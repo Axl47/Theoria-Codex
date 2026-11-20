@@ -12,10 +12,10 @@ import com.theoriacodex.sources.gelbooru.fetchGelbooruProfileOwner
 import com.theoriacodex.sources.http.SourceHttpClient
 import kotlinx.coroutines.withTimeoutOrNull
 
-internal data class CreatorOpeningOutcome(val creator: CreatorProfile?, val resolvedPost: Post? = null)
+data class CreatorOpeningOutcome(val creator: CreatorProfile?, val resolvedPost: Post? = null)
 
 /** Resolves creator identity only; the shell owns navigation and committing a hydrated Post. */
-internal class CreatorOpeningWorkflow(
+class CreatorOpeningWorkflow(
     private val registry: SourceAdapterRegistry,
     private val http: SourceHttpClient,
 ) {

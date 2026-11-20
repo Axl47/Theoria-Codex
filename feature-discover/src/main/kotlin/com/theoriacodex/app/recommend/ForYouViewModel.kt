@@ -51,7 +51,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
 /** One navigation-scoped owner for recommendation inputs, admission, continuation, and work. */
-internal class ForYouViewModel(
+class ForYouViewModel(
     private val engine: ForYouRouteEngine,
     private val savedStateHandle: SavedStateHandle,
     initialProfiles: List<RecommendationProfile> = defaultRecommendationProfiles(),

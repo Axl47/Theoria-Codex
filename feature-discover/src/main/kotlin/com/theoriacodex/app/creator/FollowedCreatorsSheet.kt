@@ -35,7 +35,7 @@ import com.theoriacodex.domain.model.CreatorProfile
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun FollowedCreatorsSheet(owner: CreatorFollowsViewModel, onDismiss: () -> Unit, onOpen: (CreatorProfile) -> Unit) {
+fun FollowedCreatorsSheet(owner: CreatorFollowsViewModel, onDismiss: () -> Unit, onOpen: (CreatorProfile) -> Unit) {
     val follows by owner.follows.collectAsStateWithLifecycle()
     ModalBottomSheet(
         onDismissRequest = onDismiss,

@@ -398,6 +398,7 @@ dependencies {
     implementation(project(":feature-viewer"))
     implementation(project(":feature-search"))
     implementation(project(":feature-library"))
+    implementation(project(":feature-discover"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

@@ -1,19 +1,10 @@
 package com.theoriacodex.app.search
 
 import com.theoriacodex.app.source.displayName
-import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.http.HostOutageKind
-
-internal fun sourceStatusChipText(status: SourceRunStatus): String {
-    return when (status.state) {
-        SourceRunState.EXCLUDED -> "${status.source.displayName()} excluded"
-        SourceRunState.FAILED -> "${status.source.displayName()} ${sourceFailureShortLabel(status.failureReason)}"
-        SourceRunState.SUCCESS -> "${status.source.displayName()} OK"
-    }
-}
 
 internal fun visibleSourceStatusChipStatuses(
     statuses: List<SourceRunStatus>,
@@ -22,8 +13,6 @@ internal fun visibleSourceStatusChipStatuses(
         status.state != SourceRunState.SUCCESS && status.state != SourceRunState.EXCLUDED
     }
 }
-
-internal const val OFFLINE_STATUS_CHIP = "Offline, retries when you reconnect"
 
 /** Failed [sources] that share an outage [kind], which a multi-source search reports above its results. */
 data class SourceOutageNotice(val kind: HostOutageKind, val sources: List<SourceKey>) {
@@ -49,10 +38,6 @@ internal fun sourceOutageNotices(
         }
 }
 
-/** The first failed source that a browser check stands in front of, which verifying can fix and retrying cannot. */
-internal fun List<SourceRunStatus>.challengedSource(issues: Map<SourceKey, HostOutageKind>): SourceKey? =
-    firstOrNull { it.state == SourceRunState.FAILED && issues[it.source] == HostOutageKind.CHALLENGE }?.source
-
 /** The first added site that refused this identity, whose API key field can fix it. */
 internal fun List<SourceRunStatus>.siteNeedingKey(): SourceKey? =
     firstOrNull { it.requiresAccount() && it.source.isCustom }?.source
@@ -60,14 +45,3 @@ internal fun List<SourceRunStatus>.siteNeedingKey(): SourceKey? =
 /** A failed search on an added site: the site's own words, then what to do about them. */
 internal fun siteKeyFailureMessage(providerMessage: String, statuses: List<SourceRunStatus>): String =
     listOfNotNull(providerMessage.takeIf(String::isNotBlank), buildSourceAuthErrorMessage(statuses)).joinToString("\n")
-
-private fun sourceFailureShortLabel(reason: SourceFailureReason?): String {
-    return when (reason) {
-        SourceFailureReason.AUTH_REQUIRED -> "needs account setup"
-        SourceFailureReason.AUTH_EXPIRED -> "needs sign-in refresh"
-        SourceFailureReason.RATE_LIMITED -> "rate limited"
-        SourceFailureReason.NETWORK -> "unreachable"
-        SourceFailureReason.PARSE -> "changed response"
-        SourceFailureReason.UNKNOWN, null -> "failed"
-    }
-}

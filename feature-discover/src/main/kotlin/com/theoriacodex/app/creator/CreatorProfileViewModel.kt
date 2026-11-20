@@ -39,7 +39,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
 /** Navigation-scoped owner for Creator identity, requests, paging, and navigation effects. */
-internal class CreatorProfileViewModel(
+class CreatorProfileViewModel(
     private val engine: CreatorRouteEngine,
     private val savedStateHandle: SavedStateHandle,
     coroutineScope: CoroutineScope? = null,
@@ -252,10 +252,10 @@ internal class CreatorProfileViewModel(
             }
         }
 
-        internal const val KEY_SOURCE = "creator_source"
-        internal const val KEY_DISPLAY_NAME = "creator_display_name"
-        internal const val KEY_PROFILE_ID = "creator_profile_id"
-        internal const val KEY_PROFILE_URL = "creator_profile_url"
-        internal const val KEY_UPLOADS_QUERY = "creator_uploads_query"
+        const val KEY_SOURCE = "creator_source"
+        const val KEY_DISPLAY_NAME = "creator_display_name"
+        const val KEY_PROFILE_ID = "creator_profile_id"
+        const val KEY_PROFILE_URL = "creator_profile_url"
+        const val KEY_UPLOADS_QUERY = "creator_uploads_query"
     }
 }

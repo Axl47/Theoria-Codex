@@ -551,7 +551,7 @@ private fun forYouEmptyMessage(state: ForYouUiState, feed: ForYouFeed): String =
 }
 
 @Composable
-internal fun ForYouSourceSelector(
+fun ForYouSourceSelector(
     selectedSource: SourceKey?,
     availableSources: List<SourceKey>,
     enabled: Boolean,

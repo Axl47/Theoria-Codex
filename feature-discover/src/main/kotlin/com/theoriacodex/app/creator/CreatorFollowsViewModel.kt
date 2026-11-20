@@ -25,7 +25,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
-internal class CreatorFollowsViewModel(
+class CreatorFollowsViewModel(
     settings: SettingsRepository,
     private val registry: SourceAdapterRegistry,
 ) : ViewModel() {
