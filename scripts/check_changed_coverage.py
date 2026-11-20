@@ -243,6 +243,15 @@ def iter_production_kotlin_paths(repo: pathlib.Path) -> Iterable[pathlib.PurePos
                 yield relative_path
 
 
+def _source_root(path: pathlib.PurePosixPath) -> tuple[str, ...]:
+    """The path up to and including its `src/main` directory: one module's production source root."""
+    lowered = [part.lower() for part in path.parts]
+    for index in range(len(lowered) - 1):
+        if lowered[index] == "src" and lowered[index + 1] == "main":
+            return path.parts[: index + 2]
+    return path.parts[:-1]
+
+
 def build_source_index(
     repo: pathlib.Path,
 ) -> dict[SourceKey, tuple[pathlib.PurePosixPath, ...]]:
@@ -265,6 +274,14 @@ def calculate_changed_coverage(
 ) -> CoverageResult:
     production_changes = production_changed_lines(changed, included_modules, included_paths, excluded_paths)
     source_index = build_source_index(repo)
+    # Source roots the report covers. A file there with no entry has no executable lines (declarations
+    # only); a file in a root the report never mentions means its module is missing from the report.
+    reported_roots = {
+        _source_root(path)
+        for key, paths in source_index.items()
+        if key in report
+        for path in paths
+    }
     executable_locations: list[tuple[pathlib.PurePosixPath, int]] = []
     uncovered_locations: list[tuple[pathlib.PurePosixPath, int]] = []
     missing_report_sources: list[pathlib.PurePosixPath] = []
@@ -273,7 +290,8 @@ def calculate_changed_coverage(
         source_key = source_key_for_path(repo, relative_path)
         report_lines = report.get(source_key)
         if report_lines is None:
-            missing_report_sources.append(relative_path)
+            if _source_root(relative_path) not in reported_roots:
+                missing_report_sources.append(relative_path)
             continue
         candidates = source_index.get(source_key, ())
         if len(candidates) > 1:

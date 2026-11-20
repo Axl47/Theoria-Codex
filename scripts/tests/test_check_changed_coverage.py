@@ -150,6 +150,40 @@ class ChangedCoverageTest(unittest.TestCase):
                     included_modules=frozenset({"app-logic"}),
                 )
 
+    def test_declarations_only_file_in_a_reported_module_has_no_executable_lines(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = pathlib.Path(temporary_directory)
+            covered = pathlib.PurePosixPath("ui-kit/src/main/kotlin/com/example/Covered.kt")
+            contract = pathlib.PurePosixPath("ui-kit/src/main/kotlin/com/example/state/Contract.kt")
+            self._write_source(repo, covered, "com.example")
+            self._write_source(repo, contract, "com.example.state")
+
+            result = coverage.calculate_changed_coverage(
+                repo=repo,
+                changed={contract: {3}},
+                report={("com/example", "Covered.kt"): {3: True}},
+                included_paths=["*/src/main/**"],
+            )
+
+        self.assertEqual(1, result.changed_production_lines)
+        self.assertEqual(0, result.executable_lines)
+
+    def test_changed_file_in_a_module_the_report_omits_still_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = pathlib.Path(temporary_directory)
+            covered = pathlib.PurePosixPath("ui-kit/src/main/kotlin/com/example/Covered.kt")
+            unreported = pathlib.PurePosixPath("media-kit/src/main/kotlin/com/example/media/Player.kt")
+            self._write_source(repo, covered, "com.example")
+            self._write_source(repo, unreported, "com.example.media")
+
+            with self.assertRaisesRegex(coverage.CoverageCheckError, "coverage XML has no source entry"):
+                coverage.calculate_changed_coverage(
+                    repo=repo,
+                    changed={unreported: {3}},
+                    report={("com/example", "Covered.kt"): {3: True}},
+                    included_paths=["*/src/main/**"],
+                )
+
     def test_maps_package_entries_across_modules_and_counts_only_xml_lines(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = pathlib.Path(temporary_directory)
