@@ -392,6 +392,7 @@ dependencies {
     implementation(project(":core-data"))
     implementation(project(":core-data-android"))
     implementation(project(":core-sources"))
+    implementation(project(":ui-kit"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -432,6 +433,7 @@ dependencies {
     testImplementation(libs.androidx.compose.ui.test.junit4)
     testImplementation(project(":core-stubs"))
     testImplementation(testFixtures(project(":core-data")))
+    testImplementation(testFixtures(project(":ui-kit")))
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.test.uiautomator)

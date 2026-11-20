@@ -1,9 +1,7 @@
 package com.theoriacodex.app.ui
 
 
-import android.app.Activity
 import android.content.Context
-import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -58,12 +56,6 @@ internal fun openUnknownSourcesSettings(context: Context) {
         }
         context.startActivity(intent)
     }
-}
-
-internal tailrec fun Context.findActivity(): Activity? = when (this) {
-    is Activity -> this
-    is ContextWrapper -> baseContext.findActivity()
-    else -> null
 }
 
 internal fun installedAppVersionCode(context: Context): Int {
