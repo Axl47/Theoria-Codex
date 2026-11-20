@@ -28,7 +28,7 @@ import com.theoriacodex.app.ui.components.FeedErrorTile
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 
 @Composable
-internal fun StatusRow(
+fun StatusRow(
     statuses: List<SourceRunStatus>,
     retryEnabled: Boolean = true,
     onRetrySource: (SourceKey) -> Unit = {},
@@ -133,7 +133,7 @@ internal fun ErrorBlock(
 
 /** A failed search, whose action verifies the source in the browser when a challenge blocked it, else retries. */
 @Composable
-internal fun SourceFailureBlock(
+fun SourceFailureBlock(
     message: String,
     statuses: List<SourceRunStatus>,
     onDismiss: (() -> Unit)? = null,
@@ -170,7 +170,7 @@ internal fun SourceAccountNotice(message: String, statuses: List<SourceRunStatus
  * collapsed once results are showing. Each notice stays dismissed for as long as its outage lasts.
  */
 @Composable
-internal fun SourceOutageNotices(notices: List<SourceOutageNotice>) {
+fun SourceOutageNotices(notices: List<SourceOutageNotice>) {
     val health = LocalSourceHealth.current
     notices.filterNot { it.sources.all(health.dismissedNotices::contains) }.forEach { notice ->
         FeedErrorTile(

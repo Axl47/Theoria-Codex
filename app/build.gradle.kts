@@ -396,6 +396,7 @@ dependencies {
     implementation(project(":media-kit"))
     implementation(project(":feed-kit"))
     implementation(project(":feature-viewer"))
+    implementation(project(":feature-search"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

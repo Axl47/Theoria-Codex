@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 
-internal fun searchViewModelFactory(
+fun searchViewModelFactory(
     coordinator: SearchCoordinator,
     relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
     networkOnline: Flow<Boolean> = emptyFlow(),

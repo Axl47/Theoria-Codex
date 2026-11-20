@@ -17,7 +17,7 @@ internal fun FeedFabRestoreState.searchAnimationFilter(
         ?: SearchAnimationFilterRestoreState()
 }
 
-internal fun FeedFabRestoreState.withSearchAnimationFilter(
+fun FeedFabRestoreState.withSearchAnimationFilter(
     mode: QueryMode,
     transform: (SearchAnimationFilterRestoreState) -> SearchAnimationFilterRestoreState,
 ): FeedFabRestoreState {

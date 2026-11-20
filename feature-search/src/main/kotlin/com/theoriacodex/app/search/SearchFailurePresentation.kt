@@ -13,7 +13,7 @@ internal val SearchUiState.pageFailure: SearchErrorUiState?
     get() = content.error?.takeIf { it.requestKind == SearchRequestKind.PAGE && content.results.isNotEmpty() }
 
 @Composable
-internal fun SearchFailureSurface(
+fun SearchFailureSurface(
     error: SearchErrorUiState,
     statuses: List<SourceRunStatus>,
     onRetry: () -> Unit,

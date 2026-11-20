@@ -62,7 +62,7 @@ import kotlinx.coroutines.withTimeout
  * must not retain it.
  */
 @Suppress("LargeClass") // One route authority is intentional; F15 owns hotspot-size ratchets.
-internal class SearchViewModel(
+class SearchViewModel(
     private val coordinator: SearchCoordinator,
     private val savedStateHandle: SavedStateHandle,
     private val executionService: SearchExecutionService = coordinator,

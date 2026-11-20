@@ -26,7 +26,7 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
 
 /** What the results grid shows after visibility filters, known durations, and related posts apply. */
-internal class SearchFeed(
+class SearchFeed(
     val animatedFilterActive: Boolean,
     val animatedDurationRange: AnimatedDurationRange,
     val animatedDurationFilterActive: Boolean,
@@ -39,7 +39,7 @@ internal class SearchFeed(
 )
 
 @Composable
-internal fun rememberSearchFeed(
+fun rememberSearchFeed(
     state: SearchUiState,
     fabRestoreState: FeedFabRestoreState,
     likedPostIds: Set<PostId>,
@@ -103,7 +103,7 @@ internal fun rememberSearchFeed(
 
 /** Restores and persists the grid position, then returns the demand that loads further pages. */
 @Composable
-internal fun rememberSearchScrollAndPaging(
+fun rememberSearchScrollAndPaging(
     state: SearchUiState,
     feed: SearchFeed,
     gridState: LazyStaggeredGridState,

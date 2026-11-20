@@ -30,7 +30,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-internal class FileBackedTagSuggestionStore(
+class FileBackedTagSuggestionStore(
     private val storeFile: File,
     private val seedData: Map<SourceKey, List<TagSuggestion>> = emptyMap(),
     private val maxEntriesPerSource: Int = DEFAULT_MAX_ENTRIES_PER_SOURCE,

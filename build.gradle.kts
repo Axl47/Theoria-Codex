@@ -32,6 +32,7 @@ dependencies {
     kover(project(":media-kit"))
     kover(project(":feed-kit"))
     kover(project(":feature-viewer"))
+    kover(project(":feature-search"))
 }
 
 val qualityCoverageVariant = "quality"

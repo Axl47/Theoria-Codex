@@ -26,7 +26,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.R
+import com.theoriacodex.uikit.R
 import com.theoriacodex.app.source.LocalSourceHealth
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchSourceScope

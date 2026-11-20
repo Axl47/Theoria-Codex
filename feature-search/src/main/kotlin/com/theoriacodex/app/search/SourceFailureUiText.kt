@@ -26,7 +26,7 @@ internal fun visibleSourceStatusChipStatuses(
 internal const val OFFLINE_STATUS_CHIP = "Offline, retries when you reconnect"
 
 /** Failed [sources] that share an outage [kind], which a multi-source search reports above its results. */
-internal data class SourceOutageNotice(val kind: HostOutageKind, val sources: List<SourceKey>) {
+data class SourceOutageNotice(val kind: HostOutageKind, val sources: List<SourceKey>) {
     val message: String
         get() = "${sources.joinToString(", ") { it.displayName() }}: ${kind.userMessage}"
 
