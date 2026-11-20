@@ -239,6 +239,47 @@ class SearchRequestReducerTest {
     }
 
     @Test
+    fun `after early results an untouched draft follows whichever query the request ends on`() {
+        val request = root(9L, query("asked"))
+        val normalized = query("normalized")
+        val early = listOf(post("early"))
+        val partial = SearchUiState(query = SearchQueryUiState(draft = request.query))
+            .reduce(SearchStateChange.BeginRequest(request))
+            .reduce(SearchStateChange.PartialResult(9L, success(request, early).copy(query = normalized)))
+        val answered = query("answered")
+        val failure = SearchStateChange.RootResult(
+            9L, SearchExecutionResult.Failure(request.executionKey, answered, request.sourceScope, emptyList(), "offline"),
+        )
+        val threw = SearchStateChange.RequestFailed(9L, "threw")
+        val edited = partial.copy(query = partial.query.copy(draft = query("edited")))
+
+        assertEquals(normalized, partial.query.draft)
+        assertEquals(normalized, partial.query.appliedByMode[modeKey(normalized.mode)])
+        assertEquals(answered, partial.reduce(failure).query.draft)
+        assertEquals(answered, partial.reduce(failure).query.applied)
+        assertEquals(early, partial.reduce(failure).content.results)
+        assertEquals(request.query, partial.reduce(threw).query.draft)
+        assertEquals(request.query, partial.reduce(threw).query.applied)
+        assertEquals(query("edited"), edited.reduce(failure).query.draft)
+        assertEquals(query("edited"), edited.reduce(threw).query.draft)
+    }
+
+    @Test
+    fun `a refresh that fails leaves the cached first page on screen`() {
+        val request = root(10L, query("resumed"), SearchRequestKind.RETRY)
+        val cached = listOf(post("cached"))
+        val painted = SearchUiState().reduce(SearchStateChange.BeginRequest(request))
+            .reduce(SearchStateChange.ShowCachedFirstPage(10L, cached))
+
+        val failed = painted.reduce(SearchStateChange.RequestFailed(10L, "offline"))
+
+        assertEquals(cached, failed.content.results)
+        assertEquals("offline", failed.content.error?.message)
+        assertFalse(failed.content.canLoadMore)
+        assertNull(failed.execution.activeRequestId)
+    }
+
+    @Test
     fun `paging appends unique posts and preserves ordered existing results`() {
         val first = post("first")
         val duplicate = post("duplicate")
