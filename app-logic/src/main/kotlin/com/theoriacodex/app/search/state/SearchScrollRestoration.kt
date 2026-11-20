@@ -30,17 +30,23 @@ sealed interface ScrollStep {
  * 5. the anchor's page is not loaded and more pages can load: wait;
  * 6. the anchor's visibility is undecided: wait;
  * 7. nothing is presented: finish without moving;
- * 8. a keep-live request on a laid-out grid: finish without moving, since a jump lines up every column
- *    at the target and the grid later reshuffles;
+ * 8. a keep-live request whose grid was already showing posts when the request arrived: finish without
+ *    moving, since that grid kept its place and a jump lines up every column at the target and the grid
+ *    later reshuffles;
  * 9. otherwise jump to the anchor, its offset floored at 0.
- * Only rules 1 to 6 wait, so whether the step waits never depends on [presentedCount] or [gridLaidOut].
+ * Only rules 1 to 6 wait, so whether the step waits never depends on [presentedCount] or
+ * [gridWasShowingPosts].
  */
-fun SearchUiState.scrollStep(anchorVisibilityDecided: Boolean, presentedCount: Int, gridLaidOut: Boolean): ScrollStep {
+fun SearchUiState.scrollStep(
+    anchorVisibilityDecided: Boolean,
+    presentedCount: Int,
+    gridWasShowingPosts: Boolean,
+): ScrollStep {
     val request = restoration as? SearchRestorationUiState.Restored ?: return ScrollStep.Wait
     val target = request.scrollState ?: return ScrollStep.Wait
     if (!canApplyScrollRestoration) return ScrollStep.Wait
     if (!request.resetToTop && !anchorVisibilityDecided) return ScrollStep.Wait
-    if (presentedCount == 0 || (request.keepLiveGrid && gridLaidOut)) {
+    if (presentedCount == 0 || (request.keepLiveGrid && gridWasShowingPosts)) {
         return ScrollStep.Finish(request.scrollRequestId)
     }
     return ScrollStep.Jump(

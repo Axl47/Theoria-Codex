@@ -49,8 +49,8 @@ class SearchScrollRestorationTest {
         results = List(loaded) { post(it) }, hasExecutedSearch = true, canLoadMore = canLoadMore, error = error,
     ))
 
-    private fun SearchUiState.step(visibilityDecided: Boolean = true, presented: Int = 40, laidOut: Boolean = false) =
-        scrollStep(visibilityDecided, presented, laidOut)
+    private fun SearchUiState.step(visibilityDecided: Boolean = true, presented: Int = 40, wasShowingPosts: Boolean = false) =
+        scrollStep(visibilityDecided, presented, wasShowingPosts)
 
     private val jump = ScrollStep.Jump(1L, 22, 17)
     private val finish = ScrollStep.Finish(1L)
@@ -107,11 +107,11 @@ class SearchScrollRestorationTest {
         assertEquals(finish, ready().step(presented = 0))
     }
 
-    @Test fun `keep-live request leaves a laid-out grid alone and still jumps a cold one`() {
+    @Test fun `keep-live request leaves a grid that was showing posts alone and still jumps one that was not`() {
         val keepLive = pending.copy(keepLiveGrid = true)
-        assertEquals(finish, ready(keepLive).step(laidOut = true))
-        assertEquals(jump, ready(keepLive).step(laidOut = false))
-        assertEquals(jump, ready().step(laidOut = true))
+        assertEquals(finish, ready(keepLive).step(wasShowingPosts = true))
+        assertEquals(jump, ready(keepLive).step(wasShowingPosts = false))
+        assertEquals(jump, ready().step(wasShowingPosts = true))
     }
 
     @Test fun `ready request jumps to the anchor with a negative offset floored at zero`() {
@@ -135,11 +135,13 @@ class SearchScrollRestorationTest {
         assertEquals(ScrollStep.Wait, ready().scrollStepAfterJump(reachedTarget = false, canScrollForward = false))
     }
 
-    @Test fun `keep-live request whose jump stopped short finishes without a second jump once the grid is laid out`() {
+    // Whether the grid was showing posts is decided once, when the request arrives, so the next page still
+    // sees false and the stopped-short jump is retried.
+    @Test fun `keep-live request that arrived on a grid without posts retries a jump that stopped short`() {
         val keepLive = ready(pending.copy(keepLiveGrid = true))
-        assertEquals(jump, keepLive.step(laidOut = false))
+        assertEquals(jump, keepLive.step(wasShowingPosts = false))
         assertEquals(ScrollStep.Wait, keepLive.scrollStepAfterJump(reachedTarget = false, canScrollForward = false))
-        assertEquals(finish, ready(pending.copy(keepLiveGrid = true), loaded = 60).step(presented = 60, laidOut = true))
+        assertEquals(jump, ready(pending.copy(keepLiveGrid = true), loaded = 60).step(presented = 60, wasShowingPosts = false))
     }
 
     private fun post(index: Int) = Post(

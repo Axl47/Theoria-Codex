@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- Search, creator profiles and For You show "No more results" at the bottom once a feed has no further pages, where the list used to just stop.
+
+### Fixed
+
+- Past about 1,000 posts Gelbooru refuses to return more results, which Search reported as "Gelbooru returned malformed JSON". It now says "Gelbooru won't load results past this point".
+- Coming back to Search while its results were still loading could leave the list at the top, or slightly above where you left it, instead of at your saved place. Search now returns to the exact place once the posts it needs have loaded.
+- If the system closed the app in the background and you switched away and back while Search was reloading, your saved place in the results was lost. It is now kept.
+
 ## [1.9.2] - 2026-11-18
 
 ### Fixed

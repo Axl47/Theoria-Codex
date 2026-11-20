@@ -217,6 +217,31 @@ class SearchScrollRestorationTest {
         }
     }
 
+    // Returning from the Viewer recomposes the grid around its retained state, which must still count as
+    // showing posts so the keep-live request leaves it alone.
+    @Test fun `keep-live request opened while a retained grid is out of composition leaves it in place`() {
+        state.value = state.value.copy(
+            content = state.value.content.copy(results = posts.take(40)),
+            restoration = SearchRestorationUiState.Restored(false),
+        )
+        render()
+        compose.onNodeWithTag("restore-grid").performScrollToIndex(25)
+        val before = compose.runOnIdle {
+            gridShown.value = false
+            grid.firstVisibleItemIndex to grid.firstVisibleItemScrollOffset
+        }
+        compose.runOnIdle {
+            state.value = state.value.copy(restoration = SearchRestorationUiState.Restored(
+                false, SearchScrollState(3, 0), 2L, keepLiveGrid = true,
+            ))
+        }
+        compose.runOnIdle { gridShown.value = true }
+        compose.runOnIdle {
+            assertEquals(listOf(2L), acknowledgements)
+            assertEquals(before, grid.firstVisibleItemIndex to grid.firstVisibleItemScrollOffset)
+        }
+    }
+
     @Test fun `keep-live request on a cold grid restores the anchor once`() {
         state.value = state.value.copy(
             content = state.value.content.copy(results = posts.take(40)),
@@ -225,6 +250,41 @@ class SearchScrollRestorationTest {
         gridShown.value = false
         render()
         compose.runOnIdle { gridShown.value = true }
+        compose.runOnIdle {
+            assertEquals(listOf(1L), acknowledgements)
+            assertEquals(22, grid.firstVisibleItemIndex)
+            assertEquals(17, grid.firstVisibleItemScrollOffset)
+        }
+    }
+
+    @Test fun `keep-live request that stopped short on a cold grid retries when the next page arrives`() {
+        state.value = state.value.copy(
+            restoration = SearchRestorationUiState.Restored(false, SearchScrollState(18, 17), 1L, keepLiveGrid = true),
+        )
+        gridShown.value = false
+        render()
+        compose.runOnIdle { gridShown.value = true }
+        compose.runOnIdle {
+            assertTrue(acknowledgements.isEmpty())
+            state.value = state.value.copy(content = state.value.content.copy(results = posts.take(40)))
+        }
+        compose.runOnIdle {
+            assertEquals(listOf(1L), acknowledgements)
+            assertEquals(18, grid.firstVisibleItemIndex)
+            assertEquals(17, grid.firstVisibleItemScrollOffset)
+        }
+    }
+
+    @Test fun `keep-live request opened before any posts restores the anchor when they arrive`() {
+        state.value = state.value.copy(
+            content = state.value.content.copy(results = emptyList()),
+            restoration = SearchRestorationUiState.Restored(false, SearchScrollState(22, 17), 1L, keepLiveGrid = true),
+        )
+        render()
+        compose.runOnIdle {
+            assertTrue(acknowledgements.isEmpty())
+            state.value = state.value.copy(content = state.value.content.copy(results = posts.take(40)))
+        }
         compose.runOnIdle {
             assertEquals(listOf(1L), acknowledgements)
             assertEquals(22, grid.firstVisibleItemIndex)

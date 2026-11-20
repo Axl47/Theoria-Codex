@@ -151,6 +151,20 @@ class SearchStateContractTest {
     }
 
     @Test
+    fun `opening a result closes an open scroll request and a missing result leaves it open`() {
+        val shown = post("shown")
+        val pending = SearchRestorationUiState.Restored(false, SearchScrollState(22, 17), 1L, resetToTop = true)
+        val state = SearchUiState(restoration = pending)
+
+        val opened = SearchStateReducer.reduce(state, SearchAction.OpenResult(shown.id, listOf(shown), 0))
+        val missing = SearchStateReducer.reduce(state, SearchAction.OpenResult(post("gone").id, listOf(shown), 0))
+
+        assertTrue(opened.effects.single() is SearchEffect.OpenViewer)
+        assertEquals(SearchRestorationUiState.Restored(false, null, 1L), opened.state.restoration)
+        assertEquals(pending, missing.state.restoration)
+    }
+
+    @Test
     fun `restoration transitions are explicit and preserve search content`() {
         val result = post("restored")
         val initial = SearchUiState(content = SearchContentUiState(results = listOf(result)))

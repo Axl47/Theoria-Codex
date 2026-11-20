@@ -183,6 +183,9 @@ object SearchStateReducer {
     ): SearchReduction {
         val restored = state.restoration as? SearchRestorationUiState.Restored
             ?: return SearchReduction(state)
+        // A keep-live request may be left undone on a grid showing posts, so it must not replace an open
+        // request that has to move the grid, such as the startup restore or a reset to top.
+        if (keepLiveGrid && restored.scrollState != null && !restored.keepLiveGrid) return SearchReduction(state)
         return SearchReduction(
             state = state.copy(
                 restoration = restored.copy(
@@ -202,11 +205,12 @@ object SearchStateReducer {
         val restored = state.restoration as? SearchRestorationUiState.Restored
             ?: return SearchReduction(state)
         if (restored.scrollRequestId != change.requestId) return SearchReduction(state)
-        return SearchReduction(
-            state = state.copy(
-                restoration = restored.copy(scrollState = null, resetToTop = false, keepLiveGrid = false),
-            ),
-        )
+        return SearchReduction(state.withScrollRequestClosed())
+    }
+
+    private fun SearchUiState.withScrollRequestClosed(): SearchUiState {
+        val restored = restoration as? SearchRestorationUiState.Restored ?: return this
+        return copy(restoration = restored.copy(scrollState = null, resetToTop = false, keepLiveGrid = false))
     }
 
     fun reduce(state: SearchUiState, action: SearchAction.OpenResult): SearchReduction {
@@ -225,8 +229,10 @@ object SearchStateReducer {
             streamSource = ViewerStreamSource.SEARCH,
             scrollOffsetHint = action.scrollOffsetHint.coerceAtLeast(0),
         )
+        // Opening a post shows the user has taken over the grid, like a drag: a pending restore must not jump
+        // the grid to an old anchor after they return from the Viewer.
         return SearchReduction(
-            state = state,
+            state = state.withScrollRequestClosed(),
             effects = listOf(
                 SearchEffect.OpenViewer(
                     posts = action.visibleResults.toList(),
