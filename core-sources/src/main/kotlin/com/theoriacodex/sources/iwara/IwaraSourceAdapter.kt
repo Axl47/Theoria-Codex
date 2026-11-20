@@ -29,6 +29,7 @@ import com.theoriacodex.sources.common.optionalJsonArray
 import com.theoriacodex.sources.common.optionalJsonObject
 import com.theoriacodex.sources.common.parseJsonElement
 import com.theoriacodex.sources.common.parseJsonObject
+import com.theoriacodex.sources.common.parseOffsetDateTimeMs
 import com.theoriacodex.sources.common.requestWithChallengeFallback
 import com.theoriacodex.sources.common.requireSuccess
 import com.theoriacodex.sources.common.sourceCall
@@ -36,10 +37,9 @@ import com.theoriacodex.sources.common.sourceRequest
 import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
+import com.theoriacodex.sources.http.buildUrl
 import com.theoriacodex.sources.media.inferMimeFromUrl
 import java.net.URI
-import java.net.URLEncoder
-import java.time.Instant
 
 class IwaraSourceAdapter(
     private val httpClient: SourceHttpClient,
@@ -58,17 +58,7 @@ class IwaraSourceAdapter(
     override suspend fun search(query: Query, pageToken: String?): Page<Post> = sourceCall {
         val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0
         val compiledQuery = compileQueryText(query)
-        if (compiledQuery.isBlank()) {
-            val response = requestJsonObject(
-                url = "$IWARA_API_BASE/videos",
-                query = linkedMapOf(
-                    "rating" to "all",
-                    "sort" to mapSort(query.sort),
-                    "page" to pageIndex.toString(),
-                ),
-            )
-            return@sourceCall parsePagedPosts(response)
-        }
+        if (compiledQuery.isBlank()) return@sourceCall parsePagedPosts(videosPage(mapSort(query.sort), pageIndex))
         val response = requestJsonObject(
             url = "$IWARA_API_BASE/search",
             query = linkedMapOf(
@@ -83,16 +73,8 @@ class IwaraSourceAdapter(
 
     override suspend fun trendingTags(limit: Int): List<TagSuggestion> = sourceCall {
         if (limit <= 0) return@sourceCall emptyList()
-        val response = requestJsonObject(
-            url = "$IWARA_API_BASE/videos",
-            query = linkedMapOf(
-                "rating" to "all",
-                "sort" to "date",
-                "page" to "0",
-            ),
-        )
         val counts = linkedMapOf<String, Int>()
-        parseResultItems(response).forEach { item ->
+        parseResultItems(videosPage(sort = "date", page = 0)).forEach { item ->
             parseTags(item).forEach { tag ->
                 counts[tag] = (counts[tag] ?: 0) + 1
             }
@@ -155,12 +137,7 @@ class IwaraSourceAdapter(
                     fallbackMime = root.optionalJsonObject("file")?.stringValue("mime"),
                 )
             }
-        if (resolvedMedia == null) {
-            return@sourceCall parsed.copy(
-                full = null,
-                media = emptyList(),
-            )
-        }
+            ?: return@sourceCall parsed
         parsed.copy(
             full = resolvedMedia,
             media = listOf(resolvedMedia),
@@ -176,16 +153,7 @@ class IwaraSourceAdapter(
             ?: creator.profileId?.trim().takeUnless { it.isNullOrBlank() }
             ?: return@sourceCall canonicalPostPage(emptyList(), null)
         val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0
-        val response = requestJsonObject(
-            url = "$IWARA_API_BASE/videos",
-            query = linkedMapOf(
-                "rating" to "all",
-                "sort" to "date",
-                "page" to pageIndex.toString(),
-                "user" to userId,
-            ),
-        )
-        parsePagedPosts(response)
+        parsePagedPosts(videosPage(sort = "date", page = pageIndex, user = userId))
     }
 
     override fun accountFeeds(creator: CreatorProfile): List<AccountFeed> =
@@ -225,6 +193,17 @@ class IwaraSourceAdapter(
         }
     }
 
+    /** One page of `/videos` across all ratings, in Iwara's [sort] order, optionally only [user]'s uploads. */
+    private suspend fun videosPage(sort: String, page: Int, user: String? = null): JsonObject = requestJsonObject(
+        url = "$IWARA_API_BASE/videos",
+        query = buildMap {
+            put("rating", "all")
+            put("sort", sort)
+            put("page", page.toString())
+            user?.let { put("user", it) }
+        },
+    )
+
     private suspend fun requestJsonObject(
         url: String,
         query: Map<String, String>,
@@ -257,7 +236,7 @@ class IwaraSourceAdapter(
         url: String,
         query: Map<String, String>,
     ): SourceHttpResponse {
-        val mirrorUrl = JINA_MIRROR_BASE + buildAbsoluteUrl(url, query).encodeJinaTargetUrl()
+        val mirrorUrl = JINA_MIRROR_BASE + buildUrl(url, query).encodeJinaTargetUrl()
         val mirrored = sourceRequest("Iwara mirror") {
             httpClient.get(
                 url = mirrorUrl,
@@ -289,22 +268,6 @@ class IwaraSourceAdapter(
             reason = SourceFailureReason.PARSE,
             message = "Iwara mirror returned non-JSON content",
         )
-    }
-
-    private fun buildAbsoluteUrl(
-        baseUrl: String,
-        query: Map<String, String>,
-    ): String {
-        if (query.isEmpty()) return baseUrl
-        val separator = if ("?" in baseUrl) "&" else "?"
-        val encoded = query.entries.joinToString("&") { (key, value) ->
-            "${key.urlEncode()}=${value.urlEncode()}"
-        }
-        return baseUrl + separator + encoded
-    }
-
-    private fun String.urlEncode(): String {
-        return URLEncoder.encode(this, Charsets.UTF_8.name()).replace("+", "%20")
     }
 
     private fun String.encodeJinaTargetUrl(): String {
@@ -420,7 +383,7 @@ class IwaraSourceAdapter(
             canonicalTags = tags,
             rawTags = tags,
             authorName = creatorProfile?.displayName,
-            createdAtEpochMs = raw.stringValue("createdAt")?.let(::parseEpochMs),
+            createdAtEpochMs = parseOffsetDateTimeMs(raw.stringValue("createdAt")),
             title = raw.stringValue("title")?.trim().takeUnless { it.isNullOrBlank() },
             creatorProfile = creatorProfile,
             durationMs = parseIwaraDurationMs(raw, file),
@@ -501,10 +464,6 @@ class IwaraSourceAdapter(
         } else {
             "https://www.iwara.tv/video/$sourcePostId/$slug"
         }
-    }
-
-    private fun parseEpochMs(value: String): Long? {
-        return runCatching { Instant.parse(value).toEpochMilli() }.getOrNull()
     }
 
 }
