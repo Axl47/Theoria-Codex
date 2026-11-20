@@ -183,6 +183,9 @@ object SearchStateReducer {
     ): SearchReduction {
         val restored = state.restoration as? SearchRestorationUiState.Restored
             ?: return SearchReduction(state)
+        // A keep-live request may be left undone on a grid showing posts, so it must not replace an open
+        // request that has to move the grid, such as the startup restore or a reset to top.
+        if (keepLiveGrid && restored.scrollState != null && !restored.keepLiveGrid) return SearchReduction(state)
         return SearchReduction(
             state = state.copy(
                 restoration = restored.copy(
