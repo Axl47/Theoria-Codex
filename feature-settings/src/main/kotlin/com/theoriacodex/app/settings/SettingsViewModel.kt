@@ -1,10 +1,7 @@
 package com.theoriacodex.app.settings
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.app.statistics.AppUsageTracker
 import com.theoriacodex.app.statistics.StatisticsSummary
@@ -653,16 +650,6 @@ class SettingsViewModel(
 
     private inline fun updateAccounts(transform: SettingsAccountUiState.() -> SettingsAccountUiState) {
         updateState { copy(accounts = accounts.transform()) }
-    }
-
-    companion object {
-        fun factory(dependencies: SettingsOwnerDependencies): ViewModelProvider.Factory = viewModelFactory {
-            initializer {
-                SettingsViewModel(
-                    dependencies = dependencies
-                )
-            }
-        }
     }
 }
 

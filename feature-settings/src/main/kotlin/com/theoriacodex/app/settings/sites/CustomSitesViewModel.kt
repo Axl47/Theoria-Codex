@@ -1,10 +1,7 @@
 package com.theoriacodex.app.settings.sites
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.app.customsites.BuiltInSiteSummary
 import com.theoriacodex.app.customsites.CredentialEdit
 import com.theoriacodex.app.customsites.CustomSiteDraft
@@ -544,12 +541,6 @@ class CustomSitesViewModel(
 
     private fun updateEdit(transform: SiteForm.Edit.() -> SiteForm.Edit) = mutableState.update { current ->
         (current.form as? SiteForm.Edit)?.let { current.copy(form = it.transform()) } ?: current
-    }
-
-    companion object {
-        fun factory(controller: CustomSitesController): ViewModelProvider.Factory = viewModelFactory {
-            initializer { CustomSitesViewModel(controller) }
-        }
     }
 }
 
