@@ -31,7 +31,6 @@ internal fun viewedPostId(href: String): String? {
 }
 
 private const val RELATED_HEADING = "More Like This:"
-private const val MAX_RELATED_POSTS = 6
 private val PAGE_POST_PATTERN = Regex("(?:[?&])page=post(?:[&#]|$)")
 private val VIEW_POST_PATTERN = Regex("(?:[?&])s=view(?:[&#]|$)")
 private val POST_ID_PATTERN = Regex("(?:[?&])id=(\\d+)(?:[&#]|$)")

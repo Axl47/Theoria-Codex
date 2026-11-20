@@ -14,11 +14,12 @@ import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.coroutines.mapConcurrent
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.AccountDetails
 import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.domain.model.CommentPage
 import com.theoriacodex.domain.model.CreatorProfile
-import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.PostId
@@ -29,6 +30,8 @@ import com.theoriacodex.domain.tags.decodeHtmlEntities
 import com.theoriacodex.sources.common.ambiguousDurationFieldMs
 import com.theoriacodex.sources.common.asStringOrNull
 import com.theoriacodex.sources.common.autocompleteTagCounts
+import com.theoriacodex.sources.common.booruFull
+import com.theoriacodex.sources.common.booruPreview
 import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.durationFieldMs
 import com.theoriacodex.sources.common.firstDurationMs
@@ -37,9 +40,9 @@ import com.theoriacodex.sources.common.intValue
 import com.theoriacodex.sources.common.keysFor
 import com.theoriacodex.sources.common.longValue
 import com.theoriacodex.sources.common.mimeFromUrlOrExt
-import com.theoriacodex.sources.common.originUrlOrNull
 import com.theoriacodex.sources.common.normalizeBooruTag
 import com.theoriacodex.sources.common.objectList
+import com.theoriacodex.sources.common.originUrlOrNull
 import com.theoriacodex.sources.common.parseJsonArray
 import com.theoriacodex.sources.common.parseJsonElement
 import com.theoriacodex.sources.common.requireSuccess
@@ -48,12 +51,6 @@ import com.theoriacodex.sources.common.sourceRequest
 import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.credentials.UserApiKeyCredentialLookup
 import com.theoriacodex.sources.http.SourceHttpClient
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.supervisorScope
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 
 /**
  * Builds the adapter for any [GelbooruSite]. The app discovers creator and related posts with `is`
@@ -303,22 +300,8 @@ private class GelbooruFamilyAdapter(
     }
 
     /** Resolves [ids] through the DAPI, at most [concurrency] at a time, keeping their order; each failure stays its own result. */
-    private suspend fun resolvePosts(ids: List<String>, concurrency: Int): List<Result<Post?>> = supervisorScope {
-        val semaphore = Semaphore(concurrency)
-        ids.map { id ->
-            async {
-                semaphore.withPermit {
-                    try {
-                        Result.success(resolvePost(PostId(sourceKey, id)))
-                    } catch (error: CancellationException) {
-                        throw error
-                    } catch (error: Throwable) {
-                        Result.failure(error)
-                    }
-                }
-            }
-        }.awaitAll()
-    }
+    private suspend fun resolvePosts(ids: List<String>, concurrency: Int): List<Result<Post?>> =
+        ids.mapConcurrent(concurrency) { id -> runCatchingPreservingCancellation { resolvePost(PostId(sourceKey, id)) } }
 
     /** The resolved posts; partial failures drop their posts, but a batch where nothing resolved and something failed rethrows. */
     private fun List<Result<Post?>>.postsOrThrow(): List<Post> {
@@ -338,10 +321,7 @@ private class GelbooruFamilyAdapter(
             put("page", "dapi")
             if (json) put("json", "1")
             putAll(entries)
-            saved?.let {
-                put("user_id", it.userId)
-                put("api_key", it.apiKey)
-            }
+            putAll(GelbooruSite.authQuery(saved))
         }
     }
 
@@ -400,16 +380,8 @@ private class GelbooruFamilyAdapter(
         val creator = parseCreator(raw)
         return Post(
             id = PostId(sourceKey, id),
-            preview = ImageRef(url = previewUrl, localPath = null, mime = mimeFromUrlOrExt(previewUrl, null) ?: fullMime),
-            full = fullUrl?.let { url ->
-                ImageRef(
-                    url = url,
-                    localPath = null,
-                    mime = fullMime,
-                    // A distinct sample is a lighter rendition on every fork, so it loads before the original.
-                    progressiveUrls = listOfNotNull(sampleUrl).filter { it != url },
-                )
-            },
+            preview = booruPreview(previewUrl, fullMime),
+            full = fullUrl?.let { booruFull(it, fullMime, sampleUrl) },
             pageUrl = "${site.siteUrl}/index.php?page=post&s=view&id=$id",
             width = raw.intValue("width"),
             height = raw.intValue("height"),
@@ -502,7 +474,7 @@ internal fun looksLikeGelbooruAuthFailure(body: String): Boolean {
 private const val PAGE_SIZE = 40
 private const val MAX_SEARCH_TAGS = 40
 private const val TAG_COUNT_BATCH_SIZE = 50
-private const val MAX_RELATED_POSTS = 6
+internal const val MAX_RELATED_POSTS = 6
 private const val RELATED_HYDRATION_CONCURRENCY = 2
 private const val POST_ENVELOPE = "post"
 private const val DEPTH_REFUSAL_PREFIX = "Too deep!"

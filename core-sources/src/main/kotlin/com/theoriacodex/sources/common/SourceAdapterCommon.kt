@@ -8,6 +8,7 @@ import com.google.gson.JsonObject
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.diagnostics.OffMainWork
+import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.sources.media.inferMimeFromUrl
 import com.theoriacodex.sources.media.mimeFromFileExt
 import com.theoriacodex.sources.http.SourceHttpResponse
@@ -235,6 +236,14 @@ private val BOORU_WHITESPACE_REGEX = Regex("\\s+")
 internal fun mimeFromUrlOrExt(url: String?, ext: String?): String? {
     return inferMimeFromUrl(url) ?: mimeFromFileExt(ext)
 }
+
+/** A booru card preview; its mime falls back to the original's ([fullMime]) when the URL names none. */
+internal fun booruPreview(url: String?, fullMime: String?): ImageRef =
+    ImageRef(url = url, localPath = null, mime = mimeFromUrlOrExt(url, null) ?: fullMime)
+
+/** A booru original. A distinct [sampleUrl] is a lighter rendition on every booru, so it loads first. */
+internal fun booruFull(url: String, mime: String?, sampleUrl: String?): ImageRef =
+    ImageRef(url = url, localPath = null, mime = mime, progressiveUrls = listOfNotNull(sampleUrl).filter { it != url })
 
 internal fun firstDurationMs(vararg candidates: Long?): Long? {
     return candidates.filterNotNull().firstOrNull { it > 0L }

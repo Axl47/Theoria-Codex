@@ -18,16 +18,17 @@ import com.theoriacodex.domain.model.AccountDetails
 import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.domain.model.CommentPage
 import com.theoriacodex.domain.model.CreatorProfile
-import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SortMode
-import com.theoriacodex.domain.model.contentHashOrNull
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.contentHashOrNull
 import com.theoriacodex.domain.query.SearchTermLimit
 import com.theoriacodex.sources.common.autocompleteTagCounts
+import com.theoriacodex.sources.common.booruFull
+import com.theoriacodex.sources.common.booruPreview
 import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.durationFieldMs
 import com.theoriacodex.sources.common.httpsMediaUrl
@@ -35,9 +36,9 @@ import com.theoriacodex.sources.common.intValue
 import com.theoriacodex.sources.common.keysFor
 import com.theoriacodex.sources.common.longValue
 import com.theoriacodex.sources.common.mimeFromUrlOrExt
-import com.theoriacodex.sources.common.originUrlOrNull
 import com.theoriacodex.sources.common.optionalJsonArray
 import com.theoriacodex.sources.common.optionalJsonObject
+import com.theoriacodex.sources.common.originUrlOrNull
 import com.theoriacodex.sources.common.parseJsonArray
 import com.theoriacodex.sources.common.parseJsonObject
 import com.theoriacodex.sources.common.parseOffsetDateTimeMs
@@ -63,6 +64,10 @@ data class DanbooruSite(
     val credentials: ApiKeyUse = ApiKeyUse.OPTIONAL,
 ) {
     companion object {
+        /** API keys as Danbooru's query parameters; empty without keys. */
+        fun authQuery(keys: UserApiKeyCredentials?): Map<String, String> =
+            keys?.let { mapOf("login" to it.userId, "api_key" to it.apiKey) }.orEmpty()
+
         /** Guests may search two tags, and an `order:` metatag counts as one of them. */
         val DANBOORU = DanbooruSite(
             source = SourceKey.DANBOORU,
@@ -223,9 +228,8 @@ class DanbooruSourceAdapter(
 
     private suspend fun request(path: String, query: Map<String, String> = emptyMap()): String {
         val saved = credentials.keysFor(site.credentials, site.label)
-        val authorizedQuery = saved?.let { query + mapOf("login" to it.userId, "api_key" to it.apiKey) } ?: query
         return sourceRequest(site.label) {
-            httpClient.get(url = "${site.baseUrl}$path", query = authorizedQuery, headers = site.headers)
+            httpClient.get(url = "${site.baseUrl}$path", query = query + DanbooruSite.authQuery(saved), headers = site.headers)
         }.requireSuccess("${site.label} request failed") { body ->
             // Danbooru explains rejected searches (such as the tag limit) in a JSON `message`.
             runCatching { parseJsonObject(body, gson, site.label) }.getOrNull()
@@ -249,13 +253,8 @@ class DanbooruSourceAdapter(
         val artistTag = raw.tagList("tag_string_artist").firstOrNull()
         return Post(
             id = PostId(sourceKey, id),
-            preview = ImageRef(url = previewUrl, localPath = null, mime = mimeFromUrlOrExt(previewUrl, null) ?: fullMime),
-            full = ImageRef(
-                url = fullUrl,
-                localPath = null,
-                mime = fullMime,
-                progressiveUrls = listOfNotNull(sampleUrl).filter { it != fullUrl },
-            ),
+            preview = booruPreview(previewUrl, fullMime),
+            full = booruFull(fullUrl, fullMime, sampleUrl),
             pageUrl = "${site.baseUrl}/posts/$id",
             width = raw.intValue("image_width"),
             height = raw.intValue("image_height"),
