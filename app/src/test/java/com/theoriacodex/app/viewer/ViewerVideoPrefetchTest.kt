@@ -27,7 +27,7 @@ class ViewerVideoPrefetchTest {
     @Test
     fun `prefetch and playback share CacheWriter identity without a legacy cache owner`() {
         val source = repositoryFile(
-            "app/src/main/java/com/theoriacodex/app/viewer/VideoPlaybackInfrastructure.kt",
+            "media-kit/src/main/kotlin/com/theoriacodex/app/viewer/VideoPlaybackInfrastructure.kt",
         ).readText()
         val platform = repositoryFile(
             "app/src/main/java/com/theoriacodex/app/viewer/ViewerPlatformPrefetcher.kt",

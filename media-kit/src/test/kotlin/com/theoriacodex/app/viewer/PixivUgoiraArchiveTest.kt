@@ -88,7 +88,7 @@ class PixivUgoiraArchiveTest {
     @Test
     fun `ugoira client source retains disk single-flight size and weighted-cache boundaries`() {
         val source = repositoryFile(
-            "app/src/main/java/com/theoriacodex/app/viewer/PixivUgoiraPlayer.kt",
+            "media-kit/src/main/kotlin/com/theoriacodex/app/viewer/PixivUgoiraPlayer.kt",
         ).readText()
         val search = repositoryFile(
             "app/src/main/java/com/theoriacodex/app/search/SearchResultCard.kt",
@@ -96,7 +96,7 @@ class PixivUgoiraArchiveTest {
 
         assertTrue(source.contains("archiveFlights"))
         assertTrue(source.contains("loadFlights"))
-        val decoder = repositoryFile("app/src/main/java/com/theoriacodex/app/viewer/PixivUgoiraFrames.kt").readText()
+        val decoder = repositoryFile("media-kit/src/main/kotlin/com/theoriacodex/app/viewer/PixivUgoiraFrames.kt").readText()
         assertTrue(decoder.contains("ZipFile(archive)"))
         assertTrue(search.contains("UgoiraSizeBucket.CARD"))
         assertTrue(source.contains("decodedCacheBytes"))

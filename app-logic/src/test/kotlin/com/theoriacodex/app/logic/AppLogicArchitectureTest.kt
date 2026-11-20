@@ -117,7 +117,7 @@ class AppLogicArchitectureTest {
     fun `media delivery plans upgrade quality from what the media offers, for every source`() {
         val postMedia = File(
             root,
-            "app/src/main/java/com/theoriacodex/app/media/PostMedia.kt",
+            "media-kit/src/main/kotlin/com/theoriacodex/app/media/PostMedia.kt",
         ).readText()
         val plans = postMedia
             .substringAfter("fun previewMediaDeliveryPlan")
