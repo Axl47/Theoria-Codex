@@ -4,17 +4,6 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
-/** Stable identity used to reject late work from a replaced Viewer session. */
-internal data class ViewerSessionIdentity(
-    val value: String,
-    val queryHash: String? = null,
-    val streamKey: String? = null,
-) {
-    init {
-        require(value.isNotBlank()) { "Viewer session identity must not be blank" }
-    }
-}
-
 internal enum class ViewerMediaKind {
     IMAGE,
     VIDEO,

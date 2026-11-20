@@ -39,7 +39,6 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
@@ -75,8 +74,6 @@ import kotlin.math.roundToInt
 import kotlin.math.sign
 
 internal const val VIEWER_PAGINATION_PREFETCH_RATIO = 0.8f
-
-internal val LocalViewerPostStripInset = staticCompositionLocalOf { 0.dp }
 
 /** Room above a thumbnail for the cards stacked behind it, grown with the selection. */
 private val STRIP_TOP_PADDING = 13.dp

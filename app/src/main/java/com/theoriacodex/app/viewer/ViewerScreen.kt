@@ -1,10 +1,6 @@
 package com.theoriacodex.app.viewer
 
 import android.content.res.Configuration
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -40,7 +36,6 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.MainActivity
 import com.theoriacodex.app.comments.ViewerComments
 import com.theoriacodex.app.media.isVideoMediaRef
-import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.domain.model.ImageRef
@@ -286,17 +281,6 @@ private fun ViewerNoPosts() {
     ) {
         Text("No posts to view", color = MaterialTheme.colorScheme.onBackground)
     }
-}
-
-/** Viewer controls fade rather than popping over the media they share the screen with. */
-@Composable
-internal fun ViewerChromeVisibility(visible: Boolean, modifier: Modifier, content: @Composable () -> Unit) {
-    AnimatedVisibility(
-        visible = visible,
-        modifier = modifier,
-        enter = fadeIn(tween(TheoriaMotion.SHORT_MS)),
-        exit = fadeOut(tween(TheoriaMotion.SHORT_MS)),
-    ) { content() }
 }
 
 internal const val VIEWER_CHROME_STAGE_TOP_BAR = 1

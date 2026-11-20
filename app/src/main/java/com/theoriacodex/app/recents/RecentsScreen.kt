@@ -48,7 +48,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -740,30 +739,6 @@ private enum class RecentSearchFilter(val label: String) {
     ALL("All"),
     SEARCH("Search"),
     FOR_YOU("For You"),
-}
-
-internal data class RecentSearchPresentation(
-    val title: String,
-    val subtitle: String?,
-)
-
-internal fun recentSearchPresentation(entry: RecentSearchEntry): RecentSearchPresentation {
-    val includes = entry.query.effectiveIncludeTermGroups.joinToString(" AND ") { group ->
-        if (group.terms.size == 1) group.terms.single().value
-        else group.terms.joinToString(prefix = "(", postfix = ")", separator = " OR ") { it.value }
-    }
-    val exclusions = entry.query.excludeTags.joinToString(" AND ") { tag -> "-$tag" }
-    val title = listOf(includes, exclusions).filter(String::isNotBlank).joinToString(" AND ")
-        .ifBlank { "No tags" }
-    val sourceList = entry.sources.joinToString(", ") { source -> source.displayName() }
-        .takeIf(String::isNotBlank)
-    val subtitle = when (entry.kind) {
-        RecentSearchKind.SOURCE -> null
-        RecentSearchKind.UNIFIED -> sourceList
-        RecentSearchKind.MULTI_SEARCH -> sourceList?.let { "Multi-Search · $it" } ?: "Multi-Search"
-        RecentSearchKind.FYP -> sourceList
-    }
-    return RecentSearchPresentation(title, subtitle)
 }
 
 internal fun RecentSearchEntry.fypSeedBySource(): Map<SourceKey, List<String>> {

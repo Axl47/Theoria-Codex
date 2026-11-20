@@ -76,7 +76,7 @@ class AppLogicArchitectureTest {
             "app-logic/src/main/kotlin/com/theoriacodex/app/search/SearchScopedInputPolicy.kt",
         ).readText()
         val formerOwners = listOf(
-            File(root, "app/src/main/java/com/theoriacodex/app/search/SearchCoordinator.kt"),
+            File(root, "feed-kit/src/main/kotlin/com/theoriacodex/app/search/SearchCoordinator.kt"),
             File(root, "app-logic/src/main/kotlin/com/theoriacodex/app/search/state/SearchDraftReducer.kt"),
         )
         listOf(

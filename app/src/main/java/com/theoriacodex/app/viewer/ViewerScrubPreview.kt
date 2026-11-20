@@ -4,24 +4,13 @@ package com.theoriacodex.app.viewer
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import kotlin.math.abs
-import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.draw.shadow
-import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Arrangement
 import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,22 +21,12 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntRect
-import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupPositionProvider
-import androidx.compose.ui.window.PopupProperties
-import kotlin.math.roundToInt
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
 import com.theoriacodex.app.source.requestHeaders
@@ -58,74 +37,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withTimeout
-
-/** The current media's width over height, so scrub previews can take its real shape. */
-internal val LocalViewerMediaAspectRatio = staticCompositionLocalOf<Float?> { null }
-
-private val SCRUB_FRAME_LONG_EDGE = 224.dp
-private val SCRUB_FRAME_PORTRAIT_HEIGHT = 168.dp
-private val SCRUB_FRAME_MIN_EDGE = 72.dp
-
-/** A preview frame in the media's shape, with both edges clamped so extreme panoramas stay visible. */
-internal fun viewerScrubFrameSize(aspectRatio: Float?): DpSize {
-    val ratio = aspectRatio?.takeIf { it > 0f } ?: (16f / 9f)
-    return if (ratio >= 1f) {
-        DpSize(SCRUB_FRAME_LONG_EDGE, (SCRUB_FRAME_LONG_EDGE / ratio).coerceAtLeast(SCRUB_FRAME_MIN_EDGE))
-    } else {
-        DpSize((SCRUB_FRAME_PORTRAIT_HEIGHT * ratio).coerceAtLeast(SCRUB_FRAME_MIN_EDGE), SCRUB_FRAME_PORTRAIT_HEIGHT)
-    }
-}
-
-internal fun formatScrubDelta(deltaMs: Long): String =
-    "${if (deltaMs < 0L) "-" else "+"}${formatTimelineTime(abs(deltaMs))}"
-
-/** A timeline drag's floating frame and time. */
-@Composable
-internal fun ViewerScrubPreview(positionMs: Long, deltaMs: Long, progress: Float, content: @Composable () -> Unit) {
-    ViewerScrubPopup(formatTimelineTime(positionMs), formatScrubDelta(deltaMs), progress) {
-        Box(Modifier.viewerScrubFrame(viewerScrubFrameSize(LocalViewerMediaAspectRatio.current)), contentAlignment = Alignment.Center) { content() }
-    }
-}
-
-/** One floating preview's surface: a rounded black frame with a shadow, so it stands off the artwork behind it. */
-internal fun Modifier.viewerScrubFrame(frameSize: DpSize): Modifier {
-    val shape = RoundedCornerShape(12.dp)
-    return size(frameSize).shadow(12.dp, shape).background(Color.Black, shape).clip(shape)
-}
-
-/**
- * Floats [frames] and a readout over the track at [progress], kept inside the window.
- * It is presentation only; the track below owns the drag gesture.
- */
-@Composable
-internal fun ViewerScrubPopup(readout: String, detail: String, progress: Float, frames: @Composable () -> Unit) {
-    val gapPx = with(LocalDensity.current) { 8.dp.roundToPx() }
-    val position = remember(progress, gapPx) {
-        object : PopupPositionProvider {
-            override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize,
-                layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset = IntOffset(
-                (anchorBounds.left + anchorBounds.width * progress - popupContentSize.width / 2f).roundToInt()
-                    .coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0)),
-                (anchorBounds.top - popupContentSize.height - gapPx).coerceAtLeast(0),
-            )
-        }
-    }
-    Popup(popupPositionProvider = position, properties = PopupProperties(
-        focusable = false, dismissOnBackPress = false, dismissOnClickOutside = false,
-    )) {
-        Column(
-            Modifier.testTag("viewer-scrub-preview"),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            frames()
-            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(readout, color = Color.White, style = ViewerVeil.LargeReadout, fontWeight = FontWeight.Medium)
-                Text(detail, Modifier.padding(bottom = 3.dp), color = Color.White.copy(alpha = ViewerVeil.SECONDARY_TEXT_ALPHA), style = ViewerVeil.Time)
-            }
-        }
-    }
-}
 
 /**
  * Scrub previews for the stream a Viewer page's [player] is playing, at the size the popup shows them. The page
