@@ -171,6 +171,7 @@ test_tasks=(
   :feature-viewer:testDebugUnitTest
   :feature-search:testDebugUnitTest
   :feature-library:testDebugUnitTest
+  :feature-discover:testDebugUnitTest
   :app:testDebugUnitTest
   :app:compileDebugAndroidTestKotlin
   :app:assembleDebug
@@ -187,12 +188,13 @@ detekt_tasks=(
   :feature-viewer:detektDebug
   :feature-search:detektDebug
   :feature-library:detektDebug
+  :feature-discover:detektDebug
   :core-domain:detektMain
   :core-data:detektMain
   :core-sources:detektMain
   :core-stubs:detektMain
 )
-lint_tasks=(:app:lint :core-data-android:lintDebug :ui-kit:lintDebug :media-kit:lintDebug :feed-kit:lintDebug :feature-viewer:lintDebug :feature-search:lintDebug :feature-library:lintDebug)
+lint_tasks=(:app:lint :core-data-android:lintDebug :ui-kit:lintDebug :media-kit:lintDebug :feed-kit:lintDebug :feature-viewer:lintDebug :feature-search:lintDebug :feature-library:lintDebug :feature-discover:lintDebug)
 # Everything lint shares with the tests and Detekt: all compilation and code generation. Once these
 # are built, a lint build and a tests-and-Detekt build have no task left in common, so the two can
 # run at the same time without writing the same output or reading sources mid-generation.
@@ -224,6 +226,9 @@ shared_tasks=(
   :feature-library:compileDebugUnitTestKotlin
   :feature-library:compileDebugUnitTestJavaWithJavac
   :feature-library:bundleLibRuntimeToJarDebug
+  :feature-discover:compileDebugUnitTestKotlin
+  :feature-discover:compileDebugUnitTestJavaWithJavac
+  :feature-discover:bundleLibRuntimeToJarDebug
   :core-domain:testClasses
   :core-data:testClasses
   :core-sources:testClasses
@@ -298,6 +303,7 @@ run_lint() {
     :feature-viewer:compileDebugKotlin \
     :feature-search:compileDebugKotlin \
     :feature-library:compileDebugKotlin \
+    :feature-discover:compileDebugKotlin \
     --warning-mode=all \
     --console=plain
 
