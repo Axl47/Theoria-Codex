@@ -15,9 +15,10 @@ import com.theoriacodex.sources.hitomi.HitomiProtocolException
 import com.theoriacodex.sources.http.SourceByteRange
 import com.theoriacodex.sources.http.SourceByteResponse
 import com.theoriacodex.sources.http.SourceHttpClient
+import com.theoriacodex.sources.http.header
 import java.io.IOException
-import kotlinx.coroutines.CancellationException
 import kotlin.system.measureTimeMillis
+import kotlinx.coroutines.CancellationException
 
 /**
  * Exercises the provider-owned routes that a generic search probe cannot prove: mutable CDN
@@ -145,7 +146,7 @@ class HitomiProviderHealthProbe(
                 maxBodyBytes = WEBP_RANGE_BYTES.toInt(),
             )
             validateMediaStatus(response, requestUrl, "animated WebP")
-            val contentType = response.headerValue("Content-Type")?.substringBefore(';')?.trim()
+            val contentType = response.headers.header("Content-Type")?.substringBefore(';')?.trim()
             val problem = when {
                 !contentType.equals("image/webp", ignoreCase = true) -> {
                     "Expected image/webp, returned ${contentType ?: "no Content-Type"}"
@@ -200,7 +201,7 @@ class HitomiProviderHealthProbe(
                 maxBodyBytes = MP4_RANGE_BYTES.toInt(),
             )
             validateMediaStatus(response, requestUrl, "MP4")
-            val contentType = response.headerValue("Content-Type")?.substringBefore(';')?.trim()
+            val contentType = response.headers.header("Content-Type")?.substringBefore(';')?.trim()
             val problem = when {
                 !contentType.equals("video/mp4", ignoreCase = true) -> {
                     "Expected video/mp4, returned ${contentType ?: "no Content-Type"}"
@@ -350,15 +351,8 @@ class HitomiProviderHealthProbe(
         }
     }
 
-    private fun SourceByteResponse.headerValue(name: String): String? {
-        return headers.entries
-            .firstOrNull { (key, _) -> key.equals(name, ignoreCase = true) }
-            ?.value
-            ?.firstOrNull()
-    }
-
     private fun SourceByteResponse.hasInitialContentRange(): Boolean {
-        val value = headerValue("Content-Range") ?: return false
+        val value = headers.header("Content-Range") ?: return false
         return INITIAL_CONTENT_RANGE.matches(value.trim())
     }
 

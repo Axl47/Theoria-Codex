@@ -16,6 +16,7 @@ import com.theoriacodex.sources.http.buildUrl
 import com.theoriacodex.sources.http.defaultSourceOkHttpClient
 import com.theoriacodex.sources.http.executeHttpRequest
 import com.theoriacodex.sources.http.executeWithRetry
+import com.theoriacodex.sources.http.header
 import com.theoriacodex.sources.http.toTextResponse
 import com.theoriacodex.sources.http.withByteRange
 import java.io.IOException
@@ -139,9 +140,7 @@ internal fun vetRedirect(from: URI, to: URI): URI {
 }
 
 private fun SourceByteResponse.redirectLocation(): String? =
-    takeIf { statusCode in REDIRECT_STATUSES }
-        ?.headers?.entries?.firstOrNull { (name, _) -> name.equals("Location", ignoreCase = true) }
-        ?.value?.firstOrNull()?.takeIf(String::isNotBlank)
+    takeIf { statusCode in REDIRECT_STATUSES }?.headers?.header("Location")?.takeIf(String::isNotBlank)
 
 private fun siteHost(uri: URI): String? = uri.host?.let(HostOutageTracker::normalizeHost)
 

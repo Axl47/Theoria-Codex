@@ -1,5 +1,6 @@
 package com.theoriacodex.sources.custom
 
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.source.ProbeFailure
 import com.theoriacodex.domain.source.ProtocolFamily
 import com.theoriacodex.domain.source.SiteAddress
@@ -14,9 +15,9 @@ import com.theoriacodex.sources.danbooru.DanbooruSite
 import com.theoriacodex.sources.gelbooru.GelbooruSite
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
+import com.theoriacodex.sources.http.header
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
-import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import kotlinx.coroutines.withTimeoutOrNull
 import org.jsoup.nodes.Document
 
@@ -178,7 +179,7 @@ private suspend fun homePage(address: SiteAddress, context: SiteRequestContext):
     if (home != null && home.iconSize >= LARGE_ICON_PX) return home
     val touchIcon = runCatchingPreservingCancellation {
         val response = context.get(address, APPLE_TOUCH_ICON_PATH)
-        val type = response.headers.entries.firstOrNull { it.key.equals("Content-Type", ignoreCase = true) }?.value?.firstOrNull()
+        val type = response.headers.header("Content-Type")
         "${address.baseUrl}$APPLE_TOUCH_ICON_PATH".takeIf { response.statusCode == 200 && type?.startsWith("image/") == true }
     }.getOrNull()
     return when {

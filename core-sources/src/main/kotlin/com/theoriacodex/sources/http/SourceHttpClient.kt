@@ -6,6 +6,10 @@ data class SourceHttpResponse(
     val headers: Map<String, List<String>> = emptyMap(),
 )
 
+/** The first value of header [name], whatever case the server or a test wrote it in. */
+fun Map<String, List<String>>.header(name: String): String? =
+    entries.firstOrNull { (key, _) -> key.equals(name, ignoreCase = true) }?.value?.firstOrNull()
+
 data class SourceByteRange(
     val startInclusive: Long,
     val endInclusive: Long,

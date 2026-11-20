@@ -148,6 +148,3 @@ class HostOutageTracker(
         private val OUTAGE_STATUSES = setOf(502, 503, 504) + (520..530)
     }
 }
-
-internal fun Map<String, List<String>>.header(name: String): String? =
-    entries.firstOrNull { (key, _) -> key.equals(name, ignoreCase = true) }?.value?.firstOrNull()
