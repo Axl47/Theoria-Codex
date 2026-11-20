@@ -57,7 +57,6 @@ data class HitomiMediaCandidate(
     val format: HitomiMediaFormat,
     val shard: Int,
     val isAlternateShard: Boolean,
-    val configurationBasePath: String,
     val configurationVersion: String,
 )
 
@@ -315,7 +314,6 @@ class HitomiMediaUrlResolver(
                         format = format,
                         shard = shard,
                         isAlternateShard = index == 1,
-                        configurationBasePath = configuration.basePath,
                         configurationVersion = configuration.version,
                     )
                 }

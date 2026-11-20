@@ -12,7 +12,6 @@ import kotlin.math.max
 /** Owns bounded binary-index transport, complete membership reads and byte-range validation. */
 internal class HitomiNozomiReader(
     private val httpClient: SourceHttpClient,
-    private val globalIndexCache: HitomiGlobalIndexCache,
     knownSizeCacheMaxBytes: Long,
     membershipCacheMaxBytes: Long,
 ) {
@@ -91,7 +90,7 @@ internal class HitomiNozomiReader(
         maxGalleryIds: Int,
     ): HitomiNozomiSnapshot {
         val url = index.url
-        (index.inlineIds ?: globalIndexCache.get(url))?.let { ordered ->
+        index.inlineIds?.let { ordered ->
             if (ordered.size > maxGalleryIds) {
                 throw sourceParseFailure("Hitomi global index exceeded the bounded gallery limit")
             }
@@ -134,7 +133,6 @@ internal class HitomiNozomiReader(
     }
 
     suspend fun nozomiSize(url: String): Long {
-        globalIndexCache.get(url)?.let { return it.size.toLong() }
         knownNozomiSizes.get(url)?.let { return it }
         val response = requestNozomi(
             url = url,
@@ -161,7 +159,7 @@ internal class HitomiNozomiReader(
         val url = index.url
         membershipCache.get(url)?.let { return it }
 
-        (index.inlineIds ?: globalIndexCache.get(url))?.let { ids ->
+        index.inlineIds?.let { ids ->
             val membership = ids.sortedDistinctCopy()
             membershipCache.put(url, membership)
             return membership
@@ -217,7 +215,7 @@ internal class HitomiNozomiReader(
         idCount: Int,
     ): PrimaryRange {
         val url = index.url
-        (index.inlineIds ?: globalIndexCache.get(url))?.let { ids ->
+        index.inlineIds?.let { ids ->
             val from = firstIdIndex.coerceAtMost(ids.size.toLong()).toInt()
             val until = (firstIdIndex + idCount).coerceAtMost(ids.size.toLong()).toInt()
             return PrimaryRange(ids.primitiveSlice(from, until), exhausted = until >= ids.size)

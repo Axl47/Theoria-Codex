@@ -90,7 +90,6 @@ internal abstract class HitomiSourceAdapterTestFixture {
         format = format,
         shard = 1,
         isAlternateShard = false,
-        configurationBasePath = "fixture/",
         configurationVersion = "fixture",
     )
 

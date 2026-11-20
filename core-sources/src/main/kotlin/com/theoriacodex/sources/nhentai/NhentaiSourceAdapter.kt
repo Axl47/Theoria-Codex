@@ -818,7 +818,6 @@ private val NHENTAI_METADATA_MIRROR_HEADERS = mapOf(
     "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 )
 private val NHENTAI_IMAGE_FALLBACK_EXTENSIONS = listOf("webp", "jpg", "png", "gif")
-private val NHENTAI_DIRECT_LOOKUP_FILTER_TAGS = NHENTAI_LANGUAGE_FILTER_TAGS + NHENTAI_FULL_COLOR_TAG
 internal val NHENTAI_MIRROR_THUMB_REGEX =
     Regex("""(https://t\d*\.nhentai\.net/galleries/(\d+)/thumb[^\)]*)""")
 internal val NHENTAI_MIRROR_GALLERY_LINK_REGEX = Regex("""https?://nhentai\.net/g/(\d+)/""")

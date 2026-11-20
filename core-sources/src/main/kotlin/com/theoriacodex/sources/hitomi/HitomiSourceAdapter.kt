@@ -107,9 +107,7 @@ class HitomiSourceAdapter(
     )
     private val globalIndexCache = HitomiGlobalIndexCache(globalIndexCacheMaxBytes)
     private val queryCompiler = HitomiQueryCompiler(httpClient, globalIndexCache)
-    private val nozomiReader = HitomiNozomiReader(
-        httpClient, globalIndexCache, knownSizeCacheMaxBytes, membershipCacheMaxBytes,
-    )
+    private val nozomiReader = HitomiNozomiReader(httpClient, knownSizeCacheMaxBytes, membershipCacheMaxBytes)
     private val randomSnapshotCache = HitomiRandomSnapshotCache(
         maxBytes = randomSnapshotCacheMaxBytes,
         initialReuseTtlMillis = randomSnapshotReuseTtlMillis,
@@ -546,7 +544,6 @@ class HitomiSourceAdapter(
     private suspend fun fetchGallery(galleryId: Int, sparse: Boolean): Post? {
         val gallery = galleryManifests.getOrLoad(galleryId) { loadGalleryManifest(galleryId) }
             ?: return null
-        if (gallery["blocked"].asIntOrNull() == 1) return null
         return postMapper.toPost(parseHitomiGallery(gallery, galleryId), sparse)
     }
 

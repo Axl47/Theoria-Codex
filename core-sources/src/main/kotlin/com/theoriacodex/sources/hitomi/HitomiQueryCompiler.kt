@@ -89,11 +89,7 @@ internal class HitomiQueryCompiler(
             key = url,
         ) {
             try {
-                val loaded = globalSearchIndex.galleryIds(normalized, version)
-                if (loaded.version != version) {
-                    throw HitomiProtocolException("global search returned an unexpected index version")
-                }
-                loaded.galleryIds
+                globalSearchIndex.galleryIds(normalized, version)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: SourceHttpBodyTooLargeException) {
