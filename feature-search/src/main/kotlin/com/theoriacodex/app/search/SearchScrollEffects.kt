@@ -5,6 +5,7 @@ import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.snapshots.Snapshot
@@ -31,6 +32,12 @@ internal fun SearchScrollRestorationEffect(
     val restoration = state.restoration as? SearchRestorationUiState.Restored
     val currentRestoration by rememberUpdatedState(restoration)
     val dispatch by rememberUpdatedState(onAction)
+    // Decided once per request, when it first arrives: a grid showing posts then kept its place, while one
+    // that was not yet showing posts is restored however many jumps it takes. Read without observation so
+    // scrolling neither recomposes the screen nor restarts the effect.
+    val gridWasShowingPosts = remember(restoration?.scrollRequestId) {
+        Snapshot.withoutReadObservation { gridState.layoutInfo.visibleItemsInfo.isNotEmpty() }
+    }
     // A deliberate drag supersedes restoration; scrollToItem emits no DragInteraction.
     LaunchedEffect(gridState) {
         gridState.interactionSource.interactions.filterIsInstance<DragInteraction.Start>().collect {
@@ -40,13 +47,12 @@ internal fun SearchScrollRestorationEffect(
         }
     }
     // Only the state rules wait, so the grid facts passed here cannot change whether a step is ready.
-    val canRestore = state.scrollStep(visibilityReady, projection.entries.size, gridLaidOut = false) != ScrollStep.Wait
+    val canRestore =
+        state.scrollStep(visibilityReady, projection.entries.size, gridWasShowingPosts = false) != ScrollStep.Wait
     // A retry needs the posts that arrived, which can reach the projection after the state that loaded them.
     LaunchedEffect(restoration?.scrollRequestId, canRestore, projection.entries.size) {
         val activeProjection = currentProjection
-        // Sampled, not observed: the jump's own layout must not restart the effect.
-        val gridLaidOut = gridState.layoutInfo.visibleItemsInfo.isNotEmpty()
-        when (val step = state.scrollStep(visibilityReady, activeProjection.entries.size, gridLaidOut)) {
+        when (val step = state.scrollStep(visibilityReady, activeProjection.entries.size, gridWasShowingPosts)) {
             ScrollStep.Wait -> Unit
             is ScrollStep.Finish -> dispatch(SearchAction.ScrollRestorationApplied(step.requestId))
             is ScrollStep.Jump -> {

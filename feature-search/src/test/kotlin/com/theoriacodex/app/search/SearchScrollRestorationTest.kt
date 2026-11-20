@@ -232,6 +232,41 @@ class SearchScrollRestorationTest {
         }
     }
 
+    @Test fun `keep-live request that stopped short on a cold grid retries when the next page arrives`() {
+        state.value = state.value.copy(
+            restoration = SearchRestorationUiState.Restored(false, SearchScrollState(18, 17), 1L, keepLiveGrid = true),
+        )
+        gridShown.value = false
+        render()
+        compose.runOnIdle { gridShown.value = true }
+        compose.runOnIdle {
+            assertTrue(acknowledgements.isEmpty())
+            state.value = state.value.copy(content = state.value.content.copy(results = posts.take(40)))
+        }
+        compose.runOnIdle {
+            assertEquals(listOf(1L), acknowledgements)
+            assertEquals(18, grid.firstVisibleItemIndex)
+            assertEquals(17, grid.firstVisibleItemScrollOffset)
+        }
+    }
+
+    @Test fun `keep-live request opened before any posts restores the anchor when they arrive`() {
+        state.value = state.value.copy(
+            content = state.value.content.copy(results = emptyList()),
+            restoration = SearchRestorationUiState.Restored(false, SearchScrollState(22, 17), 1L, keepLiveGrid = true),
+        )
+        render()
+        compose.runOnIdle {
+            assertTrue(acknowledgements.isEmpty())
+            state.value = state.value.copy(content = state.value.content.copy(results = posts.take(40)))
+        }
+        compose.runOnIdle {
+            assertEquals(listOf(1L), acknowledgements)
+            assertEquals(22, grid.firstVisibleItemIndex)
+            assertEquals(17, grid.firstVisibleItemScrollOffset)
+        }
+    }
+
     @Test fun `explicit reset to top does not wait for duration lookups`() {
         state.value = state.value.copy(restoration = SearchRestorationUiState.Restored(
             false, SearchScrollState(0, 0), 1L, resetToTop = true,
