@@ -13,13 +13,14 @@
     "ui-kit",
     "media-kit",
     "feed-kit",
-    "feature-viewer"
+    "feature-viewer",
+    "feature-search"
   ],
   "lineBudgets": {
     "production": 900,
     "test": 700,
     "productionExceptions": {
-      "app/src/main/java/com/theoriacodex/app/search/SearchViewModel.kt": 1053
+      "feature-search/src/main/kotlin/com/theoriacodex/app/search/SearchViewModel.kt": 1053
     }
   },
   "detektBaselines": {
@@ -33,6 +34,7 @@
     "config/detekt/baseline-ui-kit-debug.xml": {},
     "config/detekt/baseline-media-kit-debug.xml": {},
     "config/detekt/baseline-feed-kit-debug.xml": {},
-    "config/detekt/baseline-feature-viewer-debug.xml": {}
+    "config/detekt/baseline-feature-viewer-debug.xml": {},
+    "config/detekt/baseline-feature-search-debug.xml": {}
   }
 }
