@@ -627,6 +627,8 @@ private class RelatedGelbooruHttpClient(
     private val html: String,
     private val malformedIds: Set<String> = emptySet(),
 ) : SourceHttpClient {
+    // sourceCall runs hydrations on Dispatchers.Default, so this bookkeeping is shared across threads.
+    private val lock = Any()
     val hydratedIds = mutableListOf<String>()
     var maxConcurrentHydrations: Int = 0
         private set
@@ -639,11 +641,13 @@ private class RelatedGelbooruHttpClient(
     ): SourceHttpResponse {
         if (query["page"] == "post") return SourceHttpResponse(200, html)
         val id = requireNotNull(query["id"])
-        hydratedIds += id
-        activeHydrations += 1
-        maxConcurrentHydrations = maxOf(maxConcurrentHydrations, activeHydrations)
+        synchronized(lock) {
+            hydratedIds += id
+            activeHydrations += 1
+            maxConcurrentHydrations = maxOf(maxConcurrentHydrations, activeHydrations)
+        }
         delay(1)
-        activeHydrations -= 1
+        synchronized(lock) { activeHydrations -= 1 }
         val body = if (id in malformedIds) {
             """{"post":[{}]}"""
         } else {
