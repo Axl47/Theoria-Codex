@@ -28,10 +28,10 @@ internal class SharedPostPayloadWriter(
             "Shared Post disappeared while merging $source:$sourcePostId"
         }
         val existing = LocalPostPayloadCodec.decode(current)
-        val merged = mergeSparsePost(existing, post)
+        val merged = PostStorageCodec.encode(mergeSparsePost(existing, post))
         // Compare what the row would decode to, not bytes: the encoder no longer writes the escapes Gson did, and
         // live-only Post fields such as the comment hint are never stored.
-        if (PostStorageCodec.decode(PostStorageCodec.encode(merged)) != existing) {
+        if (PostStorageCodec.decode(merged) != existing) {
             check(dao.updatePost(source, sourcePostId, LocalPostPayloadCodec.encode(merged)) == 1) {
                 "Shared Post disappeared while updating $source:$sourcePostId"
             }
