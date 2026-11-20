@@ -1,11 +1,9 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.MemoryStateCell
+import com.theoriacodex.data.storage.StateCell
 import com.theoriacodex.domain.source.SiteProfile
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 /**
  * Stored user-added sites (plan contract C2). Step 3 implements it over `custom_sites_v1.json`;
@@ -42,33 +40,25 @@ sealed interface SiteProfileAddResult {
 /** [keptExisting]: ids whose stored profile won over an imported one with a different address or family. */
 data class SiteProfileMergeResult(val added: Int, val keptExisting: List<String>)
 
-class InMemorySiteProfileRepository(initial: List<SiteProfile> = emptyList()) : SiteProfileRepository {
-    private val mutex = Mutex()
-    private val profiles = MutableStateFlow(initial.distinctBy(SiteProfile::sourceId))
+class InMemorySiteProfileRepository(initial: List<SiteProfile> = emptyList()) :
+    SiteProfileRepository by CellSiteProfileRepository(MemoryStateCell(initial.distinctBy(SiteProfile::sourceId)))
 
-    override fun observeProfiles(): Flow<List<SiteProfile>> = profiles.asStateFlow()
+/** Sites over a [StateCell], following [SiteProfileListPolicy]; shared by the stored and in-memory repositories. */
+internal class CellSiteProfileRepository(private val cell: StateCell<List<SiteProfile>>) : SiteProfileRepository {
+    override fun observeProfiles(): Flow<List<SiteProfile>> = cell.data
 
-    override suspend fun add(profile: SiteProfile): SiteProfileAddResult = mutex.withLock {
-        val (next, result) = SiteProfileListPolicy.add(profiles.value, profile)
-        profiles.value = next
-        result
+    override suspend fun add(profile: SiteProfile): SiteProfileAddResult =
+        cell.updateReturning { SiteProfileListPolicy.add(it, profile) }
+
+    override suspend fun update(sourceId: String, transform: (SiteProfile) -> SiteProfile): Boolean =
+        cell.updateReturning { current ->
+            SiteProfileListPolicy.update(current, sourceId, transform)?.let { it to true } ?: (current to false)
+        }
+
+    override suspend fun remove(sourceId: String): Boolean = cell.updateReturning { current ->
+        SiteProfileListPolicy.remove(current, sourceId)?.let { it to true } ?: (current to false)
     }
 
-    override suspend fun update(sourceId: String, transform: (SiteProfile) -> SiteProfile): Boolean = mutex.withLock {
-        val next = SiteProfileListPolicy.update(profiles.value, sourceId, transform) ?: return@withLock false
-        profiles.value = next
-        true
-    }
-
-    override suspend fun remove(sourceId: String): Boolean = mutex.withLock {
-        val next = SiteProfileListPolicy.remove(profiles.value, sourceId) ?: return@withLock false
-        profiles.value = next
-        true
-    }
-
-    override suspend fun mergeRestored(profiles: List<SiteProfile>): SiteProfileMergeResult = mutex.withLock {
-        val (next, result) = SiteProfileListPolicy.mergeRestored(this.profiles.value, profiles)
-        this.profiles.value = next
-        result
-    }
+    override suspend fun mergeRestored(profiles: List<SiteProfile>): SiteProfileMergeResult =
+        cell.updateReturning { SiteProfileListPolicy.mergeRestored(it, profiles) }
 }

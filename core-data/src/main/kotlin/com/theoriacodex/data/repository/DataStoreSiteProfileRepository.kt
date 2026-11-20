@@ -1,19 +1,15 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.AsynchronousStore
-import com.theoriacodex.data.storage.DurableStoreStatus
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.JsonDataStore
+import com.theoriacodex.data.storage.focus
 import com.theoriacodex.data.storage.openJsonDataStore
 import com.theoriacodex.domain.source.SiteProfile
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -26,52 +22,26 @@ internal const val SITE_PROFILES_SCHEMA_VERSION = 1
  * version keeps them. A newer schema is refused rather than overwritten; a corrupt file is set
  * aside and the store starts empty (library data is unaffected, and re-adding a site reconnects it).
  */
-class DataStoreSiteProfileRepository(
-    baseDirectory: File,
-    scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-    recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
-) : SiteProfileRepository, AsynchronousStore {
-    private val storeFile = baseDirectory.resolve(SITE_PROFILES_FILE_NAME)
-    private val dataStore: JsonDataStore<SiteProfileStoreFile> = openJsonDataStore(
-        file = storeFile,
-        logicalStore = "Custom sites",
-        schemaVersion = SITE_PROFILES_SCHEMA_VERSION,
-        defaultValue = SiteProfileStoreFile(),
-        serializer = SiteProfileStoreFile.serializer(),
-        scope = scope,
-        recoveries = recoveryRegistry,
+class DataStoreSiteProfileRepository private constructor(
+    store: JsonDataStore<SiteProfileStoreFile>,
+) : SiteProfileRepository by CellSiteProfileRepository(
+    store.focus(SiteProfileStoreFile::profiles, SiteProfileStoreFile::withProfiles),
+), AsynchronousStore by store {
+    constructor(
+        baseDirectory: File,
+        scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+        recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
+    ) : this(
+        openJsonDataStore(
+            file = baseDirectory.resolve(SITE_PROFILES_FILE_NAME),
+            logicalStore = "Custom sites",
+            schemaVersion = SITE_PROFILES_SCHEMA_VERSION,
+            defaultValue = SiteProfileStoreFile(),
+            serializer = SiteProfileStoreFile.serializer(),
+            scope = scope,
+            recoveries = recoveryRegistry,
+        ),
     )
-
-    override val storageStatus: StateFlow<DurableStoreStatus> = dataStore.storageStatus
-
-    override suspend fun awaitReady() = dataStore.awaitReady()
-
-    override fun observeProfiles(): Flow<List<SiteProfile>> =
-        dataStore.data.map(SiteProfileStoreFile::profiles).distinctUntilChanged()
-
-    override suspend fun add(profile: SiteProfile): SiteProfileAddResult = mutate { SiteProfileListPolicy.add(it, profile) }
-
-    override suspend fun update(sourceId: String, transform: (SiteProfile) -> SiteProfile): Boolean = mutate { current ->
-        SiteProfileListPolicy.update(current, sourceId, transform)?.let { it to true } ?: (current to false)
-    }
-
-    override suspend fun remove(sourceId: String): Boolean = mutate { current ->
-        SiteProfileListPolicy.remove(current, sourceId)?.let { it to true } ?: (current to false)
-    }
-
-    override suspend fun mergeRestored(profiles: List<SiteProfile>): SiteProfileMergeResult =
-        mutate { SiteProfileListPolicy.mergeRestored(it, profiles) }
-
-    /** Applies [change] to the readable profiles in one transaction and returns its result. */
-    private suspend fun <R> mutate(change: (List<SiteProfile>) -> Pair<List<SiteProfile>, R>): R {
-        var result: Result<R>? = null
-        dataStore.update { stored ->
-            val (next, outcome) = change(stored.profiles())
-            result = Result.success(outcome)
-            if (next == stored.profiles()) stored else stored.withProfiles(next)
-        }
-        return checkNotNull(result).getOrThrow()
-    }
 }
 
 @Serializable

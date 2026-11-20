@@ -43,5 +43,4 @@ public interface RecentsDao {
     int trimSearches(int limit);
     @Query("DELETE FROM recent_searches") int deleteSearches();
     @Query("DELETE FROM recent_searches WHERE query_hash IN (:hashes)") int deleteSearchesByHashes(List<String> hashes);
-    @Query("DELETE FROM recent_searches WHERE query_hash LIKE :prefix || '%'") int deleteSearchesWithPrefix(String prefix);
 }

@@ -4,6 +4,8 @@ import com.theoriacodex.data.storage.AsynchronousStore
 import com.theoriacodex.data.storage.DurableStoreStatus
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.JsonDataStore
+import com.theoriacodex.data.storage.openDecodedJsonDataStore
+import com.theoriacodex.data.storage.StateCell
 import com.theoriacodex.data.storage.openJsonDataStore
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
@@ -17,31 +19,41 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
-class DataStoreSettingsRepository(
-    baseDirectory: File,
-    scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-    recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
-    private val profileWriteGuard: ProfileLibraryWriteGuard = ProfileLibraryWriteGuard(),
-) : SettingsRepository, AsynchronousStore {
-    private val storeFile = baseDirectory.resolve(DATASTORE_SETTINGS_FILE_NAME)
-    private val dataStore: JsonDataStore<SettingsDataStoreFile> = openJsonDataStore(
-        file = storeFile,
-        logicalStore = "Settings",
-        schemaVersion = SETTINGS_DATASTORE_SCHEMA_VERSION,
-        defaultValue = SettingsDataStoreFile(),
-        serializer = SettingsDataStoreFile.serializer(),
-        scope = scope,
-        validate = SettingsDataStoreFile::validate,
-        recoveries = recoveryRegistry,
+class DataStoreSettingsRepository private constructor(
+    store: JsonDataStore<AppSettings>,
+    profileWriteGuard: ProfileLibraryWriteGuard,
+) : SettingsRepository by CellSettingsRepository(store, profileWriteGuard), AsynchronousStore by store {
+    constructor(
+        baseDirectory: File,
+        scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+        recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
+        profileWriteGuard: ProfileLibraryWriteGuard = ProfileLibraryWriteGuard(),
+    ) : this(
+        openDecodedJsonDataStore(
+            file = baseDirectory.resolve(DATASTORE_SETTINGS_FILE_NAME),
+            logicalStore = "Settings",
+            schemaVersion = SETTINGS_DATASTORE_SCHEMA_VERSION,
+            defaultValue = SettingsDataStoreFile(),
+            serializer = SettingsDataStoreFile.serializer(),
+            scope = scope,
+            validate = SettingsDataStoreFile::validate,
+            recoveries = recoveryRegistry,
+            decode = SettingsDataStoreFile::toDomain,
+            encode = SettingsDataStoreFile::fromDomain,
+        ),
+        profileWriteGuard,
     )
+}
 
-    override val storageStatus: StateFlow<DurableStoreStatus> = dataStore.storageStatus
-
-    override suspend fun awaitReady() = dataStore.awaitReady()
-
-    override fun observeSettings(): Flow<AppSettings> {
-        return dataStore.data.map(SettingsDataStoreFile::toDomain).distinctUntilChanged()
-    }
+/**
+ * Settings over a [StateCell], shared by the DataStore store and the in-memory default. Every change is normalized,
+ * admitted against the settings capacity, and bounded like the settings file ([normalizeDataStoreSettings]).
+ */
+internal class CellSettingsRepository(
+    private val cell: StateCell<AppSettings>,
+    private val profileWriteGuard: ProfileLibraryWriteGuard = ProfileLibraryWriteGuard(),
+) : SettingsRepository {
+    override fun observeSettings(): Flow<AppSettings> = cell.data.distinctUntilChanged()
 
     override suspend fun updateSettings(transform: (AppSettings) -> AppSettings) {
         mutateSettings { current ->
@@ -52,12 +64,6 @@ class DataStoreSettingsRepository(
     override suspend fun setEnabledSources(enabledSources: Set<SourceKey>) {
         updateSettings { current ->
             current.copy(runtime = SourceWeightSettings.selectSources(current.runtime, enabledSources))
-        }
-    }
-
-    override suspend fun setSourceWeights(sourceWeights: Map<SourceKey, Double>) {
-        updateSettings { current ->
-            current.copy(runtime = current.runtime.copy(sourceWeights = sourceWeights))
         }
     }
 
@@ -173,26 +179,12 @@ class DataStoreSettingsRepository(
         }
     }
 
-    override suspend fun setProviderHealthSnapshots(snapshots: List<ProviderHealthSnapshot>) {
-        updateSettings { current -> RepositoryPolicies.mergeProviderHealth(current, snapshots) }
-    }
-
     private suspend fun <T> mutateSettings(
         policy: (AppSettings) -> RepositoryPolicies.Result<AppSettings, T>,
-    ): T {
-        var result: MutationValue<T>? = null
-        dataStore.update { stored ->
-            val current = stored.toDomain()
-            val policyResult = policy(current)
-            val normalized = RepositoryPolicies.normalizeSettings(policyResult.state).requireSettingsCapacity()
-            result = MutationValue(policyResult.value)
-            if (normalized == current) {
-                stored
-            } else {
-                SettingsDataStoreFile.fromDomain(normalized)
-            }
-        }
-        return requireNotNull(result).value
+    ): T = cell.updateReturning { current ->
+        val result = policy(current)
+        val admitted = RepositoryPolicies.normalizeSettings(result.state).requireSettingsCapacity()
+        normalizeDataStoreSettings(admitted) to result.value
     }
 }
 
@@ -280,5 +272,3 @@ class DataStoreUiRestoreRepository(
         return updated.toMemoryState()
     }
 }
-
-private data class MutationValue<T>(val value: T)

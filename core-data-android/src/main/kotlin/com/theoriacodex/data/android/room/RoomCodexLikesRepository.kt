@@ -26,7 +26,6 @@ import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.domain.tags.sourceTagKey
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOn
@@ -50,7 +49,7 @@ class RoomCodexLikesRepository(
     private val writeGuard: ProfileLibraryWriteGuard = ProfileLibraryWriteGuard(),
 ) : CodexRepository, LikesRepository, CodexLikesTransactions, SourceLibraryPresence {
     private val dao = database.codexLikesDao()
-    private val sharedPostPayloads = SharedPostPayloadWriter(dao)
+    private val sharedPosts = SharedPosts(dao)
     private val retainedPayloads = RetainedPostPayloadCache(LocalPostPayloadCodec::decode)
     private val summaries = RoomCodexSummaryQueries(dao, retainedPayloads)
 
@@ -61,9 +60,7 @@ class RoomCodexLikesRepository(
         }
         val rows = dao.overlappingItems(request.targetId, request.comparisonIds.sorted())
         val items = rows.map { checkNotNull(it.toDomainOrNull()) }
-        val posts = rows.map { row ->
-            LocalPostPayloadCodec.decode(checkNotNull(dao.post(row.source, row.sourcePostId)))
-        }
+        val posts = rows.map { row -> checkNotNull(storedPost(row.source, row.sourcePostId)) }
         val likes = if (request.targetId == ProfileLibraryIds.likes(request.profileId)) {
             rows.mapNotNull { row ->
                 dao.likedPost(request.profileId, row.source, row.sourcePostId)?.let { checkNotNull(it.toLikedPostOrNull()) }
@@ -84,10 +81,7 @@ class RoomCodexLikesRepository(
             restoreItems(snapshot.items, snapshot.posts)
             snapshot.likes.forEach { like ->
                 check(request.targetId == ProfileLibraryIds.likes(request.profileId) && like.profileId == request.profileId)
-                dao.insertLike(LikedPostEntity(
-                    like.profileId, like.postId.source.id, like.postId.sourcePostId,
-                    like.likedAtEpochMs, LikedTagsCodec.encode(like.tags),
-                ))
+                dao.insertLike(like.toEntity())
             }
         }
     }
@@ -100,7 +94,7 @@ class RoomCodexLikesRepository(
             dao.deleteLikes(profileId)
             codices.forEach { dao.deleteCodex(it.codexId) }
             normalizeCodexOrderInside()
-            cleanupOrphanPostsInside(affected)
+            sharedPosts.releaseIfOrphaned(affected)
         }
     }
 
@@ -148,19 +142,14 @@ class RoomCodexLikesRepository(
         }
     }
 
-    override suspend fun reorderCodex(codexId: String, targetIndex: Int) {
+    private suspend fun reorderCodex(codexId: String, targetIndex: Int) {
         database.withTransaction {
             val current = dao.codices()
             val sourceIndex = current.indexOfFirst { entity -> entity.codexId == codexId }
             if (sourceIndex < 0 || current.isEmpty()) return@withTransaction
             val clampedTarget = targetIndex.coerceIn(0, current.lastIndex)
             if (sourceIndex == clampedTarget) return@withTransaction
-            val reordered = current.toMutableList().apply {
-                add(clampedTarget, removeAt(sourceIndex))
-            }
-            reordered.forEachIndexed { index, entity ->
-                if (entity.displayOrder != index) dao.updateCodexOrder(entity.codexId, index)
-            }
+            writeDisplayOrder(current.toMutableList().apply { add(clampedTarget, removeAt(sourceIndex)) })
         }
     }
 
@@ -195,12 +184,12 @@ class RoomCodexLikesRepository(
         }
     }
 
-    override suspend fun deleteCodex(codexId: String) {
+    private suspend fun deleteCodex(codexId: String) {
         database.withTransaction {
             val removedItems = dao.itemsForCodex(codexId)
             if (dao.deleteCodex(codexId) > 0) {
                 normalizeCodexOrderInside()
-                cleanupOrphanPostsInside(removedItems.map { it.source to it.sourcePostId })
+                sharedPosts.releaseIfOrphaned(removedItems.map { it.source to it.sourcePostId })
             }
         }
     }
@@ -215,7 +204,7 @@ class RoomCodexLikesRepository(
             codex = entity.toDomain(dao.automaticTagsForCodex(codexId)),
             position = position,
             items = rows.mapNotNull { it.toDomainOrNull() },
-            posts = rows.mapNotNull { row -> dao.post(row.source, row.sourcePostId)?.let(LocalPostPayloadCodec::decode) },
+            posts = rows.mapNotNull { row -> storedPost(row.source, row.sourcePostId) },
         )
         deleteCodex(codexId)
         snapshot
@@ -249,8 +238,7 @@ class RoomCodexLikesRepository(
             else -> dao.observeCodexPostsNewest(codexId)
         }
         // Every sort projects the same rows, so sorts share one retained projection per Codex.
-        return rows.map { values -> values.map { PostEntity(it.source, it.sourcePostId, it.payloadJson) } }
-            .decodePostSnapshots(retainedPayloads, "codex:$codexId")
+        return rows.decodePostSnapshots(retainedPayloads, "codex:$codexId")
     }
 
     override fun observeLibraryPosts(codexIds: Set<String>): Flow<List<Post>> {
@@ -265,34 +253,21 @@ class RoomCodexLikesRepository(
         withContext(Dispatchers.IO) { dao.hasPosts(source.id) }
 
     override suspend fun getPost(postId: PostId): Post? = withContext(Dispatchers.IO) {
-        dao.post(postId.source.id, postId.sourcePostId)?.let(LocalPostPayloadCodec::decode)
+        storedPost(postId.source.id, postId.sourcePostId)
     }
 
     override suspend fun addItems(codexId: String, posts: List<Post>): Int {
         return database.withTransaction {
             writeGuard.requireCodexWritable(codexId)
             check(dao.codex(codexId) != null) { "The selected Codex no longer exists" }
-            posts.distinctBy(Post::id).count { post ->
-                sharedPostPayloads.upsert(post)
-                dao.insertCodexItem(
-                    CodexItemEntity(codexId, post.id.source.id, post.id.sourcePostId, clock()),
-                ) != -1L
-            }
+            posts.distinctBy(Post::id).count { post -> saveItem(codexId, post, clock()) }
         }
     }
 
     override suspend fun updatePost(post: Post) {
         database.withTransaction {
             if (dao.post(post.id.source.id, post.id.sourcePostId) != null) {
-                sharedPostPayloads.upsert(post)
-            }
-        }
-    }
-
-    override suspend fun removeItem(codexId: String, sourceKey: SourceKey, sourcePostId: String) {
-        database.withTransaction {
-            if (dao.deleteCodexItem(codexId, sourceKey.id, sourcePostId) > 0) {
-                dao.deleteOrphanPost(sourceKey.id, sourcePostId)
+                sharedPosts.upsert(post)
             }
         }
     }
@@ -304,7 +279,7 @@ class RoomCodexLikesRepository(
             postIds.forEach { postId ->
                 removed = dao.deleteCodexItem(codexId, postId.source.id, postId.sourcePostId) > 0 || removed
             }
-            if (removed) cleanupOrphanPostsInside(postIds.map { it.source.id to it.sourcePostId })
+            if (removed) sharedPosts.releaseIfOrphaned(postIds.map { it.source.id to it.sourcePostId })
         }
     }
 
@@ -319,15 +294,7 @@ class RoomCodexLikesRepository(
                     dao.codex(item.codexId) != null &&
                     dao.codexItem(item.codexId, item.postId.source.id, item.postId.sourcePostId) == null
                 ) {
-                    sharedPostPayloads.upsert(post)
-                    dao.insertCodexItem(
-                        CodexItemEntity(
-                            item.codexId,
-                            item.postId.source.id,
-                            item.postId.sourcePostId,
-                            item.savedAtEpochMs,
-                        )
-                    )
+                    saveItem(item.codexId, post, item.savedAtEpochMs)
                 }
             }
         }
@@ -356,23 +323,10 @@ class RoomCodexLikesRepository(
         return database.withTransaction {
             val codex = ensureCodexInside(codexId, name)
             val uniquePosts = posts.distinctBy(Post::id)
-            var insertedMemberships = 0
-            uniquePosts.forEach { post ->
-                sharedPostPayloads.upsert(post)
-                val inserted = dao.insertCodexItem(
-                    CodexItemEntity(
-                        codex.codexId,
-                        post.id.source.id,
-                        post.id.sourcePostId,
-                        clock(),
-                    )
-                )
-                if (inserted != -1L) insertedMemberships += 1
-            }
             CodexBulkImportResult(
                 codex = codex,
                 acceptedPosts = uniquePosts.size,
-                insertedMemberships = insertedMemberships,
+                insertedMemberships = uniquePosts.count { post -> saveItem(codex.codexId, post, clock()) },
             )
         }
     }
@@ -388,14 +342,7 @@ class RoomCodexLikesRepository(
                 movedCodices = 0,
             )
             val currentById = current.associateBy { entity -> entity.codexId }
-            var movedCodices = 0
-            resolved.forEachIndexed { index, codex ->
-                val entity = currentById.getValue(codex.codexId)
-                if (entity.displayOrder != index) {
-                    dao.updateCodexOrder(codex.codexId, index)
-                    movedCodices += 1
-                }
-            }
+            val movedCodices = writeDisplayOrder(resolved.map { codex -> currentById.getValue(codex.codexId) })
             CodexBulkReorderResult(applied = true, movedCodices = movedCodices)
         }
     }
@@ -418,15 +365,7 @@ class RoomCodexLikesRepository(
             var automaticMembershipsAdded = 0
             val membershipChanged = if (nowLiked) {
                 val codex = ensureCodexInside(systemCodexId, systemCodexName)
-                sharedPostPayloads.upsert(post)
-                val systemMembershipChanged = dao.insertCodexItem(
-                    CodexItemEntity(
-                        codex.codexId,
-                        post.id.source.id,
-                        post.id.sourcePostId,
-                        clock(),
-                    )
-                ) != -1L
+                val systemMembershipChanged = saveItem(codex.codexId, post, clock())
                 val candidateIds = (eligibleAutomaticCodexIds - systemCodexId).sorted()
                 if (candidateIds.isNotEmpty()) {
                     dao.automaticTagsForCodices(candidateIds)
@@ -439,15 +378,7 @@ class RoomCodexLikesRepository(
                         }
                         .keys
                         .forEach { codexId ->
-                            val inserted = dao.insertCodexItem(
-                                CodexItemEntity(
-                                    codexId,
-                                    post.id.source.id,
-                                    post.id.sourcePostId,
-                                    clock(),
-                                ),
-                            )
-                            if (inserted != -1L) automaticMembershipsAdded += 1
+                            if (insertItem(codexId, post.id, clock())) automaticMembershipsAdded += 1
                         }
                 }
                 systemMembershipChanged
@@ -457,7 +388,7 @@ class RoomCodexLikesRepository(
                     post.id.source.id,
                     post.id.sourcePostId,
                 ) > 0
-                dao.deleteOrphanPost(post.id.source.id, post.id.sourcePostId)
+                sharedPosts.releaseIfOrphaned(listOf(post.id.source.id to post.id.sourcePostId))
                 removed
             }
             CodexLikeSyncResult(
@@ -480,7 +411,7 @@ class RoomCodexLikesRepository(
             val memberships = dao.itemsForCodex(systemCodexId).filter { (it.source to it.sourcePostId) in likedKeys }
             val undo = ClearedLikesSnapshot(
                 items = memberships.mapNotNull { it.toDomainOrNull() },
-                posts = likedBeforeClear.mapNotNull { dao.post(it.source, it.sourcePostId)?.let(LocalPostPayloadCodec::decode) },
+                posts = likedBeforeClear.mapNotNull { storedPost(it.source, it.sourcePostId) },
                 likes = likedBeforeClear.mapNotNull(LikedPostEntity::toLikedPostOrNull),
             )
             val clearedLikes = dao.deleteLikes(normalized)
@@ -492,7 +423,7 @@ class RoomCodexLikesRepository(
                     liked.sourcePostId,
                 )
             }
-            cleanupOrphanPostsInside(likedBeforeClear.map { it.source to it.sourcePostId })
+            sharedPosts.releaseIfOrphaned(likedBeforeClear.map { it.source to it.sourcePostId })
             CodexLikesClearResult(clearedLikes, removedMemberships, undo.takeIf { clearedLikes > 0 })
         }
     }
@@ -500,12 +431,7 @@ class RoomCodexLikesRepository(
     override suspend fun restoreClearedLikes(snapshot: ClearedLikesSnapshot) {
         database.withTransaction {
             restoreItems(snapshot.items, snapshot.posts)
-            snapshot.likes.forEach { like ->
-                dao.insertLike(LikedPostEntity(
-                    like.profileId, like.postId.source.id, like.postId.sourcePostId,
-                    like.likedAtEpochMs, LikedTagsCodec.encode(like.tags),
-                ))
-            }
+            snapshot.likes.forEach { like -> dao.insertLike(like.toEntity()) }
         }
     }
 
@@ -521,7 +447,7 @@ class RoomCodexLikesRepository(
             val clearedLikes = dao.deleteLikes(normalized)
             val systemCodexDeleted = dao.deleteCodex(systemCodexId) > 0
             if (systemCodexDeleted) normalizeCodexOrderInside()
-            cleanupOrphanPostsInside(removedIds)
+            sharedPosts.releaseIfOrphaned(removedIds)
             CodexProfileDeleteResult(clearedLikes, systemCodexDeleted)
         }
     }
@@ -554,15 +480,26 @@ class RoomCodexLikesRepository(
         return created.toDomain()
     }
 
-    private suspend fun normalizeCodexOrderInside() {
-        dao.codices().forEachIndexed { index, entity ->
-            if (entity.displayOrder != index) dao.updateCodexOrder(entity.codexId, index)
-        }
+    private fun normalizeCodexOrderInside() {
+        writeDisplayOrder(dao.codices())
     }
 
-    private fun cleanupOrphanPostsInside(postIds: List<Pair<String, String>>) {
-        postIds.distinct().forEach { (source, postId) -> dao.deleteOrphanPost(source, postId) }
+    /** Gives each Codex its position in [ordered] as its display order; returns how many moved. */
+    private fun writeDisplayOrder(ordered: List<CodexEntity>): Int = ordered.withIndex().count { (index, entity) ->
+        (entity.displayOrder != index).also { moved -> if (moved) dao.updateCodexOrder(entity.codexId, index) }
     }
+
+    /** Stores [post]'s snapshot, then its membership in [codexId]; true when the membership is new. */
+    private fun saveItem(codexId: String, post: Post, savedAtEpochMs: Long): Boolean {
+        sharedPosts.upsert(post)
+        return insertItem(codexId, post.id, savedAtEpochMs)
+    }
+
+    private fun insertItem(codexId: String, postId: PostId, savedAtEpochMs: Long): Boolean =
+        dao.insertCodexItem(CodexItemEntity(codexId, postId.source.id, postId.sourcePostId, savedAtEpochMs)) != -1L
+
+    private fun storedPost(source: String, sourcePostId: String): Post? =
+        dao.post(source, sourcePostId)?.let(LocalPostPayloadCodec::decode)
 
     private suspend fun toggleLikeInside(
         normalizedProfileId: String,
@@ -585,55 +522,4 @@ class RoomCodexLikesRepository(
         )
         return true
     }
-}
-
-/** Unreadable tags degrade to none rather than hiding the like. */
-private fun LikedPostEntity.toLikedPostOrNull(): LikedPost? {
-    val postId = toPostIdOrNull() ?: return null
-    val tags = runCatching { LikedTagsCodec.decode(tagsJson) }.getOrDefault(emptyList())
-    return LikedPost(
-        profileId = profileId,
-        postId = postId,
-        likedAtEpochMs = likedAtEpochMs,
-        tags = CodexLikesPolicy.normalizeLikedTags(tags),
-    )
-}
-
-private fun CodexEntity.toDomain(automaticTagEntities: List<CodexAutomaticTagEntity> = emptyList()): Codex {
-    return Codex(
-        codexId = codexId,
-        name = name,
-        createdAtEpochMs = createdAtEpochMs,
-        automaticTags = CodexLikesPolicy.normalizeAutomaticTags(
-            automaticTagEntities.mapNotNull(CodexAutomaticTagEntity::toDomainOrNull),
-        ),
-    )
-}
-
-private fun CodexAutomaticTagEntity.toDomainOrNull(): CodexAutomaticTag? {
-    val sourceKey = SourceKey.parse(source) ?: return null
-    return CodexAutomaticTag(source = sourceKey, tag = tagDisplay, groupIndex = groupIndex)
-}
-
-private fun CodexAutomaticTag.toEntity(codexId: String): CodexAutomaticTagEntity {
-    return CodexAutomaticTagEntity(
-        codexId,
-        source.id,
-        sourceTagKey(source, tag),
-        tag,
-        groupIndex,
-    )
-}
-
-private fun CodexItemEntity.toDomainOrNull(): CodexItem? {
-    val sourceKey = SourceKey.parse(source) ?: return null
-    return CodexItem(
-        codexId = codexId,
-        postId = PostId(sourceKey, sourcePostId),
-        savedAtEpochMs = savedAtEpochMs,
-    )
-}
-
-private fun LikedPostEntity.toPostIdOrNull(): PostId? {
-    return SourceKey.parse(source)?.let { sourceKey -> PostId(sourceKey, sourcePostId) }
 }

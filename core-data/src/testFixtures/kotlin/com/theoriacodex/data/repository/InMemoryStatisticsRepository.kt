@@ -1,70 +1,7 @@
 package com.theoriacodex.data.repository
 
-import com.theoriacodex.domain.model.SearchTerm
-import com.theoriacodex.domain.model.SourceKey
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import com.theoriacodex.data.storage.MemoryStateCell
 
 class InMemoryStatisticsRepository(
     initial: LifetimeStatistics = LifetimeStatistics(),
-) : StatisticsRepository {
-    private val mutex = Mutex()
-    private val mutableStatistics = MutableStateFlow(StatisticsPolicies.normalize(initial))
-
-    override fun observeStatistics(): Flow<LifetimeStatistics> = mutableStatistics
-
-    override suspend fun addCodexUsage(target: CodexUsageTarget, durationMs: Long) = mutate {
-        StatisticsPolicies.addCodexUsage(it, target, durationMs)
-    }
-
-    override suspend fun recordCodexPostOpen(codexId: String, postKey: String, label: String) = mutate {
-        StatisticsPolicies.recordCodexPostOpen(it, codexId, postKey, label)
-    }
-
-    override suspend fun recordAppOpen() = mutate { StatisticsPolicies.recordAppOpen(it) }
-
-    override suspend fun addUsageDuration(delta: UsageDurationDelta) = mutate { current ->
-        StatisticsPolicies.addUsage(current, delta)
-    }
-
-    override suspend fun recordWatchedPost(source: SourceKey, tags: Set<String>, codexOpen: CodexPostOpen?) =
-        mutate { current ->
-            val watched = StatisticsPolicies.recordWatched(current, source, tags)
-            codexOpen?.let { StatisticsPolicies.recordCodexPostOpen(watched, it.codexId, it.postKey, it.label) } ?: watched
-        }
-
-    override suspend fun recordSearch(sources: Set<SourceKey>, terms: Set<SearchTerm>) = mutate { current ->
-        StatisticsPolicies.recordSearch(current, sources, terms)
-    }
-
-    override suspend fun seedSearchedTags(recentSearches: List<RecentSearchEntry>) = mutate { current ->
-        StatisticsPolicies.seedSearchedTags(current, recentSearches)
-    }
-
-    override suspend fun mergeRestored(imported: LifetimeStatistics) = mutate { current ->
-        StatisticsPolicies.mergeRestored(current, imported)
-    }
-
-    override suspend fun recordForYouSearch() = mutate(StatisticsPolicies::recordForYouSearch)
-
-    override suspend fun recordForYouSave() = mutate(StatisticsPolicies::recordForYouSave)
-
-    override suspend fun recordPostUrlCopy() = mutate(StatisticsPolicies::recordPostUrlCopy)
-
-    override suspend fun recordCodexEntry(codexId: String) = mutate { current ->
-        StatisticsPolicies.recordCodexEntry(current, codexId)
-    }
-
-    override suspend fun recordTranslationUsage(phraseCount: Long, sourceCharacterCount: Long) =
-        mutate { current ->
-            StatisticsPolicies.recordTranslationUsage(current, phraseCount, sourceCharacterCount)
-        }
-
-    private suspend fun mutate(transform: (LifetimeStatistics) -> LifetimeStatistics) {
-        mutex.withLock {
-            mutableStatistics.value = StatisticsPolicies.normalize(transform(mutableStatistics.value))
-        }
-    }
-}
+) : StatisticsRepository by CellStatisticsRepository(MemoryStateCell(StatisticsPolicies.normalize(initial)))

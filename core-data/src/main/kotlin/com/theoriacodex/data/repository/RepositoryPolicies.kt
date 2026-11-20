@@ -306,15 +306,6 @@ internal object RepositoryPolicies {
         )
     }
 
-    fun mergeProviderHealth(
-        settings: AppSettings,
-        snapshots: List<ProviderHealthSnapshot>,
-    ): AppSettings {
-        val merged = settings.providerHealth.toMutableMap()
-        snapshots.forEach { snapshot -> merged[snapshot.source] = snapshot }
-        return normalizeSettings(settings.copy(providerHealth = merged))
-    }
-
     fun normalizeFavoriteTag(source: SourceKey, tag: String): String {
         return normalizeFavoriteTagForStorage(source, tag)
     }

@@ -7,7 +7,6 @@ import com.theoriacodex.data.repository.ProfileBackupStore
 import com.theoriacodex.data.repository.ProfileLibraryIds
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
-import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.storage.RecentSearchPayloadCodec
 import com.theoriacodex.domain.model.Codex
@@ -25,6 +24,7 @@ class RoomProfileBackupStore(
 ) : ProfileBackupStore {
     private val dao = database.codexLikesDao()
     private val recents = database.recentsDao()
+    private val recentsWriter = RecentsWriter(recents, SharedPosts(dao))
 
     override suspend fun snapshot(includeRecents: Boolean): BackupLibrary = database.withTransaction {
         val codices = dao.codices().map { row ->
@@ -57,11 +57,7 @@ class RoomProfileBackupStore(
                     it.viewedAtEpochMs, ViewerStreamSource.valueOf(it.origin), it.originQueryHash,
                     RecentPostSection.valueOf(it.section), it.maxViewedMediaNumber)
             },
-            if (includeRecents) recents.searches().map { row ->
-                val payload = RecentSearchPayloadCodec.decodeJson(row.queryPayloadJson)
-                RecentSearchEntry(payload.query, row.queryHash, row.searchedAtEpochMs,
-                    payload.kind, payload.sources, payload.sourceTags)
-            } else emptyList(),
+            if (includeRecents) recents.searches().map(RecentSearchEntity::toDomain) else emptyList(),
         )
     }
 
@@ -77,15 +73,10 @@ class RoomProfileBackupStore(
                 if (dao.insertCodex(CodexEntity(codex.codexId, codex.name, codex.createdAtEpochMs, displayOrder)) != -1L) {
                     displayOrder += 1
                     collectionsAdded += 1
-                    dao.insertAutomaticTags(codex.automaticTags.map {
-                        CodexAutomaticTagEntity(codex.codexId, it.source.id, sourceTagKey(it.source, it.tag), it.tag, it.groupIndex)
-                    })
+                    dao.insertAutomaticTags(codex.automaticTags.map { it.toEntity(codex.codexId) })
                 }
             }
-            library.items.forEach { item ->
-                dao.insertCodexItem(CodexItemEntity(item.codexId, item.postId.source.id,
-                    item.postId.sourcePostId, item.savedAtEpochMs))
-            }
+            library.items.forEach { item -> dao.insertCodexItem(item.toEntity()) }
             library.likes.forEach { like ->
                 val systemCodexId = ProfileLibraryIds.likes(like.profileId)
                 if (dao.insertCodex(CodexEntity(systemCodexId, "Likes", like.likedAtEpochMs, displayOrder)) != -1L) {
@@ -93,8 +84,7 @@ class RoomProfileBackupStore(
                 }
                 dao.insertCodexItem(CodexItemEntity(systemCodexId, like.postId.source.id,
                     like.postId.sourcePostId, like.likedAtEpochMs))
-                dao.insertLike(LikedPostEntity(like.profileId, like.postId.source.id, like.postId.sourcePostId,
-                    like.likedAtEpochMs, LikedTagsCodec.encode(like.tags)))
+                dao.insertLike(like.toEntity())
             }
             mergeRecents(library)
             collectionsAdded
@@ -105,9 +95,8 @@ class RoomProfileBackupStore(
             val id = entry.post.id
             val existing = recents.watched(id.source.id, id.sourcePostId, entry.section.name)
             if (existing == null || entry.viewedAtEpochMs > existing.viewedAtEpochMs) {
-                recents.upsertWatched(RecentWatchedEntity(id.source.id, id.sourcePostId, entry.section.name,
-                    entry.viewedAtEpochMs, recents.nextWatchedSequence(), entry.origin.name, entry.originQueryHash,
-                    maxOf(entry.maxViewedMediaNumber, existing?.maxViewedMediaNumber ?: 1)))
+                recentsWriter.upsertWatched(id, entry.section.name, entry.viewedAtEpochMs, entry.origin.name,
+                    entry.originQueryHash, maxOf(entry.maxViewedMediaNumber, existing?.maxViewedMediaNumber ?: 1))
             } else {
                 recents.raiseWatchedMediaProgress(id.source.id, id.sourcePostId, entry.section.name, entry.maxViewedMediaNumber)
             }
@@ -115,12 +104,12 @@ class RoomProfileBackupStore(
         library.searches.asReversed().forEach { entry ->
             val existing = recents.search(entry.queryHash)
             if (existing == null || entry.searchedAtEpochMs > existing.searchedAtEpochMs) {
-                recents.upsertSearch(RecentSearchEntity(entry.queryHash, RecentSearchPayloadCodec.encodeJson(entry),
-                    entry.searchedAtEpochMs, recents.nextSearchSequence()))
+                recentsWriter.upsertSearch(entry.queryHash, RecentSearchPayloadCodec.encodeJson(entry), entry.searchedAtEpochMs)
             }
         }
-        recents.trimWatched(DEFAULT_RECENT_WATCHED_LIMIT)
-        recents.trimSearches(DEFAULT_RECENT_SEARCH_LIMIT)
+        // Trimming releases posts only the trimmed rows held, as Recents itself does.
+        recentsWriter.trimWatched(DEFAULT_RECENT_WATCHED_LIMIT)
+        recentsWriter.trimSearches(DEFAULT_RECENT_SEARCH_LIMIT)
     }
 }
 

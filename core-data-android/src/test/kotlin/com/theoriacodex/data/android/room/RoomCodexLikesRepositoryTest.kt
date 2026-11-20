@@ -55,7 +55,7 @@ class RoomCodexLikesRepositoryTest {
         repository.addItem(first.codexId, sparse)
         repository.addItem(first.codexId, sparse)
         repository.addItem(first.codexId, ai)
-        repository.reorderCodex(third.codexId, -10)
+        repository.reorderCodices(listOf(third.codexId, first.codexId, second.codexId))
 
         assertEquals("Favorites", first.name)
         assertEquals("favorites 2", second.name)
@@ -96,7 +96,7 @@ class RoomCodexLikesRepositoryTest {
         repository.restoreItems(snapshots, listOf(first, second))
         assertEquals(snapshots, repository.observeCodexItems(codex.codexId).first())
 
-        repository.removeItem(codex.codexId, first.id.source, first.id.sourcePostId)
+        repository.removeItems(codex.codexId, setOf(first.id))
         repository.addItem(codex.codexId, first)
         val newerFirst = repository.observeCodexItems(codex.codexId).first().single { it.postId == first.id }
         repository.restoreItems(snapshots.filter { it.postId == first.id }, listOf(first))
