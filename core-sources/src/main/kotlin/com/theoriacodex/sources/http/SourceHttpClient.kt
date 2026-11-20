@@ -39,6 +39,9 @@ class SourceHttpBodyTooLargeException(
  */
 const val THEORIA_SOURCE_USER_AGENT: String = "TheoriaCodex/1.0 (Android source adapter)"
 
+/** A bare browser agent, for sites that refuse library agents but not the app's lack of a real browser. */
+const val BROWSER_USER_AGENT: String = "Mozilla/5.0"
+
 const val DEFAULT_MAX_SOURCE_TEXT_BODY_BYTES: Int = 8 * 1024 * 1024
 const val DEFAULT_MAX_SOURCE_BINARY_BODY_BYTES: Int = 8 * 1024 * 1024
 

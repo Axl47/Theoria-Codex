@@ -7,25 +7,34 @@ import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
-import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
-import com.theoriacodex.sources.common.autocompleteTagCounts
+import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.common.autocompleteTagCounts
 import com.theoriacodex.sources.common.canonicalPostPage
+import com.theoriacodex.sources.common.elementsOrEmpty
+import com.theoriacodex.sources.common.intValue
+import com.theoriacodex.sources.common.optionalJsonArray
 import com.theoriacodex.sources.common.parseHtml
+import com.theoriacodex.sources.common.parseJsonObject
 import com.theoriacodex.sources.common.parseXml
 import com.theoriacodex.sources.common.requireSuccess
 import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.common.sourceRequest
+import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.http.SourceHttpClient
-import org.jsoup.nodes.Document
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
+import java.util.Locale
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
+import org.jsoup.nodes.Document
 
 /** How a KVS site links the next page of search results. */
 enum class KvsPaging {
@@ -334,3 +343,39 @@ private fun decodeDataParameters(raw: String): String {
 }
 
 private val KVS_VIDEO_ID_REGEX = Regex("""/video/(\d+)/""")
+
+private fun compileRule34VideoSearchText(query: Query): String {
+    val includeTags = query.includeTags
+        .map(String::trim)
+        .filter(String::isNotBlank)
+    return includeTags.joinToString(" ").trim()
+}
+
+private fun parseTagSuggestionsFromSelect2(
+    body: String,
+    gson: Gson,
+    defaultType: String,
+): List<TagSuggestion> {
+    val root = parseJsonObject(body, gson, "Rule34 video tag lookup")
+    return root.optionalJsonArray("items").elementsOrEmpty().mapNotNull { item ->
+        val obj = item.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
+        val text = obj.stringValue("title")?.trim().orEmpty()
+        if (text.isBlank()) return@mapNotNull null
+        TagSuggestion(
+            text = text,
+            type = defaultType,
+            count = obj.stringValue("total")?.toIntOrNull() ?: obj.intValue("total"),
+        )
+    }
+}
+
+private fun parseVideoSitePubDateEpochMs(raw: String?): Long? {
+    val value = raw?.trim().orEmpty()
+    if (value.isBlank()) return null
+    val formatter = DateTimeFormatter.ofPattern("EEE dd MMM uuuu HH:mm:ss Z", Locale.US)
+    return try {
+        ZonedDateTime.parse(value, formatter).toInstant().toEpochMilli()
+    } catch (_: DateTimeParseException) {
+        parseRfc1123EpochMs(value)
+    }
+}

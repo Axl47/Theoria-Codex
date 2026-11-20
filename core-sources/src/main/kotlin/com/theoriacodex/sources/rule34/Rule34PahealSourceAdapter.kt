@@ -23,6 +23,10 @@ import com.theoriacodex.sources.common.sourceRequest
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.media.inferMimeFromUrl
 import com.theoriacodex.sources.media.mimeFromFileExt
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
@@ -279,6 +283,18 @@ private fun Element.fileOnlyUrl(): String = select("a")
 private fun pahealDimensions(title: String): Pair<Int?, Int?> {
     val match = RULE34PAHEAL_DIMENSION_REGEX.find(title)
     return match?.groupValues?.getOrNull(1)?.toIntOrNull() to match?.groupValues?.getOrNull(2)?.toIntOrNull()
+}
+
+private fun parsePahealThumbDateEpochMs(raw: String?): Long? {
+    val value = raw?.trim().orEmpty()
+    if (value.isBlank()) return null
+    val formatter = DateTimeFormatter.ofPattern("MMMM d, uuuu; HH:mm", Locale.US)
+    return runCatching {
+        OffsetDateTime.of(
+            java.time.LocalDateTime.parse(value, formatter),
+            ZoneOffset.UTC,
+        ).toInstant().toEpochMilli()
+    }.getOrNull()
 }
 
 /** Paheal's URLs have no extensions, so this is the only word on a file's type: `image/gif; animated=true` or an older `data-ext`. */

@@ -36,6 +36,7 @@ import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.common.sourceRequest
 import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.http.SourceHttpClient
+import com.theoriacodex.sources.http.BROWSER_USER_AGENT
 import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.http.buildUrl
 import com.theoriacodex.sources.media.inferMimeFromUrl
@@ -491,10 +492,10 @@ private const val IWARA_API_BASE = "https://api.iwara.tv"
 private const val JINA_MIRROR_BASE = "https://r.jina.ai/http://"
 private val IWARA_REQUEST_HEADERS = mapOf(
     "Referer" to "https://www.iwara.tv/",
-    "User-Agent" to "Mozilla/5.0",
+    "User-Agent" to BROWSER_USER_AGENT,
     "Accept" to "application/json, text/plain, */*",
 )
 private val JINA_REQUEST_HEADERS = mapOf(
-    "User-Agent" to "Mozilla/5.0",
+    "User-Agent" to BROWSER_USER_AGENT,
     "Accept" to "application/json, text/plain, */*",
 )
