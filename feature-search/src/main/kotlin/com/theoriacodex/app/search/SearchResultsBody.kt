@@ -163,7 +163,7 @@ private fun SearchResultsGrid(
         } else {
             null
         },
-        footerMessage = if (feed.durationMetadata.readiness.isResolving) "Resolving durations…" else null,
+        footerMessage = searchFooterMessage(state, feed.durationMetadata.readiness.isResolving, feed.visibleResults.isNotEmpty()),
         postContent = { _, post ->
             FeedPostCard(
                 post = post,

@@ -148,6 +148,38 @@ class GelbooruSourceAdapterTest {
     }
 
     @Test
+    fun `a well-formed page past the last full page ends paging`() = runTest {
+        val bodies = listOf("", " \n", "[]", "{}", """{"@attributes":{"limit":40,"offset":1040,"count":1040}}""",
+            """{"@attributes":{"limit":40,"offset":1040,"count":1040},"post":[]}""")
+        for (body in bodies) {
+            val page = gelbooru(FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(200, body) })
+                .search(sampleQuery(), pageToken = "26")
+            assertTrue(body, page.items.isEmpty() && page.nextPageToken == null)
+        }
+    }
+
+    @Test
+    fun `a malformed page fails instead of ending paging`() = runTest {
+        val bodies = listOf("<!DOCTYPE html><html><body>Error</body></html>", "<html>", """{"post":[{"id":"1"""",
+            "Search is down. Try again later.")
+        for (body in bodies) {
+            val adapter = gelbooru(FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(200, body) })
+            val failure = runCatching { adapter.search(sampleQuery(), pageToken = "26") }.exceptionOrNull()
+            assertEquals(body, SourceFailureReason.PARSE, (failure as? SourceAdapterException)?.reason)
+        }
+    }
+
+    @Test
+    fun `a depth refusal fails without ending paging`() = runTest {
+        val body = "Too deep! Pull it back some. Holy fuck."
+        val adapter = gelbooru(FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(200, body) })
+        val failure = runCatching { adapter.search(sampleQuery(), pageToken = "26") }.exceptionOrNull()
+        require(failure is SourceAdapterException)
+        assertEquals(SourceFailureReason.UNKNOWN, failure.reason)
+        assertEquals("Gelbooru won't load results past this point", failure.message)
+    }
+
+    @Test
     fun `creator search keeps pagination when a full provider page contains an unparseable post`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(
