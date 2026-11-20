@@ -52,9 +52,11 @@ class AppLogicArchitectureTest {
 
     @Test
     fun `moved production owners cannot reappear in android app sources`() {
-        val appSources = File(root, "app/src/main/java").walkTopDown()
-            .filter(File::isFile)
-            .toList()
+        // :app and the kit and feature modules split out of it.
+        val appSources = (root.listFiles().orEmpty().filter { module ->
+            module.name.endsWith("-kit") || module.name.startsWith("feature-")
+        }.map { module -> File(module, "src/main") } + File(root, "app/src/main/java"))
+            .flatMap { sources -> sources.walkTopDown().filter(File::isFile).toList() }
         listOf(
             "SearchContract.kt",
             "SearchDraftReducer.kt",

@@ -11,7 +11,8 @@
     "core-sources",
     "core-stubs",
     "ui-kit",
-    "media-kit"
+    "media-kit",
+    "feed-kit"
   ],
   "lineBudgets": {
     "production": 900,
@@ -29,6 +30,7 @@
     "config/detekt/baseline-core-sources-main.xml": {},
     "config/detekt/baseline-core-stubs.xml": {},
     "config/detekt/baseline-ui-kit-debug.xml": {},
-    "config/detekt/baseline-media-kit-debug.xml": {}
+    "config/detekt/baseline-media-kit-debug.xml": {},
+    "config/detekt/baseline-feed-kit-debug.xml": {}
   }
 }
