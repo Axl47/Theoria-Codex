@@ -51,6 +51,7 @@ class SearchScrollRestorationTest {
     private var hideAnchor = false
     private val hiddenIndices = mutableStateOf(emptySet<Int>())
     private val visibilityReady = mutableStateOf(true)
+    private val gridShown = mutableStateOf(true)
 
     @Test fun `filter changes save the new post even when grid coordinates stay unchanged`() {
         state.value = state.value.copy(restoration = SearchRestorationUiState.Restored(false))
@@ -216,6 +217,21 @@ class SearchScrollRestorationTest {
         }
     }
 
+    @Test fun `keep-live request on a cold grid restores the anchor once`() {
+        state.value = state.value.copy(
+            content = state.value.content.copy(results = posts.take(40)),
+            restoration = SearchRestorationUiState.Restored(false, SearchScrollState(22, 17), 1L, keepLiveGrid = true),
+        )
+        gridShown.value = false
+        render()
+        compose.runOnIdle { gridShown.value = true }
+        compose.runOnIdle {
+            assertEquals(listOf(1L), acknowledgements)
+            assertEquals(22, grid.firstVisibleItemIndex)
+            assertEquals(17, grid.firstVisibleItemScrollOffset)
+        }
+    }
+
     @Test fun `explicit reset to top does not wait for duration lookups`() {
         state.value = state.value.copy(restoration = SearchRestorationUiState.Restored(
             false, SearchScrollState(0, 0), 1L, resetToTop = true,
@@ -236,10 +252,13 @@ class SearchScrollRestorationTest {
             }
             val projection = buildRelatedFeedProjection(current.content.results, visible, RelatedPostsUiState.Idle)
             grid = rememberLazyStaggeredGridState()
-            LazyVerticalStaggeredGrid(columns = StaggeredGridCells.Fixed(1), state = grid,
-                modifier = Modifier.height(300.dp).testTag("restore-grid")) {
-                items(visible.size, key = { visible[it].id.sourcePostId }) {
-                    BasicText("Post $it", Modifier.height(100.dp))
+            // A hidden grid keeps its state but has no layout, as before its first frame.
+            if (gridShown.value) {
+                LazyVerticalStaggeredGrid(columns = StaggeredGridCells.Fixed(1), state = grid,
+                    modifier = Modifier.height(300.dp).testTag("restore-grid")) {
+                    items(visible.size, key = { visible[it].id.sourcePostId }) {
+                        BasicText("Post $it", Modifier.height(100.dp))
+                    }
                 }
             }
             val dispatch: (SearchAction) -> Unit = { action ->

@@ -9,11 +9,13 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.snapshots.Snapshot
 import com.theoriacodex.app.related.RelatedFeedProjection
+import com.theoriacodex.app.search.state.ScrollStep
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchRestorationUiState
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.search.state.allowsScrollPersistence
-import com.theoriacodex.app.search.state.canApplyScrollRestoration
+import com.theoriacodex.app.search.state.scrollStep
+import com.theoriacodex.app.search.state.scrollStepAfterJump
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
 
@@ -37,33 +39,27 @@ internal fun SearchScrollRestorationEffect(
             }
         }
     }
-    val canRestore = state.canApplyScrollRestoration && (restoration?.resetToTop == true || visibilityReady)
+    // Only the state rules wait, so the grid facts passed here cannot change whether a step is ready.
+    val canRestore = state.scrollStep(visibilityReady, projection.entries.size, gridLaidOut = false) != ScrollStep.Wait
     // A retry needs the posts that arrived, which can reach the projection after the state that loaded them.
     LaunchedEffect(restoration?.scrollRequestId, canRestore, projection.entries.size) {
-        val request = restoration ?: return@LaunchedEffect
-        val restored = request.scrollState ?: return@LaunchedEffect
-        if (!canRestore) return@LaunchedEffect
         val activeProjection = currentProjection
-        // Jumping lines up every column at the target, which later forces the grid to reshuffle.
-        val gridIsLive = request.keepLiveGrid && gridState.layoutInfo.visibleItemsInfo.isNotEmpty()
-        if (activeProjection.entries.isNotEmpty() && !gridIsLive) {
-            val index = activeProjection.gridIndexForCanonicalIndex(restored.firstVisibleItemIndex)
-            val offset = restored.firstVisibleItemOffsetPx.coerceAtLeast(0)
-            // The request stays open; the list end asks for the next page, and its posts retry the jump.
-            if (!gridState.jumpToRestoredPosition(index, offset, state.content.canLoadMore)) return@LaunchedEffect
+        // Sampled, not observed: the jump's own layout must not restart the effect.
+        val gridLaidOut = gridState.layoutInfo.visibleItemsInfo.isNotEmpty()
+        when (val step = state.scrollStep(visibilityReady, activeProjection.entries.size, gridLaidOut)) {
+            ScrollStep.Wait -> Unit
+            is ScrollStep.Finish -> dispatch(SearchAction.ScrollRestorationApplied(step.requestId))
+            is ScrollStep.Jump -> {
+                val index = activeProjection.gridIndexForCanonicalIndex(step.anchorIndex)
+                gridState.scrollToItem(index, step.offsetPx)
+                val reached = gridState.firstVisibleItemIndex == index &&
+                    gridState.firstVisibleItemScrollOffset == step.offsetPx
+                // An open request lets the list end ask for the next page, whose posts retry the jump.
+                val after = state.scrollStepAfterJump(reached, gridState.canScrollForward)
+                if (after is ScrollStep.Finish) dispatch(SearchAction.ScrollRestorationApplied(after.requestId))
+            }
         }
-        dispatch(SearchAction.ScrollRestorationApplied(request.scrollRequestId))
     }
-}
-
-/**
- * False when too few posts below the anchor stop the grid at the list end, above the saved position,
- * while more pages could still supply them.
- */
-private suspend fun LazyStaggeredGridState.jumpToRestoredPosition(index: Int, offset: Int, canLoadMore: Boolean): Boolean {
-    scrollToItem(index, offset)
-    val reached = firstVisibleItemIndex == index && firstVisibleItemScrollOffset == offset
-    return reached || canScrollForward || !canLoadMore
 }
 
 @Composable
