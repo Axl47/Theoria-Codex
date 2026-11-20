@@ -105,12 +105,13 @@ internal class AndroidPostDownloadBackend(
     }
 
     private fun enqueueResolved(request: PostDownloadRequest, post: Post, settings: CacheSettings): Long? {
-        val selected = request.selectedMedia
-            ?: return PostDownloadService.enqueuePostDownloadId(context, post, settings, request.marker)
-        val media = if (request.restored) post.downloadablePages.getOrNull(selected.pageIndex)
-            ?: throw DownloadPreparationException("This gallery page is no longer available.") else selected.media
-        return PostDownloadService.enqueueViewerDownloadId(context, post, media, selected.pageIndex, selected.totalPages,
-            settings, request.marker)
+        // A restored page takes its media from the freshly resolved post, since saved URLs may have expired.
+        val selected = request.selectedMedia?.let { page ->
+            if (!request.restored) return@let page
+            page.copy(media = post.downloadablePages.getOrNull(page.pageIndex)
+                ?: throw DownloadPreparationException("This gallery page is no longer available."))
+        }
+        return PostDownloadService.enqueuePostDownloadId(context, post, selected, settings, request.marker)
     }
 
     override suspend fun findTransfer(marker: String): Long? = withContext(Dispatchers.IO) {
