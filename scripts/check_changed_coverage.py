@@ -253,23 +253,41 @@ def _source_root(path: pathlib.PurePosixPath) -> tuple[str, ...]:
 
 
 _COMMENT_OR_STRING = re.compile(r'/\*.*?\*/|//[^\n]*|"""(?:.|\n)*?"""|"(?:\\.|[^"\\\n])*"', re.DOTALL)
-_COMPARISON = re.compile(r"[=!<>]=+")
-_CONSTANT_OR_ALIAS = re.compile(r"^\s*(?:(?:public|internal|private)\s+)?(?:const\s+val|typealias)\b")
-_BODY_OPENING = re.compile(r"\b(?:fun\b(?!\s+interface\b)|init\b|get\s*\(|set\s*\().*\{|^\s*\).*\{\s*$")
+_VISIBILITY = r"(?:(?:public|internal|private)\s+)?"
+# The only lines a declarations-only Kotlin file may hold, once comments and string contents are removed.
+_DECLARATION_LINES = tuple(
+    re.compile(pattern)
+    for pattern in (
+        r"(?:package|import)\s+[\w.*`]+(?:\s+as\s+\w+)?",
+        r"@[\w.:]+(?:\([^=(){}]*\))?",
+        _VISIBILITY + r"(?:(?:sealed|fun)\s+)?interface\s+\w+(?:<[^={}()]*>)?(?:\s*:\s*[^={}()]+)?\s*\{?",
+        r"(?:(?:public|override|abstract|suspend|operator|infix)\s+)*fun\s+[^={}]+",
+        r"(?:(?:public|override|abstract)\s+)*va[lr]\s+[\w.<>?, ]+\s*:\s*[^={}]+",
+        _VISIBILITY + r'const\s+val\s+\w+(?:\s*:\s*\w+)?\s*=\s*[-\w."]+',
+        _VISIBILITY + r"typealias\s+\w+(?:<[^={}()]*>)?\s*=\s*[^{}]+",
+        r"\w+\s*:\s*[^={}]+,?",  # one parameter of a signature written over several lines
+        r"\)(?:\s*:\s*[^={}]+)?",  # the end of such a signature
+        r"\}",
+    )
+)
 
 
 def _declares_only(source: str) -> bool:
     """Whether a Kotlin file can hold no executable line: only interfaces, constants and type aliases.
 
-    Errs towards False: any function, accessor or initializer body and any assignment other than a
-    `const val` or `typealias` counts as code, so a file the report wrongly omits is never waved through.
+    An allow-list, so it errs towards False: a class, object, initializer, body, default value or any
+    line it does not recognise counts as code, and a file the report wrongly omits is never waved through.
     """
-    for line in _COMMENT_OR_STRING.sub('""', source).splitlines():
-        if _BODY_OPENING.search(line):
-            return False
-        if "=" in _COMPARISON.sub("", line) and not _CONSTANT_OR_ALIAS.match(line):
-            return False
-    return True
+    return all(
+        any(pattern.fullmatch(line) for pattern in _DECLARATION_LINES)
+        for line in (raw.strip() for raw in _COMMENT_OR_STRING.sub(_blank_comment_or_string, source).splitlines())
+        if line
+    )
+
+
+def _blank_comment_or_string(match: re.Match[str]) -> str:
+    """Drops a comment and empties a string literal, so neither can look like code."""
+    return '""' if match.group().startswith('"') else ""
 
 
 def build_source_index(

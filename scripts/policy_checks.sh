@@ -15,7 +15,7 @@ line_budgets() {
 
 # Project names a build file depends on, in either spelling: project(":x") or project(path = ":x").
 project_dependencies() {
-  grep -oE 'project\((path[[:space:]]*=[[:space:]]*)?"[^"]+"' "$1" | sed -E 's/.*":?([^"]+)"$/\1/'
+  grep -oE 'project\([[:space:]]*(path[[:space:]]*=[[:space:]]*)?"[^"]+"' "$1" | sed -E 's/.*":?([^"]+)"$/\1/'
 }
 
 # Module layering that Gradle cannot see: a feature never depends on another feature, a kit never on a
@@ -44,16 +44,21 @@ module_layering() {
   return "$failed"
 }
 
+# Whether a file names "$2" exactly on a line that is not commented out.
+has_active_entry() {
+  grep -vE '^[[:space:]]*(#|//)' "$1" | grep -qE "(^|[^A-Za-z0-9_-])$2([^A-Za-z0-9_-]|\$)"
+}
+
 # Every kit and feature in settings.gradle.kts must be in each hand-kept list of checked modules, or its
 # tests, Detekt, lint, coverage and line budgets would be skipped without any failure.
 module_registration() {
   local module failed=0
-  for module in $(grep -oE 'include\(":(feature-[a-z-]+|[a-z-]+-kit)"\)' settings.gradle.kts | sed -E 's/include\(":(.*)"\)/\1/'); do
-    grep -q ":$module:testDebugUnitTest" scripts/check.sh || { echo "scripts/check.sh runs no unit tests for :$module." >&2; failed=1; }
-    grep -q ":$module:detektDebug" scripts/check.sh || { echo "scripts/check.sh runs no Detekt for :$module." >&2; failed=1; }
-    grep -q ":$module:lintDebug" scripts/check.sh || { echo "scripts/check.sh runs no lint for :$module." >&2; failed=1; }
-    grep -q "kover(project(\":$module\"))" build.gradle.kts || { echo "build.gradle.kts leaves :$module out of the coverage report." >&2; failed=1; }
-    grep -q "\"$module\"" config/quality/hotspot-budgets.json || { echo "config/quality/hotspot-budgets.json has no line budgets for $module." >&2; failed=1; }
+  for module in $(grep -E '^[[:space:]]*include\(' settings.gradle.kts | grep -oE '":[^"]+"' | tr -d '":' | grep -E '^(feature-.+|.+-kit)$'); do
+    has_active_entry scripts/check.sh ":$module:testDebugUnitTest" || { echo "scripts/check.sh runs no unit tests for :$module." >&2; failed=1; }
+    has_active_entry scripts/check.sh ":$module:detektDebug" || { echo "scripts/check.sh runs no Detekt for :$module." >&2; failed=1; }
+    has_active_entry scripts/check.sh ":$module:lintDebug" || { echo "scripts/check.sh runs no lint for :$module." >&2; failed=1; }
+    has_active_entry build.gradle.kts "kover\(project\(\":$module\"\)\)" || { echo "build.gradle.kts leaves :$module out of the coverage report." >&2; failed=1; }
+    has_active_entry config/quality/hotspot-budgets.json "\"$module\"" || { echo "config/quality/hotspot-budgets.json has no line budgets for $module." >&2; failed=1; }
     [[ -f "config/detekt/baseline-$module-debug.xml" ]] || { echo "config/detekt/baseline-$module-debug.xml is missing." >&2; failed=1; }
   done
   return "$failed"

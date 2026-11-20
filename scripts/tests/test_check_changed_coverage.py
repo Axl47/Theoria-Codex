@@ -176,6 +176,30 @@ class ChangedCoverageTest(unittest.TestCase):
         self.assertEqual(1, result.changed_production_lines)
         self.assertEqual(0, result.executable_lines)
 
+    def test_only_declaration_forms_count_as_declarations_only(self) -> None:
+        declarations = (
+            "package a.b\n\nimport a.c.Thing\n\n@Stable\ninterface Owner : Base<Thing> {\n"
+            "    val thing: Thing\n    suspend fun load(\n        id: String,\n        retry: (Int) -> Boolean,\n"
+            "    ): Thing?\n}\n\ninternal const val LIMIT = 12\nconst val NAME = \"a = b\"\ntypealias Id = String\n"
+        )
+        self.assertTrue(coverage._declares_only(declarations))
+        for code in (
+            "class Stamp : java.util.Date(System.currentTimeMillis())",
+            "object Registry",
+            "enum class Mode { A, B }",
+            "val limit = compute()",
+            "val limit: Int get() = 3",
+            "fun load(id: String): String = id",
+            "fun load(id: String) {\n}",
+            "interface Owner {\n    fun load(id: String = \"\"): String\n}",
+            "interface Owner {\n    fun load(): String { return \"\" }\n}",
+            "abstract class Host : Activity()",
+            "private val cache by lazy { build() }",
+            "init { start() }",
+        ):
+            with self.subTest(code=code):
+                self.assertFalse(coverage._declares_only("package a.b\n\n" + code + "\n"))
+
     def test_file_with_code_missing_from_a_reported_module_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = pathlib.Path(temporary_directory)
