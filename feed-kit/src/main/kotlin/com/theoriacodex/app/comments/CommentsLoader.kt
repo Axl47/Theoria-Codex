@@ -1,6 +1,6 @@
 package com.theoriacodex.app.comments
 
-import com.theoriacodex.app.source.SharedFlights
+import com.theoriacodex.domain.coroutines.SharedFlights
 import com.theoriacodex.domain.adapter.CommentsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.model.CommentPage

@@ -65,46 +65,6 @@ internal class HitomiPaginationSourceAdapterTest : HitomiSourceAdapterTestFixtur
     }
 
     @Test
-    fun `legacy version two page token remains valid for Nozomi only query`() = runTest {
-        val newest = HitomiNozomi.urlFor(HitomiNozomiRequest())
-        val http = RoutingHitomiHttpClient().apply {
-            binaryIndexes[newest] = listOf(5, 4, 3)
-        }
-        val adapter = adapter(http, pageSize = 1)
-
-        val first = adapter.search(query(), null)
-        val legacyToken = requireNotNull(first.nextPageToken).asLegacyVersionTwoToken()
-        val second = adapter.search(query(), legacyToken)
-
-        assertEquals(listOf("5"), first.items.map { it.id.sourcePostId })
-        assertEquals(listOf("4"), second.items.map { it.id.sourcePostId })
-    }
-
-    @Test
-    fun `version three nonrandom token remains valid while version three random token fails closed`() = runTest {
-        val newest = HitomiNozomi.urlFor(HitomiNozomiRequest())
-        val http = RoutingHitomiHttpClient().apply {
-            binaryIndexes[newest] = listOf(5, 4, 3)
-        }
-        val adapter = adapter(http, pageSize = 1)
-
-        val nonrandomFirst = adapter.search(query(), null)
-        val nonrandomSecond = adapter.search(
-            query(),
-            requireNotNull(nonrandomFirst.nextPageToken).asPreviousVersionThreeToken(),
-        )
-        val randomFirst = adapter.search(query(sort = SortMode.RANDOM), null)
-
-        assertEquals(listOf("4"), nonrandomSecond.items.map { it.id.sourcePostId })
-        assertParseFailure {
-            adapter.search(
-                query(sort = SortMode.RANDOM),
-                requireNotNull(randomFirst.nextPageToken).asPreviousVersionThreeToken(),
-            )
-        }
-    }
-
-    @Test
     fun `full 200 Nozomi fallback resumes by logical offset without repeats`() = runTest {
         val newest = HitomiNozomi.urlFor(HitomiNozomiRequest())
         val http = RoutingHitomiHttpClient().apply {

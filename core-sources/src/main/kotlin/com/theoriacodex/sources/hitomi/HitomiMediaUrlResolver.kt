@@ -21,29 +21,6 @@ data class HitomiMediaFile(
     val hasAvif: Boolean,
 )
 
-/** The two thumbnail sizes Hitomi's own pages use; [directory] names the rendition on its thumbnail CDN. */
-internal enum class HitomiThumbnail(val directory: String) {
-    /** 640 px on the long edge, for feed cards. */
-    CARD("webpbigtn"),
-
-    /** 300 px on the long edge, for choosing a page. */
-    PAGE("webpsmalltn"),
-}
-
-/**
- * URLs of [rendition] for the file with [hash], the configured shard first. Thumbnail paths are derived from the
- * hash alone, so they survive the dated `gg.js` base path changing, unlike full-size media.
- */
-internal fun hitomiThumbnailUrls(hash: String, primaryShard: Int, rendition: HitomiThumbnail): List<String> {
-    val normalized = hash.lowercase(Locale.ROOT)
-    val path = "${rendition.directory}/${normalized.last()}/${normalized.takeLast(3).take(2)}/$normalized.webp"
-    return listOf(primaryShard, 3 - primaryShard).map { shard ->
-        "https://${'a' + (shard - 1)}tn.$HITOMI_CDN_DOMAIN/$path"
-    }
-}
-
-internal const val HITOMI_CDN_DOMAIN = "gold-usergeneratedcontent.net"
-
 data class HitomiCdnConfiguration(
     val basePath: String,
     val version: String,
@@ -57,7 +34,6 @@ data class HitomiMediaCandidate(
     val format: HitomiMediaFormat,
     val shard: Int,
     val isAlternateShard: Boolean,
-    val configurationBasePath: String,
     val configurationVersion: String,
 )
 
@@ -197,8 +173,6 @@ class HitomiMediaUrlResolver(
         const val MAX_CONFIGURATION_RESPONSE_CHARS: Int = 512 * 1_024
         const val DEFAULT_FAILURE_VERSION_CACHE_BYTES: Long = 64L * 1024L
 
-        private const val CDN_DOMAIN = HITOMI_CDN_DOMAIN
-
         private val GG_REQUEST_HEADERS = HitomiProtocol.requestHeaders +
             ("Accept" to "application/javascript, text/javascript, */*;q=0.8")
         private val BASE_PATH_ASSIGNMENT = Regex("""\bb\s*:\s*['\"]([^'\"]+)['\"]""")
@@ -210,8 +184,6 @@ class HitomiMediaUrlResolver(
         private val DEFAULT_SHARD_ASSIGNMENT = Regex("""\bvar\s+o\s*=\s*([01])\s*;""")
         private val CASE_SHARD_ASSIGNMENT = Regex("""\bo\s*=\s*([01])\s*;\s*break\s*;?""")
         private val SAFE_BASE_PATH = Regex("""(?:[A-Za-z0-9][A-Za-z0-9._-]*/)+""")
-        private val FILE_HASH = Regex("""[0-9a-f]{64}""")
-        private val FILE_EXTENSION = Regex("""[A-Za-z0-9]{1,10}""")
 
         fun parseConfiguration(script: String): HitomiCdnConfiguration {
             if (script.length > MAX_CONFIGURATION_RESPONSE_CHARS) {
@@ -263,14 +235,14 @@ class HitomiMediaUrlResolver(
             configuration: HitomiCdnConfiguration,
         ): List<HitomiMediaCandidate> {
             val hash = file.hash.trim().lowercase(Locale.ROOT)
-            if (!FILE_HASH.matches(hash)) {
+            if (!HITOMI_FILE_HASH.matches(hash)) {
                 throw HitomiProtocolException("Hitomi media file hash must contain 64 hexadecimal characters")
             }
             val extension = file.name
                 .substringAfterLast('.', missingDelimiterValue = "")
                 .trim()
                 .lowercase(Locale.ROOT)
-            if (!FILE_EXTENSION.matches(extension)) {
+            if (!HITOMI_FILE_EXTENSION.matches(extension)) {
                 throw HitomiProtocolException("Hitomi media file name did not contain a safe extension")
             }
 
@@ -281,7 +253,6 @@ class HitomiMediaUrlResolver(
                 3 - configuration.caseShard
             }
             val shards = listOf(primaryShard, 3 - primaryShard)
-            val pathNumber = routingKey
             val formats = buildList {
                 if (file.hasAvif) add(HitomiMediaFormat.AVIF)
                 add(HitomiMediaFormat.WEBP)
@@ -290,32 +261,28 @@ class HitomiMediaUrlResolver(
 
             return formats.flatMap { format ->
                 shards.mapIndexed { index, shard ->
-                    val (host, path, mime) = when (format) {
-                        HitomiMediaFormat.AVIF -> Triple(
-                            "a$shard.$CDN_DOMAIN",
-                            "${configuration.basePath}$pathNumber/$hash.avif",
-                            "image/avif",
-                        )
-
-                        HitomiMediaFormat.WEBP -> Triple(
-                            "w$shard.$CDN_DOMAIN",
-                            "${configuration.basePath}$pathNumber/$hash.webp",
-                            "image/webp",
-                        )
-
-                        HitomiMediaFormat.ORIGINAL -> Triple(
-                            "$shard.$CDN_DOMAIN",
-                            "images/${configuration.basePath}$pathNumber/$hash.$extension",
-                            mimeFromFileExt(extension) ?: "application/octet-stream",
-                        )
-                    }
+                    val location = HitomiMediaLocation(
+                        format = format,
+                        shard = shard,
+                        version = configuration.version,
+                        pathNumber = routingKey,
+                        hash = hash,
+                        extension = when (format) {
+                            HitomiMediaFormat.AVIF -> "avif"
+                            HitomiMediaFormat.WEBP -> "webp"
+                            HitomiMediaFormat.ORIGINAL -> extension
+                        },
+                    )
                     HitomiMediaCandidate(
-                        url = "https://$host/$path",
-                        mime = mime,
+                        url = location.url,
+                        mime = when (format) {
+                            HitomiMediaFormat.AVIF -> "image/avif"
+                            HitomiMediaFormat.WEBP -> "image/webp"
+                            HitomiMediaFormat.ORIGINAL -> mimeFromFileExt(extension) ?: "application/octet-stream"
+                        },
                         format = format,
                         shard = shard,
                         isAlternateShard = index == 1,
-                        configurationBasePath = configuration.basePath,
                         configurationVersion = configuration.version,
                     )
                 }

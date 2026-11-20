@@ -190,10 +190,6 @@ internal class HitomiGlobalIndexSourceAdapterTest : HitomiSourceAdapterTestFixtu
         val token = requireNotNull(first.nextPageToken)
         assertEquals("100", decodeTokenString(token, "globalIndexVersion"))
         assertEquals("TAG|tag|girl", decodeTokenString(token, "primaryKey"))
-        assertParseFailure {
-            adapter.search(query, token.asLegacyVersionTwoToken())
-        }
-
         http.textRoutes[versionUrl] = "200"
 
         assertParseFailure {

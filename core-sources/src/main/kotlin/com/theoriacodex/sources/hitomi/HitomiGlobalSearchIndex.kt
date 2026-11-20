@@ -23,18 +23,15 @@ internal class HitomiGlobalSearchIndex(
     suspend fun galleryIds(
         term: String,
         version: HitomiGlobalIndexVersion,
-    ): HitomiVersionedGalleryIds {
+    ): IntArray {
         val normalized = term.trim().lowercase(Locale.ROOT)
-        if (normalized.isEmpty()) return HitomiVersionedGalleryIds(version, IntArray(0))
+        if (normalized.isEmpty()) return IntArray(0)
         val key = MessageDigest.getInstance("SHA-256")
             .digest(normalized.toByteArray(Charsets.UTF_8))
             .copyOf(KEY_BYTES)
         val record = findRecord(version.value, key)
-            ?: return HitomiVersionedGalleryIds(version, IntArray(0))
-        return HitomiVersionedGalleryIds(
-            version = version,
-            galleryIds = loadGalleryIds(version.value, record),
-        )
+            ?: return IntArray(0)
+        return loadGalleryIds(version.value, record)
     }
 
     private suspend fun findRecord(version: String, key: ByteArray): DataRecord? {
@@ -151,8 +148,8 @@ internal class HitomiGlobalSearchIndex(
     private data class DataRecord(val offset: Long, val length: Int)
 
     companion object {
-        private const val VERSION_URL = "https://ltn.gold-usergeneratedcontent.net/galleriesindex/version"
-        private const val INDEX_BASE = "https://ltn.gold-usergeneratedcontent.net/galleriesindex"
+        private const val INDEX_BASE = "${HitomiProtocol.DATA_BASE_URL}/galleriesindex"
+        private const val VERSION_URL = "$INDEX_BASE/version"
         private const val NODE_BYTES = 464
         private const val MAX_KEYS = 16
         private const val CHILD_COUNT = MAX_KEYS + 1
@@ -167,8 +164,3 @@ internal class HitomiGlobalSearchIndex(
 
 @JvmInline
 internal value class HitomiGlobalIndexVersion(val value: String)
-
-internal data class HitomiVersionedGalleryIds(
-    val version: HitomiGlobalIndexVersion,
-    val galleryIds: IntArray,
-)

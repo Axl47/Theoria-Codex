@@ -36,8 +36,6 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -90,7 +88,6 @@ internal abstract class HitomiSourceAdapterTestFixture {
         format = format,
         shard = 1,
         isAlternateShard = false,
-        configurationBasePath = "fixture/",
         configurationVersion = "fixture",
     )
 
@@ -132,24 +129,6 @@ internal abstract class HitomiSourceAdapterTestFixture {
     protected fun decodeTokenString(token: String, field: String): String? {
         val json = Base64.getUrlDecoder().decode(token).toString(Charsets.UTF_8)
         return Json.parseToJsonElement(json).jsonObject[field]?.jsonPrimitive?.contentOrNull
-    }
-
-    protected fun String.asLegacyVersionTwoToken(): String {
-        val json = Base64.getUrlDecoder().decode(this).toString(Charsets.UTF_8)
-        val token = JsonObject(
-            Json.parseToJsonElement(json).jsonObject + ("version" to JsonPrimitive(2)) - "globalIndexVersion",
-        )
-        return Base64.getUrlEncoder().withoutPadding()
-            .encodeToString(token.toString().toByteArray(Charsets.UTF_8))
-    }
-
-    protected fun String.asPreviousVersionThreeToken(): String {
-        val json = Base64.getUrlDecoder().decode(this).toString(Charsets.UTF_8)
-        val token = JsonObject(
-            Json.parseToJsonElement(json).jsonObject + ("version" to JsonPrimitive(3)) - "randomPermutationVersion",
-        )
-        return Base64.getUrlEncoder().withoutPadding()
-            .encodeToString(token.toString().toByteArray(Charsets.UTF_8))
     }
 
     protected fun RoutingHitomiHttpClient.routeGlobalIndex(
@@ -211,6 +190,7 @@ internal class RoutingHitomiHttpClient : SourceHttpClient {
     val binaryIndexes = ConcurrentHashMap<String, List<Int>>()
     val rawFullBodies = ConcurrentHashMap<String, ByteArray>()
     val binaryFailures = ConcurrentHashMap<String, RuntimeException>()
+    val textFailures = ConcurrentHashMap<String, RuntimeException>()
     val binaryRequestStarted = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
     val binaryRequestRelease = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
     val fullResponseUrls = ConcurrentHashMap.newKeySet<String>()
@@ -232,6 +212,7 @@ internal class RoutingHitomiHttpClient : SourceHttpClient {
         headers: Map<String, String>,
     ): SourceHttpResponse {
         synchronized(textRequests) { textRequests += TextRequest(url, headers) }
+        textFailures[url]?.let { failure -> throw failure }
         val galleryId = GALLERY_URL.matchEntire(url)?.groupValues?.get(1)?.toIntOrNull()
         if (galleryId != null) {
             val active = activeGalleryRequests.incrementAndGet()

@@ -59,6 +59,3 @@ internal class HitomiGalleryException(
     message: String,
     cause: Throwable? = null,
 ) : RuntimeException(message, cause)
-
-private val HITOMI_FILE_HASH = Regex("[0-9a-f]{64}")
-private val HITOMI_FILE_EXTENSION = Regex("[A-Za-z0-9]{1,10}")

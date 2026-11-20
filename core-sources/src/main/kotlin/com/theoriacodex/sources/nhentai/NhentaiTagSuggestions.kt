@@ -1,15 +1,14 @@
 package com.theoriacodex.sources.nhentai
 
-import com.google.gson.JsonElement
+import com.google.gson.JsonObject
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.sources.common.asIntOrNull
 import com.theoriacodex.sources.common.asStringOrNull
-import com.theoriacodex.sources.common.elementsOrEmpty
-import com.theoriacodex.sources.common.optionalJsonArray
+import com.theoriacodex.sources.common.objects
 
 /** Collects the strongest count per case-insensitive tag while preserving first-wins ties. */
 internal fun collectNhentaiTagSuggestions(
-    galleries: List<JsonElement>,
+    galleries: List<JsonObject>,
     prefix: String?,
     limit: Int,
 ): List<TagSuggestion> {
@@ -17,10 +16,8 @@ internal fun collectNhentaiTagSuggestions(
     val normalizedPrefix = prefix?.trim()?.lowercase().orEmpty()
     val byName = linkedMapOf<String, TagSuggestion>()
 
-    galleries.flatMap { galleryElement ->
-        galleryElement.takeIf(JsonElement::isJsonObject)?.asJsonObject
-            ?.optionalJsonArray("tags").elementsOrEmpty()
-    }.mapNotNull { element -> parseNhentaiSuggestion(element, normalizedPrefix) }
+    galleries.flatMap { gallery -> gallery.objects("tags") }
+        .mapNotNull { tag -> parseNhentaiSuggestion(tag, normalizedPrefix) }
         .forEach { candidate ->
             val key = candidate.text.lowercase()
             val existing = byName[key]
@@ -37,8 +34,7 @@ internal fun collectNhentaiTagSuggestions(
         .take(limit)
 }
 
-private fun parseNhentaiSuggestion(element: JsonElement, prefix: String): TagSuggestion? {
-    val tag = element.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return null
+private fun parseNhentaiSuggestion(tag: JsonObject, prefix: String): TagSuggestion? {
     val name = tag.get("name").asStringOrNull()?.trim().orEmpty()
     if (name.isBlank() || (prefix.isNotBlank() && !name.lowercase().contains(prefix))) return null
     return TagSuggestion(

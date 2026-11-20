@@ -13,16 +13,12 @@ import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.credentials.PixivAuthTokens
 import com.theoriacodex.sources.http.SourceHttpClient
 import java.io.IOException
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 class PixivAuthApi(
     private val httpClient: SourceHttpClient,
     private val gson: Gson = Gson(),
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) {
-    private val refreshMutex = Mutex()
-
     fun buildAuthorizationUrl(
         codeChallenge: String,
         state: String? = null,
@@ -47,53 +43,39 @@ class PixivAuthApi(
         codeVerifier: String,
         redirectUri: String,
     ): PixivAuthTokens = sourceCall {
+        requestTokens(
+            step = "exchange",
+            grant = mapOf(
+                "grant_type" to "authorization_code",
+                "code" to code,
+                "code_verifier" to codeVerifier,
+                "redirect_uri" to redirectUri,
+            ),
+        )
+    }
+
+    /** Callers serialize refreshes themselves; [PixivTokenCoordinator] holds one lock across read, refresh and commit. */
+    suspend fun refresh(refreshToken: String): PixivAuthTokens = sourceCall {
+        requestTokens(step = "refresh", grant = mapOf("grant_type" to "refresh_token", "refresh_token" to refreshToken))
+    }
+
+    /** Posts one OAuth token grant; [step] names it in failures ("Pixiv token exchange failed (400)"). */
+    private suspend fun requestTokens(step: String, grant: Map<String, String>): PixivAuthTokens {
         val response = try {
             httpClient.postForm(
                 url = TOKEN_URL,
-                form = mapOf(
-                    "client_id" to PIXIV_CLIENT_ID,
-                    "client_secret" to PIXIV_CLIENT_SECRET,
-                    "grant_type" to "authorization_code",
-                    "code" to code,
-                    "code_verifier" to codeVerifier,
-                    "redirect_uri" to redirectUri,
-                ),
+                form = mapOf("client_id" to PIXIV_CLIENT_ID, "client_secret" to PIXIV_CLIENT_SECRET) + grant,
             )
         } catch (error: IOException) {
-            sourceNetworkFailure("Pixiv token exchange", error)
+            sourceNetworkFailure("Pixiv token $step", error)
         }
         if (!response.isSuccessful()) {
             throw SourceAdapterException(
                 reason = mapAuthFailure(response.statusCode),
-                message = "Pixiv token exchange failed (${response.statusCode})",
+                message = "Pixiv token $step failed (${response.statusCode})",
             )
         }
-        parseTokenResponse(response.body)
-    }
-
-    suspend fun refresh(refreshToken: String): PixivAuthTokens = sourceCall {
-        refreshMutex.withLock {
-            val response = try {
-                httpClient.postForm(
-                    url = TOKEN_URL,
-                    form = mapOf(
-                        "client_id" to PIXIV_CLIENT_ID,
-                        "client_secret" to PIXIV_CLIENT_SECRET,
-                        "grant_type" to "refresh_token",
-                        "refresh_token" to refreshToken,
-                    ),
-                )
-            } catch (error: IOException) {
-                sourceNetworkFailure("Pixiv token refresh", error)
-            }
-            if (!response.isSuccessful()) {
-                throw SourceAdapterException(
-                    reason = mapAuthFailure(response.statusCode),
-                    message = "Pixiv token refresh failed (${response.statusCode})",
-                )
-            }
-            parseTokenResponse(response.body)
-        }
+        return parseTokenResponse(response.body)
     }
 
     private fun parseTokenResponse(body: String): PixivAuthTokens {

@@ -1,10 +1,10 @@
 package com.theoriacodex.sources.hitomi
 
 import com.theoriacodex.sources.http.SourceByteRange
-import java.net.URLEncoder
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.Locale
+import com.theoriacodex.sources.common.percentEncode
 
 enum class HitomiNozomiSort(
     internal val orderBy: String,
@@ -93,6 +93,6 @@ object HitomiNozomi {
         if (normalized.isBlank() || normalized.length > 256) {
             throw HitomiProtocolException("Hitomi Nozomi $label must contain 1..256 characters")
         }
-        return URLEncoder.encode(normalized, Charsets.UTF_8.name()).replace("+", "%20")
+        return normalized.percentEncode()
     }
 }
