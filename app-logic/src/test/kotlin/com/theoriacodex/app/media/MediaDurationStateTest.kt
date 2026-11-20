@@ -9,20 +9,6 @@ import org.junit.Test
 
 class MediaDurationStateTest {
     @Test
-    fun `planner uses a known duration before acquisition work`() {
-        assertEquals(
-            DurationAcquisitionPlan.AlreadyKnown(4_200L),
-            planDurationAcquisition(
-                facts(
-                    knownDurationMs = 4_200L,
-                    hasAuthoritativeFullVideo = true,
-                    hasProviderDurationResolver = true,
-                ),
-            ),
-        )
-    }
-
-    @Test
     fun `planner probes existing full video before asking an optional provider`() {
         assertEquals(
             DurationAcquisitionPlan.ProbeAuthoritativeMedia,
@@ -75,12 +61,10 @@ class MediaDurationStateTest {
     }
 
     private fun facts(
-        knownDurationMs: Long? = null,
         hasAuthoritativeFullVideo: Boolean = false,
         hasProviderDurationResolver: Boolean = false,
     ): DurationAcquisitionFacts {
         return DurationAcquisitionFacts(
-            knownDurationMs = knownDurationMs,
             hasAuthoritativeFullVideo = hasAuthoritativeFullVideo,
             hasProviderDurationResolver = hasProviderDurationResolver,
         )

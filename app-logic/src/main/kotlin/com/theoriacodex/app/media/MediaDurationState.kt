@@ -119,23 +119,19 @@ data class DurationDemand(
     }
 }
 
+/** What a post without a feed-supplied duration offers for looking one up. */
 data class DurationAcquisitionFacts(
-    val knownDurationMs: Long?,
     val hasAuthoritativeFullVideo: Boolean,
     val hasProviderDurationResolver: Boolean,
 )
 
 sealed interface DurationAcquisitionPlan {
-    data class AlreadyKnown(val durationMs: Long) : DurationAcquisitionPlan
     data object AskProvider : DurationAcquisitionPlan
     data object ProbeAuthoritativeMedia : DurationAcquisitionPlan
     data class Unsupported(val reason: MediaDurationUnsupportedReason) : DurationAcquisitionPlan
 }
 
 fun planDurationAcquisition(facts: DurationAcquisitionFacts): DurationAcquisitionPlan {
-    facts.knownDurationMs?.takeIf { durationMs -> durationMs > 0L }?.let { durationMs ->
-        return DurationAcquisitionPlan.AlreadyKnown(durationMs)
-    }
     if (facts.hasAuthoritativeFullVideo) {
         return DurationAcquisitionPlan.ProbeAuthoritativeMedia
     }

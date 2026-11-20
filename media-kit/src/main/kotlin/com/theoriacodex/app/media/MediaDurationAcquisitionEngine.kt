@@ -45,10 +45,6 @@ class MediaDurationAcquisitionEngine(
     /** Answers that need no network, so they never wait behind paced lookups. */
     override fun settleWithoutWork(post: Post): MediaDurationState? {
         return when (plan(post)) {
-            is DurationAcquisitionPlan.AlreadyKnown -> MediaDurationState.Known(
-                durationMs = requireNotNull(animatedDurationMs(post)),
-                provenance = MediaDurationProvenance.PROVIDER,
-            )
             is DurationAcquisitionPlan.Unsupported -> MediaDurationState.Unsupported(
                 MediaDurationUnsupportedReason.NO_AUTHORITATIVE_MEDIA,
             )
@@ -75,7 +71,6 @@ class MediaDurationAcquisitionEngine(
     private fun plan(post: Post): DurationAcquisitionPlan {
         return planDurationAcquisition(
             DurationAcquisitionFacts(
-                knownDurationMs = animatedDurationMs(post),
                 hasAuthoritativeFullVideo = authoritativeDurationProbeRef(post) != null,
                 hasProviderDurationResolver = hasProviderDurationResolver(post),
             ),
@@ -86,7 +81,6 @@ class MediaDurationAcquisitionEngine(
         return when (plan(post)) {
             DurationAcquisitionPlan.ProbeAuthoritativeMedia -> probe(post)
             DurationAcquisitionPlan.AskProvider -> acquireFromProvider(post)
-            is DurationAcquisitionPlan.AlreadyKnown,
             is DurationAcquisitionPlan.Unsupported,
             -> error("Settled before any acquisition starts")
         }

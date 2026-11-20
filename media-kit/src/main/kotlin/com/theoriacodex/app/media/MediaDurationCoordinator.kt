@@ -112,14 +112,8 @@ class MediaDurationCoordinator(
         require(demand.key.postId == post.id) { "Duration demand key must match its post" }
         traceRecorder.record(DurationTraceEvent.Demand)
 
-        post.durationMs?.takeIf { durationMs -> durationMs > 0L }?.let { durationMs ->
-            publishKnown(
-                key = demand.key,
-                durationMs = durationMs,
-                provenance = MediaDurationProvenance.PROVIDER,
-            )
-            return
-        }
+        // Readers take a feed-supplied duration from the post itself, so there is nothing to look up or keep.
+        if (animatedDurationMs(post) != null) return
 
         val shouldLoadStoredState = lock.withLock {
             demand.key !in retainedStates &&

@@ -172,6 +172,33 @@ class MediaDurationRouteViewModelTest {
     }
 
     @Test
+    fun `a feed-supplied duration answers from the post without lookup or storage`() = runTest {
+        var acquisitions = 0
+        val coordinator = coordinator {
+            acquisitions += 1
+            MediaDurationState.Known(1_000L, MediaDurationProvenance.CONTAINER_PROBE)
+        }
+        val owner = MediaDurationRouteViewModel(coordinator, "provider-test", backgroundScope)
+        val post = animatedTestPost(sourcePostId = "provider", durationMs = 6_000L)
+
+        owner.synchronize("query", listOf(post), resolveInBackground = true)
+        owner.onFilterChanged(true)
+        owner.onNearbyPostsChanged(setOf(post.id))
+        owner.onEnvironmentChanged(lifecycleStarted = true, scrollIdle = true)
+        owner.publishPlayerDuration(post, 6_100L)
+        coordinator.submit(post, DurationDemand("direct", mediaDurationKey(post), DurationDemandPriority.VISIBLE))
+        runCurrent()
+
+        assertEquals(
+            MediaDurationState.Known(6_000L, MediaDurationProvenance.PROVIDER),
+            owner.observeState(post).first(),
+        )
+        assertEquals(0, acquisitions)
+        assertTrue(coordinator.states.value.isEmpty())
+        coordinator.close()
+    }
+
+    @Test
     fun `same identity append submits only the new duration candidate`() = runTest {
         val traces = DemandCountingTraceRecorder()
         val coordinator = coordinator(

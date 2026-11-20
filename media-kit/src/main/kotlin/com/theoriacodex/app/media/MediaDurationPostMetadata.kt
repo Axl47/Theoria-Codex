@@ -7,8 +7,8 @@ import com.theoriacodex.domain.model.PostId
 internal data class MediaDurationPostSnapshot(
     val postsById: Map<PostId, Post>,
     val keysByPostId: Map<PostId, MediaDurationKey>,
+    /** Animated posts whose feed carries no duration, so a lookup must decide one. */
     val candidatesByKey: Map<MediaDurationKey, Post>,
-    val knownDurationsByKey: Map<MediaDurationKey, Long>,
 ) {
     val observedKeys: Set<MediaDurationKey> = keysByPostId.values.toSet()
 
@@ -17,7 +17,6 @@ internal data class MediaDurationPostSnapshot(
             postsById = emptyMap(),
             keysByPostId = emptyMap(),
             candidatesByKey = emptyMap(),
-            knownDurationsByKey = emptyMap(),
         )
     }
 }
@@ -32,7 +31,6 @@ internal fun mediaDurationPostSnapshot(
     val postsById = LinkedHashMap(appendSeed?.snapshot?.postsById.orEmpty())
     val keysByPostId = LinkedHashMap(appendSeed?.snapshot?.keysByPostId.orEmpty())
     val candidatesByKey = LinkedHashMap(appendSeed?.snapshot?.candidatesByKey.orEmpty())
-    val knownDurationsByKey = LinkedHashMap(appendSeed?.snapshot?.knownDurationsByKey.orEmpty())
     val newPosts = posts.subList(appendSeed?.newPostsStart ?: 0, posts.size)
     newPosts.forEach { post ->
         if (postsById.putIfAbsent(post.id, post) != null || !isAnimatedPost(post)) {
@@ -40,18 +38,12 @@ internal fun mediaDurationPostSnapshot(
         }
         val key = keyFactory(post)
         keysByPostId[post.id] = key
-        val durationMs = animatedDurationMs(post)
-        if (durationMs != null) {
-            knownDurationsByKey[key] = durationMs
-        } else {
-            candidatesByKey[key] = post
-        }
+        if (animatedDurationMs(post) == null) candidatesByKey[key] = post
     }
     return MediaDurationPostSnapshot(
         postsById = postsById,
         keysByPostId = keysByPostId,
         candidatesByKey = candidatesByKey,
-        knownDurationsByKey = knownDurationsByKey,
     )
 }
 

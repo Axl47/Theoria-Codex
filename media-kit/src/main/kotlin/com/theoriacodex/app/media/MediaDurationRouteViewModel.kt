@@ -53,7 +53,6 @@ class MediaDurationRouteViewModel(
     private var postsById: Map<PostId, Post> = emptyMap()
     private var keysByPostId: Map<PostId, MediaDurationKey> = emptyMap()
     private var candidatesByKey: Map<MediaDurationKey, Post> = emptyMap()
-    private var knownDurationsByKey: Map<MediaDurationKey, Long> = emptyMap()
     private var observedKeys: Set<MediaDurationKey> = emptySet()
     private var retainedDecisions: Map<MediaDurationKey, MediaDurationState> = emptyMap()
     private var backgroundEnabled = false
@@ -150,18 +149,15 @@ class MediaDurationRouteViewModel(
             return
         }
         if (contentIdentity != request.identity) releaseContentDemand()
-        val previouslyPublishedDurations = knownDurationsByKey
         contentIdentity = request.identity
         postsById = snapshot.postsById
         keysByPostId = snapshot.keysByPostId
         candidatesByKey = snapshot.candidatesByKey
-        knownDurationsByKey = snapshot.knownDurationsByKey
         observedKeys = snapshot.observedKeys
         retainedDecisions = withContext(snapshotDispatcher) { retainedDecisions.filterKeys { it in observedKeys } }
         publishObservedStates(coordinator.states.value)
         visiblePostIds.retainAll(snapshot.postsById.keys)
         backgroundEnabled = request.resolveInBackground
-        publishSnapshotDurations(previouslyPublishedDurations)
         synchronizeDemand()
     }
 
@@ -176,8 +172,12 @@ class MediaDurationRouteViewModel(
         }
     }
 
+    /** A duration the feed supplied answers directly; only the others are looked up and kept by the coordinator. */
     fun observeState(post: Post): Flow<MediaDurationState?> {
         if (!isAnimatedPost(post)) return flowOf(null)
+        animatedDurationMs(post)?.let { durationMs ->
+            return flowOf(MediaDurationState.Known(durationMs, MediaDurationProvenance.PROVIDER))
+        }
         val key = if (requestedSnapshotIdentity == requestedContentIdentity) {
             requestedSnapshot.keysByPostId[post.id]
         } else {
@@ -218,7 +218,7 @@ class MediaDurationRouteViewModel(
     }
 
     fun publishPlayerDuration(post: Post, durationMs: Long) {
-        if (durationMs <= 0L) return
+        if (durationMs <= 0L || animatedDurationMs(post) != null) return
         val key = requestedSnapshot
             .takeIf { requestedSnapshotIdentity == requestedContentIdentity }
             ?.keysByPostId
@@ -316,17 +316,6 @@ class MediaDurationRouteViewModel(
         visibleDemandKeys = visibleDemandKeys + key
     }
 
-    private suspend fun publishSnapshotDurations(previouslyPublished: Map<MediaDurationKey, Long>) {
-        knownDurationsByKey.forEach { (key, durationMs) ->
-            if (previouslyPublished[key] == durationMs) return@forEach
-            coordinator.publishKnown(
-                key = key,
-                durationMs = durationMs,
-                provenance = MediaDurationProvenance.PROVIDER,
-            )
-        }
-    }
-
     private suspend fun submit(
         post: Post,
         key: MediaDurationKey,
@@ -353,7 +342,6 @@ class MediaDurationRouteViewModel(
         postsById = emptyMap()
         keysByPostId = emptyMap()
         candidatesByKey = emptyMap()
-        knownDurationsByKey = emptyMap()
     }
 
     private fun ownedDemandIdentities(): Set<String> {
