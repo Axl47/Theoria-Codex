@@ -389,10 +389,21 @@ private class GelbooruFamilyAdapter(
         }
     }
 
-    /** Some sites answer an empty result with an empty body instead of `[]`. */
+    /**
+     * A page's records: `[]`, `{}` and an object without [envelopeKey] (such as `{"@attributes":{...}}`) have none.
+     * A blank body is read as no records too, not as a failure, because some sites answer an empty result that way.
+     * Gson reads a lone word as a string, so a bare-word reply is rejected here instead of ending paging.
+     */
     private fun parseItems(body: String, envelopeKey: String): List<JsonObject> {
         if (body.isBlank()) return emptyList()
-        return parseJsonElement(body = body, gson = gson, errorLabel = site.label).objectList(envelopeKey)
+        val root = parseJsonElement(body = body, gson = gson, errorLabel = site.label)
+        if (root.isJsonPrimitive) {
+            throw SourceAdapterException(
+                reason = SourceFailureReason.PARSE,
+                message = "${site.label} returned malformed JSON",
+            )
+        }
+        return root.objectList(envelopeKey)
     }
 
     private fun parsePost(raw: JsonObject): Post? {

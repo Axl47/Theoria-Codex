@@ -148,6 +148,26 @@ class GelbooruSourceAdapterTest {
     }
 
     @Test
+    fun `a well-formed page past the last full page ends paging`() = runTest {
+        val bodies = listOf("", " \n", "[]", "{}", """{"@attributes":{"limit":40,"offset":1040,"count":1040}}""",
+            """{"@attributes":{"limit":40,"offset":1040,"count":1040},"post":[]}""")
+        for (body in bodies) {
+            val page = gelbooru(FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(200, body) })
+                .search(sampleQuery(), pageToken = "26")
+            assertTrue(body, page.items.isEmpty() && page.nextPageToken == null)
+        }
+    }
+
+    @Test
+    fun `a malformed page fails instead of ending paging`() = runTest {
+        for (body in listOf("<!DOCTYPE html><html><body>Error</body></html>", "<html>", """{"post":[{"id":"1"""")) {
+            val adapter = gelbooru(FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(200, body) })
+            val failure = runCatching { adapter.search(sampleQuery(), pageToken = "26") }.exceptionOrNull()
+            assertEquals(body, SourceFailureReason.PARSE, (failure as? SourceAdapterException)?.reason)
+        }
+    }
+
+    @Test
     fun `creator search keeps pagination when a full provider page contains an unparseable post`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(
