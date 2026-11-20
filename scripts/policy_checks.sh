@@ -13,16 +13,25 @@ line_budgets() {
   python3 scripts/check_hotspots.py ${1:+--base "$1"}
 }
 
+# Project names a build file depends on, in either spelling: project(":x") or project(path = ":x").
+project_dependencies() {
+  grep -oE 'project\([[:space:]]*(path[[:space:]]*=[[:space:]]*)?"[^"]+"' "$1" | sed -E 's/.*":?([^"]+)"$/\1/'
+}
+
 # Module layering that Gradle cannot see: a feature never depends on another feature, a kit never on a
-# feature, and a kit only on kits to its left in ui-kit, media-kit, feed-kit.
+# feature, a kit only on kits to its left in ui-kit, media-kit, feed-kit, and nothing below the kits
+# (app-logic, core-*) on a kit or a feature.
 module_layering() {
   local kits=(ui-kit media-kit feed-kit) build module name index failed=0
-  for build in feature-*/build.gradle.kts *-kit/build.gradle.kts; do
+  for build in feature-*/build.gradle.kts *-kit/build.gradle.kts app-logic/build.gradle.kts core-*/build.gradle.kts; do
     [[ -f "$build" ]] || continue
     module="${build%%/*}"
-    for name in $(grep -oE 'project\("[^"]+"\)' "$build" | sed -E 's/project\(":?([^"]+)"\)/\1/'); do
+    for name in $(project_dependencies "$build"); do
       if [[ "$name" == feature-* && "$name" != "$module" ]]; then
-        echo "$build depends on :$name; features and kits must not depend on a feature." >&2; failed=1
+        echo "$build depends on :$name; only :app may depend on a feature." >&2; failed=1
+      fi
+      if [[ "$module" != feature-* && "$module" != *-kit && "$name" == *-kit ]]; then
+        echo "$build depends on :$name; app-logic and core modules must not depend on a kit." >&2; failed=1
       fi
       for (( index = 0; index < ${#kits[@]}; index++ )); do
         [[ "$module" == "${kits[index]}" ]] || continue
@@ -31,6 +40,26 @@ module_layering() {
         fi
       done
     done
+  done
+  return "$failed"
+}
+
+# Whether a file names "$2" exactly on a line that is not commented out.
+has_active_entry() {
+  grep -vE '^[[:space:]]*(#|//)' "$1" | grep -qE "(^|[^A-Za-z0-9_-])$2([^A-Za-z0-9_-]|\$)"
+}
+
+# Every kit and feature in settings.gradle.kts must be in each hand-kept list of checked modules, or its
+# tests, Detekt, lint, coverage and line budgets would be skipped without any failure.
+module_registration() {
+  local module failed=0
+  for module in $(grep -E '^[[:space:]]*include\(' settings.gradle.kts | grep -oE '":[^"]+"' | tr -d '":' | grep -E '^(feature-.+|.+-kit)$'); do
+    has_active_entry scripts/check.sh ":$module:testDebugUnitTest" || { echo "scripts/check.sh runs no unit tests for :$module." >&2; failed=1; }
+    has_active_entry scripts/check.sh ":$module:detektDebug" || { echo "scripts/check.sh runs no Detekt for :$module." >&2; failed=1; }
+    has_active_entry scripts/check.sh ":$module:lintDebug" || { echo "scripts/check.sh runs no lint for :$module." >&2; failed=1; }
+    has_active_entry build.gradle.kts "kover\(project\(\":$module\"\)\)" || { echo "build.gradle.kts leaves :$module out of the coverage report." >&2; failed=1; }
+    has_active_entry config/quality/hotspot-budgets.json "\"$module\"" || { echo "config/quality/hotspot-budgets.json has no line budgets for $module." >&2; failed=1; }
+    [[ -f "config/detekt/baseline-$module-debug.xml" ]] || { echo "config/detekt/baseline-$module-debug.xml is missing." >&2; failed=1; }
   done
   return "$failed"
 }

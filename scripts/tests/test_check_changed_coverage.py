@@ -157,6 +157,14 @@ class ChangedCoverageTest(unittest.TestCase):
             contract = pathlib.PurePosixPath("ui-kit/src/main/kotlin/com/example/state/Contract.kt")
             self._write_source(repo, covered, "com.example")
             self._write_source(repo, contract, "com.example.state")
+            repo.joinpath(*contract.parts).write_text(
+                "package com.example.state\n\n"
+                "/** Reads `a = b` in a comment, which is not code. */\n"
+                "interface Contract {\n    fun load(id: String): String\n}\n\n"
+                "const val CONTRACT_VERSION = 2\n"
+                "typealias ContractId = String\n",
+                encoding="utf-8",
+            )
 
             result = coverage.calculate_changed_coverage(
                 repo=repo,
@@ -167,6 +175,46 @@ class ChangedCoverageTest(unittest.TestCase):
 
         self.assertEqual(1, result.changed_production_lines)
         self.assertEqual(0, result.executable_lines)
+
+    def test_only_declaration_forms_count_as_declarations_only(self) -> None:
+        declarations = (
+            "package a.b\n\nimport a.c.Thing\n\n@Stable\ninterface Owner : Base<Thing> {\n"
+            "    val thing: Thing\n    suspend fun load(\n        id: String,\n        retry: (Int) -> Boolean,\n"
+            "    ): Thing?\n}\n\ninternal const val LIMIT = 12\nconst val NAME = \"a = b\"\ntypealias Id = String\n"
+        )
+        self.assertTrue(coverage._declares_only(declarations))
+        for code in (
+            "class Stamp : java.util.Date(System.currentTimeMillis())",
+            "object Registry",
+            "enum class Mode { A, B }",
+            "val limit = compute()",
+            "val limit: Int get() = 3",
+            "fun load(id: String): String = id",
+            "fun load(id: String) {\n}",
+            "interface Owner {\n    fun load(id: String = \"\"): String\n}",
+            "interface Owner {\n    fun load(): String { return \"\" }\n}",
+            "abstract class Host : Activity()",
+            "private val cache by lazy { build() }",
+            "init { start() }",
+        ):
+            with self.subTest(code=code):
+                self.assertFalse(coverage._declares_only("package a.b\n\n" + code + "\n"))
+
+    def test_file_with_code_missing_from_a_reported_module_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = pathlib.Path(temporary_directory)
+            covered = pathlib.PurePosixPath("ui-kit/src/main/kotlin/com/example/Covered.kt")
+            omitted = pathlib.PurePosixPath("ui-kit/src/main/kotlin/com/example/state/Omitted.kt")
+            self._write_source(repo, covered, "com.example")
+            self._write_source(repo, omitted, "com.example.state")
+
+            with self.assertRaisesRegex(coverage.CoverageCheckError, "coverage XML has no source entry"):
+                coverage.calculate_changed_coverage(
+                    repo=repo,
+                    changed={omitted: {3}},
+                    report={("com/example", "Covered.kt"): {3: True}},
+                    included_paths=["*/src/main/**"],
+                )
 
     def test_changed_file_in_a_module_the_report_omits_still_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

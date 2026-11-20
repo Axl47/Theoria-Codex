@@ -252,6 +252,44 @@ def _source_root(path: pathlib.PurePosixPath) -> tuple[str, ...]:
     return path.parts[:-1]
 
 
+_COMMENT_OR_STRING = re.compile(r'/\*.*?\*/|//[^\n]*|"""(?:.|\n)*?"""|"(?:\\.|[^"\\\n])*"', re.DOTALL)
+_VISIBILITY = r"(?:(?:public|internal|private)\s+)?"
+# The only lines a declarations-only Kotlin file may hold, once comments and string contents are removed.
+_DECLARATION_LINES = tuple(
+    re.compile(pattern)
+    for pattern in (
+        r"(?:package|import)\s+[\w.*`]+(?:\s+as\s+\w+)?",
+        r"@[\w.:]+(?:\([^=(){}]*\))?",
+        _VISIBILITY + r"(?:(?:sealed|fun)\s+)?interface\s+\w+(?:<[^={}()]*>)?(?:\s*:\s*[^={}()]+)?\s*\{?",
+        r"(?:(?:public|override|abstract|suspend|operator|infix)\s+)*fun\s+[^={}]+",
+        r"(?:(?:public|override|abstract)\s+)*va[lr]\s+[\w.<>?, ]+\s*:\s*[^={}]+",
+        _VISIBILITY + r'const\s+val\s+\w+(?:\s*:\s*\w+)?\s*=\s*[-\w."]+',
+        _VISIBILITY + r"typealias\s+\w+(?:<[^={}()]*>)?\s*=\s*[^{}]+",
+        r"\w+\s*:\s*[^={}]+,?",  # one parameter of a signature written over several lines
+        r"\)(?:\s*:\s*[^={}]+)?",  # the end of such a signature
+        r"\}",
+    )
+)
+
+
+def _declares_only(source: str) -> bool:
+    """Whether a Kotlin file can hold no executable line: only interfaces, constants and type aliases.
+
+    An allow-list, so it errs towards False: a class, object, initializer, body, default value or any
+    line it does not recognise counts as code, and a file the report wrongly omits is never waved through.
+    """
+    return all(
+        any(pattern.fullmatch(line) for pattern in _DECLARATION_LINES)
+        for line in (raw.strip() for raw in _COMMENT_OR_STRING.sub(_blank_comment_or_string, source).splitlines())
+        if line
+    )
+
+
+def _blank_comment_or_string(match: re.Match[str]) -> str:
+    """Drops a comment and empties a string literal, so neither can look like code."""
+    return '""' if match.group().startswith('"') else ""
+
+
 def build_source_index(
     repo: pathlib.Path,
 ) -> dict[SourceKey, tuple[pathlib.PurePosixPath, ...]]:
@@ -274,8 +312,9 @@ def calculate_changed_coverage(
 ) -> CoverageResult:
     production_changes = production_changed_lines(changed, included_modules, included_paths, excluded_paths)
     source_index = build_source_index(repo)
-    # Source roots the report covers. A file there with no entry has no executable lines (declarations
-    # only); a file in a root the report never mentions means its module is missing from the report.
+    # Source roots the report covers. A file there with no entry is accepted only when it holds
+    # declarations alone (nothing executable to report); a file with code and no entry, or a file in a
+    # root the report never mentions, means the report is missing something.
     reported_roots = {
         _source_root(path)
         for key, paths in source_index.items()
@@ -290,7 +329,8 @@ def calculate_changed_coverage(
         source_key = source_key_for_path(repo, relative_path)
         report_lines = report.get(source_key)
         if report_lines is None:
-            if _source_root(relative_path) not in reported_roots:
+            source_text = repo.joinpath(*relative_path.parts).read_text(encoding="utf-8")
+            if _source_root(relative_path) not in reported_roots or not _declares_only(source_text):
                 missing_report_sources.append(relative_path)
             continue
         candidates = source_index.get(source_key, ())
