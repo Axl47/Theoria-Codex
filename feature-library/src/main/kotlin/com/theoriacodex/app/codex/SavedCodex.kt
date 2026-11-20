@@ -5,9 +5,6 @@ import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.SourceKey
 
-/** Presentation container only; its children retain their existing storage identities. */
-const val SAVED_CODEX_ID = "system:saved"
-
 fun savedCodexChildren(likesCodexId: String) = listOf(
     Codex(likesCodexId, "Likes", 0),
     Codex(FOLLOWED_CODEX_ID, "Followed", 0),

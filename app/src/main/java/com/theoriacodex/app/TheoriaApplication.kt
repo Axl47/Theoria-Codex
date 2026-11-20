@@ -10,6 +10,7 @@ import coil.decode.ImageDecoderDecoder
 import coil.disk.DiskCache
 import com.theoriacodex.app.customsites.AndroidBrowserCookieStore
 import com.theoriacodex.app.customsites.SiteCookieBridge
+import com.theoriacodex.app.customsites.SiteCookieBridgeOwner
 import com.theoriacodex.app.di.DefaultTheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
@@ -38,13 +39,14 @@ class TheoriaApplication :
     ImageLoaderFactory,
     TheoriaAppContainerOwner,
     AppHttpClientsOwner,
-    VideoPlaybackInfrastructureOwner {
+    VideoPlaybackInfrastructureOwner,
+    SiteCookieBridgeOwner {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var readiness: ApplicationDataReadiness<TheoriaAppContainer>
     private var initializingContainer: DefaultTheoriaAppContainer? = null
 
     /** The one place browser cookies reach the app's own requests: every client in [httpClients] carries its jar. */
-    internal val siteCookieBridge = SiteCookieBridge(AndroidBrowserCookieStore)
+    override val siteCookieBridge = SiteCookieBridge(AndroidBrowserCookieStore)
 
     /** Every HTTP client in the app, so they share one connection pool and these cookies. */
     override val httpClients = AppHttpClients(

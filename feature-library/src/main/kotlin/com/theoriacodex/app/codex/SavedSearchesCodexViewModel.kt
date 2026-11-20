@@ -14,7 +14,6 @@ import com.theoriacodex.data.repository.CacheRepository
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.domain.model.SourceKey
 
-const val SAVED_SEARCHES_CODEX_ID = "system:saved-searches"
 fun isVirtualCodex(id: String) = id == FOLLOWED_CODEX_ID || id == SAVED_SEARCHES_CODEX_ID
 
 /** A query collection owns live continuations, never durable Codex memberships. */

@@ -399,6 +399,7 @@ dependencies {
     implementation(project(":feature-search"))
     implementation(project(":feature-library"))
     implementation(project(":feature-discover"))
+    implementation(project(":feature-settings"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -442,6 +443,7 @@ dependencies {
     testImplementation(testFixtures(project(":ui-kit")))
     testImplementation(testFixtures(project(":feed-kit")))
     testImplementation(testFixtures(project(":feature-library")))
+    testImplementation(testFixtures(project(":feature-settings")))
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.test.uiautomator)
