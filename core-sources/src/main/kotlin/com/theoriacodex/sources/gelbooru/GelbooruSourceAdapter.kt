@@ -298,6 +298,15 @@ private class GelbooruFamilyAdapter(
             "limit" to PAGE_SIZE.toString(),
             "tags" to tags,
         )
+        // Past its depth limit Gelbooru answers in plain text ("Too deep! Pull it back some. Holy fuck.") although
+        // more posts exist, so this must not read as an empty last page. No failure reason names a refusal; UNKNOWN
+        // shows as a plain failure.
+        if (response.trimStart().startsWith(DEPTH_REFUSAL_PREFIX)) {
+            throw SourceAdapterException(
+                reason = SourceFailureReason.UNKNOWN,
+                message = "${site.label} won't load results past this point",
+            )
+        }
         val rawPosts = parseItems(response, POST_ENVELOPE)
         // Fullness counts every raw record, so a malformed entry never ends paging early.
         val next = if (rawPosts.size >= PAGE_SIZE) (pageIndex + 1).toString() else null
@@ -527,6 +536,7 @@ private const val TAG_COUNT_BATCH_SIZE = 50
 private const val MAX_RELATED_POSTS = 6
 private const val RELATED_HYDRATION_CONCURRENCY = 2
 private const val POST_ENVELOPE = "post"
+private const val DEPTH_REFUSAL_PREFIX = "Too deep!"
 private const val TAG_ENVELOPE = "tag"
 private val NO_SAMPLE_FLAGS = setOf("false", "0")
 private val GELBOORU_NUMBERED_VIDEO_CDN_PREFIX =

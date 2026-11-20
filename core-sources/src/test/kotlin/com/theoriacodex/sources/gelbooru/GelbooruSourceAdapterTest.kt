@@ -160,11 +160,23 @@ class GelbooruSourceAdapterTest {
 
     @Test
     fun `a malformed page fails instead of ending paging`() = runTest {
-        for (body in listOf("<!DOCTYPE html><html><body>Error</body></html>", "<html>", """{"post":[{"id":"1"""")) {
+        val bodies = listOf("<!DOCTYPE html><html><body>Error</body></html>", "<html>", """{"post":[{"id":"1"""",
+            "Search is down. Try again later.")
+        for (body in bodies) {
             val adapter = gelbooru(FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(200, body) })
             val failure = runCatching { adapter.search(sampleQuery(), pageToken = "26") }.exceptionOrNull()
             assertEquals(body, SourceFailureReason.PARSE, (failure as? SourceAdapterException)?.reason)
         }
+    }
+
+    @Test
+    fun `a depth refusal fails without ending paging`() = runTest {
+        val body = "Too deep! Pull it back some. Holy fuck."
+        val adapter = gelbooru(FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(200, body) })
+        val failure = runCatching { adapter.search(sampleQuery(), pageToken = "26") }.exceptionOrNull()
+        require(failure is SourceAdapterException)
+        assertEquals(SourceFailureReason.UNKNOWN, failure.reason)
+        assertEquals("Gelbooru won't load results past this point", failure.message)
     }
 
     @Test
