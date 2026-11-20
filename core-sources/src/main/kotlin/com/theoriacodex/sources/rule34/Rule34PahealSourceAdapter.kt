@@ -4,7 +4,6 @@ import com.google.gson.Gson
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
-import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -17,18 +16,16 @@ import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.asStringOrNull
 import com.theoriacodex.sources.common.canonicalPostPage
-import com.theoriacodex.sources.common.classifyHttpFailure
-import com.theoriacodex.sources.common.isSuccessful
 import com.theoriacodex.sources.common.normalizeBooruTag
 import com.theoriacodex.sources.common.parseHtml
 import com.theoriacodex.sources.common.parseJsonArray
 import com.theoriacodex.sources.common.parseXml
+import com.theoriacodex.sources.common.requireSuccess
 import com.theoriacodex.sources.common.sourceCall
-import com.theoriacodex.sources.common.sourceNetworkFailure
+import com.theoriacodex.sources.common.sourceRequest
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.media.inferMimeFromUrl
 import com.theoriacodex.sources.media.mimeFromFileExt
-import java.io.IOException
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
@@ -133,22 +130,12 @@ class Rule34PahealSourceAdapter(
         allowNotFound: Boolean = false,
         headers: Map<String, String> = RULE34_BROWSER_HEADERS + ("Referer" to "$RULE34PAHEAL_BASE_URL/"),
     ): String? {
-        val response = try {
-            httpClient.get(url = url, headers = headers)
-        } catch (error: IOException) {
-            sourceNetworkFailure("rule34.paheal.net", error)
-        }
+        val response = sourceRequest("rule34.paheal.net") { httpClient.get(url = url, headers = headers) }
 
         if (allowNotFound && response.statusCode == 404) {
             return null
         }
-        if (!response.isSuccessful()) {
-            throw SourceAdapterException(
-                reason = classifyHttpFailure(response.statusCode),
-                message = "rule34.paheal.net request failed (${response.statusCode})",
-            )
-        }
-        return response.body
+        return response.requireSuccess("rule34.paheal.net request failed").body
     }
 
     private fun parseRssPage(body: String, limit: Int): Page<Post> {

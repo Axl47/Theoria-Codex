@@ -30,11 +30,10 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.query.SearchTermLimit
 import com.theoriacodex.sources.common.autocompleteTagCounts
 import com.theoriacodex.sources.common.canonicalPostPage
-import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.durationFieldMs
 import com.theoriacodex.sources.common.httpsMediaUrl
 import com.theoriacodex.sources.common.intValue
-import com.theoriacodex.sources.common.isSuccessful
+import com.theoriacodex.sources.common.keysFor
 import com.theoriacodex.sources.common.longValue
 import com.theoriacodex.sources.common.mimeFromUrlOrExt
 import com.theoriacodex.sources.common.originUrlOrNull
@@ -43,16 +42,16 @@ import com.theoriacodex.sources.common.optionalJsonObject
 import com.theoriacodex.sources.common.parseJsonArray
 import com.theoriacodex.sources.common.parseJsonObject
 import com.theoriacodex.sources.common.parseOffsetDateTimeMs
+import com.theoriacodex.sources.common.requireSuccess
 import com.theoriacodex.sources.common.sourceCall
-import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.common.sourceQuickQuery
+import com.theoriacodex.sources.common.sourceRequest
 import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.credentials.ApiKeyUse
 import com.theoriacodex.sources.credentials.UserApiKeyCredentialLookup
 import com.theoriacodex.sources.credentials.UserApiKeyCredentials
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.THEORIA_SOURCE_USER_AGENT
-import java.io.IOException
 
 /** One site running Danbooru's software; every site shares the same API and post shape. */
 data class DanbooruSite(
@@ -232,29 +231,15 @@ class DanbooruSourceAdapter(
     }
 
     private suspend fun request(path: String, query: Map<String, String> = emptyMap()): String {
-        val saved = credentials()
-        if (saved == null && site.credentials == ApiKeyUse.REQUIRED) {
-            throw SourceAdapterException(
-                reason = SourceFailureReason.AUTH_REQUIRED,
-                message = "${site.label} credentials required",
-            )
-        }
+        val saved = credentials.keysFor(site.credentials, site.label)
         val authorizedQuery = saved?.let { query + mapOf("login" to it.userId, "api_key" to it.apiKey) } ?: query
-        val response = try {
+        return sourceRequest(site.label) {
             httpClient.get(url = "${site.baseUrl}$path", query = authorizedQuery, headers = site.headers)
-        } catch (error: IOException) {
-            sourceNetworkFailure(site.label, error)
-        }
-        if (!response.isSuccessful()) {
+        }.requireSuccess("${site.label} request failed") { body ->
             // Danbooru explains rejected searches (such as the tag limit) in a JSON `message`.
-            val providerMessage = runCatching { parseJsonObject(response.body, gson, site.label) }.getOrNull()
+            runCatching { parseJsonObject(body, gson, site.label) }.getOrNull()
                 ?.stringValue("message")?.trim()?.takeIf(String::isNotBlank)
-            throw SourceAdapterException(
-                reason = classifyHttpFailure(response.statusCode),
-                message = providerMessage ?: "${site.label} request failed (${response.statusCode})",
-            )
-        }
-        return response.body
+        }.body
     }
 
     /** Posts without a file URL are restricted to signed-in users, so they are left out. */

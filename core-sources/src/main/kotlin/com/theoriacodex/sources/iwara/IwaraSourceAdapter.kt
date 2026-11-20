@@ -23,24 +23,22 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.canonicalPostPage
-import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.durationFieldMs
 import com.theoriacodex.sources.common.firstDurationMs
 import com.theoriacodex.sources.common.intValue
-import com.theoriacodex.sources.common.isSuccessful
 import com.theoriacodex.sources.common.matchesChallenge
 import com.theoriacodex.sources.common.optionalJsonArray
 import com.theoriacodex.sources.common.optionalJsonObject
 import com.theoriacodex.sources.common.parseJsonElement
 import com.theoriacodex.sources.common.parseJsonObject
 import com.theoriacodex.sources.common.requestWithChallengeFallback
+import com.theoriacodex.sources.common.requireSuccess
 import com.theoriacodex.sources.common.sourceCall
-import com.theoriacodex.sources.common.sourceNetworkFailure
+import com.theoriacodex.sources.common.sourceRequest
 import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.media.inferMimeFromUrl
-import java.io.IOException
 import java.net.URI
 import java.net.URLEncoder
 import java.time.Instant
@@ -274,13 +272,8 @@ class IwaraSourceAdapter(
         } else {
             response
         }
-        if (!effectiveResponse.isSuccessful() && effectiveResponse.statusCode != 404) {
-            throw SourceAdapterException(
-                reason = classifyHttpFailure(effectiveResponse.statusCode),
-                message = "Iwara request failed (${effectiveResponse.statusCode})",
-            )
-        }
-        return effectiveResponse
+        if (effectiveResponse.statusCode == 404) return effectiveResponse
+        return effectiveResponse.requireSuccess("Iwara request failed")
     }
 
     private suspend fun requestMirror(
@@ -288,14 +281,12 @@ class IwaraSourceAdapter(
         query: Map<String, String>,
     ): SourceHttpResponse {
         val mirrorUrl = JINA_MIRROR_BASE + buildAbsoluteUrl(url, query).encodeJinaTargetUrl()
-        val mirrored = try {
+        val mirrored = sourceRequest("Iwara mirror") {
             httpClient.get(
                 url = mirrorUrl,
                 query = emptyMap(),
                 headers = JINA_REQUEST_HEADERS,
             )
-        } catch (error: IOException) {
-            sourceNetworkFailure("Iwara mirror", error)
         }
         return mirrored.copy(body = extractJsonBody(mirrored.body))
     }

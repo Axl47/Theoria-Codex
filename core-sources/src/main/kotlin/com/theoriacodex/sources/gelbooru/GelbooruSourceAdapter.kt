@@ -31,12 +31,11 @@ import com.theoriacodex.sources.common.ambiguousDurationFieldMs
 import com.theoriacodex.sources.common.asStringOrNull
 import com.theoriacodex.sources.common.autocompleteTagCounts
 import com.theoriacodex.sources.common.canonicalPostPage
-import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.durationFieldMs
 import com.theoriacodex.sources.common.firstDurationMs
 import com.theoriacodex.sources.common.httpsMediaUrl
 import com.theoriacodex.sources.common.intValue
-import com.theoriacodex.sources.common.isSuccessful
+import com.theoriacodex.sources.common.keysFor
 import com.theoriacodex.sources.common.longValue
 import com.theoriacodex.sources.common.mimeFromUrlOrExt
 import com.theoriacodex.sources.common.originUrlOrNull
@@ -44,14 +43,14 @@ import com.theoriacodex.sources.common.normalizeBooruTag
 import com.theoriacodex.sources.common.objectList
 import com.theoriacodex.sources.common.parseJsonArray
 import com.theoriacodex.sources.common.parseJsonElement
+import com.theoriacodex.sources.common.requireSuccess
 import com.theoriacodex.sources.common.sourceCall
-import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.common.sourceQuickQuery
+import com.theoriacodex.sources.common.sourceRequest
 import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.credentials.ApiKeyUse
 import com.theoriacodex.sources.credentials.UserApiKeyCredentialLookup
 import com.theoriacodex.sources.http.SourceHttpClient
-import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -344,13 +343,7 @@ private class GelbooruFamilyAdapter(
 
     /** DAPI query with the site's credentials. Comments are XML only, so they ask for no `json=1`. */
     private suspend fun apiQuery(vararg entries: Pair<String, String>, json: Boolean = true): Map<String, String> {
-        val saved = credentials()
-        if (saved == null && site.credentials == ApiKeyUse.REQUIRED) {
-            throw SourceAdapterException(
-                reason = SourceFailureReason.AUTH_REQUIRED,
-                message = "${site.label} credentials required",
-            )
-        }
+        val saved = credentials.keysFor(site.credentials, site.label)
         return buildMap {
             put("page", "dapi")
             if (json) put("json", "1")
@@ -369,24 +362,10 @@ private class GelbooruFamilyAdapter(
         return body
     }
 
-    private suspend fun requestBody(url: String, query: Map<String, String>): String {
-        val response = try {
-            httpClient.get(url = url, query = query, headers = site.headers)
-        } catch (error: IOException) {
-            sourceNetworkFailure(site.label, error)
-        }
-        if (!response.isSuccessful()) {
-            throw SourceAdapterException(
-                reason = classifyHttpFailure(
-                    statusCode = response.statusCode,
-                    body = response.body,
-                    authBlockedBody = ::looksLikeGelbooruAuthFailure,
-                ),
-                message = "${site.label} request failed (${response.statusCode})",
-            )
-        }
-        return response.body
-    }
+    private suspend fun requestBody(url: String, query: Map<String, String>): String =
+        sourceRequest(site.label) { httpClient.get(url = url, query = query, headers = site.headers) }
+            .requireSuccess("${site.label} request failed", authBlockedBody = ::looksLikeGelbooruAuthFailure)
+            .body
 
     /** Sites report a missing or bad key in a successful response body. */
     private fun throwIfAuthFailure(body: String) {

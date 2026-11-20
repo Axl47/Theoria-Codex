@@ -20,14 +20,12 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.canonicalPostPage
-import com.theoriacodex.sources.common.classifyHttpFailure
-import com.theoriacodex.sources.common.isSuccessful
 import com.theoriacodex.sources.common.parseHtml
 import com.theoriacodex.sources.common.parseXml
+import com.theoriacodex.sources.common.requireSuccess
 import com.theoriacodex.sources.common.sourceCall
-import com.theoriacodex.sources.common.sourceNetworkFailure
+import com.theoriacodex.sources.common.sourceRequest
 import com.theoriacodex.sources.http.SourceHttpClient
-import java.io.IOException
 import org.jsoup.nodes.Document
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
@@ -237,26 +235,18 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
     }
 
     protected suspend fun request(url: String, allowNotFound: Boolean = false): String {
-        val response = try {
+        val response = sourceRequest(baseUrl) {
             httpClient.get(
                 url = url,
                 headers = RULE34_BROWSER_HEADERS + ("Referer" to "$baseUrl/"),
             )
-        } catch (error: IOException) {
-            sourceNetworkFailure(baseUrl, error)
         }
 
         if (allowNotFound && response.statusCode == 404) {
             return ""
         }
         if (response.statusCode == 404) return ""
-        if (!response.isSuccessful()) {
-            throw SourceAdapterException(
-                reason = classifyHttpFailure(response.statusCode),
-                message = "$baseUrl request failed (${response.statusCode})",
-            )
-        }
-        return response.body
+        return response.requireSuccess("$baseUrl request failed").body
     }
 }
 

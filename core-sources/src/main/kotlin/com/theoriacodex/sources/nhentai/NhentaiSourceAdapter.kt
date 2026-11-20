@@ -420,10 +420,10 @@ class NhentaiSourceAdapter(
         mirrorOnChallenge: Boolean = false,
     ): SourceHttpResponse {
         throttle()
-        val request = suspend { httpClient.get(url = url, query = query, headers = NHENTAI_DEFAULT_HEADERS) }
-        if (mirrorOnChallenge) return requestWithChallengeFallback("NHentai", request)
+        suspend fun get() = httpClient.get(url = url, query = query, headers = NHENTAI_DEFAULT_HEADERS)
+        if (mirrorOnChallenge) return requestWithChallengeFallback("NHentai") { get() }
         return try {
-            request()
+            get()
         } catch (error: IOException) {
             sourceNetworkFailure("NHentai", error)
         }
