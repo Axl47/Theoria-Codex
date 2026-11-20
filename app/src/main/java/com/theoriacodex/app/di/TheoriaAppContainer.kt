@@ -277,11 +277,8 @@ internal class DefaultTheoriaAppContainer(
         publishMediaKeys = cookieBridge::updateMediaKeys,
     )
     private val sourceRegistry = CompositeSourceAdapterRegistry(
-        builtIn = AvailabilityAwareSourceAdapterRegistry(
-            delegate = allPotentialSourceRegistry,
-            availableSourceState = accountStore.availableSources,
-        ),
         potentialBuiltIns = allPotentialSourceRegistry,
+        availableBuiltIns = accountStore.availableSources,
         custom = customSourceRuntime.snapshot,
     )
     /** Built-ins the account store allows plus usable custom sites; Settings intersects saves with it. */

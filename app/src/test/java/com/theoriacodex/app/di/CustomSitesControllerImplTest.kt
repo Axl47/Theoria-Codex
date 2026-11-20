@@ -39,6 +39,7 @@ import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.test.TestScope
@@ -111,7 +112,7 @@ class CustomSitesControllerImplTest {
             runBuiltInSearch = { builtInSearch() },
             clock = { now },
         )
-        return Graph(controller, CompositeSourceAdapterRegistry(NoBuiltIns, NoBuiltIns, runtime.snapshot))
+        return Graph(controller, CompositeSourceAdapterRegistry(NoBuiltIns, MutableStateFlow(emptySet()), runtime.snapshot))
     }
 
     @Test

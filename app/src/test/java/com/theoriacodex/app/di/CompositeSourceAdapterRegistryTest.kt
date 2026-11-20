@@ -31,14 +31,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class AvailabilityAwareSourceAdapterRegistryTest {
+class CompositeSourceAdapterRegistryTest {
     @Test
     fun `capability changes preserve registry coordinator and orchestrator identity`() {
         val pixiv = FakeAdapter(SourceKey.PIXIV)
         val rule34 = FakeAdapter(SourceKey.RULE34XXX)
         val delegate = FakeRegistry(mapOf(pixiv.sourceKey to pixiv, rule34.sourceKey to rule34))
         val capabilities = MutableStateFlow(setOf(SourceKey.PIXIV))
-        val registry = AvailabilityAwareSourceAdapterRegistry(delegate, capabilities)
+        val registry = CompositeSourceAdapterRegistry(delegate, capabilities, noCustomSites)
         val coordinator = testSearchCoordinator(registry)
         val orchestrator = registry.unifiedOrchestrator()
 
@@ -57,9 +57,10 @@ class AvailabilityAwareSourceAdapterRegistryTest {
     fun `capability state cannot expose an adapter absent from the delegate`() {
         val pixiv = FakeAdapter(SourceKey.PIXIV)
         val delegate = FakeRegistry(mapOf(pixiv.sourceKey to pixiv))
-        val registry = AvailabilityAwareSourceAdapterRegistry(
-            delegate = delegate,
-            availableSourceState = MutableStateFlow(setOf(SourceKey.PIXIV, SourceKey.RULE34XXX)),
+        val registry = CompositeSourceAdapterRegistry(
+            potentialBuiltIns = delegate,
+            availableBuiltIns = MutableStateFlow(setOf(SourceKey.PIXIV, SourceKey.RULE34XXX)),
+            custom = noCustomSites,
         )
 
         assertEquals(setOf(SourceKey.PIXIV), registry.availableSources())
@@ -85,9 +86,10 @@ class AvailabilityAwareSourceAdapterRegistryTest {
         val pixiv = FakeAdapter(SourceKey.PIXIV)
         val rule34 = FakeAdapter(SourceKey.RULE34XXX)
         val capabilities = MutableStateFlow(setOf(SourceKey.PIXIV, SourceKey.RULE34XXX))
-        val registry = AvailabilityAwareSourceAdapterRegistry(
-            delegate = FakeRegistry(mapOf(pixiv.sourceKey to pixiv, rule34.sourceKey to rule34)),
-            availableSourceState = capabilities,
+        val registry = CompositeSourceAdapterRegistry(
+            potentialBuiltIns = FakeRegistry(mapOf(pixiv.sourceKey to pixiv, rule34.sourceKey to rule34)),
+            availableBuiltIns = capabilities,
+            custom = noCustomSites,
         )
         val search = testSearchCoordinator(registry)
         search.initializeRoute()
@@ -120,6 +122,8 @@ class AvailabilityAwareSourceAdapterRegistryTest {
         assertNull(forYou.state.value.selectedSource)
     }
 }
+
+private val noCustomSites = MutableStateFlow(CustomSourceSnapshot.EMPTY)
 
 private class FakeRegistry(
     private val adapters: Map<SourceKey, SourceAdapter>,
