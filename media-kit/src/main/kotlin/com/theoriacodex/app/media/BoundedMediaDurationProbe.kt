@@ -1,9 +1,9 @@
 package com.theoriacodex.app.media
 
+import com.theoriacodex.app.source.presentation
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
-import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.http.SourceByteRange
 import com.theoriacodex.sources.http.SourceByteResponse
 import com.theoriacodex.sources.http.SourceHttpClient
@@ -135,10 +135,9 @@ class BoundedMediaDurationProbe(
 
 private class DurationProbeThrottled : Exception()
 
-/** Gelbooru's media host answers an overloaded client with 404, even for files it can serve. */
 private fun SourceByteResponse.requireNotThrottled(post: Post): SourceByteResponse {
     val throttled = statusCode == HTTP_TOO_MANY_REQUESTS || statusCode == HTTP_SERVICE_UNAVAILABLE ||
-        (statusCode == HTTP_NOT_FOUND && post.id.source == SourceKey.GELBOORU)
+        (statusCode == HTTP_NOT_FOUND && post.id.source.presentation().durationLookup.notFoundMeansThrottled)
     if (throttled) throw DurationProbeThrottled()
     return this
 }

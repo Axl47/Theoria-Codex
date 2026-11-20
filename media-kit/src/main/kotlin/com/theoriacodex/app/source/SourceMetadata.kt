@@ -40,6 +40,19 @@ sealed interface SourceLogoAsset {
     data class Favicon(val url: String) : SourceLogoAsset
 }
 
+/**
+ * How duration lookups treat a source's hosts. Lookups share a host and an IP with video playback, so tripping a
+ * host's limit would also break the videos on screen.
+ */
+data class DurationLookupPolicy(
+    /** Minimum gap between lookup starts; zero leaves lookups unpaced. */
+    val startIntervalMs: Long = 0L,
+    /** Lookups that may run at once, so one slow or rate-limited host never holds up the others. */
+    val maxConcurrent: Int = 4,
+    /** The media host answers an overloaded client with 404, even for files it can serve. */
+    val notFoundMeansThrottled: Boolean = false,
+)
+
 data class SourcePresentation(
     val source: SourceKey,
     val label: String,
@@ -56,6 +69,7 @@ data class SourcePresentation(
     val animatedSearchTags: List<String> = emptyList(),
     /** Feed cards never step up from the preview to a lighter rendition; the Viewer still does. */
     val cardsStayOnPreview: Boolean = false,
+    val durationLookup: DurationLookupPolicy = DurationLookupPolicy(),
 ) {
     fun isUserExposed(rule34XxxConfigured: Boolean): Boolean {
         return when (exposure) {
@@ -76,6 +90,8 @@ object SourcePresentationCatalog {
             group = SourcePresentationGroup.ILLUSTRATION,
             order = 1,
             logo = SourceLogoAsset.Drawable(R.drawable.pixiv_logo),
+            // Pixiv durations cost a rate-limited API call; the others are ranged reads from a media CDN.
+            durationLookup = DurationLookupPolicy(startIntervalMs = 500L, maxConcurrent = 2),
         ),
         SourcePresentation(
             source = SourceKey.GELBOORU,
@@ -86,6 +102,7 @@ object SourcePresentationCatalog {
             order = 0,
             logo = SourceLogoAsset.RawSvg(R.raw.gelbooru_logo),
             animatedSearchTags = GELBOORU_ANIMATED_SEARCH_TAGS,
+            durationLookup = DurationLookupPolicy(startIntervalMs = 500L, notFoundMeansThrottled = true),
         ),
         SourcePresentation(
             source = SourceKey.DANBOORU,
@@ -276,6 +293,8 @@ fun customSourcePresentation(
             ProtocolFamily.DANBOORU -> DANBOORU_ANIMATED_SEARCH_TAGS
             null -> emptyList()
         },
+        // A user-added site's rate limits are unknown; pace it like Gelbooru.
+        durationLookup = DurationLookupPolicy(startIntervalMs = 500L),
     )
 }
 

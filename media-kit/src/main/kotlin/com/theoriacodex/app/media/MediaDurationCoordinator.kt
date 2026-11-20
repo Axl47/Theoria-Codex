@@ -1,6 +1,7 @@
 package com.theoriacodex.app.media
 
 import android.os.Trace
+import com.theoriacodex.app.source.presentation
 import com.theoriacodex.data.repository.MediaDurationRepository
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
@@ -77,7 +78,7 @@ class MediaDurationCoordinator(
     private val retryDelayMs: Long = DEFAULT_DURATION_RETRY_DELAY_MS,
     private val maxQueuedKeys: Int = DEFAULT_MAX_QUEUED_KEYS,
     private val maxConcurrentWork: Int = DEFAULT_MAX_CONCURRENT_WORK,
-    private val maxConcurrentForSource: (SourceKey) -> Int = ::defaultDurationConcurrencyForSource,
+    private val maxConcurrentForSource: (SourceKey) -> Int = { source -> source.presentation().durationLookup.maxConcurrent },
     private val maxRetainedStates: Int = DEFAULT_MAX_RETAINED_STATES,
     private val traceRecorder: MediaDurationTraceRecorder = AndroidMediaDurationTraceRecorder,
 ) : AutoCloseable {
@@ -486,12 +487,6 @@ class MediaDurationCoordinator(
         const val DEFAULT_MAX_CONCURRENT_WORK = 8
         const val DEFAULT_MAX_RETAINED_STATES = 2_048
     }
-}
-
-/** Per-source lanes keep one slow or rate-limited host from holding up the others. */
-private fun defaultDurationConcurrencyForSource(source: SourceKey): Int {
-    // Pixiv durations cost a rate-limited API call; the others are ranged reads from a media CDN.
-    return if (source == SourceKey.PIXIV) 2 else 4
 }
 
 /** How long a failed lookup waits before a new demand may try it again. */
