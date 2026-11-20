@@ -41,8 +41,7 @@ import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.di.SourceDependencies
 import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.codex.usesDuration
-import com.theoriacodex.app.media.MediaDurationState
-import com.theoriacodex.app.media.MediaDurationKey
+import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.media.rememberDurationFilterMetadata
@@ -124,7 +123,7 @@ private fun SavedCodexSection(
     restore: FeedFabRestoreState,
     sort: CodexSortMode,
     owner: MediaDurationRouteViewModel,
-    durationStates: Map<MediaDurationKey, MediaDurationState>,
+    durationStates: MediaDurationStates,
     sources: SourceDependencies,
     parentScrolling: () -> Boolean,
     onOpen: () -> Unit,

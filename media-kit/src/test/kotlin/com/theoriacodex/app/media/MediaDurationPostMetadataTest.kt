@@ -17,7 +17,7 @@ class MediaDurationPostMetadataTest {
 
         assertEquals(
             mapOf(animated.id to mediaDurationKey(animated)),
-            mediaDurationKeysByPostId(listOf(animated, static)),
+            mediaDurationPostSnapshot(listOf(animated, static)).keysByPostId,
         )
     }
 
@@ -98,7 +98,7 @@ class MediaDurationPostMetadataTest {
 
         val durations = knownMediaDurations(
             posts = listOf(post),
-            states = mapOf(mediaDurationKey(post) to state),
+            states = mediaDurationStates(listOf(post), mapOf(mediaDurationKey(post) to state)),
         )
 
         assertEquals(8_000L, durations[post.id])
@@ -123,7 +123,7 @@ class MediaDurationPostMetadataTest {
         assertTrue(
             knownMediaDurations(
                 posts = listOf(newPost),
-                states = mapOf(mediaDurationKey(oldPost) to oldState),
+                states = mediaDurationStates(listOf(newPost), mapOf(mediaDurationKey(oldPost) to oldState)),
             ).isEmpty(),
         )
     }

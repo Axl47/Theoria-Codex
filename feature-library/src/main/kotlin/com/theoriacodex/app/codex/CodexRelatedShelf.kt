@@ -5,8 +5,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import com.theoriacodex.app.media.MediaDurationKey
-import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.related.RelatedShelfBinding
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
@@ -33,7 +32,7 @@ internal fun rememberCodexRelatedFeed(
     visiblePosts: List<Post>,
     filters: CodexCollectionFilters,
     likedPostIds: Set<PostId>,
-    durationStates: Map<MediaDurationKey, MediaDurationState>,
+    durationStates: MediaDurationStates,
     unknownDurationPolicy: UnknownAnimatedDurationPolicy,
     durationFilterActive: Boolean,
 ): CodexRelatedFeed {

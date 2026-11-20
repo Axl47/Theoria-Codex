@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -266,8 +267,8 @@ class MediaDurationRouteViewModelTest {
         creatorOwner.publishPlayerDuration(creatorPost, 5_000L)
         runCurrent()
 
-        assertTrue(searchOwner.states.value.isEmpty())
-        assertTrue(creatorOwner.states.value.isEmpty())
+        assertSame(MediaDurationStates.EMPTY, searchOwner.states.value)
+        assertSame(MediaDurationStates.EMPTY, creatorOwner.states.value)
         assertEquals(null, searchOwner.observeState(searchPost).first())
         assertEquals(
             MediaDurationState.Known(5_000L, MediaDurationProvenance.ACTIVE_PLAYER),

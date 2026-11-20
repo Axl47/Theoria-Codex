@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridS
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -20,6 +21,7 @@ import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationProvenance
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.mediaDurationKey
+import com.theoriacodex.app.media.mediaDurationStates
 import com.theoriacodex.app.related.RelatedFeedEntry
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchContentUiState
@@ -62,6 +64,7 @@ class SearchFeedFramesTest {
     private var state by mutableStateOf(searchState(posts.take(8)))
     private var fab by mutableStateOf(FeedFabRestoreState())
     private var durations by mutableStateOf(emptyMap<MediaDurationKey, MediaDurationState>())
+    private val durationStates by derivedStateOf { mediaDurationStates(posts, durations) }
     private var liked by mutableStateOf(emptySet<PostId>())
     private var feedShown by mutableStateOf(true)
     private val actions = mutableListOf<SearchAction>()
@@ -297,7 +300,7 @@ class SearchFeedFramesTest {
                 }
                 val feed = rememberSearchFeed(
                     state, fab, liked, pendingLikePostIds = emptySet(), savedPostIds = emptySet(),
-                    watchedPostIds = emptySet(), durationStates = durations, resolveUnknownAnimatedDurations = true,
+                    watchedPostIds = emptySet(), durationStates = durationStates, resolveUnknownAnimatedDurations = true,
                 )
                 val entries = feed.related.projection.entries
                 SideEffect { shown = entries.map { (it as RelatedFeedEntry.PostEntry).post.id.sourcePostId } }

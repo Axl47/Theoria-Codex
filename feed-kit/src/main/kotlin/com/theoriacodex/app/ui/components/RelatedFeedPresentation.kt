@@ -3,8 +3,7 @@ package com.theoriacodex.app.ui.components
 import androidx.compose.runtime.Composable
 import com.theoriacodex.app.viewer.retainPostsUntilViewerCloses
 import androidx.compose.runtime.remember
-import com.theoriacodex.app.media.MediaDurationKey
-import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.media.rememberDurationFilterMetadata
 import com.theoriacodex.app.related.RelatedFeedProjection
 import com.theoriacodex.app.related.RelatedPostsUiState
@@ -40,7 +39,7 @@ fun rememberRelatedFeedPresentation(
     savedPostIds: Set<PostId>,
     watchedPostIds: Set<PostId>,
     unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy,
-    durationStates: Map<MediaDurationKey, MediaDurationState>,
+    durationStates: MediaDurationStates,
     durationFilterActive: Boolean,
     pendingLikePostIds: Set<PostId> = emptySet(),
 ): RelatedFeedPresentation {

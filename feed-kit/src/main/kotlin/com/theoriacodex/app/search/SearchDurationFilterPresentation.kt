@@ -5,8 +5,8 @@ import androidx.compose.runtime.remember
 import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.media.DurationFilterMetadata
 import com.theoriacodex.app.media.DurationFilterReadiness
-import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.media.rememberDurationFilterMetadata
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -26,7 +26,7 @@ data class SearchDurationFilterPresentation(
 fun rememberSearchDurationFilterPresentation(
     posts: List<Post>,
     range: AnimatedDurationRange,
-    durationStates: Map<MediaDurationKey, MediaDurationState>,
+    durationStates: MediaDurationStates,
     resolveUnknownAnimatedDurations: Boolean,
     retainKey: String,
 ): SearchDurationFilterPresentation {

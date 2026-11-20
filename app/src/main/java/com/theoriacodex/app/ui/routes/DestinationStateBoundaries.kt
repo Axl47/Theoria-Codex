@@ -36,8 +36,7 @@ import com.theoriacodex.app.codex.storeOrder
 import com.theoriacodex.app.codex.rememberSortedCodexPosts
 import com.theoriacodex.app.codex.rememberCodexPostUsage
 import com.theoriacodex.app.codex.rememberCodexPostDurations
-import com.theoriacodex.app.media.MediaDurationState
-import com.theoriacodex.app.media.MediaDurationKey
+import com.theoriacodex.app.media.MediaDurationStates
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import com.theoriacodex.app.codex.CodexCoverCandidate
@@ -268,7 +267,7 @@ internal fun CodexDetailDestinationStateBoundary(
     data: DataDependencies,
     sources: SourceDependencies,
     fabRestoreState: com.theoriacodex.data.repository.FeedFabRestoreState,
-    durationStates: Map<MediaDurationKey, MediaDurationState> = emptyMap(),
+    durationStates: MediaDurationStates = MediaDurationStates.EMPTY,
     content: @Composable (CodexDetailDestinationState) -> Unit,
 ) {
     val metadata = browsingMetadataOwner(data).state.collectAsStateWithLifecycle().value ?: return
@@ -519,7 +518,7 @@ private fun FollowedCodexDestinationStateBoundary(
     settings: AppSettings,
     filters: com.theoriacodex.data.repository.FeedFabRestoreState,
     sort: CodexSortMode,
-    durationStates: Map<MediaDurationKey, MediaDurationState>,
+    durationStates: MediaDurationStates,
     content: @Composable (CodexDetailDestinationState) -> Unit,
 ) {
     val available = sources.availableSources.collectAsStateWithLifecycle().value

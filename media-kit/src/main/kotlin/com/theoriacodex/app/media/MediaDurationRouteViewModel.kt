@@ -65,8 +65,13 @@ class MediaDurationRouteViewModel(
     private var visibleDemandKeys: Set<MediaDurationKey> = emptySet()
     private var nearbyDemandKeys: Set<MediaDurationKey> = emptySet()
 
-    private val mutableStates = MutableStateFlow<Map<MediaDurationKey, MediaDurationState>>(emptyMap())
-    val states: StateFlow<Map<MediaDurationKey, MediaDurationState>> = mutableStates.asStateFlow()
+    private var publishedDecisions: Map<MediaDurationKey, MediaDurationState>? = null
+    private var publishedPosts: Map<PostId, Post>? = null
+
+    private val mutableStates = MutableStateFlow(MediaDurationStates.EMPTY)
+
+    /** Decisions for the synchronized posts while a duration filter is active; empty otherwise. */
+    val states: StateFlow<MediaDurationStates> = mutableStates.asStateFlow()
 
     init {
         ownerScope.launch {
@@ -166,7 +171,7 @@ class MediaDurationRouteViewModel(
         filterActive = active
         ownerScope.launch {
             demandLock.withLock {
-                if (active) publishObservedStates(coordinator.states.value) else mutableStates.value = emptyMap()
+                if (active) publishObservedStates(coordinator.states.value) else clearPublishedStates()
                 synchronizeDemand()
             }
         }
@@ -368,7 +373,18 @@ class MediaDurationRouteViewModel(
         val observed = withContext(snapshotDispatcher) { reconcileDurationDecisions(previous, allStates, keys) }
         if (generation != requestGeneration) return
         retainedDecisions = observed
-        if (filterActive && mutableStates.value !== observed) mutableStates.value = observed
+        if (!filterActive || (observed === publishedDecisions && postsById === publishedPosts)) return
+        publishedDecisions = observed
+        publishedPosts = postsById
+        val posts = postsById
+        val postKeys = keysByPostId
+        mutableStates.value = withContext(snapshotDispatcher) { routeDurationStates(posts, postKeys, observed) }
+    }
+
+    private fun clearPublishedStates() {
+        publishedDecisions = null
+        publishedPosts = null
+        mutableStates.value = MediaDurationStates.EMPTY
     }
 
     private enum class DemandLane {

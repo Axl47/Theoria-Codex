@@ -26,8 +26,8 @@ class DurationBacklogIntegrationTest {
         owner.onEnvironmentChanged(lifecycleStarted = true, scrollIdle = true)
         runCurrent()
         assertEquals(513, acquisitions)
-        assertEquals(513, owner.states.value.values.count { it is MediaDurationState.Known })
-        assertFalse(durationFilterReadiness(posts, true, owner.states.value.mapKeys { it.key.postId }).isResolving)
+        assertEquals(513, posts.count { owner.states.value[it] is MediaDurationState.Known })
+        assertFalse(durationFilterMetadata(posts, owner.states.value, true).readiness.isResolving)
         coordinator.close()
     }
 
@@ -65,7 +65,7 @@ class DurationBacklogIntegrationTest {
         owner.onEnvironmentChanged(lifecycleStarted = true, scrollIdle = true)
         runCurrent()
         assertEquals(2, coordinator.states.value.size)
-        assertEquals(5, owner.states.value.values.count { it is MediaDurationState.Known })
+        assertEquals(5, posts.count { owner.states.value[it] is MediaDurationState.Known })
         coordinator.close()
     }
 
