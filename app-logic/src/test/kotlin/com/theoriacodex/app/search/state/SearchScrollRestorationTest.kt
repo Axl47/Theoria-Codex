@@ -58,8 +58,12 @@ class SearchScrollRestorationTest {
     private val reset = pending.copy(scrollState = SearchScrollState(0, 0), resetToTop = true)
 
     @Test fun `no open request waits`() {
-        assertEquals(ScrollStep.Wait, ready(SearchRestorationUiState.NotStarted).step())
-        assertEquals(ScrollStep.Wait, ready(pending.copy(scrollState = null)).step())
+        for (closed in listOf(SearchRestorationUiState.NotStarted, pending.copy(scrollState = null))) {
+            assertEquals(ScrollStep.Wait, ready(closed).step())
+            assertFalse(ready(closed).canApplyScrollRestoration)
+        }
+        val notRestored = ready(SearchRestorationUiState.NotStarted)
+        assertEquals(ScrollStep.Wait, notRestored.scrollStepAfterJump(reachedTarget = true, canScrollForward = true))
     }
 
     @Test fun `unfinished or loading search waits even for a reset to top`() {
@@ -90,6 +94,8 @@ class SearchScrollRestorationTest {
 
     @Test fun `unloaded anchor waits for more pages and jumps once results are exhausted`() {
         assertEquals(ScrollStep.Wait, ready(loaded = 20).step(presented = 20))
+        assertEquals(ScrollStep.Wait, ready(loaded = 22).step(presented = 22))
+        assertEquals(jump, ready(loaded = 23).step(presented = 23))
         assertEquals(jump, ready(loaded = 20, canLoadMore = false).step(presented = 20))
     }
 
