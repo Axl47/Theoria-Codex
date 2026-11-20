@@ -89,46 +89,12 @@ internal class HitomiNozomiReader(
         index: CompiledIndex,
         maxGalleryIds: Int,
     ): HitomiNozomiSnapshot {
-        val url = index.url
-        index.inlineIds?.let { ordered ->
+        val ids = index.inlineIds?.let { ordered ->
             if (ordered.size > maxGalleryIds) {
                 throw sourceParseFailure("Hitomi global index exceeded the bounded gallery limit")
             }
-            val uniqueIds = ordered.sortedDistinctCopy()
-            return HitomiNozomiSnapshot(uniqueIds, uniqueIds.hitomiSha256Hex())
-        }
-        val maxBytes = Math.multiplyExact(maxGalleryIds, Int.SIZE_BYTES)
-        val response = requestNozomi(
-            url = url,
-            firstIdIndex = 0L,
-            idCount = maxGalleryIds,
-            maxBodyBytes = maxBytes,
-        )
-        val body = when (response.statusCode) {
-            404, 416 -> ByteArray(0)
-            200 -> response.body
-            206 -> {
-                val contentRange = response.validatedContentRange()
-                    ?: throw sourceParseFailure("Hitomi random index omitted its byte range")
-                val totalBytes = contentRange.totalBytes
-                    ?: throw sourceParseFailure("Hitomi random index omitted its total size")
-                if (
-                    contentRange.startByte != 0L ||
-                    contentRange.endByte + 1L != totalBytes ||
-                    response.body.size.toLong() != totalBytes
-                ) {
-                    throw sourceParseFailure(
-                        "Hitomi random index returned only part of its declared snapshot",
-                    )
-                }
-                if (bytesToIdCount(totalBytes) > maxGalleryIds) {
-                    throw sourceParseFailure("Hitomi random index exceeded the bounded gallery limit")
-                }
-                response.body
-            }
-            else -> throw sourceHttpFailure("random Nozomi", response.statusCode)
-        }
-        val ids = HitomiNozomi.decodeGalleryIds(body, maxGalleryIds).sortDistinctOwned()
+            ordered.sortedDistinctCopy()
+        } ?: readWholeNozomi(index.url, maxGalleryIds, kind = "random")
         return HitomiNozomiSnapshot(ids = ids, fingerprint = ids.hitomiSha256Hex())
     }
 
@@ -158,55 +124,45 @@ internal class HitomiNozomiReader(
     suspend fun membershipFor(index: CompiledIndex): IntArray {
         val url = index.url
         membershipCache.get(url)?.let { return it }
+        val membership = index.inlineIds?.sortedDistinctCopy()
+            ?: readWholeNozomi(url, MAX_SECONDARY_MEMBERSHIP_IDS, kind = "secondary")
+        membershipCache.put(url, membership)
+        return membership
+    }
 
-        index.inlineIds?.let { ids ->
-            val membership = ids.sortedDistinctCopy()
-            membershipCache.put(url, membership)
-            return membership
-        }
-
+    /**
+     * Reads a whole index from byte zero as sorted distinct IDs. A missing index (404/416) is empty; a partial
+     * response must cover the complete declared body, and no index may hold more than [maxIds].
+     */
+    private suspend fun readWholeNozomi(url: String, maxIds: Int, kind: String): IntArray {
         val response = requestNozomi(
             url = url,
             firstIdIndex = 0L,
-            idCount = MAX_SECONDARY_MEMBERSHIP_IDS,
-            maxBodyBytes = MAX_SECONDARY_MEMBERSHIP_IDS * Int.SIZE_BYTES,
+            idCount = maxIds,
+            maxBodyBytes = Math.multiplyExact(maxIds, Int.SIZE_BYTES),
         )
-        val ids = when (response.statusCode) {
-            404, 416 -> IntArray(0)
-            200 -> HitomiNozomi.decodeGalleryIds(
-                bytes = response.body,
-                maxGalleryIds = MAX_SECONDARY_MEMBERSHIP_IDS,
-            )
+        val body = when (response.statusCode) {
+            404, 416 -> return IntArray(0)
+            200 -> response.body
             206 -> {
                 val contentRange = response.validatedContentRange()
-                    ?: throw sourceParseFailure(
-                        "Hitomi secondary index did not report a complete byte range",
-                    )
+                    ?: throw sourceParseFailure("Hitomi $kind index omitted its byte range")
                 if (contentRange.startByte != 0L) {
-                    throw sourceParseFailure("Hitomi secondary index did not start at byte zero")
+                    throw sourceParseFailure("Hitomi $kind index did not start at byte zero")
                 }
                 val totalBytes = contentRange.totalBytes
-                    ?: throw sourceParseFailure("Hitomi secondary index omitted its total length")
-                val totalIds = bytesToIdCount(totalBytes)
-                if (totalIds > MAX_SECONDARY_MEMBERSHIP_IDS) {
-                    throw sourceParseFailure(
-                        "Hitomi secondary index exceeded the bounded membership limit",
-                    )
+                    ?: throw sourceParseFailure("Hitomi $kind index omitted its total length")
+                if (bytesToIdCount(totalBytes) > maxIds) {
+                    throw sourceParseFailure("Hitomi $kind index exceeded its bounded ID limit")
                 }
                 if (response.body.size.toLong() != totalBytes) {
-                    throw sourceParseFailure("Hitomi secondary index response was incomplete")
+                    throw sourceParseFailure("Hitomi $kind index response was incomplete")
                 }
-                val decoded = HitomiNozomi.decodeGalleryIds(
-                    bytes = response.body,
-                    maxGalleryIds = MAX_SECONDARY_MEMBERSHIP_IDS,
-                )
-                decoded
+                response.body
             }
-            else -> throw sourceHttpFailure("Nozomi membership", response.statusCode)
+            else -> throw sourceHttpFailure("$kind Nozomi", response.statusCode)
         }
-        val membership = ids.sortDistinctOwned()
-        membershipCache.put(url, membership)
-        return membership
+        return HitomiNozomi.decodeGalleryIds(body, maxIds).sortDistinctOwned()
     }
 
     suspend fun readPrimaryRange(
@@ -215,25 +171,11 @@ internal class HitomiNozomiReader(
         idCount: Int,
     ): PrimaryRange {
         val url = index.url
-        index.inlineIds?.let { ids ->
-            val from = firstIdIndex.coerceAtMost(ids.size.toLong()).toInt()
-            val until = (firstIdIndex + idCount).coerceAtMost(ids.size.toLong()).toInt()
-            return PrimaryRange(ids.primitiveSlice(from, until), exhausted = until >= ids.size)
-        }
+        index.inlineIds?.let { ids -> return ids.primaryRange(firstIdIndex, idCount) }
         val response = requestNozomi(url, firstIdIndex, idCount)
         return when (response.statusCode) {
             404, 416 -> PrimaryRange(IntArray(0), exhausted = true)
-            200 -> {
-                val allIds = HitomiNozomi.decodeGalleryIds(response.body)
-                val from = firstIdIndex.coerceAtMost(allIds.size.toLong()).toInt()
-                val until = (firstIdIndex + idCount)
-                    .coerceAtMost(allIds.size.toLong())
-                    .toInt()
-                PrimaryRange(
-                    ids = allIds.primitiveSlice(from, until),
-                    exhausted = until >= allIds.size,
-                )
-            }
+            200 -> HitomiNozomi.decodeGalleryIds(response.body).primaryRange(firstIdIndex, idCount)
             206 -> {
                 val contentRange = response.validatedContentRange()
                     ?: throw sourceParseFailure("Hitomi Nozomi page omitted its byte range")
@@ -322,6 +264,13 @@ internal class HitomiNozomiReader(
                 throw HitomiProtocolException("Hitomi Nozomi byte length was not ID-aligned")
             }
             return bytes / Int.SIZE_BYTES
+        }
+
+        /** Slices a whole ordered index down to the requested page. */
+        private fun IntArray.primaryRange(firstIdIndex: Long, idCount: Int): PrimaryRange {
+            val from = firstIdIndex.coerceAtMost(size.toLong()).toInt()
+            val until = (firstIdIndex + idCount).coerceAtMost(size.toLong()).toInt()
+            return PrimaryRange(primitiveSlice(from, until), exhausted = until >= size)
         }
 
         private fun validateNozomiBody(body: ByteArray) {
