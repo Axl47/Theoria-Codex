@@ -44,15 +44,13 @@ import com.theoriacodex.sources.common.parseJsonArray as parseSourceJsonArray
 import com.theoriacodex.sources.common.parseJsonObject as parseSourceJsonObject
 import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.common.sourceNetworkFailure
+import com.theoriacodex.sources.http.RequestPacer
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.http.THEORIA_SOURCE_USER_AGENT
 import java.io.IOException
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 class NhentaiSourceAdapter(
     private val httpClient: SourceHttpClient,
@@ -77,10 +75,9 @@ class NhentaiSourceAdapter(
 
     override val supportedSearchScopes: Set<FacetedSearchScope> = NHENTAI_FACETS.searchScopes
 
-    private val throttleMutex = Mutex()
-    private var lastRequestAtEpochMs: Long = 0L
+    private val pacer = RequestPacer(minRequestIntervalMs)
     private val tagInfoByKey = BoundedLruCache<String, List<NhentaiTagInfo>>(TAG_CACHE_MAX_KEYS)
-    private val mirror = NhentaiMirror(httpClient, pace = ::throttle)
+    private val mirror = NhentaiMirror(httpClient, pacer)
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> = sourceCall(callContext) {
         val directGalleryId = query.directNhentaiGalleryIdCandidate()
@@ -335,7 +332,7 @@ class NhentaiSourceAdapter(
         url: String,
         query: Map<String, String>,
     ): SourceHttpResponse {
-        throttle()
+        pacer.awaitTurn()
         return try {
             httpClient.get(
                 url = url,
@@ -351,7 +348,7 @@ class NhentaiSourceAdapter(
         url: String,
         body: String,
     ): SourceHttpResponse {
-        throttle()
+        pacer.awaitTurn()
         return try {
             httpClient.postJson(
                 url = url,
@@ -398,17 +395,6 @@ class NhentaiSourceAdapter(
                         info.slug.equals(normalizedSlug, ignoreCase = true)
                     )
             }
-    }
-
-    private suspend fun throttle() {
-        throttleMutex.withLock {
-            val now = System.currentTimeMillis()
-            val waitMs = minRequestIntervalMs - (now - lastRequestAtEpochMs)
-            if (waitMs > 0L) {
-                delay(waitMs)
-            }
-            lastRequestAtEpochMs = System.currentTimeMillis()
-        }
     }
 
     private fun parseJsonObject(response: SourceHttpResponse): JsonObject =

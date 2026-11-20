@@ -4,6 +4,7 @@ import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.sources.common.sourceNetworkFailure
+import com.theoriacodex.sources.http.RequestPacer
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import java.io.IOException
@@ -11,12 +12,12 @@ import java.net.URLEncoder
 
 /**
  * Reaches nhentai through mirrors while its API answers with a Cloudflare challenge: search and reader pages
- * come through the Jina text mirror, and tags from the first HTML metadata mirror that lists them. [pace]
- * spaces metadata requests with the adapter's own.
+ * come through the Jina text mirror, and tags from the first HTML metadata mirror that lists them. Metadata
+ * requests take turns on the adapter's [pacer].
  */
 internal class NhentaiMirror(
     private val httpClient: SourceHttpClient,
-    private val pace: suspend () -> Unit,
+    private val pacer: RequestPacer,
 ) {
     suspend fun search(
         compiledQuery: String,
@@ -67,7 +68,7 @@ internal class NhentaiMirror(
     }
 
     private suspend fun requestMetadata(url: String): SourceHttpResponse? {
-        pace()
+        pacer.awaitTurn()
         return runCatchingPreservingCancellation {
             httpClient.get(
                 url = url,

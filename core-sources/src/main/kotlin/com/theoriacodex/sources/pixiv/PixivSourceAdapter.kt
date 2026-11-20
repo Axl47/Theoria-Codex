@@ -40,6 +40,7 @@ import com.theoriacodex.sources.common.sourceQuickQuery
 import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.credentials.PixivAuthTokens
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
+import com.theoriacodex.sources.http.RequestPacer
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import java.io.IOException
@@ -50,9 +51,6 @@ import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 class PixivSourceAdapter(
     private val httpClient: SourceHttpClient,
@@ -84,10 +82,10 @@ class PixivSourceAdapter(
     )
 
     /** Feed pages and settings lookups; background duration lookups never queue in front of them. */
-    private val browsePacer = PixivRequestPacer(minRequestIntervalMs, clock)
+    private val browsePacer = RequestPacer(minRequestIntervalMs, clock)
 
     /** Ugoira duration lookups are already paced per source by the duration engine; this lane keeps them apart. */
-    private val durationPacer = PixivRequestPacer(minRequestIntervalMs, clock)
+    private val durationPacer = RequestPacer(minRequestIntervalMs, clock)
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> = sourceCall(callContext) {
         val params = offsetPageParams(
@@ -290,7 +288,7 @@ class PixivSourceAdapter(
     private suspend fun authorizedGet(
         url: String,
         query: Map<String, String>,
-        pacer: PixivRequestPacer = browsePacer,
+        pacer: RequestPacer = browsePacer,
     ): String {
         pacer.awaitTurn()
         var tokens = tokenCoordinator.activeTokens()
@@ -354,17 +352,6 @@ class PixivSourceAdapter(
     }
 }
 
-/** Spaces requests on one lane at least [minIntervalMs] apart. */
-private class PixivRequestPacer(private val minIntervalMs: Long, private val clock: () -> Long) {
-    private val mutex = Mutex()
-    private var lastRequestAtEpochMs = 0L
-
-    suspend fun awaitTurn() = mutex.withLock {
-        val waitMs = minIntervalMs - (clock() - lastRequestAtEpochMs)
-        if (waitMs > 0L) delay(waitMs)
-        lastRequestAtEpochMs = clock()
-    }
-}
 private class PixivIllusts(val posts: List<Post>, val nextUrl: String?)
 
 /** Query parameters for an offset-paged feed; the page token is the offset, omitted on the first page. */
