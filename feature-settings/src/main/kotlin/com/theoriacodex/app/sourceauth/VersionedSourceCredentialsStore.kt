@@ -1,0 +1,314 @@
+package com.theoriacodex.app.sourceauth
+
+import com.theoriacodex.domain.source.CustomSourceIds
+import com.theoriacodex.domain.source.SiteCredentials
+import com.theoriacodex.sources.credentials.GelbooruCredentials
+import com.theoriacodex.sources.credentials.PixivAuthTokens
+import com.theoriacodex.sources.credentials.Rule34XxxCredentials
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+
+/**
+ * The non-secret status exposed to the app shell.
+ *
+ * Storage failures are intentionally split by the action a user or caller can take. None of
+ * these states contains exception text because provider credentials can occur in nested causes.
+ */
+sealed interface CredentialStoreRecoveryState {
+    data object Loading : CredentialStoreRecoveryState
+
+    data object Ready : CredentialStoreRecoveryState
+
+    data object TemporarilyUnavailable : CredentialStoreRecoveryState
+
+    data object ReconnectRequired : CredentialStoreRecoveryState
+
+    data class UnsupportedVersion(val version: Int) : CredentialStoreRecoveryState
+}
+
+class CredentialStoreUnavailableException : IllegalStateException(
+    "Source credentials are unavailable in the current recovery state",
+)
+
+/**
+ * A deliberately redacted, whole-store snapshot. Equality verifies committed envelope writes;
+ * [toString] never exposes tokens, user IDs, or API keys.
+ */
+class SourceCredentialSnapshot(
+    val pixivAccessToken: String? = null,
+    val pixivRefreshToken: String? = null,
+    val pixivExpiresAtEpochMs: Long? = null,
+    val gelbooruUserId: String? = null,
+    val gelbooruApiKey: String? = null,
+    val rule34XxxUserId: String? = null,
+    val rule34XxxApiKey: String? = null,
+    /** Keys of user-added sites by source id; written only when non-empty (plan D7). */
+    val customSites: Map<String, SiteCredentials> = emptyMap(),
+) {
+    fun pixivTokens(): PixivAuthTokens? {
+        val accessToken = pixivAccessToken?.takeIf(String::isNotBlank) ?: return null
+        val refreshToken = pixivRefreshToken?.takeIf(String::isNotBlank) ?: return null
+        val expiresAt = pixivExpiresAtEpochMs?.takeIf { value -> value > 0L } ?: return null
+        return PixivAuthTokens(accessToken, refreshToken, expiresAt)
+    }
+
+    fun gelbooruCredentials(): GelbooruCredentials? {
+        val userId = gelbooruUserId?.takeIf(String::isNotBlank) ?: return null
+        val apiKey = gelbooruApiKey?.takeIf(String::isNotBlank) ?: return null
+        return GelbooruCredentials(userId, apiKey)
+    }
+
+    fun rule34XxxCredentials(): Rule34XxxCredentials? {
+        val userId = rule34XxxUserId?.takeIf(String::isNotBlank) ?: return null
+        val apiKey = rule34XxxApiKey?.takeIf(String::isNotBlank) ?: return null
+        return Rule34XxxCredentials(userId, apiKey)
+    }
+
+    fun withPixiv(tokens: PixivAuthTokens?): SourceCredentialSnapshot = SourceCredentialSnapshot(
+        pixivAccessToken = tokens?.accessToken,
+        pixivRefreshToken = tokens?.refreshToken,
+        pixivExpiresAtEpochMs = tokens?.expiresAtEpochMs,
+        gelbooruUserId = gelbooruUserId,
+        gelbooruApiKey = gelbooruApiKey,
+        rule34XxxUserId = rule34XxxUserId,
+        rule34XxxApiKey = rule34XxxApiKey,
+        customSites = customSites,
+    )
+
+    fun withGelbooru(credentials: GelbooruCredentials?): SourceCredentialSnapshot = SourceCredentialSnapshot(
+        pixivAccessToken = pixivAccessToken,
+        pixivRefreshToken = pixivRefreshToken,
+        pixivExpiresAtEpochMs = pixivExpiresAtEpochMs,
+        gelbooruUserId = credentials?.userId,
+        gelbooruApiKey = credentials?.apiKey,
+        rule34XxxUserId = rule34XxxUserId,
+        rule34XxxApiKey = rule34XxxApiKey,
+        customSites = customSites,
+    )
+
+    fun withRule34Xxx(credentials: Rule34XxxCredentials?): SourceCredentialSnapshot = SourceCredentialSnapshot(
+        pixivAccessToken = pixivAccessToken,
+        pixivRefreshToken = pixivRefreshToken,
+        pixivExpiresAtEpochMs = pixivExpiresAtEpochMs,
+        gelbooruUserId = gelbooruUserId,
+        gelbooruApiKey = gelbooruApiKey,
+        rule34XxxUserId = credentials?.userId,
+        rule34XxxApiKey = credentials?.apiKey,
+        customSites = customSites,
+    )
+
+    fun withCustomSite(sourceId: String, credentials: SiteCredentials?): SourceCredentialSnapshot = SourceCredentialSnapshot(
+        pixivAccessToken = pixivAccessToken,
+        pixivRefreshToken = pixivRefreshToken,
+        pixivExpiresAtEpochMs = pixivExpiresAtEpochMs,
+        gelbooruUserId = gelbooruUserId,
+        gelbooruApiKey = gelbooruApiKey,
+        rule34XxxUserId = rule34XxxUserId,
+        rule34XxxApiKey = rule34XxxApiKey,
+        customSites = if (credentials == null) customSites - sourceId else customSites + (sourceId to credentials),
+    )
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is SourceCredentialSnapshot) return false
+        return pixivAccessToken == other.pixivAccessToken &&
+            pixivRefreshToken == other.pixivRefreshToken &&
+            pixivExpiresAtEpochMs == other.pixivExpiresAtEpochMs &&
+            gelbooruUserId == other.gelbooruUserId &&
+            gelbooruApiKey == other.gelbooruApiKey &&
+            rule34XxxUserId == other.rule34XxxUserId &&
+            rule34XxxApiKey == other.rule34XxxApiKey &&
+            customSites == other.customSites
+    }
+
+    override fun hashCode(): Int {
+        var result = pixivAccessToken.hashCode()
+        result = 31 * result + pixivRefreshToken.hashCode()
+        result = 31 * result + pixivExpiresAtEpochMs.hashCode()
+        result = 31 * result + gelbooruUserId.hashCode()
+        result = 31 * result + gelbooruApiKey.hashCode()
+        result = 31 * result + rule34XxxUserId.hashCode()
+        result = 31 * result + rule34XxxApiKey.hashCode()
+        return 31 * result + customSites.hashCode()
+    }
+
+    override fun toString(): String = "SourceCredentialSnapshot([REDACTED])"
+}
+
+sealed interface CredentialEnvelopeReadResult {
+    data object Missing : CredentialEnvelopeReadResult
+
+    data class Success(val snapshot: SourceCredentialSnapshot) : CredentialEnvelopeReadResult
+
+    data object TemporarilyUnavailable : CredentialEnvelopeReadResult
+
+    data object ReconnectRequired : CredentialEnvelopeReadResult
+
+    data class UnsupportedVersion(val version: Int) : CredentialEnvelopeReadResult
+}
+
+sealed interface CredentialStoreWriteResult {
+    data object Success : CredentialStoreWriteResult
+
+    data object TemporarilyUnavailable : CredentialStoreWriteResult
+
+    data object ReconnectRequired : CredentialStoreWriteResult
+}
+
+internal interface CredentialEnvelopeStore {
+    suspend fun read(): CredentialEnvelopeReadResult
+
+    /** Writes atomically and verifies a decrypting read-back before reporting success. */
+    suspend fun writeVerified(snapshot: SourceCredentialSnapshot): CredentialStoreWriteResult
+
+    suspend fun reset(): Boolean
+}
+
+internal class VersionedSourceCredentialsStore(
+    private val envelopeStore: CredentialEnvelopeStore,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+) : RecoverableSourceCredentialsStore, SiteCredentialsStore {
+    private val mutex = Mutex()
+    private val customSiteRevision = MutableStateFlow(0L)
+    private val mutableRecoveryState = MutableStateFlow<CredentialStoreRecoveryState>(
+        CredentialStoreRecoveryState.Loading,
+    )
+    private var loadedSnapshot: SourceCredentialSnapshot? = null
+
+    override val recoveryState: StateFlow<CredentialStoreRecoveryState> =
+        mutableRecoveryState.asStateFlow()
+
+    override suspend fun getPixivTokens(): PixivAuthTokens? = readSnapshot()?.pixivTokens()
+
+    override suspend fun savePixivTokens(tokens: PixivAuthTokens) {
+        updateSnapshot { snapshot -> snapshot.withPixiv(tokens) }
+    }
+
+    override suspend fun clearPixivTokens() {
+        updateSnapshot { snapshot -> snapshot.withPixiv(null) }
+    }
+
+    override suspend fun getGelbooruCredentials(): GelbooruCredentials? =
+        readSnapshot()?.gelbooruCredentials()
+
+    override suspend fun saveGelbooruCredentials(credentials: GelbooruCredentials) {
+        updateSnapshot { snapshot -> snapshot.withGelbooru(credentials) }
+    }
+
+    override suspend fun clearGelbooruCredentials() {
+        updateSnapshot { snapshot -> snapshot.withGelbooru(null) }
+    }
+
+    override suspend fun getRule34XxxCredentials(): Rule34XxxCredentials? =
+        readSnapshot()?.rule34XxxCredentials()
+
+    override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) {
+        updateSnapshot { snapshot -> snapshot.withRule34Xxx(credentials) }
+    }
+
+    override suspend fun clearRule34XxxCredentials() {
+        updateSnapshot { snapshot -> snapshot.withRule34Xxx(null) }
+    }
+
+    override suspend fun get(sourceId: String): SiteCredentials? = readSnapshot()?.customSites?.get(sourceId)
+
+    override suspend fun save(sourceId: String, credentials: SiteCredentials) {
+        require(CustomSourceIds.isValid(sourceId)) { "Site credentials need a custom source id" }
+        updateSnapshot { snapshot -> snapshot.withCustomSite(sourceId, credentials) }
+        customSiteRevision.update { it + 1 }
+    }
+
+    override suspend fun clear(sourceId: String) {
+        updateSnapshot { snapshot -> snapshot.withCustomSite(sourceId, null) }
+        customSiteRevision.update { it + 1 }
+    }
+
+    override val changes: Flow<Unit> = customSiteRevision.map { }
+
+    override suspend fun resetAfterReconnectRequired(): Boolean = withContext(ioDispatcher) {
+        mutex.withLock {
+            if (mutableRecoveryState.value != CredentialStoreRecoveryState.ReconnectRequired) {
+                return@withLock false
+            }
+            // A reset may partially succeed or be cancelled. Never keep serving a cached snapshot
+            // after the user has authorized destructive recovery.
+            loadedSnapshot = null
+            if (envelopeStore.reset()) {
+                loadedSnapshot = SourceCredentialSnapshot()
+                mutableRecoveryState.value = CredentialStoreRecoveryState.Ready
+                customSiteRevision.update { it + 1 }
+                true
+            } else {
+                mutableRecoveryState.value = CredentialStoreRecoveryState.ReconnectRequired
+                false
+            }
+        }
+    }
+
+    private suspend fun readSnapshot(): SourceCredentialSnapshot? = withContext(ioDispatcher) {
+        mutex.withLock { ensureLoadedLocked() }
+    }
+
+    private suspend fun updateSnapshot(
+        transform: (SourceCredentialSnapshot) -> SourceCredentialSnapshot,
+    ) = withContext(ioDispatcher) {
+        mutex.withLock {
+            val current = ensureLoadedLocked() ?: throw CredentialStoreUnavailableException()
+            val updated = transform(current)
+            if (updated == current) return@withLock
+            when (envelopeStore.writeVerified(updated)) {
+                CredentialStoreWriteResult.Success -> {
+                    loadedSnapshot = updated
+                    mutableRecoveryState.value = CredentialStoreRecoveryState.Ready
+                }
+                CredentialStoreWriteResult.TemporarilyUnavailable -> {
+                    loadedSnapshot = null
+                    mutableRecoveryState.value = CredentialStoreRecoveryState.TemporarilyUnavailable
+                    throw CredentialStoreUnavailableException()
+                }
+                CredentialStoreWriteResult.ReconnectRequired -> {
+                    loadedSnapshot = null
+                    mutableRecoveryState.value = CredentialStoreRecoveryState.ReconnectRequired
+                    throw CredentialStoreUnavailableException()
+                }
+            }
+        }
+    }
+
+    private suspend fun ensureLoadedLocked(): SourceCredentialSnapshot? {
+        loadedSnapshot?.let { current -> return current }
+
+        val snapshot = when (val envelope = envelopeStore.read()) {
+            is CredentialEnvelopeReadResult.Success -> envelope.snapshot
+            CredentialEnvelopeReadResult.Missing -> SourceCredentialSnapshot()
+            CredentialEnvelopeReadResult.TemporarilyUnavailable -> return unavailableTemporarily()
+            CredentialEnvelopeReadResult.ReconnectRequired -> return reconnectRequired()
+            is CredentialEnvelopeReadResult.UnsupportedVersion -> {
+                mutableRecoveryState.value = CredentialStoreRecoveryState.UnsupportedVersion(envelope.version)
+                return null
+            }
+        }
+        loadedSnapshot = snapshot
+        mutableRecoveryState.value = CredentialStoreRecoveryState.Ready
+        return snapshot
+    }
+
+    private fun unavailableTemporarily(): SourceCredentialSnapshot? {
+        mutableRecoveryState.value = CredentialStoreRecoveryState.TemporarilyUnavailable
+        return null
+    }
+
+    private fun reconnectRequired(): SourceCredentialSnapshot? {
+        mutableRecoveryState.value = CredentialStoreRecoveryState.ReconnectRequired
+        return null
+    }
+}

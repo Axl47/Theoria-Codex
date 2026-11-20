@@ -35,6 +35,7 @@ dependencies {
     kover(project(":feature-search"))
     kover(project(":feature-library"))
     kover(project(":feature-discover"))
+    kover(project(":feature-settings"))
 }
 
 val qualityCoverageVariant = "quality"

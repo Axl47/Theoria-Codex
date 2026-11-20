@@ -315,7 +315,7 @@ private fun rememberShellOwners(container: TheoriaAppContainer, appContext: Cont
             initializer { CodexSaveViewModel(workflows.codexTransfer, data.codexRepository, data.statisticsRepository) }
         },
     )
-    val settings = viewModel<SettingsViewModel>(key = "settings-route-owner", factory = SettingsViewModel.factory(container))
+    val settings = viewModel<SettingsViewModel>(key = "settings-route-owner", factory = SettingsViewModel.factory(settingsOwnerDependencies(container)))
     val follows = viewModel<CreatorFollowsViewModel>(
         key = "creator-follows",
         factory = CreatorFollowsViewModel.factory(data.settingsRepository, container.sources.registry),
