@@ -22,9 +22,7 @@
   "lineBudgets": {
     "production": 900,
     "test": 700,
-    "productionExceptions": {
-      "feature-search/src/main/kotlin/com/theoriacodex/app/search/SearchViewModel.kt": 1053
-    }
+    "productionExceptions": {}
   },
   "detektBaselines": {
     "config/detekt/baseline-app-debug.xml": {},

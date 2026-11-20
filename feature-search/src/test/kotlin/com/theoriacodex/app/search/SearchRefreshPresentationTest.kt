@@ -16,6 +16,7 @@ import com.theoriacodex.app.search.state.SearchContentUiState
 import com.theoriacodex.app.search.state.SearchErrorUiState
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchExecutionUiState
+import com.theoriacodex.app.search.state.SearchRequest
 import com.theoriacodex.app.search.state.SearchRequestKind
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.testing.testPost
@@ -79,7 +80,7 @@ class SearchRefreshPresentationTest {
         node.assertIsDisplayed()
         val id = node.fetchSemanticsNode().id
         compose.runOnIdle { state.value = state.value.copy(execution = SearchExecutionUiState(
-            activeRequestId = 1, activeKind = SearchRequestKind.REPLACE, submittedQuery = state.value.query.applied,
+            SearchRequest(1, SearchRequestKind.REPLACE, state.value.query.applied),
         )) }
         node.assertIsDisplayed()
         assertEquals(id, node.fetchSemanticsNode().id)

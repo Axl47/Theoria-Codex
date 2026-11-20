@@ -136,7 +136,12 @@ sealed interface SearchPageResult {
     ) : SearchPageResult
 }
 
-fun com.theoriacodex.app.search.state.SearchUiState.admitsPage(
-    requestId: Long, result: SearchPageResult, executionKey: String,
-): Boolean = execution.activeRequestId == requestId && result.executionKey == executionKey &&
-    query.appliedQueryHash == executionKey
+/** Whether an answer carrying [executionKey] belongs to the request in flight: same request, same search. */
+fun com.theoriacodex.app.search.state.SearchUiState.admits(requestId: Long, executionKey: String): Boolean =
+    execution.request?.let { request -> request.id == requestId && request.executionKey == executionKey } == true
+
+/** Results that arrive early go on screen unless a cached first page is already there. */
+fun com.theoriacodex.app.search.state.SearchUiState.showsPartialResults(
+    requestId: Long, result: SearchExecutionResult.Success,
+): Boolean = admits(requestId, result.executionKey) &&
+    execution.request?.cachedFirstPage == com.theoriacodex.app.search.state.CachedFirstPage.NONE

@@ -1,6 +1,10 @@
 package com.theoriacodex.app.search.state
 
+import com.theoriacodex.app.search.SearchContinuation
+import com.theoriacodex.app.search.SearchExecutionResult
 import com.theoriacodex.app.search.SearchInitialization
+import com.theoriacodex.app.search.SearchPageResult
+import com.theoriacodex.app.search.showsPartialResults
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.data.repository.SearchScrollState
@@ -8,58 +12,54 @@ import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.distinctByFile
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.domain.query.QueryHash
 
 sealed interface SearchStateChange {
+    /** [retrySource] is the one source a page request retries; a root request and a plain next page have none. */
     data class BeginRequest(
-        val requestId: Long,
-        val kind: SearchRequestKind,
-        val submittedQuery: Query,
+        val request: SearchRequest,
+        val retrySource: SourceKey? = null,
     ) : SearchStateChange
 
-    data class ReplaceResults(
+    /** A root request's complete answer. */
+    data class RootResult(
         val requestId: Long,
-        val appliedQuery: Query,
-        val results: List<Post>,
-        val statuses: List<SourceRunStatus>,
-        val canLoadMore: Boolean,
-        val appliedSourceScope: SearchSourceScope = SearchSourceScope.fromQuery(appliedQuery),
-        val appliedQueryHash: String = QueryHash.from(appliedQuery),
+        val result: SearchExecutionResult,
     ) : SearchStateChange
 
-    /** Shows results while their request keeps running; paging waits for the request to finish. */
-    data class PublishPartialResults(
+    /** Results that arrived while their request keeps running; paging waits for the request to finish. */
+    data class PartialResult(
         val requestId: Long,
-        val appliedQuery: Query,
-        val results: List<Post>,
-        val statuses: List<SourceRunStatus>,
-        val appliedSourceScope: SearchSourceScope = SearchSourceScope.fromQuery(appliedQuery),
-        val appliedQueryHash: String = QueryHash.from(appliedQuery),
+        val result: SearchExecutionResult.Success,
     ) : SearchStateChange
 
-    data class AppendPage(
+    /** The last run's first page of the search now rerunning, to show until the fresh one arrives. */
+    data class ShowCachedFirstPage(
         val requestId: Long,
-        val results: List<Post>,
-        val statuses: List<SourceRunStatus>,
-        val canLoadMore: Boolean,
+        val posts: List<Post>,
     ) : SearchStateChange
 
+    /** The user moved away from the top of a cached first page. */
+    data object CachedFirstPageScrolled : SearchStateChange
+
+    /** A page request's answer: the next page, or one source retried. */
+    data class PageResult(
+        val requestId: Long,
+        val result: SearchPageResult,
+    ) : SearchStateChange
+
+    /** The request ended without an answer: it threw or ran out of time. */
     data class RequestFailed(
         val requestId: Long,
         val message: String,
-        val statuses: List<SourceRunStatus> = emptyList(),
-        val retryable: Boolean = true,
-        val appliedQuery: Query? = null,
-        val appliedSourceScope: SearchSourceScope? = null,
-        val appliedQueryHash: String? = null,
     ) : SearchStateChange
 
     data class RequestCancelled(
         val requestId: Long,
     ) : SearchStateChange
-
     data object BeginRestoration : SearchStateChange
 
     data class RestorationCompleted(
@@ -119,6 +119,7 @@ object SearchStateReducer {
                 applied = initialization.query,
                 appliedSourceScope = initialization.sourceScope,
                 appliedQueryHash = appliedHash,
+                appliedByMode = initialization.appliedByMode,
             ),
             content = base.content,
             restoration = base.restoration,
@@ -127,31 +128,22 @@ object SearchStateReducer {
 
     fun reduce(state: SearchUiState, change: SearchStateChange): SearchReduction {
         return when (change) {
-            is SearchStateChange.BeginRequest -> {
-                val nextState = if (
-                    state.execution.activeRequestId != null &&
-                    change.requestId <= state.execution.activeRequestId
-                ) {
-                    state
-                } else {
-                    state.copy(
-                        content = state.content.copy(error = null),
-                        execution = state.execution.copy(
-                            activeRequestId = change.requestId,
-                            activeKind = change.kind,
-                            submittedQuery = change.submittedQuery,
-                            showingPartialResults = false,
-                        ),
-                    )
-                }
-                SearchReduction(state = nextState)
-            }
+            is SearchStateChange.BeginRequest -> beginRequest(state, change)
 
-            is SearchStateChange.ReplaceResults -> replaceResults(state, change)
-            is SearchStateChange.PublishPartialResults -> publishPartialResults(state, change)
-            is SearchStateChange.AppendPage -> appendPage(state, change)
-            is SearchStateChange.RequestFailed -> failRequest(state, change)
-            is SearchStateChange.RequestCancelled -> cancelRequest(state, change)
+            is SearchStateChange.RootResult -> rootResult(state, change)
+
+            is SearchStateChange.PartialResult -> partialResult(state, change)
+
+            is SearchStateChange.ShowCachedFirstPage -> showCachedFirstPage(state, change)
+
+            SearchStateChange.CachedFirstPageScrolled -> cachedFirstPageScrolled(state)
+
+            is SearchStateChange.PageResult -> pageResult(state, change)
+
+            is SearchStateChange.RequestFailed -> requestFailed(state, change)
+
+            is SearchStateChange.RequestCancelled -> cancelRequest(state, change.requestId)
+
             SearchStateChange.BeginRestoration -> SearchReduction(
                 state = state.copy(restoration = SearchRestorationUiState.Restoring),
             )
@@ -245,52 +237,97 @@ object SearchStateReducer {
         )
     }
 
-    private fun replaceResults(
-        state: SearchUiState,
-        change: SearchStateChange.ReplaceResults,
-    ): SearchReduction {
-        if (!state.isCurrent(change.requestId)) return SearchReduction(state)
-        val published = state.withPublishedResults(
-            change.appliedQuery, change.appliedSourceScope, change.appliedQueryHash,
-            change.results, change.statuses, change.canLoadMore,
-        )
-        return SearchReduction(published.copy(execution = published.execution.completed(change.requestId)))
-    }
-
-    private fun publishPartialResults(
-        state: SearchUiState,
-        change: SearchStateChange.PublishPartialResults,
-    ): SearchReduction {
-        if (!state.isCurrent(change.requestId)) return SearchReduction(state)
-        val published = state.withPublishedResults(
-            change.appliedQuery, change.appliedSourceScope, change.appliedQueryHash,
-            change.results, change.statuses, canLoadMore = false,
-        )
+    private fun beginRequest(state: SearchUiState, change: SearchStateChange.BeginRequest): SearchReduction {
+        val active = state.execution.request
+        if (active != null && change.request.id <= active.id) return SearchReduction(state)
+        val page = change.request.isPage
         return SearchReduction(
-            published.copy(
-                execution = published.execution.copy(
-                    // The applied query may be a normalized form of what was submitted.
-                    submittedQuery = change.appliedQuery,
-                    showingPartialResults = true,
+            state.copy(
+                content = state.content.copy(error = null),
+                execution = state.execution.copy(
+                    request = change.request,
+                    // A new search replaces the results, so nothing continues from them.
+                    continuation = state.execution.continuation.takeIf { page },
+                    pageRetrySource = change.retrySource.takeIf { page },
                 ),
             ),
         )
     }
 
+    private fun rootResult(state: SearchUiState, change: SearchStateChange.RootResult): SearchReduction {
+        val request = state.activeRequest(change.requestId) ?: return SearchReduction(state)
+        val result = change.result
+        if (result.executionKey != request.executionKey) return cancelRequest(state, request.id)
+        val applied = AppliedSearch(result.query, result.sourceScope, result.executionKey)
+        return when (result) {
+            is SearchExecutionResult.Success -> {
+                val published = state.withPublishedResults(
+                    applied, request.refreshed(state.content.results, result.posts), result.statuses,
+                    canLoadMore = result.continuation.canLoadMore,
+                )
+                SearchReduction(
+                    published.copy(
+                        execution = published.execution.completed(request.id).copy(continuation = result.continuation),
+                    ),
+                )
+            }
+
+            is SearchExecutionResult.Failure -> SearchReduction(
+                state.withFailedRequest(request, result.message, result.statuses, applied, result.continuation),
+            )
+        }
+    }
+
+    private fun partialResult(state: SearchUiState, change: SearchStateChange.PartialResult): SearchReduction {
+        val request = state.execution.request
+        if (request == null || !state.showsPartialResults(change.requestId, change.result)) return SearchReduction(state)
+        val result = change.result
+        val published = state.withPublishedResults(
+            AppliedSearch(result.query, result.sourceScope, result.executionKey), result.posts, result.statuses,
+            canLoadMore = false,
+        )
+        // The applied query may be a normalized form of what was asked.
+        return SearchReduction(published.withRequest(request.copy(shownQuery = result.query)))
+    }
+
+    private fun showCachedFirstPage(
+        state: SearchUiState,
+        change: SearchStateChange.ShowCachedFirstPage,
+    ): SearchReduction {
+        val request = state.activeRequest(change.requestId)
+        if (request == null || change.posts.isEmpty()) return SearchReduction(state)
+        val published = state.withPublishedResults(
+            AppliedSearch(request.query, request.sourceScope, request.executionKey), change.posts, emptyList(),
+            canLoadMore = false,
+            // Nothing has answered yet, so this is not yet a search the mode has run.
+            recordForMode = false,
+        )
+        return SearchReduction(
+            published.withRequest(request.copy(shownQuery = request.query, cachedFirstPage = CachedFirstPage.SHOWN)),
+        )
+    }
+
+    private fun cachedFirstPageScrolled(state: SearchUiState): SearchReduction {
+        val request = state.execution.request?.takeIf { it.cachedFirstPage == CachedFirstPage.SHOWN }
+            ?: return SearchReduction(state)
+        return SearchReduction(state.withRequest(request.copy(cachedFirstPage = CachedFirstPage.SCROLLED)))
+    }
+
+    /** Someone who has scrolled the cached page keeps their place: its posts stay put and new ones go below. */
+    private fun SearchRequest.refreshed(shown: List<Post>, fresh: List<Post>): List<Post> {
+        if (cachedFirstPage != CachedFirstPage.SCROLLED) return fresh
+        val freshById = fresh.associateBy(Post::id)
+        return (shown.map { post -> freshById[post.id] ?: post } + fresh).distinctByFile()
+    }
+
     private fun SearchUiState.withPublishedResults(
-        appliedQuery: Query,
-        appliedSourceScope: SearchSourceScope,
-        appliedQueryHash: String,
+        applied: AppliedSearch,
         results: List<Post>,
         statuses: List<SourceRunStatus>,
         canLoadMore: Boolean,
+        recordForMode: Boolean = true,
     ): SearchUiState = copy(
-        query = query.copy(
-            draft = if (query.draft == execution.submittedQuery) appliedQuery else query.draft,
-            applied = appliedQuery,
-            appliedSourceScope = appliedSourceScope,
-            appliedQueryHash = appliedQueryHash,
-        ),
+        query = query.withApplied(applied, execution.submittedQuery, recordForMode),
         content = content.copy(
             results = results.toList(),
             statuses = statuses.toList(),
@@ -301,80 +338,86 @@ object SearchStateReducer {
         ),
     )
 
-    private fun appendPage(
-        state: SearchUiState,
-        change: SearchStateChange.AppendPage,
-    ): SearchReduction {
-        if (!state.isCurrent(change.requestId)) return SearchReduction(state)
-        val combined = (state.content.results + change.results).distinctByFile()
-        val mergedStatuses = (state.content.statuses + change.statuses)
-            .associateBy { status -> status.source }
-            .values
-            .sortedBy { status -> status.source.id }
-        return SearchReduction(
-            state = state.copy(
-                content = state.content.copy(
-                    results = combined,
-                    statuses = mergedStatuses,
-                    canLoadMore = change.canLoadMore,
-                    error = null,
-                    displayVersion = state.content.displayVersion + 1,
+    /** A draft still equal to what was asked follows the applied query, which may be a normalized form of it. */
+    private fun SearchQueryUiState.withApplied(
+        applied: AppliedSearch,
+        submittedQuery: Query?,
+        recordForMode: Boolean = true,
+    ): SearchQueryUiState = copy(
+        draft = if (draft == submittedQuery) applied.query else draft,
+        applied = applied.query,
+        appliedSourceScope = applied.sourceScope,
+        appliedQueryHash = applied.hash,
+        appliedByMode = if (recordForMode && applied.sourceScope !is SearchSourceScope.Temporary) {
+            appliedByMode + (modeKey(applied.query.mode) to applied.query)
+        } else {
+            appliedByMode
+        },
+    )
+
+    private fun pageResult(state: SearchUiState, change: SearchStateChange.PageResult): SearchReduction {
+        val request = state.activeRequest(change.requestId) ?: return SearchReduction(state)
+        val result = change.result
+        // A page belongs to the results on screen only while they are still the search it was asked for.
+        if (result.executionKey != request.executionKey || state.query.appliedQueryHash != request.executionKey) {
+            return cancelRequest(state, request.id)
+        }
+        return when (result) {
+            is SearchPageResult.Success -> SearchReduction(
+                state.copy(
+                    content = state.content.copy(
+                        results = (state.content.results + result.posts).distinctByFile(),
+                        statuses = mergeStatusesBySource(state.content.statuses, result.statuses),
+                        canLoadMore = result.continuation.canLoadMore,
+                        error = null,
+                        displayVersion = state.content.displayVersion + 1,
+                    ),
+                    execution = state.execution.completed(request.id).copy(
+                        continuation = result.continuation,
+                        pageRetrySource = null,
+                    ),
                 ),
-                execution = state.execution.completed(change.requestId),
-            ),
+            )
+
+            // The continuation and the retried source stay, so Retry repeats this page.
+            is SearchPageResult.Failure -> SearchReduction(
+                state.withFailedRequest(request, result.message, result.statuses, null, state.execution.continuation),
+            )
+        }
+    }
+
+    private fun requestFailed(state: SearchUiState, change: SearchStateChange.RequestFailed): SearchReduction {
+        val request = state.activeRequest(change.requestId) ?: return SearchReduction(state)
+        // A search that never answered still becomes the applied one, so Retry repeats it and not the one before.
+        val attempted = AppliedSearch(request.query, request.sourceScope, request.executionKey).takeUnless { request.isPage }
+        return SearchReduction(
+            state.withFailedRequest(request, change.message, emptyList(), attempted, state.execution.continuation),
         )
     }
 
-    private fun failRequest(
-        state: SearchUiState,
-        change: SearchStateChange.RequestFailed,
-    ): SearchReduction {
-        if (!state.isCurrent(change.requestId)) return SearchReduction(state)
-        val statuses = if (
-            state.execution.activeKind == SearchRequestKind.PAGE && change.statuses.isNotEmpty()
-        ) {
-            mergeStatusesBySource(state.content.statuses, change.statuses)
-        } else {
-            change.statuses.ifEmpty { state.content.statuses }
-        }
-        val appliedQuery = change.appliedQuery
-        val queryState = if (appliedQuery == null) {
-            state.query
-        } else {
-            state.query.copy(
-                draft = if (state.query.draft == state.execution.submittedQuery) {
-                    appliedQuery
+    /** [applied] is the search the failure belongs to; null leaves the results and their search as they are. */
+    private fun SearchUiState.withFailedRequest(
+        request: SearchRequest,
+        message: String,
+        statuses: List<SourceRunStatus>,
+        applied: AppliedSearch?,
+        continuation: SearchContinuation?,
+    ): SearchUiState {
+        val queryState = if (applied == null) query else query.withApplied(applied, execution.submittedQuery)
+        return copy(
+            query = queryState,
+            content = content.copy(
+                results = if (queryState.appliedQueryHash != query.appliedQueryHash) emptyList() else content.results,
+                statuses = if (request.isPage && statuses.isNotEmpty()) {
+                    mergeStatusesBySource(content.statuses, statuses)
                 } else {
-                    state.query.draft
+                    statuses.ifEmpty { content.statuses }
                 },
-                applied = appliedQuery,
-                appliedSourceScope = change.appliedSourceScope
-                    ?: SearchSourceScope.fromQuery(appliedQuery),
-                appliedQueryHash = change.appliedQueryHash ?: QueryHash.from(appliedQuery),
-            )
-        }
-        return SearchReduction(
-            state = state.copy(
-                query = queryState,
-                content = state.content.copy(
-                    results = if (appliedQuery != null && queryState.appliedQueryHash != state.query.appliedQueryHash)
-                        emptyList() else state.content.results,
-                    statuses = statuses,
-                    hasExecutedSearch = state.content.hasExecutedSearch || appliedQuery != null,
-                    canLoadMore = if (appliedQuery != null) false else state.content.canLoadMore,
-                    error = SearchErrorUiState(
-                        message = change.message,
-                        requestKind = state.execution.activeKind,
-                        retryable = change.retryable,
-                    ),
-                ),
-                execution = state.execution.copy(
-                    activeRequestId = null,
-                    activeKind = null,
-                    submittedQuery = null,
-                    showingPartialResults = false,
-                ),
+                hasExecutedSearch = content.hasExecutedSearch || applied != null,
+                canLoadMore = if (applied != null) false else content.canLoadMore,
+                error = SearchErrorUiState(message = message, requestKind = request.kind, retryable = true),
             ),
+            execution = execution.copy(request = null, continuation = continuation),
         )
     }
 
@@ -386,35 +429,26 @@ object SearchStateReducer {
         .values
         .sortedBy { status -> status.source.id }
 
-    private fun cancelRequest(
-        state: SearchUiState,
-        change: SearchStateChange.RequestCancelled,
-    ): SearchReduction {
-        if (!state.isCurrent(change.requestId)) return SearchReduction(state)
+    private fun cancelRequest(state: SearchUiState, requestId: Long): SearchReduction {
+        if (state.activeRequest(requestId) == null) return SearchReduction(state)
         return SearchReduction(
-            state = state.copy(
-                execution = state.execution.copy(
-                    activeRequestId = null,
-                    activeKind = null,
-                    submittedQuery = null,
-                    showingPartialResults = false,
-                    lastCancelledRequestId = change.requestId,
-                ),
-            ),
+            state.copy(execution = state.execution.copy(request = null, lastCancelledRequestId = requestId)),
         )
     }
 }
 
-private fun SearchUiState.isCurrent(requestId: Long): Boolean {
-    return execution.activeRequestId == requestId
-}
+/** The search some results or a failure belong to. */
+private data class AppliedSearch(
+    val query: Query,
+    val sourceScope: SearchSourceScope,
+    val hash: String,
+)
 
-private fun SearchExecutionUiState.completed(requestId: Long): SearchExecutionUiState {
-    return copy(
-        activeRequestId = null,
-        activeKind = null,
-        submittedQuery = null,
-        showingPartialResults = false,
-        lastCompletedRequestId = requestId,
-    )
-}
+private fun SearchUiState.activeRequest(requestId: Long): SearchRequest? =
+    execution.request?.takeIf { request -> request.id == requestId }
+
+private fun SearchUiState.withRequest(request: SearchRequest): SearchUiState =
+    copy(execution = execution.copy(request = request))
+
+private fun SearchExecutionUiState.completed(requestId: Long): SearchExecutionUiState =
+    copy(request = null, lastCompletedRequestId = requestId)

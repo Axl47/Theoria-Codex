@@ -5,10 +5,12 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theoriacodex.app.search.state.withAcceptedSearchHistory
+import com.theoriacodex.app.search.state.CachedFirstPage
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchDraftContext
 import com.theoriacodex.app.search.state.SearchDraftReducer
 import com.theoriacodex.app.search.state.SearchEffect
+import com.theoriacodex.app.search.state.SearchRequest
 import com.theoriacodex.app.search.state.SearchRequestKind
 import com.theoriacodex.app.search.state.SearchRestorationUiState
 import com.theoriacodex.app.search.state.SearchStateChange
@@ -18,7 +20,6 @@ import com.theoriacodex.app.search.state.allowsScrollPersistence
 import com.theoriacodex.app.search.state.withResolvedPosts
 import com.theoriacodex.app.search.state.withSuggestionInput
 import com.theoriacodex.app.search.state.SearchSourceScope
-import com.theoriacodex.app.search.state.modeKey
 import com.theoriacodex.app.related.RelatedPostsLoading
 import com.theoriacodex.app.related.RelatedPostsRouteController
 import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
@@ -28,13 +29,12 @@ import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
-import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.domain.model.distinctByFile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -109,14 +109,7 @@ class SearchViewModel(
     private var activeRequestJob: Job? = null
     private var restorationJob: Job? = null
     private var pendingRootSearch: (() -> Unit)? = null
-    private var activeContinuation: SearchContinuation? = null
-    private var pageRetrySource: SourceKey? = null
-
-    /** Last run's first page is on screen awaiting its refresh, so partial results would only make it flicker. */
-    private var showingCachedFirstPage = false
-    private var scrolledCachedFirstPage = false
     private var latestEnvironmentSettings: AppSettings? = null
-    private val appliedByMode = mutableMapOf<String, Query>()
     private val suggestionRefresh =
         SearchSuggestionRefresher(viewModelScope, mutableState, coordinator, suggestionDispatcher, autocompleteDelayMs)
     private val scrollPersistence = coordinator.scrollPersistence(scrollPersistenceDispatcher, scrollPersistenceDelayMs)
@@ -294,14 +287,7 @@ class SearchViewModel(
         mutableState.value = current
         persistDraftQuery()
         suggestionRefresh.refreshTrending()
-        if (current.content.hasExecutedSearch && current.hasPendingChanges) {
-            launchRootSearch(
-                kind = SearchRequestKind.REPLACE,
-                query = current.query.draft,
-                sourceScope = current.query.draftSourceScope,
-                persistAcceptedResult = true,
-            )
-        }
+        if (current.content.hasExecutedSearch && current.hasPendingChanges) runDraft()
     }
 
     private fun toggleTemporarySource(source: SourceKey) {
@@ -333,17 +319,7 @@ class SearchViewModel(
             commitTagInput(pending)
             if (mutableState.value.query.draft == draftBefore) return // opened as a gallery
         }
-        val current = mutableState.value
-        launchRootSearch(
-            kind = if (current.content.hasExecutedSearch) {
-                SearchRequestKind.REPLACE
-            } else {
-                SearchRequestKind.INITIAL
-            },
-            query = current.query.draft,
-            sourceScope = current.query.draftSourceScope,
-            persistAcceptedResult = true,
-        )
+        runDraft(if (mutableState.value.content.hasExecutedSearch) SearchRequestKind.REPLACE else SearchRequestKind.INITIAL)
     }
 
     private fun applyTagSearch(action: SearchAction.ApplyTagSearch) {
@@ -361,13 +337,7 @@ class SearchViewModel(
         }
         mutableState.value = reduction.state
         persistDraftQuery()
-        val current = mutableState.value
-        launchRootSearch(
-            kind = SearchRequestKind.REPLACE,
-            query = current.query.draft,
-            sourceScope = current.query.draftSourceScope,
-            persistAcceptedResult = true,
-        )
+        runDraft()
     }
 
     /**
@@ -404,21 +374,13 @@ class SearchViewModel(
             query = reduction.state.query.copy(draftSourceScope = restoredScope),
         )
         persistDraftQuery()
-        val current = mutableState.value
-        launchRootSearch(
-            kind = SearchRequestKind.REPLACE,
-            query = current.query.draft,
-            sourceScope = current.query.draftSourceScope,
-            persistAcceptedResult = true,
-            undo = undo,
-            undoScrollState = if (undo) current.searchHistory.lastOrNull()?.scrollState else null,
-        )
+        val undoScrollState = if (undo) mutableState.value.searchHistory.lastOrNull()?.scrollState else null
+        runDraft(acceptance = SearchAcceptance(undo, undoScrollState))
     }
 
     private fun loadNextPage() {
-        if (!mutableState.value.content.canLoadMore) return
-        val continuation = activeContinuation ?: return
-        launchPage(continuation)
+        val current = mutableState.value
+        if (current.content.canLoadMore && current.execution.continuation != null) launchPage()
     }
 
     private fun openRelatedResult(action: SearchAction.OpenRelatedResult) {
@@ -486,12 +448,7 @@ class SearchViewModel(
         val requiresRetry = hadExecutedSearch && (change.settingsChanged || change.sourcesChanged ||
             draft != current.query.draft || applied != current.query.applied)
         if (requiresRetry && scheduleRetry) {
-            val latest = mutableState.value
-            launchRootSearch(
-                kind = SearchRequestKind.RETRY,
-                query = latest.query.applied,
-                sourceScope = latest.query.appliedSourceScope,
-                persistAcceptedResult = false,
+            rerunApplied(
                 relatedResetReason = "environment: runtime=${change.settingsChanged} sources=${change.sourcesChanged} " +
                     "draft=${draft != current.query.draft} applied=${applied != current.query.applied}",
             )
@@ -541,108 +498,117 @@ class SearchViewModel(
         ) {
             return
         }
+        rerunApplied(paintCachedFirstPage = true)
+    }
+
+    /** Runs the draft as the new search. Its first results make it the applied search and enter Undo history. */
+    private fun runDraft(
+        kind: SearchRequestKind = SearchRequestKind.REPLACE,
+        acceptance: SearchAcceptance = SearchAcceptance(),
+    ) {
+        val query = mutableState.value.query
+        launchRootSearch(kind, query.draft, query.draftSourceScope, acceptance)
+    }
+
+    /** Runs the applied search again. It is already the accepted one, so nothing about it is persisted anew. */
+    private fun rerunApplied(
+        relatedResetReason: String = "root search (${SearchRequestKind.RETRY})",
+        paintCachedFirstPage: Boolean = false,
+    ) {
+        val query = mutableState.value.query
         launchRootSearch(
-            kind = SearchRequestKind.RETRY,
-            query = current.query.applied,
-            sourceScope = current.query.appliedSourceScope,
-            persistAcceptedResult = false,
-            paintCachedFirstPage = true,
+            SearchRequestKind.RETRY, query.applied, query.appliedSourceScope,
+            acceptance = null, relatedResetReason, paintCachedFirstPage,
         )
     }
 
     private fun launchRootSearch(
         kind: SearchRequestKind,
         query: Query,
-        sourceScope: com.theoriacodex.app.search.state.SearchSourceScope,
-        persistAcceptedResult: Boolean,
-        undo: Boolean = false,
-        undoScrollState: SearchScrollState? = null,
-        onSuccess: suspend () -> Unit = {},
+        sourceScope: SearchSourceScope,
+        acceptance: SearchAcceptance?,
         relatedResetReason: String = "root search ($kind)",
         paintCachedFirstPage: Boolean = false,
     ) {
         relatedPosts.clear(relatedResetReason)
         cancelActiveRequest()
-        activeContinuation = null
-        pageRetrySource = null
-        showingCachedFirstPage = false
-        scrolledCachedFirstPage = false
-        val expectedExecutionKey = executionService.executionKeyFor(query, sourceScope)
-        val requestId = ++nextRequestId
-        reduce(SearchStateChange.BeginRequest(requestId, kind, query))
+        val executionKey = executionService.executionKeyFor(query, sourceScope)
+        val request = SearchRequest(++nextRequestId, kind, query, sourceScope, executionKey)
+        reduce(SearchStateChange.BeginRequest(request))
+        launchRequest(request, failureMessage = "Search failed") {
+            try {
+                if (paintCachedFirstPage) {
+                    val posts = executionService.cachedFirstPage(request.executionKey, request.sourceScope)
+                    reduce(SearchStateChange.ShowCachedFirstPage(request.id, posts))
+                }
+                executeRootRequest(request, acceptance)
+            } catch (_: TimeoutCancellationException) {
+                reduce(SearchStateChange.RequestFailed(request.id, ROOT_REQUEST_TIMEOUT_MESSAGE))
+            }
+        }
+    }
+
+    /**
+     * Runs [block] as the job of [request]. However it ends, the reducer hears of it, and ignores the
+     * news when a newer request has since taken over.
+     */
+    private fun launchRequest(request: SearchRequest, failureMessage: String, block: suspend CoroutineScope.() -> Unit) {
         val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
             try {
-                if (paintCachedFirstPage) paintCachedFirstPage(requestId, query, sourceScope, expectedExecutionKey)
-                executeRootRequest(
-                    requestId, query, sourceScope, expectedExecutionKey, persistAcceptedResult, undo, undoScrollState, onSuccess,
-                )
-            } catch (_: TimeoutCancellationException) {
-                failRootRequestIfCurrent(requestId, ROOT_REQUEST_TIMEOUT_MESSAGE, query, sourceScope, expectedExecutionKey)
+                block()
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                failRootRequestIfCurrent(requestId, error.message ?: "Search failed", query, sourceScope, expectedExecutionKey)
+                reduce(SearchStateChange.RequestFailed(request.id, error.message ?: failureMessage))
             } finally {
-                if (!isActive) cancelRequestIfCurrent(requestId)
+                if (!isActive) reduce(SearchStateChange.RequestCancelled(request.id))
             }
         }
         activeRequestJob = job
-        job.invokeOnCompletion {
-            if (activeRequestJob === job) activeRequestJob = null
-        }
+        job.invokeOnCompletion { if (activeRequestJob === job) activeRequestJob = null }
         job.start()
     }
 
-    private suspend fun executeRootRequest(
-        requestId: Long, query: Query, sourceScope: SearchSourceScope,
-        expectedExecutionKey: String, persistAcceptedResult: Boolean, undo: Boolean,
-        undoScrollState: SearchScrollState?, onSuccess: suspend () -> Unit,
-    ) = withTimeout(rootRequestTimeoutMs) {
-        val publisher = RootResultPublisher(requestId, expectedExecutionKey, persistAcceptedResult, undo, undoScrollState)
-        val result = executionService.executeInitialProgressively(query, sourceScope) { publisher.publishPartial(it) }
-        coroutineContext.ensureActive()
-        if (!isAdmittedResult(requestId, result, expectedExecutionKey)) {
-            activeContinuation = null
-            cancelRequestIfCurrent(requestId)
-            return@withTimeout
+    private suspend fun executeRootRequest(request: SearchRequest, acceptance: SearchAcceptance?) =
+        withTimeout(rootRequestTimeoutMs) {
+            val publisher = RootResultPublisher(request, acceptance)
+            val result = executionService.executeInitialProgressively(request.query, request.sourceScope) { partial ->
+                if (mutableState.value.showsPartialResults(request.id, partial)) {
+                    publisher.publish(partial, SearchStateChange.PartialResult(request.id, partial))
+                }
+            }
+            coroutineContext.ensureActive()
+            if (!mutableState.value.admits(request.id, result.executionKey)) {
+                reduce(SearchStateChange.RequestCancelled(request.id))
+                return@withTimeout
+            }
+            if (!publisher.publish(result, SearchStateChange.RootResult(request.id, result))) return@withTimeout
+            rememberFirstPage(result)
+            persistDraftQuery()
+            if (acceptance != null) withContext(NonCancellable) {
+                executionService.recordAcceptedSearch(result)
+            }
         }
-        val succeeded = publisher.publish(result) { completeRequest(requestId, result, expectedExecutionKey) } ?: return@withTimeout
-        rememberFirstPage(result)
-        persistDraftQuery()
-        if (persistAcceptedResult) withContext(NonCancellable) {
-            executionService.recordAcceptedSearch(result)
-        }
-        if (succeeded) onSuccess()
-    }
 
     /** Puts one root request's results on screen; persisting it and resetting the scroll target happen only once. */
     private inner class RootResultPublisher(
-        private val requestId: Long,
-        private val expectedExecutionKey: String,
-        persistAcceptedResult: Boolean,
-        private val undo: Boolean,
-        private val undoScrollState: SearchScrollState?,
+        private val request: SearchRequest,
+        acceptance: SearchAcceptance?,
     ) {
-        private var acceptancePending = persistAcceptedResult
+        private var pendingAcceptance = acceptance
 
-        suspend fun publishPartial(partial: SearchExecutionResult.Success) {
-            if (!showingCachedFirstPage && isAdmittedResult(requestId, partial, expectedExecutionKey)) {
-                publish(partial) { showPartialResults(requestId, partial) }
-            }
-        }
-
-        /** Returns what [show] returned, or null when this request no longer owns the screen. */
-        suspend fun publish(result: SearchExecutionResult, show: () -> Boolean): Boolean? {
-            val accepting = acceptancePending
-            if (accepting) scrollPersistence.reset(result.executionKey) {
+        /** Applies [change], which shows [result]. False when this request no longer owns the screen. */
+        suspend fun publish(result: SearchExecutionResult, change: SearchStateChange): Boolean {
+            val acceptance = pendingAcceptance
+            if (acceptance != null) scrollPersistence.reset(result.executionKey) {
                 executionService.persistAppliedSearch(result.query, result.sourceScope, result.executionKey)
             }
-            if (!isAdmittedResult(requestId, result, expectedExecutionKey)) return null
+            if (!mutableState.value.admits(request.id, result.executionKey)) return false
             val previous = mutableState.value
-            val shown = show()
-            acceptancePending = false
-            if (accepting) rememberAcceptedSearchNavigation(previous, undo, undoScrollState)
-            return shown
+            reduce(change)
+            pendingAcceptance = null
+            if (acceptance != null) rememberAcceptedSearchNavigation(previous, acceptance)
+            return true
         }
     }
 
@@ -653,119 +619,25 @@ class SearchViewModel(
     }
 
     /** Preserve Undo history and the accepted search's route scroll request together. */
-    private fun rememberAcceptedSearchNavigation(previous: SearchUiState, undo: Boolean, undoScrollState: SearchScrollState?) {
+    private fun rememberAcceptedSearchNavigation(previous: SearchUiState, acceptance: SearchAcceptance) {
         mutableState.value = mutableState.value.withAcceptedSearchHistory(
-            previous, undo, savedStateHandle.savedSearchScrollState() ?: SearchScrollState(0, 0),
+            previous, acceptance.undo, savedStateHandle.savedSearchScrollState() ?: SearchScrollState(0, 0),
         )
-        val scrollState = undoScrollState ?: SearchScrollState(0, 0)
+        val scrollState = acceptance.undoScrollState ?: SearchScrollState(0, 0)
         savedStateHandle[SearchSavedStateKeys.SCROLL_INDEX] = scrollState.firstVisibleItemIndex
         savedStateHandle[SearchSavedStateKeys.SCROLL_OFFSET] = scrollState.firstVisibleItemOffsetPx
         reduce(
-            if (undoScrollState != null) SearchStateChange.RouteEntryScrollRestorationRequested(scrollState)
+            if (acceptance.undoScrollState != null) SearchStateChange.RouteEntryScrollRestorationRequested(scrollState)
             else SearchStateChange.ScrollResetRequested,
         )
-    }
-
-    private suspend fun paintCachedFirstPage(
-        requestId: Long,
-        query: Query,
-        sourceScope: SearchSourceScope,
-        executionKey: String,
-    ) {
-        val posts = executionService.cachedFirstPage(executionKey, sourceScope)
-        if (posts.isEmpty() || mutableState.value.execution.activeRequestId != requestId) return
-        showingCachedFirstPage = true
-        reduce(SearchStateChange.PublishPartialResults(requestId, query, posts, emptyList(), sourceScope, executionKey))
-    }
-
-    /** Someone who has scrolled the cached page keeps their place: its posts stay put and new ones go below. */
-    private fun refreshedResults(fresh: List<Post>): List<Post> {
-        if (!showingCachedFirstPage || !scrolledCachedFirstPage) return fresh
-        val freshById = fresh.associateBy(Post::id)
-        val shown = mutableState.value.content.results.map { post -> freshById[post.id] ?: post }
-        return (shown + fresh).distinctByFile()
-    }
-
-    private fun showPartialResults(requestId: Long, result: SearchExecutionResult.Success): Boolean {
-        rememberAppliedQuery(result.query, result.sourceScope)
-        reduce(
-            SearchStateChange.PublishPartialResults(
-                requestId, result.query, result.posts, result.statuses, result.sourceScope, result.executionKey,
-            ),
-        )
-        return true
-    }
-
-    private fun completeRequest(
-        requestId: Long,
-        result: SearchExecutionResult,
-        expectedExecutionKey: String,
-    ): Boolean {
-        if (mutableState.value.execution.activeRequestId != requestId) return false
-        if (result.executionKey != expectedExecutionKey) {
-            activeContinuation = null
-            reduce(SearchStateChange.RequestCancelled(requestId))
-            return false
-        }
-        return when (result) {
-            is SearchExecutionResult.Failure -> {
-                activeContinuation = result.continuation
-                rememberAppliedQuery(result.query, result.sourceScope)
-                reduce(
-                    SearchStateChange.RequestFailed(
-                        requestId = requestId,
-                        message = result.message,
-                        statuses = result.statuses,
-                        appliedQuery = result.query,
-                        appliedSourceScope = result.sourceScope,
-                        appliedQueryHash = result.executionKey,
-                    ),
-                )
-                false
-            }
-
-            is SearchExecutionResult.Success -> {
-                activeContinuation = result.continuation
-                rememberAppliedQuery(result.query, result.sourceScope)
-                reduce(
-                    SearchStateChange.ReplaceResults(
-                        requestId = requestId,
-                        appliedQuery = result.query,
-                        appliedSourceScope = result.sourceScope,
-                        appliedQueryHash = result.executionKey,
-                        results = refreshedResults(result.posts),
-                        statuses = result.statuses,
-                        canLoadMore = result.continuation.canLoadMore,
-                    ),
-                )
-                showingCachedFirstPage = false
-                true
-            }
-        }
-    }
-
-    private fun rememberAppliedQuery(query: Query, sourceScope: SearchSourceScope) {
-        if (sourceScope !is SearchSourceScope.Temporary) {
-            appliedByMode[modeKey(query.mode)] = query
-        }
-    }
-
-    private fun isAdmittedResult(
-        requestId: Long,
-        result: SearchExecutionResult,
-        expectedExecutionKey: String,
-    ): Boolean {
-        return mutableState.value.execution.activeRequestId == requestId &&
-            result.executionKey == expectedExecutionKey
     }
 
     private fun retry() {
         val current = mutableState.value
         if (current.content.error?.requestKind == SearchRequestKind.PAGE) {
-            launchPage(activeContinuation, pageRetrySource)
+            launchPage(current.execution.pageRetrySource)
         } else {
-            launchRootSearch(SearchRequestKind.RETRY, current.query.applied,
-                current.query.appliedSourceScope, persistAcceptedResult = false)
+            rerunApplied()
         }
     }
 
@@ -774,57 +646,27 @@ class SearchViewModel(
         if (current.execution.activeRequestId != null || current.content.statuses.none {
             it.source == source && it.state == com.theoriacodex.domain.orchestration.SourceRunState.FAILED
         }) return
-        launchPage(activeContinuation, source)
+        launchPage(source)
     }
 
-    private fun launchPage(continuation: SearchContinuation?, retrySource: SourceKey? = null) {
-        pageRetrySource = retrySource
+    /** Loads the next page of the results on screen, or with [retrySource] asks that one source again. */
+    private fun launchPage(retrySource: SourceKey? = null) {
         val current = mutableState.value
-        val query = continuation?.query ?: current.query.applied
-        val executionKey = continuation?.executionKey ?: current.query.appliedQueryHash
+        val continuation = current.execution.continuation
         cancelActiveRequest()
-        val requestId = ++nextRequestId
-        reduce(SearchStateChange.BeginRequest(requestId, SearchRequestKind.PAGE, query))
-        val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
-            try {
-                val result = if (retrySource == null) executionService.executePage(requireNotNull(continuation))
-                else coordinator.retrySource(query, current.query.appliedSourceScope, continuation, retrySource)
-                coroutineContext.ensureActive()
-                if (!mutableState.value.admitsPage(requestId, result, executionKey)) {
-                    cancelRequestIfCurrent(requestId)
-                    return@launch
-                }
-                completePageRequest(requestId, result)
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Throwable) {
-                failRequestIfCurrent(requestId, error.message ?: "Could not load more results")
-            } finally {
-                if (!isActive) cancelRequestIfCurrent(requestId)
-            }
-        }
-        activeRequestJob = job
-        job.invokeOnCompletion { if (activeRequestJob === job) activeRequestJob = null }
-        job.start()
-    }
-
-    private fun completePageRequest(requestId: Long, result: SearchPageResult) {
-        when (result) {
-            is SearchPageResult.Failure -> reduce(
-                SearchStateChange.RequestFailed(requestId, result.message, result.statuses),
-            )
-            is SearchPageResult.Success -> {
-                pageRetrySource = null
-                activeContinuation = result.continuation
-                reduce(
-                    SearchStateChange.AppendPage(
-                        requestId,
-                        result.posts,
-                        result.statuses,
-                        result.continuation.canLoadMore,
-                    ),
-                )
-            }
+        val request = SearchRequest(
+            id = ++nextRequestId,
+            kind = SearchRequestKind.PAGE,
+            query = continuation?.query ?: current.query.applied,
+            sourceScope = current.query.appliedSourceScope,
+            executionKey = continuation?.executionKey ?: current.query.appliedQueryHash,
+        )
+        reduce(SearchStateChange.BeginRequest(request, retrySource))
+        launchRequest(request, failureMessage = "Could not load more results") {
+            val result = if (retrySource == null) executionService.executePage(requireNotNull(continuation))
+            else coordinator.retrySource(request.query, request.sourceScope, continuation, retrySource)
+            coroutineContext.ensureActive()
+            reduce(SearchStateChange.PageResult(request.id, result))
         }
     }
 
@@ -833,30 +675,6 @@ class SearchViewModel(
         activeRequestJob?.cancel(CancellationException("Search route request cancelled"))
         activeRequestJob = null
         requestId?.let { reduce(SearchStateChange.RequestCancelled(it)) }
-    }
-    private fun cancelRequestIfCurrent(requestId: Long) {
-        if (mutableState.value.execution.activeRequestId == requestId) {
-            reduce(SearchStateChange.RequestCancelled(requestId))
-        }
-    }
-    private fun failRequestIfCurrent(requestId: Long, message: String) {
-        if (mutableState.value.execution.activeRequestId == requestId) {
-            reduce(SearchStateChange.RequestFailed(requestId, message))
-        }
-    }
-
-    /** Records the attempted query as a provider failure does, so Retry repeats it and not the search before it. */
-    private fun failRootRequestIfCurrent(
-        requestId: Long,
-        message: String,
-        query: Query,
-        sourceScope: SearchSourceScope,
-        executionKey: String,
-    ) {
-        if (mutableState.value.execution.activeRequestId != requestId) return
-        rememberAppliedQuery(query, sourceScope)
-        reduce(SearchStateChange.RequestFailed(requestId, message, appliedQuery = query,
-            appliedSourceScope = sourceScope, appliedQueryHash = executionKey))
     }
 
     private fun restore() {
@@ -867,8 +685,6 @@ class SearchViewModel(
         restorationJob = viewModelScope.launch {
             try {
                 val initialization = coordinator.initializeRoute()
-                appliedByMode.clear()
-                appliedByMode.putAll(initialization.appliedByMode)
                 val appliedHash = executionService.executionKeyFor(
                     initialization.query,
                     initialization.sourceScope,
@@ -894,13 +710,7 @@ class SearchViewModel(
                 if (pendingSearch != null) {
                     pendingSearch()
                 } else if (environmentChanged) {
-                    val current = mutableState.value
-                    launchRootSearch(
-                        kind = SearchRequestKind.RETRY,
-                        query = current.query.applied,
-                        sourceScope = current.query.appliedSourceScope,
-                        persistAcceptedResult = false,
-                    )
+                    rerunApplied()
                 } else {
                     resumeSearchIfNeeded()
                 }
@@ -937,7 +747,9 @@ class SearchViewModel(
     }
 
     private fun persistScroll(action: SearchAction.ScrollChanged) {
-        if (showingCachedFirstPage && action.firstVisibleItemIndex > 0) scrolledCachedFirstPage = true
+        if (action.firstVisibleItemIndex > 0 && mutableState.value.execution.request?.cachedFirstPage == CachedFirstPage.SHOWN) {
+            reduce(SearchStateChange.CachedFirstPageScrolled)
+        }
         if (!mutableState.value.restoration.allowsScrollPersistence) return
         val index = action.firstVisibleItemIndex.coerceAtLeast(0)
         val offset = action.firstVisibleItemOffsetPx.coerceAtLeast(0)
@@ -971,7 +783,7 @@ class SearchViewModel(
     }
     private fun draftContext(): SearchDraftContext = SearchDraftContext(
         availableSources = mutableState.value.query.availableSources.toSet(),
-        appliedByMode = appliedByMode,
+        appliedByMode = mutableState.value.query.appliedByMode,
     )
 
     private fun clearSuggestionState() {
@@ -1013,6 +825,13 @@ class SearchViewModel(
     override fun onCleared() {
         effectChannel.close()
     }
+
+    /** How a search the user asked for is recorded once its first results are on screen. */
+    private data class SearchAcceptance(
+        val undo: Boolean = false,
+        /** Where the search being returned to by Undo was scrolled; null sends the new results to the top. */
+        val undoScrollState: SearchScrollState? = null,
+    )
 
     private companion object {
         const val DEFAULT_AUTOCOMPLETE_DELAY_MS = 300L

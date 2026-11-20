@@ -18,7 +18,7 @@ class SearchScrollRestorationTest {
     @Test fun `loading and failure are not evidence of exhaustion`() {
         val exhausted = state.copy(content = state.content.copy(canLoadMore = false))
         for (kind in listOf(SearchRequestKind.INITIAL, SearchRequestKind.PAGE)) {
-            assertFalse(exhausted.copy(execution = SearchExecutionUiState(activeKind = kind)).canApplyScrollRestoration)
+            assertFalse(exhausted.copy(execution = SearchExecutionUiState(SearchRequest(1, kind, emptySearchQuery()))).canApplyScrollRestoration)
         }
         assertFalse(exhausted.copy(content = exhausted.content.copy(hasExecutedSearch = false)).canApplyScrollRestoration)
         assertFalse(exhausted.copy(content = exhausted.content.copy(

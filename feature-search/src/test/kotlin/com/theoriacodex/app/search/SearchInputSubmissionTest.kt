@@ -19,7 +19,10 @@ import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.search.state.SearchExecutionUiState
 import com.theoriacodex.app.search.state.SearchHistoryEntry
+import com.theoriacodex.app.search.state.SearchRequest
+import com.theoriacodex.app.search.state.SearchRequestKind
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchSuggestionsUiState
 import com.theoriacodex.app.search.state.SearchUiState
@@ -58,9 +61,9 @@ class SearchInputSubmissionTest {
             state.value = state.value.copy(searchHistory = listOf(SearchHistoryEntry(query, state.value.query.appliedSourceScope)))
         }
         undo.assertIsEnabled()
-        compose.runOnIdle { state.value = state.value.copy(execution = state.value.execution.copy(activeRequestId = 10)) }
+        compose.runOnIdle { state.value = state.value.copy(execution = SearchExecutionUiState(SearchRequest(10, SearchRequestKind.REPLACE, state.value.query.applied))) }
         undo.assertIsNotEnabled()
-        compose.runOnIdle { state.value = state.value.copy(execution = state.value.execution.copy(activeRequestId = null)) }
+        compose.runOnIdle { state.value = state.value.copy(execution = SearchExecutionUiState()) }
         undo.assertIsEnabled().performClick()
         compose.runOnIdle { assertEquals(1, actions.count { it == SearchAction.UndoSearch }) }
     }
