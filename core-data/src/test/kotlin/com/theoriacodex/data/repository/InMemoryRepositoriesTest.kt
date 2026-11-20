@@ -1,227 +1,15 @@
 package com.theoriacodex.data.repository
 
-import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
-import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.DateRange
-import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
-import com.theoriacodex.domain.model.SearchTerm
-import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class InMemoryRepositoriesTest {
-    @Test
-    fun `codex repository creates and tracks items`() = runTest {
-        val repo = InMemoryCodexRepository()
-        val codex = repo.createCodex("Favorites")
-        repo.addItem(codex.codexId, samplePost("1"))
-
-        val codices = repo.observeCodices().first()
-        val items = repo.observeCodexItems(codex.codexId).first()
-
-        assertEquals(1, codices.size)
-        assertEquals("Favorites", codices.first().name)
-        assertEquals(1, items.size)
-    }
-
-    @Test
-    fun `codex repository deduplicates and sorts post hydration`() = runTest {
-        val repo = InMemoryCodexRepository()
-        val codex = repo.createCodex("Favorites")
-        val pixiv = samplePost(id = "1", source = SourceKey.PIXIV)
-        val gelbooru = samplePost(id = "2", source = SourceKey.GELBOORU)
-
-        repo.addItem(codex.codexId, pixiv)
-        repo.addItem(codex.codexId, gelbooru)
-        repo.addItem(codex.codexId, pixiv)
-
-        val items = repo.observeCodexItems(codex.codexId).first()
-        val bySource = repo.observeCodexPosts(codex.codexId, CodexSortMode.BY_SOURCE).first()
-
-        assertEquals(2, items.size)
-        assertEquals(SourceKey.GELBOORU, bySource.first().id.source)
-        assertNotNull(repo.getPost(pixiv.id))
-    }
-
-    @Test
-    fun `codex repository ensures stable system codex`() = runTest {
-        val repo = InMemoryCodexRepository()
-
-        val first = repo.ensureCodex(codexId = "system_likes_codex", name = "Likes")
-        val second = repo.ensureCodex(codexId = "system_likes_codex", name = "Likes")
-
-        assertEquals(first.codexId, second.codexId)
-        assertEquals("Likes", second.name)
-        assertEquals(1, repo.observeCodices().first().size)
-    }
-
-    @Test
-    fun `codex repository appends numeric suffix for duplicate names`() = runTest {
-        val repo = InMemoryCodexRepository()
-
-        val first = repo.createCodex("Favorites")
-        val second = repo.createCodex("Favorites")
-        val third = repo.ensureCodex(codexId = "manual", name = "Favorites")
-
-        repo.renameCodex(second.codexId, "Favorites")
-
-        val names = repo.observeCodices().first().associateBy({ it.codexId }, { it.name })
-        assertEquals("Favorites", names[first.codexId])
-        assertEquals("Favorites 2", names[second.codexId])
-        assertEquals("Favorites 3", names[third.codexId])
-    }
-
-    @Test
-    fun `codex repository supports reordering`() = runTest {
-        val repo = InMemoryCodexRepository()
-        val first = repo.createCodex("First")
-        val second = repo.createCodex("Second")
-        val third = repo.createCodex("Third")
-
-        repo.reorderCodex(codexId = third.codexId, targetIndex = 0)
-
-        val reordered = repo.observeCodices().first()
-        assertEquals(listOf(third.codexId, first.codexId, second.codexId), reordered.map { it.codexId })
-    }
-
-    @Test
-    fun `query repository stores applied query`() = runTest {
-        val repo = InMemoryQueryRepository()
-        val query = Query(
-            mode = QueryMode.Unified,
-            includeTags = listOf("landscape"),
-            excludeTags = emptyList(),
-            sort = SortMode.NEWEST,
-            dateRange = null,
-            minScore = null,
-        )
-
-        repo.upsertAppliedQuery("unified", query)
-
-        assertNotNull(repo.observeAppliedQuery("unified").first())
-    }
-
-    @Test
-    fun `recents repository dedupes watched posts and searches by newest activity`() = runTest {
-        var now = 1_000L
-        val repo = InMemoryRecentsRepository(
-            watchedLimit = 3,
-            searchLimit = 2,
-            clock = { now },
-        )
-        val firstPost = samplePost("1", source = SourceKey.PIXIV)
-        val secondPost = samplePost("2", source = SourceKey.GELBOORU)
-        val thirdPost = samplePost("3", source = SourceKey.AIBOORU)
-        val firstQuery = sampleQuery(includeTags = listOf("landscape"))
-        val secondQuery = sampleQuery(includeTags = listOf("portrait"))
-        val thirdQuery = sampleQuery(includeTags = listOf("city"))
-
-        repo.recordWatchedPost(firstPost, ViewerStreamSource.SEARCH, "hash-1")
-        now += 1
-        repo.recordWatchedPost(secondPost, ViewerStreamSource.FOR_YOU, "hash-2")
-        now += 1
-        repo.recordWatchedPost(firstPost.copy(title = "updated"), ViewerStreamSource.CODEX, "hash-3")
-        now += 1
-        repo.recordWatchedPost(thirdPost, ViewerStreamSource.CREATOR_PROFILE, "hash-4")
-        now += 1
-        repo.recordSearch(firstQuery, "query-1")
-        now += 1
-        repo.recordSearch(secondQuery, "query-2")
-        now += 1
-        repo.recordSearch(
-            firstQuery.copy(excludeTerms = listOf(SearchTerm(value = "sketch"))),
-            "query-1",
-        )
-        now += 1
-        repo.recordSearch(thirdQuery, "query-3")
-
-        val watched = repo.observeWatchedPosts().first()
-        val searches = repo.observeSearches().first()
-        val activity = mergeRecentActivity(watched, searches)
-
-        assertEquals(listOf(thirdPost.id, firstPost.id, secondPost.id), watched.map { entry -> entry.post.id })
-        assertEquals("updated", watched[1].post.title)
-        assertEquals(ViewerStreamSource.CODEX, watched[1].origin)
-        assertEquals(RecentPostSection.CODEX, watched[1].section)
-        assertEquals(listOf("query-3", "query-1"), searches.map { entry -> entry.queryHash })
-        assertEquals(listOf("sketch"), searches[1].query.excludeTags)
-        assertEquals(searches.first().searchedAtEpochMs, activity.first().occurredAtEpochMs)
-    }
-
-    @Test
-    fun `recents repository clears watched and searches independently`() = runTest {
-        val repo = InMemoryRecentsRepository(clock = { 1L })
-
-        repo.recordWatchedPost(samplePost("1"), ViewerStreamSource.SEARCH, "hash")
-        repo.recordSearch(sampleQuery(), "query")
-        repo.clearWatchedPosts(RecentPostSection.WATCHED)
-
-        assertTrue(repo.observeWatchedPosts().first().isEmpty())
-        assertEquals(1, repo.observeSearches().first().size)
-
-        repo.clearSearches(RecentSearchSection.SEARCHES)
-
-        assertTrue(repo.observeSearches().first().isEmpty())
-
-        repo.recordWatchedPost(samplePost("2"), ViewerStreamSource.CODEX, null)
-        repo.recordSearch(sampleQuery(includeTags = listOf("city")), "query-2")
-        repo.clearAll()
-
-        assertTrue(repo.observeWatchedPosts().first().isEmpty())
-        assertTrue(repo.observeSearches().first().isEmpty())
-    }
-
-    @Test
-    fun `watched media progress is monotonic and section scoped`() = runTest {
-        val repo = InMemoryRecentsRepository(clock = { 1L })
-        val post = samplePost("progress")
-
-        repo.recordWatchedMediaProgress(
-            post,
-            origin = ViewerStreamSource.SEARCH,
-            originQueryHash = null,
-            section = RecentPostSection.WATCHED,
-            viewedMediaNumber = 50,
-        )
-        repo.recordWatchedPost(
-            post,
-            ViewerStreamSource.SEARCH,
-            null,
-            viewedMediaNumber = 1,
-        )
-        repo.recordWatchedPost(
-            post,
-            ViewerStreamSource.CODEX,
-            null,
-            viewedMediaNumber = 3,
-        )
-        repo.recordWatchedMediaProgress(
-            post,
-            ViewerStreamSource.SEARCH,
-            null,
-            RecentPostSection.WATCHED,
-            30,
-        )
-
-        val entries = repo.observeWatchedPosts().first()
-        assertEquals(
-            50,
-            entries.single { it.section == RecentPostSection.WATCHED }.maxViewedMediaNumber,
-        )
-        assertEquals(
-            3,
-            entries.single { it.section == RecentPostSection.CODEX }.maxViewedMediaNumber,
-        )
-    }
-
     @Test
     fun `cache repository tracks thumbnail and full counts`() = runTest {
         val repo = InMemoryCacheRepository()
@@ -265,7 +53,6 @@ class InMemoryRepositoriesTest {
         assertEquals(ScenarioPreset.PARTIAL_FAILURE, settings.scenarioPreset)
         assertEquals("profile-alt", settings.activeProfileId)
     }
-
 
     @Test
     fun `settings repository supports dynamic recommendation profiles`() = runTest {
@@ -429,17 +216,6 @@ class InMemoryRepositoriesTest {
         assertEquals("codex", repo.getLastTab())
         assertEquals(2, repo.getSearchScrollState("hash-1")?.firstVisibleItemIndex)
         assertEquals(context, repo.observeViewerLaunchContext().first())
-    }
-
-    private fun sampleQuery(includeTags: List<String> = listOf("landscape")): Query {
-        return Query(
-            mode = QueryMode.Source(SourceKey.PIXIV),
-            includeTags = includeTags,
-            excludeTags = emptyList(),
-            sort = SortMode.TOP,
-            dateRange = DateRange(fromEpochMs = 100L, toEpochMs = 200L),
-            minScore = 20,
-        )
     }
 
     private fun samplePost(id: String, source: SourceKey = SourceKey.PIXIV): Post {

@@ -19,6 +19,7 @@ dependencies {
     testFixturesImplementation(libs.kotlinx.coroutines.core)
     testFixturesApi(libs.kotlinx.serialization.json)
     testFixturesImplementation(libs.junit)
+    testFixturesImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.junit)
 }
