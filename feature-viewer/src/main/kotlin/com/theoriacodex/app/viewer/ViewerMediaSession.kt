@@ -8,7 +8,7 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaSession
 
 /** External controls belong to the current Viewer, never to concurrently autoplaying feed cards. */
-internal fun createViewerMediaSession(
+fun createViewerMediaSession(
     context: Context,
     player: Player,
     onPlaybackIntentChanged: (Boolean) -> Unit,
@@ -34,7 +34,7 @@ internal fun createViewerMediaSession(
 }
 
 /** A stopped Viewer must not keep receiving external commands that could start hidden playback. */
-internal fun attachViewerMediaSession(
+fun attachViewerMediaSession(
     lifecycle: androidx.lifecycle.Lifecycle,
     create: () -> java.io.Closeable,
 ): java.io.Closeable {
