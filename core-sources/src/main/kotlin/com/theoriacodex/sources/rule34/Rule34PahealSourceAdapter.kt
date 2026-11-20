@@ -135,40 +135,22 @@ class Rule34PahealSourceAdapter(
                 val previewUrl = item.selectFirst("media|thumbnail")?.attr("url").orEmpty().ifBlank {
                     image?.attr("src").orEmpty()
                 }
-                val fullUrl = item.selectFirst("media|content")?.attr("url").orEmpty().ifBlank {
-                    descriptionDoc.select("a")
-                        .firstOrNull { anchor -> anchor.text().contains("file only", ignoreCase = true) }
-                        ?.attr("abs:href")
-                        .orEmpty()
-                }
-                val tags = thumb?.attr("data-tags")
-                    ?.split(' ')
-                    ?.map(String::trim)
-                    ?.filter(String::isNotBlank)
-                    .orEmpty()
-                val title = item.selectFirst("title")?.text()
-                    ?.substringAfter(" - ", "")
-                    ?.trim()
-                    ?.takeIf(String::isNotBlank)
+                val fullUrl = item.selectFirst("media|content")?.attr("url").orEmpty().ifBlank { descriptionDoc.fileOnlyUrl() }
                 val mime = thumb?.pahealFileMime() ?: inferMimeFromUrl(fullUrl)
-                val sizeMatch = RULE34PAHEAL_DIMENSION_REGEX.find(image?.attr("title").orEmpty())
-                val width = sizeMatch?.groupValues?.getOrNull(1)?.toIntOrNull()
-                val height = sizeMatch?.groupValues?.getOrNull(2)?.toIntOrNull()
-
-                Post(
-                    id = PostId(source = SourceKey.RULE34PAHEAL, sourcePostId = sourcePostId),
-                    preview = ImageRef(url = previewUrl.ifBlank { null }, localPath = null, mime = PAHEAL_THUMBNAIL_MIME),
-                    full = fullUrl.ifBlank { null }?.let { url ->
-                        ImageRef(url = url, localPath = null, mime = mime)
-                    },
-                    pageUrl = link.ifBlank { "$RULE34PAHEAL_BASE_URL/post/view/$sourcePostId" },
+                val (width, height) = pahealDimensions(image?.attr("title").orEmpty())
+                pahealPost(
+                    sourcePostId = sourcePostId,
+                    preview = pahealThumbnail(previewUrl),
+                    full = fullUrl.ifBlank { null }?.let { url -> ImageRef(url = url, localPath = null, mime = mime) },
+                    pageUrl = link,
+                    tags = thumb?.pahealTags().orEmpty(),
+                    title = item.selectFirst("title")?.text()
+                        ?.substringAfter(" - ", "")
+                        ?.trim()
+                        ?.takeIf(String::isNotBlank),
                     width = width,
                     height = height,
-                    canonicalTags = tags,
-                    rawTags = tags,
-                    authorName = tags.firstOrNull(),
                     createdAtEpochMs = parseRfc1123EpochMs(item.selectFirst("pubDate")?.text()),
-                    title = title,
                 )
             }
         val next = document.selectFirst("channel > atom|link[rel=next]")?.attr("abs:href")?.takeIf(String::isNotBlank)
@@ -181,36 +163,22 @@ class Rule34PahealSourceAdapter(
             val sourcePostId = thumb.attr("data-post-id").trim().takeIf(String::isNotBlank) ?: return@mapNotNull null
             val link = thumb.selectFirst("a.shm-thumb-link")?.attr("abs:href").orEmpty()
             val image = thumb.selectFirst("img")
-            val previewUrl = image?.attr("abs:src").orEmpty()
-            val fullUrl = thumb.select("a")
-                .firstOrNull { anchor -> anchor.text().contains("file only", ignoreCase = true) }
-                ?.attr("abs:href")
-                .orEmpty()
             val fileMime = thumb.pahealFileMime()
-            val tags = thumb.attr("data-tags")
-                .split(' ')
-                .map(String::trim)
-                .filter(String::isNotBlank)
             val titleAttr = image?.attr("title").orEmpty()
             val lines = titleAttr.lines().map(String::trim).filter(String::isNotBlank)
-            val sizeMatch = RULE34PAHEAL_DIMENSION_REGEX.find(titleAttr)
-            val width = sizeMatch?.groupValues?.getOrNull(1)?.toIntOrNull()
-            val height = sizeMatch?.groupValues?.getOrNull(2)?.toIntOrNull()
-
-            Post(
-                id = PostId(source = SourceKey.RULE34PAHEAL, sourcePostId = sourcePostId),
-                preview = ImageRef(url = previewUrl.ifBlank { null }, localPath = null, mime = PAHEAL_THUMBNAIL_MIME),
-                full = fullUrl.ifBlank { null }?.let { url ->
+            val (width, height) = pahealDimensions(titleAttr)
+            pahealPost(
+                sourcePostId = sourcePostId,
+                preview = pahealThumbnail(image?.attr("abs:src").orEmpty()),
+                full = thumb.fileOnlyUrl().ifBlank { null }?.let { url ->
                     ImageRef(url = url, localPath = null, mime = fileMime ?: inferMimeFromUrl(url))
                 },
-                pageUrl = link.ifBlank { "$RULE34PAHEAL_BASE_URL/post/view/$sourcePostId" },
+                pageUrl = link,
+                tags = thumb.pahealTags(),
+                title = lines.firstOrNull()?.substringBefore("//")?.trim(),
                 width = width,
                 height = height,
-                canonicalTags = tags,
-                rawTags = tags,
-                authorName = tags.firstOrNull(),
                 createdAtEpochMs = parsePahealThumbDateEpochMs(lines.lastOrNull()),
-                title = lines.firstOrNull()?.substringBefore("//")?.trim(),
             )
         }
         val next = document.select("section#paginator a, section#Navigationleft a")
@@ -239,39 +207,78 @@ class Rule34PahealSourceAdapter(
             val poster = main.attr("poster").ifBlank { null }
             val mime = source.attr("type").ifBlank { inferMimeFromUrl(videoUrl) ?: "video/mp4" }
             val videoRef = ImageRef(url = videoUrl, localPath = null, mime = mime)
-            Post(
-                id = PostId(source = SourceKey.RULE34PAHEAL, sourcePostId = sourcePostId),
+            pahealPost(
+                sourcePostId = sourcePostId,
                 preview = ImageRef(url = poster, localPath = null, mime = inferMimeFromUrl(poster)),
                 full = videoRef,
                 media = listOf(videoRef),
                 pageUrl = pageUrl,
+                tags = tags,
+                title = title,
                 width = RULE34PAHEAL_STYLE_WIDTH_REGEX.find(main.attr("style"))?.groupValues?.getOrNull(1)?.toIntOrNull(),
                 height = RULE34PAHEAL_STYLE_HEIGHT_REGEX.find(main.attr("style"))?.groupValues?.getOrNull(1)?.toIntOrNull(),
-                canonicalTags = tags,
-                rawTags = tags,
-                authorName = tags.firstOrNull(),
-                createdAtEpochMs = null,
-                title = title,
             )
         } else {
             val imageUrl = main.attr("abs:src").ifBlank { main.attr("src") }.ifBlank { return null }
             val mime = main.pahealFileMime() ?: inferMimeFromUrl(imageUrl)
             val imageRef = ImageRef(url = imageUrl, localPath = null, mime = mime)
-            Post(
-                id = PostId(source = SourceKey.RULE34PAHEAL, sourcePostId = sourcePostId),
+            pahealPost(
+                sourcePostId = sourcePostId,
                 preview = imageRef,
                 full = imageRef,
                 pageUrl = pageUrl,
+                tags = tags,
+                title = title,
                 width = main.attr("data-width").toIntOrNull(),
                 height = main.attr("data-height").toIntOrNull(),
-                canonicalTags = tags,
-                rawTags = tags,
-                authorName = tags.firstOrNull(),
-                createdAtEpochMs = null,
-                title = title,
             )
         }
     }
+}
+
+/** A Paheal post, whose first tag stands in for its author; a blank [pageUrl] falls back to the post's own page. */
+private fun pahealPost(
+    sourcePostId: String,
+    preview: ImageRef,
+    full: ImageRef?,
+    pageUrl: String,
+    tags: List<String>,
+    title: String?,
+    width: Int?,
+    height: Int?,
+    media: List<ImageRef> = emptyList(),
+    createdAtEpochMs: Long? = null,
+): Post = Post(
+    id = PostId(source = SourceKey.RULE34PAHEAL, sourcePostId = sourcePostId),
+    preview = preview,
+    full = full,
+    media = media,
+    pageUrl = pageUrl.ifBlank { "$RULE34PAHEAL_BASE_URL/post/view/$sourcePostId" },
+    width = width,
+    height = height,
+    canonicalTags = tags,
+    rawTags = tags,
+    authorName = tags.firstOrNull(),
+    createdAtEpochMs = createdAtEpochMs,
+    title = title,
+)
+
+/** A listing's thumbnail; a blank [url] is none. */
+private fun pahealThumbnail(url: String) = ImageRef(url = url.ifBlank { null }, localPath = null, mime = PAHEAL_THUMBNAIL_MIME)
+
+/** A thumbnail's space-separated `data-tags`. */
+private fun Element.pahealTags(): List<String> = attr("data-tags").split(' ').map(String::trim).filter(String::isNotBlank)
+
+/** The address behind a listing's "File Only" link, or blank. */
+private fun Element.fileOnlyUrl(): String = select("a")
+    .firstOrNull { anchor -> anchor.text().contains("file only", ignoreCase = true) }
+    ?.attr("abs:href")
+    .orEmpty()
+
+/** Width and height from a thumbnail title such as `1920x1080`; nulls when it names none. */
+private fun pahealDimensions(title: String): Pair<Int?, Int?> {
+    val match = RULE34PAHEAL_DIMENSION_REGEX.find(title)
+    return match?.groupValues?.getOrNull(1)?.toIntOrNull() to match?.groupValues?.getOrNull(2)?.toIntOrNull()
 }
 
 /** Paheal's URLs have no extensions, so this is the only word on a file's type: `image/gif; animated=true` or an older `data-ext`. */
