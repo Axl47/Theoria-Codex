@@ -16,7 +16,8 @@
     "feature-viewer",
     "feature-search",
     "feature-library",
-    "feature-discover"
+    "feature-discover",
+    "feature-settings"
   ],
   "lineBudgets": {
     "production": 900,
@@ -39,6 +40,7 @@
     "config/detekt/baseline-feature-viewer-debug.xml": {},
     "config/detekt/baseline-feature-search-debug.xml": {},
     "config/detekt/baseline-feature-library-debug.xml": {},
-    "config/detekt/baseline-feature-discover-debug.xml": {}
+    "config/detekt/baseline-feature-discover-debug.xml": {},
+    "config/detekt/baseline-feature-settings-debug.xml": {}
   }
 }
