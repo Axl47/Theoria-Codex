@@ -126,24 +126,11 @@ private fun loadProbeCases(): List<ProviderProbeCase> {
     return ProviderProbeCases.fromJson(caseFile.readText())
 }
 
-private fun credentialedSourcesFromEnvironment(): Set<SourceKey> {
-    return buildSet {
-        if (!System.getenv("THEORIA_PIXIV_ACCESS_TOKEN").isNullOrBlank()) {
-            add(SourceKey.PIXIV)
-        }
-        if (
-            !System.getenv("THEORIA_RULE34XXX_USER_ID").isNullOrBlank() &&
-            !System.getenv("THEORIA_RULE34XXX_API_KEY").isNullOrBlank()
-        ) {
-            add(SourceKey.RULE34XXX)
-        }
-        if (
-            !System.getenv("THEORIA_GELBOORU_USER_ID").isNullOrBlank() &&
-            !System.getenv("THEORIA_GELBOORU_API_KEY").isNullOrBlank()
-        ) {
-            add(SourceKey.GELBOORU)
-        }
-    }
+/** Sources whose credentials [EnvironmentCredentialsProvider] supplies. */
+private suspend fun credentialedSourcesFromEnvironment(): Set<SourceKey> = buildSet {
+    if (EnvironmentCredentialsProvider.getPixivTokens() != null) add(SourceKey.PIXIV)
+    if (EnvironmentCredentialsProvider.getRule34XxxCredentials() != null) add(SourceKey.RULE34XXX)
+    if (EnvironmentCredentialsProvider.getGelbooruCredentials() != null) add(SourceKey.GELBOORU)
 }
 
 internal fun aggregateProbeResults(probeResults: List<ProviderProbeStepResult>): List<ProviderHealthCheckResult> {

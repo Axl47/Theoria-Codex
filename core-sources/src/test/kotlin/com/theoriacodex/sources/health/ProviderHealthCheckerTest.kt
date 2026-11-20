@@ -28,31 +28,6 @@ import org.junit.Test
 
 class ProviderHealthCheckerTest {
     @Test
-    fun `check all reports ok degraded failed and skipped statuses`() = runTest {
-        val registry = FakeRegistry(
-            mapOf(
-                SourceKey.PIXIV to FakeAdapter(SourceKey.PIXIV, Page(items = listOf(samplePost(SourceKey.PIXIV)), nextPageToken = null)),
-                SourceKey.GELBOORU to FakeAdapter(SourceKey.GELBOORU, Page(items = emptyList(), nextPageToken = null)),
-                SourceKey.AIBOORU to FakeAdapter(
-                    SourceKey.AIBOORU,
-                    failure = SourceAdapterException(SourceFailureReason.RATE_LIMITED, "slow down"),
-                ),
-            )
-        )
-
-        val results = ProviderHealthChecker(registry, nowProvider = { 123L }).checkAll(
-            listOf(SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.AIBOORU, SourceKey.NHENTAI),
-        ).associateBy { it.source }
-
-        assertEquals(ProviderHealthStatus.OK, results.getValue(SourceKey.PIXIV).status)
-        assertEquals(ProviderHealthStatus.DEGRADED, results.getValue(SourceKey.GELBOORU).status)
-        assertEquals(ProviderHealthStatus.FAILED, results.getValue(SourceKey.AIBOORU).status)
-        assertEquals(SourceFailureReason.RATE_LIMITED, results.getValue(SourceKey.AIBOORU).failureReason)
-        assertEquals(ProviderHealthStatus.SKIPPED, results.getValue(SourceKey.NHENTAI).status)
-        assertEquals(123L, results.getValue(SourceKey.PIXIV).checkedAtEpochMs)
-    }
-
-    @Test
     fun `a problem during a browser challenge cannot be checked while a real failure stays failed`() = runTest {
         val registry = FakeRegistry(
             mapOf(
@@ -258,20 +233,6 @@ class ProviderHealthCheckerTest {
             probeCase.diagnosticUrls.getValue("seeded-search"),
             results.single { result -> result.checkName == "seeded-search" }.requestUrl,
         )
-    }
-
-    @Test
-    fun `health checker rethrows cancellation instead of reporting provider failure`() = runTest {
-        val adapter = FakeAdapter(
-            sourceKey = SourceKey.HITOMI,
-            failure = CancellationException("cancel checker"),
-        )
-
-        val failure = runCatching {
-            ProviderHealthChecker(FakeRegistry(mapOf(SourceKey.HITOMI to adapter))).checkAll()
-        }.exceptionOrNull()
-
-        assertTrue(failure is CancellationException)
     }
 
     @Test

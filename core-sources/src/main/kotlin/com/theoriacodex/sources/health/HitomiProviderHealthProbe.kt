@@ -17,8 +17,6 @@ import com.theoriacodex.sources.http.SourceByteResponse
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.header
 import java.io.IOException
-import kotlin.system.measureTimeMillis
-import kotlinx.coroutines.CancellationException
 
 /**
  * Exercises the provider-owned routes that a generic search probe cannot prove: mutable CDN
@@ -34,6 +32,13 @@ class HitomiProviderHealthProbe(
     private val probeMediaRanges: Boolean = true,
     private val challengesSeen: () -> Int = { 0 },
 ) {
+    private val steps = ProbeSteps(
+        source = SourceKey.HITOMI,
+        nowProvider = nowProvider,
+        challengesSeen = challengesSeen,
+        failureReason = { it.toFailureReason() },
+    )
+
     init {
         require(adapter.sourceKey == SourceKey.HITOMI) {
             "Hitomi provider health requires the Hitomi source adapter"
@@ -42,12 +47,13 @@ class HitomiProviderHealthProbe(
 
     suspend fun runAll(): List<ProviderProbeStepResult> {
         return listOfNotNull(
-            runStep(
+            steps.run(
                 checkName = GG_CONFIGURATION_STEP,
-                initialRequestUrl = HitomiMediaUrlResolver.GG_CONFIGURATION_URL,
+                requestUrl = { HitomiMediaUrlResolver.GG_CONFIGURATION_URL },
             ) {
                 val configuration = mediaUrlResolver.refresh()
-                ok(
+                steps.result(
+                    status = ProviderHealthStatus.OK,
                     checkName = GG_CONFIGURATION_STEP,
                     requestUrl = HitomiMediaUrlResolver.GG_CONFIGURATION_URL,
                     message = "Parsed gg.js configuration ${configuration.version}",
@@ -98,16 +104,18 @@ class HitomiProviderHealthProbe(
         contractProblem: (Post) -> String?,
     ): ProviderProbeStepResult {
         val galleryUrl = HitomiProtocol.galleryUrl(galleryId)
-        return runStep(checkName = checkName, initialRequestUrl = galleryUrl) {
+        return steps.run(checkName = checkName, requestUrl = { galleryUrl }) {
             val post = adapter.resolvePost(PostId(SourceKey.HITOMI, galleryId.toString()))
-                ?: return@runStep degraded(
+                ?: return@run steps.result(
+                    status = ProviderHealthStatus.DEGRADED,
                     checkName = checkName,
                     requestUrl = galleryUrl,
                     message = "Resolve returned null for gallery $galleryId",
                 )
             val problem = contractProblem(post)
             if (problem == null) {
-                ok(
+                steps.result(
+                    status = ProviderHealthStatus.OK,
                     checkName = checkName,
                     requestUrl = galleryUrl,
                     itemCount = post.media.size,
@@ -115,7 +123,8 @@ class HitomiProviderHealthProbe(
                     message = "Resolved gallery $galleryId with ${post.media.size} media items",
                 )
             } else {
-                degraded(
+                steps.result(
+                    status = ProviderHealthStatus.DEGRADED,
                     checkName = checkName,
                     requestUrl = galleryUrl,
                     itemCount = post.media.size,
@@ -128,7 +137,7 @@ class HitomiProviderHealthProbe(
 
     private suspend fun probeAnimatedWebpRange(): ProviderProbeStepResult {
         var requestUrl = HitomiProtocol.galleryUrl(ANIMATED_GALLERY_ID)
-        return runStep(
+        return steps.run(
             checkName = ANIMATED_WEBP_RANGE_STEP,
             requestUrl = { requestUrl },
         ) {
@@ -161,7 +170,8 @@ class HitomiProviderHealthProbe(
                 else -> null
             }
             if (problem == null) {
-                ok(
+                steps.result(
+                    status = ProviderHealthStatus.OK,
                     checkName = ANIMATED_WEBP_RANGE_STEP,
                     requestUrl = requestUrl,
                     itemCount = response.body.size,
@@ -169,7 +179,8 @@ class HitomiProviderHealthProbe(
                     message = "Verified bounded animated WebP range (${response.body.size} bytes)",
                 )
             } else {
-                degraded(
+                steps.result(
+                    status = ProviderHealthStatus.DEGRADED,
                     checkName = ANIMATED_WEBP_RANGE_STEP,
                     requestUrl = requestUrl,
                     itemCount = response.body.size,
@@ -182,7 +193,7 @@ class HitomiProviderHealthProbe(
 
     private suspend fun probeAnimeMp4Range(): ProviderProbeStepResult {
         var requestUrl = HitomiProtocol.galleryUrl(ANIME_GALLERY_ID)
-        return runStep(
+        return steps.run(
             checkName = ANIME_MP4_RANGE_STEP,
             requestUrl = { requestUrl },
         ) {
@@ -213,7 +224,8 @@ class HitomiProviderHealthProbe(
                 else -> null
             }
             if (problem == null) {
-                ok(
+                steps.result(
+                    status = ProviderHealthStatus.OK,
                     checkName = ANIME_MP4_RANGE_STEP,
                     requestUrl = requestUrl,
                     itemCount = response.body.size,
@@ -221,7 +233,8 @@ class HitomiProviderHealthProbe(
                     message = "Verified bounded MP4 range (${response.body.size} bytes)",
                 )
             } else {
-                degraded(
+                steps.result(
+                    status = ProviderHealthStatus.DEGRADED,
                     checkName = ANIME_MP4_RANGE_STEP,
                     requestUrl = requestUrl,
                     itemCount = response.body.size,
@@ -238,94 +251,6 @@ class HitomiProviderHealthProbe(
                 reason = SourceFailureReason.PARSE,
                 message = "Hitomi gallery $galleryId resolve returned null (${HitomiProtocol.galleryUrl(galleryId)})",
             )
-    }
-
-    private suspend fun runStep(
-        checkName: String,
-        initialRequestUrl: String? = null,
-        requestUrl: () -> String? = { initialRequestUrl },
-        block: suspend () -> ProviderProbeStepResult,
-    ): ProviderProbeStepResult = observingChallenges(challengesSeen) {
-        var result: ProviderProbeStepResult? = null
-        var failure: Throwable? = null
-        val latencyMs = measureTimeMillis {
-            try {
-                result = block()
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Throwable) {
-                failure = error
-            }
-        }
-        val caught = failure
-        if (caught != null) {
-            return@observingChallenges ProviderProbeStepResult(
-                source = SourceKey.HITOMI,
-                checkName = checkName,
-                status = ProviderHealthStatus.FAILED,
-                latencyMs = latencyMs,
-                failureReason = caught.toFailureReason(),
-                message = caught.message ?: caught::class.simpleName,
-                checkedAtEpochMs = nowProvider(),
-                requestUrl = requestUrl(),
-            )
-        }
-        requireNotNull(result).copy(latencyMs = latencyMs)
-    }
-
-    private fun ok(
-        checkName: String,
-        requestUrl: String,
-        itemCount: Int? = null,
-        samplePostId: String? = null,
-        message: String,
-    ): ProviderProbeStepResult {
-        return result(
-            checkName = checkName,
-            status = ProviderHealthStatus.OK,
-            requestUrl = requestUrl,
-            itemCount = itemCount,
-            samplePostId = samplePostId,
-            message = message,
-        )
-    }
-
-    private fun degraded(
-        checkName: String,
-        requestUrl: String,
-        itemCount: Int? = null,
-        samplePostId: String? = null,
-        message: String,
-    ): ProviderProbeStepResult {
-        return result(
-            checkName = checkName,
-            status = ProviderHealthStatus.DEGRADED,
-            requestUrl = requestUrl,
-            itemCount = itemCount,
-            samplePostId = samplePostId,
-            message = message,
-        )
-    }
-
-    private fun result(
-        checkName: String,
-        status: ProviderHealthStatus,
-        requestUrl: String,
-        itemCount: Int?,
-        samplePostId: String?,
-        message: String,
-    ): ProviderProbeStepResult {
-        return ProviderProbeStepResult(
-            source = SourceKey.HITOMI,
-            checkName = checkName,
-            status = status,
-            latencyMs = 0L,
-            message = message,
-            checkedAtEpochMs = nowProvider(),
-            itemCount = itemCount,
-            samplePostId = samplePostId,
-            requestUrl = requestUrl,
-        )
     }
 
     private fun validateMediaStatus(
