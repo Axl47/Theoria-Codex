@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.data.repository.BackupLibrary
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.ProfileLibraryIds
+import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.CodexAutomaticTag
@@ -141,6 +142,22 @@ class RoomProfileBackupStoreTest {
         assertTrue(runCatching { backups.merge(invalid) }.isFailure)
         assertEquals(null, content.getPost(post.id))
         assertFalse(content.observeCodices().first().isNotEmpty())
+    }
+
+    @Test fun `a restore that trims Recents deletes posts only the trimmed rows held`() = runTest {
+        val posts = (0..DEFAULT_RECENT_WATCHED_LIMIT).map { index -> post("watched-$index") }
+        val watched = posts.mapIndexed { index, post ->
+            RecentPostEntry(post, viewedAtEpochMs = index + 1L, ViewerStreamSource.SEARCH, null)
+        }
+        content.ensureCodex("kept", "Kept")
+        content.addItems("kept", listOf(posts[1]))
+
+        backups.merge(BackupLibrary(emptyList(), emptyList(), posts, emptyList(), watched.asReversed()))
+
+        assertEquals(DEFAULT_RECENT_WATCHED_LIMIT, recents.observeWatchedPosts().first().size)
+        assertEquals(null, content.getPost(posts[0].id))
+        assertEquals(posts[1].id, content.getPost(posts[1].id)?.id)
+        assertEquals(posts.last().id, content.getPost(posts.last().id)?.id)
     }
 
     @Test fun `legacy Likes without snapshots and independently saved Likes members are preserved`() = runTest {

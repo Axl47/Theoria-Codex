@@ -26,7 +26,6 @@ import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.domain.tags.sourceTagKey
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOn
@@ -50,7 +49,7 @@ class RoomCodexLikesRepository(
     private val writeGuard: ProfileLibraryWriteGuard = ProfileLibraryWriteGuard(),
 ) : CodexRepository, LikesRepository, CodexLikesTransactions, SourceLibraryPresence {
     private val dao = database.codexLikesDao()
-    private val sharedPostPayloads = SharedPostPayloadWriter(dao)
+    private val sharedPosts = SharedPosts(dao)
     private val retainedPayloads = RetainedPostPayloadCache(LocalPostPayloadCodec::decode)
     private val summaries = RoomCodexSummaryQueries(dao, retainedPayloads)
 
@@ -95,7 +94,7 @@ class RoomCodexLikesRepository(
             dao.deleteLikes(profileId)
             codices.forEach { dao.deleteCodex(it.codexId) }
             normalizeCodexOrderInside()
-            cleanupOrphanPostsInside(affected)
+            sharedPosts.releaseIfOrphaned(affected)
         }
     }
 
@@ -190,7 +189,7 @@ class RoomCodexLikesRepository(
             val removedItems = dao.itemsForCodex(codexId)
             if (dao.deleteCodex(codexId) > 0) {
                 normalizeCodexOrderInside()
-                cleanupOrphanPostsInside(removedItems.map { it.source to it.sourcePostId })
+                sharedPosts.releaseIfOrphaned(removedItems.map { it.source to it.sourcePostId })
             }
         }
     }
@@ -269,7 +268,7 @@ class RoomCodexLikesRepository(
     override suspend fun updatePost(post: Post) {
         database.withTransaction {
             if (dao.post(post.id.source.id, post.id.sourcePostId) != null) {
-                sharedPostPayloads.upsert(post)
+                sharedPosts.upsert(post)
             }
         }
     }
@@ -277,7 +276,7 @@ class RoomCodexLikesRepository(
     override suspend fun removeItem(codexId: String, sourceKey: SourceKey, sourcePostId: String) {
         database.withTransaction {
             if (dao.deleteCodexItem(codexId, sourceKey.id, sourcePostId) > 0) {
-                dao.deleteOrphanPost(sourceKey.id, sourcePostId)
+                sharedPosts.releaseIfOrphaned(listOf(sourceKey.id to sourcePostId))
             }
         }
     }
@@ -289,7 +288,7 @@ class RoomCodexLikesRepository(
             postIds.forEach { postId ->
                 removed = dao.deleteCodexItem(codexId, postId.source.id, postId.sourcePostId) > 0 || removed
             }
-            if (removed) cleanupOrphanPostsInside(postIds.map { it.source.id to it.sourcePostId })
+            if (removed) sharedPosts.releaseIfOrphaned(postIds.map { it.source.id to it.sourcePostId })
         }
     }
 
@@ -398,7 +397,7 @@ class RoomCodexLikesRepository(
                     post.id.source.id,
                     post.id.sourcePostId,
                 ) > 0
-                dao.deleteOrphanPost(post.id.source.id, post.id.sourcePostId)
+                sharedPosts.releaseIfOrphaned(listOf(post.id.source.id to post.id.sourcePostId))
                 removed
             }
             CodexLikeSyncResult(
@@ -433,7 +432,7 @@ class RoomCodexLikesRepository(
                     liked.sourcePostId,
                 )
             }
-            cleanupOrphanPostsInside(likedBeforeClear.map { it.source to it.sourcePostId })
+            sharedPosts.releaseIfOrphaned(likedBeforeClear.map { it.source to it.sourcePostId })
             CodexLikesClearResult(clearedLikes, removedMemberships, undo.takeIf { clearedLikes > 0 })
         }
     }
@@ -457,7 +456,7 @@ class RoomCodexLikesRepository(
             val clearedLikes = dao.deleteLikes(normalized)
             val systemCodexDeleted = dao.deleteCodex(systemCodexId) > 0
             if (systemCodexDeleted) normalizeCodexOrderInside()
-            cleanupOrphanPostsInside(removedIds)
+            sharedPosts.releaseIfOrphaned(removedIds)
             CodexProfileDeleteResult(clearedLikes, systemCodexDeleted)
         }
     }
@@ -501,7 +500,7 @@ class RoomCodexLikesRepository(
 
     /** Stores [post]'s snapshot, then its membership in [codexId]; true when the membership is new. */
     private fun saveItem(codexId: String, post: Post, savedAtEpochMs: Long): Boolean {
-        sharedPostPayloads.upsert(post)
+        sharedPosts.upsert(post)
         return insertItem(codexId, post.id, savedAtEpochMs)
     }
 
@@ -510,10 +509,6 @@ class RoomCodexLikesRepository(
 
     private fun storedPost(source: String, sourcePostId: String): Post? =
         dao.post(source, sourcePostId)?.let(LocalPostPayloadCodec::decode)
-
-    private fun cleanupOrphanPostsInside(postIds: List<Pair<String, String>>) {
-        postIds.distinct().forEach { (source, postId) -> dao.deleteOrphanPost(source, postId) }
-    }
 
     private suspend fun toggleLikeInside(
         normalizedProfileId: String,
@@ -536,59 +531,4 @@ class RoomCodexLikesRepository(
         )
         return true
     }
-}
-
-private fun LikedPost.toEntity() = LikedPostEntity(
-    profileId, postId.source.id, postId.sourcePostId, likedAtEpochMs, LikedTagsCodec.encode(tags),
-)
-
-/** Unreadable tags degrade to none rather than hiding the like. */
-private fun LikedPostEntity.toLikedPostOrNull(): LikedPost? {
-    val postId = toPostIdOrNull() ?: return null
-    val tags = runCatching { LikedTagsCodec.decode(tagsJson) }.getOrDefault(emptyList())
-    return LikedPost(
-        profileId = profileId,
-        postId = postId,
-        likedAtEpochMs = likedAtEpochMs,
-        tags = CodexLikesPolicy.normalizeLikedTags(tags),
-    )
-}
-
-private fun CodexEntity.toDomain(automaticTagEntities: List<CodexAutomaticTagEntity> = emptyList()): Codex {
-    return Codex(
-        codexId = codexId,
-        name = name,
-        createdAtEpochMs = createdAtEpochMs,
-        automaticTags = CodexLikesPolicy.normalizeAutomaticTags(
-            automaticTagEntities.mapNotNull(CodexAutomaticTagEntity::toDomainOrNull),
-        ),
-    )
-}
-
-private fun CodexAutomaticTagEntity.toDomainOrNull(): CodexAutomaticTag? {
-    val sourceKey = SourceKey.parse(source) ?: return null
-    return CodexAutomaticTag(source = sourceKey, tag = tagDisplay, groupIndex = groupIndex)
-}
-
-private fun CodexAutomaticTag.toEntity(codexId: String): CodexAutomaticTagEntity {
-    return CodexAutomaticTagEntity(
-        codexId,
-        source.id,
-        sourceTagKey(source, tag),
-        tag,
-        groupIndex,
-    )
-}
-
-private fun CodexItemEntity.toDomainOrNull(): CodexItem? {
-    val sourceKey = SourceKey.parse(source) ?: return null
-    return CodexItem(
-        codexId = codexId,
-        postId = PostId(sourceKey, sourcePostId),
-        savedAtEpochMs = savedAtEpochMs,
-    )
-}
-
-private fun LikedPostEntity.toPostIdOrNull(): PostId? {
-    return SourceKey.parse(source)?.let { sourceKey -> PostId(sourceKey, sourcePostId) }
 }

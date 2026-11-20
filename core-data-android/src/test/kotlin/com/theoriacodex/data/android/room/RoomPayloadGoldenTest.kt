@@ -74,7 +74,7 @@ class RoomPayloadGoldenTest {
         val golden = golden("post-payload-full.json")
         dao.insertPost(PostEntity("GELBOORU", "gold-full", golden))
 
-        SharedPostPayloadWriter(dao).upsert(goldenFullPost.copy(commentHint = CommentHint(3)))
+        SharedPosts(dao).upsert(goldenFullPost.copy(commentHint = CommentHint(3)))
 
         assertEquals(golden, dao.post("GELBOORU", "gold-full")?.payloadJson)
     }
@@ -89,7 +89,7 @@ class RoomPayloadGoldenTest {
             creatorProfiles = goldenFullPost.creatorProfiles.map { it.copy(profileUrl = null, uploadsQuery = null) },
         )
 
-        SharedPostPayloadWriter(dao).upsert(sparse)
+        SharedPosts(dao).upsert(sparse)
 
         assertEquals(golden, dao.post("GELBOORU", "gold-full")?.payloadJson)
     }
@@ -98,7 +98,7 @@ class RoomPayloadGoldenTest {
         val dao = database.codexLikesDao()
         dao.insertPost(PostEntity("GELBOORU", "gold-full", golden("post-payload-full.json")))
 
-        SharedPostPayloadWriter(dao).upsert(goldenFullPost.copy(title = "Renamed & more"))
+        SharedPosts(dao).upsert(goldenFullPost.copy(title = "Renamed & more"))
 
         val stored = checkNotNull(dao.post("GELBOORU", "gold-full"))
         assertEquals(goldenFullPost.copy(title = "Renamed & more"), LocalPostPayloadCodec.decode(stored))
