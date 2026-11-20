@@ -29,6 +29,7 @@ dependencies {
     kover(project(":core-sources"))
     kover(project(":core-stubs"))
     kover(project(":ui-kit"))
+    kover(project(":media-kit"))
 }
 
 val qualityCoverageVariant = "quality"

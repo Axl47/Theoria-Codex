@@ -23,7 +23,9 @@ import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.app.media.AnimatedWebPDecoder
 import com.theoriacodex.app.media.UndecodableImageEviction
 import com.theoriacodex.app.network.AppHttpClients
+import com.theoriacodex.app.network.AppHttpClientsOwner
 import com.theoriacodex.app.viewer.VideoPlaybackInfrastructure
+import com.theoriacodex.app.viewer.VideoPlaybackInfrastructureOwner
 import com.theoriacodex.data.storage.ApplicationDataReadiness
 import com.theoriacodex.data.storage.ApplicationDataState
 import kotlinx.coroutines.CoroutineScope
@@ -31,7 +33,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.StateFlow
 
-class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContainerOwner {
+class TheoriaApplication :
+    Application(),
+    ImageLoaderFactory,
+    TheoriaAppContainerOwner,
+    AppHttpClientsOwner,
+    VideoPlaybackInfrastructureOwner {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var readiness: ApplicationDataReadiness<TheoriaAppContainer>
     private var initializingContainer: DefaultTheoriaAppContainer? = null
@@ -40,7 +47,7 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
     internal val siteCookieBridge = SiteCookieBridge(AndroidBrowserCookieStore)
 
     /** Every HTTP client in the app, so they share one connection pool and these cookies. */
-    internal val httpClients = AppHttpClients(
+    override val httpClients = AppHttpClients(
         siteCookieBridge.cookieJar,
         ConnectionMemory(
             SharedPreferencesRecentHostStore(this),
@@ -51,7 +58,7 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
         siteCookieBridge::mediaAuthorizationFor,
     )
 
-    internal val videoPlaybackInfrastructure: VideoPlaybackInfrastructure by lazy {
+    override val videoPlaybackInfrastructure: VideoPlaybackInfrastructure by lazy {
         VideoPlaybackInfrastructure(this, httpClients.video)
     }
 
@@ -91,7 +98,11 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
         installOffMainChecker()
         installDebugStrictMode()
         installCrashCapture(store)
-        diagnosticReporter = DiagnosticReporter(this, store)
+        diagnosticReporter = DiagnosticReporter(
+            this,
+            store,
+            "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) ${BuildConfig.BUILD_TYPE}",
+        )
         Diagnostics.report("app", "Started ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
     }
 

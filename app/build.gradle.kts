@@ -393,6 +393,7 @@ dependencies {
     implementation(project(":core-data-android"))
     implementation(project(":core-sources"))
     implementation(project(":ui-kit"))
+    implementation(project(":media-kit"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
