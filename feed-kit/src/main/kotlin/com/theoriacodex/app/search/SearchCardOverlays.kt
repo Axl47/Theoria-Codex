@@ -57,7 +57,7 @@ import com.theoriacodex.domain.model.Post
  * time, watched mark and source along the bottom; and gallery progress as a line on the bottom edge.
  */
 @Composable
-internal fun BoxScope.SearchCardBadges(
+fun BoxScope.SearchCardBadges(
     post: Post,
     viewedMediaNumber: Int?,
     watchedDescription: String?,
