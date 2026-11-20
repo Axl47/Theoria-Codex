@@ -440,6 +440,15 @@ private fun ForYouSeedSummary(state: ForYouUiState) {
     }
 }
 
+private fun forYouFooterMessage(state: ForYouUiState, feed: ForYouFeed): String? = pagedFeedFooterMessage(
+    resolvingDurations = feed.durationFilter.readiness.isResolving,
+    hasVisibleResults = feed.visibleResults.isNotEmpty(),
+    canLoadMore = state.canLoadMore,
+    requestRunning = state.isRefreshing || state.isPaging,
+    // A source whose next page failed leaves paging until it is retried; that is not the end.
+    failed = state.errorMessage != null || state.retryableSources.isNotEmpty(),
+)
+
 @Composable
 private fun ForYouFeedBody(
     state: ForYouUiState,
@@ -471,14 +480,7 @@ private fun ForYouFeedBody(
                     state = gridState,
                     modifier = Modifier.fillMaxSize(),
                     showPagingTile = state.isPaging,
-                    footerMessage = pagedFeedFooterMessage(
-                        resolvingDurations = feed.durationFilter.readiness.isResolving,
-                        hasVisibleResults = feed.visibleResults.isNotEmpty(),
-                        canLoadMore = state.canLoadMore,
-                        requestRunning = state.isRefreshing || state.isPaging,
-                        // A source whose next page failed leaves paging until it is retried; that is not the end.
-                        failed = state.errorMessage != null || state.retryableSources.isNotEmpty(),
-                    ),
+                    footerMessage = forYouFooterMessage(state, feed),
                     postContent = { _, post ->
                         FeedPostCard(
                             post = post,
