@@ -13,6 +13,28 @@ line_budgets() {
   python3 scripts/check_hotspots.py ${1:+--base "$1"}
 }
 
+# Module layering that Gradle cannot see: a feature never depends on another feature, a kit never on a
+# feature, and a kit only on kits to its left in ui-kit, media-kit, feed-kit.
+module_layering() {
+  local kits=(ui-kit media-kit feed-kit) build module name index failed=0
+  for build in feature-*/build.gradle.kts *-kit/build.gradle.kts; do
+    [[ -f "$build" ]] || continue
+    module="${build%%/*}"
+    for name in $(grep -oE 'project\("[^"]+"\)' "$build" | sed -E 's/project\(":?([^"]+)"\)/\1/'); do
+      if [[ "$name" == feature-* && "$name" != "$module" ]]; then
+        echo "$build depends on :$name; features and kits must not depend on a feature." >&2; failed=1
+      fi
+      for (( index = 0; index < ${#kits[@]}; index++ )); do
+        [[ "$module" == "${kits[index]}" ]] || continue
+        if [[ "$name" != "$module" && " ${kits[*]:index} " == *" $name "* ]]; then
+          echo "$build depends on :$name; a kit may only depend on kits before it (${kits[*]})." >&2; failed=1
+        fi
+      done
+    done
+  done
+  return "$failed"
+}
+
 python_tests() {
   python3 -m unittest discover -s scripts/tests -p 'test_*.py'
   python3 -m unittest discover -s deploy/libretranslate -p 'test_*.py'

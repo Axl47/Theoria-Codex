@@ -165,6 +165,7 @@ test_tasks=(
   :app-logic:test
   :core-data-android:testDebugUnitTest
   :core-data-android:compileDebugAndroidTestKotlin
+  :ui-kit:testDebugUnitTest
   :app:testDebugUnitTest
   :app:compileDebugAndroidTestKotlin
   :app:assembleDebug
@@ -175,12 +176,13 @@ detekt_tasks=(
   :app:detektDebug
   :app-logic:detektMain
   :core-data-android:detektDebug
+  :ui-kit:detektDebug
   :core-domain:detektMain
   :core-data:detektMain
   :core-sources:detektMain
   :core-stubs:detektMain
 )
-lint_tasks=(:app:lint :core-data-android:lintDebug)
+lint_tasks=(:app:lint :core-data-android:lintDebug :ui-kit:lintDebug)
 # Everything lint shares with the tests and Detekt: all compilation and code generation. Once these
 # are built, a lint build and a tests-and-Detekt build have no task left in common, so the two can
 # run at the same time without writing the same output or reading sources mid-generation.
@@ -194,6 +196,9 @@ shared_tasks=(
   :core-data-android:compileDebugUnitTestJavaWithJavac
   :core-data-android:compileDebugAndroidTestKotlin
   :core-data-android:bundleLibRuntimeToJarDebug
+  :ui-kit:compileDebugUnitTestKotlin
+  :ui-kit:compileDebugUnitTestJavaWithJavac
+  :ui-kit:bundleLibRuntimeToJarDebug
   :core-domain:testClasses
   :core-data:testClasses
   :core-sources:testClasses
@@ -262,6 +267,7 @@ run_lint() {
   phase 'Gradle: lint inputs' ./gradlew "${task_timings[@]}" \
     :app:compileDebugKotlin \
     :core-data-android:compileDebugKotlin \
+    :ui-kit:compileDebugKotlin \
     --warning-mode=all \
     --console=plain
 
@@ -314,6 +320,7 @@ run_screenshots() {
 }
 
 phase 'Hotspot check' line_budgets "$base"
+phase 'Module layering' module_layering
 [[ "$part" != static ]] || phase 'Python unittests' python_tests
 
 case "$part" in

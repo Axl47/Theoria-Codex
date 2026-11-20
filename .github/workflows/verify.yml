@@ -195,6 +195,10 @@ jobs:
             core-data-android/build/test-results/
             core-data-android/build/reports/tests/
             core-data-android/build/reports/lint-results-*
+            *-kit/build/test-results/
+            *-kit/build/reports/tests/
+            *-kit/build/reports/lint-results-*
+            *-kit/build/reports/detekt/
             build/reports/quality/
             build/reports/jscpd/
             build/reports/kover/
