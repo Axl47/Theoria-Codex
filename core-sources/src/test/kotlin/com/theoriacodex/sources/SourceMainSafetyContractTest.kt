@@ -189,8 +189,7 @@ class SourceMainSafetyContractTest {
     ) : SourceCredentialsProvider by delegate {
         override suspend fun getPixivTokens(): PixivAuthTokens? = delegate.getPixivTokens().also { record(CREDENTIALS) }
         override suspend fun getPixivSession(): PixivCredentialSession = delegate.getPixivSession().also { record(CREDENTIALS) }
-        override suspend fun getGelbooruCredentials() = delegate.getGelbooruCredentials().also { record(CREDENTIALS) }
-        override suspend fun getRule34XxxCredentials() = delegate.getRule34XxxCredentials().also { record(CREDENTIALS) }
+        override suspend fun userApiKey(source: SourceKey) = delegate.userApiKey(source).also { record(CREDENTIALS) }
     }
 
     private companion object {

@@ -6,6 +6,7 @@ import com.theoriacodex.data.repository.ProfileBackupCodec
 import com.theoriacodex.data.repository.checkDocumentDepth
 import com.theoriacodex.data.repository.decodeDocumentUtf8
 import com.theoriacodex.data.storage.DurableJson
+import com.theoriacodex.domain.model.SourceKey
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.InputStream
@@ -92,8 +93,8 @@ private fun decodeCredentials(bytes: ByteArray): SourceCredentialSnapshot {
     )
     require(snapshot.pixivAccessToken == null && snapshot.pixivRefreshToken == null &&
         snapshot.pixivExpiresAtEpochMs == null || snapshot.pixivTokens() != null)
-    require(snapshot.gelbooruUserId == null && snapshot.gelbooruApiKey == null || snapshot.gelbooruCredentials() != null)
-    require(snapshot.rule34XxxUserId == null && snapshot.rule34XxxApiKey == null || snapshot.rule34XxxCredentials() != null)
+    require(snapshot.gelbooruUserId == null && snapshot.gelbooruApiKey == null || snapshot.userApiKey(SourceKey.GELBOORU) != null)
+    require(snapshot.rule34XxxUserId == null && snapshot.rule34XxxApiKey == null || snapshot.userApiKey(SourceKey.RULE34XXX) != null)
     return snapshot
 }
 

@@ -5,7 +5,7 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.credentials.PixivAuthTokens
-import com.theoriacodex.sources.credentials.Rule34XxxCredentials
+import com.theoriacodex.sources.credentials.UserApiKey
 
 /** One provider's search page: posts 42 (listed twice) and 43, then [continuation]. */
 internal data class ProviderPageFixture(val source: SourceKey, val body: String, val continuation: String?)
@@ -13,7 +13,7 @@ internal data class ProviderPageFixture(val source: SourceKey, val body: String,
 /** Credentials every registry source accepts without refreshing. */
 internal fun providerPageCredentials() = FakeCredentialsProvider().apply {
     pixivTokens = PixivAuthTokens("fixture-access", "fixture-refresh", Long.MAX_VALUE)
-    rule34XxxCredentials = Rule34XxxCredentials("fixture-user", "fixture-key")
+    rule34XxxCredentials = UserApiKey("fixture-user", "fixture-key")
 }
 
 internal fun providerPageQuery(source: SourceKey) = Query(

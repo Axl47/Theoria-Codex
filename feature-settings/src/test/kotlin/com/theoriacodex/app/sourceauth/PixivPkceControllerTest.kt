@@ -2,9 +2,7 @@ package com.theoriacodex.app.sourceauth
 
 import androidx.core.net.toUri
 import android.app.Application
-import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.PixivAuthTokens
-import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
@@ -332,12 +330,6 @@ class PixivPkceControllerTest {
         override suspend fun clearPixivTokens() {
             savedPixivTokens = null
         }
-        override suspend fun getGelbooruCredentials(): GelbooruCredentials? = null
-        override suspend fun saveGelbooruCredentials(credentials: GelbooruCredentials) = Unit
-        override suspend fun clearGelbooruCredentials() = Unit
-        override suspend fun getRule34XxxCredentials(): Rule34XxxCredentials? = null
-        override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) = Unit
-        override suspend fun clearRule34XxxCredentials() = Unit
     }
 
     // Host debug stack recovery may clone ordinary exceptions; this sentinel tests exact propagation.
@@ -353,12 +345,6 @@ class PixivPkceControllerTest {
         override suspend fun getPixivTokens(): PixivAuthTokens? = null
         override suspend fun savePixivTokens(tokens: PixivAuthTokens): Unit = throw cancellation
         override suspend fun clearPixivTokens() = Unit
-        override suspend fun getGelbooruCredentials(): GelbooruCredentials? = null
-        override suspend fun saveGelbooruCredentials(credentials: GelbooruCredentials) = Unit
-        override suspend fun clearGelbooruCredentials() = Unit
-        override suspend fun getRule34XxxCredentials(): Rule34XxxCredentials? = null
-        override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) = Unit
-        override suspend fun clearRule34XxxCredentials() = Unit
     }
 
     private companion object {

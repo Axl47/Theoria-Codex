@@ -1,11 +1,11 @@
 package com.theoriacodex.app.sourceauth
 
 import android.content.Context
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.SiteCredentials
-import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.PixivAuthTokens
-import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
+import com.theoriacodex.sources.credentials.UserApiKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,20 +29,11 @@ class AndroidSecureSourceCredentialsStore private constructor(
 
     override suspend fun clearPixivTokens() = delegate.clearPixivTokens()
 
-    override suspend fun getGelbooruCredentials(): GelbooruCredentials? = delegate.getGelbooruCredentials()
+    override suspend fun userApiKey(source: SourceKey): UserApiKey? = delegate.userApiKey(source)
 
-    override suspend fun saveGelbooruCredentials(credentials: GelbooruCredentials) =
-        delegate.saveGelbooruCredentials(credentials)
+    override suspend fun saveUserApiKey(source: SourceKey, key: UserApiKey) = delegate.saveUserApiKey(source, key)
 
-    override suspend fun clearGelbooruCredentials() = delegate.clearGelbooruCredentials()
-
-    override suspend fun getRule34XxxCredentials(): Rule34XxxCredentials? =
-        delegate.getRule34XxxCredentials()
-
-    override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) =
-        delegate.saveRule34XxxCredentials(credentials)
-
-    override suspend fun clearRule34XxxCredentials() = delegate.clearRule34XxxCredentials()
+    override suspend fun clearUserApiKey(source: SourceKey) = delegate.clearUserApiKey(source)
 
     /**
      * Clears an unreadable encrypted store only after the user has chosen to reconnect sources.
@@ -54,8 +45,7 @@ class AndroidSecureSourceCredentialsStore private constructor(
 
 class InMemorySourceCredentialsStore : SourceCredentialsProvider {
     private var pixivTokens: PixivAuthTokens? = null
-    private var gelbooruCredentials: GelbooruCredentials? = null
-    private var rule34XxxCredentials: Rule34XxxCredentials? = null
+    private val userApiKeys = mutableMapOf<SourceKey, UserApiKey>()
 
     override suspend fun getPixivTokens(): PixivAuthTokens? = pixivTokens
 
@@ -67,24 +57,14 @@ class InMemorySourceCredentialsStore : SourceCredentialsProvider {
         pixivTokens = null
     }
 
-    override suspend fun getGelbooruCredentials(): GelbooruCredentials? = gelbooruCredentials
+    override suspend fun userApiKey(source: SourceKey): UserApiKey? = userApiKeys[source]
 
-    override suspend fun saveGelbooruCredentials(credentials: GelbooruCredentials) {
-        gelbooruCredentials = credentials
+    override suspend fun saveUserApiKey(source: SourceKey, key: UserApiKey) {
+        userApiKeys[source] = key
     }
 
-    override suspend fun clearGelbooruCredentials() {
-        gelbooruCredentials = null
-    }
-
-    override suspend fun getRule34XxxCredentials(): Rule34XxxCredentials? = rule34XxxCredentials
-
-    override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) {
-        rule34XxxCredentials = credentials
-    }
-
-    override suspend fun clearRule34XxxCredentials() {
-        rule34XxxCredentials = null
+    override suspend fun clearUserApiKey(source: SourceKey) {
+        userApiKeys -= source
     }
 }
 

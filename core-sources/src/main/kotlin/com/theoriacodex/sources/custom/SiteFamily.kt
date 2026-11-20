@@ -8,7 +8,7 @@ import com.theoriacodex.domain.source.SiteAddress
 import com.theoriacodex.domain.source.SiteCredentials
 import com.theoriacodex.domain.source.SiteHeaders
 import com.theoriacodex.domain.source.SiteProfile
-import com.theoriacodex.sources.credentials.UserApiKeyCredentials
+import com.theoriacodex.sources.credentials.UserApiKey
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.http.THEORIA_SOURCE_USER_AGENT
@@ -85,10 +85,7 @@ class SiteFamilyRegistry(
 }
 
 /** Site keys in the shape both families' adapters accept. */
-internal fun SiteCredentials.asUserApiKey(): UserApiKeyCredentials = object : UserApiKeyCredentials {
-    override val userId: String = user
-    override val apiKey: String = this@asUserApiKey.apiKey
-}
+internal fun SiteCredentials.asUserApiKey(): UserApiKey = UserApiKey(userId = user, apiKey = apiKey)
 
 /** Runs one family probe, turning transport failures into [FamilyProbe.Failed]. */
 internal suspend fun probing(block: suspend () -> FamilyProbe): FamilyProbe = try {

@@ -47,8 +47,8 @@ import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.common.sourceRequest
 import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.credentials.ApiKeyUse
+import com.theoriacodex.sources.credentials.UserApiKey
 import com.theoriacodex.sources.credentials.UserApiKeyCredentialLookup
-import com.theoriacodex.sources.credentials.UserApiKeyCredentials
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.THEORIA_SOURCE_USER_AGENT
 
@@ -65,7 +65,7 @@ data class DanbooruSite(
 ) {
     companion object {
         /** API keys as Danbooru's query parameters; empty without keys. */
-        fun authQuery(keys: UserApiKeyCredentials?): Map<String, String> =
+        fun authQuery(keys: UserApiKey?): Map<String, String> =
             keys?.let { mapOf("login" to it.userId, "api_key" to it.apiKey) }.orEmpty()
 
         /** Guests may search two tags, and an `order:` metatag counts as one of them. */
@@ -87,7 +87,7 @@ data class DanbooruSite(
 class DanbooruSourceAdapter(
     private val site: DanbooruSite,
     private val httpClient: SourceHttpClient,
-    /** [UserApiKeyCredentials.userId] is the Danbooru login name. */
+    /** [UserApiKey.userId] is the Danbooru login name. */
     private val credentials: UserApiKeyCredentialLookup = { null },
     private val gson: Gson = Gson(),
 ) : SourceAdapter, TagCountLookupSourceAdapter, CreatorPostsSourceAdapter, CommentsSourceAdapter,

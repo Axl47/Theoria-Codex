@@ -3,10 +3,9 @@ package com.theoriacodex.sources.health
 import com.google.gson.GsonBuilder
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.RealAdapterRegistry
-import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.PixivAuthTokens
-import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
+import com.theoriacodex.sources.credentials.UserApiKey
 import com.theoriacodex.sources.http.DefaultSourceHttpClient
 import java.io.File
 import kotlinx.coroutines.runBlocking
@@ -129,8 +128,8 @@ private fun loadProbeCases(): List<ProviderProbeCase> {
 /** Sources whose credentials [EnvironmentCredentialsProvider] supplies. */
 private suspend fun credentialedSourcesFromEnvironment(): Set<SourceKey> = buildSet {
     if (EnvironmentCredentialsProvider.getPixivTokens() != null) add(SourceKey.PIXIV)
-    if (EnvironmentCredentialsProvider.getRule34XxxCredentials() != null) add(SourceKey.RULE34XXX)
-    if (EnvironmentCredentialsProvider.getGelbooruCredentials() != null) add(SourceKey.GELBOORU)
+    if (EnvironmentCredentialsProvider.userApiKey(SourceKey.RULE34XXX) != null) add(SourceKey.RULE34XXX)
+    if (EnvironmentCredentialsProvider.userApiKey(SourceKey.GELBOORU) != null) add(SourceKey.GELBOORU)
 }
 
 internal fun aggregateProbeResults(probeResults: List<ProviderProbeStepResult>): List<ProviderHealthCheckResult> {
@@ -222,23 +221,14 @@ private object EnvironmentCredentialsProvider : SourceCredentialsProvider {
 
     override suspend fun clearPixivTokens() = Unit
 
-    override suspend fun getGelbooruCredentials(): GelbooruCredentials? {
-        val userId = System.getenv("THEORIA_GELBOORU_USER_ID")?.takeIf(String::isNotBlank) ?: return null
-        val apiKey = System.getenv("THEORIA_GELBOORU_API_KEY")?.takeIf(String::isNotBlank) ?: return null
-        return GelbooruCredentials(userId = userId, apiKey = apiKey)
+    override suspend fun userApiKey(source: SourceKey): UserApiKey? {
+        val prefix = when (source) {
+            SourceKey.GELBOORU -> "THEORIA_GELBOORU"
+            SourceKey.RULE34XXX -> "THEORIA_RULE34XXX"
+            else -> return null
+        }
+        val userId = System.getenv("${prefix}_USER_ID")?.takeIf(String::isNotBlank) ?: return null
+        val apiKey = System.getenv("${prefix}_API_KEY")?.takeIf(String::isNotBlank) ?: return null
+        return UserApiKey(userId = userId, apiKey = apiKey)
     }
-
-    override suspend fun saveGelbooruCredentials(credentials: GelbooruCredentials) = Unit
-
-    override suspend fun clearGelbooruCredentials() = Unit
-
-    override suspend fun getRule34XxxCredentials(): Rule34XxxCredentials? {
-        val userId = System.getenv("THEORIA_RULE34XXX_USER_ID")?.takeIf(String::isNotBlank) ?: return null
-        val apiKey = System.getenv("THEORIA_RULE34XXX_API_KEY")?.takeIf(String::isNotBlank) ?: return null
-        return Rule34XxxCredentials(userId = userId, apiKey = apiKey)
-    }
-
-    override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) = Unit
-
-    override suspend fun clearRule34XxxCredentials() = Unit
 }

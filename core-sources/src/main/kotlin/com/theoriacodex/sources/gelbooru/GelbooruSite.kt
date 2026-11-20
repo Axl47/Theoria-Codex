@@ -3,7 +3,7 @@ package com.theoriacodex.sources.gelbooru
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.credentials.ApiKeyUse
-import com.theoriacodex.sources.credentials.UserApiKeyCredentials
+import com.theoriacodex.sources.credentials.UserApiKey
 import com.theoriacodex.sources.http.BROWSER_USER_AGENT
 
 /**
@@ -60,7 +60,7 @@ data class GelbooruSite(
 
     companion object {
         /** API keys as DAPI query parameters; empty without keys. */
-        fun authQuery(keys: UserApiKeyCredentials?): Map<String, String> =
+        fun authQuery(keys: UserApiKey?): Map<String, String> =
             keys?.let { mapOf("user_id" to it.userId, "api_key" to it.apiKey) }.orEmpty()
 
         val GELBOORU = GelbooruSite(

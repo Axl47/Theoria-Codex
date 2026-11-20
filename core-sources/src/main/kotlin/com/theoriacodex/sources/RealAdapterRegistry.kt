@@ -44,7 +44,7 @@ class RealAdapterRegistry(
         SourceKey.GELBOORU to GelbooruSourceAdapter(
             GelbooruSite.GELBOORU,
             httpClient,
-            credentialsProvider::getGelbooruCredentials,
+            { credentialsProvider.userApiKey(SourceKey.GELBOORU) },
         ),
         SourceKey.NHENTAI to NhentaiSourceAdapter(
             httpClient = httpClient,
@@ -58,7 +58,7 @@ class RealAdapterRegistry(
         SourceKey.RULE34XXX to GelbooruSourceAdapter(
             GelbooruSite.RULE34XXX,
             httpClient,
-            credentialsProvider::getRule34XxxCredentials,
+            { credentialsProvider.userApiKey(SourceKey.RULE34XXX) },
         ),
         SourceKey.RULE34PAHEAL to Rule34PahealSourceAdapter(
             httpClient = httpClient,

@@ -11,7 +11,7 @@ import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.sources.credentials.GelbooruCredentials
+import com.theoriacodex.sources.credentials.UserApiKey
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -127,7 +127,7 @@ class SettingsViewModelTest {
     fun `configured account state never publishes the stored secret`() = runTest {
         val storedSecret = "stored-secret-must-not-reach-settings-state"
         val accounts = FakeSettingsAccountGateway(
-            gelbooru = GelbooruCredentials(userId = "42", apiKey = storedSecret),
+            gelbooru = UserApiKey(userId = "42", apiKey = storedSecret),
         )
         val owner = settingsOwner(accounts = accounts)
         runCurrent()
@@ -158,7 +158,7 @@ class SettingsViewModelTest {
     @Test
     fun `blank configured save reuses repository key and clears transient input`() = runTest {
         val accounts = FakeSettingsAccountGateway(
-            gelbooru = GelbooruCredentials(userId = "42", apiKey = "stored-key"),
+            gelbooru = UserApiKey(userId = "42", apiKey = "stored-key"),
         )
         val owner = settingsOwner(accounts = accounts)
         runCurrent()
@@ -167,7 +167,7 @@ class SettingsViewModelTest {
         owner.onAction(SettingsAction.SaveGelbooruCredentials)
         runCurrent()
 
-        assertEquals(GelbooruCredentials("84", "stored-key"), accounts.savedGelbooru)
+        assertEquals(UserApiKey("84", "stored-key"), accounts.savedGelbooru)
         assertEquals("Configured", owner.state.value.accounts.gelbooruStatusLabel)
         assertEquals("", owner.state.value.accounts.gelbooruApiKeyInput)
         assertFalse(owner.state.value.toString().contains("stored-key"))
@@ -176,7 +176,7 @@ class SettingsViewModelTest {
     @Test
     fun `failed credential mutation preserves recovery presentation after refresh`() = runTest {
         val accounts = FakeSettingsAccountGateway(
-            gelbooru = GelbooruCredentials(userId = "42", apiKey = "stored-key"),
+            gelbooru = UserApiKey(userId = "42", apiKey = "stored-key"),
         ).apply {
             failGelbooruSaveWithRecovery = CredentialStoreRecoveryState.TemporarilyUnavailable
         }

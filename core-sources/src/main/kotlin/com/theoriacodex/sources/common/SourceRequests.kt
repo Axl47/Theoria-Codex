@@ -3,8 +3,8 @@ package com.theoriacodex.sources.common
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.sources.credentials.ApiKeyUse
+import com.theoriacodex.sources.credentials.UserApiKey
 import com.theoriacodex.sources.credentials.UserApiKeyCredentialLookup
-import com.theoriacodex.sources.credentials.UserApiKeyCredentials
 import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.HostUnavailableException
 import com.theoriacodex.sources.http.SourceHttpResponse
@@ -34,7 +34,7 @@ internal fun SourceHttpResponse.requireSuccess(
 }
 
 /** The keys [use] attaches to a site's API calls; a site that requires keys fails before the request without them. */
-internal suspend fun UserApiKeyCredentialLookup.keysFor(use: ApiKeyUse, siteLabel: String): UserApiKeyCredentials? {
+internal suspend fun UserApiKeyCredentialLookup.keysFor(use: ApiKeyUse, siteLabel: String): UserApiKey? {
     val saved = invoke()
     if (saved == null && use == ApiKeyUse.REQUIRED) {
         throw SourceAdapterException(

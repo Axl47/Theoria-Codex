@@ -1,10 +1,10 @@
 package com.theoriacodex.app.sourceauth
 
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.CustomSourceIds
 import com.theoriacodex.domain.source.SiteCredentials
-import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.PixivAuthTokens
-import com.theoriacodex.sources.credentials.Rule34XxxCredentials
+import com.theoriacodex.sources.credentials.UserApiKey
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -61,60 +61,53 @@ class SourceCredentialSnapshot(
         return PixivAuthTokens(accessToken, refreshToken, expiresAt)
     }
 
-    fun gelbooruCredentials(): GelbooruCredentials? {
-        val userId = gelbooruUserId?.takeIf(String::isNotBlank) ?: return null
-        val apiKey = gelbooruApiKey?.takeIf(String::isNotBlank) ?: return null
-        return GelbooruCredentials(userId, apiKey)
+    /** The keys in [source]'s slot; null when either half is blank or [source] has no slot. */
+    fun userApiKey(source: SourceKey): UserApiKey? {
+        val (userId, apiKey) = when (source) {
+            SourceKey.GELBOORU -> gelbooruUserId to gelbooruApiKey
+            SourceKey.RULE34XXX -> rule34XxxUserId to rule34XxxApiKey
+            else -> return null
+        }
+        return UserApiKey(
+            userId = userId?.takeIf(String::isNotBlank) ?: return null,
+            apiKey = apiKey?.takeIf(String::isNotBlank) ?: return null,
+        )
     }
 
-    fun rule34XxxCredentials(): Rule34XxxCredentials? {
-        val userId = rule34XxxUserId?.takeIf(String::isNotBlank) ?: return null
-        val apiKey = rule34XxxApiKey?.takeIf(String::isNotBlank) ?: return null
-        return Rule34XxxCredentials(userId, apiKey)
-    }
-
-    fun withPixiv(tokens: PixivAuthTokens?): SourceCredentialSnapshot = SourceCredentialSnapshot(
+    fun withPixiv(tokens: PixivAuthTokens?): SourceCredentialSnapshot = copy(
         pixivAccessToken = tokens?.accessToken,
         pixivRefreshToken = tokens?.refreshToken,
         pixivExpiresAtEpochMs = tokens?.expiresAtEpochMs,
-        gelbooruUserId = gelbooruUserId,
-        gelbooruApiKey = gelbooruApiKey,
-        rule34XxxUserId = rule34XxxUserId,
-        rule34XxxApiKey = rule34XxxApiKey,
-        customSites = customSites,
     )
 
-    fun withGelbooru(credentials: GelbooruCredentials?): SourceCredentialSnapshot = SourceCredentialSnapshot(
-        pixivAccessToken = pixivAccessToken,
-        pixivRefreshToken = pixivRefreshToken,
-        pixivExpiresAtEpochMs = pixivExpiresAtEpochMs,
-        gelbooruUserId = credentials?.userId,
-        gelbooruApiKey = credentials?.apiKey,
-        rule34XxxUserId = rule34XxxUserId,
-        rule34XxxApiKey = rule34XxxApiKey,
-        customSites = customSites,
-    )
+    fun withUserApiKey(source: SourceKey, key: UserApiKey?): SourceCredentialSnapshot = when (source) {
+        SourceKey.GELBOORU -> copy(gelbooruUserId = key?.userId, gelbooruApiKey = key?.apiKey)
+        SourceKey.RULE34XXX -> copy(rule34XxxUserId = key?.userId, rule34XxxApiKey = key?.apiKey)
+        else -> throw IllegalArgumentException("${source.id} has no API key slot")
+    }
 
-    fun withRule34Xxx(credentials: Rule34XxxCredentials?): SourceCredentialSnapshot = SourceCredentialSnapshot(
-        pixivAccessToken = pixivAccessToken,
-        pixivRefreshToken = pixivRefreshToken,
-        pixivExpiresAtEpochMs = pixivExpiresAtEpochMs,
-        gelbooruUserId = gelbooruUserId,
-        gelbooruApiKey = gelbooruApiKey,
-        rule34XxxUserId = credentials?.userId,
-        rule34XxxApiKey = credentials?.apiKey,
-        customSites = customSites,
-    )
-
-    fun withCustomSite(sourceId: String, credentials: SiteCredentials?): SourceCredentialSnapshot = SourceCredentialSnapshot(
-        pixivAccessToken = pixivAccessToken,
-        pixivRefreshToken = pixivRefreshToken,
-        pixivExpiresAtEpochMs = pixivExpiresAtEpochMs,
-        gelbooruUserId = gelbooruUserId,
-        gelbooruApiKey = gelbooruApiKey,
-        rule34XxxUserId = rule34XxxUserId,
-        rule34XxxApiKey = rule34XxxApiKey,
+    fun withCustomSite(sourceId: String, credentials: SiteCredentials?): SourceCredentialSnapshot = copy(
         customSites = if (credentials == null) customSites - sourceId else customSites + (sourceId to credentials),
+    )
+
+    private fun copy(
+        pixivAccessToken: String? = this.pixivAccessToken,
+        pixivRefreshToken: String? = this.pixivRefreshToken,
+        pixivExpiresAtEpochMs: Long? = this.pixivExpiresAtEpochMs,
+        gelbooruUserId: String? = this.gelbooruUserId,
+        gelbooruApiKey: String? = this.gelbooruApiKey,
+        rule34XxxUserId: String? = this.rule34XxxUserId,
+        rule34XxxApiKey: String? = this.rule34XxxApiKey,
+        customSites: Map<String, SiteCredentials> = this.customSites,
+    ) = SourceCredentialSnapshot(
+        pixivAccessToken = pixivAccessToken,
+        pixivRefreshToken = pixivRefreshToken,
+        pixivExpiresAtEpochMs = pixivExpiresAtEpochMs,
+        gelbooruUserId = gelbooruUserId,
+        gelbooruApiKey = gelbooruApiKey,
+        rule34XxxUserId = rule34XxxUserId,
+        rule34XxxApiKey = rule34XxxApiKey,
+        customSites = customSites,
     )
 
     override fun equals(other: Any?): Boolean {
@@ -197,26 +190,14 @@ internal class VersionedSourceCredentialsStore(
         updateSnapshot { snapshot -> snapshot.withPixiv(null) }
     }
 
-    override suspend fun getGelbooruCredentials(): GelbooruCredentials? =
-        readSnapshot()?.gelbooruCredentials()
+    override suspend fun userApiKey(source: SourceKey): UserApiKey? = readSnapshot()?.userApiKey(source)
 
-    override suspend fun saveGelbooruCredentials(credentials: GelbooruCredentials) {
-        updateSnapshot { snapshot -> snapshot.withGelbooru(credentials) }
+    override suspend fun saveUserApiKey(source: SourceKey, key: UserApiKey) {
+        updateSnapshot { snapshot -> snapshot.withUserApiKey(source, key) }
     }
 
-    override suspend fun clearGelbooruCredentials() {
-        updateSnapshot { snapshot -> snapshot.withGelbooru(null) }
-    }
-
-    override suspend fun getRule34XxxCredentials(): Rule34XxxCredentials? =
-        readSnapshot()?.rule34XxxCredentials()
-
-    override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) {
-        updateSnapshot { snapshot -> snapshot.withRule34Xxx(credentials) }
-    }
-
-    override suspend fun clearRule34XxxCredentials() {
-        updateSnapshot { snapshot -> snapshot.withRule34Xxx(null) }
+    override suspend fun clearUserApiKey(source: SourceKey) {
+        updateSnapshot { snapshot -> snapshot.withUserApiKey(source, null) }
     }
 
     override suspend fun get(sourceId: String): SiteCredentials? = readSnapshot()?.customSites?.get(sourceId)
