@@ -8,6 +8,8 @@ Keep Detekt's own `parallel` setting disabled: concurrent Kotlin 2.4 FIR/PSI tra
 
 Robolectric tests need Java 21 or newer because the Android SDK 36 sandbox refuses older JVMs, failing at class setup with `UnsupportedOperationException`. Set `JAVA_HOME` to a compatible JDK before running them; on the Mac, the default JDK is 19 and Homebrew's works: `JAVA_HOME=/opt/homebrew/Cellar/openjdk/26.0.2.1/libexec/openjdk.jdk/Contents/Home`.
 
+Gradle also needs a JDK 17 installed for the library modules' `jvmToolchain(17)`, and no toolchain download repository is configured. Gradle finds JDKs only in standard locations, so a JDK installed by mise or another version manager must be listed in `org.gradle.java.installations.paths` in `~/.gradle/gradle.properties`, or the check fails with "Cannot find a Java installation ... languageVersion=17".
+
 Screenshot reference images (`app/src/test/screenshots`) are CI's Linux renders; macOS draws text differently, so a Mac can only capture screens to look at (`scripts/screenshots.sh capture`) and never records or compares references. After a UI change fails Verify's screenshots part, `scripts/screenshots.sh record` pulls that run's Linux renders; commit them. Screenshots use fixture posts with solid-color images, never provider media.
 
 Fresh git worktrees lack the gitignored `local.properties`, so Android Gradle tasks fail with "SDK location not found"; copy it from the main checkout or set `ANDROID_HOME` first.
@@ -66,7 +68,8 @@ Keep `AGENTS.md` limited to durable product intent, safety boundaries, and accep
 
 - The Android emulator on the Windows development PC is not available for now, so do not plan device or emulator testing around it.
 - On the Mac, run device tests on the `theoria-search-test` AVD (Pixel 6, API 36, `google_apis` arm64-v8a, no Play Store), opened through T3 Code's `device_open`. Recreate it with those settings if it is missing.
-- Other worktrees share that AVD, so its `com.theoriacodex.debug` data can hold a newer Room schema and fail at launch with "Saved data could not be opened safely". Test on the isolated `releaseAcceptance` APK (`com.theoriacodex.acceptance`) instead of clearing debug data.
+- On the Linux workstation, run device tests on the `agent-1` to `agent-3` AVDs (Pixel 8, API 36, `google_apis` x86_64, no Play Store, KVM-accelerated), opened through T3 Code's `device_open`.
+- Other worktrees share these AVDs, so its `com.theoriacodex.debug` data can hold a newer Room schema and fail at launch with "Saved data could not be opened safely". Test on the isolated `releaseAcceptance` APK (`com.theoriacodex.acceptance`) instead of clearing debug data.
 - `scripts/verify_debug_device.sh` refuses to run while the personal phone is also connected, and that connection is not ours to change. Instead, run `scripts/verify_device_apk.py` on both APKs, confirm the target's `ro.kernel.qemu` is `1`, then use `adb -s <emulator-serial>` to `install -r -t` both and run `shell am instrument -w -e class <test> com.theoriacodex.debug.test/androidx.test.runner.AndroidJUnitRunner`.
 - Protect `com.theoriacodex` and its data. Before any device installation or test, verify every packaged APK’s application ID and signing lane; variant names are insufficient. New or changed device commands require a host-only task-graph/preflight check.
 - Automated device lanes must use isolated packages. Production changes require explicit authorization; destructive actions require authorization for the exact action after explaining possible data loss. Production installs use the signed release/update path.
