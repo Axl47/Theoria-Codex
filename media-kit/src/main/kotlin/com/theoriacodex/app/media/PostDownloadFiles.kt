@@ -16,7 +16,7 @@ import kotlinx.coroutines.withContext
 data class DownloadedPostFile(val uri: Uri, val mime: String?)
 
 /** Restored jobs have no remote preview; decode videos from their tracked local destination. */
-internal suspend fun downloadedPostPreview(context: Context, file: DownloadedPostFile): Any? =
+suspend fun downloadedPostPreview(context: Context, file: DownloadedPostFile): Any? =
     withContext(Dispatchers.IO) {
         if (file.mime?.startsWith("video/") != true) return@withContext file.uri
         MediaMetadataRetriever().use { retriever ->
