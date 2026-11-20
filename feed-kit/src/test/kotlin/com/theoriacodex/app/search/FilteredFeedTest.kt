@@ -5,6 +5,7 @@ import com.theoriacodex.app.media.DurationFilterProjection
 import com.theoriacodex.app.media.MediaDurationProvenance
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.mediaDurationKey
+import com.theoriacodex.app.media.mediaDurationStates
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.ui.components.ListFrame
 import com.theoriacodex.domain.model.Post
@@ -44,7 +45,7 @@ class FilteredFeedTest {
             var carried = 0
             var filtered = 0
             for (arrived in 0..states.size) {
-                val metadata = projection.project(posts, states.take(arrived).toMap(), true)
+                val metadata = projection.project(posts, mediaDurationStates(posts, states.take(arrived).toMap()), true)
                 val presented = checkNotNull(metadata.presentedPosts)
                 val known = metadata.knownDurationMsByPostId
                 val previous = frame

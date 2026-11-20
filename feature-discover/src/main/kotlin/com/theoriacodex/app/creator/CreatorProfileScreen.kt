@@ -50,8 +50,8 @@ import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.feed.FeedPageDemandInput
 import com.theoriacodex.app.ui.components.rememberFeedPageDemand
 import com.theoriacodex.app.ui.components.FeedContinueLoading
-import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.media.copyTextToClipboard
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
@@ -102,7 +102,7 @@ fun CreatorProfileScreen(
     savedPostIds: Set<PostId>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     resolveUnknownAnimatedDurations: Boolean = false,
-    durationStates: Map<MediaDurationKey, MediaDurationState> = emptyMap(),
+    durationStates: MediaDurationStates = MediaDurationStates.EMPTY,
     durationStateForPost: (Post) -> Flow<MediaDurationState?> = noMediaDurationStateForPost,
     onDurationFilterChanged: (Boolean) -> Unit = {},
     onDurationPostVisibilityChanged: (Post, Boolean) -> Unit = { _, _ -> },
@@ -222,7 +222,7 @@ private fun rememberCreatorFeed(
     likedPostIds: Set<PostId>,
     savedPostIds: Set<PostId>,
     fabRestoreState: FeedFabRestoreState,
-    durationStates: Map<MediaDurationKey, MediaDurationState>,
+    durationStates: MediaDurationStates,
     resolveUnknownAnimatedDurations: Boolean,
 ): CreatorFeed {
     val animatedOnly = fabRestoreState.animatedOnly

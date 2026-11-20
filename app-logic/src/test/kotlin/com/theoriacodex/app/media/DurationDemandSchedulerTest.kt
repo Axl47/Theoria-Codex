@@ -36,7 +36,6 @@ class DurationDemandSchedulerTest {
         scheduler.submit(demand("search", key, DurationDemandPriority.ACTIVE_FILTER))
 
         assertEquals(1, scheduler.queuedKeyCount())
-        assertEquals(2, scheduler.queuedDemandCount())
         val work = requireNotNull(
             scheduler.takeNext(DurationExecutionGate(lifecycleStarted = true, scrollIdle = true)),
         )
@@ -51,12 +50,28 @@ class DurationDemandSchedulerTest {
         scheduler.submit(demand("search", shared, DurationDemandPriority.VISIBLE))
         scheduler.submit(demand("creator", shared, DurationDemandPriority.NEAR_VIEWPORT))
 
-        scheduler.removeIdentity("search")
+        scheduler.removeIdentities(setOf("search"))
         assertTrue(scheduler.contains(shared))
-        assertEquals(listOf("creator"), scheduler.demandsFor(shared).map(DurationDemand::identity))
 
-        scheduler.removeIdentity("creator")
+        scheduler.removeIdentities(setOf("creator"))
         assertFalse(scheduler.contains(shared))
+    }
+
+    @Test
+    fun `releasing several consumers at once reports every key that lost one and keeps the rest`() {
+        val scheduler = DurationDemandScheduler()
+        val shared = key("shared")
+        val owned = key("owned")
+        val other = key("other")
+        scheduler.submit(demand("search", shared, DurationDemandPriority.VISIBLE))
+        scheduler.submit(demand("creator", shared, DurationDemandPriority.NEAR_VIEWPORT))
+        scheduler.submit(demand("search", owned, DurationDemandPriority.VISIBLE))
+        scheduler.submit(demand("viewer", other, DurationDemandPriority.VISIBLE))
+
+        assertEquals(setOf(shared, owned), scheduler.removeIdentities(setOf("search", "creator")))
+        assertFalse(scheduler.contains(shared))
+        assertFalse(scheduler.contains(owned))
+        assertTrue(scheduler.contains(other))
     }
 
     @Test
@@ -140,13 +155,6 @@ class DurationDemandSchedulerTest {
             identity = identity,
             key = key,
             priority = priority,
-            reason = when (priority) {
-                DurationDemandPriority.ACTIVE_FILTER -> DurationDemandReason.FILTER
-                DurationDemandPriority.VISIBLE,
-                DurationDemandPriority.NEAR_VIEWPORT,
-                -> DurationDemandReason.VIEWPORT
-                DurationDemandPriority.BACKGROUND_IDLE -> DurationDemandReason.APPEND
-            },
         )
     }
 

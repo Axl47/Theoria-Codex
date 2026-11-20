@@ -27,9 +27,8 @@ import androidx.navigation.navArgument
 import com.theoriacodex.app.codex.CodexDetailScreen
 import com.theoriacodex.app.codex.SAVED_CODEX_ID
 import com.theoriacodex.app.codex.likesCodexIdForProfile
-import com.theoriacodex.app.media.MediaDurationKey
+import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
-import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.related.RelatedPostsRouteController
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.related.RelatedShelfBinding
@@ -166,7 +165,7 @@ private fun CodexDetailContent(
     fabRestoreState: FeedFabRestoreState,
     state: CodexDetailDestinationState,
     durationOwner: MediaDurationRouteViewModel,
-    durationStates: Map<MediaDurationKey, MediaDurationState>,
+    durationStates: MediaDurationStates,
 ) {
     val routes = shell.routes
     val commands = shell.owners.codexCommands

@@ -28,8 +28,6 @@ fun durationFilterReadiness(
         .filter { post -> animatedDurationMs(post) == null }
         .distinctBy(Post::id)
         .toList()
-    val pending = candidates.count { post ->
-        stateByPostId[post.id].let { state -> state == null || state == MediaDurationState.Pending }
-    }
+    val pending = candidates.count { post -> stateByPostId[post.id].isUndecided }
     return DurationFilterReadiness(pendingCount = pending, candidateCount = candidates.size)
 }

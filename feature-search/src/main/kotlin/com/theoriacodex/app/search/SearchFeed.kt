@@ -7,8 +7,7 @@ import androidx.compose.runtime.remember
 import com.theoriacodex.app.feed.FeedPageDemandInput
 import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.media.DurationFilterMetadata
-import com.theoriacodex.app.media.MediaDurationKey
-import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.media.rememberDurationFilterMetadata
 import com.theoriacodex.app.related.retainedLikedPostIds
 import com.theoriacodex.app.search.state.SearchAction
@@ -46,7 +45,7 @@ fun rememberSearchFeed(
     pendingLikePostIds: Set<PostId>,
     savedPostIds: Set<PostId>,
     watchedPostIds: Set<PostId>,
-    durationStates: Map<MediaDurationKey, MediaDurationState>,
+    durationStates: MediaDurationStates,
     resolveUnknownAnimatedDurations: Boolean,
 ): SearchFeed {
     val animationRestoreState = fabRestoreState.searchAnimationFilter(state.query.draft.mode)

@@ -49,8 +49,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.AnimatedDurationRange
-import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.media.rememberDurationFilterMetadata
 import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.media.observedMediaDurationMs
@@ -106,7 +106,7 @@ fun CodexDetailScreen(
     creatorBrowsingSources: Set<SourceKey>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     resolveUnknownAnimatedDurations: Boolean = false,
-    durationStates: Map<MediaDurationKey, MediaDurationState> = emptyMap(),
+    durationStates: MediaDurationStates = MediaDurationStates.EMPTY,
     durationStateForPost: (Post) -> Flow<MediaDurationState?> = noMediaDurationStateForPost,
     onDurationFilterChanged: (Boolean) -> Unit = {},
     onDurationPostVisibilityChanged: (Post, Boolean) -> Unit = { _, _ -> },
@@ -307,7 +307,7 @@ internal fun rememberCodexDetailFeed(
     posts: List<Post>,
     filters: CodexCollectionFilters,
     fabRestoreState: FeedFabRestoreState,
-    durationStates: Map<MediaDurationKey, MediaDurationState>,
+    durationStates: MediaDurationStates,
     resolveUnknownAnimatedDurations: Boolean,
     relatedShelf: RelatedShelfBinding?,
     likedPostIds: Set<PostId>,

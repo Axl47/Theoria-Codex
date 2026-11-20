@@ -27,8 +27,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.AnimatedDurationRange
-import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.media.animatedDurationRangeLabel
 import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.search.state.SearchAction
@@ -92,7 +92,7 @@ fun SearchScreen(
     watchedPostIds: Set<PostId> = emptySet(),
     favoriteTags: List<FavoriteTagEntry> = emptyList(),
     resolveUnknownAnimatedDurations: Boolean = false,
-    durationStates: Map<MediaDurationKey, MediaDurationState> = emptyMap(),
+    durationStates: MediaDurationStates = MediaDurationStates.EMPTY,
     durationStateForPost: (Post) -> Flow<MediaDurationState?> = noMediaDurationStateForPost,
     onDurationFilterChanged: (Boolean) -> Unit = {},
     onDurationPostVisibilityChanged: (Post, Boolean) -> Unit = { _, _ -> },

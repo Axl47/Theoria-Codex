@@ -9,6 +9,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import com.theoriacodex.app.media.MediaDurationProvenance
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.mediaDurationKey
+import com.theoriacodex.app.media.mediaDurationStates
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.ui.components.FeedTraceSections
 import com.theoriacodex.data.repository.CodexSortMode
@@ -29,9 +30,9 @@ class CodexPostDurationsTest {
 
     private val posts = List(4) { testPost(SourceKey.RULE34VIDEO, "c$it") }
     private val lengths = posts.withIndex().associate { (index, post) -> post.id to 1_000L * (index + 1) }
-    private val states = posts.associate { post ->
+    private val states = mediaDurationStates(posts, posts.associate { post ->
         mediaDurationKey(post) to MediaDurationState.Known(lengths.getValue(post.id), MediaDurationProvenance.CONTAINER_PROBE)
-    }
+    })
 
     @Test fun `a length sort reads known lengths and an appended page adds only its own`() {
         var shown by mutableStateOf(posts.take(2))

@@ -2,6 +2,7 @@ package com.theoriacodex.app.media
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 
 fun Context.isMediaNetworkMetered(): Boolean =
     (getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager)?.isActiveNetworkMetered ?: true
@@ -13,10 +14,11 @@ fun videoQualityLabel(quality: com.theoriacodex.domain.model.VideoQuality): Stri
 }
 
 /** Ugoira export uses the application transport rather than Android's queued DownloadManager. */
-@Suppress("DEPRECATION") // activeNetworkInfo supplies roaming state on API 26/27 too.
 internal fun Context.animationExportNetworkBlock(settings: com.theoriacodex.data.repository.CacheSettings): String? {
-    val network = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-    return if (blockedAnimationExport(settings, isMediaNetworkMetered(), network?.activeNetworkInfo?.isRoaming == true)) {
+    val connectivity = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+    val roaming = connectivity?.getNetworkCapabilities(connectivity.activeNetwork)
+        ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_ROAMING) == false
+    return if (blockedAnimationExport(settings, isMediaNetworkMetered(), roaming)) {
         "Connect to an allowed network or change download preferences before exporting animation"
     } else null
 }

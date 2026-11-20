@@ -85,7 +85,6 @@ class PostDownloadQueue(
     private val mutableBatches = MutableStateFlow<List<PostDownloadBatch>>(emptyList())
     val batches = mutableBatches.asStateFlow()
     private val workers = mutableMapOf<Long, Job>()
-    private val locations = mutableMapOf<Long, Pair<Int, Int>>()
     private val expandedItems = mutableMapOf<Long, Set<Long>>()
     private var nextId = 0L
     private val persistence = Mutex()
@@ -98,7 +97,6 @@ class PostDownloadQueue(
         loaded.flatMap { it.items }.filter { it.status == PostDownloadStatus.CANCELLED }
             .forEach { item -> cancelNativeTransfer(item) }
         mutableBatches.value = loaded
-        rebuildLocations()
         nextId = loaded.flatMap { listOf(it.id) + it.items.map(PostDownloadItem::id) }.maxOrNull() ?: 0L
         restored = true
         schedule()
@@ -117,20 +115,10 @@ class PostDownloadQueue(
         if (uniqueRequests.isEmpty()) return null
         val batchId = ++nextId
         val items = uniqueRequests.map { PostDownloadItem(id = ++nextId, request = it) }
-        mutableBatches.value = (mutableBatches.value + PostDownloadBatch(batchId, title, items))
+        val admitted = (mutableBatches.value + PostDownloadBatch(batchId, title, items))
             .let { batches -> batches.filter { it.active } + batches.filterNot { it.active }.takeLast(20) }
             .sortedBy { it.id }
-        rebuildLocations()
-        var admitted = false
-        try {
-            checkpoint()
-            admitted = true
-        } finally {
-            if (!admitted) {
-                mutableBatches.value = mutableBatches.value.filterNot { it.id == batchId }
-                rebuildLocations()
-            }
-        }
+        commit(admitted) { mutableBatches.value.filterNot { it.id == batchId } }
         schedule()
         return batchId
     }
@@ -173,7 +161,7 @@ class PostDownloadQueue(
         selected.forEach { original ->
             val item = currentItem(original.id) ?: return@forEach
             val result = com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation {
-                val nativeId = item.downloadId ?: if (item.enqueuePending) backend.findTransfer(item.request.marker) else null
+                val nativeId = nativeTransferId(item)
                 check(!item.enqueuePending || nativeId != null) { "Android could not identify this transfer" }
                 val target = item.copy(downloadId = nativeId)
                 cancelNativeTransfer(target)
@@ -183,25 +171,15 @@ class PostDownloadQueue(
             else update(item.id) { it.copy(message = "Could not remove this download. Check file access and try again.") }
         }
         val previous = mutableBatches.value
-        mutableBatches.value = previous.mapNotNull { batch ->
+        val remaining = previous.mapNotNull { batch ->
             batch.copy(items = batch.items.filterNot { it.id in removed }).takeIf { it.items.isNotEmpty() }
         }
-        rebuildLocations()
-        var committed = false
-        try {
-            checkpoint()
-            committed = true
-        } finally {
-            if (!committed) {
-                mutableBatches.value = previous
-                rebuildLocations()
-            }
-        }
+        commit(remaining) { previous }
         schedule()
     }
 
     private suspend fun retryItem(item: PostDownloadItem) {
-        val nativeId = item.downloadId ?: if (item.enqueuePending) backend.findTransfer(item.request.marker) else null
+        val nativeId = nativeTransferId(item)
         // Losing a marker to a native redirect cannot authorize a duplicate of an unknown transfer.
         if (item.enqueuePending && nativeId == null) return
         val nativeStatus = nativeId?.let { backend.snapshot(it).status }
@@ -285,8 +263,8 @@ class PostDownloadQueue(
     }
 
     private suspend fun resumeExistingTransfer(item: PostDownloadItem): Boolean {
-        val nativeId = item.downloadId ?: if (item.enqueuePending) backend.findTransfer(item.request.marker) else return false
-        if (nativeId == null) throw DownloadPreparationException(
+        if (item.downloadId == null && !item.enqueuePending) return false
+        val nativeId = nativeTransferId(item) ?: throw DownloadPreparationException(
             "Android could not identify this transfer. Check Downloads; start a new download if needed.")
         if (item.downloadId == null) {
             update(item.id) { it.copy(downloadId = nativeId, enqueuePending = false) }
@@ -297,8 +275,24 @@ class PostDownloadQueue(
     }
 
     private suspend fun cancelNativeTransfer(item: PostDownloadItem) {
-        val id = item.downloadId ?: if (item.enqueuePending) backend.findTransfer(item.request.marker) else null
-        id?.let { backend.cancel(it) }
+        nativeTransferId(item)?.let { backend.cancel(it) }
+    }
+
+    /** The item's Android transfer, looked up by its marker when the process died before the id was saved. */
+    private suspend fun nativeTransferId(item: PostDownloadItem): Long? =
+        item.downloadId ?: if (item.enqueuePending) backend.findTransfer(item.request.marker) else null
+
+    /** Publishes [next] and saves it; if the save fails, publishes [rollback]'s list instead and rethrows. */
+    private suspend fun commit(next: List<PostDownloadBatch>, rollback: () -> List<PostDownloadBatch>) {
+        mutableBatches.value = next
+        forgetRemovedExpansions()
+        var committed = false
+        try {
+            checkpoint()
+            committed = true
+        } finally {
+            if (!committed) mutableBatches.value = rollback()
+        }
     }
 
     private suspend fun awaitTransfer(itemId: Long, downloadId: Long) {
@@ -327,37 +321,31 @@ class PostDownloadQueue(
             expandedItems[itemId] = children.mapTo(mutableSetOf()) { it.id }
             batch.copy(items = batch.items.flatMap { if (it.id == itemId) children else listOf(it) })
         }
-        rebuildLocations()
     }
 
-    private fun rebuildLocations() {
-        locations.clear()
-        mutableBatches.value.forEachIndexed { batchIndex, batch ->
-            batch.items.forEachIndexed { itemIndex, item -> locations[item.id] = batchIndex to itemIndex }
-        }
-        expandedItems.entries.removeAll { (_, children) -> children.none { it in locations } }
+    /** A gallery whose page rows are all gone no longer redirects removal requests for its old row. */
+    private fun forgetRemovedExpansions() {
+        val ids = mutableBatches.value.flatMapTo(HashSet()) { batch -> batch.items.map(PostDownloadItem::id) }
+        expandedItems.entries.removeAll { (_, children) -> children.none { it in ids } }
     }
 
-    private fun currentItem(itemId: Long): PostDownloadItem? {
-        val (batch, item) = locations[itemId] ?: return null
-        return mutableBatches.value.getOrNull(batch)?.items?.getOrNull(item)
-    }
+    private fun currentItem(itemId: Long): PostDownloadItem? =
+        mutableBatches.value.firstNotNullOfOrNull { batch -> batch.items.find { it.id == itemId } }
 
     private fun update(itemId: Long, transform: (PostDownloadItem) -> PostDownloadItem) {
-        val (batchIndex, itemIndex) = locations[itemId] ?: return
-        val batches = mutableBatches.value.toMutableList()
+        val batches = mutableBatches.value
+        val batchIndex = batches.indexOfFirst { batch -> batch.items.any { it.id == itemId } }
+        if (batchIndex < 0) return
         val batch = batches[batchIndex]
-        val items = batch.items.toMutableList()
-        items[itemIndex] = transform(items[itemIndex])
-        batches[batchIndex] = batch.copy(items = items)
-        mutableBatches.value = batches
+        val items = batch.items.map { item -> if (item.id == itemId) transform(item) else item }
+        mutableBatches.value = batches.toMutableList().apply { this[batchIndex] = batch.copy(items = items) }
     }
 
 }
 
 /** Expansion happens after one authoritative resolution; selected Viewer pages never expand again. */
 fun galleryDownloadPages(post: Post): List<PostDownloadRequest> {
-    val media = post.media.ifEmpty { listOfNotNull(post.full) }
+    val media = post.downloadablePages
     if ((post.mediaCount ?: media.size) > media.size) {
         throw DownloadPreparationException("The provider could not load the complete gallery. Try again.")
     }

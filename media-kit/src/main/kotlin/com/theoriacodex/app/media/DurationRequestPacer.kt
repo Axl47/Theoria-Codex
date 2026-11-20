@@ -1,17 +1,16 @@
 package com.theoriacodex.app.media
 
+import com.theoriacodex.app.source.DurationLookupPolicy
+import com.theoriacodex.app.source.presentation
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/**
- * Spaces duration lookups per source and pauses a source that pushed back. Lookups share a host and
- * an IP with video playback, so tripping a host's limit would also break the videos on screen.
- */
+/** Spaces duration lookups per source ([DurationLookupPolicy.startIntervalMs]) and pauses a source that pushed back. */
 class DurationRequestPacer(
     private val clock: () -> Long = System::currentTimeMillis,
-    private val startIntervalMs: (SourceKey) -> Long = ::defaultDurationStartIntervalMs,
+    private val startIntervalMs: (SourceKey) -> Long = { source -> source.presentation().durationLookup.startIntervalMs },
     private val cooldownMs: Long = DEFAULT_DURATION_COOLDOWN_MS,
 ) {
     private val lock = Mutex()
@@ -37,15 +36,6 @@ class DurationRequestPacer(
             val resumeAt = clock() + cooldownMs
             nextStartBySource[source] = maxOf(nextStartBySource[source] ?: resumeAt, resumeAt)
         }
-    }
-}
-
-private fun defaultDurationStartIntervalMs(source: SourceKey): Long {
-    return when (source) {
-        SourceKey.GELBOORU -> 500L
-        SourceKey.PIXIV -> 500L
-        // A user-added site's rate limits are unknown; pace it like Gelbooru.
-        else -> if (source.isCustom) 500L else 0L
     }
 }
 

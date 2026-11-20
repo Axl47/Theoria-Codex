@@ -3,6 +3,7 @@ package com.theoriacodex.app.codex
 import android.app.Application
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -12,6 +13,7 @@ import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationProvenance
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.mediaDurationKey
+import com.theoriacodex.app.media.mediaDurationStates
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.testing.SteppedDispatcher
 import com.theoriacodex.app.testing.testPost
@@ -50,6 +52,7 @@ class CodexFeedFramesTest {
     private var stored by mutableStateOf(videos + stills)
     private var fab by mutableStateOf(FeedFabRestoreState())
     private var durations by mutableStateOf(states(videos))
+    private val durationStates by derivedStateOf { mediaDurationStates(stored, durations) }
     private var feedShown by mutableStateOf(true)
     private var sort by mutableStateOf(CodexSortMode.LONGEST)
     private var shown: List<String>? = null
@@ -206,9 +209,9 @@ class CodexFeedFramesTest {
                     SideEffect { shown = null }
                     return@CompositionLocalProvider
                 }
-                val sorted = rememberSortedCodexPosts(codexId, stored, sort, emptyMap(), durations)
+                val sorted = rememberSortedCodexPosts(codexId, stored, sort, emptyMap(), durationStates)
                 val feed = rememberCodexDetailFeed(
-                    codexId, sorted.orEmpty(), fab.savedCollectionFilters(), fab, durations,
+                    codexId, sorted.orEmpty(), fab.savedCollectionFilters(), fab, durationStates,
                     resolveUnknownAnimatedDurations = true, relatedShelf = null, likedPostIds = emptySet(), sortMode = sort,
                 )
                 SideEffect { shown = feed.visiblePosts.map { it.id.sourcePostId } }

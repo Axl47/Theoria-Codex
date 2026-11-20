@@ -76,6 +76,10 @@ sealed interface MediaDurationState {
     }
 }
 
+/** No lookup has decided this duration yet: none was asked for, or one is still running. */
+val MediaDurationState?.isUndecided: Boolean
+    get() = this == null || this == MediaDurationState.Pending
+
 enum class MediaDurationProvenance {
     PROVIDER,
     ACTIVE_PLAYER,
@@ -105,46 +109,29 @@ enum class DurationDemandPriority {
     BACKGROUND_IDLE,
 }
 
-enum class DurationDemandReason {
-    FILTER,
-    VIEWPORT,
-    APPEND,
-    PLAYER,
-}
-
 data class DurationDemand(
     val identity: String,
     val key: MediaDurationKey,
     val priority: DurationDemandPriority,
-    val reason: DurationDemandReason,
 ) {
     init {
         require(identity.isNotBlank()) { "Demand identity must not be blank" }
     }
 }
 
+/** What a post without a feed-supplied duration offers for looking one up. */
 data class DurationAcquisitionFacts(
-    val knownDurationMs: Long?,
-    val persistedState: MediaDurationState?,
     val hasAuthoritativeFullVideo: Boolean,
     val hasProviderDurationResolver: Boolean,
 )
 
 sealed interface DurationAcquisitionPlan {
-    data class AlreadyKnown(val durationMs: Long) : DurationAcquisitionPlan
-    data class UsePersisted(val state: MediaDurationState) : DurationAcquisitionPlan
     data object AskProvider : DurationAcquisitionPlan
     data object ProbeAuthoritativeMedia : DurationAcquisitionPlan
     data class Unsupported(val reason: MediaDurationUnsupportedReason) : DurationAcquisitionPlan
 }
 
 fun planDurationAcquisition(facts: DurationAcquisitionFacts): DurationAcquisitionPlan {
-    facts.knownDurationMs?.takeIf { durationMs -> durationMs > 0L }?.let { durationMs ->
-        return DurationAcquisitionPlan.AlreadyKnown(durationMs)
-    }
-    facts.persistedState?.takeUnless { state -> state == MediaDurationState.Pending }?.let { state ->
-        return DurationAcquisitionPlan.UsePersisted(state)
-    }
     if (facts.hasAuthoritativeFullVideo) {
         return DurationAcquisitionPlan.ProbeAuthoritativeMedia
     }

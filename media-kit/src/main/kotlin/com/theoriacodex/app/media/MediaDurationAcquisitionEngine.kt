@@ -15,7 +15,7 @@ class MediaDurationAcquisitionEngine(
     private val probeDuration: suspend (Post) -> MediaDurationState,
     private val clock: () -> Long = System::currentTimeMillis,
     private val operationTimeoutMs: Long = DEFAULT_DURATION_ACQUISITION_TIMEOUT_MS,
-    private val retryDelayMs: Long = DEFAULT_DURATION_ACQUISITION_RETRY_MS,
+    private val retryDelayMs: Long = DEFAULT_DURATION_RETRY_DELAY_MS,
     private val traceRecorder: MediaDurationTraceRecorder = AndroidMediaDurationTraceRecorder,
     private val pacer: DurationRequestPacer = DurationRequestPacer(clock),
 ) : MediaDurationAcquirer {
@@ -45,10 +45,6 @@ class MediaDurationAcquisitionEngine(
     /** Answers that need no network, so they never wait behind paced lookups. */
     override fun settleWithoutWork(post: Post): MediaDurationState? {
         return when (plan(post)) {
-            is DurationAcquisitionPlan.AlreadyKnown -> MediaDurationState.Known(
-                durationMs = requireNotNull(animatedDurationMs(post)),
-                provenance = MediaDurationProvenance.PROVIDER,
-            )
             is DurationAcquisitionPlan.Unsupported -> MediaDurationState.Unsupported(
                 MediaDurationUnsupportedReason.NO_AUTHORITATIVE_MEDIA,
             )
@@ -75,8 +71,6 @@ class MediaDurationAcquisitionEngine(
     private fun plan(post: Post): DurationAcquisitionPlan {
         return planDurationAcquisition(
             DurationAcquisitionFacts(
-                knownDurationMs = animatedDurationMs(post),
-                persistedState = null,
                 hasAuthoritativeFullVideo = authoritativeDurationProbeRef(post) != null,
                 hasProviderDurationResolver = hasProviderDurationResolver(post),
             ),
@@ -87,15 +81,13 @@ class MediaDurationAcquisitionEngine(
         return when (plan(post)) {
             DurationAcquisitionPlan.ProbeAuthoritativeMedia -> probe(post)
             DurationAcquisitionPlan.AskProvider -> acquireFromProvider(post)
-            is DurationAcquisitionPlan.AlreadyKnown,
             is DurationAcquisitionPlan.Unsupported,
-            is DurationAcquisitionPlan.UsePersisted,
             -> error("Settled before any acquisition starts")
         }
     }
 
     private suspend fun acquireFromProvider(post: Post): MediaDurationState {
-        traceRecorder.providerResolve()
+        traceRecorder.record(DurationTraceEvent.ProviderResolve)
         val result = runCatchingPreservingCancellation { resolveProviderDuration(post) }
             .getOrElse { error ->
                 val throttled = (error as? SourceAdapterException)?.reason == SourceFailureReason.RATE_LIMITED
@@ -126,7 +118,7 @@ class MediaDurationAcquisitionEngine(
     }
 
     private suspend fun probe(post: Post): MediaDurationState {
-        traceRecorder.probe()
+        traceRecorder.record(DurationTraceEvent.Probe)
         return runCatchingPreservingCancellation { probeDuration(post) }
             .getOrElse { retryable(MediaDurationFailureReason.TRANSPORT_FAILURE) }
     }
@@ -140,5 +132,4 @@ class MediaDurationAcquisitionEngine(
 }
 
 internal const val DEFAULT_DURATION_ACQUISITION_TIMEOUT_MS = 12_000L
-private const val DEFAULT_DURATION_ACQUISITION_RETRY_MS = 5L * 60L * 1_000L
 private const val MAX_THROTTLED_ATTEMPTS = 3

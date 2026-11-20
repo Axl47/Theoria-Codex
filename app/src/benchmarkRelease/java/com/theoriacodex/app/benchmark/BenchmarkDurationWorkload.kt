@@ -10,7 +10,6 @@ import com.theoriacodex.app.R
 import com.theoriacodex.app.viewer.videoPlaybackInfrastructure
 import com.theoriacodex.app.media.DurationDemand
 import com.theoriacodex.app.media.DurationDemandPriority
-import com.theoriacodex.app.media.DurationDemandReason
 import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.media.MediaDurationProvenance
 import com.theoriacodex.app.media.MediaDurationState
@@ -102,7 +101,6 @@ internal class BenchmarkDurationWorkload(
                             identity = DURATION_WORKLOAD_IDENTITY,
                             key = key,
                             priority = DurationDemandPriority.BACKGROUND_IDLE,
-                            reason = DurationDemandReason.APPEND,
                         ),
                     )
                 }

@@ -3,6 +3,7 @@ package com.theoriacodex.app.search
 import android.app.Application
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -12,6 +13,7 @@ import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationProvenance
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.mediaDurationKey
+import com.theoriacodex.app.media.mediaDurationStates
 import com.theoriacodex.app.related.RelatedPostsRequest
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.search.state.SearchContentUiState
@@ -52,6 +54,7 @@ class RelatedShelfFramesTest {
     )
     private val fab = FeedFabRestoreState().withSearchAnimationFilter(state.query.draft.mode) { it.copy(durationMaxBucket = 2) }
     private var durations by mutableStateOf(feedPosts.associate { known(it, SHORT_MS) })
+    private val durationStates by derivedStateOf { mediaDurationStates(feedPosts + shelfPosts, durations) }
     private var feedShown by mutableStateOf(true)
 
     /** The shelf posts shown in the last applied composition (null while the Viewer covers the feed). */
@@ -104,7 +107,7 @@ class RelatedShelfFramesTest {
                 }
                 val feed = rememberSearchFeed(
                     state, fab, emptySet(), pendingLikePostIds = emptySet(), savedPostIds = emptySet(),
-                    watchedPostIds = emptySet(), durationStates = durations, resolveUnknownAnimatedDurations = true,
+                    watchedPostIds = emptySet(), durationStates = durationStates, resolveUnknownAnimatedDurations = true,
                 )
                 val related = feed.related
                 SideEffect {

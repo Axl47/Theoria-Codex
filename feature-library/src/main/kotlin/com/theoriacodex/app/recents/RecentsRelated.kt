@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.related.RelatedPostsLoading
 import com.theoriacodex.app.related.RelatedPostsRequest
 import com.theoriacodex.app.related.RelatedPostsRouteController
@@ -116,7 +117,7 @@ private fun rememberRecentsRelatedSlot(
         savedPostIds = emptySet(),
         watchedPostIds = emptySet(),
         unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy(resolveInBackground = false),
-        durationStates = emptyMap(),
+        durationStates = MediaDurationStates.EMPTY,
         durationFilterActive = false,
     )
     val controller = binding.controller

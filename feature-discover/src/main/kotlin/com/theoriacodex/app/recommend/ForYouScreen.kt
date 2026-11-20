@@ -55,8 +55,8 @@ import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.feed.FeedPageDemandInput
 import com.theoriacodex.app.ui.components.rememberFeedPageDemand
 import com.theoriacodex.app.ui.components.FeedContinueLoading
-import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recommend.state.ForYouEmptyReason
@@ -103,7 +103,7 @@ fun ForYouScreen(
     likedPostIds: Set<PostId>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     resolveUnknownAnimatedDurations: Boolean = false,
-    durationStates: Map<MediaDurationKey, MediaDurationState> = emptyMap(),
+    durationStates: MediaDurationStates = MediaDurationStates.EMPTY,
     durationStateForPost: (Post) -> Flow<MediaDurationState?> = noMediaDurationStateForPost,
     onDurationFilterChanged: (Boolean) -> Unit = {},
     onDurationPostVisibilityChanged: (Post, Boolean) -> Unit = { _, _ -> },
@@ -293,7 +293,7 @@ private data class ForYouFeed(
 private fun rememberForYouFeed(
     state: ForYouUiState,
     fabRestoreState: FeedFabRestoreState,
-    durationStates: Map<MediaDurationKey, MediaDurationState>,
+    durationStates: MediaDurationStates,
     resolveUnknownAnimatedDurations: Boolean,
 ): ForYouFeed {
     val animatedOnly = fabRestoreState.animatedOnly

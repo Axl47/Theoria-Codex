@@ -34,13 +34,13 @@ class MediaDurationCoordinatorTest {
         val post = post("background")
         val key = key(post)
 
-        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = false)
-        assertEquals(DurationDemandAdmission.SCHEDULED, coordinator.submit(post, demand("search", key, DurationDemandPriority.BACKGROUND_IDLE)))
+        coordinator.updateEnvironment("environment", lifecycleStarted = true, scrollIdle = false)
+        coordinator.submit(post, demand("search", key, DurationDemandPriority.BACKGROUND_IDLE))
         runCurrent()
         assertEquals(0, acquisitions)
         assertEquals(MediaDurationState.Pending, coordinator.states.value[key])
 
-        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        coordinator.updateEnvironment("environment", lifecycleStarted = true, scrollIdle = true)
         runCurrent()
         assertEquals(1, acquisitions)
         assertEquals(known(4_000L), coordinator.states.value[key])
@@ -59,14 +59,14 @@ class MediaDurationCoordinatorTest {
         )
         val post = post("visible-scroll")
         val key = key(post)
-        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = false)
+        coordinator.updateEnvironment("environment", lifecycleStarted = true, scrollIdle = false)
 
-        assertEquals(DurationDemandAdmission.SCHEDULED, coordinator.submit(post, demand("search", key, DurationDemandPriority.VISIBLE)))
+        coordinator.submit(post, demand("search", key, DurationDemandPriority.VISIBLE))
         runCurrent()
         assertEquals(0, acquisitions)
         assertEquals(MediaDurationState.Pending, coordinator.states.value[key])
 
-        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        coordinator.updateEnvironment("environment", lifecycleStarted = true, scrollIdle = true)
         runCurrent()
         assertEquals(1, acquisitions)
         assertEquals(known(4_000L), coordinator.states.value[key])
@@ -95,17 +95,17 @@ class MediaDurationCoordinatorTest {
         )
         val post = post("active-visible-scroll")
         val key = key(post)
-        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        coordinator.updateEnvironment("environment", lifecycleStarted = true, scrollIdle = true)
         coordinator.submit(post, demand("search", key, DurationDemandPriority.VISIBLE))
         runCurrent()
         firstStarted.await()
 
-        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = false)
+        coordinator.updateEnvironment("environment", lifecycleStarted = true, scrollIdle = false)
         runCurrent()
         firstCancelled.await()
         assertEquals(MediaDurationState.Pending, coordinator.states.value[key])
 
-        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        coordinator.updateEnvironment("environment", lifecycleStarted = true, scrollIdle = true)
         runCurrent()
         assertEquals(2, attempts)
         assertEquals(known(4_000L), coordinator.states.value[key])
@@ -128,12 +128,12 @@ class MediaDurationCoordinatorTest {
         )
         val post = post("filter-scroll")
         val key = key(post)
-        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        coordinator.updateEnvironment("environment", lifecycleStarted = true, scrollIdle = true)
         coordinator.submit(post, demand("search", key, DurationDemandPriority.ACTIVE_FILTER))
         runCurrent()
         started.await()
 
-        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = false)
+        coordinator.updateEnvironment("environment", lifecycleStarted = true, scrollIdle = false)
         runCurrent()
         release.complete(Unit)
         runCurrent()
@@ -158,7 +158,7 @@ class MediaDurationCoordinatorTest {
         )
         val post = post("shared")
         val key = key(post)
-        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        coordinator.updateEnvironment("environment", lifecycleStarted = true, scrollIdle = true)
 
         coordinator.submit(post, demand("search", key, DurationDemandPriority.VISIBLE))
         runCurrent()
@@ -191,7 +191,7 @@ class MediaDurationCoordinatorTest {
         )
         val post = post("cancel")
         val key = key(post)
-        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        coordinator.updateEnvironment("environment", lifecycleStarted = true, scrollIdle = true)
         coordinator.submit(post, demand("search", key, DurationDemandPriority.VISIBLE))
         runCurrent()
         started.await()
@@ -223,7 +223,7 @@ class MediaDurationCoordinatorTest {
         val visible = post("visible")
         val backgroundKey = key(background)
         val visibleKey = key(visible)
-        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        coordinator.updateEnvironment("environment", lifecycleStarted = true, scrollIdle = true)
         coordinator.submit(
             background,
             demand("search", backgroundKey, DurationDemandPriority.BACKGROUND_IDLE),
@@ -254,12 +254,12 @@ class MediaDurationCoordinatorTest {
         )
         val post = post("terminal")
         val key = key(post)
-        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        coordinator.updateEnvironment("environment", lifecycleStarted = true, scrollIdle = true)
         coordinator.submit(post, demand("search", key, DurationDemandPriority.VISIBLE))
         runCurrent()
         assertEquals(1, acquisitions)
 
-        assertEquals(DurationDemandAdmission.DECIDED, coordinator.submit(post, demand("creator", key, DurationDemandPriority.VISIBLE)))
+        coordinator.submit(post, demand("creator", key, DurationDemandPriority.VISIBLE))
         coordinator.publishKnown(key, 6_000L, MediaDurationProvenance.ACTIVE_PLAYER)
         runCurrent()
 
@@ -313,7 +313,7 @@ class MediaDurationCoordinatorTest {
                 known(3_000L)
             },
         )
-        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        coordinator.updateEnvironment("environment", lifecycleStarted = true, scrollIdle = true)
         listOf("first", "second", "third").forEach { id ->
             val post = post(id)
             coordinator.submit(post, demand("search", key(post), DurationDemandPriority.VISIBLE))
@@ -346,9 +346,8 @@ class MediaDurationCoordinatorTest {
         )
         val post = post("gif")
 
-        val admission = coordinator.submit(post, demand("search", key(post), DurationDemandPriority.ACTIVE_FILTER))
+        coordinator.submit(post, demand("search", key(post), DurationDemandPriority.ACTIVE_FILTER))
 
-        assertEquals(DurationDemandAdmission.DECIDED, admission)
         assertEquals(unsupported, coordinator.states.value[key(post)])
         assertEquals(0, acquisitions)
         coordinator.close()
@@ -369,7 +368,7 @@ class MediaDurationCoordinatorTest {
             maxConcurrentForSource = { source -> if (source == SourceKey.HITOMI) 1 else 2 },
             traceRecorder = NoOpMediaDurationTraceRecorder,
         )
-        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        coordinator.updateEnvironment("environment", lifecycleStarted = true, scrollIdle = true)
         val hitomi = listOf(post("slow-1"), post("slow-2"))
         val gelbooru = post("fast").let { it.copy(id = PostId(SourceKey.GELBOORU, "fast")) }
         (hitomi + gelbooru).forEach { candidate ->
@@ -403,9 +402,9 @@ class MediaDurationCoordinatorTest {
             },
             durationRepository = repository,
         )
-        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        coordinator.updateEnvironment("environment", lifecycleStarted = true, scrollIdle = true)
 
-        assertEquals(DurationDemandAdmission.DECIDED, coordinator.submit(post, demand("search", key, DurationDemandPriority.VISIBLE)))
+        coordinator.submit(post, demand("search", key, DurationDemandPriority.VISIBLE))
         runCurrent()
 
         assertEquals(0, acquisitions)
@@ -426,7 +425,7 @@ class MediaDurationCoordinatorTest {
             acquirer = MediaDurationAcquirer { known(13_000L) },
             durationRepository = repository,
         )
-        first.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        first.updateEnvironment("environment", lifecycleStarted = true, scrollIdle = true)
         first.submit(post, demand("search", key, DurationDemandPriority.VISIBLE))
         runCurrent()
         first.close()
@@ -440,7 +439,7 @@ class MediaDurationCoordinatorTest {
             },
             durationRepository = repository,
         )
-        second.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        second.updateEnvironment("environment", lifecycleStarted = true, scrollIdle = true)
         second.submit(post, demand("creator", key, DurationDemandPriority.VISIBLE))
         runCurrent()
 
@@ -463,7 +462,7 @@ class MediaDurationCoordinatorTest {
             acquirer = MediaDurationAcquirer { known(2_000L) },
             durationRepository = repository,
         )
-        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        coordinator.updateEnvironment("environment", lifecycleStarted = true, scrollIdle = true)
         coordinator.submit(post, demand("search", key, DurationDemandPriority.ACTIVE_FILTER))
         runCurrent()
 
@@ -499,13 +498,6 @@ class MediaDurationCoordinatorTest {
             identity = identity,
             key = key,
             priority = priority,
-            reason = when (priority) {
-                DurationDemandPriority.ACTIVE_FILTER -> DurationDemandReason.FILTER
-                DurationDemandPriority.VISIBLE,
-                DurationDemandPriority.NEAR_VIEWPORT,
-                -> DurationDemandReason.VIEWPORT
-                DurationDemandPriority.BACKGROUND_IDLE -> DurationDemandReason.APPEND
-            },
         )
     }
 
@@ -540,26 +532,14 @@ class MediaDurationCoordinatorTest {
         var publications = 0
         var settled = 0
 
-        override fun demand() = Unit
-
-        override fun providerResolve() = Unit
-
-        override fun probe() = Unit
-
-        override fun workloadStarted(cookie: Int) {
-            workloadStarts += 1
-        }
-
-        override fun workloadFinished(cookie: Int) {
-            workloadFinishes += 1
-        }
-
-        override fun publication() {
-            publications += 1
-        }
-
-        override fun settled() {
-            settled += 1
+        override fun record(event: DurationTraceEvent) {
+            when (event) {
+                is DurationTraceEvent.WorkloadStarted -> workloadStarts += 1
+                is DurationTraceEvent.WorkloadFinished -> workloadFinishes += 1
+                DurationTraceEvent.Publication -> publications += 1
+                DurationTraceEvent.Settled -> settled += 1
+                else -> Unit
+            }
         }
     }
 }

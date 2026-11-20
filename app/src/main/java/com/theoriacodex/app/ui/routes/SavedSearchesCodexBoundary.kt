@@ -7,8 +7,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.codex.rememberCodexPostDurations
 import com.theoriacodex.app.codex.rememberCodexPostUsage
-import com.theoriacodex.app.media.MediaDurationKey
-import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.codex.sortLiveCodexPosts
 import com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID
 import com.theoriacodex.app.codex.SavedSearchesCodexViewModel
@@ -29,7 +28,7 @@ internal fun SavedSearchesCodexBoundary(
     settings: com.theoriacodex.data.repository.AppSettings,
     filters: FeedFabRestoreState,
     sort: CodexSortMode,
-    durationStates: Map<MediaDurationKey, MediaDurationState>,
+    durationStates: MediaDurationStates,
     content: @Composable (CodexDetailDestinationState) -> Unit,
 ) {
     val entries = rememberRetained("saved-searches") { data.savedSearches.observeSavedSearches() }.value ?: return
