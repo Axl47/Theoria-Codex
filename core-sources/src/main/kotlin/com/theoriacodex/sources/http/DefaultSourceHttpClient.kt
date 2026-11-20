@@ -3,7 +3,6 @@ package com.theoriacodex.sources.http
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
-import com.theoriacodex.domain.diagnostics.Diagnostics
 import java.net.URLEncoder
 import java.util.TreeMap
 import java.util.concurrent.TimeUnit
@@ -60,7 +59,7 @@ class DefaultSourceHttpClient(
         require(maxBodyBytes > 0) { "maxBodyBytes must be positive" }
         val requestUrl = buildUrl(url, query)
         val requestHeaders = headers.withByteRange(range)
-        return executeReportingFailure(requestUrl) {
+        return executeWithRetry(requestUrl, retryPolicy, outages) {
             executeRequest(
                 method = "GET",
                 url = requestUrl,
@@ -82,7 +81,7 @@ class DefaultSourceHttpClient(
         } else {
             headers + ("Content-Type" to "application/x-www-form-urlencoded")
         }
-        val response = executeReportingFailure(url) {
+        val response = executeWithRetry(url, retryPolicy, outages) {
             executeRequest(
                 method = "POST",
                 url = url,
@@ -104,7 +103,7 @@ class DefaultSourceHttpClient(
         } else {
             headers + ("Content-Type" to "application/json")
         }
-        val response = executeReportingFailure(url) {
+        val response = executeWithRetry(url, retryPolicy, outages) {
             executeRequest(
                 method = "POST",
                 url = url,
@@ -114,22 +113,6 @@ class DefaultSourceHttpClient(
             )
         }
         return response.toTextResponse()
-    }
-
-    /** Records only the outcome after retries, so a request that recovers leaves nothing in the log. */
-    private suspend fun executeReportingFailure(
-        requestUrl: String,
-        block: suspend () -> SourceByteResponse,
-    ): SourceByteResponse {
-        val host = HostOutageTracker.hostKey(requestUrl) ?: "unknown host"
-        return try {
-            executeWithRetry(requestUrl, retryPolicy, outages, block = block).also { response ->
-                if (response.statusCode >= 400) Diagnostics.report("http", "$host: HTTP ${response.statusCode}")
-            }
-        } catch (error: IOException) {
-            Diagnostics.report("http", "$host: request failed", error)
-            throw error
-        }
     }
 
     private suspend fun executeRequest(

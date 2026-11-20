@@ -1,5 +1,6 @@
 package com.theoriacodex.sources.http
 
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import java.io.IOException
 import java.net.URL
 import java.net.UnknownHostException
@@ -21,6 +22,7 @@ internal class SourceRetryPolicy(
  * honors a short Retry-After. Outages are recorded in [outages] only for the outcome after retries, so a
  * request that recovers leaves nothing behind; a known-down host fails before the first attempt. A
  * non-null [extraOutage] can flag the final answer as an outage too (for example a challenge page).
+ * The outcome after retries is also all that reaches the `http` diagnostics log: an error status or a failure.
  */
 internal suspend fun executeWithRetry(
     requestUrl: String,
@@ -29,17 +31,31 @@ internal suspend fun executeWithRetry(
     extraOutage: (SourceByteResponse) -> HostOutageKind? = { null },
     block: suspend () -> SourceByteResponse,
 ): SourceByteResponse {
+    val host = HostOutageTracker.hostKey(requestUrl) ?: "unknown host"
+    return try {
+        retrying(requestUrl, policy, outages, extraOutage, block).also { response ->
+            if (response.statusCode >= 400) Diagnostics.report("http", "$host: HTTP ${response.statusCode}")
+        }
+    } catch (error: IOException) {
+        Diagnostics.report("http", "$host: request failed", error)
+        throw error
+    }
+}
+
+private suspend fun retrying(
+    requestUrl: String,
+    policy: SourceRetryPolicy,
+    outages: HostOutageTracker?,
+    extraOutage: (SourceByteResponse) -> HostOutageKind?,
+    block: suspend () -> SourceByteResponse,
+): SourceByteResponse {
     outages?.ensureAvailable(requestUrl)
     var attempt = 0
     while (true) {
         try {
             val response = block()
-            val delayMs = if (defaultShouldRetryStatus(requestUrl, response.statusCode)) {
-                retryDelayMs(response.headers, attempt + 1, policy.baseDelayMs)
-            } else {
-                null
-            }
-            if (delayMs == null || attempt == policy.maxRetries) {
+            val delayMs = policy.delayBeforeRetry(requestUrl, response, attempt)
+            if (delayMs == null) {
                 outages?.settle(requestUrl, response, extraOutage)
                 return response
             }
@@ -56,6 +72,12 @@ internal suspend fun executeWithRetry(
             delay(policy.baseDelayMs * attempt)
         }
     }
+}
+
+/** How long to wait before retrying [response] to failed attempt [attempt] (from 0); null when it is final. */
+private fun SourceRetryPolicy.delayBeforeRetry(requestUrl: String, response: SourceByteResponse, attempt: Int): Long? {
+    if (attempt == maxRetries || !defaultShouldRetryStatus(requestUrl, response.statusCode)) return null
+    return retryDelayMs(response.headers, attempt + 1, baseDelayMs)
 }
 
 /** 5xx answers are retried, and 429s except from Iwara, whose rate limit counts each retry and only lasts longer for it. */

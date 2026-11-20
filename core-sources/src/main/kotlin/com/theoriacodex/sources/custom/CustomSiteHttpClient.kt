@@ -29,7 +29,8 @@ import okhttp3.OkHttpClient
  * go out with redirects off; a redirect is followed (at most [maxRedirects] hops) only when it stays
  * on HTTPS and on the same site, so query-string API keys never reach another host or travel in
  * cleartext. A refused redirect is never requested. GET only. When [retry] is set (adapters), each
- * hop retries transient failures the way built-in sources do; probes leave it null and see raw answers.
+ * hop retries transient failures and reports its outcome to the diagnostics log the way built-in
+ * sources do; probes leave it null, see raw answers and log nothing.
  */
 class CustomSiteHttpClient internal constructor(
     private val connectTimeoutMs: Int,

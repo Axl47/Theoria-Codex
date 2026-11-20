@@ -1,6 +1,7 @@
 package com.theoriacodex.sources.custom
 
 import com.sun.net.httpserver.HttpServer
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.source.ProbeFailure
 import com.theoriacodex.sources.http.HttpRequestSpec
 import com.theoriacodex.sources.http.SourceByteResponse
@@ -202,5 +203,19 @@ class CustomSiteHttpClientTest {
 
         assertEquals(503, http.get("https://booru.example/index.php").statusCode)
         assertEquals(1, requested.size)
+    }
+
+    @Test
+    fun `an adapter's failed answer reaches the diagnostics log and a probe's does not`() = runTest {
+        val logged = mutableListOf<String>()
+        Diagnostics.install { area, message, _ -> logged += "$area: $message" }
+        try {
+            retryingClient(retry = null) { SourceByteResponse(404, ByteArray(0)) }.get("https://probe.example/index.php")
+            retryingClient(HostOutageTracker()) { SourceByteResponse(404, ByteArray(0)) }.get("https://booru.example/index.php")
+        } finally {
+            Diagnostics.install { _, _, _ -> }
+        }
+
+        assertEquals(listOf("http: booru.example: HTTP 404"), logged)
     }
 }
