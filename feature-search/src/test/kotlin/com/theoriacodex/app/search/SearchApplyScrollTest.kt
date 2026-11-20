@@ -20,6 +20,7 @@ import androidx.compose.ui.test.swipeUp
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchContentUiState
 import com.theoriacodex.app.search.state.SearchQueryUiState
+import com.theoriacodex.app.search.state.SearchRequest
 import com.theoriacodex.app.search.state.SearchRequestKind
 import com.theoriacodex.app.search.state.SearchRestorationUiState
 import com.theoriacodex.app.search.state.SearchStateChange
@@ -97,7 +98,7 @@ class SearchApplyScrollTest {
         setSearchContent(state, animatedOnly) { action ->
             when (action) {
                 SearchAction.ApplyDraft -> reduce(SearchStateChange.BeginRequest(
-                    ++request, SearchRequestKind.REPLACE, state.value.query.draft,
+                    SearchRequest(++request, SearchRequestKind.REPLACE, state.value.query.draft),
                 ))
                 is SearchAction.ScrollRestorationApplied -> {
                     acknowledgements += action.requestId
@@ -128,14 +129,15 @@ class SearchApplyScrollTest {
             compose.onNode(hasContentDescription("Expand Search") or hasTestTag("Search bar")).performClick()
             compose.onNodeWithTag("Search composer apply").performClick()
             compose.runOnIdle {
-                reduce(SearchStateChange.ReplaceResults(
-                    requestId = request,
-                    appliedQuery = state.value.query.applied,
-                    appliedQueryHash = "query",
-                    results = replacements,
+                val current = state.value
+                reduce(SearchStateChange.RootResult(request, SearchExecutionResult.Success(
+                    executionKey = checkNotNull(current.execution.request).executionKey,
+                    query = current.query.applied,
+                    sourceScope = current.query.appliedSourceScope,
+                    posts = replacements,
                     statuses = emptyList(),
-                    canLoadMore = false,
-                ))
+                    continuation = current.lastPage(),
+                )))
                 reduce(SearchStateChange.ScrollResetRequested)
             }
             compose.onNodeWithTag(searchCardTestTag(replacements.first().id)).assertIsDisplayed()
@@ -185,14 +187,24 @@ class SearchApplyScrollTest {
         card.assertIsDisplayed()
         val top = card.fetchSemanticsNode().boundsInRoot.top
         compose.runOnIdle {
-            val request = nextRequest()
-            reduce(SearchStateChange.BeginRequest(request, SearchRequestKind.PAGE, state.value.query.applied))
-            reduce(SearchStateChange.AppendPage(request, listOf(testPost(sourcePostId = "next")), emptyList(), false))
+            val shown = state.value
+            val request = SearchRequest(
+                nextRequest(), SearchRequestKind.PAGE, shown.query.applied, executionKey = shown.query.appliedQueryHash,
+            )
+            reduce(SearchStateChange.BeginRequest(request))
+            reduce(SearchStateChange.PageResult(request.id, SearchPageResult.Success(
+                request.executionKey, listOf(testPost(sourcePostId = "next")), emptyList(), shown.lastPage(),
+            )))
         }
         card.assertIsDisplayed()
         assertEquals(top, card.fetchSemanticsNode().boundsInRoot.top, 1f)
         compose.runOnIdle { assertEquals(2, acknowledgements.size) }
     }
+
+    /** A continuation with nothing after it, for the search this state shows. */
+    private fun SearchUiState.lastPage() = SearchContinuation(
+        query.appliedQueryHash, query.applied, query.appliedSourceScope, emptySet(), emptyList(), emptyMap(),
+    )
 
     private fun resetPosts(animatedOnly: Boolean): List<com.theoriacodex.domain.model.Post> {
         return (0..39).map { index ->

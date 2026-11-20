@@ -28,7 +28,7 @@ class SearchHistoryTest {
         val same = accepted(state, "query-29")
         assertEquals(state.searchHistory, same.searchHistory)
         assertTrue(same.canUndoSearch)
-        assertFalse(same.copy(execution = same.execution.copy(activeRequestId = 10)).canUndoSearch)
+        assertFalse(same.copy(execution = SearchExecutionUiState(SearchRequest(10, SearchRequestKind.REPLACE, same.query.applied))).canUndoSearch)
     }
 
     @Test fun `Undo consumes steps without adding a forward entry`() {

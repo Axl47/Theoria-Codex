@@ -2,6 +2,7 @@ package com.theoriacodex.app.search.state
 
 import com.theoriacodex.app.search.NhentaiLanguageFilter
 import com.theoriacodex.app.search.DateRangePreset
+import com.theoriacodex.app.search.SearchContinuation
 import com.theoriacodex.app.search.SearchTermLimitNotice
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.searchTermLimitNotices
@@ -22,6 +23,7 @@ import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunStatus
+import com.theoriacodex.domain.query.QueryHash
 import com.theoriacodex.domain.query.SearchTermLimit
 
 /** Platform-free state rendered by the future Search route. */
@@ -119,6 +121,8 @@ data class SearchQueryUiState(
     val nhentaiFullColorFilter: Boolean = false,
     /** Per-request term caps of the available sources that have one. */
     val sourceTermLimits: Map<SourceKey, SearchTermLimit> = emptyMap(),
+    /** The last search run in each mode, by [modeKey]; picking a mode starts from it. Multi-Search runs are not kept. */
+    val appliedByMode: Map<String, Query> = emptyMap(),
 ) {
     /** Sources the draft would search: the picked source, a temporary mix, or every Unified source. */
     val draftSources: Set<SourceKey>
@@ -151,14 +155,54 @@ data class SearchSuggestionsUiState(
 )
 
 data class SearchExecutionUiState(
-    val activeRequestId: Long? = null,
-    val activeKind: SearchRequestKind? = null,
-    val submittedQuery: Query? = null,
-    /** The active request already put results on screen, so it must not look like a blocking refresh. */
-    val showingPartialResults: Boolean = false,
+    /** The request in flight, if any. */
+    val request: SearchRequest? = null,
+    /** Where the results on screen continue from; absent while a new search is replacing them. */
+    val continuation: SearchContinuation? = null,
+    /** The one source the last page request retried, kept so Retry repeats it after a failure. */
+    val pageRetrySource: SourceKey? = null,
     val lastCompletedRequestId: Long? = null,
     val lastCancelledRequestId: Long? = null,
-)
+) {
+    val activeRequestId: Long? get() = request?.id
+    val activeKind: SearchRequestKind? get() = request?.kind
+
+    /** The active request's query, in the form its results carry once some are on screen. */
+    val submittedQuery: Query? get() = request?.let { it.shownQuery ?: it.query }
+
+    /** The active request already put results on screen, so it must not look like a blocking refresh. */
+    val showingPartialResults: Boolean get() = request?.shownQuery != null
+}
+
+/**
+ * One search or page request, from the moment it starts until it ends. [SearchStateReducer] decides
+ * everything about its ending from this record and the source's answer.
+ */
+data class SearchRequest(
+    val id: Long,
+    val kind: SearchRequestKind,
+    /** The query as asked. A source may answer with a normalized form, kept in [shownQuery]. */
+    val query: Query,
+    val sourceScope: SearchSourceScope = SearchSourceScope.fromQuery(query),
+    /** Names the search this request belongs to; an answer carrying another key is not this request's. */
+    val executionKey: String = QueryHash.from(query),
+    /** Set once this request has put results on screen while still running. */
+    val shownQuery: Query? = null,
+    val cachedFirstPage: CachedFirstPage = CachedFirstPage.NONE,
+) {
+    val isPage: Boolean get() = kind == SearchRequestKind.PAGE
+}
+
+/** Whether the last run's first page is on screen while its search reruns, and whether the user has moved in it. */
+enum class CachedFirstPage {
+    NONE,
+
+    /** Partial results would only make the page flicker, so they wait for the complete answer. */
+    SHOWN,
+
+    /** The user keeps their place: the shown posts stay put and new ones go below. */
+    SCROLLED,
+}
 
 enum class SearchRequestKind {
     INITIAL,
