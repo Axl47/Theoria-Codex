@@ -4,7 +4,9 @@ Detailed architecture, storage, release, and verification notes. See the [README
 
 ## Architecture
 
-- `app`: Android Compose shell, top-level navigation, viewer/search/codex/settings screens, source account flows, deep links, update UI, and app-level coordinators.
+- `app`: startup, the dependency container, the Compose shell and top-level navigation, the routes that wire each screen to the container, deep links, update UI, and App lock with the main Settings screen.
+- `feature-viewer`, `feature-search`, `feature-library` (Codex and Recents), `feature-discover` (For You and creator profiles), `feature-settings` (Settings, Sites, statistics, source accounts, backup): one screen family each. A feature may use the kits, `app-logic` and `core-*`, never another feature; a route in `app` passes in whatever one feature needs from another.
+- `ui-kit`, `media-kit`, `feed-kit`: code that several features share, lowest first. `ui-kit` holds theme, navigation types and common components; `media-kit` holds HTTP clients, image and video playback infrastructure, downloads and diagnostics; `feed-kit` holds the search coordinator, result cards and the pieces Viewer, Search and the other features all draw. A kit may use only kits before it.
 - `core-domain`: immutable domain models, source adapter contracts, query state, capability gates, unified search orchestration, and recommendation primitives.
 - `app-logic`: platform-free Search reducers, visibility filtering, feed/media policy, recommendation policy, and duration scheduling.
 - `core-data`: storage-independent repository contracts, shared policy, DataStore-backed Settings/UI restore, and the remaining bounded atomic-file repositories.
@@ -12,6 +14,8 @@ Detailed architecture, storage, release, and verification notes. See the [README
 - `core-sources`: real source integrations, HTTP infrastructure, source helper policy, media MIME helpers, and opt-in live provider health tooling.
 - `core-stubs`: fixture-backed source adapters and provider contract tests for deterministic development and CI coverage.
 - `baseline-profile`: connected cold-start and top-level-navigation profile generation for the optimized release app.
+
+Kotlin package names predate the module split and do not name the module: `com.theoriacodex.app.viewer`, for example, spans `media-kit`, `feed-kit` and `feature-viewer`. `scripts/check.sh` enforces the layering (`module_layering`) and that every kit and feature is in each list of checked modules (`module_registration`).
 
 `TheoriaApplication` creates one asynchronous `TheoriaAppContainer` in `app/src/main/java/com/theoriacodex/app/di/TheoriaAppContainer.kt`. That container owns repositories, source clients, credentials, updates, coordinators, and cross-repository workflows; Compose only resolves the ready container.
 
@@ -139,15 +143,14 @@ the merged manifest and R8 mapping. Personal connected/install/uninstall tasks a
 Profile plugin's two derived personal variants are disabled. Production signing and installation
 remain separate from automated device-test lanes.
 
-From the project root, run the deterministic test lane:
+From the project root, run the deterministic test lane. `scripts/check.sh` holds the task lists for every module, so use it instead of naming Gradle tasks by hand:
 
 ```sh
-./gradlew :app:testDebugUnitTest :app-logic:test :core-domain:test :core-data:test \
-  :core-data-android:testDebugUnitTest :core-stubs:test :core-sources:test
+scripts/check.sh --part tests   # unit tests of every module, coverage, changed-line coverage
+scripts/check.sh --part lint    # Android lint of every Android module
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 python3 -m unittest discover -s deploy/libretranslate -p 'test_*.py'
 ./gradlew :app:compileDebugAndroidTestKotlin :core-data-android:compileDebugAndroidTestKotlin
-./gradlew :app:lint :core-data-android:lintDebug --offline
 ```
 
 Run the maintainability lane:
@@ -156,9 +159,7 @@ Run the maintainability lane:
 npm ci
 npm run audit:quality
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'
-./gradlew :app:detektDebug :app-logic:detektMain :core-data-android:detektDebug \
-  :core-domain:detektMain :core-data:detektMain \
-  :core-sources:detektMain :core-stubs:detektMain
+scripts/check.sh --part static  # Detekt of every module, duplicate code, configuration cache
 ./gradlew :koverXmlReportQuality :koverVerifyQuality
 ```
 
