@@ -4,7 +4,7 @@ import com.theoriacodex.data.storage.AsynchronousStore
 import com.theoriacodex.data.storage.DurableStoreStatus
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.JsonDataStore
-import com.theoriacodex.data.storage.openJsonDataStore
+import com.theoriacodex.data.storage.openDecodedJsonDataStore
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
@@ -19,7 +19,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -403,7 +402,7 @@ class DataStoreStatisticsRepository(
     private val clock: Clock = Clock.systemDefaultZone(),
 ) : StatisticsRepository, AsynchronousStore {
     private val storeFile = baseDirectory.resolve(DATASTORE_STATISTICS_FILE_NAME)
-    private val dataStore: JsonDataStore<StatisticsDataStoreFile> = openJsonDataStore(
+    private val dataStore: JsonDataStore<LifetimeStatistics> = openDecodedJsonDataStore(
         file = storeFile,
         logicalStore = "Statistics",
         schemaVersion = STATISTICS_DATASTORE_SCHEMA_VERSION,
@@ -412,13 +411,15 @@ class DataStoreStatisticsRepository(
         scope = scope,
         validate = StatisticsDataStoreFile::validate,
         recoveries = recoveryRegistry,
+        decode = StatisticsDataStoreFile::toDomain,
+        encode = StatisticsDataStoreFile::fromDomain,
     )
     override val storageStatus: StateFlow<DurableStoreStatus> = dataStore.storageStatus
 
     override suspend fun awaitReady() = dataStore.awaitReady()
 
     override fun observeStatistics(): Flow<LifetimeStatistics> {
-        return dataStore.data.map(StatisticsDataStoreFile::toDomain).distinctUntilChanged()
+        return dataStore.data.distinctUntilChanged()
     }
 
     override suspend fun addCodexUsage(target: CodexUsageTarget, durationMs: Long) = mutate {
@@ -469,9 +470,9 @@ class DataStoreStatisticsRepository(
     }
 
     private suspend fun mutate(transform: (LifetimeStatistics) -> LifetimeStatistics) {
-        dataStore.update { stored ->
-            val next = transform(stored.toDomain())
-            StatisticsDataStoreFile.fromDomain(next.copy(history = next.history.retainedHistory(LocalDate.now(clock))))
+        dataStore.update { current ->
+            val next = transform(current)
+            next.copy(history = next.history.retainedHistory(LocalDate.now(clock)))
         }
     }
 }
