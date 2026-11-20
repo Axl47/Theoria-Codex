@@ -36,7 +36,6 @@ class DurationDemandSchedulerTest {
         scheduler.submit(demand("search", key, DurationDemandPriority.ACTIVE_FILTER))
 
         assertEquals(1, scheduler.queuedKeyCount())
-        assertEquals(2, scheduler.queuedDemandCount())
         val work = requireNotNull(
             scheduler.takeNext(DurationExecutionGate(lifecycleStarted = true, scrollIdle = true)),
         )
@@ -53,7 +52,6 @@ class DurationDemandSchedulerTest {
 
         scheduler.removeIdentity("search")
         assertTrue(scheduler.contains(shared))
-        assertEquals(listOf("creator"), scheduler.demandsFor(shared).map(DurationDemand::identity))
 
         scheduler.removeIdentity("creator")
         assertFalse(scheduler.contains(shared))
@@ -140,13 +138,6 @@ class DurationDemandSchedulerTest {
             identity = identity,
             key = key,
             priority = priority,
-            reason = when (priority) {
-                DurationDemandPriority.ACTIVE_FILTER -> DurationDemandReason.FILTER
-                DurationDemandPriority.VISIBLE,
-                DurationDemandPriority.NEAR_VIEWPORT,
-                -> DurationDemandReason.VIEWPORT
-                DurationDemandPriority.BACKGROUND_IDLE -> DurationDemandReason.APPEND
-            },
         )
     }
 

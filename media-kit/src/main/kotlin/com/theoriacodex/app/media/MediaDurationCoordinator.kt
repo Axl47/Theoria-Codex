@@ -27,61 +27,42 @@ fun interface MediaDurationAcquirer {
     fun settleWithoutWork(post: Post): MediaDurationState? = null
 }
 
-interface MediaDurationTraceRecorder {
-    fun demand()
+/** Duration-pipeline milestones, recorded as trace sections the macrobenchmark counts. */
+sealed interface DurationTraceEvent {
+    data object Demand : DurationTraceEvent
+    data object ProviderResolve : DurationTraceEvent
+    data object Probe : DurationTraceEvent
+    data class WorkloadStarted(val cookie: Int) : DurationTraceEvent
+    data class WorkloadFinished(val cookie: Int) : DurationTraceEvent
+    data object Publication : DurationTraceEvent
+    data object Settled : DurationTraceEvent
+}
 
-    fun providerResolve()
-
-    fun probe()
-
-    fun workloadStarted(cookie: Int)
-
-    fun workloadFinished(cookie: Int)
-
-    fun publication()
-
-    fun settled()
+fun interface MediaDurationTraceRecorder {
+    fun record(event: DurationTraceEvent)
 }
 
 object AndroidMediaDurationTraceRecorder : MediaDurationTraceRecorder {
-    override fun demand() = recordEvent(TRACE_DURATION_DEMAND)
-
-    override fun providerResolve() = recordEvent(TRACE_DURATION_RESOLVE)
-
-    override fun probe() = recordEvent(TRACE_DURATION_PROBE)
-
-    override fun workloadStarted(cookie: Int) {
-        Trace.beginAsyncSection(TRACE_DURATION_WORKLOAD, cookie)
+    override fun record(event: DurationTraceEvent) {
+        when (event) {
+            DurationTraceEvent.Demand -> recordSection(TRACE_DURATION_DEMAND)
+            DurationTraceEvent.ProviderResolve -> recordSection(TRACE_DURATION_RESOLVE)
+            DurationTraceEvent.Probe -> recordSection(TRACE_DURATION_PROBE)
+            is DurationTraceEvent.WorkloadStarted -> Trace.beginAsyncSection(TRACE_DURATION_WORKLOAD, event.cookie)
+            is DurationTraceEvent.WorkloadFinished -> Trace.endAsyncSection(TRACE_DURATION_WORKLOAD, event.cookie)
+            DurationTraceEvent.Publication -> recordSection(TRACE_DURATION_PUBLISH)
+            DurationTraceEvent.Settled -> recordSection(TRACE_DURATION_SETTLED)
+        }
     }
 
-    override fun workloadFinished(cookie: Int) {
-        Trace.endAsyncSection(TRACE_DURATION_WORKLOAD, cookie)
-    }
-
-    override fun publication() = recordEvent(TRACE_DURATION_PUBLISH)
-
-    override fun settled() = recordEvent(TRACE_DURATION_SETTLED)
-
-    private fun recordEvent(name: String) {
+    private fun recordSection(name: String) {
         Trace.beginSection(name)
         Trace.endSection()
     }
 }
 
 object NoOpMediaDurationTraceRecorder : MediaDurationTraceRecorder {
-    override fun demand() = Unit
-
-    override fun providerResolve() = Unit
-
-    override fun probe() = Unit
-
-    override fun workloadStarted(cookie: Int) = Unit
-
-    override fun workloadFinished(cookie: Int) = Unit
-
-    override fun publication() = Unit
-
-    override fun settled() = Unit
+    override fun record(event: DurationTraceEvent) = Unit
 }
 
 /**
@@ -123,13 +104,13 @@ class MediaDurationCoordinator(
         require(maxRetainedStates > 0) { "Retained duration-state bound must be positive" }
     }
 
-    suspend fun submit(post: Post, demand: DurationDemand): DurationDemandAdmission = withContext(coordinationContext) {
+    suspend fun submit(post: Post, demand: DurationDemand) = withContext(coordinationContext) {
         submitInContext(post, demand)
     }
 
-    private suspend fun submitInContext(post: Post, demand: DurationDemand): DurationDemandAdmission {
+    private suspend fun submitInContext(post: Post, demand: DurationDemand) {
         require(demand.key.postId == post.id) { "Duration demand key must match its post" }
-        traceRecorder.demand()
+        traceRecorder.record(DurationTraceEvent.Demand)
 
         post.durationMs?.takeIf { durationMs -> durationMs > 0L }?.let { durationMs ->
             publishKnown(
@@ -137,7 +118,7 @@ class MediaDurationCoordinator(
                 durationMs = durationMs,
                 provenance = MediaDurationProvenance.PROVIDER,
             )
-            return DurationDemandAdmission.DECIDED
+            return
         }
 
         val shouldLoadStoredState = lock.withLock {
@@ -153,14 +134,14 @@ class MediaDurationCoordinator(
         post: Post,
         demand: DurationDemand,
         storedState: MediaDurationState?,
-    ): DurationDemandAdmission {
+    ) {
         when (val current = retainedStates[demand.key]) {
             is MediaDurationState.Known,
             is MediaDurationState.Unsupported,
-            -> return DurationDemandAdmission.DECIDED
+            -> return
 
             is MediaDurationState.RetryableFailure -> {
-                if (clock() < current.retryAtEpochMs) return DurationDemandAdmission.DECIDED
+                if (clock() < current.retryAtEpochMs) return
                 removeStateLocked(demand.key)
             }
 
@@ -172,19 +153,19 @@ class MediaDurationCoordinator(
         active[demand.key]?.let { work ->
             work.demands[demand.identity] = demand
             work.priority = work.demands.values.minOf(DurationDemand::priority)
-            return DurationDemandAdmission.SCHEDULED
+            return
         }
 
         if (storedState != null) {
             putStateLocked(demand.key, storedState)
-            traceRecorder.publication()
-            return DurationDemandAdmission.DECIDED
+            traceRecorder.record(DurationTraceEvent.Publication)
+            return
         }
 
         acquirer.settleWithoutWork(post)?.let { settled ->
             putStateLocked(demand.key, settled)
-            traceRecorder.publication()
-            return DurationDemandAdmission.DECIDED
+            traceRecorder.record(DurationTraceEvent.Publication)
+            return
         }
 
         posts[demand.key] = post
@@ -192,7 +173,7 @@ class MediaDurationCoordinator(
         if (submission == DurationDemandSubmission.Rejected) {
             deferredDemands.put(listOf(demand))
             hadOutstandingWork = true
-            return DurationDemandAdmission.DEFERRED
+            return
         }
         val accepted = submission as DurationDemandSubmission.Accepted
         deferEvictedDemandsLocked(accepted)
@@ -201,7 +182,6 @@ class MediaDurationCoordinator(
         hadOutstandingWork = true
         preemptBackgroundForLocked(demand.priority, demand.key.postId.source)
         pumpLocked()
-        return DurationDemandAdmission.SCHEDULED
     }
 
     suspend fun releaseIdentity(identity: String) = releaseIdentities(setOf(identity))
@@ -246,10 +226,6 @@ class MediaDurationCoordinator(
             }
             pumpLocked()
         }
-    }
-
-    suspend fun updateEnvironment(lifecycleStarted: Boolean, scrollIdle: Boolean) {
-        updateEnvironment(LEGACY_ENVIRONMENT_IDENTITY, lifecycleStarted, scrollIdle)
     }
 
     suspend fun releaseEnvironment(identity: String) = withContext(coordinationContext) {
@@ -298,7 +274,7 @@ class MediaDurationCoordinator(
         active[key]?.let { work -> cancelActiveLocked(work, requeue = false) }
         posts.remove(key)
         putStateLocked(key, state)
-        traceRecorder.publication()
+        traceRecorder.record(DurationTraceEvent.Publication)
         pumpLocked()
         recordSettledIfNeededLocked()
         return true
@@ -372,7 +348,7 @@ class MediaDurationCoordinator(
             job = job,
         )
         active[scheduled.key] = work
-        traceRecorder.workloadStarted(cookie)
+        traceRecorder.record(DurationTraceEvent.WorkloadStarted(cookie))
         job.start()
     }
 
@@ -380,10 +356,10 @@ class MediaDurationCoordinator(
         val completedState = lock.withLock {
             if (active[work.key] !== work) return@withLock null
             active.remove(work.key)
-            traceRecorder.workloadFinished(work.traceCookie)
+            traceRecorder.record(DurationTraceEvent.WorkloadFinished(work.traceCookie))
             posts.remove(work.key)
             putStateLocked(work.key, result)
-            traceRecorder.publication()
+            traceRecorder.record(DurationTraceEvent.Publication)
             pumpLocked()
             result
         }
@@ -429,7 +405,7 @@ class MediaDurationCoordinator(
 
     private fun cancelActiveLocked(work: ActiveWork, requeue: Boolean) {
         if (active.remove(work.key) !== work) return
-        traceRecorder.workloadFinished(work.traceCookie)
+        traceRecorder.record(DurationTraceEvent.WorkloadFinished(work.traceCookie))
         if (requeue) {
             var retained = false
             work.demands.values.forEach { demand ->
@@ -489,7 +465,7 @@ class MediaDurationCoordinator(
     private fun recordSettledIfNeededLocked() {
         if (hadOutstandingWork && active.isEmpty() && scheduler.queuedKeyCount() == 0 && deferredDemands.isEmpty()) {
             hadOutstandingWork = false
-            traceRecorder.settled()
+            traceRecorder.record(DurationTraceEvent.Settled)
         }
     }
 
@@ -515,7 +491,6 @@ class MediaDurationCoordinator(
         const val DEFAULT_MAX_QUEUED_KEYS = 512
         const val DEFAULT_MAX_CONCURRENT_WORK = 8
         const val DEFAULT_MAX_RETAINED_STATES = 2_048
-        const val LEGACY_ENVIRONMENT_IDENTITY = "legacy-duration-environment"
     }
 }
 

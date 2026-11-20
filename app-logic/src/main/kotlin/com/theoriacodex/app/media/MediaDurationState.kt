@@ -105,18 +105,10 @@ enum class DurationDemandPriority {
     BACKGROUND_IDLE,
 }
 
-enum class DurationDemandReason {
-    FILTER,
-    VIEWPORT,
-    APPEND,
-    PLAYER,
-}
-
 data class DurationDemand(
     val identity: String,
     val key: MediaDurationKey,
     val priority: DurationDemandPriority,
-    val reason: DurationDemandReason,
 ) {
     init {
         require(identity.isNotBlank()) { "Demand identity must not be blank" }

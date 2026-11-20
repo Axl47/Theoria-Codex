@@ -93,7 +93,7 @@ class MediaDurationAcquisitionEngine(
     }
 
     private suspend fun acquireFromProvider(post: Post): MediaDurationState {
-        traceRecorder.providerResolve()
+        traceRecorder.record(DurationTraceEvent.ProviderResolve)
         val result = runCatchingPreservingCancellation { resolveProviderDuration(post) }
             .getOrElse { error ->
                 val throttled = (error as? SourceAdapterException)?.reason == SourceFailureReason.RATE_LIMITED
@@ -124,7 +124,7 @@ class MediaDurationAcquisitionEngine(
     }
 
     private suspend fun probe(post: Post): MediaDurationState {
-        traceRecorder.probe()
+        traceRecorder.record(DurationTraceEvent.Probe)
         return runCatchingPreservingCancellation { probeDuration(post) }
             .getOrElse { retryable(MediaDurationFailureReason.TRANSPORT_FAILURE) }
     }

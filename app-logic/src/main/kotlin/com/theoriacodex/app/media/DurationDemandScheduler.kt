@@ -109,15 +109,6 @@ class DurationDemandScheduler(
 
     fun queuedKeyCount(): Int = entries.size
 
-    fun queuedDemandCount(): Int = entries.values.sumOf { entry -> entry.tickets.size }
-
-    fun demandsFor(key: MediaDurationKey): List<DurationDemand> {
-        return entries[key]?.tickets?.values
-            ?.sortedBy(Ticket::sequence)
-            ?.map(Ticket::demand)
-            .orEmpty()
-    }
-
     private fun nextSequence(): Long {
         sequence += 1L
         return sequence

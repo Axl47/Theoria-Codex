@@ -246,14 +246,12 @@ class MediaDurationRouteViewModel(
             desired = if (backgroundEnabled) candidatesByKey.keys else emptySet(),
             lane = DemandLane.BACKGROUND,
             priority = DurationDemandPriority.BACKGROUND_IDLE,
-            reason = DurationDemandReason.APPEND,
         )
         filterDemandKeys = reconcileDemandLane(
             current = filterDemandKeys,
             desired = if (filterActive) candidatesByKey.keys else emptySet(),
             lane = DemandLane.FILTER,
             priority = DurationDemandPriority.ACTIVE_FILTER,
-            reason = DurationDemandReason.FILTER,
         )
         visibleDemandKeys = reconcileDemandLane(
             current = visibleDemandKeys,
@@ -266,7 +264,6 @@ class MediaDurationRouteViewModel(
             },
             lane = DemandLane.VISIBLE,
             priority = DurationDemandPriority.VISIBLE,
-            reason = DurationDemandReason.VIEWPORT,
         )
         nearbyDemandKeys = reconcileDemandLane(
             current = nearbyDemandKeys,
@@ -275,7 +272,6 @@ class MediaDurationRouteViewModel(
             },
             lane = DemandLane.NEARBY,
             priority = DurationDemandPriority.NEAR_VIEWPORT,
-            reason = DurationDemandReason.VIEWPORT,
         )
     }
 
@@ -284,14 +280,13 @@ class MediaDurationRouteViewModel(
         desired: Set<MediaDurationKey>,
         lane: DemandLane,
         priority: DurationDemandPriority,
-        reason: DurationDemandReason,
     ): Set<MediaDurationKey> {
         val removedIdentities = (current - desired)
             .mapTo(mutableSetOf()) { key -> demandIdentity(lane, key) }
         if (removedIdentities.isNotEmpty()) coordinator.releaseIdentities(removedIdentities)
         (desired - current).forEach { key ->
             val post = candidatesByKey[key] ?: return@forEach
-            submit(post, key, demandIdentity(lane, key), priority, reason)
+            submit(post, key, demandIdentity(lane, key), priority)
         }
         // The coordinator retains deferred demand and refills its bounded queue independently.
         return desired
@@ -317,7 +312,6 @@ class MediaDurationRouteViewModel(
             key = key,
             identity = demandIdentity(DemandLane.VISIBLE, key),
             priority = DurationDemandPriority.VISIBLE,
-            reason = DurationDemandReason.VIEWPORT,
         )
         visibleDemandKeys = visibleDemandKeys + key
     }
@@ -338,7 +332,6 @@ class MediaDurationRouteViewModel(
         key: MediaDurationKey,
         identity: String,
         priority: DurationDemandPriority,
-        reason: DurationDemandReason,
     ) {
         coordinator.submit(
             post = post,
@@ -346,7 +339,6 @@ class MediaDurationRouteViewModel(
                 identity = identity,
                 key = key,
                 priority = priority,
-                reason = reason,
             ),
         )
     }
