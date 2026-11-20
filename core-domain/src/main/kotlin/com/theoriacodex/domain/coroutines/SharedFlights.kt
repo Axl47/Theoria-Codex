@@ -23,6 +23,9 @@ class SharedFlights<K : Any, V> {
     private val lock = Any()
     private val flights = mutableMapOf<K, Flight<V>>()
 
+    /** How many keys have a request in flight now; caches report it in their diagnostics snapshots. */
+    val inFlightCount: Int get() = synchronized(lock) { flights.size }
+
     /** Runs [fetch] unless a request for [key] is already in flight, then waits for that request's result. */
     suspend fun share(key: K, fetch: suspend () -> V): V {
         // The request runs where the first caller's dispatcher does, but under its own job, so that caller

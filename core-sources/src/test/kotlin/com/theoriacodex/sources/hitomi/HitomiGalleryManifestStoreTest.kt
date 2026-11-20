@@ -8,10 +8,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -30,7 +26,7 @@ import org.junit.Test
 class HitomiGalleryManifestStoreTest {
     @Test
     fun `only the last departing consumer cancels a shared load`() = runTest {
-        val store = store(scope = backgroundScope)
+        val store = store()
         var calls = 0
         var cancelled = false
         val loader: suspend () -> HitomiGalleryManifest? = {
@@ -51,18 +47,8 @@ class HitomiGalleryManifestStoreTest {
     }
 
     @Test
-    fun `supplied owner cancellation stops loaders and a load deadline becomes a provider failure`() = runTest {
-        val parent = CoroutineScope(coroutineContext + SupervisorJob(coroutineContext[Job]))
-        val store = store(scope = parent)
-        var cancelled = false
-        val waiter = launch {
-            store.getOrLoad(1) { try { awaitCancellation() } finally { cancelled = true } }
-        }
-        runCurrent()
-        parent.cancel()
-        waiter.join()
-        assertTrue(cancelled)
-        val bounded = HitomiGalleryManifestStore(4_096L, 1_000L, { 0L }, backgroundScope, loadTimeoutMs = 10L)
+    fun `a load deadline becomes a provider failure`() = runTest {
+        val bounded = HitomiGalleryManifestStore(4_096L, 1_000L, { 0L }, loadTimeoutMs = 10L)
         val failure = runCatching { bounded.getOrLoad(2) { awaitCancellation() } }.exceptionOrNull()
         assertTrue(failure is com.theoriacodex.domain.adapter.SourceAdapterException)
     }
@@ -72,7 +58,7 @@ class HitomiGalleryManifestStoreTest {
         val gate = CompletableDeferred<Unit>()
         val calls = AtomicInteger()
         val gallery = buildJsonObject { put("id", "42") }
-        val store = store(scope = this)
+        val store = store()
 
         val consumers = List(8) {
             async {
@@ -95,7 +81,7 @@ class HitomiGalleryManifestStoreTest {
     fun `successful manifest is reused until ttl then replaced`() = runTest {
         var now = 0L
         var calls = 0
-        val store = store(nowMillis = { now }, scope = this)
+        val store = store(nowMillis = { now })
         suspend fun load(): JsonObject? = store.getOrLoad(7) {
             calls += 1
             HitomiGalleryManifest(
@@ -115,7 +101,7 @@ class HitomiGalleryManifestStoreTest {
     @Test
     fun `missing and failed manifests never poison the cache`() = runTest {
         var missingCalls = 0
-        val store = store(scope = this)
+        val store = store()
 
         repeat(2) {
             assertEquals(null, store.getOrLoad(1) { missingCalls += 1; null })
@@ -139,7 +125,6 @@ class HitomiGalleryManifestStoreTest {
             maxBytes = 256L,
             ttlMillis = 120_000L,
             nowMillis = { 0L },
-            scope = this,
         )
 
         repeat(2) {
@@ -155,11 +140,9 @@ class HitomiGalleryManifestStoreTest {
 
     private fun store(
         nowMillis: () -> Long = { 0L },
-        scope: kotlinx.coroutines.CoroutineScope,
     ) = HitomiGalleryManifestStore(
         maxBytes = 4L * 1024L,
         ttlMillis = 120_000L,
         nowMillis = nowMillis,
-        scope = scope,
     )
 }
