@@ -1,4 +1,4 @@
-package com.theoriacodex.app.source
+package com.theoriacodex.domain.coroutines
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
