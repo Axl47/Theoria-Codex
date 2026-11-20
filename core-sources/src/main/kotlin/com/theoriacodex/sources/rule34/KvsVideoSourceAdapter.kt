@@ -27,14 +27,62 @@ import org.jsoup.nodes.Document
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
 
-abstract class AbstractRule34KvsVideoSourceAdapter(
+/** How a KVS site links the next page of search results. */
+enum class KvsPaging {
+    /** The next block's address sits in a `data-block-next` attribute. */
+    DATA_BLOCK_NEXT,
+
+    /** The pager's next link carries `data-parameters` for the site's async block endpoint. */
+    ASYNC_PAGER,
+}
+
+/** Where a KVS site's newest posts come from, for a search with no tags. */
+enum class KvsLatest {
+    RSS,
+
+    /** The latest-updates listing, for a site whose RSS links thumbnails that answer 404. */
+    LISTING,
+}
+
+/** A Kernel Video Sharing site: everything that differs between the KVS sources. */
+enum class KvsVideoSite(
+    val source: SourceKey,
+    val baseUrl: String,
+    /** The anchors of a search page's result cards. */
+    val cardSelector: String,
+    /** Whether a card without a `data-preview` element may carry its preview clip on the thumbnail image. */
+    val imgPreviewFallback: Boolean,
+    val paging: KvsPaging,
+    val latest: KvsLatest,
+) {
+    RULE34VIDEO(
+        source = SourceKey.RULE34VIDEO,
+        baseUrl = "https://rule34video.com",
+        cardSelector = "div.item.thumb a.th[href]",
+        imgPreviewFallback = false,
+        paging = KvsPaging.ASYNC_PAGER,
+        latest = KvsLatest.RSS,
+    ),
+    RULE34GEN(
+        source = SourceKey.RULE34GEN,
+        baseUrl = "https://rule34gen.com",
+        cardSelector = "div.item.thumb a.th[href], div.cards__item a.card[href]",
+        imgPreviewFallback = true,
+        paging = KvsPaging.DATA_BLOCK_NEXT,
+        latest = KvsLatest.LISTING,
+    ),
+}
+
+/** Searches, resolves and suggests tags on one [KvsVideoSite]. */
+class KvsVideoSourceAdapter(
+    private val site: KvsVideoSite,
     private val httpClient: SourceHttpClient,
     private val gson: Gson = Gson(),
     /** Where entry points run; tests pass EmptyCoroutineContext to keep virtual time. Production never sets it. */
     private val callContext: CoroutineContext = Dispatchers.Default,
 ) : SourceAdapter, SearchMetadataSourceAdapter, TagCountLookupSourceAdapter {
-    abstract override val sourceKey: SourceKey
-    protected abstract val baseUrl: String
+    override val sourceKey: SourceKey = site.source
+    private val baseUrl: String = site.baseUrl
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
         supportsSortNewest = true,
@@ -48,7 +96,7 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
         val queryText = compileRule34VideoSearchText(query)
         if (queryText.isBlank()) return@sourceCall latestPage()
 
-        val url = pageToken ?: initialSearchUrl(queryText)
+        val url = pageToken ?: searchUrl(queryText)
         val body = request(url)
         val document = parseHtml(body, baseUrl)
         canonicalPostPage(
@@ -102,7 +150,7 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
 
     override suspend fun resolvePost(id: PostId): Post? = sourceCall(callContext) {
         if (id.source != sourceKey) return@sourceCall null
-        val body = request("$baseUrl/video/${id.sourcePostId}/x/", allowNotFound = true)
+        val body = request("$baseUrl/video/${id.sourcePostId}/x/")
         if (body.isBlank()) return@sourceCall null
         val document = parseHtml(body, baseUrl)
         val config = parseRule34KvsConfig(document)
@@ -157,19 +205,56 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
     }
 
     /** The newest posts, for a search with no tags. */
-    protected open suspend fun latestPage(): Page<Post> = parseLatestRss(request("$baseUrl/rss/"))
+    private suspend fun latestPage(): Page<Post> = when (site.latest) {
+        KvsLatest.RSS -> parseLatestRss(request("$baseUrl/rss/"))
+        KvsLatest.LISTING -> canonicalPostPage(
+            items = parseSearchPage(parseHtml(request("$baseUrl/latest-updates/"), baseUrl)),
+            nextPageToken = null,
+        )
+    }
 
-    protected abstract fun initialSearchUrl(queryText: String): String
+    private fun searchUrl(queryText: String): String = "$baseUrl/search/${encodePathSegment(queryText)}/"
 
-    protected abstract fun nextPageToken(document: Document, queryText: String): String?
+    private fun nextPageToken(document: Document, queryText: String): String? = when (site.paging) {
+        KvsPaging.DATA_BLOCK_NEXT ->
+            document.selectFirst("[data-block-next]")?.attr("data-block-next")?.trim()?.takeIf(String::isNotBlank)
+        KvsPaging.ASYNC_PAGER -> asyncPagerToken(document, queryText)
+    }
 
-    protected abstract fun parseSearchPage(document: Document): List<Post>
+    private fun asyncPagerToken(document: Document, queryText: String): String? {
+        val nextLink = document.selectFirst("div.pager.next a[data-parameters]") ?: return null
+        val parameters = decodeDataParameters(nextLink.attr("data-parameters")).takeIf(String::isNotBlank) ?: return null
+        val blockId = nextLink.attr("data-block-id").ifBlank { "custom_list_videos_videos_list_search" }
+        return "${searchUrl(queryText)}?mode=async&function=get_block&block_id=$blockId&$parameters"
+    }
 
-    protected fun parseLatestRss(body: String): Page<Post> {
+    private fun parseSearchPage(document: Document): List<Post> = document
+        .select(site.cardSelector)
+        .mapNotNull { anchor ->
+            val pageUrl = anchor.attr("abs:href").ifBlank { anchor.attr("href") }
+            val sourcePostId = KVS_VIDEO_ID_REGEX.find(pageUrl)?.groupValues?.getOrNull(1) ?: return@mapNotNull null
+            val image = anchor.selectFirst("img")
+            val previewVideoUrl = anchor.selectFirst("div[data-preview]")?.attr("data-preview")?.trim()?.ifBlank { null }
+                ?: image?.attr("data-preview")?.ifBlank { null }?.takeIf { site.imgPreviewFallback }
+            searchPost(
+                pageUrl = pageUrl,
+                sourcePostId = sourcePostId,
+                title = anchor.attr("title").trim().ifBlank { null },
+                previewUrl = image?.kvsThumbnailUrl(),
+                previewVideoUrl = previewVideoUrl,
+                durationMs = parseRule34DurationMs(
+                    anchor.selectFirst(".duration, .time, time, [data-duration]")?.let { element ->
+                        element.attr("data-duration").ifBlank { element.text() }
+                    }
+                ),
+            )
+        }
+
+    private fun parseLatestRss(body: String): Page<Post> {
         val document = parseXml(body, baseUrl)
         val items = document.select("channel > item").mapNotNull { item ->
             val link = item.selectFirst("link")?.text()?.trim().orEmpty()
-            val sourcePostId = RULE34_VIDEO_ID_REGEX.find(link)?.groupValues?.getOrNull(1) ?: return@mapNotNull null
+            val sourcePostId = KVS_VIDEO_ID_REGEX.find(link)?.groupValues?.getOrNull(1) ?: return@mapNotNull null
             val descriptionDoc = parseHtml(item.selectFirst("description")?.text().orEmpty(), baseUrl)
             val imageUrl = descriptionDoc.selectFirst("img")?.attr("abs:src").orEmpty()
             val title = item.selectFirst("title")?.text()?.trim()?.takeIf(String::isNotBlank)
@@ -190,7 +275,7 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
         return canonicalPostPage(items = items, nextPageToken = null)
     }
 
-    protected fun searchPost(
+    private fun searchPost(
         pageUrl: String,
         sourcePostId: String,
         title: String?,
@@ -217,20 +302,35 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
         )
     }
 
-    protected suspend fun request(url: String, allowNotFound: Boolean = false): String {
+    /** A page's body; a missing page is empty. */
+    private suspend fun request(url: String): String {
         val response = sourceRequest(baseUrl) {
             httpClient.get(
                 url = url,
                 headers = RULE34_BROWSER_HEADERS + ("Referer" to "$baseUrl/"),
             )
         }
-
-        if (allowNotFound && response.statusCode == 404) {
-            return ""
-        }
         if (response.statusCode == 404) return ""
         return response.requireSuccess("$baseUrl request failed").body
     }
 }
 
-private val RULE34_VIDEO_ID_REGEX = Regex("""/video/(\d+)/""")
+/** Turns a pager's `key:value;a+b:value` parameters into a query string, giving joined keys the same value. */
+private fun decodeDataParameters(raw: String): String {
+    return raw
+        .split(';')
+        .filter { it.isNotBlank() }
+        .joinToString("&") { segment ->
+            val key = segment.substringBefore(':').trim()
+            val value = segment.substringAfter(':', "").trim()
+            if ('+' in key) {
+                key.split('+').joinToString("&") { nestedKey ->
+                    "${nestedKey.trim()}=${encodePathSegment(value)}"
+                }
+            } else {
+                "$key=${encodePathSegment(value)}"
+            }
+        }
+}
+
+private val KVS_VIDEO_ID_REGEX = Regex("""/video/(\d+)/""")

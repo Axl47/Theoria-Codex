@@ -18,7 +18,7 @@ class Rule34GenSourceAdapterTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(statusCode = 200, body = SAMPLE_RULE34GEN_SEARCH_HTML)
         }
-        val adapter = Rule34GenSourceAdapter(httpClient = httpClient)
+        val adapter = KvsVideoSourceAdapter(KvsVideoSite.RULE34GEN, httpClient = httpClient)
 
         val page = adapter.search(sampleQuery(), pageToken = null)
 
@@ -33,7 +33,7 @@ class Rule34GenSourceAdapterTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(statusCode = 200, body = SAMPLE_RULE34GEN_LAZY_LISTING_HTML)
         }
-        val adapter = Rule34GenSourceAdapter(httpClient = httpClient)
+        val adapter = KvsVideoSourceAdapter(KvsVideoSite.RULE34GEN, httpClient = httpClient)
 
         val page = adapter.search(sampleQuery(tags = emptyList()), pageToken = null)
 
@@ -49,7 +49,7 @@ class Rule34GenSourceAdapterTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(statusCode = 200, body = SAMPLE_RULE34GEN_POST_HTML)
         }
-        val adapter = Rule34GenSourceAdapter(httpClient = httpClient)
+        val adapter = KvsVideoSourceAdapter(KvsVideoSite.RULE34GEN, httpClient = httpClient)
 
         val post = adapter.resolvePost(PostId(source = SourceKey.RULE34GEN, sourcePostId = "8255"))
 

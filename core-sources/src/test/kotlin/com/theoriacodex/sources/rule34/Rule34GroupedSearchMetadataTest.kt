@@ -93,11 +93,11 @@ class Rule34GroupedSearchMetadataTest {
 
     // The orchestrator's deadlines run on the virtual clock and hydration runs two posts at once, so the
     // adapter stays on the test dispatcher too.
-    private fun adapter(http: SourceHttpClient, gen: Boolean): AbstractRule34KvsVideoSourceAdapter =
+    private fun adapter(http: SourceHttpClient, gen: Boolean): KvsVideoSourceAdapter =
         if (gen) {
-            Rule34GenSourceAdapter(http, callContext = EmptyCoroutineContext)
+            KvsVideoSourceAdapter(KvsVideoSite.RULE34GEN, http, callContext = EmptyCoroutineContext)
         } else {
-            Rule34VideoSourceAdapter(http, callContext = EmptyCoroutineContext)
+            KvsVideoSourceAdapter(KvsVideoSite.RULE34VIDEO, http, callContext = EmptyCoroutineContext)
         }
 
     private fun plainQuery() = Query(

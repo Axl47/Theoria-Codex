@@ -31,7 +31,7 @@ class Rule34GenProviderJourneyTest {
             """.trimIndent(), requiredHeaders = headers)
             enqueueGet("$BASE/video/44/x/", statusCode = 404, requiredHeaders = headers)
         }
-        val adapter = Rule34GenSourceAdapter(http)
+        val adapter = KvsVideoSourceAdapter(KvsVideoSite.RULE34GEN, http)
         val query = Query(QueryMode.Source(SourceKey.RULE34GEN), includeTags = listOf("landscape"),
             excludeTags = emptyList(), sort = SortMode.NEWEST, dateRange = null, minScore = null)
         val first = adapter.search(query, null)

@@ -18,9 +18,9 @@ import com.theoriacodex.sources.pixiv.PixivSourceAdapter
 import com.theoriacodex.sources.pixiv.PixivAuthApi
 import com.theoriacodex.sources.pixiv.PixivTokenCoordinator
 import com.theoriacodex.sources.pixiv.PixivUgoiraMetadataCache
-import com.theoriacodex.sources.rule34.Rule34GenSourceAdapter
+import com.theoriacodex.sources.rule34.KvsVideoSite
+import com.theoriacodex.sources.rule34.KvsVideoSourceAdapter
 import com.theoriacodex.sources.rule34.Rule34PahealSourceAdapter
-import com.theoriacodex.sources.rule34.Rule34VideoSourceAdapter
 
 class RealAdapterRegistry(
     credentialsProvider: SourceCredentialsProvider,
@@ -63,10 +63,12 @@ class RealAdapterRegistry(
         SourceKey.RULE34PAHEAL to Rule34PahealSourceAdapter(
             httpClient = httpClient,
         ),
-        SourceKey.RULE34VIDEO to Rule34VideoSourceAdapter(
+        SourceKey.RULE34VIDEO to KvsVideoSourceAdapter(
+            site = KvsVideoSite.RULE34VIDEO,
             httpClient = httpClient,
         ),
-        SourceKey.RULE34GEN to Rule34GenSourceAdapter(
+        SourceKey.RULE34GEN to KvsVideoSourceAdapter(
+            site = KvsVideoSite.RULE34GEN,
             httpClient = httpClient,
         ),
     )
