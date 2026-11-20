@@ -442,6 +442,7 @@ private fun ViewerRouteRenderer(
         },
         onOpenCreatorFallback = screenCallbacks.onOpenCreatorFallback,
         contextActions = rememberViewerContextActions(related.source, activeSession?.context, latestScreenCallbacks),
+        playbackDiagnosticsEnabled = com.theoriacodex.app.BuildConfig.BENCHMARK_FIXTURES_ENABLED,
     )
 }
 

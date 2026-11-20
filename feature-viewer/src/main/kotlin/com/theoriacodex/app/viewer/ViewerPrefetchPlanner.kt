@@ -49,7 +49,7 @@ internal fun planAdjacentViewerPrefetch(
  * within [VIEWER_MEMORY_PREFETCH_DISTANCE] are marked for decoding, so a page first downloaded while it was
  * far away is decoded into memory once it becomes a neighbour, and shows without a decode when reached.
  */
-internal fun viewerPrefetchAction(
+fun viewerPrefetchAction(
     pages: List<ViewerPageState>,
     current: ViewerMediaKey?,
     swipeTarget: ViewerMediaKey?,

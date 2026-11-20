@@ -7,7 +7,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
 /** Display order can visit a recommendation branch; backing indices and the original feed stay stable. */
-internal data class ViewerPostNavigation(
+data class ViewerPostNavigation(
     val originalPosts: List<Post>,
     val pages: List<ViewerPageState>,
     val sourceIndices: List<Int>,
@@ -20,7 +20,7 @@ internal data class ViewerPostNavigation(
         get() = listOfNotNull(pages.getOrNull(currentIndex + 1), pages.getOrNull(currentIndex - 1))
 }
 
-internal fun viewerPostNavigation(state: ViewerUiState, pendingPostId: PostId? = null): ViewerPostNavigation {
+fun viewerPostNavigation(state: ViewerUiState, pendingPostId: PostId? = null): ViewerPostNavigation {
     val indicesById = state.pages.mapIndexed { index, page -> page.post.id to index }.toMap()
     val originals = state.pages.filterNot { it.post.id in state.related.extraPostIds }
     val originalPosts = originals.map { it.post }
@@ -49,7 +49,7 @@ private fun branchDisplayOrder(originals: List<Post>, branch: ViewerRelatedNavig
 }
 
 /** Adding branch media never changes which posts belong to the original bottom strip. */
-internal fun ViewerSession.withRelatedPosts(seedId: PostId, incoming: List<Post>): ViewerSession {
+fun ViewerSession.withRelatedPosts(seedId: PostId, incoming: List<Post>): ViewerSession {
     val originals = posts.filterNot { it.id in relatedPostIds }
     val originalIds = originals.mapTo(mutableSetOf(), Post::id)
     val anchor = seedId.takeIf { it in originalIds } ?: relatedNavigation?.anchor ?: return this

@@ -57,7 +57,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.MainActivity
 import com.theoriacodex.app.codex.PreloadCodexSaveRelevance
 import com.theoriacodex.app.codex.LocalCodexPostIds
 import com.theoriacodex.app.codex.codexSavedColor
@@ -98,7 +97,7 @@ internal fun BoxScope.ViewerChromeOverlays(
     screen: ViewerScreenState,
     controls: ViewerControls,
     swipe: ViewerSwipeController,
-    activity: MainActivity?,
+    activity: ViewerHostActivity?,
     quality: MutableState<com.theoriacodex.domain.model.VideoQuality>,
     qualityHeight: MutableState<Int?>,
     pendingPostId: MutableState<PostId?>,
@@ -175,7 +174,7 @@ internal fun BoxScope.ViewerChromeOverlays(
 
 /** The rotate button on the left and the slideshow button on the right, hidden while another surface owns the bottom. */
 @Composable
-private fun BoxScope.ViewerFooterButtons(frame: ViewerFrame, screen: ViewerScreenState, activity: MainActivity?, onAction: (ViewerAction) -> Unit) {
+private fun BoxScope.ViewerFooterButtons(frame: ViewerFrame, screen: ViewerScreenState, activity: ViewerHostActivity?, onAction: (ViewerAction) -> Unit) {
     val bottomOwned = frame.mediaOverviewVisible || screen.timelineInteractionActive
     // A running slideshow keeps the image clear, including of the rotate hint.
     val rotationSuppressed = bottomOwned || frame.uiState.controls.slideshow
@@ -187,7 +186,7 @@ private fun BoxScope.ViewerFooterButtons(frame: ViewerFrame, screen: ViewerScree
 private fun ViewerTopBar(
     frame: ViewerFrame,
     controls: ViewerControls,
-    activity: MainActivity?,
+    activity: ViewerHostActivity?,
     quality: MutableState<com.theoriacodex.domain.model.VideoQuality>,
     qualityHeight: MutableState<Int?>,
     liked: Boolean,
@@ -399,7 +398,7 @@ internal fun ViewerInfoSheet(
 
 /** Post actions that depend on where the Viewer was opened from; each is null where that place has none. */
 @Immutable
-internal class ViewerContextActions(
+class ViewerContextActions(
     val showRelated: ((Post) -> Unit)? = null,
     val removeFromCodex: ((Post) -> Unit)? = null,
 )

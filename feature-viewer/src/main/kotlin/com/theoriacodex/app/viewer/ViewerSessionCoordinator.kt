@@ -9,9 +9,9 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 import java.util.UUID
 
-internal data class ViewerRelatedBinding(val source: ViewerStreamSource, val queryHash: String)
+data class ViewerRelatedBinding(val source: ViewerStreamSource, val queryHash: String)
 
-internal data class ViewerSession(
+data class ViewerSession(
     val posts: List<Post>,
     val context: ViewerLaunchContext,
     val liveSearchBinding: Boolean = false,
@@ -69,7 +69,7 @@ private fun hasRemoteViewerMedia(post: Post): Boolean {
     }
 }
 
-internal suspend fun prepareViewerPostsForLaunch(
+suspend fun prepareViewerPostsForLaunch(
     posts: List<Post>,
     context: ViewerLaunchContext,
     resolvePost: suspend (Post) -> Post?,
@@ -89,7 +89,7 @@ internal fun mergeViewerPosts(current: List<Post>, incoming: List<Post>): List<P
 }
 
 /** The posts of [incoming] that [current] lacks, in order and without repeats. */
-internal fun newViewerPosts(current: List<Post>, incoming: List<Post>): List<Post> {
+fun newViewerPosts(current: List<Post>, incoming: List<Post>): List<Post> {
     if (incoming.isEmpty()) return emptyList()
     val seen = current.mapTo(mutableSetOf()) { post -> "${post.id.source.id}:${post.id.sourcePostId}" }
     return incoming.filter { post -> seen.add("${post.id.source.id}:${post.id.sourcePostId}") }

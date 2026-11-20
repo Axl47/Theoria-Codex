@@ -30,7 +30,7 @@ class ViewerVideoPrefetchTest {
             "media-kit/src/main/kotlin/com/theoriacodex/app/viewer/VideoPlaybackInfrastructure.kt",
         ).readText()
         val platform = repositoryFile(
-            "app/src/main/java/com/theoriacodex/app/viewer/ViewerPlatformPrefetcher.kt",
+            "feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerPlatformPrefetcher.kt",
         ).readText()
 
         assertTrue("CacheWriter" in source)

@@ -4,7 +4,7 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
-internal enum class ViewerMediaKind {
+enum class ViewerMediaKind {
     IMAGE,
     VIDEO,
     ANIMATED_WEBP,
@@ -14,7 +14,7 @@ internal enum class ViewerMediaKind {
     UNKNOWN,
 }
 
-internal data class ViewerMediaState(
+data class ViewerMediaState(
     val key: ViewerMediaKey,
     val ref: ImageRef,
     val kind: ViewerMediaKind,
@@ -27,7 +27,7 @@ internal data class ViewerMediaState(
     }
 }
 
-internal enum class ViewerResolutionStatus {
+enum class ViewerResolutionStatus {
     NOT_REQUIRED,
     IDLE,
     REQUESTED,
@@ -36,7 +36,7 @@ internal enum class ViewerResolutionStatus {
     FAILED,
 }
 
-internal data class ViewerResolutionState(
+data class ViewerResolutionState(
     val status: ViewerResolutionStatus = ViewerResolutionStatus.NOT_REQUIRED,
     val attempt: Int = 0,
     val message: String? = null,
@@ -47,7 +47,7 @@ internal data class ViewerResolutionState(
     }
 }
 
-internal data class ViewerPageState(
+data class ViewerPageState(
     val post: Post,
     val media: List<ViewerMediaState>,
     val selectedMediaIndex: Int = 0,
@@ -59,7 +59,7 @@ internal data class ViewerPageState(
         get() = media.getOrNull(selectedMediaIndex)
 }
 
-internal data class ViewerPlaybackControlsState(
+data class ViewerPlaybackControlsState(
     val available: Boolean = false,
     val playing: Boolean = false,
     val playbackRate: Float = 1f,
@@ -74,7 +74,7 @@ internal data class ViewerPlaybackControlsState(
 
 internal typealias ViewerPlaybackMode = com.theoriacodex.domain.model.ViewerPlaybackMode
 
-internal data class ViewerControlsState(
+data class ViewerControlsState(
     val playbackMode: ViewerPlaybackMode = ViewerPlaybackMode.LOOP,
     val chromeVisible: Boolean = true,
     val actionsMenuVisible: Boolean = false,
@@ -85,13 +85,13 @@ internal data class ViewerControlsState(
     val slideshow: Boolean = false,
 )
 
-internal data class ViewerOverviewState(
+data class ViewerOverviewState(
     val visible: Boolean = false,
     val available: Boolean = false,
 )
 
 /** [decoded] is the subset of [warmed] images that were decoded into memory rather than only downloaded. */
-internal data class ViewerPrefetchState(
+data class ViewerPrefetchState(
     val queued: Set<ViewerMediaKey> = emptySet(),
     val inFlight: Set<ViewerMediaKey> = emptySet(),
     val warmed: Map<ViewerMediaKey, Long> = emptyMap(),
@@ -100,7 +100,7 @@ internal data class ViewerPrefetchState(
     val failed: Set<ViewerMediaKey> = emptySet(),
 )
 
-internal sealed interface ViewerMediaError {
+sealed interface ViewerMediaError {
     val mediaKey: ViewerMediaKey?
     val message: String
 
@@ -116,16 +116,16 @@ internal sealed interface ViewerMediaError {
     ) : ViewerMediaError
 }
 
-internal data class ViewerRelatedNavigation(val anchor: PostId, val postIds: List<PostId>)
+data class ViewerRelatedNavigation(val anchor: PostId, val postIds: List<PostId>)
 
-internal data class ViewerRelatedUiState(
+data class ViewerRelatedUiState(
     val state: com.theoriacodex.app.related.RelatedPostsUiState = com.theoriacodex.app.related.RelatedPostsUiState.Idle,
     val posts: List<Post> = emptyList(),
     val navigation: ViewerRelatedNavigation? = null,
     val extraPostIds: Set<PostId> = emptySet(),
 )
 
-internal data class ViewerUiState(
+data class ViewerUiState(
     val session: ViewerSessionIdentity? = null,
     val pages: List<ViewerPageState> = emptyList(),
     val currentPageIndex: Int = 0,

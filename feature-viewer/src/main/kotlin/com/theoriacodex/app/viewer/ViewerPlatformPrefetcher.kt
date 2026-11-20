@@ -24,7 +24,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
 /** The Viewer route's prefetcher: how far from the current media a prefetch may stay decoded is decided here. */
-internal fun viewerMediaPrefetcher(
+fun viewerMediaPrefetcher(
     context: Context,
     ugoiraClient: PixivUgoiraClient? = null,
     videoQuality: () -> VideoQuality,
@@ -41,7 +41,7 @@ internal fun viewerMediaPrefetcher(
  * [keepDecodedInMemory] keeps a prefetched image in Coil's memory cache; otherwise only its disk copy is warmed.
  * A Pixiv ugoira warms its archive through [ugoiraClient]; on a metered network only its still image is warmed.
  */
-internal suspend fun prefetchViewerMedia(
+suspend fun prefetchViewerMedia(
     context: Context,
     media: ViewerMediaState,
     videoQuality: VideoQuality,

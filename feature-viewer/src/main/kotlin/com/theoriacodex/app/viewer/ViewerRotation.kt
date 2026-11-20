@@ -22,20 +22,20 @@ import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.delay
 
-internal val LocalViewerAutoRotateVideos = staticCompositionLocalOf { false }
+val LocalViewerAutoRotateVideos = staticCompositionLocalOf { false }
 
 /**
  * The orientation the Viewer holds, which the app shell applies while the Viewer is open. Null leaves
  * rotation to the phone. Owned by the Activity so the shell and the mounted video can both reach it.
  */
-internal class ViewerRotationState {
+class ViewerRotationState {
     var held by mutableStateOf<ViewerOrientation?>(null)
 
     /** What the mounted video's decoded frames fill; covers sources that report no dimensions. */
     var measured by mutableStateOf<MeasuredVideoShape?>(null)
 }
 
-internal data class MeasuredVideoShape(val key: ViewerMediaKey, val fill: ViewerOrientation?)
+data class MeasuredVideoShape(val key: ViewerMediaKey, val fill: ViewerOrientation?)
 
 /**
  * Rotates once when the Viewer opens on a clearly wide or tall video, then holds that orientation while
