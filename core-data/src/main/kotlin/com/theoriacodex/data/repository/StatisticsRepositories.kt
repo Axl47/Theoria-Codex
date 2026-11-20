@@ -1,10 +1,11 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.AsynchronousStore
-import com.theoriacodex.data.storage.DurableStoreStatus
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.JsonDataStore
+import com.theoriacodex.data.storage.StateCell
 import com.theoriacodex.data.storage.openDecodedJsonDataStore
+import com.theoriacodex.data.storage.update
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
@@ -17,7 +18,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -395,32 +395,41 @@ internal object StatisticsPolicies {
     }
 }
 
-class DataStoreStatisticsRepository(
-    baseDirectory: File,
-    scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-    recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
-    private val clock: Clock = Clock.systemDefaultZone(),
-) : StatisticsRepository, AsynchronousStore {
-    private val storeFile = baseDirectory.resolve(DATASTORE_STATISTICS_FILE_NAME)
-    private val dataStore: JsonDataStore<LifetimeStatistics> = openDecodedJsonDataStore(
-        file = storeFile,
-        logicalStore = "Statistics",
-        schemaVersion = STATISTICS_DATASTORE_SCHEMA_VERSION,
-        defaultValue = StatisticsDataStoreFile(),
-        serializer = StatisticsDataStoreFile.serializer(),
-        scope = scope,
-        validate = StatisticsDataStoreFile::validate,
-        recoveries = recoveryRegistry,
-        decode = StatisticsDataStoreFile::toDomain,
-        encode = StatisticsDataStoreFile::fromDomain,
+class DataStoreStatisticsRepository private constructor(
+    store: JsonDataStore<LifetimeStatistics>,
+    clock: Clock,
+) : StatisticsRepository by CellStatisticsRepository(store, clock), AsynchronousStore by store {
+    constructor(
+        baseDirectory: File,
+        scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+        recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
+        clock: Clock = Clock.systemDefaultZone(),
+    ) : this(
+        openDecodedJsonDataStore(
+            file = baseDirectory.resolve(DATASTORE_STATISTICS_FILE_NAME),
+            logicalStore = "Statistics",
+            schemaVersion = STATISTICS_DATASTORE_SCHEMA_VERSION,
+            defaultValue = StatisticsDataStoreFile(),
+            serializer = StatisticsDataStoreFile.serializer(),
+            scope = scope,
+            validate = StatisticsDataStoreFile::validate,
+            recoveries = recoveryRegistry,
+            decode = StatisticsDataStoreFile::toDomain,
+            encode = StatisticsDataStoreFile::fromDomain,
+        ),
+        clock,
     )
-    override val storageStatus: StateFlow<DurableStoreStatus> = dataStore.storageStatus
+}
 
-    override suspend fun awaitReady() = dataStore.awaitReady()
-
-    override fun observeStatistics(): Flow<LifetimeStatistics> {
-        return dataStore.data.distinctUntilChanged()
-    }
+/**
+ * Statistics over a [StateCell], shared by the DataStore store and the in-memory default. Every change is
+ * normalized and keeps only the retained daily history, dated by [clock].
+ */
+internal class CellStatisticsRepository(
+    private val cell: StateCell<LifetimeStatistics>,
+    private val clock: Clock = Clock.systemDefaultZone(),
+) : StatisticsRepository {
+    override fun observeStatistics(): Flow<LifetimeStatistics> = cell.data.distinctUntilChanged()
 
     override suspend fun addCodexUsage(target: CodexUsageTarget, durationMs: Long) = mutate {
         StatisticsPolicies.addCodexUsage(it, target, durationMs)
@@ -470,8 +479,8 @@ class DataStoreStatisticsRepository(
     }
 
     private suspend fun mutate(transform: (LifetimeStatistics) -> LifetimeStatistics) {
-        dataStore.update { current ->
-            val next = transform(current)
+        cell.update { current ->
+            val next = StatisticsPolicies.normalize(transform(current))
             next.copy(history = next.history.retainedHistory(LocalDate.now(clock)))
         }
     }

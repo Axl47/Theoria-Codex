@@ -108,13 +108,13 @@ internal class JsonDataStoreSerializer<T : Any>(
 internal class JsonDataStore<T>(
     private val store: DataStore<T>,
     private val canonical: (T) -> T = { it },
-) : AsynchronousStore {
+) : AsynchronousStore, StateCell<T> {
     private val status = MutableStateFlow(DurableStoreStatus())
     private val opening = Mutex()
 
     override val storageStatus: StateFlow<DurableStoreStatus> = status.asStateFlow()
 
-    val data: Flow<T> = flow {
+    override val data: Flow<T> = flow {
         try {
             awaitReady()
         } catch (cancellation: CancellationException) {
@@ -145,6 +145,14 @@ internal class JsonDataStore<T>(
     suspend fun update(transform: suspend (T) -> T): T = store.updateDataInBackground { current ->
         val next = transform(current)
         if (next == current) current else canonical(next)
+    }
+
+    override suspend fun value(): T = data.first()
+
+    override suspend fun <R> updateReturning(transform: (T) -> Pair<T, R>): R {
+        var outcome: Pair<T, R>? = null
+        update { current -> transform(current).also { outcome = it }.first }
+        return checkNotNull(outcome).second
     }
 }
 

@@ -2,17 +2,16 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.data.storage.DurableJson
+import com.theoriacodex.data.storage.FileStateCell
+import com.theoriacodex.data.storage.MemoryStateCell
+import com.theoriacodex.data.storage.StateCell
 import com.theoriacodex.data.storage.decodeEachOrSkip
+import com.theoriacodex.data.storage.update
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.emitAll
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -52,38 +51,47 @@ const val MAX_READING_POSITIONS = 2_000
 internal const val READING_POSITION_COALESCE_MS = 5_000L
 
 /** The store writes compact JSON because the Viewer rewrites this file on every media change. */
-class FileBackedReadingPositionRepository(
-    baseDirectory: File,
-    private val store: AtomicJsonFileStore = AtomicJsonFileStore(),
+class FileBackedReadingPositionRepository private constructor(repository: ReadingPositionRepository) :
+    ReadingPositionRepository by repository {
+    constructor(
+        baseDirectory: File,
+        store: AtomicJsonFileStore = AtomicJsonFileStore(),
+        entryLimit: Int = MAX_READING_POSITIONS,
+    ) : this(fileBackedReadingPositions(baseDirectory.resolve(READING_POSITIONS_FILE_NAME), store, entryLimit))
+}
+
+private fun fileBackedReadingPositions(file: File, store: AtomicJsonFileStore, entryLimit: Int): ReadingPositionRepository {
+    require(entryLimit > 0)
+    val cell = FileStateCell(
+        load = { decodeReadingPositions(store.read(file, ReadingPositionsFile(), ReadingPositionsFile.serializer()), entryLimit) },
+        write = { positions -> store.write(file, encodeReadingPositions(positions), ReadingPositionsFile.serializer()) },
+    )
+    return CellReadingPositionRepository(cell, entryLimit)
+}
+
+/**
+ * Positions over a [StateCell], shared by the file-backed store and the in-memory default. A position older than the
+ * stored one for the same post is ignored, and a repeat of the newest one inside [READING_POSITION_COALESCE_MS] keeps
+ * the stored timestamp.
+ */
+internal class CellReadingPositionRepository(
+    private val cell: StateCell<List<ReadingPosition>>,
     private val entryLimit: Int = MAX_READING_POSITIONS,
 ) : ReadingPositionRepository {
-    private val file = baseDirectory.resolve(READING_POSITIONS_FILE_NAME)
-    private val mutex = Mutex()
-    private var positions: List<ReadingPosition>? = null
-    private val updates = MutableStateFlow<List<ReadingPosition>>(emptyList())
+    override fun observe(): Flow<List<ReadingPosition>> = cell.data
 
-    override fun observe(): Flow<List<ReadingPosition>> = flow {
-        mutex.withLock { load() }
-        emitAll(updates)
-    }
+    override suspend fun get(postId: PostId, section: RecentPostSection): ReadingPosition? =
+        cell.value().firstOrNull { it.postId == postId && it.section == section }
 
-    init {
-        require(entryLimit > 0)
-    }
+    override suspend fun snapshot(): List<ReadingPosition> = cell.value().toList()
 
-    override suspend fun get(postId: PostId, section: RecentPostSection): ReadingPosition? = mutex.withLock {
-        load().firstOrNull { it.postId == postId && it.section == section }
-    }
-
-    override suspend fun snapshot(): List<ReadingPosition> = mutex.withLock { load().toList() }
-
-    override suspend fun record(position: ReadingPosition) = writing {
-        val current = load()
+    override suspend fun record(position: ReadingPosition) = writing { current ->
         val previous = current.firstOrNull { it.postId == position.postId && it.section == position.section }
-        if (previous != null && previous.lastViewedAt > position.lastViewedAt) return@writing
-        if (previous != null && previous.repeatsNewest(position, current)) return@writing
-        val updated = normalizeReadingPositions(listOf(position) + current, entryLimit)
-        if (updated != current) persist(updated)
+        when {
+            previous != null && previous.lastViewedAt > position.lastViewedAt -> current
+            previous != null && previous.repeatsNewest(position, current) -> current
+            else -> normalizeReadingPositions(listOf(position) + current, entryLimit)
+        }
     }
 
     private fun ReadingPosition.repeatsNewest(next: ReadingPosition, current: List<ReadingPosition>): Boolean =
@@ -92,32 +100,16 @@ class FileBackedReadingPositionRepository(
             current.firstOrNull() == this
 
     override suspend fun replace(positions: List<ReadingPosition>) = writing {
-        persist(normalizeReadingPositions(positions, entryLimit))
+        normalizeReadingPositions(positions, entryLimit)
     }
 
-    override suspend fun merge(positions: List<ReadingPosition>) = writing {
-        persist(normalizeReadingPositions(load() + positions, entryLimit))
+    override suspend fun merge(positions: List<ReadingPosition>) = writing { current ->
+        normalizeReadingPositions(current + positions, entryLimit)
     }
 
     /** Each write re-sorts and re-encodes the whole list, which must not run on a caller's main thread. */
-    private suspend fun writing(block: suspend () -> Unit) = withContext(Dispatchers.Default) {
-        mutex.withLock { block() }
-    }
-
-    private suspend fun load(): List<ReadingPosition> {
-        positions?.let { return it }
-        val document = store.read(file, ReadingPositionsFile(), ReadingPositionsFile.serializer())
-        return decodeReadingPositions(document, entryLimit).also {
-            positions = it
-            updates.value = it
-        }
-    }
-
-    private suspend fun persist(updated: List<ReadingPosition>) {
-        store.write(file, encodeReadingPositions(updated), ReadingPositionsFile.serializer())
-        positions = updated
-        updates.value = updated
-    }
+    private suspend fun writing(transform: (List<ReadingPosition>) -> List<ReadingPosition>) =
+        withContext(Dispatchers.Default) { cell.update(transform) }
 }
 
 /**
@@ -180,33 +172,8 @@ private fun encodeReadingPositions(updated: List<ReadingPosition>) = ReadingPosi
 )
 
 /** Fixture/default owner; production supplies the file-backed repository. */
-class InMemoryReadingPositionRepository : ReadingPositionRepository {
-    private val mutex = Mutex()
-    private val updates = MutableStateFlow<List<ReadingPosition>>(emptyList())
-    private var positions: List<ReadingPosition>
-        get() = updates.value
-        set(value) { updates.value = value }
-
-    override fun observe(): Flow<List<ReadingPosition>> = updates
-
-    override suspend fun get(postId: PostId, section: RecentPostSection): ReadingPosition? = mutex.withLock {
-        positions.firstOrNull { it.postId == postId && it.section == section }
-    }
-
-    override suspend fun snapshot(): List<ReadingPosition> = mutex.withLock { positions.toList() }
-
-    override suspend fun record(position: ReadingPosition) = mutex.withLock {
-        positions = normalizeReadingPositions(listOf(position) + positions, MAX_READING_POSITIONS)
-    }
-
-    override suspend fun replace(positions: List<ReadingPosition>) = mutex.withLock {
-        this.positions = normalizeReadingPositions(positions, MAX_READING_POSITIONS)
-    }
-
-    override suspend fun merge(positions: List<ReadingPosition>) = mutex.withLock {
-        this.positions = normalizeReadingPositions(this.positions + positions, MAX_READING_POSITIONS)
-    }
-}
+class InMemoryReadingPositionRepository :
+    ReadingPositionRepository by CellReadingPositionRepository(MemoryStateCell(emptyList()))
 
 private fun normalizeReadingPositions(positions: List<ReadingPosition>, limit: Int): List<ReadingPosition> = positions
     .filter { it.section != RecentPostSection.FYP }
