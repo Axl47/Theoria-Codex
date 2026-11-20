@@ -29,30 +29,9 @@ object HitomiProtocol {
         "Referer" to "https://hitomi.la/",
     )
 
-    val autocompleteScopes: Set<String> = setOf(
-        "global",
-        "tag",
-        "female",
-        "male",
-        "artist",
-        "character",
-        "series",
-        "group",
-        "type",
-        "language",
-    )
+    val namespaces: Set<String> = HITOMI_FACETS.namespaces
 
-    val namespaces: Set<String> = setOf(
-        "tag",
-        "female",
-        "male",
-        "artist",
-        "character",
-        "series",
-        "group",
-        "type",
-        "language",
-    )
+    val autocompleteScopes: Set<String> = setOf("global") + namespaces
 
     fun autocompleteUrl(scope: String, term: String): String {
         val normalizedScope = scope.trim().lowercase(Locale.ROOT)

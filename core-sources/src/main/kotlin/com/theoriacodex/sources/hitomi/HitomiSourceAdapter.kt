@@ -82,18 +82,7 @@ class HitomiSourceAdapter(
         requiresCredentials = false,
     )
 
-    override val supportedSearchScopes: Set<FacetedSearchScope> = linkedSetOf(
-        FacetedSearchScope.All,
-        FacetedSearchScope(SearchFacet.TAG, HITOMI_TAG_NAMESPACE),
-        FacetedSearchScope(SearchFacet.TAG, HITOMI_FEMALE_NAMESPACE),
-        FacetedSearchScope(SearchFacet.TAG, HITOMI_MALE_NAMESPACE),
-        FacetedSearchScope(SearchFacet.ARTIST, HITOMI_ARTIST_NAMESPACE),
-        FacetedSearchScope(SearchFacet.CHARACTER, HITOMI_CHARACTER_NAMESPACE),
-        FacetedSearchScope(SearchFacet.SERIES, HITOMI_SERIES_NAMESPACE),
-        FacetedSearchScope(SearchFacet.GROUP, HITOMI_GROUP_NAMESPACE),
-        FacetedSearchScope(SearchFacet.TYPE, HITOMI_TYPE_NAMESPACE),
-        FacetedSearchScope(SearchFacet.LANGUAGE, HITOMI_LANGUAGE_NAMESPACE),
-    )
+    override val supportedSearchScopes: Set<FacetedSearchScope> = HITOMI_FACETS.searchScopes
 
     private val postMapper = HitomiPostMapper(mediaUrlResolver, mediaCandidates)
 
@@ -617,16 +606,8 @@ class HitomiSourceAdapter(
         }
 
         private fun HitomiAutocompleteEntry.toFacetedSuggestion(): FacetedTagSuggestion {
-            val facet = when (namespace) {
-                HITOMI_TAG_NAMESPACE, HITOMI_FEMALE_NAMESPACE, HITOMI_MALE_NAMESPACE -> SearchFacet.TAG
-                HITOMI_ARTIST_NAMESPACE -> SearchFacet.ARTIST
-                HITOMI_CHARACTER_NAMESPACE -> SearchFacet.CHARACTER
-                HITOMI_SERIES_NAMESPACE -> SearchFacet.SERIES
-                HITOMI_GROUP_NAMESPACE -> SearchFacet.GROUP
-                HITOMI_TYPE_NAMESPACE -> SearchFacet.TYPE
-                HITOMI_LANGUAGE_NAMESPACE -> SearchFacet.LANGUAGE
-                else -> throw HitomiProtocolException("Unsupported Hitomi namespace: $namespace")
-            }
+            val facet = HITOMI_FACETS.facetOf(namespace)
+                ?: throw HitomiProtocolException("Unsupported Hitomi namespace: $namespace")
             return FacetedTagSuggestion(
                 text = name,
                 facet = facet,
@@ -636,17 +617,8 @@ class HitomiSourceAdapter(
         }
 
         private fun FacetedSearchScope.toHitomiAutocompleteScope(): String {
-            if (isAll) return "global"
-            return sourceNamespace?.lowercase(Locale.ROOT) ?: when (facet) {
-                SearchFacet.TAG -> HITOMI_TAG_NAMESPACE
-                SearchFacet.ARTIST -> HITOMI_ARTIST_NAMESPACE
-                SearchFacet.CHARACTER -> HITOMI_CHARACTER_NAMESPACE
-                SearchFacet.SERIES -> HITOMI_SERIES_NAMESPACE
-                SearchFacet.GROUP -> HITOMI_GROUP_NAMESPACE
-                SearchFacet.TYPE -> HITOMI_TYPE_NAMESPACE
-                SearchFacet.LANGUAGE -> HITOMI_LANGUAGE_NAMESPACE
-                null -> "global"
-            }
+            val facet = facet ?: return "global"
+            return sourceNamespace?.lowercase(Locale.ROOT) ?: HITOMI_FACETS.defaultNamespace(facet)
         }
 
         private fun FacetedTagSuggestion.termCacheKey(): String {

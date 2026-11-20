@@ -78,16 +78,7 @@ class NhentaiSourceAdapter(
         requiresCredentials = false,
     )
 
-    override val supportedSearchScopes: Set<FacetedSearchScope> = linkedSetOf(
-        FacetedSearchScope.All,
-        FacetedSearchScope(SearchFacet.TAG, NHENTAI_TAG_NAMESPACE),
-        FacetedSearchScope(SearchFacet.ARTIST, NHENTAI_ARTIST_NAMESPACE),
-        FacetedSearchScope(SearchFacet.CHARACTER, NHENTAI_CHARACTER_NAMESPACE),
-        FacetedSearchScope(SearchFacet.SERIES, NHENTAI_SERIES_NAMESPACE),
-        FacetedSearchScope(SearchFacet.GROUP, NHENTAI_GROUP_NAMESPACE),
-        FacetedSearchScope(SearchFacet.TYPE, NHENTAI_TYPE_NAMESPACE),
-        FacetedSearchScope(SearchFacet.LANGUAGE, NHENTAI_LANGUAGE_NAMESPACE),
-    )
+    override val supportedSearchScopes: Set<FacetedSearchScope> = NHENTAI_FACETS.searchScopes
 
     private val throttleMutex = Mutex()
     private var lastRequestAtEpochMs: Long = 0L
@@ -714,25 +705,13 @@ private fun NhentaiTagInfo.toFacetedSuggestion(): FacetedTagSuggestion {
 }
 
 internal fun nhentaiTaxonomy(type: String?): Pair<SearchFacet, String> {
-    return when (type?.trim()?.lowercase()) {
-        NHENTAI_ARTIST_NAMESPACE -> SearchFacet.ARTIST to NHENTAI_ARTIST_NAMESPACE
-        NHENTAI_CHARACTER_NAMESPACE -> SearchFacet.CHARACTER to NHENTAI_CHARACTER_NAMESPACE
-        NHENTAI_SERIES_NAMESPACE -> SearchFacet.SERIES to NHENTAI_SERIES_NAMESPACE
-        NHENTAI_GROUP_NAMESPACE -> SearchFacet.GROUP to NHENTAI_GROUP_NAMESPACE
-        NHENTAI_TYPE_NAMESPACE -> SearchFacet.TYPE to NHENTAI_TYPE_NAMESPACE
-        NHENTAI_LANGUAGE_NAMESPACE -> SearchFacet.LANGUAGE to NHENTAI_LANGUAGE_NAMESPACE
-        else -> SearchFacet.TAG to NHENTAI_TAG_NAMESPACE
-    }
+    val namespace = type?.trim()?.lowercase()
+    val facet = namespace?.let(NHENTAI_FACETS::facetOf) ?: return SearchFacet.TAG to NHENTAI_TAG_NAMESPACE
+    return facet to namespace
 }
 
 internal fun String.isNhentaiTaxonomyPath(): Boolean {
-    return startsWith("/tag/") ||
-        startsWith("/artist/") ||
-        startsWith("/character/") ||
-        startsWith("/parody/") ||
-        startsWith("/group/") ||
-        startsWith("/language/") ||
-        startsWith("/category/")
+    return NHENTAI_FACETS.namespaces.any { namespace -> startsWith("/$namespace/") }
 }
 
 internal fun String.nhentaiTaxonomyNamespace(): String? {
