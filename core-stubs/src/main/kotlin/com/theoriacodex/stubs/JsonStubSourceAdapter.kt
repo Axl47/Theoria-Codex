@@ -1,7 +1,6 @@
 package com.theoriacodex.stubs
 
 import com.theoriacodex.domain.adapter.Page
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
@@ -10,8 +9,6 @@ import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
-import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.delay
 
@@ -59,24 +56,6 @@ class JsonStubSourceAdapter(
             .map { it.toDomain() }
             .filter { it.text.contains(prefix, ignoreCase = true) }
             .take(limit)
-    }
-
-    override suspend fun quickQuery(kind: QuickQueryKind): Query {
-        val sort = when (kind) {
-            QuickQueryKind.POPULAR_TODAY -> SortMode.POPULAR
-            QuickQueryKind.TOP_7D -> SortMode.TOP
-            QuickQueryKind.TOP_30D -> SortMode.TOP
-            QuickQueryKind.NEWEST -> SortMode.NEWEST
-            QuickQueryKind.RANDOM -> SortMode.RANDOM
-        }
-        return Query(
-            mode = QueryMode.Source(sourceKey),
-            includeTags = emptyList(),
-            excludeTags = emptyList(),
-            sort = sort,
-            dateRange = null,
-            minScore = null,
-        )
     }
 
     override suspend fun resolvePost(id: PostId): Post? {
@@ -128,9 +107,6 @@ class JsonStubSourceAdapter(
                 supportsSortTop = true,
                 supportsSortRandom = true,
                 supportsExcludeTagsServerSide = true,
-                supportsDateRangeServerSide = true,
-                supportsMinScoreServerSide = true,
-                requiresCredentials = false,
             )
         }
     }

@@ -21,7 +21,6 @@ import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.related.RelatedPostsLoading
 import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
 import com.theoriacodex.domain.adapter.Page
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.SourceCapabilities
@@ -31,9 +30,7 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
-import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import java.util.Collections
@@ -232,9 +229,6 @@ internal class ViewModelSearchAdapter(
         supportsSortTop = true,
         supportsSortRandom = true,
         supportsExcludeTagsServerSide = true,
-        supportsDateRangeServerSide = true,
-        supportsMinScoreServerSide = true,
-        requiresCredentials = false,
     )
 
     val slowSearchStarted = CompletableDeferred<Unit>()
@@ -281,17 +275,6 @@ internal class ViewModelSearchAdapter(
             return listOf(TagSuggestion("old-suggestion", "tag", null))
         }
         return listOf(TagSuggestion("$prefix-suggestion", "tag", null))
-    }
-
-    override suspend fun quickQuery(kind: QuickQueryKind): Query {
-        return Query(
-            mode = QueryMode.Source(sourceKey),
-            includeTags = emptyList(),
-            excludeTags = emptyList(),
-            sort = SortMode.NEWEST,
-            dateRange = null,
-            minScore = null,
-        )
     }
 
     override suspend fun resolvePost(id: PostId): Post? {

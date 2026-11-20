@@ -6,7 +6,6 @@ import com.google.gson.JsonObject
 import com.theoriacodex.domain.adapter.AccountProfileSourceAdapter
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.Page
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
@@ -19,7 +18,6 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.canonicalPostPage
@@ -55,9 +53,6 @@ class IwaraSourceAdapter(
         supportsSortTop = true,
         supportsSortRandom = false,
         supportsExcludeTagsServerSide = false,
-        supportsDateRangeServerSide = false,
-        supportsMinScoreServerSide = false,
-        requiresCredentials = false,
     )
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> = sourceCall {
@@ -140,24 +135,6 @@ class IwaraSourceAdapter(
             }
             ?.take(limit)
             .orEmpty()
-    }
-
-    override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceCall {
-        val sort = when (kind) {
-            QuickQueryKind.POPULAR_TODAY -> SortMode.POPULAR
-            QuickQueryKind.TOP_7D -> SortMode.TOP
-            QuickQueryKind.TOP_30D -> SortMode.TOP
-            QuickQueryKind.NEWEST -> SortMode.NEWEST
-            QuickQueryKind.RANDOM -> SortMode.NEWEST
-        }
-        Query(
-            mode = QueryMode.Source(SourceKey.IWARA),
-            includeTags = emptyList(),
-            excludeTags = emptyList(),
-            sort = sort,
-            dateRange = null,
-            minScore = null,
-        )
     }
 
     override suspend fun resolvePost(id: PostId): Post? = sourceCall {

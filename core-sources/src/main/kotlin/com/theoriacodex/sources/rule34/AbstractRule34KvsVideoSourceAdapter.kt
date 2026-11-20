@@ -2,7 +2,6 @@ package com.theoriacodex.sources.rule34
 
 import com.google.gson.Gson
 import com.theoriacodex.domain.adapter.Page
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SearchMetadataSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
@@ -16,8 +15,6 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
-import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.parseHtml
@@ -45,9 +42,6 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
         supportsSortTop = false,
         supportsSortRandom = false,
         supportsExcludeTagsServerSide = false,
-        supportsDateRangeServerSide = false,
-        supportsMinScoreServerSide = false,
-        requiresCredentials = false,
     )
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> = sourceCall(callContext) {
@@ -104,17 +98,6 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
 
     override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> = sourceCall(callContext) {
         autocompleteTagCounts(sourceKey, tags, ::autocompleteTags)
-    }
-
-    override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceCall(callContext) {
-        Query(
-            mode = QueryMode.Source(sourceKey),
-            includeTags = emptyList(),
-            excludeTags = emptyList(),
-            sort = SortMode.NEWEST,
-            dateRange = null,
-            minScore = null,
-        )
     }
 
     override suspend fun resolvePost(id: PostId): Post? = sourceCall(callContext) {

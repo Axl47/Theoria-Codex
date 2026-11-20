@@ -4,8 +4,6 @@ import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
-import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.query.SearchTermLimit
 import com.theoriacodex.domain.source.ProbeFailure
@@ -145,14 +143,7 @@ private suspend fun SiteFamily.verifyWithAdapter(
         addedAtEpochMs = 0,
     )
     val source = SourceKey.of(profile)
-    val newest = Query(
-        mode = QueryMode.Source(source),
-        includeTags = emptyList(),
-        excludeTags = emptyList(),
-        sort = SortMode.NEWEST,
-        dateRange = null,
-        minScore = null,
-    )
+    val newest = Query.newest(source)
     return try {
         createAdapter(profile, source, context).search(newest, pageToken = null)
         match

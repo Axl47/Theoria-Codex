@@ -4,12 +4,8 @@ import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
-import com.theoriacodex.domain.model.QueryMode
-import com.theoriacodex.domain.model.SortMode
-import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.http.SourceHttpResponse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -18,20 +14,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SourceAdapterCommonTest {
-    @Test
-    fun `source quick query maps popular windows and random fallback`() {
-        val now = 1_700_000_000_000L
-        val popular = sourceQuickQuery(SourceKey.GELBOORU, QuickQueryKind.POPULAR_TODAY, nowEpochMs = now)
-        val random = sourceQuickQuery(SourceKey.GELBOORU, QuickQueryKind.RANDOM, nowEpochMs = now)
-
-        assertEquals(QueryMode.Source(SourceKey.GELBOORU), popular.mode)
-        assertEquals(SortMode.POPULAR, popular.sort)
-        assertEquals(now, popular.dateRange?.toEpochMs)
-        assertEquals(now - 24L * 60L * 60L * 1000L, popular.dateRange?.fromEpochMs)
-        assertEquals(SortMode.NEWEST, random.sort)
-        assertNull(random.dateRange)
-    }
-
     @Test
     fun `flexible duration parser supports seconds milliseconds and clock strings`() {
         val obj = Gson().fromJson(

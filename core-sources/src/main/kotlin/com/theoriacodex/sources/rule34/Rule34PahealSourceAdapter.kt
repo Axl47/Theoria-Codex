@@ -2,7 +2,6 @@ package com.theoriacodex.sources.rule34
 
 import com.google.gson.Gson
 import com.theoriacodex.domain.adapter.Page
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -11,8 +10,6 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
-import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.asStringOrNull
 import com.theoriacodex.sources.common.canonicalPostPage
@@ -43,9 +40,6 @@ class Rule34PahealSourceAdapter(
         supportsSortTop = false,
         supportsSortRandom = false,
         supportsExcludeTagsServerSide = false,
-        supportsDateRangeServerSide = false,
-        supportsMinScoreServerSide = false,
-        requiresCredentials = false,
     )
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> = sourceCall {
@@ -105,17 +99,6 @@ class Rule34PahealSourceAdapter(
             val text = item.asStringOrNull()?.trim().orEmpty()
             if (text.isBlank()) null else TagSuggestion(text = text, type = "tag", count = null)
         }.take(limit)
-    }
-
-    override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceCall {
-        Query(
-            mode = QueryMode.Source(SourceKey.RULE34PAHEAL),
-            includeTags = emptyList(),
-            excludeTags = emptyList(),
-            sort = SortMode.NEWEST,
-            dateRange = null,
-            minScore = null,
-        )
     }
 
     override suspend fun resolvePost(id: PostId): Post? = sourceCall {

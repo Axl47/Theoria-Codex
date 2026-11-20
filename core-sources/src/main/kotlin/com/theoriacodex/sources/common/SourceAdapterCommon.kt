@@ -5,15 +5,9 @@ import com.theoriacodex.sources.http.HostUnavailableException
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.diagnostics.OffMainWork
-import com.theoriacodex.domain.model.DateRange
-import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
-import com.theoriacodex.domain.model.SortMode
-import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.media.inferMimeFromUrl
 import com.theoriacodex.sources.media.mimeFromFileExt
 import com.theoriacodex.sources.http.SourceHttpResponse
@@ -34,36 +28,6 @@ internal suspend fun <T> sourceCall(
     context: CoroutineContext = Dispatchers.Default,
     block: suspend () -> T,
 ): T = withContext(context) { block() }
-
-internal fun sourceQuickQuery(
-    source: SourceKey,
-    kind: QuickQueryKind,
-    randomSort: SortMode = SortMode.NEWEST,
-    nowEpochMs: Long = System.currentTimeMillis(),
-): Query {
-    val dayMs = 24L * 60L * 60L * 1000L
-    val sort = when (kind) {
-        QuickQueryKind.POPULAR_TODAY -> SortMode.POPULAR
-        QuickQueryKind.TOP_7D -> SortMode.TOP
-        QuickQueryKind.TOP_30D -> SortMode.TOP
-        QuickQueryKind.NEWEST -> SortMode.NEWEST
-        QuickQueryKind.RANDOM -> randomSort
-    }
-    val dateRange = when (kind) {
-        QuickQueryKind.POPULAR_TODAY -> DateRange(nowEpochMs - dayMs, nowEpochMs)
-        QuickQueryKind.TOP_7D -> DateRange(nowEpochMs - 7L * dayMs, nowEpochMs)
-        QuickQueryKind.TOP_30D -> DateRange(nowEpochMs - 30L * dayMs, nowEpochMs)
-        QuickQueryKind.NEWEST, QuickQueryKind.RANDOM -> null
-    }
-    return Query(
-        mode = QueryMode.Source(source),
-        includeTags = emptyList(),
-        excludeTags = emptyList(),
-        sort = sort,
-        dateRange = dateRange,
-        minScore = null,
-    )
-}
 
 /**
  * A booru's `source` field as a page that can be opened, or null when it is empty or free text. Direct Pixiv image

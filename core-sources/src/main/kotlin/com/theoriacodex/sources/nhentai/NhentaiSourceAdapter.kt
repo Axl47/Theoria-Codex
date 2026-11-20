@@ -10,7 +10,6 @@ import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.Page
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.RelatedPostsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
@@ -74,9 +73,6 @@ class NhentaiSourceAdapter(
         supportsSortTop = true,
         supportsSortRandom = true,
         supportsExcludeTagsServerSide = true,
-        supportsDateRangeServerSide = false,
-        supportsMinScoreServerSide = false,
-        requiresCredentials = false,
     )
 
     override val supportedSearchScopes: Set<FacetedSearchScope> = linkedSetOf(
@@ -272,24 +268,6 @@ class NhentaiSourceAdapter(
             .forEach { tag ->
                 resolveNhentaiTag(tag)?.let { info -> onCounts(mapOf(info.name to info.count)) }
             }
-    }
-
-    override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceCall(callContext) {
-        val sort = when (kind) {
-            QuickQueryKind.POPULAR_TODAY -> SortMode.POPULAR
-            QuickQueryKind.TOP_7D -> SortMode.TOP
-            QuickQueryKind.TOP_30D -> SortMode.TOP
-            QuickQueryKind.NEWEST -> SortMode.NEWEST
-            QuickQueryKind.RANDOM -> SortMode.RANDOM
-        }
-        Query(
-            mode = QueryMode.Source(SourceKey.NHENTAI),
-            includeTags = emptyList(),
-            excludeTags = emptyList(),
-            sort = sort,
-            dateRange = null,
-            minScore = null,
-        )
     }
 
     override suspend fun resolvePost(id: PostId): Post? = sourceCall(callContext) {

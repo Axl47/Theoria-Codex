@@ -1,7 +1,6 @@
 package com.theoriacodex.domain.orchestration
 
 import com.theoriacodex.domain.adapter.Page
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
@@ -140,13 +139,11 @@ class GroupedSearchPagingTest {
         override val sourceKey = source
         override val capabilities = SourceCapabilities(
             supportsSortNewest = true, supportsSortPopular = true, supportsSortTop = true,
-            supportsSortRandom = true, supportsExcludeTagsServerSide = true, supportsDateRangeServerSide = true,
-            supportsMinScoreServerSide = true, requiresCredentials = false,
+            supportsSortRandom = true, supportsExcludeTagsServerSide = true,
         )
         override suspend fun search(query: Query, pageToken: String?) = load(query, pageToken)
         override suspend fun trendingTags(limit: Int): List<TagSuggestion> = emptyList()
         override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = emptyList()
-        override suspend fun quickQuery(kind: QuickQueryKind): Query = error("Unexpected quick query")
         override suspend fun resolvePost(id: PostId): Post? = error("Unexpected resolution")
     }
 }

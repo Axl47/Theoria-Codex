@@ -1,7 +1,6 @@
 package com.theoriacodex.domain.orchestration
 
 import com.theoriacodex.domain.adapter.Page
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
@@ -160,9 +159,6 @@ class UnifiedSearchOrchestratorTest {
                         supportsSortTop = false,
                         supportsSortRandom = true,
                         supportsExcludeTagsServerSide = true,
-                        supportsDateRangeServerSide = true,
-                        supportsMinScoreServerSide = true,
-                        requiresCredentials = false,
                     ),
                     posts = listOf(post(SourceKey.PIXIV, "1")),
                 ),
@@ -174,9 +170,6 @@ class UnifiedSearchOrchestratorTest {
                         supportsSortTop = true,
                         supportsSortRandom = true,
                         supportsExcludeTagsServerSide = true,
-                        supportsDateRangeServerSide = true,
-                        supportsMinScoreServerSide = true,
-                        requiresCredentials = false,
                     ),
                     posts = listOf(post(SourceKey.GELBOORU, "2")),
                 ),
@@ -337,9 +330,6 @@ class UnifiedSearchOrchestratorTest {
                 supportsSortTop = true,
                 supportsSortRandom = true,
                 supportsExcludeTagsServerSide = false,
-                supportsDateRangeServerSide = true,
-                supportsMinScoreServerSide = true,
-                requiresCredentials = false,
             ),
             posts = listOf(
                 post(SourceKey.PIXIV, "p1", tags = listOf("landscape", "safe")),
@@ -594,9 +584,6 @@ class UnifiedSearchOrchestratorTest {
             supportsSortTop = true,
             supportsSortRandom = true,
             supportsExcludeTagsServerSide = true,
-            supportsDateRangeServerSide = true,
-            supportsMinScoreServerSide = true,
-            requiresCredentials = false,
         )
     }
 
@@ -622,17 +609,6 @@ class UnifiedSearchOrchestratorTest {
 
         override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> {
             return emptyList()
-        }
-
-        override suspend fun quickQuery(kind: QuickQueryKind): Query {
-            return Query(
-                mode = QueryMode.Source(sourceKey),
-                includeTerms = emptyList(),
-                excludeTerms = emptyList(),
-                sort = SortMode.NEWEST,
-                dateRange = null,
-                minScore = null,
-            )
         }
 
         override suspend fun resolvePost(id: PostId): Post? {
@@ -668,7 +644,6 @@ class UnifiedSearchOrchestratorTest {
 
         override suspend fun trendingTags(limit: Int): List<TagSuggestion> = emptyList()
         override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = emptyList()
-        override suspend fun quickQuery(kind: QuickQueryKind): Query = sampleQuery()
         override suspend fun resolvePost(id: PostId): Post? = null
     }
 }

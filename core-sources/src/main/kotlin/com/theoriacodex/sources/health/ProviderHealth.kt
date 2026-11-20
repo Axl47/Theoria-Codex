@@ -2,7 +2,6 @@ package com.theoriacodex.sources.health
 
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.RelatedPostsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
@@ -285,7 +284,7 @@ class ProviderHealthChecker(
         var itemCount = 0
         val latency = measureTimeMillis {
             try {
-                val query = adapter.quickQuery(QuickQueryKind.NEWEST)
+                val query = Query.newest(adapter.sourceKey)
                 val page = adapter.search(query, pageToken = null)
                 itemCount = page.items.size
             } catch (error: CancellationException) {
@@ -384,7 +383,7 @@ class ProviderProbeRunner(
         adapter: SourceAdapter,
     ): ProviderProbeStepResult {
         return runStep(probeCase = probeCase, checkName = "newest-search") {
-            val query = adapter.quickQuery(QuickQueryKind.NEWEST)
+            val query = Query.newest(adapter.sourceKey)
             val page = adapter.search(query, pageToken = null)
             val sample = page.items.firstOrNull()
             okOrDegraded(

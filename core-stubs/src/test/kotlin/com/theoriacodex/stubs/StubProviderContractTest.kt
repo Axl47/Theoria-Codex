@@ -1,6 +1,5 @@
 package com.theoriacodex.stubs
 
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.Post
@@ -57,7 +56,7 @@ class StubProviderContractTest {
     }
 
     @Test
-    fun `every stub source exposes shaped trending autocomplete and quick queries`() = runTest {
+    fun `every stub source exposes shaped trending and autocomplete`() = runTest {
         val registry = StubAdapterRegistry(runtime = StubRuntime(StubScenarioPreset.NORMAL))
 
         SourceKey.builtIns.forEach { source ->
@@ -74,14 +73,6 @@ class StubProviderContractTest {
             assertTrue("Expected autocomplete tags for $source and prefix $prefix", autocomplete.isNotEmpty())
             autocomplete.forEach { tag ->
                 assertTrue(tag.text.contains(prefix, ignoreCase = true))
-            }
-
-            QuickQueryKind.entries.forEach { kind ->
-                val query = adapter.quickQuery(kind)
-                assertEquals(QueryMode.Source(source), query.mode)
-                if (kind == QuickQueryKind.RANDOM) {
-                    assertNotNull(query.sort)
-                }
             }
         }
     }

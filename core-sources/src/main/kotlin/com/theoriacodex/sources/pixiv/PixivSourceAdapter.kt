@@ -8,7 +8,6 @@ import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.DurationMetadataSourceAdapter
 import com.theoriacodex.domain.adapter.DurationMetadataSourceResult
 import com.theoriacodex.domain.adapter.Page
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.MAX_RELATED_POST_CANDIDATES
 import com.theoriacodex.domain.adapter.RelatedPostsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapter
@@ -43,7 +42,6 @@ import com.theoriacodex.sources.common.optionalJsonObject
 import com.theoriacodex.sources.common.parseJsonObject
 import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.common.sourceNetworkFailure
-import com.theoriacodex.sources.common.sourceQuickQuery
 import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.http.SourceHttpClient
@@ -84,9 +82,6 @@ class PixivSourceAdapter(
         supportsSortTop = true,
         supportsSortRandom = true,
         supportsExcludeTagsServerSide = false,
-        supportsDateRangeServerSide = true,
-        supportsMinScoreServerSide = false,
-        requiresCredentials = true,
     )
 
     /** Feed pages and settings lookups; background duration lookups never queue in front of them. */
@@ -153,14 +148,6 @@ class PixivSourceAdapter(
             val tag = item.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
             parseTagSuggestion(tag, type = "tag")
         }.take(limit)
-    }
-
-    override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceCall(callContext) {
-        sourceQuickQuery(
-            source = SourceKey.PIXIV,
-            kind = kind,
-            nowEpochMs = clock(),
-        )
     }
 
     override suspend fun resolvePost(id: PostId): Post? = sourceCall(callContext) {

@@ -5,7 +5,6 @@ import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.SourceCapabilities
@@ -53,9 +52,6 @@ class TestAdapter(
         supportsSortTop = true,
         supportsSortRandom = true,
         supportsExcludeTagsServerSide = true,
-        supportsDateRangeServerSide = true,
-        supportsMinScoreServerSide = true,
-        requiresCredentials = false,
         searchTermLimit = searchTermLimit,
     )
 
@@ -80,8 +76,6 @@ class TestAdapter(
         if (autocompleteResponseDelayMs > 0L) delay(autocompleteResponseDelayMs)
         return autocompleteByPrefix[prefix]?.take(limit) ?: autocomplete.take(limit)
     }
-
-    override suspend fun quickQuery(kind: QuickQueryKind): Query = query(sourceKey, "")
 
     override suspend fun resolvePost(id: PostId): Post? {
         resolveCalls += 1

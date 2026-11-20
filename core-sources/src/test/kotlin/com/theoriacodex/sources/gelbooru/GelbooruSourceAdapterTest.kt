@@ -489,7 +489,6 @@ class GelbooruSourceAdapterTest {
 
         assertFalse(rule34 is CreatorPostsSourceAdapter)
         assertFalse(rule34 is RelatedPostsSourceAdapter)
-        assertTrue(rule34.capabilities.requiresCredentials)
         assertFalse(rule34.capabilities.supportsGroupedIncludeTagsServerSide)
         assertTrue(gelbooru is CreatorPostsSourceAdapter)
         assertTrue(gelbooru is RelatedPostsSourceAdapter)

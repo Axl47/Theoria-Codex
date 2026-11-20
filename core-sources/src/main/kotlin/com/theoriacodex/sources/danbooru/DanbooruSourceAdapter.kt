@@ -8,7 +8,6 @@ import com.theoriacodex.domain.adapter.CommentsSourceAdapter
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.FileHashLookupSourceAdapter
 import com.theoriacodex.domain.adapter.Page
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
@@ -44,7 +43,6 @@ import com.theoriacodex.sources.common.parseJsonObject
 import com.theoriacodex.sources.common.parseOffsetDateTimeMs
 import com.theoriacodex.sources.common.requireSuccess
 import com.theoriacodex.sources.common.sourceCall
-import com.theoriacodex.sources.common.sourceQuickQuery
 import com.theoriacodex.sources.common.sourceRequest
 import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.credentials.ApiKeyUse
@@ -97,9 +95,6 @@ class DanbooruSourceAdapter(
         supportsSortTop = true,
         supportsSortRandom = false,
         supportsExcludeTagsServerSide = true,
-        supportsDateRangeServerSide = false,
-        supportsMinScoreServerSide = false,
-        requiresCredentials = site.credentials == ApiKeyUse.REQUIRED,
         searchTermLimit = site.searchTermLimit,
     )
 
@@ -157,10 +152,6 @@ class DanbooruSourceAdapter(
 
     override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> = sourceCall {
         autocompleteTagCounts(sourceKey, tags, ::autocompleteTags)
-    }
-
-    override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceCall {
-        sourceQuickQuery(source = sourceKey, kind = kind)
     }
 
     override suspend fun resolvePost(id: PostId): Post? = sourceCall {

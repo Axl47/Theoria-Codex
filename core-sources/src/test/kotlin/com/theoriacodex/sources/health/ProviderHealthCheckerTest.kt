@@ -4,7 +4,6 @@ import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.Page
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.RelatedPostsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
@@ -16,7 +15,6 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
@@ -325,9 +323,6 @@ class ProviderHealthCheckerTest {
             supportsSortTop = true,
             supportsSortRandom = true,
             supportsExcludeTagsServerSide = true,
-            supportsDateRangeServerSide = true,
-            supportsMinScoreServerSide = true,
-            requiresCredentials = false,
         )
 
         override suspend fun search(query: Query, pageToken: String?): Page<Post> {
@@ -358,16 +353,6 @@ class ProviderHealthCheckerTest {
                     count = suggestion.count,
                 )
             }
-        }
-        override suspend fun quickQuery(kind: QuickQueryKind): Query {
-            return Query(
-                mode = QueryMode.Source(sourceKey),
-                includeTags = emptyList(),
-                excludeTags = emptyList(),
-                sort = SortMode.NEWEST,
-                dateRange = null,
-                minScore = null,
-            )
         }
 
         override suspend fun resolvePost(id: PostId): Post? = resolvedPost?.takeIf { it.id == id }
