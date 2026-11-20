@@ -44,9 +44,10 @@ module_layering() {
   return "$failed"
 }
 
-# Whether a file names "$2" exactly on a line that is not commented out.
+# Whether a file names "$2" exactly on a line that is not commented out. The second grep counts instead of
+# stopping at the first match: stopping early kills the first grep, and under pipefail that reads as "no entry".
 has_active_entry() {
-  grep -vE '^[[:space:]]*(#|//)' "$1" | grep -qE "(^|[^A-Za-z0-9_-])$2([^A-Za-z0-9_-]|\$)"
+  grep -vE '^[[:space:]]*(#|//)' "$1" | grep -cE "(^|[^A-Za-z0-9_-])$2([^A-Za-z0-9_-]|\$)" > /dev/null
 }
 
 # Every kit and feature in settings.gradle.kts must be in each hand-kept list of checked modules, or its
