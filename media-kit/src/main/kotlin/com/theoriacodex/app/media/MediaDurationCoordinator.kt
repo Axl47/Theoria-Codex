@@ -93,7 +93,7 @@ class MediaDurationCoordinator(
     private val durationRepository: MediaDurationRepository? = null,
     parentScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     private val clock: () -> Long = System::currentTimeMillis,
-    private val retryDelayMs: Long = DEFAULT_RETRY_DELAY_MS,
+    private val retryDelayMs: Long = DEFAULT_DURATION_RETRY_DELAY_MS,
     private val maxQueuedKeys: Int = DEFAULT_MAX_QUEUED_KEYS,
     private val maxConcurrentWork: Int = DEFAULT_MAX_CONCURRENT_WORK,
     private val maxConcurrentForSource: (SourceKey) -> Int = ::defaultDurationConcurrencyForSource,
@@ -512,7 +512,6 @@ class MediaDurationCoordinator(
     )
 
     private companion object {
-        const val DEFAULT_RETRY_DELAY_MS = 5L * 60L * 1_000L
         const val DEFAULT_MAX_QUEUED_KEYS = 512
         const val DEFAULT_MAX_CONCURRENT_WORK = 8
         const val DEFAULT_MAX_RETAINED_STATES = 2_048
@@ -525,6 +524,9 @@ private fun defaultDurationConcurrencyForSource(source: SourceKey): Int {
     // Pixiv durations cost a rate-limited API call; the others are ranged reads from a media CDN.
     return if (source == SourceKey.PIXIV) 2 else 4
 }
+
+/** How long a failed lookup waits before a new demand may try it again. */
+internal const val DEFAULT_DURATION_RETRY_DELAY_MS = 5L * 60L * 1_000L
 
 internal const val TRACE_DURATION_DEMAND = "TheoriaDurationDemand"
 internal const val TRACE_DURATION_RESOLVE = "TheoriaDurationResolve"

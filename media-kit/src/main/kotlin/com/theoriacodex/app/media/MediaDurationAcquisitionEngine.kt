@@ -15,7 +15,7 @@ class MediaDurationAcquisitionEngine(
     private val probeDuration: suspend (Post) -> MediaDurationState,
     private val clock: () -> Long = System::currentTimeMillis,
     private val operationTimeoutMs: Long = DEFAULT_DURATION_ACQUISITION_TIMEOUT_MS,
-    private val retryDelayMs: Long = DEFAULT_DURATION_ACQUISITION_RETRY_MS,
+    private val retryDelayMs: Long = DEFAULT_DURATION_RETRY_DELAY_MS,
     private val traceRecorder: MediaDurationTraceRecorder = AndroidMediaDurationTraceRecorder,
     private val pacer: DurationRequestPacer = DurationRequestPacer(clock),
 ) : MediaDurationAcquirer {
@@ -76,7 +76,6 @@ class MediaDurationAcquisitionEngine(
         return planDurationAcquisition(
             DurationAcquisitionFacts(
                 knownDurationMs = animatedDurationMs(post),
-                persistedState = null,
                 hasAuthoritativeFullVideo = authoritativeDurationProbeRef(post) != null,
                 hasProviderDurationResolver = hasProviderDurationResolver(post),
             ),
@@ -89,7 +88,6 @@ class MediaDurationAcquisitionEngine(
             DurationAcquisitionPlan.AskProvider -> acquireFromProvider(post)
             is DurationAcquisitionPlan.AlreadyKnown,
             is DurationAcquisitionPlan.Unsupported,
-            is DurationAcquisitionPlan.UsePersisted,
             -> error("Settled before any acquisition starts")
         }
     }
@@ -140,5 +138,4 @@ class MediaDurationAcquisitionEngine(
 }
 
 internal const val DEFAULT_DURATION_ACQUISITION_TIMEOUT_MS = 12_000L
-private const val DEFAULT_DURATION_ACQUISITION_RETRY_MS = 5L * 60L * 1_000L
 private const val MAX_THROTTLED_ATTEMPTS = 3

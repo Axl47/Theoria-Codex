@@ -11,7 +11,6 @@ import com.theoriacodex.sources.http.SourceHttpResponse
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -130,30 +129,11 @@ class BoundedMediaDurationProbeTest {
         assertEquals(1, http.requests.size)
     }
 
-    @Test
-    fun `overall timeout cancels transport and publishes bounded retry`() = runTest {
-        val http = StalledHttpClient()
-        val probe = BoundedMediaDurationProbe(
-            httpClient = http,
-            clock = { 100L },
-            byteWindowLimit = TEST_WINDOW_BYTES,
-            operationTimeoutMs = 10L,
-            retryDelayMs = 10L,
-        )
-
-        assertEquals(
-            MediaDurationState.RetryableFailure(110L, MediaDurationFailureReason.TIMEOUT),
-            probe.probe(post("timeout")),
-        )
-        assertTrue(http.cancelled)
-    }
-
     private fun probe(http: SourceHttpClient): BoundedMediaDurationProbe {
         return BoundedMediaDurationProbe(
             httpClient = http,
             clock = { 100L },
             byteWindowLimit = TEST_WINDOW_BYTES,
-            operationTimeoutMs = 1_000L,
             retryDelayMs = 10L,
         )
     }
@@ -237,36 +217,6 @@ class BoundedMediaDurationProbeTest {
             range: SourceByteRange?,
             maxBodyBytes: Int,
         ): SourceByteResponse = SourceByteResponse(status, "not found".toByteArray(), emptyMap())
-
-        override suspend fun get(
-            url: String,
-            query: Map<String, String>,
-            headers: Map<String, String>,
-        ): SourceHttpResponse = error("Text GET is not used")
-
-        override suspend fun postForm(
-            url: String,
-            form: Map<String, String>,
-            headers: Map<String, String>,
-        ): SourceHttpResponse = error("POST is not used")
-    }
-
-    private class StalledHttpClient : SourceHttpClient {
-        var cancelled = false
-
-        override suspend fun getBytes(
-            url: String,
-            query: Map<String, String>,
-            headers: Map<String, String>,
-            range: SourceByteRange?,
-            maxBodyBytes: Int,
-        ): SourceByteResponse {
-            try {
-                awaitCancellation()
-            } finally {
-                cancelled = true
-            }
-        }
 
         override suspend fun get(
             url: String,

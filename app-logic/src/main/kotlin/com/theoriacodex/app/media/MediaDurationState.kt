@@ -125,14 +125,12 @@ data class DurationDemand(
 
 data class DurationAcquisitionFacts(
     val knownDurationMs: Long?,
-    val persistedState: MediaDurationState?,
     val hasAuthoritativeFullVideo: Boolean,
     val hasProviderDurationResolver: Boolean,
 )
 
 sealed interface DurationAcquisitionPlan {
     data class AlreadyKnown(val durationMs: Long) : DurationAcquisitionPlan
-    data class UsePersisted(val state: MediaDurationState) : DurationAcquisitionPlan
     data object AskProvider : DurationAcquisitionPlan
     data object ProbeAuthoritativeMedia : DurationAcquisitionPlan
     data class Unsupported(val reason: MediaDurationUnsupportedReason) : DurationAcquisitionPlan
@@ -141,9 +139,6 @@ sealed interface DurationAcquisitionPlan {
 fun planDurationAcquisition(facts: DurationAcquisitionFacts): DurationAcquisitionPlan {
     facts.knownDurationMs?.takeIf { durationMs -> durationMs > 0L }?.let { durationMs ->
         return DurationAcquisitionPlan.AlreadyKnown(durationMs)
-    }
-    facts.persistedState?.takeUnless { state -> state == MediaDurationState.Pending }?.let { state ->
-        return DurationAcquisitionPlan.UsePersisted(state)
     }
     if (facts.hasAuthoritativeFullVideo) {
         return DurationAcquisitionPlan.ProbeAuthoritativeMedia

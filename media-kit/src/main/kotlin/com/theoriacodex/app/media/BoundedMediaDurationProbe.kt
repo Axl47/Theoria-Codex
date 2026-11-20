@@ -8,23 +8,21 @@ import com.theoriacodex.sources.http.SourceByteRange
 import com.theoriacodex.sources.http.SourceByteResponse
 import com.theoriacodex.sources.http.SourceHttpClient
 import kotlin.coroutines.cancellation.CancellationException
-import kotlinx.coroutines.withTimeoutOrNull
 
 class BoundedMediaDurationProbe(
     private val httpClient: SourceHttpClient,
     private val clock: () -> Long = System::currentTimeMillis,
     private val byteWindowLimit: Int = DEFAULT_DURATION_PROBE_WINDOW_BYTES,
     private val initialWindowBytes: Int = DEFAULT_DURATION_PROBE_INITIAL_BYTES,
-    private val operationTimeoutMs: Long = DEFAULT_DURATION_PROBE_TIMEOUT_MS,
-    private val retryDelayMs: Long = DEFAULT_DURATION_PROBE_RETRY_MS,
+    private val retryDelayMs: Long = DEFAULT_DURATION_RETRY_DELAY_MS,
 ) {
     init {
         require(byteWindowLimit > 0) { "Duration probe byte window must be positive" }
         require(initialWindowBytes > 0) { "Duration probe initial window must be positive" }
-        require(operationTimeoutMs > 0L) { "Duration probe timeout must be positive" }
         require(retryDelayMs > 0L) { "Duration probe retry delay must be positive" }
     }
 
+    /** Unbounded in time: [MediaDurationAcquisitionEngine] times out the whole lookup, probe included. */
     suspend fun probe(post: Post): MediaDurationState {
         val ref = authoritativeDurationProbeRef(post)
             ?: return MediaDurationState.Unsupported(
@@ -35,9 +33,7 @@ class BoundedMediaDurationProbe(
                 MediaDurationUnsupportedReason.NO_AUTHORITATIVE_MEDIA,
             )
         return try {
-            withTimeoutOrNull(operationTimeoutMs) {
-                probeWithinBudget(post, ref, location)
-            } ?: retryable(MediaDurationFailureReason.TIMEOUT)
+            probeWithinBudget(post, ref, location)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: DurationProbeThrottled) {
@@ -269,8 +265,6 @@ private data class ParsedContentRange(
 internal const val DEFAULT_DURATION_PROBE_WINDOW_BYTES = 256 * 1024
 internal const val DEFAULT_DURATION_PROBE_INITIAL_BYTES = 16 * 1024
 private const val MAX_DURATION_PROBE_BOX_SEEKS = 4
-internal const val DEFAULT_DURATION_PROBE_TIMEOUT_MS = 12_000L
-private const val DEFAULT_DURATION_PROBE_RETRY_MS = 5L * 60L * 1_000L
 private const val HTTP_OK = 200
 private const val HTTP_PARTIAL_CONTENT = 206
 private const val HTTP_NOT_FOUND = 404
