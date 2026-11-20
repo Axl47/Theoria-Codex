@@ -52,7 +52,7 @@ fun advanceDurationReveal(
 ): DurationReveal {
     fun isPending(post: Post): Boolean {
         if (!isAnimatedPost(post) || post.id in knownDurationMsByPostId) return false
-        return stateByPostId[post.id].let { state -> state == null || state == MediaDurationState.Pending }
+        return stateByPostId[post.id].isUndecided
     }
     val current = reveal.takeUnless {
         it.frontier > posts.size ||

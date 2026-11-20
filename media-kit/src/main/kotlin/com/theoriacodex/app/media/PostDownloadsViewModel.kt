@@ -107,7 +107,7 @@ internal class AndroidPostDownloadBackend(
     private fun enqueueResolved(request: PostDownloadRequest, post: Post, settings: CacheSettings): Long? {
         val selected = request.selectedMedia
             ?: return PostDownloadService.enqueuePostDownloadId(context, post, settings, request.marker)
-        val media = if (request.restored) post.media.ifEmpty { listOfNotNull(post.full) }.getOrNull(selected.pageIndex)
+        val media = if (request.restored) post.downloadablePages.getOrNull(selected.pageIndex)
             ?: throw DownloadPreparationException("This gallery page is no longer available.") else selected.media
         return PostDownloadService.enqueueViewerDownloadId(context, post, media, selected.pageIndex, selected.totalPages,
             settings, request.marker)

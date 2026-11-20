@@ -357,7 +357,7 @@ class PostDownloadQueue(
 
 /** Expansion happens after one authoritative resolution; selected Viewer pages never expand again. */
 fun galleryDownloadPages(post: Post): List<PostDownloadRequest> {
-    val media = post.media.ifEmpty { listOfNotNull(post.full) }
+    val media = post.downloadablePages
     if ((post.mediaCount ?: media.size) > media.size) {
         throw DownloadPreparationException("The provider could not load the complete gallery. Try again.")
     }

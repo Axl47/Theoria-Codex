@@ -77,9 +77,7 @@ data class DurationFilterMetadata(
     fun isVisibilityResolved(post: Post?, resolveInBackground: Boolean, canonicalIndex: Int? = null): Boolean {
         if (!isPrepared) return false
         if (post == null || !resolveInBackground || !isAnimatedPost(post) || animatedDurationMs(post) != null) return true
-        val state = stateByPostId[post.id]
-        return state != null && state != MediaDurationState.Pending &&
-            (canonicalIndex == null || canonicalIndex < revealFrontier)
+        return !stateByPostId[post.id].isUndecided && (canonicalIndex == null || canonicalIndex < revealFrontier)
     }
 
     /** New posts appended to this frame are being prepared, while its shown posts stay put. */

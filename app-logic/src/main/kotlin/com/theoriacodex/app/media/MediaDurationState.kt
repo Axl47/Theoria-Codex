@@ -76,6 +76,10 @@ sealed interface MediaDurationState {
     }
 }
 
+/** No lookup has decided this duration yet: none was asked for, or one is still running. */
+val MediaDurationState?.isUndecided: Boolean
+    get() = this == null || this == MediaDurationState.Pending
+
 enum class MediaDurationProvenance {
     PROVIDER,
     ACTIVE_PLAYER,
