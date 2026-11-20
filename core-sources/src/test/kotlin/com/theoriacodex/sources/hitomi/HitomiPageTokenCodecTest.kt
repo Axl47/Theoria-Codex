@@ -6,10 +6,9 @@ import org.junit.Test
 class HitomiPageTokenCodecTest {
     private val codec = HitomiPageTokenCodec()
 
-    // Tokens older builds issued, which a restored feed may still hand back: v4-full.txt is the Gson encoder's output
-    // (HTML-escaped strings); v2-legacy.txt predates permutation versions and carries a retired key.
+    // v4-full.txt is the Gson encoder's output (HTML-escaped strings), which the current decoder still reads.
     @Test
-    fun `tokens older builds issued decode the same`() {
+    fun `tokens the Gson encoder issued decode the same`() {
         assertEquals(
             DecodedHitomiPageToken(
                 queryHash = "q=1&x<y>'z'",
@@ -21,18 +20,6 @@ class HitomiPageTokenCodecTest {
                 globalIndexVersion = "1715000000",
             ),
             codec.decode(golden("v4-full.txt")),
-        )
-        assertEquals(
-            DecodedHitomiPageToken(
-                queryHash = "legacy-query",
-                primaryKey = "all",
-                primaryOffset = 12L,
-                randomSeed = 5L,
-                randomSnapshotFingerprint = null,
-                randomPermutationVersion = null,
-                globalIndexVersion = null,
-            ),
-            codec.decode(golden("v2-legacy.txt")),
         )
     }
 

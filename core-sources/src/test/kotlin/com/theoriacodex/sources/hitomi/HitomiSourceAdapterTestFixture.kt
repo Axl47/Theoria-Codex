@@ -36,8 +36,6 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -131,24 +129,6 @@ internal abstract class HitomiSourceAdapterTestFixture {
     protected fun decodeTokenString(token: String, field: String): String? {
         val json = Base64.getUrlDecoder().decode(token).toString(Charsets.UTF_8)
         return Json.parseToJsonElement(json).jsonObject[field]?.jsonPrimitive?.contentOrNull
-    }
-
-    protected fun String.asLegacyVersionTwoToken(): String {
-        val json = Base64.getUrlDecoder().decode(this).toString(Charsets.UTF_8)
-        val token = JsonObject(
-            Json.parseToJsonElement(json).jsonObject + ("version" to JsonPrimitive(2)) - "globalIndexVersion",
-        )
-        return Base64.getUrlEncoder().withoutPadding()
-            .encodeToString(token.toString().toByteArray(Charsets.UTF_8))
-    }
-
-    protected fun String.asPreviousVersionThreeToken(): String {
-        val json = Base64.getUrlDecoder().decode(this).toString(Charsets.UTF_8)
-        val token = JsonObject(
-            Json.parseToJsonElement(json).jsonObject + ("version" to JsonPrimitive(3)) - "randomPermutationVersion",
-        )
-        return Base64.getUrlEncoder().withoutPadding()
-            .encodeToString(token.toString().toByteArray(Charsets.UTF_8))
     }
 
     protected fun RoutingHitomiHttpClient.routeGlobalIndex(

@@ -13,6 +13,7 @@ import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
+import com.theoriacodex.domain.coroutines.mapConcurrent
 import com.theoriacodex.sources.common.asIntOrNull
 import com.theoriacodex.sources.common.autocompleteTagCounts
 import com.theoriacodex.domain.model.CreatorProfile
@@ -26,22 +27,14 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.canonicalHitomiArtistIdentity
-import com.theoriacodex.domain.query.QueryHash
 import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.http.SourceHttpBodyTooLargeException
 import com.theoriacodex.sources.http.SourceHttpClient
 import java.io.IOException
-import java.security.MessageDigest
 import java.util.Locale
 import kotlin.coroutines.CoroutineContext
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.supervisorScope
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 
 /**
  * Hitomi's search pages are metadata shells. This adapter reads the provider's binary Nozomi
@@ -90,7 +83,6 @@ class HitomiSourceAdapter(
         hitomiCall("media recovery") { postMapper.recoverPostMedia(post, failedMedia) }
     }
 
-    private val pageTokenCodec = HitomiPageTokenCodec()
     private val suggestionCounts = HitomiByteBudgetCache<String, Int>(
         maxBytes = suggestionCountCacheMaxBytes,
         weigh = { key, _ -> key.hitomiUtf8ByteWeight() + Int.SIZE_BYTES },
@@ -102,6 +94,13 @@ class HitomiSourceAdapter(
         maxBytes = randomSnapshotCacheMaxBytes,
         initialReuseTtlMillis = randomSnapshotReuseTtlMillis,
         nowMillis = randomSnapshotNowMillis,
+    )
+    private val searchPager = HitomiSearchPager(
+        queryCompiler = queryCompiler,
+        nozomiReader = nozomiReader,
+        randomSnapshotCache = randomSnapshotCache,
+        suggestionCounts = suggestionCounts,
+        pageSize = pageSize,
     )
     private val galleryManifests = HitomiGalleryManifestStore(
         maxBytes = galleryManifestCacheMaxBytes,
@@ -123,201 +122,8 @@ class HitomiSourceAdapter(
     }
 
     private suspend fun searchInternal(query: Query, pageToken: String?): Page<Post> {
-        val compiled = queryCompiler.compile(query)
-        if (compiled.isUnsatisfiable) return Page(items = emptyList(), nextPageToken = null)
-
-        val queryHash = QueryHash.from(query)
-        val decodedToken = pageToken?.let(::decodePageToken)
-        validatePageToken(decodedToken, queryHash, compiled.globalIndexVersion, query.sort)
-
-        val primaryOptions = compiled.primaryOptions(query.sort)
-        val primary = if (decodedToken == null) {
-            choosePrimary(primaryOptions)
-        } else {
-            primaryOptions.firstOrNull { option -> option.key == decodedToken.primaryKey }
-                ?: throw hitomiParseFailure("Hitomi page token references an invalid primary index")
-        }
-        val seed = decodedToken?.randomSeed ?: deterministicSeed(queryHash)
-        val primaryOffset = decodedToken?.primaryOffset ?: 0L
-        if (primaryOffset < 0L) {
-            throw hitomiParseFailure("Hitomi page token contained a negative primary offset")
-        }
-
-        val secondaryIncludes = compiled.secondaryIncludes(primary.key)
-            .map { index -> nozomiReader.membershipFor(index) }
-        if (secondaryIncludes.any(IntArray::isEmpty)) {
-            return Page(items = emptyList(), nextPageToken = null)
-        }
-        val exclusions = compiled.exclusions
-            .map { index -> nozomiReader.membershipFor(index) }
-
-        if (query.sort == SortMode.RANDOM) {
-            return randomPage(
-                queryHash = queryHash,
-                primary = primary,
-                seed = seed,
-                initialOffset = primaryOffset,
-                expectedSnapshotFingerprint = decodedToken?.randomSnapshotFingerprint,
-                secondaryIncludes = secondaryIncludes,
-                exclusions = exclusions,
-                globalIndexVersion = compiled.globalIndexVersion,
-            )
-        }
-
-        return orderedPage(
-            queryHash = queryHash,
-            primary = primary,
-            seed = seed,
-            initialOffset = primaryOffset,
-            secondaryIncludes = secondaryIncludes,
-            exclusions = exclusions,
-            globalIndexVersion = compiled.globalIndexVersion,
-        )
-    }
-
-    private suspend fun orderedPage(
-        queryHash: String,
-        primary: CompiledIndex,
-        seed: Long,
-        initialOffset: Long,
-        secondaryIncludes: List<IntArray>,
-        exclusions: List<IntArray>,
-        globalIndexVersion: String?,
-    ): Page<Post> {
-        val scanned = nozomiReader.scanMatchingIds(primary, initialOffset, pageSize, secondaryIncludes, exclusions)
-        val posts = hydrateGalleries(scanned.ids)
-        val nextToken = if (!scanned.exhausted && scanned.scannedIds > 0) {
-            encodePageToken(
-                HitomiPageToken(
-                    version = HITOMI_PAGE_TOKEN_VERSION,
-                    queryHash = queryHash,
-                    primaryKey = primary.key,
-                    primaryOffset = scanned.nextOffset,
-                    randomSeed = seed,
-                    randomSnapshotFingerprint = null,
-                    globalIndexVersion = globalIndexVersion,
-                ),
-            )
-        } else {
-            null
-        }
-        return Page(items = posts, nextPageToken = nextToken)
-    }
-
-    private fun validatePageToken(
-        decodedToken: DecodedHitomiPageToken?,
-        queryHash: String,
-        globalIndexVersion: String?,
-        sort: SortMode,
-    ) {
-        if (decodedToken != null && decodedToken.queryHash != queryHash) {
-            throw hitomiParseFailure("Hitomi page token does not match the active query")
-        }
-        if (decodedToken != null && decodedToken.globalIndexVersion != globalIndexVersion) {
-            throw hitomiParseFailure("Hitomi page token does not match the active global index version")
-        }
-        if (
-            decodedToken != null &&
-            sort == SortMode.RANDOM &&
-            decodedToken.randomSnapshotFingerprint == null
-        ) {
-            throw hitomiParseFailure("Hitomi random page token omitted its source snapshot")
-        }
-        if (
-            decodedToken != null &&
-            sort == SortMode.RANDOM &&
-            decodedToken.randomPermutationVersion != HitomiDeterministicPermutation.ALGORITHM_VERSION
-        ) {
-            throw hitomiParseFailure("Hitomi random page token used an unsupported permutation")
-        }
-        if (
-            decodedToken != null &&
-            sort != SortMode.RANDOM &&
-            (decodedToken.randomSnapshotFingerprint != null || decodedToken.randomPermutationVersion != null)
-        ) {
-            throw hitomiParseFailure("Hitomi non-random page token contained a random snapshot")
-        }
-    }
-
-    private suspend fun randomPage(
-        queryHash: String,
-        primary: CompiledIndex,
-        seed: Long,
-        initialOffset: Long,
-        expectedSnapshotFingerprint: String?,
-        secondaryIncludes: List<IntArray>,
-        exclusions: List<IntArray>,
-        globalIndexVersion: String?,
-    ): Page<Post> {
-        val snapshot = randomSnapshotFor(
-            compiledIndex = primary,
-            expectedSnapshotFingerprint = expectedSnapshotFingerprint,
-        )
-        val randomIds = snapshot.ids
-        if (initialOffset > randomIds.size.toLong()) {
-            throw hitomiParseFailure("Hitomi page token offset exceeded the random candidate list")
-        }
-        val permutation = randomIds.takeIf(IntArray::isNotEmpty)?.let { ids ->
-            HitomiDeterministicPermutation(ids.size, seed)
-        }
-        var offset = initialOffset
-        var scanned = 0
-        val survivingIds = HitomiIntArrayBuilder(pageSize)
-        while (
-            offset < randomIds.size.toLong() &&
-            survivingIds.size < pageSize &&
-            scanned < MAX_PRIMARY_SCAN_IDS_PER_PAGE
-        ) {
-            val galleryId = randomIds[requireNotNull(permutation).sourceIndex(offset)]
-            offset += 1L
-            scanned += 1
-            if (matchesHitomiMemberships(galleryId, secondaryIncludes, exclusions)) survivingIds.add(galleryId)
-        }
-
-        val posts = hydrateGalleries(survivingIds.toIntArray())
-        val nextToken = if (offset < randomIds.size.toLong()) {
-            encodePageToken(
-                HitomiPageToken(
-                    version = HITOMI_PAGE_TOKEN_VERSION,
-                    queryHash = queryHash,
-                    primaryKey = primary.key,
-                    primaryOffset = offset,
-                    randomSeed = seed,
-                    randomSnapshotFingerprint = snapshot.fingerprint,
-                    randomPermutationVersion = HitomiDeterministicPermutation.ALGORITHM_VERSION,
-                    globalIndexVersion = globalIndexVersion,
-                ),
-            )
-        } else {
-            null
-        }
-        return Page(items = posts, nextPageToken = nextToken)
-    }
-
-    private suspend fun randomSnapshotFor(
-        compiledIndex: CompiledIndex,
-        expectedSnapshotFingerprint: String?,
-    ): HitomiNozomiSnapshot {
-        val url = compiledIndex.url
-        val snapshot = try {
-            randomSnapshotCache.getOrLoad(url, expectedSnapshotFingerprint) {
-                nozomiReader.readCompleteNozomi(compiledIndex, MAX_RANDOM_GALLERY_IDS)
-            }
-        } catch (error: HitomiRandomSnapshotMismatchException) {
-            throw hitomiParseFailure(
-                "Hitomi random source changed before the next page could be resumed",
-                error,
-            )
-        }
-        if (
-            expectedSnapshotFingerprint != null &&
-            snapshot.fingerprint != expectedSnapshotFingerprint
-        ) {
-            throw hitomiParseFailure(
-                "Hitomi random source changed before the next page could be resumed",
-            )
-        }
-        return snapshot
+        val page = searchPager.page(query, pageToken)
+        return Page(items = hydrateGalleries(page.ids), nextPageToken = page.nextToken)
     }
 
     internal suspend fun cacheSnapshot(): HitomiSourceCacheSnapshot {
@@ -463,41 +269,14 @@ class HitomiSourceAdapter(
         )
     }
 
-    private suspend fun choosePrimary(options: List<CompiledIndex>): CompiledIndex {
-        require(options.isNotEmpty()) { "Hitomi search requires a primary index" }
-        if (options.size == 1) return options.single()
-        val estimates = options.associateWith { option ->
-            option.inlineIds?.size?.toLong()
-                ?: option.term
-                ?.termCacheKey()
-                ?.let(suggestionCounts::get)
-                ?.toLong()
-                ?: nozomiReader.nozomiSize(option.url)
-        }
-        return options.minWithOrNull(
-            compareBy<CompiledIndex> { option -> estimates.getValue(option) }
-                .thenBy(CompiledIndex::key),
-        ) ?: options.first()
-    }
-
-    private suspend fun hydrateGalleries(ids: IntArray): List<Post> = supervisorScope {
-        val semaphore = Semaphore(hydrationConcurrency)
-        ids.map { galleryId ->
-            async {
-                semaphore.withPermit {
-                    try {
-                        fetchGallery(galleryId, sparse = true)
-                    } catch (error: CancellationException) {
-                        throw error
-                    } catch (_: HitomiGalleryException) {
-                        null
-                    }
-                }
+    private suspend fun hydrateGalleries(ids: IntArray): List<Post> =
+        ids.asList().mapConcurrent(hydrationConcurrency) { galleryId ->
+            try {
+                fetchGallery(galleryId, sparse = true)
+            } catch (_: HitomiGalleryException) {
+                null
             }
-        }.awaitAll()
-            .filterNotNull()
-            .distinctBy(Post::id)
-    }
+        }.filterNotNull().distinctBy(Post::id)
 
     private suspend fun fetchGallery(galleryId: Int, sparse: Boolean): Post? {
         val gallery = galleryManifests.getOrLoad(galleryId) { loadGalleryManifest(galleryId) }
@@ -551,18 +330,6 @@ class HitomiSourceAdapter(
         )
     }
 
-    private fun encodePageToken(token: HitomiPageToken): String {
-        return pageTokenCodec.encode(token)
-    }
-
-    private fun decodePageToken(raw: String): DecodedHitomiPageToken {
-        return try {
-            pageTokenCodec.decode(raw)
-        } catch (error: HitomiPageTokenException) {
-            throw hitomiParseFailure(error.message ?: "Hitomi page token was invalid", error)
-        }
-    }
-
     companion object {
         private const val DEFAULT_PAGE_SIZE = 25
         private const val MAX_PAGE_SIZE = 100
@@ -571,9 +338,7 @@ class HitomiSourceAdapter(
         private const val DEFAULT_HYDRATION_CONCURRENCY = DEFAULT_PAGE_SIZE
         private const val MAX_HYDRATION_CONCURRENCY = MAX_PAGE_SIZE
         private const val HITOMI_AUTOCOMPLETE_LIMIT = 10
-        private const val MAX_PRIMARY_SCAN_IDS_PER_PAGE = 10_000
         internal const val DEFAULT_MEMBERSHIP_CACHE_BYTES = 8L * 1024L * 1024L
-        private const val MAX_RANDOM_GALLERY_IDS = HitomiNozomi.MAX_GALLERY_IDS
         internal const val DEFAULT_KNOWN_SIZE_CACHE_BYTES = 256L * 1024L
         internal const val DEFAULT_SUGGESTION_COUNT_CACHE_BYTES = 256L * 1024L
         internal const val DEFAULT_GALLERY_MANIFEST_CACHE_BYTES = 8L * 1024L * 1024L
@@ -597,13 +362,6 @@ class HitomiSourceAdapter(
             "italian",
             "russian",
         )
-
-        private fun deterministicSeed(queryHash: String): Long {
-            val digest = MessageDigest.getInstance("SHA-256").digest(queryHash.toByteArray(Charsets.UTF_8))
-            return digest.take(Long.SIZE_BYTES).fold(0L) { result, byte ->
-                (result shl Byte.SIZE_BITS) or (byte.toLong() and 0xffL)
-            }
-        }
 
         private fun HitomiAutocompleteEntry.toFacetedSuggestion(): FacetedTagSuggestion {
             val facet = HITOMI_FACETS.facetOf(namespace)

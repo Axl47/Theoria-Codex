@@ -1,11 +1,16 @@
 package com.theoriacodex.sources.hitomi
 
 import com.theoriacodex.domain.diagnostics.OffMainWork
+import com.theoriacodex.domain.model.SortMode
 import java.util.Base64
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
+/**
+ * Encodes Hitomi page tokens. Tokens live only in a search's in-memory continuation, never in saved data, so
+ * only the current version decodes.
+ */
 internal class HitomiPageTokenCodec {
     fun encode(token: HitomiPageToken): String {
         val json = hitomiPageTokenJson.encodeToString(token).toByteArray(Charsets.UTF_8)
@@ -21,7 +26,7 @@ internal class HitomiPageTokenCodec {
             throw HitomiPageTokenException("Hitomi page token was malformed", error)
         }
         if (
-            token.version !in SUPPORTED_PAGE_TOKEN_VERSIONS ||
+            token.version != HITOMI_PAGE_TOKEN_VERSION ||
             token.queryHash.isNullOrBlank() ||
             token.primaryKey.isNullOrBlank() ||
             token.primaryOffset == null ||
@@ -41,22 +46,14 @@ internal class HitomiPageTokenCodec {
                         "Hitomi page token contained an invalid random snapshot",
                     )
                 },
-            randomPermutationVersion = if (token.version == HITOMI_PAGE_TOKEN_VERSION) {
-                token.randomPermutationVersion
-            } else {
-                null
-            },
-            globalIndexVersion = if (token.version in GLOBAL_INDEX_PAGE_TOKEN_VERSIONS) {
-                token.globalIndexVersion
-                    ?.takeIf(GLOBAL_INDEX_VERSION_PATTERN::matches)
-                    ?: token.globalIndexVersion?.let {
-                        throw HitomiPageTokenException(
-                            "Hitomi page token contained an invalid global index version",
-                        )
-                    }
-            } else {
-                null
-            },
+            randomPermutationVersion = token.randomPermutationVersion,
+            globalIndexVersion = token.globalIndexVersion
+                ?.takeIf(GLOBAL_INDEX_VERSION_PATTERN::matches)
+                ?: token.globalIndexVersion?.let {
+                    throw HitomiPageTokenException(
+                        "Hitomi page token contained an invalid global index version",
+                    )
+                },
         )
     }
 }
@@ -81,7 +78,24 @@ internal data class DecodedHitomiPageToken(
     val randomSnapshotFingerprint: String?,
     val randomPermutationVersion: Int?,
     val globalIndexVersion: String?,
-)
+) {
+    /** Throws unless this token continues a search for [queryHash] under [globalIndexVersion] and [sort]. */
+    fun requireContinues(queryHash: String, globalIndexVersion: String?, sort: SortMode) {
+        val failure = when {
+            this.queryHash != queryHash -> "Hitomi page token does not match the active query"
+            this.globalIndexVersion != globalIndexVersion ->
+                "Hitomi page token does not match the active global index version"
+            sort == SortMode.RANDOM && randomSnapshotFingerprint == null ->
+                "Hitomi random page token omitted its source snapshot"
+            sort == SortMode.RANDOM && randomPermutationVersion != HitomiDeterministicPermutation.ALGORITHM_VERSION ->
+                "Hitomi random page token used an unsupported permutation"
+            sort != SortMode.RANDOM && (randomSnapshotFingerprint != null || randomPermutationVersion != null) ->
+                "Hitomi non-random page token contained a random snapshot"
+            else -> return
+        }
+        throw hitomiParseFailure(failure)
+    }
+}
 
 internal class HitomiPageTokenException(
     message: String,
@@ -98,16 +112,5 @@ internal val hitomiPageTokenJson = Json {
 }
 
 internal const val HITOMI_PAGE_TOKEN_VERSION = 4
-private const val LEGACY_PAGE_TOKEN_VERSION = 2
-private const val PREVIOUS_PAGE_TOKEN_VERSION = 3
-private val SUPPORTED_PAGE_TOKEN_VERSIONS = setOf(
-    LEGACY_PAGE_TOKEN_VERSION,
-    PREVIOUS_PAGE_TOKEN_VERSION,
-    HITOMI_PAGE_TOKEN_VERSION,
-)
-private val GLOBAL_INDEX_PAGE_TOKEN_VERSIONS = setOf(
-    PREVIOUS_PAGE_TOKEN_VERSION,
-    HITOMI_PAGE_TOKEN_VERSION,
-)
 private val GLOBAL_INDEX_VERSION_PATTERN = Regex("[0-9]+")
 private val RANDOM_SNAPSHOT_FINGERPRINT = Regex("[0-9a-f]{64}")
