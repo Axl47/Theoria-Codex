@@ -43,6 +43,7 @@ import com.theoriacodex.sources.common.matchesChallenge
 import com.theoriacodex.sources.common.optionalJsonArray
 import com.theoriacodex.sources.common.parseJsonArray as parseSourceJsonArray
 import com.theoriacodex.sources.common.parseJsonObject as parseSourceJsonObject
+import com.theoriacodex.sources.common.requestWithChallengeFallback
 import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.http.SourceHttpClient
@@ -298,6 +299,7 @@ class NhentaiSourceAdapter(
         val response = requestDirect(
             url = "$NHENTAI_GALLERY_URL_PREFIX/$galleryId",
             query = emptyMap(),
+            mirrorOnChallenge = true,
         )
         if (response.statusCode == 404) return@sourceCall null
         if (shouldUseMirrorFallback(response)) {
@@ -358,7 +360,7 @@ class NhentaiSourceAdapter(
         pageIndex: Int,
         useAllEndpoint: Boolean,
     ): JsonObject {
-        val response = requestDirect(url = url, query = query)
+        val response = requestDirect(url = url, query = query, mirrorOnChallenge = true)
         if (shouldUseMirrorFallback(response)) {
             return requestMirrorSearch(
                 compiledQuery = compiledQuery,
@@ -411,17 +413,17 @@ class NhentaiSourceAdapter(
         return parseJsonArray(response.body)
     }
 
+    /** With [mirrorOnChallenge], a challenge the HTTP client turned into an outage answers like one, for the mirror. */
     private suspend fun requestDirect(
         url: String,
         query: Map<String, String>,
+        mirrorOnChallenge: Boolean = false,
     ): SourceHttpResponse {
         throttle()
+        val request = suspend { httpClient.get(url = url, query = query, headers = NHENTAI_DEFAULT_HEADERS) }
+        if (mirrorOnChallenge) return requestWithChallengeFallback("NHentai", request)
         return try {
-            httpClient.get(
-                url = url,
-                query = query,
-                headers = NHENTAI_DEFAULT_HEADERS,
-            )
+            request()
         } catch (error: IOException) {
             sourceNetworkFailure("NHentai", error)
         }

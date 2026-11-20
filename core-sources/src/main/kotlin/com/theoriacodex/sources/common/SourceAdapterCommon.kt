@@ -1,6 +1,7 @@
 package com.theoriacodex.sources.common
 
 import com.google.gson.Gson
+import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.HostUnavailableException
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
@@ -134,6 +135,32 @@ internal fun sourceNetworkFailure(siteLabel: String, error: IOException): Nothin
         cause = error,
     )
 }
+
+/**
+ * Runs a direct request whose Cloudflare challenge has a mirror to fall back on. A client with an outage tracker
+ * throws a challenge it recognizes, and refuses the host up front while that outage lasts, so such a failure
+ * comes back as [CHALLENGED_RESPONSE] for the caller's [matchesChallenge] check to route to the mirror. The
+ * outage stays recorded, so later requests skip the direct host. Other transport failures are
+ * [sourceNetworkFailure]s.
+ */
+internal suspend fun requestWithChallengeFallback(
+    siteLabel: String,
+    request: suspend () -> SourceHttpResponse,
+): SourceHttpResponse = try {
+    request()
+} catch (error: HostUnavailableException) {
+    if (error.kind != HostOutageKind.CHALLENGE) sourceNetworkFailure(siteLabel, error)
+    CHALLENGED_RESPONSE
+} catch (error: IOException) {
+    sourceNetworkFailure(siteLabel, error)
+}
+
+/** The answer a Cloudflare challenge gives, standing in for one the HTTP client already turned into an outage. */
+internal val CHALLENGED_RESPONSE = SourceHttpResponse(
+    statusCode = 403,
+    body = "",
+    headers = mapOf("cf-mitigated" to listOf("challenge")),
+)
 
 internal fun classifyHttpFailure(
     statusCode: Int,

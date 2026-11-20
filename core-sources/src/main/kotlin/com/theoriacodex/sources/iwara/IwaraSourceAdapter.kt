@@ -33,6 +33,7 @@ import com.theoriacodex.sources.common.optionalJsonArray
 import com.theoriacodex.sources.common.optionalJsonObject
 import com.theoriacodex.sources.common.parseJsonElement
 import com.theoriacodex.sources.common.parseJsonObject
+import com.theoriacodex.sources.common.requestWithChallengeFallback
 import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.common.stringValue
@@ -261,14 +262,12 @@ class IwaraSourceAdapter(
         url: String,
         query: Map<String, String>,
     ): SourceHttpResponse {
-        val response = try {
+        val response = requestWithChallengeFallback("Iwara") {
             httpClient.get(
                 url = url,
                 query = query,
                 headers = IWARA_REQUEST_HEADERS,
             )
-        } catch (error: IOException) {
-            sourceNetworkFailure("Iwara", error)
         }
         val effectiveResponse = if (shouldUseMirrorFallback(response)) {
             requestMirror(url = url, query = query)
