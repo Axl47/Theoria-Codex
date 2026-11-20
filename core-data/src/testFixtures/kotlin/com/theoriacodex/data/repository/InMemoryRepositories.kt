@@ -12,6 +12,7 @@ import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -80,7 +81,7 @@ class InMemoryCodexRepository : CodexRepository {
         }
     }
 
-    override suspend fun reorderCodex(codexId: String, targetIndex: Int) {
+    suspend fun reorderCodex(codexId: String, targetIndex: Int) {
         mutex.withLock {
             codices.value = FixtureRepositoryPolicies.reorderCodices(
                 codices = codices.value,
@@ -124,7 +125,7 @@ class InMemoryCodexRepository : CodexRepository {
         }
     }
 
-    override suspend fun deleteCodex(codexId: String) {
+    suspend fun deleteCodex(codexId: String) {
         mutex.withLock {
             codices.value = codices.value.filterNot { it.codexId == codexId }
             itemsByCodex.value = itemsByCodex.value - codexId
@@ -212,17 +213,6 @@ class InMemoryCodexRepository : CodexRepository {
         }
     }
 
-    override suspend fun removeItem(codexId: String, sourceKey: SourceKey, sourcePostId: String) {
-        mutex.withLock {
-            val targetPostId = PostId(source = sourceKey, sourcePostId = sourcePostId)
-            val updated = FixtureRepositoryPolicies.removeCodexItem(
-                items = itemsByCodex.value[codexId].orEmpty(),
-                postId = targetPostId,
-            )
-            itemsByCodex.value = itemsByCodex.value + (codexId to updated)
-        }
-    }
-
     override suspend fun removeItems(codexId: String, postIds: Set<PostId>) {
         if (postIds.isEmpty()) return
         mutex.withLock {
@@ -279,12 +269,6 @@ class InMemoryRecentsRepository(
 
     override fun observeSearches(): Flow<List<RecentSearchEntry>> {
         return searches
-    }
-
-    override fun observeActivity(): Flow<List<RecentActivityEntry>> {
-        return combine(watched, searches) { watchedPosts, searchEntries ->
-            mergeRecentActivity(watchedPosts, searchEntries)
-        }
     }
 
     override suspend fun recordWatchedPost(
@@ -406,23 +390,9 @@ class InMemoryRecentsRepository(
         }
     }
 
-    override suspend fun clearWatchedPosts() {
-        mutex.withLock {
-            watched.value = emptyList()
-        }
-    }
-
     override suspend fun clearWatchedPosts(section: RecentPostSection) {
         mutex.withLock {
             watched.value = watched.value.filterNot { entry -> entry.section == section }
-        }
-    }
-
-    override suspend fun clearSearches(queryHashPrefix: String?) {
-        mutex.withLock {
-            searches.value = queryHashPrefix?.let { prefix ->
-                searches.value.filterNot { entry -> entry.queryHash.startsWith(prefix) }
-            }.orEmpty()
         }
     }
 
@@ -491,3 +461,7 @@ class InMemoryUiRestoreRepository : UiRestoreRepository {
         viewerLaunchContext.value = context
     }
 }
+
+/** The combined Recents activity list the app shows, read once from this repository's watched posts and searches. */
+suspend fun RecentsRepository.activity(): List<RecentActivityEntry> =
+    mergeRecentActivity(observeWatchedPosts().first(), observeSearches().first())

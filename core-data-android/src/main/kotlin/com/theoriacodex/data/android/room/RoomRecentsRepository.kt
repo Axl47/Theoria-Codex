@@ -1,7 +1,6 @@
 package com.theoriacodex.data.android.room
 
 import androidx.room.withTransaction
-import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchEntry
@@ -12,14 +11,12 @@ import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.storage.RecentSearchPayloadCodec
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.data.repository.mergeRecentActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 
 const val DEFAULT_RECENT_WATCHED_LIMIT = 200
@@ -67,9 +64,6 @@ class RoomRecentsRepository(
 
     override fun observeSearches(): Flow<List<RecentSearchEntry>> = dao.observeSearches()
         .map { rows -> rows.map(RecentSearchEntity::toDomain) }.flowOn(Dispatchers.Default)
-
-    override fun observeActivity(): Flow<List<RecentActivityEntry>> =
-        combine(observeWatchedPosts(), observeSearches(), ::mergeRecentActivity).flowOn(Dispatchers.Default)
 
     override suspend fun recordWatchedPost(
         post: Post,
@@ -168,25 +162,11 @@ class RoomRecentsRepository(
         }
     }
 
-    override suspend fun clearWatchedPosts() {
-        database.withTransaction {
-            val removed = dao.watched()
-            dao.deleteWatched()
-            cleanupWatchedPostsInside(removed)
-        }
-    }
-
     override suspend fun clearWatchedPosts(section: RecentPostSection) {
         database.withTransaction {
             val removed = dao.watched().filter { it.section == section.name }
             dao.deleteWatchedSection(section.name)
             cleanupWatchedPostsInside(removed)
-        }
-    }
-
-    override suspend fun clearSearches(queryHashPrefix: String?) {
-        database.withTransaction {
-            if (queryHashPrefix == null) dao.deleteSearches() else dao.deleteSearchesWithPrefix(queryHashPrefix)
         }
     }
 

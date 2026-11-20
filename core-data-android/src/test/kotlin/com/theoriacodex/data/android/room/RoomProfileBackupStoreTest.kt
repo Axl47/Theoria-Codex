@@ -49,7 +49,7 @@ class RoomProfileBackupStoreTest {
     @Test fun `logical snapshot preserves order rules likes timestamps and independent recents memberships`() = runTest {
         val first = content.ensureCodex("a", "First")
         val second = content.ensureCodex("b", "Second")
-        content.reorderCodex(second.codexId, 0)
+        content.reorderCodices(listOf(second.codexId, first.codexId))
         content.setAutomaticTag(first.codexId, CodexAutomaticTag(SourceKey.PIXIV, "cat"), true)
         val post = post("42")
         content.addItems(first.codexId, listOf(post))

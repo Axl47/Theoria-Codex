@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.data.repository.RecentActivityEntry
+import com.theoriacodex.data.repository.activity
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.RecentSearchSection
@@ -106,8 +107,8 @@ class RoomRecentsRepositoryTest {
         assertEquals(fypQuery, restored.query)
         assertEquals(listOf(SourceKey.PIXIV), restored.sources)
         assertEquals(sourceTags, restored.sourceTags)
-        assertTrue(repository.observeActivity().first().none { it is RecentActivityEntry.Watched })
-        repository.clearSearches("for_you:")
+        assertTrue(repository.activity().none { it is RecentActivityEntry.Watched })
+        repository.clearSearches(RecentSearchSection.FYP)
         assertEquals(listOf("search:manual"), repository.observeSearches().first().map { it.queryHash })
     }
 
@@ -134,7 +135,7 @@ class RoomRecentsRepositoryTest {
         assertEquals("original", watched.single { it.post.id.sourcePostId == "b" }.originQueryHash)
         assertEquals(listOf("c", "a"), searches.map { it.queryHash })
 
-        val activity = repository.observeActivity().first()
+        val activity = repository.activity()
         assertTrue(activity.take(2).all { it is RecentActivityEntry.Watched })
         assertEquals(
             listOf("c", "b"),
@@ -163,7 +164,7 @@ class RoomRecentsRepositoryTest {
 
         recents.clearWatchedPosts(RecentPostSection.CODEX)
         assertEquals(shared, codex.getPost(shared.id))
-        codex.deleteCodex(codexId)
+        codex.deleteCodexForUndo(codexId)
         assertNull(codex.getPost(shared.id))
     }
 
@@ -180,7 +181,7 @@ class RoomRecentsRepositoryTest {
             setOf(RecentPostSection.WATCHED, RecentPostSection.CODEX),
             memberships.map { entry -> entry.section }.toSet(),
         )
-        assertEquals(1, repository.observeActivity().first().filterIsInstance<RecentActivityEntry.Watched>().size)
+        assertEquals(1, repository.activity().filterIsInstance<RecentActivityEntry.Watched>().size)
         assertEquals(1, database.codexLikesDao().posts().size)
     }
 
@@ -352,23 +353,23 @@ class RoomRecentsRepositoryTest {
         assertTrue(database.recentsDao().searches().single().queryPayloadJson.contains("schemaVersion"))
     }
 
-    @Test fun `unfiltered watched search and combined clears remain independent`() = runTest {
+    @Test fun `watched search and combined clears remain independent`() = runTest {
         val repository = RoomRecentsRepository(database, clock = { now++ })
         repository.recordWatchedPost(recentPost("watched"), ViewerStreamSource.SEARCH, null)
         repository.recordSearch(recentQuery("search"), "search")
 
-        repository.clearWatchedPosts()
+        repository.clearWatchedPosts(RecentPostSection.WATCHED)
         assertTrue(repository.observeWatchedPosts().first().isEmpty())
         assertEquals(listOf("search"), repository.observeSearches().first().map { it.queryHash })
 
         repository.recordWatchedPost(recentPost("watched-2"), ViewerStreamSource.CODEX, null)
-        repository.clearSearches()
+        repository.clearSearches(RecentSearchSection.SEARCHES)
         assertTrue(repository.observeSearches().first().isEmpty())
         assertEquals(listOf("watched-2"), repository.observeWatchedPosts().first().map { it.post.id.sourcePostId })
 
         repository.recordSearch(recentQuery("again"), "again")
         repository.clearAll()
-        assertTrue(repository.observeActivity().first().isEmpty())
+        assertTrue(repository.activity().isEmpty())
         assertNull(database.codexLikesDao().post(SourceKey.PIXIV.id, "watched-2"))
     }
 }

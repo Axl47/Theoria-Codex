@@ -46,12 +46,10 @@ class DataStoreRepositoryContractsTest(
         assertEquals(1.0, initial.runtime.sourceWeights.values.sum(), 0.0000001)
 
         repository.setEnabledSources(setOf(SourceKey.PIXIV, SourceKey.GELBOORU))
-        repository.setSourceWeights(
-            mapOf(
-                SourceKey.PIXIV to Double.MAX_VALUE,
-                SourceKey.GELBOORU to Double.MAX_VALUE,
-            )
-        )
+        repository.updateSettings { it.copy(runtime = it.runtime.copy(sourceWeights = mapOf(
+            SourceKey.PIXIV to Double.MAX_VALUE,
+            SourceKey.GELBOORU to Double.MAX_VALUE,
+        ))) }
         val profile = repository.addRecommendationProfile("  Contract Profile  ")
         assertTrue(repository.addFavoriteTag(profile.profileId, SourceKey.GELBOORU, listOf("Blue Hair")))
         assertFalse(repository.addFavoriteTag(profile.profileId, SourceKey.GELBOORU, listOf("blue_hair")))
@@ -73,13 +71,13 @@ class DataStoreRepositoryContractsTest(
         val repository = createSettingsRepository()
         val pair = linkedSetOf(SourceKey.PIXIV, SourceKey.GELBOORU)
         repository.setEnabledSources(pair)
-        repository.setSourceWeights(mapOf(SourceKey.PIXIV to 3.0, SourceKey.GELBOORU to 1.0))
+        repository.updateSettings { it.copy(runtime = it.runtime.copy(sourceWeights = mapOf(SourceKey.PIXIV to 3.0, SourceKey.GELBOORU to 1.0))) }
         val pairWeights = repository.observeSettings().first().runtime.sourceWeights
         assertEquals(0.75, pairWeights.getValue(SourceKey.PIXIV), 0.0000001)
 
         val triple = pair + SourceKey.HITOMI
         repository.setEnabledSources(triple)
-        repository.setSourceWeights(mapOf(SourceKey.PIXIV to 1.0, SourceKey.GELBOORU to 2.0, SourceKey.HITOMI to 7.0))
+        repository.updateSettings { it.copy(runtime = it.runtime.copy(sourceWeights = mapOf(SourceKey.PIXIV to 1.0, SourceKey.GELBOORU to 2.0, SourceKey.HITOMI to 7.0))) }
         val tripleWeights = repository.observeSettings().first().runtime.sourceWeights
         repository.setEnabledSources(emptySet())
         repository.setEnabledSources(linkedSetOf(SourceKey.GELBOORU, SourceKey.PIXIV))

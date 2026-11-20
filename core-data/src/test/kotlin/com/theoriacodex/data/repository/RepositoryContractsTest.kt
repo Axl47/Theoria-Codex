@@ -65,7 +65,7 @@ class RepositoryContractTest(
         repository.addItem(first.codexId, repositoryTestPost(id = "pixiv", source = SourceKey.PIXIV))
         repository.addItem(first.codexId, repositoryTestPost(id = "ai", source = SourceKey.AIBOORU))
 
-        repository.reorderCodex(third.codexId, targetIndex = -10)
+        InMemoryCodexLikesTransactions(repository).reorderCodices(listOf(third.codexId, first.codexId, second.codexId))
 
         assertEquals("Favorites", first.name)
         assertEquals("favorites 2", second.name)
@@ -252,7 +252,7 @@ class RepositoryContractTest(
             setOf(RecentPostSection.WATCHED, RecentPostSection.CODEX),
             watched.map { entry -> entry.section }.toSet(),
         )
-        assertEquals(1, repository.observeActivity().first().filterIsInstance<RecentActivityEntry.Watched>().size)
+        assertEquals(1, repository.activity().filterIsInstance<RecentActivityEntry.Watched>().size)
     }
 
     @Test
@@ -270,8 +270,8 @@ class RepositoryContractTest(
         repository.recordSearch(fypQuery.copy(mode = QueryMode.Source(SourceKey.PIXIV)), "search:manual")
         repository.recordSearch(fypQuery, "for_you:seed", RecentSearchKind.FYP, listOf(SourceKey.PIXIV))
 
-        assertEquals(2, repository.observeActivity().first().size)
-        repository.clearSearches("for_you:")
+        assertEquals(2, repository.activity().size)
+        repository.clearSearches(RecentSearchSection.FYP)
         assertEquals(listOf("search:manual"), repository.observeSearches().first().map { it.queryHash })
     }
 
@@ -286,7 +286,7 @@ class RepositoryContractTest(
             RecentPostSection.FYP,
         )
 
-        assertTrue(repository.observeActivity().first().isEmpty())
+        assertTrue(repository.activity().isEmpty())
     }
 
     @Test
@@ -333,13 +333,11 @@ class RepositoryContractTest(
         val repository = createSettingsRepository()
         val enabled = setOf(SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.NHENTAI)
         repository.setEnabledSources(enabled)
-        repository.setSourceWeights(
-            mapOf(
-                SourceKey.PIXIV to Double.NaN,
-                SourceKey.GELBOORU to Double.POSITIVE_INFINITY,
-                SourceKey.NHENTAI to -1.0,
-            )
-        )
+        repository.updateSettings { it.copy(runtime = it.runtime.copy(sourceWeights = mapOf(
+            SourceKey.PIXIV to Double.NaN,
+            SourceKey.GELBOORU to Double.POSITIVE_INFINITY,
+            SourceKey.NHENTAI to -1.0,
+        ))) }
 
         var weights = repository.observeSettings().first().runtime.sourceWeights
         assertEquals(enabled, weights.keys)
@@ -347,13 +345,11 @@ class RepositoryContractTest(
         assertTrue(weights.values.all { weight -> weight.isFinite() && weight > 0.0 })
         assertTrue(weights.values.all { weight -> kotlin.math.abs(weight - (1.0 / 3.0)) < 0.0000001 })
 
-        repository.setSourceWeights(
-            mapOf(
-                SourceKey.PIXIV to Double.MAX_VALUE,
-                SourceKey.GELBOORU to Double.MAX_VALUE,
-                SourceKey.NHENTAI to 0.0,
-            )
-        )
+        repository.updateSettings { it.copy(runtime = it.runtime.copy(sourceWeights = mapOf(
+            SourceKey.PIXIV to Double.MAX_VALUE,
+            SourceKey.GELBOORU to Double.MAX_VALUE,
+            SourceKey.NHENTAI to 0.0,
+        ))) }
         weights = repository.observeSettings().first().runtime.sourceWeights
         assertEquals(0.5, weights.getValue(SourceKey.PIXIV), 0.0000001)
         assertEquals(0.5, weights.getValue(SourceKey.GELBOORU), 0.0000001)

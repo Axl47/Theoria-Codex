@@ -142,7 +142,7 @@ class RoomCodexLikesRepository(
         }
     }
 
-    override suspend fun reorderCodex(codexId: String, targetIndex: Int) {
+    private suspend fun reorderCodex(codexId: String, targetIndex: Int) {
         database.withTransaction {
             val current = dao.codices()
             val sourceIndex = current.indexOfFirst { entity -> entity.codexId == codexId }
@@ -184,7 +184,7 @@ class RoomCodexLikesRepository(
         }
     }
 
-    override suspend fun deleteCodex(codexId: String) {
+    private suspend fun deleteCodex(codexId: String) {
         database.withTransaction {
             val removedItems = dao.itemsForCodex(codexId)
             if (dao.deleteCodex(codexId) > 0) {
@@ -238,8 +238,7 @@ class RoomCodexLikesRepository(
             else -> dao.observeCodexPostsNewest(codexId)
         }
         // Every sort projects the same rows, so sorts share one retained projection per Codex.
-        return rows.map { values -> values.map { PostEntity(it.source, it.sourcePostId, it.payloadJson) } }
-            .decodePostSnapshots(retainedPayloads, "codex:$codexId")
+        return rows.decodePostSnapshots(retainedPayloads, "codex:$codexId")
     }
 
     override fun observeLibraryPosts(codexIds: Set<String>): Flow<List<Post>> {
@@ -269,14 +268,6 @@ class RoomCodexLikesRepository(
         database.withTransaction {
             if (dao.post(post.id.source.id, post.id.sourcePostId) != null) {
                 sharedPosts.upsert(post)
-            }
-        }
-    }
-
-    override suspend fun removeItem(codexId: String, sourceKey: SourceKey, sourcePostId: String) {
-        database.withTransaction {
-            if (dao.deleteCodexItem(codexId, sourceKey.id, sourcePostId) > 0) {
-                sharedPosts.releaseIfOrphaned(listOf(sourceKey.id to sourcePostId))
             }
         }
     }

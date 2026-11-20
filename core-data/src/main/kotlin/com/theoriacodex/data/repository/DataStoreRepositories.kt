@@ -67,12 +67,6 @@ internal class CellSettingsRepository(
         }
     }
 
-    override suspend fun setSourceWeights(sourceWeights: Map<SourceKey, Double>) {
-        updateSettings { current ->
-            current.copy(runtime = current.runtime.copy(sourceWeights = sourceWeights))
-        }
-    }
-
     override suspend fun setCacheFullImageOnSave(enabled: Boolean) {
         updateSettings { current ->
             current.copy(cache = current.cache.copy(cacheFullImageOnSave = enabled))
@@ -183,10 +177,6 @@ internal class CellSettingsRepository(
             profileWriteGuard.requireProfileWritable(profileId)
             RepositoryPolicies.renameFavoriteTag(current, profileId, source, tags, name)
         }
-    }
-
-    override suspend fun setProviderHealthSnapshots(snapshots: List<ProviderHealthSnapshot>) {
-        updateSettings { current -> RepositoryPolicies.mergeProviderHealth(current, snapshots) }
     }
 
     private suspend fun <T> mutateSettings(

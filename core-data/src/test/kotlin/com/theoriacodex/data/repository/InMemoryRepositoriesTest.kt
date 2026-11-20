@@ -145,7 +145,7 @@ class InMemoryRepositoriesTest {
 
         val watched = repo.observeWatchedPosts().first()
         val searches = repo.observeSearches().first()
-        val activity = repo.observeActivity().first()
+        val activity = mergeRecentActivity(watched, searches)
 
         assertEquals(listOf(thirdPost.id, firstPost.id, secondPost.id), watched.map { entry -> entry.post.id })
         assertEquals("updated", watched[1].post.title)
@@ -162,12 +162,12 @@ class InMemoryRepositoriesTest {
 
         repo.recordWatchedPost(samplePost("1"), ViewerStreamSource.SEARCH, "hash")
         repo.recordSearch(sampleQuery(), "query")
-        repo.clearWatchedPosts()
+        repo.clearWatchedPosts(RecentPostSection.WATCHED)
 
         assertTrue(repo.observeWatchedPosts().first().isEmpty())
         assertEquals(1, repo.observeSearches().first().size)
 
-        repo.clearSearches()
+        repo.clearSearches(RecentSearchSection.SEARCHES)
 
         assertTrue(repo.observeSearches().first().isEmpty())
 
@@ -240,7 +240,7 @@ class InMemoryRepositoriesTest {
         val repo = InMemorySettingsRepository()
 
         repo.setEnabledSources(setOf(SourceKey.PIXIV, SourceKey.GELBOORU))
-        repo.setSourceWeights(mapOf(SourceKey.PIXIV to 3.0, SourceKey.GELBOORU to 1.0))
+        repo.updateSettings { it.copy(runtime = it.runtime.copy(sourceWeights = mapOf(SourceKey.PIXIV to 3.0, SourceKey.GELBOORU to 1.0))) }
         repo.setResolveUnknownAnimatedDurations(true)
         repo.setInvertMultiImageScrollDirection(true)
         repo.setAutomaticTextTranslationEnabled(true)
@@ -266,27 +266,6 @@ class InMemoryRepositoriesTest {
         assertEquals("profile-alt", settings.activeProfileId)
     }
 
-    @Test
-    fun `settings repository records provider health snapshots`() = runTest {
-        val repo = InMemorySettingsRepository()
-
-        repo.setProviderHealthSnapshots(
-            listOf(
-                ProviderHealthSnapshot(
-                    source = SourceKey.IWARA,
-                    status = ProviderHealthSnapshotStatus.DEGRADED,
-                    checkedAtEpochMs = 22L,
-                    latencyMs = 11L,
-                    message = "Reachable but empty",
-                )
-            )
-        )
-
-        val snapshot = repo.observeSettings().first().providerHealth[SourceKey.IWARA]
-
-        assertEquals(ProviderHealthSnapshotStatus.DEGRADED, snapshot?.status)
-        assertEquals(11L, snapshot?.latencyMs)
-    }
 
     @Test
     fun `settings repository supports dynamic recommendation profiles`() = runTest {

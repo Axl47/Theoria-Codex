@@ -30,7 +30,7 @@ class InMemoryCodexLikesTransactions(
 
     override suspend fun removeProfileLibrary(profileId: String) {
         codices.observeCodices().first().filter { ProfileLibraryIds.belongsTo(it.codexId, profileId) }
-            .forEach { codices.deleteCodex(it.codexId) }
+            .forEach { codices.deleteCodexForUndo(it.codexId) }
         likes.clearLikes(profileId)
     }
 
@@ -55,7 +55,8 @@ class InMemoryCodexLikesTransactions(
         val resolved = CodexLikesPolicy.resolveCompleteCodexOrder(current, codexIdsInOrder)
             ?: return CodexBulkReorderResult(applied = false, movedCodices = 0)
         val originalIndices = current.mapIndexed { index, codex -> codex.codexId to index }.toMap()
-        resolved.forEachIndexed { index, codex -> codices.reorderCodex(codex.codexId, index) }
+        val store = checkNotNull(codices as? InMemoryCodexRepository) { "Reordering needs an InMemoryCodexRepository" }
+        resolved.forEachIndexed { index, codex -> store.reorderCodex(codex.codexId, index) }
         return CodexBulkReorderResult(
             applied = true,
             movedCodices = resolved.count { codex -> originalIndices[codex.codexId] != resolved.indexOf(codex) },
@@ -88,7 +89,7 @@ class InMemoryCodexLikesTransactions(
                 }
             }
         } else {
-            codices.removeItem(codex.codexId, post.id.source, post.id.sourcePostId)
+            codices.removeItems(codex.codexId, setOf(post.id))
         }
         val after = codices.observeCodexItems(codex.codexId).first().any { it.postId == post.id }
         val automaticMembershipsAdded = if (nowLiked) {
@@ -117,7 +118,7 @@ class InMemoryCodexLikesTransactions(
         val before = codices.observeCodexItems(systemCodexId).first().map { it.postId }.toSet()
         likes.clearLikes(profileId)
         likedIds.forEach { postId ->
-            codices.removeItem(systemCodexId, postId.source, postId.sourcePostId)
+            codices.removeItems(systemCodexId, setOf(postId))
         }
         return CodexLikesClearResult(
             clearedLikes = likedIds.size,
@@ -138,7 +139,7 @@ class InMemoryCodexLikesTransactions(
         val clearedLikes = likes.observeLikedPostIds(profileId).first().size
         val existed = codices.observeCodex(systemCodexId).first() != null
         likes.clearLikes(profileId)
-        if (existed) codices.deleteCodex(systemCodexId)
+        if (existed) codices.deleteCodexForUndo(systemCodexId)
         return CodexProfileDeleteResult(
             clearedLikes = clearedLikes,
             systemCodexDeleted = existed,
