@@ -131,7 +131,7 @@ internal class HitomiPostMapper(
             )
         }
         if (candidates.isEmpty()) {
-            throw sourceParseFailure("Hitomi media URL resolver returned no candidates")
+            throw hitomiParseFailure("Hitomi media URL resolver returned no candidates")
         }
         return candidates
     }
@@ -276,11 +276,6 @@ internal class HitomiPostMapper(
         val hasAvif: Boolean,
         val configurationVersion: String,
         val failedFormat: HitomiMediaFormat,
-    )
-
-    private fun sourceParseFailure(message: String): SourceAdapterException = SourceAdapterException(
-        reason = SourceFailureReason.PARSE,
-        message = message,
     )
 
     private companion object {

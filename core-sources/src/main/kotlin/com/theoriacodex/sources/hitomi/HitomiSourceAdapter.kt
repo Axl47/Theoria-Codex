@@ -29,6 +29,7 @@ import com.theoriacodex.domain.model.canonicalHitomiArtistIdentity
 import com.theoriacodex.domain.query.QueryHash
 import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.sourceCall
+import com.theoriacodex.sources.http.SourceHttpBodyTooLargeException
 import com.theoriacodex.sources.http.SourceHttpClient
 import java.io.IOException
 import java.security.MessageDigest
@@ -97,7 +98,7 @@ class HitomiSourceAdapter(
     private val postMapper = HitomiPostMapper(mediaUrlResolver, mediaCandidates)
 
     override suspend fun recoverPostMedia(post: Post, failedMedia: ImageRef): Post? = sourceCall(callContext) {
-        postMapper.recoverPostMedia(post, failedMedia)
+        hitomiCall("media recovery") { postMapper.recoverPostMedia(post, failedMedia) }
     }
 
     private val pageTokenCodec = HitomiPageTokenCodec()
@@ -129,19 +130,7 @@ class HitomiSourceAdapter(
     }
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> = sourceCall(callContext) {
-        try {
-            searchInternal(query, pageToken)
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: SourceAdapterException) {
-            throw error
-        } catch (error: HitomiProtocolException) {
-            throw SourceAdapterException(
-                reason = SourceFailureReason.PARSE,
-                message = "Hitomi search protocol failed: ${error.message}",
-                cause = error,
-            )
-        }
+        hitomiCall("search") { searchInternal(query, pageToken) }
     }
 
     private suspend fun searchInternal(query: Query, pageToken: String?): Page<Post> {
@@ -157,12 +146,12 @@ class HitomiSourceAdapter(
             choosePrimary(primaryOptions)
         } else {
             primaryOptions.firstOrNull { option -> option.key == decodedToken.primaryKey }
-                ?: throw sourceParseFailure("Hitomi page token references an invalid primary index")
+                ?: throw hitomiParseFailure("Hitomi page token references an invalid primary index")
         }
         val seed = decodedToken?.randomSeed ?: deterministicSeed(queryHash)
         val primaryOffset = decodedToken?.primaryOffset ?: 0L
         if (primaryOffset < 0L) {
-            throw sourceParseFailure("Hitomi page token contained a negative primary offset")
+            throw hitomiParseFailure("Hitomi page token contained a negative primary offset")
         }
 
         val secondaryIncludes = compiled.secondaryIncludes(primary.key)
@@ -233,31 +222,31 @@ class HitomiSourceAdapter(
         sort: SortMode,
     ) {
         if (decodedToken != null && decodedToken.queryHash != queryHash) {
-            throw sourceParseFailure("Hitomi page token does not match the active query")
+            throw hitomiParseFailure("Hitomi page token does not match the active query")
         }
         if (decodedToken != null && decodedToken.globalIndexVersion != globalIndexVersion) {
-            throw sourceParseFailure("Hitomi page token does not match the active global index version")
+            throw hitomiParseFailure("Hitomi page token does not match the active global index version")
         }
         if (
             decodedToken != null &&
             sort == SortMode.RANDOM &&
             decodedToken.randomSnapshotFingerprint == null
         ) {
-            throw sourceParseFailure("Hitomi random page token omitted its source snapshot")
+            throw hitomiParseFailure("Hitomi random page token omitted its source snapshot")
         }
         if (
             decodedToken != null &&
             sort == SortMode.RANDOM &&
             decodedToken.randomPermutationVersion != HitomiDeterministicPermutation.ALGORITHM_VERSION
         ) {
-            throw sourceParseFailure("Hitomi random page token used an unsupported permutation")
+            throw hitomiParseFailure("Hitomi random page token used an unsupported permutation")
         }
         if (
             decodedToken != null &&
             sort != SortMode.RANDOM &&
             (decodedToken.randomSnapshotFingerprint != null || decodedToken.randomPermutationVersion != null)
         ) {
-            throw sourceParseFailure("Hitomi non-random page token contained a random snapshot")
+            throw hitomiParseFailure("Hitomi non-random page token contained a random snapshot")
         }
     }
 
@@ -277,7 +266,7 @@ class HitomiSourceAdapter(
         )
         val randomIds = snapshot.ids
         if (initialOffset > randomIds.size.toLong()) {
-            throw sourceParseFailure("Hitomi page token offset exceeded the random candidate list")
+            throw hitomiParseFailure("Hitomi page token offset exceeded the random candidate list")
         }
         val permutation = randomIds.takeIf(IntArray::isNotEmpty)?.let { ids ->
             HitomiDeterministicPermutation(ids.size, seed)
@@ -326,7 +315,7 @@ class HitomiSourceAdapter(
                 nozomiReader.readCompleteNozomi(compiledIndex, MAX_RANDOM_GALLERY_IDS)
             }
         } catch (error: HitomiRandomSnapshotMismatchException) {
-            throw sourceParseFailure(
+            throw hitomiParseFailure(
                 "Hitomi random source changed before the next page could be resumed",
                 error,
             )
@@ -335,7 +324,7 @@ class HitomiSourceAdapter(
             expectedSnapshotFingerprint != null &&
             snapshot.fingerprint != expectedSnapshotFingerprint
         ) {
-            throw sourceParseFailure(
+            throw hitomiParseFailure(
                 "Hitomi random source changed before the next page could be resumed",
             )
         }
@@ -379,19 +368,7 @@ class HitomiSourceAdapter(
         scope: FacetedSearchScope,
         limit: Int,
     ): List<FacetedTagSuggestion> = sourceCall(callContext) {
-        try {
-            autocompleteFacetedInternal(prefix, scope, limit)
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: SourceAdapterException) {
-            throw error
-        } catch (error: HitomiProtocolException) {
-            throw SourceAdapterException(
-                reason = SourceFailureReason.PARSE,
-                message = "Hitomi autocomplete protocol failed: ${error.message}",
-                cause = error,
-            )
-        }
+        hitomiCall("autocomplete") { autocompleteFacetedInternal(prefix, scope, limit) }
     }
 
     override suspend fun featuredFacetedSuggestions(
@@ -433,7 +410,7 @@ class HitomiSourceAdapter(
         val url = HitomiProtocol.autocompleteUrl(providerScope, normalizedPrefix)
         val response = requestText(url)
         if (response.statusCode !in 200..299) {
-            throw sourceHttpFailure("autocomplete", response.statusCode)
+            throw hitomiHttpFailure("autocomplete", response.statusCode)
         }
         return HitomiProtocol.parseAutocomplete(
             body = response.body,
@@ -469,15 +446,7 @@ class HitomiSourceAdapter(
         if (id.source != SourceKey.HITOMI) return@sourceCall null
         val galleryId = id.sourcePostId.trim().toIntOrNull()?.takeIf { value -> value > 0 }
             ?: return@sourceCall null
-        try {
-            fetchGallery(galleryId, sparse = false)
-        } catch (error: HitomiGalleryException) {
-            throw SourceAdapterException(
-                reason = error.reason,
-                message = error.message,
-                cause = error.cause ?: error,
-            )
-        }
+        hitomiCall("post") { fetchGallery(galleryId, sparse = false) }
     }
 
     override suspend fun searchCreatorPosts(
@@ -583,6 +552,8 @@ class HitomiSourceAdapter(
 
     private suspend fun requestText(url: String) = try {
         httpClient.get(url = url, headers = HitomiProtocol.requestHeaders)
+    } catch (error: SourceHttpBodyTooLargeException) {
+        throw hitomiParseFailure("Hitomi response exceeded its bounded size ($url)", error)
     } catch (error: IOException) {
         throw SourceAdapterException(
             reason = SourceFailureReason.NETWORK,
@@ -599,23 +570,8 @@ class HitomiSourceAdapter(
         return try {
             pageTokenCodec.decode(raw)
         } catch (error: HitomiPageTokenException) {
-            throw sourceParseFailure(error.message ?: "Hitomi page token was invalid", error)
+            throw hitomiParseFailure(error.message ?: "Hitomi page token was invalid", error)
         }
-    }
-
-    private fun sourceHttpFailure(step: String, statusCode: Int): SourceAdapterException {
-        return SourceAdapterException(
-            reason = classifyHttpFailure(statusCode),
-            message = "Hitomi $step request failed ($statusCode)",
-        )
-    }
-
-    private fun sourceParseFailure(message: String, cause: Throwable? = null): SourceAdapterException {
-        return SourceAdapterException(
-            reason = SourceFailureReason.PARSE,
-            message = message,
-            cause = cause,
-        )
     }
 
     companion object {

@@ -68,7 +68,7 @@ internal class HitomiQueryCompiler(
         } catch (error: CancellationException) {
             throw error
         } catch (error: SourceHttpBodyTooLargeException) {
-            throw sourceParseFailure("Hitomi global search version exceeded its bounded response", error)
+            throw hitomiParseFailure("Hitomi global search version exceeded its bounded response", error)
         } catch (error: IOException) {
             throw SourceAdapterException(
                 reason = SourceFailureReason.NETWORK,
@@ -93,7 +93,7 @@ internal class HitomiQueryCompiler(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: SourceHttpBodyTooLargeException) {
-                throw sourceParseFailure("Hitomi global search exceeded its bounded response", error)
+                throw hitomiParseFailure("Hitomi global search exceeded its bounded response", error)
             } catch (error: IOException) {
                 throw SourceAdapterException(
                     reason = SourceFailureReason.NETWORK,
@@ -127,7 +127,7 @@ internal class HitomiQueryCompiler(
             SearchFacet.LANGUAGE -> setOf(HITOMI_LANGUAGE_NAMESPACE)
         }
         if (namespace !in allowedNamespaces) {
-            throw sourceParseFailure(
+            throw hitomiParseFailure(
                 "Hitomi does not support ${term.facet.name.lowercase()} terms in the $namespace namespace",
             )
         }
@@ -187,9 +187,6 @@ internal class HitomiQueryCompiler(
         val url = HitomiNozomi.urlFor(request)
         return CompiledIndex(key = term.termCacheKey(), term = term, newestUrl = url, sortedUrl = url)
     }
-
-    private fun sourceParseFailure(message: String, cause: Throwable? = null): SourceAdapterException =
-        SourceAdapterException(reason = SourceFailureReason.PARSE, message = message, cause = cause)
 }
 
 internal data class CompiledHitomiQuery(

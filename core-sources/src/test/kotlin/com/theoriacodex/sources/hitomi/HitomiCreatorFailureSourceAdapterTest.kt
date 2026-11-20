@@ -288,4 +288,28 @@ internal class HitomiCreatorFailureSourceAdapterTest : HitomiSourceAdapterTestFi
         assertParseFailure { adapter(partial).search(query(sort = SortMode.RANDOM), null) }
     }
 
+    @Test
+    fun `oversized gallery and autocomplete bodies become typed source errors`() = runTest {
+        val http = RoutingHitomiHttpClient().apply {
+            textFailures[HitomiProtocol.galleryUrl(55)] = SourceHttpBodyTooLargeException(64)
+            textFailures[HitomiProtocol.autocompleteUrl("global", "girl")] = SourceHttpBodyTooLargeException(64)
+        }
+
+        assertParseFailure { adapter(http).resolvePost(PostId(SourceKey.HITOMI, "55")) }
+        assertParseFailure { adapter(http).autocompleteFaceted("girl", FacetedSearchScope.All, limit = 5) }
+    }
+
+    @Test
+    fun `a media recovery whose configuration refresh fails becomes a typed source error`() = runTest {
+        val http = RoutingHitomiHttpClient().apply {
+            textRoutes[HitomiMediaUrlResolver.GG_CONFIGURATION_URL] = fixture("gg-shape.js")
+            galleryBodies[4_042_375] = fixture("gallery-4042375.js")
+        }
+        val adapter = HitomiSourceAdapter(httpClient = http, mediaUrlResolver = HitomiMediaUrlResolver(http))
+        val post = requireNotNull(adapter.resolvePost(PostId(SourceKey.HITOMI, "4042375")))
+        http.textRoutes.remove(HitomiMediaUrlResolver.GG_CONFIGURATION_URL)
+
+        assertParseFailure { adapter.recoverPostMedia(post, post.preview) }
+    }
+
 }

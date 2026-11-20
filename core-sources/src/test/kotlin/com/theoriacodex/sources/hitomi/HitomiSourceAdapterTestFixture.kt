@@ -210,6 +210,7 @@ internal class RoutingHitomiHttpClient : SourceHttpClient {
     val binaryIndexes = ConcurrentHashMap<String, List<Int>>()
     val rawFullBodies = ConcurrentHashMap<String, ByteArray>()
     val binaryFailures = ConcurrentHashMap<String, RuntimeException>()
+    val textFailures = ConcurrentHashMap<String, RuntimeException>()
     val binaryRequestStarted = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
     val binaryRequestRelease = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
     val fullResponseUrls = ConcurrentHashMap.newKeySet<String>()
@@ -231,6 +232,7 @@ internal class RoutingHitomiHttpClient : SourceHttpClient {
         headers: Map<String, String>,
     ): SourceHttpResponse {
         synchronized(textRequests) { textRequests += TextRequest(url, headers) }
+        textFailures[url]?.let { failure -> throw failure }
         val galleryId = GALLERY_URL.matchEntire(url)?.groupValues?.get(1)?.toIntOrNull()
         if (galleryId != null) {
             val active = activeGalleryRequests.incrementAndGet()

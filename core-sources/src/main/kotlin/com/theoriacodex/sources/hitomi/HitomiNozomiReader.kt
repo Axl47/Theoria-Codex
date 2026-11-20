@@ -91,7 +91,7 @@ internal class HitomiNozomiReader(
     ): HitomiNozomiSnapshot {
         val ids = index.inlineIds?.let { ordered ->
             if (ordered.size > maxGalleryIds) {
-                throw sourceParseFailure("Hitomi global index exceeded the bounded gallery limit")
+                throw hitomiParseFailure("Hitomi global index exceeded the bounded gallery limit")
             }
             ordered.sortedDistinctCopy()
         } ?: readWholeNozomi(index.url, maxGalleryIds, kind = "random")
@@ -113,9 +113,9 @@ internal class HitomiNozomiReader(
                 response.validatedContentRange()
                     ?.totalBytes
                     ?.let(::bytesToIdCount)
-                    ?: throw sourceParseFailure("Hitomi Nozomi size probe omitted its total length")
+                    ?: throw hitomiParseFailure("Hitomi Nozomi size probe omitted its total length")
             }
-            else -> throw sourceHttpFailure("Nozomi size probe", response.statusCode)
+            else -> throw hitomiHttpFailure("Nozomi size probe", response.statusCode)
         }
         knownNozomiSizes.put(url, size)
         return size
@@ -146,21 +146,21 @@ internal class HitomiNozomiReader(
             200 -> response.body
             206 -> {
                 val contentRange = response.validatedContentRange()
-                    ?: throw sourceParseFailure("Hitomi $kind index omitted its byte range")
+                    ?: throw hitomiParseFailure("Hitomi $kind index omitted its byte range")
                 if (contentRange.startByte != 0L) {
-                    throw sourceParseFailure("Hitomi $kind index did not start at byte zero")
+                    throw hitomiParseFailure("Hitomi $kind index did not start at byte zero")
                 }
                 val totalBytes = contentRange.totalBytes
-                    ?: throw sourceParseFailure("Hitomi $kind index omitted its total length")
+                    ?: throw hitomiParseFailure("Hitomi $kind index omitted its total length")
                 if (bytesToIdCount(totalBytes) > maxIds) {
-                    throw sourceParseFailure("Hitomi $kind index exceeded its bounded ID limit")
+                    throw hitomiParseFailure("Hitomi $kind index exceeded its bounded ID limit")
                 }
                 if (response.body.size.toLong() != totalBytes) {
-                    throw sourceParseFailure("Hitomi $kind index response was incomplete")
+                    throw hitomiParseFailure("Hitomi $kind index response was incomplete")
                 }
                 response.body
             }
-            else -> throw sourceHttpFailure("$kind Nozomi", response.statusCode)
+            else -> throw hitomiHttpFailure("$kind Nozomi", response.statusCode)
         }
         return HitomiNozomi.decodeGalleryIds(body, maxIds).sortDistinctOwned()
     }
@@ -178,10 +178,10 @@ internal class HitomiNozomiReader(
             200 -> HitomiNozomi.decodeGalleryIds(response.body).primaryRange(firstIdIndex, idCount)
             206 -> {
                 val contentRange = response.validatedContentRange()
-                    ?: throw sourceParseFailure("Hitomi Nozomi page omitted its byte range")
+                    ?: throw hitomiParseFailure("Hitomi Nozomi page omitted its byte range")
                 val expectedStartByte = Math.multiplyExact(firstIdIndex, Int.SIZE_BYTES.toLong())
                 if (contentRange.startByte != expectedStartByte) {
-                    throw sourceParseFailure("Hitomi Nozomi response started at an unexpected byte")
+                    throw hitomiParseFailure("Hitomi Nozomi response started at an unexpected byte")
                 }
                 val ids = HitomiNozomi.decodeGalleryIds(response.body)
                 val totalIds = contentRange.totalBytes?.let(::bytesToIdCount)
@@ -194,7 +194,7 @@ internal class HitomiNozomiReader(
                     },
                 )
             }
-            else -> throw sourceHttpFailure("Nozomi page", response.statusCode)
+            else -> throw hitomiHttpFailure("Nozomi page", response.statusCode)
         }
     }
 
@@ -209,7 +209,7 @@ internal class HitomiNozomiReader(
             bodyLength != body.size.toLong() ||
             (parsed.totalBytes != null && parsed.totalBytes < parsed.endByte + 1L)
         ) {
-            throw sourceParseFailure("Hitomi Nozomi response reported an invalid byte range")
+            throw hitomiParseFailure("Hitomi Nozomi response reported an invalid byte range")
         }
         parsed.totalBytes?.let(::bytesToIdCount)
         return parsed
@@ -242,16 +242,6 @@ internal class HitomiNozomiReader(
             )
         }
     }
-
-    private fun sourceHttpFailure(step: String, statusCode: Int): SourceAdapterException = SourceAdapterException(
-        reason = classifyHttpFailure(statusCode),
-        message = "Hitomi $step request failed ($statusCode)",
-    )
-
-    private fun sourceParseFailure(message: String): SourceAdapterException = SourceAdapterException(
-        reason = SourceFailureReason.PARSE,
-        message = message,
-    )
 
     private companion object {
         private const val PRIMARY_SCAN_CHUNK_IDS = 64
