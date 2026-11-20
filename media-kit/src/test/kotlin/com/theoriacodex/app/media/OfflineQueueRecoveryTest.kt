@@ -16,6 +16,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -42,7 +43,7 @@ class OfflineQueueRecoveryTest {
             first.makeAvailableOffline(AUTOMATIC_OFFLINE_OWNER, posts.values.take(2))
             bStarted.await()
             first.saveOnCollectionSave(posts.values.last())
-            while (queue.load()[AUTOMATIC_OFFLINE_OWNER]?.size != 3) kotlinx.coroutines.yield()
+            while (queue.loadNow()[AUTOMATIC_OFFLINE_OWNER]?.size != 3) kotlinx.coroutines.yield()
             assertFalse(directory.resolve("queue.json").readText().contains("signed-token"))
             firstScope.coroutineContext[Job]!!.cancelAndJoin()
             val reopenedStore = OfflineMediaStore(directory.resolve("media"), ioDispatcher = StandardTestDispatcher(testScheduler))
@@ -82,10 +83,10 @@ class OfflineQueueRecoveryTest {
                 pendingStore = pending, ownerExists = { kotlinx.coroutines.yield(); true })
             owner.recoverPendingJobs()
             started.await()
-            assertEquals(setOf("codex:first", "codex:second"), pending.load().keys)
+            assertEquals(setOf("codex:first", "codex:second"), pending.loadNow().keys)
             owner.cancel("codex:first")
-            while ("codex:first" in pending.load()) kotlinx.coroutines.yield()
-            assertEquals(setOf("codex:second"), pending.load().keys)
+            while ("codex:first" in pending.loadNow()) kotlinx.coroutines.yield()
+            assertEquals(setOf("codex:second"), pending.loadNow().keys)
         } finally { scope.cancel(); directory.deleteRecursively() }
     }
 
@@ -112,6 +113,12 @@ class OfflineQueueRecoveryTest {
             } finally { scope.cancel(); directory.deleteRecursively() }
         }
     }
+
+    /**
+     * Reads the queue without leaving the test thread. Suspending for its real file read would leave runTest
+     * with nothing to run, and it would then skip virtual time to the timeout of the post still being acquired.
+     */
+    private fun OfflinePendingJobStore.loadNow() = runBlocking { load() }
 
     private fun post(id: String): Post = Post(PostId(SourceKey.PIXIV, id), ImageRef(null, null, null), null,
         media = listOf(ImageRef("https://example.test/$id.jpg?signed-token=secret", null, "image/jpeg")),
