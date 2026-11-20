@@ -10,7 +10,8 @@
     "core-data-android",
     "core-sources",
     "core-stubs",
-    "ui-kit"
+    "ui-kit",
+    "media-kit"
   ],
   "lineBudgets": {
     "production": 900,
@@ -27,6 +28,7 @@
     "config/detekt/baseline-core-domain-main.xml": {},
     "config/detekt/baseline-core-sources-main.xml": {},
     "config/detekt/baseline-core-stubs.xml": {},
-    "config/detekt/baseline-ui-kit-debug.xml": {}
+    "config/detekt/baseline-ui-kit-debug.xml": {},
+    "config/detekt/baseline-media-kit-debug.xml": {}
   }
 }
