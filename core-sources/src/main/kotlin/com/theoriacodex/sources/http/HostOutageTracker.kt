@@ -149,11 +149,5 @@ class HostOutageTracker(
     }
 }
 
-/** Whether a 5xx answer's Retry-After asks for a wait too long to spend inside one request. */
-internal fun Map<String, List<String>>.retryAfterTooLong(): Boolean =
-    header("Retry-After")?.trim()?.toLongOrNull()?.let { it > MAX_INLINE_RETRY_AFTER_SECONDS } ?: false
-
-private fun Map<String, List<String>>.header(name: String): String? =
+internal fun Map<String, List<String>>.header(name: String): String? =
     entries.firstOrNull { (key, _) -> key.equals(name, ignoreCase = true) }?.value?.firstOrNull()
-
-private const val MAX_INLINE_RETRY_AFTER_SECONDS = 3L

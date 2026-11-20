@@ -5,7 +5,6 @@ import java.io.IOException
 import java.io.InputStream
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import java.net.URLEncoder
-import java.net.URL
 import java.util.TreeMap
 import java.util.concurrent.TimeUnit
 import okhttp3.Dispatcher
@@ -24,7 +23,6 @@ class DefaultSourceHttpClient(
     private val readTimeoutMs: Int = 20_000,
     maxRetries: Int = SourceRetryPolicy.DEFAULT_MAX_RETRIES,
     retryBaseDelayMs: Long = SourceRetryPolicy.DEFAULT_RETRY_BASE_DELAY_MS,
-    shouldRetryStatus: (url: String, statusCode: Int) -> Boolean = ::defaultShouldRetryStatus,
     /** When set, known-down hosts fail at once and outage answers throw [HostUnavailableException]. */
     private val outages: HostOutageTracker? = null,
     /** The User-Agent a site's browser clearance is bound to, replacing the request's own; null keeps it. */
@@ -32,7 +30,7 @@ class DefaultSourceHttpClient(
     /** The app passes its shared client, so these calls reuse the process's connections and carry its cookies. */
     private val okHttpClient: OkHttpClient = defaultSourceOkHttpClient,
 ) : SourceHttpClient {
-    private val retryPolicy = SourceRetryPolicy(maxRetries, retryBaseDelayMs, shouldRetryStatus)
+    private val retryPolicy = SourceRetryPolicy(maxRetries, retryBaseDelayMs)
 
     override suspend fun get(
         url: String,
@@ -277,35 +275,4 @@ private fun String.urlEncode(): String {
     return URLEncoder.encode(this, Charsets.UTF_8.name())
         // Query-component spaces should be encoded as %20 for broader API compatibility.
         .replace("+", "%20")
-}
-
-internal fun defaultShouldRetryStatus(requestUrl: String, statusCode: Int): Boolean {
-    if (statusCode in 500..599) return true
-    if (statusCode != 429) return false
-    return !isIwaraRequestUrl(requestUrl)
-}
-
-internal fun resolveRetryDelayMs(
-    response: SourceHttpResponse,
-    attempt: Int,
-    retryBaseDelayMs: Long,
-): Long {
-    val retryAfterSeconds = response.headers.entries
-        .firstOrNull { (name, _) -> name.equals("Retry-After", ignoreCase = true) }
-        ?.value
-        ?.firstOrNull()
-        ?.trim()
-        ?.toLongOrNull()
-    if (retryAfterSeconds != null && retryAfterSeconds > 0L) {
-        return retryAfterSeconds
-            .coerceAtMost(MAX_SERVER_RETRY_DELAY_MS / 1_000L) * 1_000L
-    }
-    return retryBaseDelayMs * attempt
-}
-
-internal const val MAX_SERVER_RETRY_DELAY_MS = 30_000L
-
-private fun isIwaraRequestUrl(requestUrl: String): Boolean {
-    val host = runCatching { URL(requestUrl).host.lowercase() }.getOrNull() ?: return false
-    return host == "iwara.tv" || host.endsWith(".iwara.tv")
 }

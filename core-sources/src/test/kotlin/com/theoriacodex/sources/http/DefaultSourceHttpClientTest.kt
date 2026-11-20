@@ -14,6 +14,7 @@ import okhttp3.Request
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -401,34 +402,17 @@ class DefaultSourceHttpClientTest {
     }
 
     @Test
-    fun `retry delay honors retry after header`() {
-        val response = SourceHttpResponse(
-            statusCode = 429,
-            body = "",
-            headers = mapOf("Retry-After" to listOf("12")),
-        )
-
-        assertEquals(12_000L, resolveRetryDelayMs(response, attempt = 2, retryBaseDelayMs = 300L))
+    fun `retry delay honors a short retry after header`() {
+        assertEquals(2_000L, retryDelayMs(mapOf("Retry-After" to listOf("2")), attempt = 2, baseDelayMs = 300L))
     }
 
     @Test
-    fun `retry delay caps excessive server retry after`() {
-        val response = SourceHttpResponse(
-            statusCode = 429,
-            body = "",
-            headers = mapOf("Retry-After" to listOf("3600")),
-        )
-
-        assertEquals(
-            MAX_SERVER_RETRY_DELAY_MS,
-            resolveRetryDelayMs(response, attempt = 1, retryBaseDelayMs = 300L),
-        )
+    fun `a long retry after is not waited out`() {
+        assertNull(retryDelayMs(mapOf("Retry-After" to listOf("3600")), attempt = 1, baseDelayMs = 300L))
     }
 
     @Test
-    fun `retry delay falls back to exponential base when retry after missing`() {
-        val response = SourceHttpResponse(statusCode = 503, body = "")
-
-        assertEquals(600L, resolveRetryDelayMs(response, attempt = 2, retryBaseDelayMs = 300L))
+    fun `retry delay falls back to linear backoff when retry after missing`() {
+        assertEquals(600L, retryDelayMs(emptyMap(), attempt = 2, baseDelayMs = 300L))
     }
 }
