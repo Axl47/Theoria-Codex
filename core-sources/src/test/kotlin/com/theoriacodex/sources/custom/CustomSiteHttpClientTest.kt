@@ -9,7 +9,8 @@ import com.theoriacodex.sources.http.HostUnavailableException
 import com.theoriacodex.sources.http.HostOutageTracker
 import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.SourceRetryPolicy
-import com.theoriacodex.sources.http.executeHttpRequest
+import com.theoriacodex.sources.http.defaultSourceOkHttpClient
+import com.theoriacodex.sources.http.httpTransport
 import java.io.IOException
 import java.net.InetSocketAddress
 import kotlinx.coroutines.test.runTest
@@ -22,8 +23,7 @@ class CustomSiteHttpClientTest {
     private val requested = mutableListOf<String>()
 
     /** Serves `routes[url]`, or 200 "ok" for any other URL. */
-    private fun client(routes: Map<String, SourceByteResponse>) = CustomSiteHttpClient(1_000, 1_000, 3) { spec ->
-        assertEquals(false, spec.followRedirects)
+    private fun client(routes: Map<String, SourceByteResponse>) = CustomSiteHttpClient(3) { spec ->
         requested += spec.url
         routes[spec.url] ?: SourceByteResponse(200, "ok".toByteArray())
     }
@@ -111,8 +111,8 @@ class CustomSiteHttpClientTest {
             start()
         }
         val response = try {
-            executeHttpRequest(
-                HttpRequestSpec("GET", "http://127.0.0.1:${server.address.port}/start", emptyMap(), null, 1_024, 1_000, 1_000, followRedirects = false),
+            httpTransport(defaultSourceOkHttpClient, 1_000, 1_000, followRedirects = false)(
+                HttpRequestSpec("GET", "http://127.0.0.1:${server.address.port}/start", emptyMap(), null, 1_024),
             )
         } finally {
             server.stop(0)
@@ -126,7 +126,7 @@ class CustomSiteHttpClientTest {
     fun `a challenge served instead of the API marks the site and later requests skip the network`() = runTest {
         val tracker = HostOutageTracker()
         val challenge = "<!doctype html><html><title>Checking</title><p>Complete the challenge to show you are not a robot.</p></html>"
-        val http = CustomSiteHttpClient(1_000, 1_000, 3, tracker) { spec ->
+        val http = CustomSiteHttpClient(3, tracker) { spec ->
             requested += spec.url
             SourceByteResponse(200, challenge.toByteArray())
         }
@@ -143,7 +143,7 @@ class CustomSiteHttpClientTest {
     fun `a real answer proves the site works and a refusal of its keys takes that back`() = runTest {
         val tracker = HostOutageTracker()
         var status = 200
-        val http = CustomSiteHttpClient(1_000, 1_000, 3, tracker) { SourceByteResponse(status, "[]".toByteArray()) }
+        val http = CustomSiteHttpClient(3, tracker) { SourceByteResponse(status, "[]".toByteArray()) }
 
         http.get("https://booru.example/index.php")
         assertEquals(setOf("booru.example"), tracker.working.value)
@@ -158,7 +158,7 @@ class CustomSiteHttpClientTest {
     }
 
     private fun retryingClient(tracker: HostOutageTracker? = null, retry: SourceRetryPolicy? = SourceRetryPolicy(), answer: (Int) -> SourceByteResponse) =
-        CustomSiteHttpClient(1_000, 1_000, 3, tracker, retry) { spec ->
+        CustomSiteHttpClient(3, tracker, retry) { spec ->
             requested += spec.url
             answer(requested.size)
         }

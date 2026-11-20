@@ -14,9 +14,9 @@ import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.http.SourceRetryPolicy
 import com.theoriacodex.sources.http.buildUrl
 import com.theoriacodex.sources.http.defaultSourceOkHttpClient
-import com.theoriacodex.sources.http.executeHttpRequest
 import com.theoriacodex.sources.http.executeWithRetry
 import com.theoriacodex.sources.http.header
+import com.theoriacodex.sources.http.httpTransport
 import com.theoriacodex.sources.http.toTextResponse
 import com.theoriacodex.sources.http.withByteRange
 import java.io.IOException
@@ -33,12 +33,11 @@ import okhttp3.OkHttpClient
  * sources do; probes leave it null, see raw answers and log nothing.
  */
 class CustomSiteHttpClient internal constructor(
-    private val connectTimeoutMs: Int,
-    private val readTimeoutMs: Int,
     private val maxRedirects: Int,
     /** Set for adapters, never for probes (which must see raw answers); see [HostOutageTracker]. */
     private val outages: HostOutageTracker? = null,
     private val retry: SourceRetryPolicy? = null,
+    /** Must leave redirects unfollowed, as [httpTransport] does with `followRedirects = false`. */
     private val transport: suspend (HttpRequestSpec) -> SourceByteResponse,
 ) : SourceHttpClient {
     /**
@@ -51,12 +50,10 @@ class CustomSiteHttpClient internal constructor(
         outages: HostOutageTracker? = null,
         okHttpClient: OkHttpClient = defaultSourceOkHttpClient,
     ) : this(
-        connectTimeoutMs,
-        readTimeoutMs,
         MAX_REDIRECTS,
         outages,
         retry = outages?.let { SourceRetryPolicy() },
-        transport = { spec -> executeHttpRequest(spec, okHttpClient) },
+        transport = httpTransport(okHttpClient, connectTimeoutMs, readTimeoutMs, followRedirects = false),
     )
 
     override suspend fun get(url: String, query: Map<String, String>, headers: Map<String, String>): SourceHttpResponse =
@@ -83,9 +80,6 @@ class CustomSiteHttpClient internal constructor(
                         headers = requestHeaders,
                         body = null,
                         maxBodyBytes = maxBodyBytes,
-                        connectTimeoutMs = connectTimeoutMs,
-                        readTimeoutMs = readTimeoutMs,
-                        followRedirects = false,
                     ),
                 )
             }
