@@ -23,6 +23,7 @@ fail() {
 
 line_budgets "$(diff_base 2>/dev/null || true)" > /dev/null || fail 'Line budget check'
 module_layering || fail 'Module layering check'
+module_registration || fail 'Module registration check'
 if [[ -x scripts/detekt_changed.sh ]]; then
   scripts/detekt_changed.sh || fail 'Detekt on changed files'
 fi

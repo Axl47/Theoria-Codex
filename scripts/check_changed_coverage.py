@@ -252,6 +252,26 @@ def _source_root(path: pathlib.PurePosixPath) -> tuple[str, ...]:
     return path.parts[:-1]
 
 
+_COMMENT_OR_STRING = re.compile(r'/\*.*?\*/|//[^\n]*|"""(?:.|\n)*?"""|"(?:\\.|[^"\\\n])*"', re.DOTALL)
+_COMPARISON = re.compile(r"[=!<>]=+")
+_CONSTANT_OR_ALIAS = re.compile(r"^\s*(?:(?:public|internal|private)\s+)?(?:const\s+val|typealias)\b")
+_BODY_OPENING = re.compile(r"\b(?:fun\b(?!\s+interface\b)|init\b|get\s*\(|set\s*\().*\{|^\s*\).*\{\s*$")
+
+
+def _declares_only(source: str) -> bool:
+    """Whether a Kotlin file can hold no executable line: only interfaces, constants and type aliases.
+
+    Errs towards False: any function, accessor or initializer body and any assignment other than a
+    `const val` or `typealias` counts as code, so a file the report wrongly omits is never waved through.
+    """
+    for line in _COMMENT_OR_STRING.sub('""', source).splitlines():
+        if _BODY_OPENING.search(line):
+            return False
+        if "=" in _COMPARISON.sub("", line) and not _CONSTANT_OR_ALIAS.match(line):
+            return False
+    return True
+
+
 def build_source_index(
     repo: pathlib.Path,
 ) -> dict[SourceKey, tuple[pathlib.PurePosixPath, ...]]:
@@ -274,8 +294,9 @@ def calculate_changed_coverage(
 ) -> CoverageResult:
     production_changes = production_changed_lines(changed, included_modules, included_paths, excluded_paths)
     source_index = build_source_index(repo)
-    # Source roots the report covers. A file there with no entry has no executable lines (declarations
-    # only); a file in a root the report never mentions means its module is missing from the report.
+    # Source roots the report covers. A file there with no entry is accepted only when it holds
+    # declarations alone (nothing executable to report); a file with code and no entry, or a file in a
+    # root the report never mentions, means the report is missing something.
     reported_roots = {
         _source_root(path)
         for key, paths in source_index.items()
@@ -290,7 +311,8 @@ def calculate_changed_coverage(
         source_key = source_key_for_path(repo, relative_path)
         report_lines = report.get(source_key)
         if report_lines is None:
-            if _source_root(relative_path) not in reported_roots:
+            source_text = repo.joinpath(*relative_path.parts).read_text(encoding="utf-8")
+            if _source_root(relative_path) not in reported_roots or not _declares_only(source_text):
                 missing_report_sources.append(relative_path)
             continue
         candidates = source_index.get(source_key, ())

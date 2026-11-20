@@ -363,6 +363,7 @@ run_screenshots() {
 
 phase 'Hotspot check' line_budgets "$base"
 phase 'Module layering' module_layering
+phase 'Module registration' module_registration
 [[ "$part" != static ]] || phase 'Python unittests' python_tests
 
 case "$part" in
