@@ -148,8 +148,8 @@ internal class HitomiGlobalSearchIndex(
     private data class DataRecord(val offset: Long, val length: Int)
 
     companion object {
-        private const val VERSION_URL = "https://ltn.gold-usergeneratedcontent.net/galleriesindex/version"
-        private const val INDEX_BASE = "https://ltn.gold-usergeneratedcontent.net/galleriesindex"
+        private const val INDEX_BASE = "${HitomiProtocol.DATA_BASE_URL}/galleriesindex"
+        private const val VERSION_URL = "$INDEX_BASE/version"
         private const val NODE_BYTES = 464
         private const val MAX_KEYS = 16
         private const val CHILD_COUNT = MAX_KEYS + 1

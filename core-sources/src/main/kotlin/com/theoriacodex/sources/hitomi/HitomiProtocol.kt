@@ -19,7 +19,7 @@ class HitomiProtocolException(message: String, cause: Throwable? = null) : Illeg
 
 object HitomiProtocol {
     const val TAG_INDEX_BASE_URL: String = "https://tagindex.hitomi.la"
-    const val DATA_BASE_URL: String = "https://ltn.gold-usergeneratedcontent.net"
+    const val DATA_BASE_URL: String = "https://ltn.$HITOMI_CDN_DOMAIN"
     const val MAX_AUTOCOMPLETE_CODE_POINTS: Int = 64
     const val MAX_AUTOCOMPLETE_RESPONSE_CHARS: Int = 64 * 1024
     const val MAX_GALLERY_RESPONSE_CHARS: Int = 2 * 1024 * 1024
