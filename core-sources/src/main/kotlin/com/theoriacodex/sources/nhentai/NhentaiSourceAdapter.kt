@@ -96,13 +96,7 @@ class NhentaiSourceAdapter(
         val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(1) ?: 1
         val compiledQuery = compileNhentaiQuery(query)
         val params = linkedMapOf("page" to pageIndex.toString())
-        val exactTag = if (query.sort != SortMode.RANDOM) {
-            query.singleIncludeTagCandidate()?.let { tag ->
-                runCatchingPreservingCancellation { resolveNhentaiTag(tag) }.getOrNull()
-            }
-        } else {
-            null
-        }
+        val exactTag = exactTagFor(query)
         val useAllEndpoint = compiledQuery.isBlank() &&
             (query.sort == SortMode.NEWEST || query.sort == SortMode.RANDOM)
 
@@ -112,11 +106,7 @@ class NhentaiSourceAdapter(
         val page = if (shouldUseMirrorFallback(response)) {
             mirror.search(compiledQuery, query.sort, pageIndex, useAllEndpoint)
         } else {
-            val root = parseJsonObject(response.ensureNhentaiOk())
-            NhentaiSearchPage(
-                posts = root.optionalJsonArray("result").galleryPosts(),
-                totalPages = root.get("num_pages").asIntOrNull(),
-            )
+            apiSearchPage(response)
         }
         val normalizedPosts = if (query.sort == SortMode.RANDOM) page.posts.shuffled() else page.posts
 
@@ -130,6 +120,21 @@ class NhentaiSourceAdapter(
         canonicalPostPage(
             items = normalizedPosts,
             nextPageToken = nextPageToken,
+        )
+    }
+
+    /** A single include tag nhentai knows, for its tag endpoint; random sort and failed lookups use plain search. */
+    private suspend fun exactTagFor(query: Query): NhentaiTagInfo? {
+        if (query.sort == SortMode.RANDOM) return null
+        val tag = query.singleIncludeTagCandidate() ?: return null
+        return runCatchingPreservingCancellation { resolveNhentaiTag(tag) }.getOrNull()
+    }
+
+    private fun apiSearchPage(response: SourceHttpResponse): NhentaiSearchPage {
+        val root = parseJsonObject(response.ensureNhentaiOk())
+        return NhentaiSearchPage(
+            posts = root.optionalJsonArray("result").galleryPosts(),
+            totalPages = root.get("num_pages").asIntOrNull(),
         )
     }
 
