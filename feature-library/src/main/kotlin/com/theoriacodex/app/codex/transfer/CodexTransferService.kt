@@ -1,0 +1,176 @@
+package com.theoriacodex.app.codex.transfer
+
+import com.theoriacodex.app.codex.encodeCodexShareFile
+import com.theoriacodex.app.codex.parseCodexShareFile
+import com.theoriacodex.domain.source.CustomSourceIds
+import com.theoriacodex.app.codex.resolveCodexShareImportPost
+import com.theoriacodex.app.codex.sanitizeCodexExportName
+import com.theoriacodex.app.codex.selectCodexShareEntries
+import com.theoriacodex.data.repository.CacheRepository
+import com.theoriacodex.data.repository.CodexLikesTransactions
+import com.theoriacodex.data.repository.CodexRepository
+import com.theoriacodex.data.repository.CodexSortMode
+import com.theoriacodex.domain.adapter.SourceAdapterRegistry
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.diagnostics.Diagnostics
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withTimeoutOrNull
+import com.theoriacodex.domain.model.Post
+
+/** A finished file waiting to be handed to the system share sheet. */
+data class ExportDocument(
+    val title: String,
+    val fileName: String,
+    val text: String,
+)
+
+sealed interface CodexExportResult {
+    data class Success(val payload: ExportDocument) : CodexExportResult
+    data object NotFound : CodexExportResult
+    data object Failure : CodexExportResult
+}
+
+sealed interface CodexImportResult {
+    data object Unreadable : CodexImportResult
+    data object Invalid : CodexImportResult
+    data object Failure : CodexImportResult
+    data object TimedOut : CodexImportResult
+    data class Success(
+        val codexId: String,
+        val imported: Int,
+        val skipped: Int,
+        /** Hosts of custom sites in the file that aren't usable here, so the user can set them up. */
+        val missingSiteHosts: List<String> = emptyList(),
+    ) : CodexImportResult
+}
+
+data class CodexImportProgress(val completed: Int, val total: Int, val committing: Boolean = false)
+
+sealed interface CodexSaveResult {
+    data class Success(val inserted: Int, val cacheFailures: Int) : CodexSaveResult
+    data class Failure(val message: String) : CodexSaveResult
+}
+
+/** Platform-free Codex JSON transfer; ContentResolver/FileProvider remain shell effects. */
+class CodexTransferService constructor(
+    private val codexRepository: CodexRepository,
+    private val transactions: CodexLikesTransactions,
+    private val cacheRepository: CacheRepository,
+    private val sourceRegistry: SourceAdapterRegistry,
+    private val workerDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val canonicalizePost: (Post) -> Post = { it },
+) {
+    suspend fun export(codexId: String): CodexExportResult = withContext(workerDispatcher) {
+        runCatchingPreservingCancellation { exportInside(codexId) }
+            .onFailure { Diagnostics.report("codex-transfer", "Codex export failed", it) }
+            .getOrDefault(CodexExportResult.Failure)
+    }
+
+    private suspend fun exportInside(codexId: String): CodexExportResult {
+        val codex = codexRepository.observeCodex(codexId).first() ?: return CodexExportResult.NotFound
+        val posts = codexRepository.observeCodexPosts(codexId, CodexSortMode.NEWEST_SAVED).first()
+        return CodexExportResult.Success(
+            ExportDocument(
+                title = codex.name,
+                fileName = "${sanitizeCodexExportName(codex.name)}.json",
+                text = encodeCodexShareFile(title = codex.name, posts = posts),
+            )
+        )
+    }
+
+    suspend fun import(
+        raw: String?,
+        targetCodexId: String,
+        onProgress: (CodexImportProgress) -> Unit = {},
+    ): CodexImportResult = withContext(workerDispatcher) {
+        runCatchingPreservingCancellation { importInside(raw, targetCodexId, onProgress) }
+            .onFailure { Diagnostics.report("codex-transfer", "Codex import failed", it) }
+            .getOrDefault(CodexImportResult.Failure)
+    }
+
+    private suspend fun importInside(raw: String?, targetCodexId: String, onProgress: (CodexImportProgress) -> Unit): CodexImportResult {
+        if (raw.isNullOrBlank()) return CodexImportResult.Unreadable
+        val parsed = parseCodexShareFile(raw) ?: return CodexImportResult.Invalid
+        val title = parsed.title?.trim().orEmpty()
+        if (title.isBlank()) return CodexImportResult.Invalid
+
+        val entries = selectCodexShareEntries(parsed.posts.orEmpty())
+        onProgress(CodexImportProgress(0, entries.size))
+        val completed = java.util.concurrent.atomic.AtomicInteger()
+        val resolvedPosts = withTimeoutOrNull(120_000L) {
+            // A fixed-size batch bounds both live requests and coroutine allocation; awaitAll keeps input order.
+            entries.chunked(4).flatMap { batch ->
+                coroutineScope {
+                    batch.map { (entry, postId) -> async {
+                        val resolved = resolveCodexShareImportPost(
+                            entry = entry,
+                            storedPost = { codexRepository.getPost(postId) },
+                            resolveFromSource = {
+                                withTimeoutOrNull(15_000L) {
+                                    runCatchingPreservingCancellation { sourceRegistry.adapterFor(postId.source)?.resolvePost(postId) }.getOrNull()
+                                }
+                            },
+                        )
+                        onProgress(CodexImportProgress(completed.incrementAndGet(), entries.size))
+                        resolved?.let(canonicalizePost)
+                    } }.awaitAll().filterNotNull()
+                }
+            }
+        } ?: return CodexImportResult.TimedOut
+        currentCoroutineContext().ensureActive()
+        onProgress(CodexImportProgress(entries.size, entries.size, committing = true))
+        val committed = transactions.importCodex(
+            codexId = targetCodexId,
+            name = title,
+            posts = resolvedPosts,
+        )
+        cacheCommittedPosts(resolvedPosts, cacheFullImage = false)
+        return CodexImportResult.Success(
+            codexId = committed.codex.codexId,
+            imported = committed.acceptedPosts,
+            skipped = entries.size - resolvedPosts.size,
+            missingSiteHosts = entries.map { (_, postId) -> postId.source }.distinct()
+                .filter { it.isCustom && sourceRegistry.adapterFor(it) == null }
+                .map { CustomSourceIds.hostLabel(it.id) },
+        )
+    }
+
+    /** Reorders the selected profile's slots while preserving other profiles in one transaction. */
+    suspend fun reorderVisibleCodices(visibleIds: List<String>) = withContext(workerDispatcher) {
+        if (visibleIds.isEmpty()) return@withContext
+        val selected = visibleIds.toSet()
+        require(selected.size == visibleIds.size) { "Duplicate Codex order" }
+        val current = codexRepository.observeCodices().first().map { it.codexId }
+        require(current.count { it in selected } == selected.size) { "Codex list changed. Please try again." }
+        val order = visibleIds.iterator()
+        transactions.reorderCodices(current.map { if (it in selected) order.next() else it })
+        Unit
+    }
+
+    /** Commit the selection atomically; optional cache failures cannot truncate durable saves. */
+    suspend fun save(codexId: String, posts: List<Post>, cacheFullImage: Boolean): CodexSaveResult =
+        withContext(workerDispatcher) {
+            val uniquePosts = posts.map(canonicalizePost).distinctBy(Post::id)
+            val committed = runCatchingPreservingCancellation {
+                codexRepository.addItems(codexId, uniquePosts)
+            }.getOrElse { return@withContext CodexSaveResult.Failure("Could not save posts. Please try again.") }
+            CodexSaveResult.Success(committed, cacheCommittedPosts(uniquePosts, cacheFullImage))
+        }
+
+    private suspend fun cacheCommittedPosts(posts: List<Post>, cacheFullImage: Boolean): Int =
+        posts.count { post ->
+            val thumbnail = runCatchingPreservingCancellation { cacheRepository.cacheThumbnail(post) }
+            val full = if (cacheFullImage) {
+                runCatchingPreservingCancellation { cacheRepository.cacheFull(post) }
+            } else Result.success(Unit)
+            thumbnail.isFailure || full.isFailure
+        }
+}

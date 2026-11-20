@@ -14,7 +14,9 @@
     "media-kit",
     "feed-kit",
     "feature-viewer",
-    "feature-search"
+    "feature-search",
+    "feature-library",
+    "feature-discover"
   ],
   "lineBudgets": {
     "production": 900,
@@ -35,6 +37,8 @@
     "config/detekt/baseline-media-kit-debug.xml": {},
     "config/detekt/baseline-feed-kit-debug.xml": {},
     "config/detekt/baseline-feature-viewer-debug.xml": {},
-    "config/detekt/baseline-feature-search-debug.xml": {}
+    "config/detekt/baseline-feature-search-debug.xml": {},
+    "config/detekt/baseline-feature-library-debug.xml": {},
+    "config/detekt/baseline-feature-discover-debug.xml": {}
   }
 }

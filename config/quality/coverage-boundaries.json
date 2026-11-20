@@ -51,6 +51,7 @@
     "*/src/main/**/search/SearchFacetUi.kt",
     "*/src/main/**/search/SearchFilterControls.kt",
     "*/src/main/**/search/SearchStateComponents.kt",
+    "*/src/main/**/search/SourceStatusRow.kt",
     "*/src/main/**/settings/SettingsScreen.kt",
     "*/src/main/**/settings/MediaPreferencesSection.kt",
     "*/src/main/**/viewer/ViewerScreen.kt",
