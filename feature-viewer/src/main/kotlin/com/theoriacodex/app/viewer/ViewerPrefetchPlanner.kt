@@ -1,0 +1,79 @@
+package com.theoriacodex.app.viewer
+
+import com.theoriacodex.app.viewer.state.ViewerAction
+import com.theoriacodex.app.viewer.state.ViewerMediaKey
+import com.theoriacodex.app.viewer.state.ViewerMediaKind
+import com.theoriacodex.app.viewer.state.ViewerPageState
+import kotlin.math.abs
+
+internal const val VIEWER_PREFETCH_LEFT_COUNT = 3
+internal const val VIEWER_PREFETCH_RIGHT_COUNT = 3
+
+/** Videos and ugoira archives warm only the immediate neighbours; each one can cost megabytes of disk cache. */
+internal const val VIEWER_VIDEO_PREFETCH_DISTANCE = 1
+
+/**
+ * Prefetched images this close to the current media stay decoded in Coil's memory cache. Farther ones
+ * warm the disk cache only, so a full prefetch window cannot evict the feed's grid thumbnails.
+ */
+internal const val VIEWER_MEMORY_PREFETCH_DISTANCE = 1
+
+/**
+ * Orders speculative Viewer work: nearest right neighbours first, then nearest left ones. Images use the
+ * full window; videos and ugoira beyond [VIEWER_VIDEO_PREFETCH_DISTANCE] are left to load when they are shown.
+ */
+internal fun planAdjacentViewerPrefetch(
+    pages: List<ViewerPageState>,
+    current: ViewerMediaKey?,
+    leftCount: Int = VIEWER_PREFETCH_LEFT_COUNT,
+    rightCount: Int = VIEWER_PREFETCH_RIGHT_COUNT,
+): List<ViewerMediaKey> {
+    if (current == null || leftCount < 0 || rightCount < 0) return emptyList()
+    val flattened = pages.flatMap(ViewerPageState::media)
+    val currentIndex = flattened.indexOfFirst { media -> media.key == current }
+    if (currentIndex < 0) return emptyList()
+
+    fun neighbour(offset: Int) = flattened.getOrNull(currentIndex + offset)?.takeUnless { media ->
+        (media.kind == ViewerMediaKind.VIDEO || media.kind == ViewerMediaKind.UGOIRA) &&
+            abs(offset) > VIEWER_VIDEO_PREFETCH_DISTANCE
+    }?.key
+
+    return buildList {
+        for (offset in 1..rightCount) neighbour(offset)?.let(::add)
+        for (offset in 1..leftCount) neighbour(-offset)?.let(::add)
+    }.distinct().filterNot { key -> key == current }
+}
+
+/**
+ * What the Viewer asks its owner to prefetch: a swipe's target first, then the adjacent plan. Static images
+ * within [VIEWER_MEMORY_PREFETCH_DISTANCE] are marked for decoding, so a page first downloaded while it was
+ * far away is decoded into memory once it becomes a neighbour, and shows without a decode when reached.
+ */
+fun viewerPrefetchAction(
+    pages: List<ViewerPageState>,
+    current: ViewerMediaKey?,
+    swipeTarget: ViewerMediaKey?,
+): ViewerAction.QueuePrefetch {
+    val keys = (listOfNotNull(swipeTarget) + planAdjacentViewerPrefetch(pages, current)).distinct()
+    val images = pages.asSequence().flatMap { page -> page.media.asSequence() }
+        .filter { media -> media.kind == ViewerMediaKind.IMAGE }
+        .mapTo(hashSetOf()) { media -> media.key }
+    val decodeKeys = keys.filterTo(hashSetOf()) { key ->
+        key in images && (viewerPrefetchDistance(pages, current, key) ?: Int.MAX_VALUE) <= VIEWER_MEMORY_PREFETCH_DISTANCE
+    }
+    return ViewerAction.QueuePrefetch(keys, decodeKeys)
+}
+
+/** Media-item distance between [current] and [target] in the flattened Viewer stream; null when either is absent. */
+internal fun viewerPrefetchDistance(
+    pages: List<ViewerPageState>,
+    current: ViewerMediaKey?,
+    target: ViewerMediaKey,
+): Int? {
+    if (current == null) return null
+    val flattened = pages.flatMap(ViewerPageState::media)
+    val currentIndex = flattened.indexOfFirst { media -> media.key == current }
+    val targetIndex = flattened.indexOfFirst { media -> media.key == target }
+    if (currentIndex < 0 || targetIndex < 0) return null
+    return abs(targetIndex - currentIndex)
+}

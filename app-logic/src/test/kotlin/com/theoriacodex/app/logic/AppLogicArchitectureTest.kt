@@ -52,9 +52,11 @@ class AppLogicArchitectureTest {
 
     @Test
     fun `moved production owners cannot reappear in android app sources`() {
-        val appSources = File(root, "app/src/main/java").walkTopDown()
-            .filter(File::isFile)
-            .toList()
+        // :app and the kit and feature modules split out of it.
+        val appSources = (root.listFiles().orEmpty().filter { module ->
+            module.name.endsWith("-kit") || module.name.startsWith("feature-")
+        }.map { module -> File(module, "src/main") } + File(root, "app/src/main/java"))
+            .flatMap { sources -> sources.walkTopDown().filter(File::isFile).toList() }
         listOf(
             "SearchContract.kt",
             "SearchDraftReducer.kt",
@@ -76,7 +78,7 @@ class AppLogicArchitectureTest {
             "app-logic/src/main/kotlin/com/theoriacodex/app/search/SearchScopedInputPolicy.kt",
         ).readText()
         val formerOwners = listOf(
-            File(root, "app/src/main/java/com/theoriacodex/app/search/SearchCoordinator.kt"),
+            File(root, "feed-kit/src/main/kotlin/com/theoriacodex/app/search/SearchCoordinator.kt"),
             File(root, "app-logic/src/main/kotlin/com/theoriacodex/app/search/state/SearchDraftReducer.kt"),
         )
         listOf(
@@ -117,7 +119,7 @@ class AppLogicArchitectureTest {
     fun `media delivery plans upgrade quality from what the media offers, for every source`() {
         val postMedia = File(
             root,
-            "app/src/main/java/com/theoriacodex/app/media/PostMedia.kt",
+            "media-kit/src/main/kotlin/com/theoriacodex/app/media/PostMedia.kt",
         ).readText()
         val plans = postMedia
             .substringAfter("fun previewMediaDeliveryPlan")

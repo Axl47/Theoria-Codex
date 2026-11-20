@@ -3,7 +3,6 @@ package com.theoriacodex.app
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -11,18 +10,19 @@ import androidx.compose.runtime.setValue
 import androidx.core.net.toUri
 import com.theoriacodex.app.ui.TheoriaApp
 import com.theoriacodex.app.viewer.ViewerAutoPictureInPicture
+import com.theoriacodex.app.viewer.ViewerHostActivity
 import com.theoriacodex.app.viewer.ViewerRotationState
 
-class MainActivity : ComponentActivity() {
-    var viewerPictureInPictureActive by mutableStateOf(false)
+class MainActivity : ViewerHostActivity() {
+    override var viewerPictureInPictureActive by mutableStateOf(false)
         private set
     private var enteringViewerPictureInPicture = false
-    internal val viewerAutoPictureInPicture = ViewerAutoPictureInPicture(this)
-    internal val viewerRotation = ViewerRotationState()
-    val keepViewerPlayingOnPause: Boolean
+    override val viewerAutoPictureInPicture = ViewerAutoPictureInPicture(this)
+    override val viewerRotation = ViewerRotationState()
+    override val keepViewerPlayingOnPause: Boolean
         get() = enteringViewerPictureInPicture || isInPictureInPictureMode || viewerAutoPictureInPicture.keepPlayingOnPause
 
-    fun requestViewerPictureInPicture(params: android.app.PictureInPictureParams): Boolean {
+    override fun requestViewerPictureInPicture(params: android.app.PictureInPictureParams): Boolean {
         enteringViewerPictureInPicture = true
         val entered = runCatching { enterPictureInPictureMode(params) }.getOrDefault(false)
         if (!entered) enteringViewerPictureInPicture = false

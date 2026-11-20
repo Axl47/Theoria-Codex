@@ -103,10 +103,6 @@ internal fun profileScopedCodexId(
     uniqueId: String = UUID.randomUUID().toString(),
 ): String = com.theoriacodex.data.repository.ProfileLibraryIds.codex(profileId, uniqueId)
 
-internal fun codexBelongsToProfile(codexId: String, profileId: String): Boolean {
-    return com.theoriacodex.data.repository.ProfileLibraryIds.belongsTo(codexId, profileId)
-}
-
 internal const val PROFILE_CODEX_ID_PREFIX = com.theoriacodex.data.repository.ProfileLibraryIds.CODEX_PREFIX
 internal const val LIKES_CODEX_ID_PREFIX = com.theoriacodex.data.repository.ProfileLibraryIds.LIKES_PREFIX
 private const val LIKES_CODEX_NAME = "Likes"

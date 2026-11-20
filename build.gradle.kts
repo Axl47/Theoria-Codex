@@ -28,6 +28,11 @@ dependencies {
     kover(project(":core-data-android"))
     kover(project(":core-sources"))
     kover(project(":core-stubs"))
+    kover(project(":ui-kit"))
+    kover(project(":media-kit"))
+    kover(project(":feed-kit"))
+    kover(project(":feature-viewer"))
+    kover(project(":feature-search"))
 }
 
 val qualityCoverageVariant = "quality"

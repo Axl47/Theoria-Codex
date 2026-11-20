@@ -66,20 +66,21 @@ class ArchitectureBoundarySourceTest {
         )
     }
 
-    private fun appProductionSources(): Sequence<File> = kotlinSourcesUnder("app/src/main")
+    private fun appProductionSources(): Sequence<File> = productionSourcesOf(::isAppModule)
 
-    private fun productionSources(): Sequence<File> {
+    private fun productionSources(): Sequence<File> = productionSourcesOf { name ->
+        isAppModule(name) || name == "app-logic" || name.startsWith("core-")
+    }
+
+    /** :app and the kit and feature modules split out of it, which hold the app's UI code. */
+    private fun isAppModule(name: String): Boolean =
+        name == "app" || name.endsWith("-kit") || name.startsWith("feature-")
+
+    private fun productionSourcesOf(includesModule: (String) -> Boolean): Sequence<File> {
         return repositoryRoot.listFiles().orEmpty()
             .asSequence()
-            .filter { directory ->
-                directory.isDirectory &&
-                    (directory.name == "app" || directory.name == "app-logic" || directory.name.startsWith("core-"))
-            }
-            .flatMap { module ->
-                File(module, "src/main").walkTopDown()
-                    .filter(File::isFile)
-                    .filter { it.extension == "kt" }
-            }
+            .filter { directory -> directory.isDirectory && includesModule(directory.name) }
+            .flatMap { module -> kotlinSourcesUnder(module.relativeTo(repositoryRoot).path + "/src/main") }
     }
 
     private fun kotlinSourcesUnder(relativeDirectory: String): Sequence<File> {

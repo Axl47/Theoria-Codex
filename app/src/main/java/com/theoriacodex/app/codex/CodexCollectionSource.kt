@@ -99,7 +99,3 @@ internal class CodexCollectionSource(
             )
         }.flowOn(Dispatchers.Default)
 }
-
-/** Scores each Codex of a saved-library snapshot against the incoming selection. */
-internal fun CodexSaveRelevance.scoreEach(library: Map<String, List<Post>>): Map<String, Double> =
-    library.mapValues { (_, saved) -> score(saved) }

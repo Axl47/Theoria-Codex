@@ -9,13 +9,18 @@
     "core-data",
     "core-data-android",
     "core-sources",
-    "core-stubs"
+    "core-stubs",
+    "ui-kit",
+    "media-kit",
+    "feed-kit",
+    "feature-viewer",
+    "feature-search"
   ],
   "lineBudgets": {
     "production": 900,
     "test": 700,
     "productionExceptions": {
-      "app/src/main/java/com/theoriacodex/app/search/SearchViewModel.kt": 1053
+      "feature-search/src/main/kotlin/com/theoriacodex/app/search/SearchViewModel.kt": 1053
     }
   },
   "detektBaselines": {
@@ -25,6 +30,11 @@
     "config/detekt/baseline-core-data-main.xml": {},
     "config/detekt/baseline-core-domain-main.xml": {},
     "config/detekt/baseline-core-sources-main.xml": {},
-    "config/detekt/baseline-core-stubs.xml": {}
+    "config/detekt/baseline-core-stubs.xml": {},
+    "config/detekt/baseline-ui-kit-debug.xml": {},
+    "config/detekt/baseline-media-kit-debug.xml": {},
+    "config/detekt/baseline-feed-kit-debug.xml": {},
+    "config/detekt/baseline-feature-viewer-debug.xml": {},
+    "config/detekt/baseline-feature-search-debug.xml": {}
   }
 }

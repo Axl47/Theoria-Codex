@@ -1,0 +1,169 @@
+package com.theoriacodex.app.viewer.state
+
+import com.theoriacodex.domain.model.CreatorProfile
+import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.PostTaxonomyTerm
+
+sealed interface ViewerAction {
+    data class ReplaceSession(
+        val session: ViewerSessionIdentity,
+        val posts: List<Post>,
+        val initialPageIndex: Int = 0,
+        val resolutionRequiredPostIds: Set<PostId> = emptySet(),
+        val initialMediaIndices: Map<PostId, Int> = emptyMap(),
+        val relatedNavigation: ViewerRelatedNavigation? = null,
+        val relatedPostIds: Set<PostId> = emptySet(),
+    ) : ViewerAction
+
+    /** Adds [posts] after the live [session]'s pages, leaving the pages, selection and controls it has untouched. */
+    data class AppendPosts(
+        val session: ViewerSessionIdentity,
+        val posts: List<Post>,
+        val resolutionRequiredPostIds: Set<PostId> = emptySet(),
+        val initialMediaIndices: Map<PostId, Int> = emptyMap(),
+    ) : ViewerAction
+
+    data class SelectPage(val pageIndex: Int) : ViewerAction
+    data class SelectMedia(val mediaIndex: Int) : ViewerAction
+    data class SelectOverviewMedia(val mediaIndex: Int) : ViewerAction
+    data object ToggleChrome : ViewerAction
+    data object ToggleOverview : ViewerAction
+    data object ShowMetadata : ViewerAction
+    data object HideMetadata : ViewerAction
+    data object ShowActionsMenu : ViewerAction
+    data object HideActionsMenu : ViewerAction
+    data object ShowPlaybackSettings : ViewerAction
+    data object HidePlaybackSettings : ViewerAction
+
+    data class SetPlaybackMode(val mode: ViewerPlaybackMode) : ViewerAction
+    data class PlaybackCompleted(val session: ViewerSessionIdentity, val key: ViewerMediaKey, val loadGeneration: Long) : ViewerAction
+    data class SetSlideshow(val running: Boolean) : ViewerAction
+    /** A slideshow's hold on the still image [key] ran out. */
+    data class SlideshowAdvance(val session: ViewerSessionIdentity, val key: ViewerMediaKey) : ViewerAction
+    data object Play : ViewerAction
+    data object Pause : ViewerAction
+    data object TogglePlayback : ViewerAction
+    data object RestartPlayback : ViewerAction
+    data class SetPlaybackRate(val rate: Float) : ViewerAction
+
+    data object RequestCurrentPageResolution : ViewerAction
+    data class RequestPageResolution(val postId: PostId) : ViewerAction
+    data class ResolutionCancelled(val session: ViewerSessionIdentity, val postId: PostId) : ViewerAction
+    data class ResolutionStarted(
+        val session: ViewerSessionIdentity,
+        val postId: PostId,
+    ) : ViewerAction
+
+    data class ResolutionCompleted(
+        val session: ViewerSessionIdentity,
+        val post: Post,
+    ) : ViewerAction
+
+    data class ResolutionFailed(
+        val session: ViewerSessionIdentity,
+        val postId: PostId,
+        val message: String,
+        val recoverable: Boolean,
+    ) : ViewerAction
+
+    /** [decodeKeys]: images among [mediaKeys] close enough to the current media to keep decoded in memory. */
+    data class QueuePrefetch(
+        val mediaKeys: List<ViewerMediaKey>,
+        val decodeKeys: Set<ViewerMediaKey> = emptySet(),
+    ) : ViewerAction
+    data class PrefetchStarted(
+        val session: ViewerSessionIdentity,
+        val mediaKey: ViewerMediaKey,
+    ) : ViewerAction
+
+    data class PrefetchCompleted(
+        val session: ViewerSessionIdentity,
+        val mediaKey: ViewerMediaKey,
+        val result: ViewerPrefetchResult,
+    ) : ViewerAction
+
+    data class MediaFailed(
+        val session: ViewerSessionIdentity,
+        val error: ViewerMediaError,
+        val loadGeneration: Long? = null,
+    ) : ViewerAction
+
+    data class MediaReady(
+        val session: ViewerSessionIdentity,
+        val key: ViewerMediaKey,
+        val loadGeneration: Long,
+    ) : ViewerAction
+
+    data object ClearMediaError : ViewerAction
+    data object RetryMedia : ViewerAction
+
+    data object Save : ViewerAction
+    data object Download : ViewerAction
+    data object ToggleLike : ViewerAction
+    data class OpenCreator(val creator: CreatorProfile) : ViewerAction
+    data class IncludeTag(val term: PostTaxonomyTerm) : ViewerAction
+    data class ExcludeTag(val term: PostTaxonomyTerm) : ViewerAction
+    data object LoadMore : ViewerAction
+    data object Dismiss : ViewerAction
+}
+
+sealed interface ViewerEffect {
+    val session: ViewerSessionIdentity
+
+    data class ResolvePost(
+        override val session: ViewerSessionIdentity,
+        val postId: PostId,
+    ) : ViewerEffect
+
+    data class PrefetchMedia(
+        override val session: ViewerSessionIdentity,
+        val mediaKeys: List<ViewerMediaKey>,
+    ) : ViewerEffect
+
+    data class SavePost(
+        override val session: ViewerSessionIdentity,
+        val postId: PostId,
+    ) : ViewerEffect
+
+    data class DownloadMedia(
+        override val session: ViewerSessionIdentity,
+        val postId: PostId,
+        val mediaKey: ViewerMediaKey,
+    ) : ViewerEffect
+
+    data class SetLiked(
+        override val session: ViewerSessionIdentity,
+        val postId: PostId,
+    ) : ViewerEffect
+
+    data class OpenCreatorProfile(
+        override val session: ViewerSessionIdentity,
+        val creator: CreatorProfile,
+    ) : ViewerEffect
+
+    data class ApplyTag(
+        override val session: ViewerSessionIdentity,
+        val postId: PostId,
+        val term: PostTaxonomyTerm,
+        val excluded: Boolean,
+    ) : ViewerEffect
+
+    data class RetryMedia(
+        override val session: ViewerSessionIdentity,
+        val mediaKey: ViewerMediaKey,
+    ) : ViewerEffect
+
+    data class LoadMore(
+        override val session: ViewerSessionIdentity,
+    ) : ViewerEffect
+
+    data class Dismiss(
+        override val session: ViewerSessionIdentity,
+    ) : ViewerEffect
+}
+
+data class ViewerReduction(
+    val state: ViewerUiState,
+    val effects: List<ViewerEffect> = emptyList(),
+)

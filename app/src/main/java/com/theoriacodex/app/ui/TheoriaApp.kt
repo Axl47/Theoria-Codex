@@ -53,7 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
-import com.theoriacodex.app.R
+import com.theoriacodex.uikit.R
 import com.theoriacodex.app.ui.components.LocalPostMenuActions
 import com.theoriacodex.app.ui.components.PostMenuActions
 import com.theoriacodex.app.ui.components.sharePostLink
