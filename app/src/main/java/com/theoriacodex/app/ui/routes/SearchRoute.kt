@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.search.omnibox.OmniboxEntry
 import com.theoriacodex.app.ui.components.FeedMarks
 import com.theoriacodex.app.ui.components.feedDurations
 import com.theoriacodex.app.ui.LocalNetworkOnline
@@ -48,6 +49,8 @@ internal data class SearchRouteConfig(
     val marks: FeedMarks,
     val favoriteTags: List<FavoriteTagEntry>,
     val resolveUnknownAnimatedDurations: Boolean,
+    /** What the composer's typed text reaches besides tags; see `rememberSearchOmniboxEntries`. */
+    val omnibox: List<OmniboxEntry> = emptyList(),
 )
 
 /** Platform and navigation effects that remain owned by the application shell. */
@@ -208,6 +211,7 @@ private fun SearchRouteContent(
         onOpenSavedSearch = callbacks.onOpenSavedSearch,
         onSaveSearch = callbacks.onSaveSearch,
         onManageSavedSearches = callbacks.onManageSavedSearches,
+        omnibox = config.omnibox,
         creatorBrowsingSources = config.creatorBrowsingSources,
         onAction = owner::onAction,
         resolvePostById = resolvePostById,

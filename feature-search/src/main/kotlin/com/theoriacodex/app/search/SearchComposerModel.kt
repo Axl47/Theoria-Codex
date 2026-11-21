@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.search.omnibox.OmniboxEntry
 import com.theoriacodex.app.post.PostTagSelection
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.source.presentation
@@ -37,8 +38,13 @@ internal sealed interface ComposerAddTarget {
 }
 
 /** Autocomplete rows for the target, and how many matches its group's tag type ruled out. */
-internal data class ComposerSuggestions(val rows: List<ComposerSuggestion>, val hiddenCount: Int) {
-    val isVisible: Boolean get() = rows.isNotEmpty() || hiddenCount > 0
+internal data class ComposerSuggestions(
+    val rows: List<ComposerSuggestion>,
+    val hiddenCount: Int,
+    /** Codices, creators, searches and commands the typed text also reaches, shown below the tags. */
+    val omnibox: List<OmniboxEntry> = emptyList(),
+) {
+    val isVisible: Boolean get() = rows.isNotEmpty() || hiddenCount > 0 || omnibox.isNotEmpty()
 }
 
 /** One autocomplete row, carrying the term it stands for and the action that adds it to the current target. */

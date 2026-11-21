@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.search.omnibox.OmniboxEntry
 import com.theoriacodex.app.related.RelatedShelfBinding
 import com.theoriacodex.app.ui.components.LocalPostMenuActions
 import com.theoriacodex.app.ui.components.FeedMarks
@@ -97,6 +98,7 @@ fun SearchScreen(
     onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
     onSaveSearch: (String, RecentSearchEntry) -> Unit = { _, _ -> },
     onManageSavedSearches: () -> Unit = {},
+    omnibox: List<OmniboxEntry> = emptyList(),
 ) {
     val chrome = rememberSearchChromeState(composerOpen)
     val actionPost = remember { SearchActionPostState() }
@@ -107,13 +109,12 @@ fun SearchScreen(
     val feed = rememberSearchFeed(state, related.state, fabRestoreState, marks, durations)
     val serverFilters = state.query.serverFilters()
     val filterScroll = rememberFeedScrollSignal()
-    var filterSheetBaseline by remember { mutableStateOf(serverFilters) }
     LaunchedEffect(feed.animatedDurationFilterActive) { durations.onFilterChanged(feed.animatedDurationFilterActive) }
     DurationRouteEnvironmentEffect(gridState, durations.onEnvironmentChanged)
     val pageDemand = rememberSearchScrollAndPaging(state, feed, gridState, durations.resolveInBackground, onAction)
     SearchScrollDismissEffect(gridState, chrome, inputFocus)
     val applyDraft = { chrome.applyDraft(inputFocus, onAction) }
-    val filterActions = SearchFilterActions(state, fabRestoreState, rememberUpdatedState(serverFilters), onAction, onFabRestoreStateChange, applyDraft)
+    val filterActions = SearchFilterActions(state, fabRestoreState, rememberUpdatedState(serverFilters), onAction, onFabRestoreStateChange)
     val sourcePicker: @Composable () -> Unit = { SearchScreenSourcePicker(state, chrome, inputFocus, onAction) }
     Scaffold(
         modifier = Modifier.nestedScroll(filterScroll.connection),
@@ -121,13 +122,12 @@ fun SearchScreen(
         floatingActionButton = {
             SearchFilterFab(searchFilterLabels(serverFilters, feed, fabRestoreState), filterScroll, { filterActions.clearFilters(serverFilters) }) {
                 inputFocus.clear()
-                filterSheetBaseline = serverFilters
                 chrome.showFilterSheet = true
             }
         }
     ) { padding ->
         SearchChromeLayout(
-            padding, state, related, feed, fabRestoreState, chrome, oldSearchBar, sourcePicker, applyDraft, gridState, pageDemand, inputFocus,
+            padding, state, related, feed, fabRestoreState, chrome, oldSearchBar, sourcePicker, gridState, pageDemand, inputFocus,
             pixivUgoiraClient, marks.liked, durations, onToggleLike, resolvePostById, recoverPostMedia, onAction,
         ) { post ->
             inputFocus.clear()
@@ -137,23 +137,23 @@ fun SearchScreen(
     actionPost.post?.let { post ->
         SearchPostSheet(
             post, actionPost, state, related, creatorBrowsingSources, onAction, onSaveToDevice,
-            onRequestSaveToCodex, onAddFavoriteTag, applyDraft,
+            onRequestSaveToCodex, onAddFavoriteTag,
             liked = post.id in marks.liked, onToggleLike = onToggleLike,
         )
     }
     if (chrome.composerOpen) {
         val saved = composerSavedSearches(state, savedSearches, onSaveSearch, onManageSavedSearches) { chrome.closeComposer(onAction); onOpenSavedSearch(it) }
         SearchComposerDialog(state, feed, chrome, gridState, sourcePicker, applyDraft, onAction, onOpenSourceAccounts, saved,
-            favoriteTags, onAddFavoriteTag, onRemoveFavoriteTag, onRenameFavoriteTag)
+            favoriteTags, onAddFavoriteTag, onRemoveFavoriteTag, onRenameFavoriteTag, omnibox)
     }
     if (chrome.showFavoriteTagSheet) {
         SearchFavoriteTags(state, favoriteTags, onAction, onRemoveFavoriteTag, onRenameFavoriteTag) { chrome.showFavoriteTagSheet = false }
     }
     if (chrome.showFilterSheet) {
         SearchFilterSheet(state, feed, fabRestoreState, onAction, onFabRestoreStateChange, filterActions::resetFilterDraft) {
-            // Results change once, when the filters are settled, however many were adjusted.
+            // Filters apply live as they change; closing the sheet settles the search they made.
             chrome.showFilterSheet = false
-            if (serverFilters != filterSheetBaseline) applyDraft()
+            onAction(SearchAction.SettleSearch)
         }
     }
 }
@@ -198,7 +198,6 @@ private fun SearchChromeLayout(
     chrome: SearchChromeState,
     oldSearchBar: Boolean,
     sourcePicker: @Composable () -> Unit,
-    applyDraft: () -> Unit,
     gridState: LazyStaggeredGridState,
     pageDemand: FeedPageDemandControl,
     inputFocus: SearchInputFocus,
@@ -219,12 +218,15 @@ private fun SearchChromeLayout(
         horizontalPadding = 16.dp,
         modifier = Modifier.fillMaxSize().padding(padding)
             .padding(top = if (oldSearchBar) 6.dp else 0.dp, bottom = 8.dp),
-        inputField = { SearchChromeInput(state, feed, fabRestoreState, chrome, oldSearchBar, sourcePicker, applyDraft) },
+        inputField = { SearchChromeInput(state, feed, fabRestoreState, chrome, oldSearchBar, sourcePicker, onAction) },
     ) {
         val cards = rememberFeedCardEnvironment(
             pixivUgoiraClient, likedPostIds, feed.durationMetadata.knownDurationMsByPostId, durations, onToggleLike,
         )
-        SearchResultsBody(state, related, feed, cards, gridState, pageDemand, inputFocus, resolvePostById, recoverPostMedia, onAction, openPostActions)
+        SearchResultsBody(
+            state, related, feed, cards, gridState, pageDemand, inputFocus, resolvePostById, recoverPostMedia, onAction,
+            openPostActions, composerOpen = chrome.composerOpen,
+        )
     }
 }
 
@@ -245,8 +247,10 @@ private class SearchChromeState(composerOpen: MutableState<Boolean>, searchBarDi
     var showFilterSheet by mutableStateOf(false)
     var showFavoriteTagSheet by mutableStateOf(false)
 
+    /** Closing the composer settles the search it left on screen. */
     fun closeComposer(onAction: (SearchAction) -> Unit) {
         onAction(SearchAction.ClearAutocomplete)
+        onAction(SearchAction.SettleSearch)
         composerOpen = false
         searchBarDismissedByScroll = false
     }
@@ -274,6 +278,7 @@ private fun SearchComposerDialog(
     onAddFavoriteTag: (SourceKey, List<String>, String?) -> Unit,
     onRemoveFavoriteTag: (SourceKey, List<String>) -> Unit,
     onRenameFavoriteTag: (SourceKey, List<String>, String) -> Unit,
+    omnibox: List<OmniboxEntry>,
 ) {
     val scope = rememberCoroutineScope()
     val favoriteSections = rememberFavoriteTagSections(state, favoriteTags)
@@ -303,6 +308,7 @@ private fun SearchComposerDialog(
             // Single-source only: Unified would expand the group across sources with tighter tag limits.
             builtIn = listOfNotNull(animatedSavedGroup((state.query.draft.mode as? QueryMode.Source)?.source)),
         ),
+        omnibox = omnibox,
     )
 }
 
@@ -337,14 +343,15 @@ private fun SearchChromeInput(
     chrome: SearchChromeState,
     oldSearchBar: Boolean,
     sourcePicker: @Composable () -> Unit,
-    applyDraft: () -> Unit,
+    onAction: (SearchAction) -> Unit,
 ) {
     SearchSummaryBar(
         summary = collapsedSearchContextSummary(state.query.draft, activeSearchFilterCount(state, feed, fabRestoreState)),
         validationMessage = state.validationMessage,
-        showSearchAction = state.hasPendingChanges && !chrome.composerOpen,
+        history = SearchBarHistory(state.canUndoSearch, state.canRedoSearch) { back ->
+            onAction(if (back) SearchAction.UndoSearch else SearchAction.RedoSearch)
+        },
         onOpen = { chrome.composerOpen = true },
-        onSearch = applyDraft,
         trailing = { if (oldSearchBar) sourcePicker() },
     )
 }
@@ -360,7 +367,6 @@ private fun SearchPostSheet(
     onSaveToDevice: (Post) -> Unit,
     onRequestSaveToCodex: (Post) -> Unit,
     onAddFavoriteTag: (SourceKey, List<String>, String?) -> Unit,
-    applyDraft: () -> Unit,
     liked: Boolean,
     onToggleLike: ((Post) -> Unit)?,
 ) {
@@ -395,7 +401,7 @@ private fun SearchPostSheet(
                 onFavoriteTagLongPress = { source, tag -> onAddFavoriteTag(source, listOf(tag), null) },
                 onSearch = {
                     actionPost.dismiss()
-                    applyDraft()
+                    onAction(SearchAction.SettleSearch)
                 },
             )
         },
@@ -443,7 +449,6 @@ private class SearchFilterActions(
     private val currentServerFilters: State<SearchServerFilters>,
     private val onAction: (SearchAction) -> Unit,
     private val onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
-    private val applyDraft: () -> Unit,
 ) {
     private fun applyServerFilters(filters: SearchServerFilters) {
         onAction(SearchAction.SelectSort(filters.sort))
@@ -467,16 +472,15 @@ private class SearchFilterActions(
         )
     }
 
-    /** Clears every filter and returns how to put them back. */
+    /** Clears every filter, settling the search that leaves, and returns how to put them back. */
     fun clearFilters(previousServerFilters: SearchServerFilters): () -> Unit {
         val previousFab = fabRestoreState
-        val serverFiltersActive = previousServerFilters != DEFAULT_SERVER_FILTERS
         resetFilterDraft()
-        if (serverFiltersActive) applyDraft()
+        onAction(SearchAction.SettleSearch)
         return {
             onFabRestoreStateChange(previousFab)
             applyServerFilters(previousServerFilters)
-            if (serverFiltersActive) applyDraft()
+            onAction(SearchAction.SettleSearch)
         }
     }
 }
@@ -711,7 +715,7 @@ private fun nhentaiLanguageLabel(filter: NhentaiLanguageFilter): String = when (
     NhentaiLanguageFilter.JAPANESE -> "Japanese"
 }
 
-/** The filters that change what a source returns, so changing them needs a new search. */
+/** The filters that change what a source returns, so changing them runs a new search. */
 private data class SearchServerFilters(
     val sort: SortMode,
     val dateRange: DateRange?,

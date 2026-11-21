@@ -56,6 +56,7 @@ internal fun ColumnScope.SearchResultsBody(
     recoverPostMedia: suspend (Post, ImageRef) -> Post?,
     onAction: (SearchAction) -> Unit,
     openPostActions: (Post) -> Unit,
+    composerOpen: Boolean = false,
 ) {
     val clearFocusInteraction = remember { MutableInteractionSource() }
     val tapToClearFocus = Modifier
@@ -75,8 +76,10 @@ internal fun ColumnScope.SearchResultsBody(
             SearchFailureSurface(failure, state.content.statuses, retrySearch, onDismiss = dismiss)
         }
     }
-    // Results show the pull indicator instead; this keeps refreshes of an emptied feed visible.
-    if (state.retainsResultsWhileRefreshing && feed.related.projection.entries.isEmpty()) SearchRefreshProgress()
+    // Results show the pull indicator for a refresh; this line covers newer searches (the open composer shows its
+    // own) and refreshes of an emptied feed.
+    val emptied = feed.related.projection.entries.isEmpty()
+    if ((state.replacingResults && !composerOpen) || (state.refreshingAppliedSearch && emptied)) SearchRefreshProgress()
     when {
         state.loading && !state.retainsResultsWhileRefreshing -> FeedLoadingState(modifier = tapToClearFocus.fillMaxWidth())
         state.content.error != null && state.pageFailure == null -> {
@@ -90,7 +93,7 @@ internal fun ColumnScope.SearchResultsBody(
                 DismissibleFailure(message) { dismiss -> SourceAccountNotice(message, state.content.statuses, dismiss) }
             }
             PullToRefreshBox(
-                isRefreshing = state.retainsResultsWhileRefreshing && !state.execution.showingPartialResults,
+                isRefreshing = state.refreshingAppliedSearch && !state.execution.showingPartialResults,
                 onRefresh = retrySearch,
                 modifier = Modifier.weight(1f),
             ) {
@@ -120,12 +123,11 @@ private fun SearchEmptyResults(
         sourceAuthErrorMessage?.let { SourceAccountNotice(it, state.content.statuses) }
         sourceFailureMessage?.let { failureMessage -> SourceFailureBlock(failureMessage, unannounced, onRetry = onRetry) }
         if (feed.durationMetadata.readiness.isResolving) {
-            EmptyBlock(hasPendingChanges = false, messageOverride = "Resolving durations…")
+            EmptyBlock(messageOverride = "Resolving durations…")
         } else if (!state.content.hasExecutedSearch && !feed.animatedFilterActive) {
             SearchStartSplash(modifier = Modifier.fillMaxWidth())
         } else {
             EmptyBlock(
-                hasPendingChanges = state.hasPendingChanges,
                 messageOverride = buildEmptySearchMessage(
                     sourceResults = state.content.results,
                     visibilityFilters = feed.visibilityFilters,
@@ -210,7 +212,7 @@ private fun SearchStartSplash(
                 modifier = Modifier.size(180.dp),
             )
             Text(
-                text = "Add tags and press Apply to start searching.",
+                text = "Add tags to start searching.",
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 24.dp),

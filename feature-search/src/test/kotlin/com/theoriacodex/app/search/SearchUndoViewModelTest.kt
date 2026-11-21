@@ -33,7 +33,7 @@ internal class SearchUndoViewModelTest : SearchViewModelTestFixture() {
         owner.onAction(SearchAction.ScrollChanged(1, 37))
         owner.onAction(SearchAction.ApplyTagSearch(listOf(SearchTermGroup.single(SearchTerm("second"))), mode = QueryMode.Source(SourceKey.PIXIV)))
         advanceUntilIdle()
-        assertEquals(SearchScrollState(1, 37), owner.state.value.searchHistory.single().scrollState)
+        assertEquals(SearchScrollState(1, 37), owner.state.value.history.back.single().scrollState)
 
         owner.onAction(SearchAction.UndoSearch)
         advanceUntilIdle()
@@ -101,7 +101,7 @@ internal class SearchUndoViewModelTest : SearchViewModelTestFixture() {
         runCurrent()
         adapter.releaseSlowSearch.complete(Unit)
         advanceUntilIdle()
-        assertEquals(listOf("paged"), owner.state.value.searchHistory.map { it.query.includeTags.single() })
+        assertEquals(listOf("paged"), owner.state.value.history.back.map { it.query.includeTags.single() })
         owner.onAction(SearchAction.UndoSearch)
         advanceUntilIdle()
         assertEquals(listOf("paged"), owner.state.value.query.applied.includeTags)
