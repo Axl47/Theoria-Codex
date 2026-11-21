@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.components.ActionMenuSheet
+import com.theoriacodex.app.ui.components.EmptyState
 import com.theoriacodex.app.ui.components.SheetHeader
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 
@@ -28,14 +29,7 @@ fun HiddenTagsSheet(
 ) {
     ActionMenuSheet(onDismiss) {
         SheetHeader("Hidden tags", "Close hidden tags", onDismiss)
-        if (entries.isEmpty()) {
-            Text(
-                "No hidden tags",
-                modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        if (entries.isEmpty()) EmptyState("No hidden tags")
         entries.forEach { entry ->
             Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
