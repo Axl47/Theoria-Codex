@@ -37,6 +37,7 @@ class FeedPreviewPlayerPool(
     private val slots = ReusableVideoSlotPool<ExoPlayer, VideoPlaybackIdentity>(
         maxIdleResources = FEED_PREVIEW_MAX_IDLE_PLAYERS,
         idleTimeoutMs = FEED_PREVIEW_IDLE_TIMEOUT_MS,
+        excessReleaseDelayMs = FEED_PREVIEW_EXCESS_RELEASE_DELAY_MS,
         clock = clock,
         createResource = ::createPlayer,
     )
@@ -83,7 +84,7 @@ class FeedPreviewPlayerPool(
     fun acquire(
         location: String,
         headers: Map<String, String>,
-    ): FeedPreviewPlayerLease {
+    ): VideoPlayerLease {
         checkMainThread()
         // A card keeps loading until the Viewer stops it, so it must not lock the rest of a clip the Viewer reads.
         val request = infrastructure.bind(location, headers, boundedLocks = true)
@@ -105,11 +106,11 @@ class FeedPreviewPlayerPool(
         publishTraceCounters()
         scheduleCooling()
         scheduleCleanup()
-        return FeedPreviewPlayerLease(slotLease)
+        return VideoPlayerLease(slotLease)
     }
 
     fun recycle(
-        lease: FeedPreviewPlayerLease,
+        lease: VideoPlayerLease,
         retainBinding: Boolean,
     ) {
         checkMainThread()
@@ -149,7 +150,7 @@ class FeedPreviewPlayerPool(
     }
 
     /** Restarts loading for a leased card that [stopForViewer] stopped; a no-op for a loaded or failed player. */
-    fun resume(lease: FeedPreviewPlayerLease) {
+    fun resume(lease: VideoPlayerLease) {
         checkMainThread()
         traceMediaSection(MediaTraceSections.PREVIEW_PLAYER_RESUME) {
             val player = lease.player
@@ -242,18 +243,23 @@ class FeedPreviewPlayerPool(
     }
 }
 
-class FeedPreviewPlayerLease internal constructor(
+/** A feed or Viewer pool's loan of one player; return it to the pool that lent it. */
+class VideoPlayerLease internal constructor(
     internal val slotLease: ReusableVideoSlotPool.Lease<ExoPlayer>,
 ) {
     val player: ExoPlayer
         get() = slotLease.resource
 }
 
-/** Pure lease/retention policy kept separate from Media3 so reuse remains directly testable. */
+/**
+ * Pure lease/retention policy kept separate from Media3 so reuse remains directly testable.
+ * Idle resources beyond [maxIdleResources] are released [excessReleaseDelayMs] after cleanup is scheduled.
+ */
 class ReusableVideoSlotPool<Resource : Any, Identity : Any>(
     private val maxIdleResources: Int,
     private val idleTimeoutMs: Long,
     private val clock: () -> Long,
+    private val excessReleaseDelayMs: Long = 0L,
     private val createResource: () -> Resource,
 ) {
     data class Lease<Resource : Any>(
@@ -377,7 +383,7 @@ class ReusableVideoSlotPool<Resource : Any, Identity : Any>(
 
     fun nextCleanupDelayMs(nowMs: Long = clock()): Long? {
         if (idleSlots.isEmpty() || activeResourceCount > 0) return null
-        if (idleSlots.size > maxIdleResources) return FEED_PREVIEW_EXCESS_RELEASE_DELAY_MS
+        if (idleSlots.size > maxIdleResources) return excessReleaseDelayMs
         val oldest = idleSlots.first()
         return (idleTimeoutMs - (nowMs - oldest.idleSinceMs)).coerceAtLeast(0L)
     }

@@ -4,13 +4,18 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
-enum class ViewerMediaKind {
+enum class ViewerMediaKind(
+    /** Plays on a timeline the user can seek: double-tap jumps and hold-scrub. */
+    val seekable: Boolean = false,
+    /** Plays over time, so its timeline reserves the bottom of the page. */
+    val animated: Boolean = seekable,
+) {
     IMAGE,
-    VIDEO,
-    ANIMATED_WEBP,
-    GIF,
-    ANIMATED_IMAGE,
-    UGOIRA,
+    VIDEO(seekable = true),
+    ANIMATED_WEBP(animated = true),
+    GIF(seekable = true),
+    ANIMATED_IMAGE(animated = true),
+    UGOIRA(seekable = true),
     UNKNOWN,
 }
 

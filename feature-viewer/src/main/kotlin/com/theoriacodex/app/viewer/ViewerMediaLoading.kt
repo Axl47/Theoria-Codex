@@ -84,8 +84,8 @@ private fun InputStream.readBoundedGifBytes(): ByteArray {
         val read = read(chunk)
         if (read == -1) return output.toByteArray()
         totalBytes += read
-        if (totalBytes > MAX_GIF_BYTES) {
-            throw IOException("GIF exceeded the $MAX_GIF_BYTES-byte playback limit")
+        if (totalBytes > MAX_VIEWER_GIF_BYTES) {
+            throw IOException("GIF exceeded the $MAX_VIEWER_GIF_BYTES-byte playback limit")
         }
         output.write(chunk, 0, read)
     }
@@ -110,4 +110,3 @@ internal const val GIF_MOVIE_LOAD_ATTEMPTS = 2
 internal const val GIF_MOVIE_RETRY_DELAY_MS = 750L
 internal const val GIF_LOG_TAG = "TheoriaGifPlayer"
 private const val GIF_READ_CHUNK_BYTES = 8 * 1024
-private const val MAX_GIF_BYTES = 64L * 1024L * 1024L

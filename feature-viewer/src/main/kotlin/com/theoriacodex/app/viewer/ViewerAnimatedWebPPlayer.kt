@@ -29,9 +29,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
 import coil.drawable.ScaleDrawable
 import com.github.penfeizhou.animation.webp.WebPDrawable
@@ -60,7 +57,12 @@ internal fun ViewerAnimatedWebPPlayer(
         MediaRequestFactory.imageRequest(context, location, sourceKey, crossfade = false, controllableAnimatedWebP = true)
     }
     ViewerWebPCompletion(state.drawable, controls.loopPlayback, events.onPlaybackCompleted)
-    ViewerWebPLifecycle(state.drawable, controls)
+    val drawable = state.drawable
+    ViewerPlayWhileStarted(
+        drawable, controls.isActive && controls.isPlaying,
+        play = { drawable?.let { if (it.isPaused) it.resume() else it.start() } },
+        pause = { drawable?.pause() },
+    )
     ViewerWebPProgress(state, controls)
     Box(modifier, contentAlignment = Alignment.Center) {
         AsyncImage(
@@ -107,23 +109,6 @@ private fun ViewerWebPCompletion(drawable: WebPDrawable?, loop: Boolean, onCompl
 }
 
 @Composable
-private fun ViewerWebPLifecycle(drawable: WebPDrawable?, controls: ViewerRendererControls) {
-    val owner = LocalLifecycleOwner.current
-    DisposableEffect(drawable, owner, controls.isActive, controls.isPlaying) {
-        fun sync() {
-            if (drawable == null) return
-            if (controls.isActive && controls.isPlaying && owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
-                if (drawable.isPaused) drawable.resume() else drawable.start()
-            } else drawable.pause()
-        }
-        val observer = LifecycleEventObserver { _, _ -> sync() }
-        owner.lifecycle.addObserver(observer)
-        sync()
-        onDispose { owner.lifecycle.removeObserver(observer); drawable?.pause() }
-    }
-}
-
-@Composable
 private fun ViewerWebPProgress(state: ViewerWebPState, controls: ViewerRendererControls) {
     LaunchedEffect(state.drawable, controls.isActive) {
         val drawable = state.drawable ?: return@LaunchedEffect
@@ -132,9 +117,6 @@ private fun ViewerWebPProgress(state: ViewerWebPState, controls: ViewerRendererC
             state.frameIndex = drawable.frameSeqDecoder.frameIndex.coerceAtLeast(0)
             delay(100L)
         }
-    }
-    LaunchedEffect(controls.restartRequest, state.drawable) {
-        if (controls.restartRequest > 0L) { state.drawable?.reset(); state.frameIndex = 0 }
     }
 }
 

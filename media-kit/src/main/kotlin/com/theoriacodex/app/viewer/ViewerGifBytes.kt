@@ -61,7 +61,7 @@ internal class ViewerGifByteStore(private val directory: File) {
     }
 
     suspend fun cachedLocation(key: String): String? = withContext(Dispatchers.IO) {
-        File(directory, entryName(key)).takeIf { it.isFile && it.length() in 1..MAX_VIEWER_GIF_BYTES.toLong() }?.path
+        File(directory, entryName(key)).takeIf { it.isFile && it.length() in 1..MAX_VIEWER_GIF_BYTES }?.path
     }
 
     suspend fun clear() = withContext(Dispatchers.IO) {
@@ -76,7 +76,7 @@ internal class ViewerGifByteStore(private val directory: File) {
     }
 
     private fun isFresh(file: File): Boolean = file.isFile &&
-        file.length() in 1..MAX_VIEWER_GIF_BYTES.toLong() &&
+        file.length() in 1..MAX_VIEWER_GIF_BYTES &&
         System.currentTimeMillis() - file.lastModified() <= CACHE_MAX_AGE_MS
 
     private fun read(file: File): ByteArray? = if (isFresh(file)) runCatching { file.readBytes() }.getOrNull() else null
@@ -121,10 +121,10 @@ suspend fun warmRemoteViewerGif(context: Context, source: SourceKey, location: S
 
 private suspend fun fillRemoteGif(context: Context, source: SourceKey, url: String, destination: File) {
     // Feed images may already have warmed Coil's raw disk entry.
-    if (copyCachedMediaBytes(context, source, url, destination, MAX_VIEWER_GIF_BYTES.toLong())) return
+    if (copyCachedMediaBytes(context, source, url, destination, MAX_VIEWER_GIF_BYTES)) return
     // The connection's read timeout catches stalls; this bound must leave room for large files on slow links.
     withTimeout(GIF_DOWNLOAD_TIMEOUT_MS) {
-        downloadMediaFile(url, source.requestHeaders(), destination, MAX_VIEWER_GIF_BYTES.toLong(), context.appHttpClients.downloads)
+        downloadMediaFile(url, source.requestHeaders(), destination, MAX_VIEWER_GIF_BYTES, context.appHttpClients.downloads)
     }
 }
 
@@ -143,5 +143,6 @@ private fun gifByteStore(context: Context): ViewerGifByteStore = synchronized(gi
 }
 
 private val gifStores = linkedMapOf<File, ViewerGifByteStore>()
-internal const val MAX_VIEWER_GIF_BYTES = 64 * 1024 * 1024
+/** The largest GIF the Viewer downloads, caches or decodes. */
+const val MAX_VIEWER_GIF_BYTES = 64L * 1024L * 1024L
 private const val GIF_DOWNLOAD_TIMEOUT_MS = 120_000L
