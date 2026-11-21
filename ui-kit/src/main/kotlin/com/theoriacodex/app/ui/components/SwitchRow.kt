@@ -7,13 +7,16 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.data.repository.AppSettings
@@ -22,7 +25,10 @@ import com.theoriacodex.data.repository.SettingToggle
 /** The padding a [SwitchRow] uses inside a Settings group; sheets that already pad their content pass their own. */
 val SwitchRowPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
 
-/** The app's one labelled switch: the whole row toggles, with an optional [description] under the [title]. */
+/**
+ * The app's one labelled switch: the whole row toggles, with an optional [description] under the [title] and
+ * an optional [icon] before it, for rows in a group of icon rows.
+ */
 @Composable
 fun SwitchRow(
     title: String,
@@ -31,6 +37,7 @@ fun SwitchRow(
     description: String? = null,
     enabled: Boolean = true,
     contentPadding: PaddingValues = SwitchRowPadding,
+    icon: ImageVector? = null,
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
@@ -42,6 +49,7 @@ fun SwitchRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        icon?.let { Icon(it, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary) }
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
             description?.let {
@@ -61,4 +69,4 @@ fun SwitchRow(
     enabled: Boolean = true,
     contentPadding: PaddingValues = SwitchRowPadding,
     onCheckedChange: (Boolean) -> Unit,
-) = SwitchRow(toggle.title, toggle.read(settings), modifier, toggle.description, enabled, contentPadding, onCheckedChange)
+) = SwitchRow(toggle.title, toggle.read(settings), modifier, toggle.description, enabled, contentPadding, onCheckedChange = onCheckedChange)
