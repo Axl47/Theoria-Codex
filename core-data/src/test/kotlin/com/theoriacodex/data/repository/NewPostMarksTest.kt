@@ -34,14 +34,35 @@ class NewPostMarksTest {
         assertTrue(newPostsCheckDue(listOf(0L, 2 * hours), 5 * hours))
     }
 
-    @Test fun `opening Followed clears every creator's new posts`() = runTest {
+    @Test fun `a refresh is one write that stamps failures as attempts`() = runTest {
         val repository = CreatorFollowsRepository(InMemorySettingsRepository())
-        fun post(id: String) = requireNotNull(PostStorageCodec.decode(PostStorageRecord(source = "PIXIV", sourcePostId = id)))
         val creators = listOf("1", "2").map { CreatorProfile(SourceKey.PIXIV, "Artist $it", it, uploadsQuery = "user:$it") }
         creators.forEach { repository.follow(it, listOf(post("old"))) }
-        repository.observe().first().forEach { repository.recordCheck(it, listOf(post("new"), post("old")), 42L) }
+        val (checked, failed) = repository.observe().first()
+        repository.recordChecks(mapOf(checked.membershipId to listOf(post("new"), post("old")), failed.membershipId to null), 42L)
+        val (afterChecked, afterFailed) = repository.observe().first()
+        assertEquals(1, afterChecked.newPostCount)
+        assertEquals(42L, afterChecked.checkedAtEpochMs)
+        assertEquals(null, afterFailed.checkedAtEpochMs)
+        assertEquals(42L, afterFailed.attemptedAtEpochMs)
+    }
+
+    @Test fun `opening Followed clears only the posts it showed`() = runTest {
+        val repository = CreatorFollowsRepository(InMemorySettingsRepository())
+        val creators = listOf("1", "2").map { CreatorProfile(SourceKey.PIXIV, "Artist $it", it, uploadsQuery = "user:$it") }
+        creators.forEach { repository.follow(it, listOf(post("old"))) }
+        repository.recordChecks(repository.observe().first().associate { it.membershipId to listOf(post("new"), post("old")) }, 42L)
         assertEquals(listOf(1, 1), repository.observe().first().map { it.newPostCount })
-        repository.markLatestSeen()
+        repository.markSeen(emptySet())
+        assertEquals(listOf(1, 1), repository.observe().first().map { it.newPostCount })
+        repository.markSeen(setOf("PIXIV:new"))
         assertEquals(listOf(0, 0), repository.observe().first().map { it.newPostCount })
     }
+
+    @Test fun `seen takes only the shown ids`() {
+        val marks = NewPostMarks().checked(listOf("a"), 10L).checked(listOf("c", "b", "a"), 20L)
+        assertEquals(listOf("b"), marks.seen { it == "c" }.newPostIds)
+    }
+
+    private fun post(id: String) = requireNotNull(PostStorageCodec.decode(PostStorageRecord(source = "PIXIV", sourcePostId = id)))
 }

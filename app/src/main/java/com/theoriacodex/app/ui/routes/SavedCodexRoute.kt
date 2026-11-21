@@ -203,7 +203,7 @@ private fun SavedCodexSection(
         PostShelfSection(title, count, posts, state.loading, feed?.errors?.isNotEmpty() == true,
             onOpen, { liveOwner?.retry() }, onLongPress,
             icon = savedCodexChildIcon(id),
-            countSuffix = savedCodexCountSuffix(id),
+            countSuffix = savedCodexCountSuffix(id, count),
             onMore = onLongPress,
             highlight = newPostsLabel(news.size)) {
             LazyRow(state = row, modifier = Modifier.height(rowHeight), contentPadding = PaddingValues(horizontal = 16.dp),

@@ -23,7 +23,7 @@ class CreatorFollowsRepositoryTest {
         val oldMembership = repository.observe().first().single()
         repository.unfollow(creator)
         repository.follow(creator, emptyList())
-        repository.recordCheck(oldMembership, emptyList(), 123L)
+        repository.recordChecks(mapOf(oldMembership.membershipId to emptyList()), 123L)
         assertEquals(null, repository.observe().first().single().checkedAtEpochMs)
     }
 
@@ -33,12 +33,12 @@ class CreatorFollowsRepositoryTest {
             com.theoriacodex.data.storage.PostStorageRecord(source = "PIXIV", sourcePostId = id)))
         repository.follow(creator, listOf(post("old")))
         val follow = repository.observe().first().single()
-        repository.recordCheck(follow, listOf(post("new"), post("old"), post("new")), 42L)
+        repository.recordChecks(mapOf(follow.membershipId to listOf(post("new"), post("old"), post("new"))), 42L)
         assertEquals(1, repository.observe().first().single().newPostCount)
         repository.recordVisit(creator, listOf(post("new"), post("old")))
         assertEquals(0, repository.observe().first().single().newPostCount)
         repository.unfollow(creator)
-        repository.recordCheck(follow, listOf(post("later")), 43L)
+        repository.recordChecks(mapOf(follow.membershipId to listOf(post("later"))), 43L)
         assertTrue(repository.observe().first().isEmpty())
     }
 

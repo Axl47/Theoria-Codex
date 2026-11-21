@@ -25,8 +25,9 @@ data class NewPostMarks(
         return NewPostMarks(if (baseline) latest else seenPostIds, latest, atEpochMs)
     }
 
-    /** Everything last checked has now been shown. */
-    fun seen(): NewPostMarks = copy(seenPostIds = (latestPostIds + seenPostIds).distinct().take(MAX_NEW_POST_MARK_IDS))
+    /** The last-checked posts that [shown] accepts (all of them by default) have now been shown. */
+    fun seen(shown: (String) -> Boolean = { true }): NewPostMarks =
+        copy(seenPostIds = (latestPostIds.filter(shown) + seenPostIds).distinct().take(MAX_NEW_POST_MARK_IDS))
 }
 
 const val MAX_NEW_POST_MARK_IDS = 200
@@ -35,8 +36,8 @@ const val MAX_NEW_POST_MARK_IDS = 200
 fun PostId.markKey(): String = "${source.id}:$sourcePostId"
 
 /**
- * Saved searches' marks by saved-search ID, and when the app last tried checking them, so a
- * failing check waits out the interval even across restarts.
+ * Saved searches' marks by saved-search ID, and when the app last finished a check of them (even a
+ * failed one), so a failing check waits out the interval even across restarts.
  */
 @Serializable
 data class SavedSearchNewPosts(

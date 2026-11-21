@@ -558,7 +558,12 @@ private fun CodexDetailEmptyState(collectionIsEmpty: Boolean, loading: Boolean, 
         }
     } else {
         FeedEmptyTile(
-            title = if (collectionIsEmpty) "This codex is empty" else "No matching posts",
+            // A live feed (Followed, saved searches) is not a Codex, so it states only what to do.
+            title = when {
+                emptyMessage != null -> null
+                collectionIsEmpty -> "This codex is empty"
+                else -> "No matching posts"
+            },
             message = emptyMessage ?: when {
                 collectionIsEmpty -> "Browse and save posts"
                 resolvingDurations -> "Resolving durations…"
@@ -703,7 +708,8 @@ internal fun codexItemSummary(
     selectedCount: Int? = null,
 ): String {
     if (selectedCount != null) return "$selectedCount/$totalCount"
-    return if (filtersActive) "$visibleCount of $totalCount items" else "$totalCount items"
+    val items = countNoun(totalCount, "item")
+    return if (filtersActive) "$visibleCount of $totalCount $items" else "$totalCount $items"
 }
 
 internal fun codexSelectedPostActionDescription(

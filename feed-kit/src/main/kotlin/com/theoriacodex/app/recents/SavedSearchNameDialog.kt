@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recents
 
+import com.theoriacodex.app.ui.components.focusOnOpen
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -9,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import com.theoriacodex.data.repository.MAX_SAVED_SEARCH_NAME_LENGTH
 
 @Composable
@@ -24,6 +26,7 @@ fun SavedSearchNameDialog(
         title = { Text(if (renaming) "Rename search" else "Save search") },
         text = {
             OutlinedTextField(
+                modifier = Modifier.focusOnOpen(),
                 value = name,
                 onValueChange = { if (it.length <= MAX_SAVED_SEARCH_NAME_LENGTH) name = it },
                 label = { Text("Name") },

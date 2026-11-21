@@ -111,7 +111,6 @@ private fun CodexDetailEntry(
     BackHandler { shell.navController.popBackStack() }
     val codexId = requireNotNull(entry.arguments?.getString("codexId"))
     RecordCodexEntryEffect(entry, codexId, shell.data.statisticsRepository)
-    MarkNewPostsSeenEffect(shell, codexId)
     val codexMorph = remember { CodexMorphScope(sharedScope, entryScope) }
     // Opaque so the screen hides the tile it grows out of.
     Box(Modifier.fillMaxSize().codexMorph(codexId, codexMorph).background(MaterialTheme.colorScheme.background)) {
@@ -123,7 +122,7 @@ private fun CodexDetailEntry(
                 restoreRegistry = shell.feedFabRestoreRegistry,
                 header = { SavedBackHeader { shell.navController.popBackStack() } },
                 onOpenCodex = { shell.navController.navigate(AppRoute.codexDetail(it)) },
-                onOpenViewer = shell::openCodexViewer,
+                onOpenViewer = shell::openSavedShelfViewer,
                 onOpenCodexActions = shell.overlays::openCollectionActions,
                 resolvePost = { shell.viewerRouteWorkflow.resolvePost(it, ViewerStreamSource.CODEX) },
                 onToggleLike = { shell.toggleLikeAndSyncCodex(it) },
@@ -185,6 +184,7 @@ private fun CodexDetailContent(
         shell.owners.savedSearches::rename, shell.owners.savedSearches::remove,
     )
     val liveOwner = state.followedOwner ?: state.savedSearchOwner
+    MarkNewPostsSeenEffect(shell, codexId, state.loading, state.posts)
     CodexDetailScreen(
         codexId = codexId,
         codexName = state.codex?.name,

@@ -52,7 +52,7 @@ internal fun SavedSearchSheet(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Saved searches", style = MaterialTheme.typography.titleLarge)
                     Text(
-                        "Available across profiles. Clearing Recents keeps these searches.",
+                        "Available across profiles. Clearing History keeps these searches.",
                         style = MaterialTheme.typography.bodySmall,
                     )
                     if (searches.isEmpty()) {
