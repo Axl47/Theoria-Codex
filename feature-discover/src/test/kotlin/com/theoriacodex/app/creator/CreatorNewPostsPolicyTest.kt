@@ -37,4 +37,14 @@ class CreatorNewPostsPolicyTest {
         assertEquals(listOf("m1", "m3"), followedCreatorRows(listOf(quiet, gone), RemovedFollow(gone, 1)).map { it.key })
     }
 
+    @Test fun `common tags count posts carrying them, most common first, ignoring one-off tags`() {
+        val tagged = listOf(
+            testPost(sourcePostId = "1", canonicalTags = listOf("fog", "sea")),
+            testPost(sourcePostId = "2", canonicalTags = listOf("sea", "boat")),
+            testPost(sourcePostId = "3", canonicalTags = listOf("sea", "fog")),
+        )
+        val tags = creatorTopTags(tagged)
+        assertEquals(listOf("sea" to 3, "fog" to 2), tags.map { it.name to it.count })
+        assertEquals("1", tags.first().from.id.sourcePostId)
+    }
 }

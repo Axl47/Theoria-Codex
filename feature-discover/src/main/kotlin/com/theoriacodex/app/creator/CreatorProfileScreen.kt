@@ -144,13 +144,8 @@ fun CreatorProfileScreen(
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            val account = state.feeds.isNotEmpty()
-            val followEnabled = !state.uploadsRefreshing
-            CreatorHeader(state, creator, account, followed, followEnabled, onToggleFollow, onOpenUrl, onAction)
-            val uploads = state.selectedFeed == AccountFeed.UPLOADS
-            val newSince = remember(feed.visiblePosts, seenAtOpen, uploads) {
-                seenAtOpen?.takeIf { uploads }?.let { newSinceVisitBoundary(feed.visiblePosts, creator, it) }
-            }
+            CreatorHeader(state, creator, followed, onToggleFollow, onOpenUrl, onAction)
+            val newSince = rememberNewSinceVisit(state.selectedFeed, creator, feed.visiblePosts, seenAtOpen)
             CreatorFeedBody(state, related, feed, cards, gridState, pageDemand, newSince, onAction, onLongPress = { selectedActionPost = it })
         }
     }
@@ -254,18 +249,21 @@ private fun clearCreatorFilters(
     return { onFabRestoreStateChange(previous) }
 }
 
-/** The bar and, for accounts, their facts and feed tabs; landscape accounts fold all of it into one bar. */
+/**
+ * The bar and, for accounts, their facts and feed tabs (landscape accounts fold all of it into one bar), then the
+ * common tags of the uploads.
+ */
 @Composable
 private fun CreatorHeader(
     state: CreatorUiState,
     creator: CreatorProfile,
-    account: Boolean,
     followed: Boolean,
-    followEnabled: Boolean,
     onToggleFollow: () -> Unit,
     onOpenUrl: (String) -> Unit,
     onAction: (CreatorAction) -> Unit,
 ) {
+    val account = state.feeds.isNotEmpty()
+    val followEnabled = !state.uploadsRefreshing
     val onBack = { onAction(CreatorAction.Back) }
     if (account && LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) {
         CompactAccountBar(state, creator, followed, followEnabled, onToggleFollow, onOpenUrl, onBack, onAction)
@@ -273,6 +271,7 @@ private fun CreatorHeader(
         CreatorAppBar(creator, account, followed, followEnabled, onToggleFollow, onOpenUrl, onBack)
         if (account) AccountSection(state, creator, followed, followEnabled, onToggleFollow, onAction)
     }
+    if (state.selectedFeed == AccountFeed.UPLOADS) CreatorTagChips(creator, state.results)
 }
 
 /** An account's facts and its feed tabs, below the app bar. */

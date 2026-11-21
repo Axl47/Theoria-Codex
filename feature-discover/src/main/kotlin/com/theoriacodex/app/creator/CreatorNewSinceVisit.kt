@@ -8,9 +8,11 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -26,6 +28,13 @@ internal fun newSinceVisitBoundary(posts: List<Post>, creator: CreatorProfile, s
     val index = posts.indexOfFirst { it.id.source == creator.source && it.id.sourcePostId in seenPostIds }
     return posts.getOrNull(index)?.id?.takeIf { index > 0 }
 }
+
+/** [newSinceVisitBoundary] over the shown [posts] of the uploads [feed]; null on other feeds or when [seenAtOpen] is. */
+@Composable
+internal fun rememberNewSinceVisit(feed: AccountFeed, creator: CreatorProfile, posts: List<Post>, seenAtOpen: Set<String>?): PostId? =
+    remember(feed, creator, posts, seenAtOpen) {
+        seenAtOpen?.takeIf { feed == AccountFeed.UPLOADS }?.let { newSinceVisitBoundary(posts, creator, it) }
+    }
 
 /** The full-width line between a followed creator's new posts and those already seen. */
 @Composable
