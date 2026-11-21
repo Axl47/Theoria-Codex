@@ -257,7 +257,7 @@ object PostStorageCodec {
                 ?.mapNotNull { stored -> stored?.toDomainOrNull() }
                 ?: listOfNotNull(creator),
             contentHash = contentHashOrNull(record.contentHash),
-        ).withRecoveredPixivTranslations()
+        ).withRecoveredPixivTranslations().withLegacyGalleryLength()
     }
 
     private fun encodeImageRef(ref: ImageRef): ImageRefStorageRecord {
@@ -336,4 +336,15 @@ private fun PostTaxonomyTermStorageRecord.toDomainOrNull(): PostTaxonomyTerm? {
 private fun String?.toSearchFacetOrNull(): SearchFacet? {
     val normalized = this?.trim()?.takeIf(String::isNotBlank) ?: return SearchFacet.TAG
     return runCatching { SearchFacet.valueOf(normalized) }.getOrNull()
+}
+
+/**
+ * Records saved before the gallery flag existed carry none. An nhentai or Hitomi listing saved with no pages, cover or
+ * count is the gallery of unknown length the Viewer once recognized by its source, so it reads as one; current listings
+ * of that shape set the flag themselves.
+ */
+private fun Post.withLegacyGalleryLength(): Post {
+    val legacyGallery = (id.source == SourceKey.NHENTAI || id.source == SourceKey.HITOMI) &&
+        media.isEmpty() && full == null && mediaCount == null
+    return if (legacyGallery && !galleryLengthUnknown) copy(galleryLengthUnknown = true) else this
 }
