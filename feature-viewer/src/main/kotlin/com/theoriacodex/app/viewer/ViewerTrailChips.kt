@@ -7,8 +7,8 @@ import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 
-/** A Viewer level in the current trail, oldest first; the last one is on screen. */
-data class ViewerCrumb(val label: String)
+/** A Viewer level in the current trail, oldest first; the last one is on screen. [trailKey] names the trail that opened it. */
+data class ViewerCrumb(val label: String, val trailKey: String? = null)
 
 /**
  * The trail around one Viewer level: the crumbs of the Viewer levels stacked on the back stack, the query this level
@@ -16,6 +16,9 @@ data class ViewerCrumb(val label: String)
  */
 @Immutable
 class ViewerTrail(val crumbs: List<ViewerCrumb>, val levelQuery: Query?, val onCrumb: (Int) -> Unit) {
+    /** The trail this level is, which it does not offer as a fork again. */
+    val levelTrailKey: String? get() = crumbs.lastOrNull()?.trailKey
+
     companion object {
         val None = ViewerTrail(emptyList(), null) {}
     }
@@ -57,6 +60,13 @@ internal fun viewerTrailChips(
     val tags = signals.asSequence().map { it.tag }.filter { it.lowercase() !in searched }.distinct().take(maxTags)
     return listOfNotNull(creator?.let(ViewerTrailChip::Creator), ViewerTrailChip.Similar.takeIf { similarSupported }) +
         tags.map(ViewerTrailChip::Tag).toList()
+}
+
+/** Names the trail [this] opens, the same for every request for that trail. */
+fun TrailRequest.trailKey(): String = when (this) {
+    is TrailRequest.Tag -> "tag:${source.id}:$tag"
+    is TrailRequest.Creator -> "creator:${creator.source.id}:${creator.profileId ?: creator.displayName}"
+    is TrailRequest.Similar -> "similar:${from.id.source.id}:${from.id.sourcePostId}"
 }
 
 /** The trail [chip] starts from [post] at a level showing [levelQuery]. */

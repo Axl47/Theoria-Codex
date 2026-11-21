@@ -13,6 +13,7 @@ import com.theoriacodex.app.ui.launchViewer
 import com.theoriacodex.app.ui.navigation.TrailOpener
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.app.viewer.ViewerSession
+import com.theoriacodex.app.viewer.trailKey
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
@@ -23,8 +24,8 @@ import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 
-/** A fork ready to show: its crumb label and its feed. */
-internal class TrailLevel(val label: String, val feed: TrailFeed)
+/** A fork ready to show: its crumb label, the trail it is ([com.theoriacodex.app.viewer.trailKey]) and its feed. */
+internal class TrailLevel(val label: String, val trailKey: String, val feed: TrailFeed)
 
 /**
  * Holds a fork between the opener, which loads its first page, and the Viewer entry that shows it. Activity-scoped, and
@@ -77,7 +78,7 @@ private suspend fun TheoriaShell.openTrail(request: TrailRequest, handoff: Trail
         )
         if (session != null) {
             if (navController.currentBackStackEntry !== origin) throw CancellationException("The screen this trail was opened from is gone")
-            handoff.hand(session.sessionId, TrailLevel(spec.label, feed))
+            handoff.hand(session.sessionId, TrailLevel(spec.label, request.trailKey(), feed))
             // A fork saves no launch context: the Viewer it covers keeps its own for restoration.
             launchViewer(session, saveContext = false, singleTop = false)
             opened = true

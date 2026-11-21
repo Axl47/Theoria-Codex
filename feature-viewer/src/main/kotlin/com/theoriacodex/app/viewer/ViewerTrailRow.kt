@@ -66,11 +66,11 @@ internal fun ViewerTrailRow(
     val opener = LocalTrailOpener.current
     val similarSupported = LocalRelatedPostsSupport.current(post.id.source)
     val liked by LocalLikedTagCounts.current.collectAsStateWithLifecycle()
-    val chips = remember(post, liked, trail.levelQuery, similarSupported, creatorBrowsingSources, opener) {
+    val chips = remember(post, liked, trail, similarSupported, creatorBrowsingSources, opener) {
         if (opener == TrailOpener.None) emptyList() else viewerTrailChips(
             creatorProfileActions(post, creatorBrowsingSources).firstNotNullOfOrNull { it.profile },
             similarSupported, postTagSignals(post, liked), trail.levelQuery,
-        )
+        ).filterNot { it.request(post, trail.levelQuery).trailKey() == trail.levelTrailKey }
     }
     val active = forks.busy ?: forks.failed
     val shown = if (active == null || chips.any { it.key == active.key }) chips else listOf(active) + chips

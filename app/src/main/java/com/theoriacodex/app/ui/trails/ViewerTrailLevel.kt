@@ -82,14 +82,17 @@ internal fun rememberViewerLevel(navController: NavHostController, entry: NavBac
         factory = viewModelFactory { initializer { ViewerTrailEntryViewModel(handoff.claim(pendingSessionId)) } },
     )
     val saved = entry.savedStateHandle
-    owner.claimed?.let { if (saved.get<String>(TRAIL_LABEL_KEY) == null) saved[TRAIL_LABEL_KEY] = it.label }
+    owner.claimed?.let { claimed ->
+        if (saved.get<String>(TRAIL_LABEL_KEY) == null) saved[TRAIL_LABEL_KEY] = claimed.label
+        if (saved.get<String>(TRAIL_KEY) == null) saved[TRAIL_KEY] = claimed.trailKey
+    }
     if (saved.get<ArrayList<String>>(TRAIL_ANCESTOR_IDS_KEY) == null) saved.recordAncestors(navController.previousBackStackEntry)
     val label by saved.getStateFlow<String?>(TRAIL_LABEL_KEY, null).collectAsStateWithLifecycle()
     return remember(entry, owner, label) {
         val ancestors = saved.get<ArrayList<String>>(TRAIL_ANCESTOR_LABELS_KEY).orEmpty()
         ViewerLevel(
             isFork = ancestors.isNotEmpty(),
-            crumbs = (ancestors + (label ?: UNNAMED_LEVEL)).map(::ViewerCrumb),
+            crumbs = ancestors.map(::ViewerCrumb) + ViewerCrumb(label ?: UNNAMED_LEVEL, saved.get<String>(TRAIL_KEY)),
             feed = owner.claimed?.feed,
             coveredByFork = { navController.currentBackStackEntry?.savedStateHandle?.get<ArrayList<String>>(TRAIL_ANCESTOR_IDS_KEY)?.contains(entry.id) == true },
             popTo = { crumb -> repeat((ancestors.size - crumb).coerceAtLeast(0)) { navController.popBackStack() } },
@@ -117,6 +120,7 @@ private fun SavedStateHandle.recordAncestors(previous: NavBackStackEntry?) {
 }
 
 private const val TRAIL_LABEL_KEY = "viewer-trail-label"
+private const val TRAIL_KEY = "viewer-trail-key"
 private const val TRAIL_ANCESTOR_LABELS_KEY = "viewer-trail-ancestor-labels"
 private const val TRAIL_ANCESTOR_IDS_KEY = "viewer-trail-ancestor-ids"
 private const val UNNAMED_LEVEL = "Viewer"
