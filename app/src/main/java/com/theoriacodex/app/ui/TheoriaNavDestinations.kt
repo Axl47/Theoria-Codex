@@ -206,8 +206,6 @@ private fun CodexDetailContent(
             shell.transfers.downloads.submitPosts(listOf(post), originLabel = "Codex · ${state.codex?.name ?: "Collection"}")
             shell.transfers.showDownloads = true
         },
-        onOpenCreatorProfile = shell::launchOpenCreator,
-        onOpenLegacyCreatorProfile = shell::launchOpenCreator,
         onGoToSearch = { shell.navigation.goToSearch() },
         onBack = { shell.navController.popBackStack() },
         onDeleteCodex = { commands.delete(codexId, state.activeProfile.profileId) },

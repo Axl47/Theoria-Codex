@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.ui.components.LocalPostMenuActions
 import com.theoriacodex.app.ui.components.FeedMarks
 import com.theoriacodex.app.ui.components.FeedDurations
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
@@ -55,7 +56,6 @@ import com.theoriacodex.data.repository.defaultRecentSearchSources
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
-import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -84,8 +84,6 @@ fun SearchScreen(
     favoriteTags: List<FavoriteTagEntry> = emptyList(),
     durations: FeedDurations = FeedDurations.NONE,
     onToggleLike: ((Post) -> Unit)? = null,
-    onOpenCreatorProfile: (CreatorProfile) -> Unit,
-    onOpenLegacyCreatorProfile: (Post) -> Unit,
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
     onOpenSourceAccounts: () -> Unit = {},
@@ -141,7 +139,7 @@ fun SearchScreen(
     actionPost.post?.let { post ->
         SearchPostSheet(
             post, actionPost, state, creatorBrowsingSources, onAction, onSaveToDevice,
-            onRequestSaveToCodex, onOpenCreatorProfile, onOpenLegacyCreatorProfile, onAddFavoriteTag, applyDraft,
+            onRequestSaveToCodex, onAddFavoriteTag, applyDraft,
             liked = post.id in likedPostIds, onToggleLike = onToggleLike,
         )
     }
@@ -361,13 +359,12 @@ private fun SearchPostSheet(
     onAction: (SearchAction) -> Unit,
     onSaveToDevice: (Post) -> Unit,
     onRequestSaveToCodex: (Post) -> Unit,
-    onOpenCreatorProfile: (CreatorProfile) -> Unit,
-    onOpenLegacyCreatorProfile: (Post) -> Unit,
     onAddFavoriteTag: (SourceKey, List<String>, String?) -> Unit,
     applyDraft: () -> Unit,
     liked: Boolean,
     onToggleLike: ((Post) -> Unit)?,
 ) {
+    val menuActions = LocalPostMenuActions.current
     PostActionSheet(
         post = post,
         creatorBrowsingSources = creatorBrowsingSources,
@@ -377,8 +374,8 @@ private fun SearchPostSheet(
         onToggleLike = onToggleLike?.let { toggle -> { toggle(post) } },
         onSaveToCodex = { onRequestSaveToCodex(post) },
         saveToCodexQuery = state.query.applied,
-        onOpenCreatorProfile = onOpenCreatorProfile,
-        onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
+        onOpenCreatorProfile = menuActions.openCreator,
+        onOpenLegacyCreatorProfile = { menuActions.openPostCreator(post) },
         onShowRelated = { onAction(SearchAction.ShowRelatedPosts(post)) },
         tagContent = {
             PostTagActionSection(

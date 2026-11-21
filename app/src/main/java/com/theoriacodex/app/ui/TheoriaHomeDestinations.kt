@@ -102,8 +102,6 @@ private fun SearchDestination(shell: TheoriaShell) {
                 onOpenViewer = { effect -> shell.openSearchViewer(effect) },
                 onShowMessage = { message -> Toast.makeText(shell.appContext, message, Toast.LENGTH_SHORT).show() },
                 onToggleLike = { post -> shell.searchLikeAction()(post) },
-                onOpenCreatorProfile = shell::launchOpenCreator,
-                onOpenLegacyCreatorProfile = shell::launchOpenCreator,
                 onRequestSaveToCodex = { post ->
                     shell.requestSaveToCodex(post, searchQuery = routes.searchOwner?.currentState()?.query?.applied)
                 },
@@ -181,8 +179,6 @@ private fun ForYouDestination(shell: TheoriaShell) {
                 onToggleLike = { post -> shell.forYouLikeAction()(post) },
                 onRequestSaveToCodex = { post -> shell.requestSaveToCodex(post, fromForYou = true) },
                 onSaveToDevice = shell::requestSaveToDevice,
-                onOpenCreatorProfile = shell::launchOpenCreator,
-                onOpenLegacyCreatorProfile = shell::launchOpenCreator,
                 onGoToSearch = {
                     navigation.homeTabRoute = TopLevelDestination.Search.route
                     shell.scope.launch { navigation.showTab(TopLevelDestination.Search) }
@@ -297,8 +293,6 @@ private fun RecentsDestination(shell: TheoriaShell) {
             },
             onRequestSaveToCodex = { post -> shell.requestSaveToCodex(post) },
             onSaveToDevice = shell::requestSaveToDevice,
-            onOpenCreatorProfile = shell::launchOpenCreator,
-            onOpenLegacyCreatorProfile = shell::launchOpenCreator,
             onGoToSearch = {
                 shell.navigation.homeTabRoute = TopLevelDestination.Search.route
                 shell.scope.launch { shell.navigation.pagerState.scrollToPage(TopLevelDestination.entries.indexOf(TopLevelDestination.Search)) }

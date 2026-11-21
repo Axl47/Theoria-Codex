@@ -79,7 +79,6 @@ import com.theoriacodex.app.ui.components.FeedRelatedPostsShelf
 import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.FeedFabRestoreState
-import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SortMode
@@ -98,8 +97,6 @@ fun ForYouScreen(
     creatorBrowsingSources: Set<SourceKey> = emptySet(),
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
-    onOpenCreatorProfile: (CreatorProfile) -> Unit,
-    onOpenLegacyCreatorProfile: (Post) -> Unit,
     onGoToSearch: () -> Unit,
     onOpenSourceAccounts: () -> Unit = {},
     fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
@@ -151,8 +148,8 @@ fun ForYouScreen(
 
     selectedActionPost?.let { post ->
         FeedPostActionSheet(
-            post, creatorBrowsingSources, { selectedActionPost = null }, onSaveToDevice, onRequestSaveToCodex, onOpenCreatorProfile,
-            onOpenLegacyCreatorProfile, onGoToSearch, liked = post.id in likedPostIds, onToggleLike = onToggleLike,
+            post, creatorBrowsingSources, { selectedActionPost = null }, onSaveToDevice, onRequestSaveToCodex,
+            onGoToSearch, liked = post.id in likedPostIds, onToggleLike = onToggleLike,
             onShowRelated = { onAction(ForYouAction.ShowRelatedPosts(post)) },
         )
     }

@@ -147,8 +147,7 @@ class SavedSearchControlsTest {
             watchedPosts = watched, codexPosts = emptyList(), searches = searches,
             fypSearches = fyp, activity = activity,
             onSaveSearch = onSave,
-            onRequestSaveToCodex = {}, onSaveToDevice = {}, onOpenCreatorProfile = {},
-            onOpenLegacyCreatorProfile = {},
+            onRequestSaveToCodex = {}, onSaveToDevice = {},
             onGoToSearch = {},
             onOpenWatchedPost = onOpenPost, onOpenCodexPost = { _, _ -> }, onOpenSearch = onOpen, onOpenFypSearch = onOpenFyp, onClear = {},
         )

@@ -39,7 +39,6 @@ class SearchFilterApplyTest {
                         }
                     },
                     resolvePostById = { null }, recoverPostMedia = { _, _ -> null },
-                    onOpenCreatorProfile = {}, onOpenLegacyCreatorProfile = {},
                     onRequestSaveToCodex = {}, onSaveToDevice = {},
                 )
             }

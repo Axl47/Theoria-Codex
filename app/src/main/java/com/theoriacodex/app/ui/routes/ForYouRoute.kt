@@ -23,7 +23,6 @@ import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.FeedFabRestoreState
-import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -50,8 +49,6 @@ internal data class ForYouRouteCallbacks(
     val onToggleLike: (Post) -> Unit,
     val onRequestSaveToCodex: (Post) -> Unit,
     val onSaveToDevice: (Post) -> Unit,
-    val onOpenCreatorProfile: (CreatorProfile) -> Unit,
-    val onOpenLegacyCreatorProfile: (Post) -> Unit,
     val onGoToSearch: () -> Unit,
 )
 
@@ -168,8 +165,6 @@ private fun ForYouRouteContent(
         creatorBrowsingSources = config.creatorBrowsingSources,
         onRequestSaveToCodex = callbacks.onRequestSaveToCodex,
         onSaveToDevice = callbacks.onSaveToDevice,
-        onOpenCreatorProfile = callbacks.onOpenCreatorProfile,
-        onOpenLegacyCreatorProfile = callbacks.onOpenLegacyCreatorProfile,
         onOpenSourceAccounts = callbacks.onOpenSourceAccounts,
         onGoToSearch = callbacks.onGoToSearch,
         fabRestoreState = fabRestoreState,

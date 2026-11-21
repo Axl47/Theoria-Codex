@@ -163,8 +163,6 @@ class SearchApplyScrollTest {
                     onAction = onAction,
                     resolvePostById = { null },
                     recoverPostMedia = { _, _ -> null },
-                    onOpenCreatorProfile = {},
-                    onOpenLegacyCreatorProfile = {},
                     onRequestSaveToCodex = {},
                     onSaveToDevice = {},
                 )

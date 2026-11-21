@@ -363,6 +363,8 @@ private fun rememberPostMenuActions(shell: TheoriaShell): PostMenuActions = reme
         copyLink = { url ->
             if (copyTextToClipboard(shell.appContext, "post_url", url)) shell.recordPostUrlCopy() else shell.toast("Could not copy the link")
         },
+        openCreator = shell::launchOpenCreator,
+        openPostCreator = shell::launchOpenCreator,
     )
 }
 

@@ -35,7 +35,6 @@ import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.data.repository.FeedFabRestoreState
-import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -62,8 +61,6 @@ internal data class SearchRouteCallbacks(
     val onOpenViewer: suspend (SearchEffect.OpenViewer) -> Unit,
     val onShowMessage: (String) -> Unit,
     val onToggleLike: ((Post) -> Unit)?,
-    val onOpenCreatorProfile: (CreatorProfile) -> Unit,
-    val onOpenLegacyCreatorProfile: (Post) -> Unit,
     val onRequestSaveToCodex: (Post) -> Unit,
     val onSaveToDevice: (Post) -> Unit,
     val onOpenSourceAccounts: () -> Unit = {},
@@ -389,8 +386,6 @@ private fun SearchRouteContent(
         favoriteTags = config.favoriteTags,
         durations = duration.owner.feedDurations(duration.states, config.resolveUnknownAnimatedDurations),
         onToggleLike = callbacks.onToggleLike,
-        onOpenCreatorProfile = callbacks.onOpenCreatorProfile,
-        onOpenLegacyCreatorProfile = callbacks.onOpenLegacyCreatorProfile,
         onRequestSaveToCodex = callbacks.onRequestSaveToCodex,
         onSaveToDevice = callbacks.onSaveToDevice,
         onOpenSourceAccounts = callbacks.onOpenSourceAccounts,

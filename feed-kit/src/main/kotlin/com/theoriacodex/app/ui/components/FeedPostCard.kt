@@ -13,7 +13,6 @@ import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.tags.LocalPostTagSearchActions
 import com.theoriacodex.app.viewer.PixivUgoiraClient
-import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -151,8 +150,6 @@ fun FeedPostActionSheet(
     onDismiss: () -> Unit,
     onSaveToDevice: (Post) -> Unit,
     onSaveToCodex: (Post) -> Unit,
-    onOpenCreatorProfile: (CreatorProfile) -> Unit,
-    onOpenLegacyCreatorProfile: (Post) -> Unit,
     onGoToSearch: (() -> Unit)?,
     saveToCodexLabel: String = "Save to Codex",
     onRemoveFromCodex: (() -> Unit)? = null,
@@ -162,6 +159,7 @@ fun FeedPostActionSheet(
     onToggleLike: ((Post) -> Unit)? = null,
 ) {
     val searchActions = LocalPostTagSearchActions.current
+    val menuActions = LocalPostMenuActions.current
     PostActionSheet(
         post, creatorBrowsingSources, onDismiss, { onSaveToDevice(post) },
         liked = liked,
@@ -169,8 +167,8 @@ fun FeedPostActionSheet(
         onSaveToCodex = { onSaveToCodex(post) },
         saveToCodexLabel = saveToCodexLabel,
         onRemoveFromCodex = onRemoveFromCodex,
-        onOpenCreatorProfile = onOpenCreatorProfile,
-        onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
+        onOpenCreatorProfile = menuActions.openCreator,
+        onOpenLegacyCreatorProfile = { menuActions.openPostCreator(post) },
         onGoToSearch = onGoToSearch,
         onStartOver = onStartOver,
         onShowRelated = onShowRelated,

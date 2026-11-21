@@ -88,7 +88,6 @@ class NavigationChromeTest {
                     fabRestoreState = FeedFabRestoreState(source = SourceKey.PIXIV.id),
                     onOpenViewer = { posts, index -> launch = posts to index },
                     onAddPostsToAnotherCodex = {}, onRemovePosts = {}, onSavePostToDevice = {},
-                    onOpenCreatorProfile = {}, onOpenLegacyCreatorProfile = {},
                     onBack = {}, onDeleteCodex = {}, isLikesCodex = false,
                 )
             }

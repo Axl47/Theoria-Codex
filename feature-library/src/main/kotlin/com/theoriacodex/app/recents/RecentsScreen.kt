@@ -74,7 +74,6 @@ import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.MAX_SAVED_SEARCH_NAME_LENGTH
-import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -95,8 +94,6 @@ fun RecentsScreen(
     creatorBrowsingSources: Set<SourceKey> = emptySet(),
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
-    onOpenCreatorProfile: (CreatorProfile) -> Unit,
-    onOpenLegacyCreatorProfile: (Post) -> Unit,
     onGoToSearch: () -> Unit,
     onOpenWatchedPost: (List<RecentPostEntry>, Int) -> Unit,
     onOpenCodexPost: (List<RecentPostEntry>, Int) -> Unit,
@@ -152,8 +149,8 @@ fun RecentsScreen(
 
     selectedActionPost?.let { post ->
         FeedPostActionSheet(
-            post, creatorBrowsingSources, { selectedActionPost = null }, onSaveToDevice, onRequestSaveToCodex, onOpenCreatorProfile,
-            onOpenLegacyCreatorProfile, onGoToSearch,
+            post, creatorBrowsingSources, { selectedActionPost = null }, onSaveToDevice, onRequestSaveToCodex,
+            onGoToSearch,
             onStartOver = {
                 onStartOver(post, selectedActionSection)
                 selectedActionPost = null

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.components
 
+import com.theoriacodex.domain.model.CreatorProfile
 import android.content.Context
 import android.content.Intent
 import androidx.compose.material.icons.Icons
@@ -28,6 +29,10 @@ class PostMenuActions(
     val share: (url: String) -> Unit = {},
     val copyTags: (Post) -> Unit = {},
     val copyLink: (url: String) -> Unit = {},
+    /** Opens a creator's page from a post's creator rows. */
+    val openCreator: (CreatorProfile) -> Unit = {},
+    /** Opens the creator of a post whose creator is not known yet, resolving it first. */
+    val openPostCreator: (Post) -> Unit = {},
 )
 
 val LocalPostMenuActions = staticCompositionLocalOf { PostMenuActions() }

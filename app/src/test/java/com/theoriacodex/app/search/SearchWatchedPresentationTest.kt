@@ -57,7 +57,6 @@ class SearchWatchedPresentationTest {
                             ForYouScreen(
                                 state = ForYouUiState(results = listOf(post)), likedPostIds = emptySet(),
                                 onToggleLike = {}, onAction = {}, onRequestSaveToCodex = {}, onSaveToDevice = {},
-                                onOpenCreatorProfile = {}, onOpenLegacyCreatorProfile = {},
                                
                                 onGoToSearch = {},
                             )
@@ -66,7 +65,6 @@ class SearchWatchedPresentationTest {
                             creatorBrowsingSources = emptySet(), onAction = {},
                             watchedPostIds = setOf(post.id),
                             resolvePostById = { null }, recoverPostMedia = { _, _ -> null },
-                            onOpenCreatorProfile = {}, onOpenLegacyCreatorProfile = {},
                             onRequestSaveToCodex = {}, onSaveToDevice = {},
                         )
                     }

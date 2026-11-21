@@ -45,7 +45,7 @@ class SearchRefreshPresentationTest {
             MaterialTheme { Box(Modifier.size(400.dp, 700.dp)) {
                 SearchScreen(state.value, emptySet(), actions::add,
                     resolvePostById = { null }, recoverPostMedia = { _, _ -> null },
-                    onOpenCreatorProfile = {}, onOpenLegacyCreatorProfile = {}, onRequestSaveToCodex = {}, onSaveToDevice = {})
+ onRequestSaveToCodex = {}, onSaveToDevice = {})
             } }
         }
         val card = compose.onNodeWithTag(searchCardTestTag(post.id))
@@ -70,7 +70,7 @@ class SearchRefreshPresentationTest {
                 SearchScreen(
                     state = state.value, creatorBrowsingSources = emptySet(), onAction = {},
                     resolvePostById = { null }, recoverPostMedia = { _, _ -> null },
-                    onOpenCreatorProfile = {}, onOpenLegacyCreatorProfile = {}, onRequestSaveToCodex = {}, onSaveToDevice = {},
+ onRequestSaveToCodex = {}, onSaveToDevice = {},
                 )
             } }
         }

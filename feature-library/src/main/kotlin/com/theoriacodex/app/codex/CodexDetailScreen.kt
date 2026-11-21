@@ -72,7 +72,6 @@ import com.theoriacodex.app.related.RelatedShelfBinding
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.FeedFabRestoreState
-import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -108,8 +107,6 @@ fun CodexDetailScreen(
     onAddPostsToAnotherCodex: (List<Post>) -> Unit,
     onRemovePosts: (List<Post>) -> Unit,
     onSavePostToDevice: (Post) -> Unit,
-    onOpenCreatorProfile: (CreatorProfile) -> Unit,
-    onOpenLegacyCreatorProfile: (Post) -> Unit,
     onGoToSearch: (() -> Unit)? = null,
     onBack: () -> Unit,
     onDeleteCodex: () -> Unit,
@@ -171,7 +168,7 @@ fun CodexDetailScreen(
     selectedActionPost?.let { post ->
         FeedPostActionSheet(
             post, creatorBrowsingSources, { selectedActionPost = null }, onSavePostToDevice, { onAddPostsToAnotherCodex(listOf(it)) },
-            onOpenCreatorProfile, onOpenLegacyCreatorProfile, onGoToSearch,
+            onGoToSearch,
             saveToCodexLabel = "Add to another Codex",
             onRemoveFromCodex = if (customHeader == null) ({ onRemovePosts(listOf(post)) }) else null,
             onShowRelated = related?.let { shelf -> { shelf.controller.show(post) } },
