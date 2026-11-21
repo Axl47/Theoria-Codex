@@ -123,7 +123,7 @@ internal fun ViewerSaveButton(
             is ViewerSaveCommand.QuickSave -> scope.launch {
                 if (quickSave.quickSave(post, command.codexId, context.query, context.fromForYou) == null) onOpenPicker()
             }
-            ViewerSaveCommand.Undo -> quickSave.undoLastQuickSave()
+            is ViewerSaveCommand.Undo -> quickSave.undoQuickSave(command.record)
             ViewerSaveCommand.OpenPicker -> onOpenPicker()
             ViewerSaveCommand.NewCodex -> newCodex.openNewCodex(post)
         }
