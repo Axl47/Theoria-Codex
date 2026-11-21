@@ -24,15 +24,25 @@ internal class SearchSettlement(
 ) {
     private var settleWhenShown = false
 
-    /** The running search's final answer, kept until it settles and is recorded. */
+    /** The running search's latest results: its final answer, or a partial page while slower sources still run. */
     private var answer: SearchExecutionResult? = null
+    private var answerIsFinal = false
     private var settledKey: String? = null
     private var recordedKey: String? = null
 
-    /** A new search starts; [settle] when it was asked for outright rather than edited live. */
-    fun begin(settle: Boolean) {
+    /**
+     * A new search starts; [settle] when it was asked for outright rather than edited live. A step through history
+     * passes [steppedTo], its key: that search settled and was recorded before, so it is neither settled nor
+     * recorded again.
+     */
+    fun begin(settle: Boolean, steppedTo: String? = null) {
         settleWhenShown = settle
         answer = null
+        answerIsFinal = false
+        if (steppedTo != null) {
+            settledKey = steppedTo
+            recordedKey = steppedTo
+        }
     }
 
     /** The new search's first results replaced those of [previous], which was scrolled to [leftAt]. */
@@ -45,10 +55,25 @@ internal class SearchSettlement(
         if (settleWhenShown) settle()
     }
 
+    /** Partial results of the search on screen; recorded only if it settles and is then replaced before it finishes. */
+    fun partial(result: SearchExecutionResult) {
+        if (answerIsFinal) return
+        answer = result
+    }
+
     /** The final answer of the search on screen; recorded once that search settles. */
     fun answered(result: SearchExecutionResult) {
         answer = result
+        answerIsFinal = true
         recordIfSettled()
+    }
+
+    /**
+     * The running search is cancelled before its final answer. If it settled on partial results, those are what the
+     * user took, so they are recorded now; nothing else will.
+     */
+    fun superseded() {
+        recordIfSettled(acceptPartial = true)
     }
 
     /** Settles the search on screen. A new search whose results have not shown yet settles once they do. */
@@ -69,7 +94,8 @@ internal class SearchSettlement(
         recordIfSettled()
     }
 
-    private fun recordIfSettled() {
+    private fun recordIfSettled(acceptPartial: Boolean = false) {
+        if (!answerIsFinal && !acceptPartial) return
         val result = answer?.takeIf { it.executionKey == settledKey && it.executionKey != recordedKey } ?: return
         recordedKey = result.executionKey
         // Once started, recording finishes even if the user leaves Search.

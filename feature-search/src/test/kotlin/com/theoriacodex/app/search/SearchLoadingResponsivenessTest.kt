@@ -178,7 +178,7 @@ internal class SearchLoadingResponsivenessTest : SearchViewModelTestFixture() {
         owner.onAction(SearchAction.ApplyDraft)
         advanceUntilIdle()
         hold = true
-        owner.onAction(SearchAction.ApplyDraft)
+        owner.onAction(SearchAction.Retry)
         runCurrent()
         assertTrue(owner.state.value.refreshingAppliedSearch)
         owner.onAction(SearchAction.AddIncludeTerm(SearchTerm("different")))

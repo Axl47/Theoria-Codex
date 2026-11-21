@@ -104,13 +104,13 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         var nativeTouchModeBeforeApply = false
         scenario.onActivity { nativeTouchModeBeforeApply = it.window.decorView.isInTouchMode }
         submitSearch()
-        // Search runs live, so each tag edit may reach the provider before the final grouped query does.
+        // Search runs live, so each tag edit may reach the provider before the final grouped query does; that one is asked once.
         val expectedGroups = listOf(listOf("landscape"), listOf("blue", "green"))
-        fun groupedRoot() = container.registry.requests.toList().lastOrNull { request ->
+        fun groupedRoots() = container.registry.requests.toList().filter { request ->
             request.source == SourceKey.PIXIV && request.pageToken == null &&
                 request.query.effectiveIncludeTermGroups.map { group -> group.terms.map { it.value } } == expectedGroups
         }
-        compose.waitUntil(conditionDescription = "Provider receives the grouped search", timeoutMillis = 10_000) { groupedRoot() != null }
+        compose.waitUntil(conditionDescription = "Provider receives the grouped search", timeoutMillis = 10_000) { groupedRoots().isNotEmpty() }
         val summary = compose.onNodeWithText("landscape, blue or green", useUnmergedTree = true)
         try {
             compose.waitUntil(conditionDescription = "Grouped query is applied and its field is collapsed", timeoutMillis = 10_000) {
@@ -128,6 +128,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         }
         waitForCard(0)
         summary.assertIsDisplayed()
+        assertEquals(1, groupedRoots().size)
         scrollToFirstVisibleCard(SourceKey.PIXIV, 18)
         compose.waitUntil(10_000) { container.registry.requests.any { it.pageToken == "20" } }
         scrollToFirstVisibleCard(SourceKey.PIXIV, 22)
@@ -169,9 +170,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         addSearchTag("landscape")
         submitSearch()
         waitForCard(0)
-        // A live edit and the keyboard submit can both reach the provider; the query they send is what matters.
-        val applied = container.registry.requests.toList()
-            .filter { it.source == SourceKey.PIXIV && it.pageToken == null }.map { it.query }.distinct().single()
+        val applied = container.registry.requests.single { it.source == SourceKey.PIXIV && it.pageToken == null }.query
         val queryHash = QueryHash.from(applied)
         scrollToFirstVisibleCard(SourceKey.PIXIV, 6)
         val cardTag = searchCardTestTag(posts.getValue(SourceKey.PIXIV)[6].id)

@@ -65,7 +65,7 @@ import org.junit.runner.Description
 @OptIn(ExperimentalCoroutinesApi::class)
 internal class ScrollPersistenceSearchViewModelTest : SearchViewModelTestFixture() {
     @Test
-    fun `applying even the same query requests top only after acceptance and paging does not reset it`() =
+    fun `applying a query requests top only after acceptance, and neither applying it again nor paging resets it`() =
         runTest(mainDispatcherRule.dispatcher) {
             val owner = viewModel(
                 adapter = ViewModelSearchAdapter(),
@@ -75,23 +75,17 @@ internal class ScrollPersistenceSearchViewModelTest : SearchViewModelTestFixture
             owner.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
             owner.onAction(SearchAction.AddIncludeTerm(SearchTerm("paged")))
             owner.onAction(SearchAction.ApplyDraft)
+            assertEquals(null, (owner.state.value.restoration as SearchRestorationUiState.Restored).scrollState)
             advanceUntilIdle()
             val first = owner.state.value.restoration as SearchRestorationUiState.Restored
             assertEquals(SearchScrollState(0, 0), first.scrollState)
             assertTrue(first.resetToTop)
             owner.onAction(SearchAction.ScrollRestorationApplied(first.scrollRequestId))
-            owner.onAction(SearchAction.ScrollChanged(8, 29))
-
-            owner.onAction(SearchAction.ApplyDraft)
-            assertEquals(null, (owner.state.value.restoration as SearchRestorationUiState.Restored).scrollState)
-            advanceUntilIdle()
-            val repeated = owner.state.value.restoration as SearchRestorationUiState.Restored
-            assertEquals(first.scrollRequestId + 1, repeated.scrollRequestId)
-            assertEquals(SearchScrollState(0, 0), repeated.scrollState)
-            assertTrue(repeated.resetToTop)
-            owner.onAction(SearchAction.ScrollRestorationApplied(repeated.scrollRequestId))
             owner.onAction(SearchAction.ScrollChanged(3, 18))
             val acknowledged = owner.state.value.restoration
+
+            // The query on screen is not asked for again, so the place in it stays.
+            owner.onAction(SearchAction.ApplyDraft)
             owner.onAction(SearchAction.LoadNextPage)
             advanceUntilIdle()
             assertEquals(acknowledged, owner.state.value.restoration)
