@@ -136,7 +136,7 @@ internal fun TheoriaAppContent(
     val currentRoute = backStackEntry?.destination?.route
     ShellUsageEffect(shell, currentRoute, backStackEntry?.arguments?.getString("codexId"))
     PagerScrollFocusEffect(shell.navigation.pagerState)
-    ShellFollowAndSettingsEffects(shell, currentRoute, appShellState.latestInstalledChangelog)
+    ShellFollowAndSettingsEffects(shell, appShellState.latestInstalledChangelog)
     HomeTabEffects(shell, currentRoute)
     ShellPlatformEffects(shell, currentRoute)
     ActiveProfileCoordinationEffect(

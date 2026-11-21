@@ -175,10 +175,7 @@ private fun ForYouDestination(shell: TheoriaShell) {
                 onRemoveIncludeTerm = routes.removeSearchIncludeTerm,
                 onRemoveExcludeTerm = routes.removeSearchExcludeTerm,
                 onFavoriteTagLongPress = shell.addFavoriteTag,
-                onGoToSearch = {
-                    navigation.homeTabRoute = TopLevelDestination.Search.route
-                    shell.scope.launch { navigation.showTab(TopLevelDestination.Search) }
-                },
+                onGoToSearch = { navigation.showTab(TopLevelDestination.Search) },
             ),
             onOwnerAvailable = routes::publishForYou,
         )
@@ -264,10 +261,7 @@ private fun RecentsDestination(shell: TheoriaShell) {
             onRemoveIncludeTerm = routes.removeSearchIncludeTerm,
             onRemoveExcludeTerm = routes.removeSearchExcludeTerm,
             onFavoriteTagLongPress = shell.addFavoriteTag,
-            onGoToSearch = {
-                shell.navigation.homeTabRoute = TopLevelDestination.Search.route
-                shell.scope.launch { shell.navigation.pagerState.scrollToPage(TopLevelDestination.entries.indexOf(TopLevelDestination.Search)) }
-            },
+            onGoToSearch = { shell.navigation.showTab(TopLevelDestination.Search) },
             onOpenWatchedPost = { entries, index -> shell.openRecentSection(entries, index, RecentPostSection.WATCHED) },
             onOpenCodexPost = { entries, index -> shell.openRecentSection(entries, index, RecentPostSection.CODEX) },
             onStartOver = { post, section ->

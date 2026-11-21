@@ -115,7 +115,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -192,31 +191,31 @@ internal class HomeNavigation(
     val navController: NavHostController,
     homeTabRoute: MutableState<String>,
     val pagerState: PagerState,
+    private val scope: CoroutineScope,
 ) {
     var homeTabRoute by homeTabRoute
-    var pendingTopLevelRoute by mutableStateOf<String?>(null)
 
     val currentRoute: String?
         get() = navController.currentBackStackEntry?.destination?.route
 
-    fun goToSearch() {
-        homeTabRoute = TopLevelDestination.Search.route
-        pendingTopLevelRoute = TopLevelDestination.Search.route
-        if (navController.currentDestination?.route != AppRoute.Home &&
-            !navController.popBackStack(AppRoute.Home, inclusive = false)
-        ) {
+    /**
+     * Selects a tab without a page animation, which is how every cross-tab jump arrives. With another
+     * screen on top, the pager moves there when Home returns ([HomeTabEffects] scrolls to [homeTabRoute]).
+     */
+    fun showTab(destination: TopLevelDestination) {
+        homeTabRoute = destination.route
+        if (currentRoute == AppRoute.Home) scope.launch { pagerState.scrollToRoute(destination.route) }
+    }
+
+    /** Returns to Home from any screen and selects [destination]'s tab. */
+    fun goToTab(destination: TopLevelDestination) {
+        if (currentRoute != AppRoute.Home && !navController.popBackStack(AppRoute.Home, inclusive = false)) {
             navController.navigate(AppRoute.Home) {
                 popUpTo(navController.graph.findStartDestination().id)
                 launchSingleTop = true
             }
         }
-    }
-
-    /** Selects a tab without a page animation, which is how every cross-tab jump arrives. */
-    suspend fun showTab(destination: TopLevelDestination) {
-        val targetIndex = TopLevelDestination.entries.indexOf(destination)
-        homeTabRoute = destination.route
-        if (pagerState.currentPage != targetIndex) pagerState.scrollToPage(targetIndex)
+        showTab(destination)
     }
 }
 
@@ -516,7 +515,7 @@ internal class TheoriaShell(
         routes.dispatchOrQueue(
             SearchAction.ApplyTagSearch(query.effectiveIncludeTermGroups, query.excludeTerms, query.mode),
         )
-        navigation.goToSearch()
+        navigation.goToTab(TopLevelDestination.Search)
         val tags = query.effectiveIncludeTermGroups.map { group -> group.terms.joinToString(" or ") { it.value } } +
             query.excludeTerms.map { "-${it.value}" }
         toast("Searching ${source.displayName()} codex tags: ${tags.joinToString(separator = ", ")}")
@@ -721,32 +720,20 @@ internal class TheoriaShell(
     }
 
     fun openHistoricalSearch(entry: RecentSearchEntry) {
-        scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            val historicalScope = when (entry.kind) {
-                RecentSearchKind.MULTI_SEARCH -> SearchSourceScope.fromSources(entry.sources)
-                RecentSearchKind.SOURCE,
-                RecentSearchKind.UNIFIED,
-                RecentSearchKind.FYP,
-                -> SearchSourceScope.fromQuery(entry.query)
-            }
-            routes.dispatchOrQueue(SearchAction.ApplyHistoricalQuery(query = entry.query, sourceScope = historicalScope))
-            navigation.pendingTopLevelRoute = TopLevelDestination.Search.route
-            navigation.homeTabRoute = TopLevelDestination.Search.route
-            navController.navigate(AppRoute.Home) {
-                popUpTo(navController.graph.findStartDestination().id) {
-                    saveState = true
-                }
-                launchSingleTop = true
-                restoreState = true
-            }
-            navigation.showTab(TopLevelDestination.Search)
+        val historicalScope = when (entry.kind) {
+            RecentSearchKind.MULTI_SEARCH -> SearchSourceScope.fromSources(entry.sources)
+            RecentSearchKind.SOURCE,
+            RecentSearchKind.UNIFIED,
+            RecentSearchKind.FYP,
+            -> SearchSourceScope.fromQuery(entry.query)
         }
+        routes.dispatchOrQueue(SearchAction.ApplyHistoricalQuery(query = entry.query, sourceScope = historicalScope))
+        navigation.goToTab(TopLevelDestination.Search)
     }
 
     fun openHistoricalForYouSearch(entry: RecentSearchEntry) {
         routes.dispatchOrQueue(ForYouAction.ReplaySearch(seedBySource = entry.fypSeedBySource(), sortMode = entry.query.sort))
-        navigation.homeTabRoute = TopLevelDestination.ForYou.route
-        scope.launch { navigation.showTab(TopLevelDestination.ForYou) }
+        navigation.showTab(TopLevelDestination.ForYou)
     }
 
     /** Opens a finished download in a fresh Viewer session at the page that was saved. */
@@ -795,7 +782,7 @@ internal fun rememberTheoriaShell(
     val routes = remember { RouteOwners() }
     val pendingSave = remember { PendingCodexSave() }
     val overlays = remember { ShellOverlays() }
-    val navigation = remember(navController, pagerState) { HomeNavigation(navController, homeTabRoute, pagerState) }
+    val navigation = remember(navController, pagerState) { HomeNavigation(navController, homeTabRoute, pagerState, scope) }
     return remember(container, viewerSessions, appShellOwner, appContext, scope, registry, transfers, owners, codexImportLauncher, navigation) {
         TheoriaShell(
             container, viewerSessions, appShellOwner, appContext, scope, snackbarHostState, registry, transfers, owners,

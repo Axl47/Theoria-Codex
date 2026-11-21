@@ -216,7 +216,7 @@ private fun CodexDetailContent(
         onRemoveIncludeTerm = routes.removeSearchIncludeTerm,
         onRemoveExcludeTerm = routes.removeSearchExcludeTerm,
         onFavoriteTagLongPress = shell.addFavoriteTag,
-        onGoToSearch = { shell.navigation.goToSearch() },
+        onGoToSearch = { shell.navigation.goToTab(TopLevelDestination.Search) },
         onBack = { shell.navController.popBackStack() },
         onDeleteCodex = { commands.delete(codexId, state.activeProfile.profileId) },
         isLikesCodex = codexId == likesCodexIdForProfile(state.activeProfile.profileId),
@@ -414,7 +414,7 @@ private fun viewerScreenCallbacks(shell: TheoriaShell) = ViewerScreenCallbacks(
     onFavoriteTagLongPress = shell.addFavoriteTag,
     onGoToSearch = {
         shell.scope.launch { shell.features.search.setViewerLaunchContext(null) }
-        shell.navigation.goToSearch()
+        shell.navigation.goToTab(TopLevelDestination.Search)
     },
     onOpenCreatorFallback = shell::launchOpenCreator,
 )
