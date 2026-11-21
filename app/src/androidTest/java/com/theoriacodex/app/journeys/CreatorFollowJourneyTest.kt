@@ -27,7 +27,7 @@ class CreatorFollowJourneyTest : AppJourneyFixture() {
 
         activate(compose.onNodeWithText("Following"))
         compose.waitUntil(10_000) { follows().isEmpty() }
-        activate(compose.onNodeWithText("Undo"))
+        activate(compose.onNodeWithContentDescription("Unfollowed", substring = true))
         compose.waitUntil(10_000) { follows().isNotEmpty() }
 
         assertEquals(listOf(followed), follows())
