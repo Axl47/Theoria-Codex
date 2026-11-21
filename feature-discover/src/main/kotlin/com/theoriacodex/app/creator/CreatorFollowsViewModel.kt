@@ -88,13 +88,12 @@ class CreatorFollowsViewModel(
     fun cancelAutomaticRefresh() { if (refreshIsAutomatic) refreshJob?.cancel() }
 
     /**
-     * The app-open check: refreshes only when the newest check or failed attempt, which are saved with
-     * the follows, is older than the check interval, so a failing source waits for the next interval
-     * instead of retrying, restarts included.
+     * The app-open check: refreshes the follows whose own last check or failed attempt, which are saved
+     * with them, is older than the check interval. A failing source waits for the next interval instead
+     * of retrying, restarts included, and follows a cancelled run never reached stay due.
      */
     suspend fun refreshIfStale(nowEpochMs: Long) {
-        val follows = repository.observe().first()
-        if (follows.isEmpty() || !newPostsCheckDue(follows.flatMap { listOf(it.checkedAtEpochMs, it.attemptedAtEpochMs) }, nowEpochMs)) return
+        if (repository.observe().first().none { it.checkDue(nowEpochMs) }) return
         startRefresh(automatic = true, at = nowEpochMs)
     }
 
@@ -111,7 +110,7 @@ class CreatorFollowsViewModel(
             mutableRefreshing.value = true
             mutableErrors.value = emptyMap()
             try {
-                repository.observe().first().chunked(WRITE_BATCH_SIZE).forEach { batch ->
+                repository.observe().first().filter { !automatic || it.checkDue(at) }.chunked(WRITE_BATCH_SIZE).forEach { batch ->
                     val results = batch.mapConcurrent(concurrency = 2) { follow -> follow.membershipId to checkCreator(follow) }
                     repository.recordChecks(results.toMap(), at)
                 }
@@ -132,6 +131,8 @@ class CreatorFollowsViewModel(
         mutableErrors.update { it + (follow.creator.followKey() to (error.message ?: "Could not check creator")) }
         null
     }
+
+    private fun FollowedCreator.checkDue(nowEpochMs: Long) = newPostsCheckDue(listOf(checkedAtEpochMs, attemptedAtEpochMs), nowEpochMs)
 
     companion object {
         /** Creators checked per settings write, so a large list neither rewrites settings per creator nor loses its progress when cancelled. */

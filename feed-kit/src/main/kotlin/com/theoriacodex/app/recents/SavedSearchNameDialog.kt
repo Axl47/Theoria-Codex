@@ -11,6 +11,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import com.theoriacodex.data.repository.MAX_SAVED_SEARCH_NAME_LENGTH
 
 @Composable
@@ -20,7 +22,10 @@ fun SavedSearchNameDialog(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
-    var name by rememberSaveable(initialName) { mutableStateOf(initialName) }
+    // The suggested name opens selected, so typing replaces it.
+    var name by rememberSaveable(initialName, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(initialName, TextRange(0, initialName.length)))
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (renaming) "Rename search" else "Save search") },
@@ -28,13 +33,13 @@ fun SavedSearchNameDialog(
             OutlinedTextField(
                 modifier = Modifier.focusOnOpen(),
                 value = name,
-                onValueChange = { if (it.length <= MAX_SAVED_SEARCH_NAME_LENGTH) name = it },
+                onValueChange = { if (it.text.length <= MAX_SAVED_SEARCH_NAME_LENGTH) name = it },
                 label = { Text("Name") },
                 singleLine = true,
             )
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(name.trim()) }, enabled = name.isNotBlank()) {
+            TextButton(onClick = { onConfirm(name.text.trim()) }, enabled = name.text.isNotBlank()) {
                 Text("Save")
             }
         },

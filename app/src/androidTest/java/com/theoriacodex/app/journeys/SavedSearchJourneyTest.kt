@@ -54,12 +54,12 @@ class SavedSearchJourneyTest : AppJourneyFixture() {
         assertTrue(io { container.data.recentsRepository.observeSearches().first().isEmpty() })
         library(LibrarySection.Saved)
         activate(compose.onNodeWithText("Searches"))
-        compose.waitUntil(10_000) { container.registry.requests.count { it.pageToken == null } >= 2 }
+        // The new-posts check also asks these sources, newest first; the feed keeps the saved sort.
+        compose.waitUntil(10_000) { container.registry.requests.count { it.pageToken == null && it.query.sort == query.sort } >= 2 }
         val requests = container.registry.requests.filter { it.pageToken == null }
-        assertEquals(participating.toSet(), requests.map { it.source }.toSet())
+        assertEquals(participating.toSet(), requests.filter { it.query.sort == query.sort }.map { it.source }.toSet())
         assertTrue(requests.all {
-            it.query.effectiveIncludeTermGroups == query.effectiveIncludeTermGroups &&
-                it.query.excludeTags == query.excludeTags && it.query.sort == query.sort
+            it.query.effectiveIncludeTermGroups == query.effectiveIncludeTermGroups && it.query.excludeTags == query.excludeTags
         })
         assertTrue(io { container.data.queryRepository.observeAppliedQuery("unified").first() == null })
     }

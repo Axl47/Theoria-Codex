@@ -327,14 +327,18 @@ class SearchViewModel(
 
     /**
      * The draft changed: the request in flight is now out of date, and the draft runs after a short pause unless it
-     * is back to the search on screen.
+     * is back to the search on screen. An empty draft is runnable like any other, so it replaces a cancelled first search.
      */
     private fun scheduleLiveSearch() {
         val current = mutableState.value
         val request = current.execution.request
         val runsDraft = current.runsDraft
-        if (request != null && !request.isPage && !runsDraft) cancelActiveRequest()
-        if (current.hasPendingChanges && !runsDraft) {
+        val cancelsRequest = request != null && !request.isPage && !runsDraft
+        if (cancelsRequest) cancelActiveRequest()
+        // Before any search has run, the applied search is only a placeholder, so a draft equal to it still
+        // needs its own run when the first search it superseded is cancelled; otherwise nothing would answer.
+        val supersedesFirstSearch = cancelsRequest && !current.content.hasExecutedSearch
+        if ((current.hasPendingChanges || supersedesFirstSearch) && !runsDraft) {
             liveSearch.schedule(singleSource = current.query.draftSourceScope is SearchSourceScope.Single)
         } else {
             liveSearch.cancel()

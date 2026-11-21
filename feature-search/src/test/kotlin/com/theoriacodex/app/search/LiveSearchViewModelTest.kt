@@ -207,6 +207,20 @@ internal class LiveSearchViewModelTest : SearchViewModelTestFixture() {
         assertEquals(listOf("a", "b"), owner.state.value.query.applied.includeTags)
     }
 
+    @Test fun `switching back to the empty draft replaces a first search cancelled before it answered`() = runTest(mainDispatcherRule.dispatcher) {
+        val owner = viewModel(ViewModelSearchAdapter(), additionalAdapters = listOf(ViewModelSearchAdapter(SourceKey.AIBOORU)), recentsRepository = recents)
+        restore(owner)
+        owner.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
+        owner.onAction(SearchAction.ApplyDraft)
+        owner.onAction(SearchAction.SelectMode(QueryMode.Unified))
+        assertFalse(owner.state.value.hasPendingChanges)
+        assertTrue(owner.state.value.execution.liveSearchWaiting)
+        advanceUntilIdle()
+        assertFalse(owner.state.value.execution.liveSearchWaiting)
+        assertTrue(owner.state.value.content.hasExecutedSearch)
+        assertEquals(QueryMode.Unified, owner.state.value.query.applied.mode)
+    }
+
     private suspend fun TestScope.searched(adapter: ViewModelSearchAdapter, tag: String): SearchViewModel {
         val owner = viewModel(adapter, recentsRepository = recents)
         restore(owner)
