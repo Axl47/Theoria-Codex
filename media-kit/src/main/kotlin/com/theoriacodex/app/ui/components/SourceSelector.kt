@@ -157,9 +157,7 @@ fun SourceIconMenu(
             SourceMenuChoices(
                 options, highlightedSources, combinedLabel, openFolder, { openFolder = it }, pick, onLongPress, health.issues,
             )
-            if (action != null && !folderOpen) {
-                SourceFolderChip(action.label, action.icon, selected = false) { onDismiss(); action.onClick() }
-            }
+            SourceMenuActionChip(action.takeUnless { folderOpen }, onDismiss)
         }
     }
 }
@@ -193,6 +191,16 @@ private fun SourceMenuChoices(
     folders.keys.forEach { group ->
         val label = requireNotNull(group.folderLabel)
         SourceFolderChip(label, group.folderIcon, highlightedSources.any { it.presentation().group == group }) { onOpenFolder(group) }
+    }
+}
+
+/** [action]'s chip, styled as a folder; none without one. */
+@Composable
+private fun SourceMenuActionChip(action: SourceMenuAction?, onDismiss: () -> Unit) {
+    if (action == null) return
+    SourceFolderChip(action.label, action.icon, selected = false) {
+        onDismiss()
+        action.onClick()
     }
 }
 

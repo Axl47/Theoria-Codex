@@ -87,17 +87,31 @@ internal fun CodexCleaningSheet(
                     }
                 }
             }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
-                // The sheet dismisses itself, so the second action is Review rather than Cancel.
-                if (onReview == null) {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
-                } else {
-                    TextButton(enabled = (removing ?: 0) > 0, onClick = { onReview(selectedExisting) }) { Text("Review") }
-                }
-                Button(enabled = selectedExisting.isNotEmpty() && removing != 0, onClick = { onClean(selectedExisting) }) {
-                    Text(removing?.let(::codexPostCount)?.let { "Remove $it" } ?: "Clean Codex")
-                }
-            }
+            CleaningActions(selectedExisting, removing, onDismiss, onClean, onReview)
+        }
+    }
+}
+
+/**
+ * Cleaning's buttons for the [selected] comparisons, which would remove [removing] posts (null until known): Review,
+ * or Cancel where there is no review, and Remove. The sheet dismisses itself, so Review takes Cancel's place.
+ */
+@Composable
+private fun CleaningActions(
+    selected: Set<String>,
+    removing: Int?,
+    onDismiss: () -> Unit,
+    onClean: (Set<String>) -> Unit,
+    onReview: ((Set<String>) -> Unit)?,
+) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+        if (onReview == null) {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        } else {
+            TextButton(enabled = (removing ?: 0) > 0, onClick = { onReview(selected) }) { Text("Review") }
+        }
+        Button(enabled = selected.isNotEmpty() && removing != 0, onClick = { onClean(selected) }) {
+            Text(removing?.let(::codexPostCount)?.let { "Remove $it" } ?: "Clean Codex")
         }
     }
 }

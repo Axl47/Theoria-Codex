@@ -149,10 +149,7 @@ fun SearchScreen(
         SearchComposerDialog(state, feed, chrome, gridState, sourcePicker, applyDraft, onAction, onOpenSourceAccounts, saved,
             favoriteTags, onAddFavoriteTag, onRemoveFavoriteTag, onRenameFavoriteTag, omnibox + sourceMixCommands(state, chrome, sourceMix, onAction))
     }
-    SearchSourceMixSheet(state, chrome, sourceMix)
-    if (chrome.showFavoriteTagSheet) {
-        SearchFavoriteTags(state, favoriteTags, onAction, onRemoveFavoriteTag, onRenameFavoriteTag) { chrome.showFavoriteTagSheet = false }
-    }
+    SearchSideSheets(state, chrome, favoriteTags, sourceMix, onAction, onRemoveFavoriteTag, onRenameFavoriteTag)
     if (chrome.showFilterSheet) {
         // The deck follows the applied query, so a draft that has not searched yet has nothing to triage.
         val onTriage = rememberTriageAction(
@@ -164,6 +161,23 @@ fun SearchScreen(
             onAction(SearchAction.SettleSearch)
         }
     }
+}
+
+/** The sheets Search opens over its results besides filters: saved tags and the source mix. */
+@Composable
+private fun SearchSideSheets(
+    state: SearchUiState,
+    chrome: SearchChromeState,
+    favoriteTags: List<FavoriteTagEntry>,
+    sourceMix: SearchSourceMix?,
+    onAction: (SearchAction) -> Unit,
+    onRemoveFavoriteTag: (SourceKey, List<String>) -> Unit,
+    onRenameFavoriteTag: (SourceKey, List<String>, String) -> Unit,
+) {
+    if (chrome.showFavoriteTagSheet) {
+        SearchFavoriteTags(state, favoriteTags, onAction, onRemoveFavoriteTag, onRenameFavoriteTag) { chrome.showFavoriteTagSheet = false }
+    }
+    SearchSourceMixSheet(state, chrome, sourceMix)
 }
 
 /** Scrolling results tucks the search bar away and gives the keyboard back. */
