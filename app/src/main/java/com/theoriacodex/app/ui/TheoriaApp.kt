@@ -125,9 +125,11 @@ private fun TheoriaAppShellContent(
     ShellOwnerHosts(shell)
     val appShellState by appShellOwner.state.collectAsStateWithLifecycle()
     shell.overlays.codexActionTargetId?.let { id ->
-        // This overlay is composed above the app shell's theme, so it must apply the theme itself.
+        // This overlay is composed above the app shell's theme and locals, so it must apply them itself.
         TheoriaNightTheme {
-            key(id) { CodexLibraryDestination(shell, actionCodexId = id) }
+            CompositionLocalProvider(*libraryTransferLocals(shell.transfers)) {
+                key(id) { CodexLibraryDestination(shell, actionCodexId = id) }
+            }
         }
     }
     ShellStartupEffects(shell, appShellState)
