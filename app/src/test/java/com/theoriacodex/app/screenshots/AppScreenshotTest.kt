@@ -123,6 +123,8 @@ class AppScreenshotTest {
         openSearchResults()
         compose.onNodeWithTag(searchCardTestTag(posts[0].id)).performClick()
         waitFor { compose.onNodeWithContentDescription("More actions").isDisplayed() }
+        // The Save button learns after the Viewer opens that the post is already in the only Codex.
+        waitFor { compose.onAllNodesWithContentDescription("Saved in every Codex. Choose Codex").fetchSemanticsNodes().isNotEmpty() }
         capture("viewer")
     }
 
