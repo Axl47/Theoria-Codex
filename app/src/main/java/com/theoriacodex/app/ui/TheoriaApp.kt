@@ -366,11 +366,13 @@ internal fun rememberPostMenuActions(shell: TheoriaShell): PostMenuActions = rem
 private fun SaveToCodexOverlay(shell: TheoriaShell) {
     val pendingSave = shell.pendingSave
     val posts = pendingSave.posts
+    // A Codex waiting to be deleted is no save target.
+    val deleting by shell.owners.codexCommands.pendingDeletes.collectAsStateWithLifecycle()
     SaveToCodexDestinationStateBoundary(shell.data, posts, pendingSave.query) { state ->
         SaveToCodexSheet(
             profiles = state.settings.recommendationProfiles,
             initialProfileId = state.activeProfile.profileId,
-            codicesByProfile = state.codicesByProfile,
+            codicesByProfile = state.codicesByProfile.mapValues { (_, codices) -> codices.filterNot { it.codexId in deleting } },
             codexItemCounts = state.itemCounts,
             codexCoverCandidates = state.coverCandidates,
             relevanceScores = remember(state.relevanceScores, pendingSave.query) {

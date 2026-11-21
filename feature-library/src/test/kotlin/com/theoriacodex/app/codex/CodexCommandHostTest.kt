@@ -6,7 +6,6 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.lifecycle.ViewModelStore
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.ui.undo.ProvideUndoSlot
-import com.theoriacodex.app.ui.undo.UndoLifetime
 import com.theoriacodex.app.ui.undo.UndoSlot
 import com.theoriacodex.data.repository.InMemoryCodexLikesTransactions
 import com.theoriacodex.data.repository.InMemoryCodexRepository
@@ -26,7 +25,7 @@ class CodexCommandHostTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
-    fun `Undo goes to the slot where the command was given and a deletion navigates and offers Undo in its tile`() = runBlocking {
+    fun `Undo goes to the slot where the command was given and a pending deletion closes its screen`() = runBlocking {
         val repository = InMemoryCodexRepository()
         repository.ensureCodex("saved", "Saved")
         repository.ensureCodex("deleted", "Delete me")
@@ -55,15 +54,10 @@ class CodexCommandHostTest {
             compose.waitUntil(5_000) { snackbar.currentSnackbarData?.visuals?.message == "Posts restored" }
             assertEquals(original, repository.observeCodexItems("saved").first())
 
-            compose.runOnIdle {
-                owner.delete("deleted", "profile")
-                owner.rename("saved", "Newest")
-            }
-            compose.waitUntil(5_000) { deleted == listOf("deleted") }
-            compose.waitUntil(5_000) { undo.offer.value?.label == "Deleted Delete me" }
-            assertEquals(CodexUndoAnchors.tile("deleted"), undo.offer.value?.anchor)
-            assertEquals(UndoLifetime.UntilLeft, undo.offer.value?.lifetime)
-            assertEquals(null, repository.observeCodex("deleted").first())
+            compose.runOnIdle { owner.delete("deleted", "profile", name = "Delete me") }
+            compose.waitUntil(5_000) { "deleted" in deleted }
+            assertEquals("Deleted Delete me", owner.pendingDeletes.value["deleted"]?.label)
+            assertEquals("Delete me", repository.observeCodex("deleted").first()?.name)
         } finally {
             owners.clear()
         }

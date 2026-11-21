@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import com.theoriacodex.app.ui.undo.PendingRemoval
 import com.theoriacodex.data.repository.CodexLibrarySort
 import com.theoriacodex.domain.model.Codex
 import kotlinx.coroutines.flow.flowOf
@@ -31,15 +32,35 @@ class CodexGridReorderUiTest {
     private val sort = mutableStateOf(CodexLibrarySort.MANUAL)
     private var committed: List<String>? = null
 
-    private fun showLibrary() = compose.setContent { MaterialTheme {
+    private fun showLibrary(
+        deletes: CodexListDeletes = CodexListDeletes(),
+        actionCodexId: String? = null,
+        renameInPlace: Boolean = false,
+    ) = compose.setContent { MaterialTheme {
         CodexListScreen(
             listOf(Codex("a", "Alpha", 1), Codex("b", "Beta", 2), Codex("c", "Gamma", 3)), emptyMap(), emptyMap(),
             { flowOf(CodexActionOptions()) }, {}, {}, {}, {}, { _, _, _ -> },
             onCommitReorder = { committed = it }, onCreateCodex = {}, onRenameCodex = { _, _ -> },
             onSetAutomaticTag = { _, _, _ -> }, onDeleteCodex = {}, likesCodexId = "likes",
             onCleanCodex = { _, _ -> }, librarySort = sort.value, onLibrarySortChange = { sort.value = it },
+            initialActionCodexId = actionCodexId, deletes = deletes, renameInPlace = renameInPlace,
         )
     } }
+
+    @Test fun `a Codex waiting to be deleted keeps its cell, drawn as its Undo`() {
+        var acted: String? = null
+        showLibrary(CodexListDeletes(mapOf("b" to PendingRemoval("Deleted Beta")), act = { acted = it }))
+        compose.onNodeWithText("Beta").assertDoesNotExist()
+        compose.onNodeWithText("Deleted Beta").assertIsDisplayed()
+        compose.onNodeWithText("Undo").performClick()
+        compose.runOnIdle { assertEquals("b", acted) }
+    }
+
+    @Test fun `the menu of a Codex whose screen renames in place has no Rename row`() {
+        showLibrary(actionCodexId = "a", renameInPlace = true)
+        compose.onNodeWithText("Share").assertExists()
+        compose.onNodeWithText("Rename").assertDoesNotExist()
+    }
 
     @Test fun `under Manual a long-press drag drops the tile into the cell it crosses and commits once`() {
         showLibrary()

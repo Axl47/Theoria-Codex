@@ -38,8 +38,9 @@ import kotlinx.coroutines.launch
  *
  * The gesture runs on the grid ([codexReorderGestures]), not on a tile, so a tile the lazy grid disposes mid-drag
  * never cancels it. The lifted tile follows the finger; when its centre crosses another movable tile it takes that
- * tile's place in [order], and the others glide there through `animateItem`. Keys for which [isFixed] holds never
- * move. The grid binds what it presents through [bind] on every composition.
+ * tile's place in [order], and the others glide there through `animateItem`. Keys for which [isFixed] holds (a
+ * Codex waiting to be deleted) never move. The grid binds what it presents through [bind] on every composition, and
+ * reports a commit that failed through [commitFailed].
  */
 @Stable
 internal class CodexGridReorderState(private val grid: LazyGridState, private val isFixed: (String) -> Boolean) {
@@ -77,7 +78,7 @@ internal class CodexGridReorderState(private val grid: LazyGridState, private va
         when {
             !enabled || pendingIds.toSet() != shownIds.toSet() -> abandon()
             !dragging && pendingIds == shownIds -> order = null
-            // A fixed cell that went (its Undo expired) would leave the pending order out of step with the grid.
+            // A fixed cell that went would leave the pending order out of step with the grid.
             else -> order = displayed(presented)
         }
     }
@@ -86,6 +87,14 @@ internal class CodexGridReorderState(private val grid: LazyGridState, private va
     fun displayed(presented: List<String>): List<String> {
         val pending = order?.takeIf { it.filterNot(isFixed).toSet() == presented.filterNot(isFixed).toSet() }
         return pending?.filter { !isFixed(it) || it in presented } ?: presented
+    }
+
+    /**
+     * A commit of [failed] did not land, so the grid would keep showing an order that was never saved: drop the
+     * pending order while it is still that one. A newer drag, or a newer order waiting on its own commit, stays.
+     */
+    fun commitFailed(failed: List<String>) {
+        if (!dragging && order == failed) order = null
     }
 
     /** Where tile [key] is drawn relative to its cell. */

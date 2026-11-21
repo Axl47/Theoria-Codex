@@ -1,6 +1,7 @@
 package com.theoriacodex.app.codex
 
 import com.theoriacodex.app.library.LibrarySectionHeader
+import com.theoriacodex.app.ui.undo.SurfaceLeaveEffect
 import com.theoriacodex.app.ui.undo.UndoLeaveEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -55,8 +56,9 @@ internal fun CodexListContent(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         header { CodexListHeaderActions(presentation, state, actions) }
-        // A deleted Codex's Undo lives until the Library is left; leaving commits the deletion's loss.
         UndoLeaveEffect(CodexUndoAnchors.LIBRARY_SCOPE)
+        // A deleted Codex's Undo lives until the Library is left; leaving deletes it.
+        SurfaceLeaveEffect(onLeave = actions.leaveLibrary)
 
         CodexGrid(presentation, state, actions)
     }
@@ -223,6 +225,7 @@ private fun CodexActionSheet(
             codex = codex,
             isLikesCodex = isLikesCodex,
             searchEnabled = presentation.searchSourceOptions[codex.codexId].orEmpty().isNotEmpty(),
+            renameInPlace = presentation.renameInPlace,
             state = state,
             actions = actions,
         )
@@ -248,6 +251,7 @@ private fun CodexActionRows(
     codex: Codex,
     isLikesCodex: Boolean,
     searchEnabled: Boolean,
+    renameInPlace: Boolean,
     state: CodexListUiState,
     actions: CodexListActions,
 ) {
@@ -264,7 +268,7 @@ private fun CodexActionRows(
         }
     }
     ActionMenuDivider()
-    ActionMenuRow(Icons.Default.Edit, "Rename") { state.renameTarget = codex; close() }
+    if (!renameInPlace) ActionMenuRow(Icons.Default.Edit, "Rename") { state.renameTarget = codex; close() }
     ActionMenuRow(Icons.Default.CleaningServices, "Clean") { close(); state.cleaningTargetId = codex.codexId }
     ActionMenuRow(
         icon = Icons.Default.Delete,

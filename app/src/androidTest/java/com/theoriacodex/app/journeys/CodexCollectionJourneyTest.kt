@@ -59,14 +59,13 @@ class CodexCollectionJourneyTest : AppJourneyFixture() {
         activate(compose.onNodeWithText("Journey collection"))
         activate(compose.onNodeWithContentDescription("More"))
         activate(compose.onNodeWithText("Delete Codex"))
-        compose.waitUntil(10_000) { io { container.content.observeCodex(collection.codexId).first() == null } }
 
+        // The Codex waits in the Library tile it vacated; nothing is deleted until the Library is left.
         val offer = compose.onNodeWithText("Deleted Journey collection")
         compose.waitUntil(10_000) { offer.isDisplayed() }
         compose.onNodeWithContentDescription("Create Codex").assertExists()
-        activate(compose.onNodeWithText("Undo"))
-        compose.waitUntil(10_000) { io { container.content.observeCodex(collection.codexId).first() != null } }
         assertEquals(original, io { container.content.observeCodexItems(collection.codexId).first() })
+        activate(compose.onNodeWithText("Undo"))
         compose.waitUntil(10_000) { compose.onNodeWithText("Journey collection").isDisplayed() }
     }
 

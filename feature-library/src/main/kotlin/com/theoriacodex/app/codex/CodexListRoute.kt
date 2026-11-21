@@ -17,7 +17,9 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
+import com.theoriacodex.app.ui.undo.PendingRemoval
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
@@ -47,6 +49,9 @@ fun CodexListScreen(
     libraryUsage: Map<String, CodexUsage>? = null,
     observeCleaningMatches: (String, List<String>) -> Flow<Map<String, Set<PostId>>> = { _, _ -> flowOf(emptyMap()) },
     header: LibrarySectionHeader = BareSectionHeader,
+    deletes: CodexListDeletes = CodexListDeletes(),
+    reorderFailures: Flow<List<String>> = emptyFlow(),
+    renameInPlace: Boolean = false,
 ) {
     val state = remember {
         CodexListUiState().apply {
@@ -67,11 +72,14 @@ fun CodexListScreen(
         libraryUsage = libraryUsage,
         searchTerms = options.options.searchTerms,
         observeCleaningMatches = observeCleaningMatches,
+        pendingDeletes = deletes.pending,
+        reorderFailures = reorderFailures,
+        renameInPlace = renameInPlace,
     )
     val actions = CodexListActions(
         onOpenCodex, onImportCodex, onDownloadCodex, onShareCodex, onSearchFromCodex,
         onCommitReorder, onCreateCodex, onRenameCodex, onSetAutomaticTag, onDeleteCodex,
-        onCleanCodex, onMakeAvailableOffline, onLibrarySortChange,
+        onCleanCodex, onMakeAvailableOffline, onLibrarySortChange, deletes.act, deletes.commit,
     )
     LaunchedEffect(codices) { state.synchronizeCodices(codices) }
     if (initialActionCodexId == null) CodexListContent(presentation, state, actions, header)
@@ -83,6 +91,16 @@ fun CodexListScreen(
     }
     CodexListOverlays(presentation, state, actions)
 }
+
+/**
+ * Codices waiting to be deleted ([pending], by id), each tile's Undo or Retry ([act]), and what commits them when
+ * the Library is left ([commit]); see [CodexCommandViewModel.pendingDeletes].
+ */
+class CodexListDeletes(
+    val pending: Map<String, PendingRemoval> = emptyMap(),
+    val act: (String) -> Unit = {},
+    val commit: () -> Unit = {},
+)
 
 private data class CodexActionLoad(
     val options: CodexActionOptions = CodexActionOptions(),
