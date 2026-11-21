@@ -16,6 +16,7 @@ import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerMediaState
 import com.theoriacodex.app.viewer.state.ViewerPageState
+import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -52,9 +53,7 @@ internal class ViewerControls(
     private val opening: Boolean,
     private val returning: Boolean,
 ) {
-    fun setInfoSheetVisible(visible: Boolean) {
-        onAction(if (visible) ViewerAction.ShowMetadata else ViewerAction.HideMetadata)
-    }
+    fun setInfoSheetVisible(visible: Boolean) = setPanelOpen(ViewerPanel.INFO, visible)
 
     /** Opens the info sheet scrolled to the post's comments. */
     fun openInfoSheetAtComments() {
@@ -73,12 +72,13 @@ internal class ViewerControls(
         onAction(if (enabled) ViewerAction.Play else ViewerAction.Pause)
     }
 
-    fun setActionsMenuExpanded(expanded: Boolean) {
-        onAction(if (expanded) ViewerAction.ShowActionsMenu else ViewerAction.HideActionsMenu)
-    }
+    fun setActionsMenuExpanded(expanded: Boolean) = setPanelOpen(ViewerPanel.ACTIONS_MENU, expanded)
 
-    fun setPlaybackSettingsExpanded(expanded: Boolean) {
-        onAction(if (expanded) ViewerAction.ShowPlaybackSettings else ViewerAction.HidePlaybackSettings)
+    fun setPlaybackSettingsExpanded(expanded: Boolean) = setPanelOpen(ViewerPanel.PLAYBACK_SETTINGS, expanded)
+
+    /** Opening a panel closes the one that was open. */
+    private fun setPanelOpen(panel: ViewerPanel, open: Boolean) {
+        onAction(if (open) ViewerAction.ShowPanel(panel) else ViewerAction.HidePanel(panel))
     }
 
     fun setOverviewVisible(visible: Boolean) {
@@ -106,7 +106,7 @@ internal class ViewerControls(
 
     /** Moves the open post to one of its pages at once, for controls that pick a page directly. */
     fun jumpToMedia(postId: PostId, mediaIndex: Int) {
-        onAction(ViewerAction.SelectOverviewMedia(mediaIndex))
+        onAction(ViewerAction.SelectMedia(mediaIndex))
         screen.pendingMediaJumpByPost[postId] = mediaIndex
         markInteraction()
     }
@@ -118,11 +118,7 @@ internal class ViewerControls(
 
     fun requestDismiss() {
         if (screen.pendingDismiss) return
-        setPlaybackEnabled(false)
-        setInfoSheetVisible(false)
-        setActionsMenuExpanded(false)
-        setPlaybackSettingsExpanded(false)
-        setOverviewVisible(false)
+        onAction(ViewerAction.PrepareDismiss)
         screen.pendingDismiss = true
     }
 }

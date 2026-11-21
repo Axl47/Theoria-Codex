@@ -54,6 +54,7 @@ import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerMediaError
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
+import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
@@ -224,7 +225,7 @@ private fun ViewerMediaGestureLayer(
             seek = { interactions.seek(it); onPassiveInteraction() },
             zoom = { tap -> animateZoom(tap); onPassiveInteraction() },
             toggleControls = onToggleChrome,
-            showInfo = { onAction(ViewerAction.ShowMetadata); onInteraction() },
+            showInfo = { onAction(ViewerAction.ShowPanel(ViewerPanel.INFO)); onInteraction() },
             hold = if (seekable) { holding ->
                 if (holding && !interactions.holdingSpeed) haptics.performHapticFeedback(TheoriaHaptics.Hold)
                 interactions.holdingSpeed = holding

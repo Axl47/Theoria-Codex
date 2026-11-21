@@ -76,7 +76,7 @@ class ViewerStateBoundaryTest {
     fun `selecting a page clamps the index, closes transient panels and keeps the playback rate`() {
         var state = created(video("a"), still("b"), video("c"))
         state = state.act(ViewerAction.SetPlaybackRate(2f))
-            .act(ViewerAction.ShowActionsMenu).act(ViewerAction.ShowMetadata).act(ViewerAction.ShowPlaybackSettings)
+            .act(ViewerAction.ShowPanel(ViewerPanel.INFO))
             .let { it.copy(mediaError = ViewerMediaError.Fatal(null, "broken")) }
         val last = state.act(ViewerAction.SelectPage(99))
         assertEquals(2, last.currentPageIndex)
@@ -101,32 +101,48 @@ class ViewerStateBoundaryTest {
     }
 
     @Test
-    fun `hiding the chrome closes its menus and showing it never reopens one that was closed`() {
-        val video = created(video("a"))
-        val open = video.act(ViewerAction.ShowActionsMenu).act(ViewerAction.ShowPlaybackSettings)
-        val hidden = open.act(ViewerAction.ToggleChrome)
-        assertFalse(hidden.controls.chromeVisible)
-        assertFalse(hidden.controls.actionsMenuVisible)
-        assertTrue(open.controls.actionsMenuVisible && open.controls.playbackSettingsVisible)
-        assertFalse(hidden.act(ViewerAction.ToggleChrome).controls.actionsMenuVisible)
+    fun `preparing to dismiss pauses and closes every surface, and navigating lands on a page's media in one step`() {
+        val gallery = post("g", listOf(ref("video/mp4", "1.mp4"), ref("image/jpeg", "2.jpg")))
+        val open = created(gallery).act(ViewerAction.Play).act(ViewerAction.ToggleOverview)
+            .act(ViewerAction.ShowPanel(ViewerPanel.INFO))
+        val prepared = open.act(ViewerAction.PrepareDismiss)
+        assertFalse(prepared.controls.playback.playing)
+        assertNull(prepared.controls.panel)
+        assertFalse(prepared.overview.visible)
+        val landed = created(video("a"), gallery).act(ViewerAction.Navigate(1, 1))
+        assertEquals(1, landed.currentPageIndex)
+        assertEquals(1, landed.currentPage?.selectedMediaIndex)
+        assertEquals(landed, landed.act(ViewerAction.Navigate(1, 1)))
     }
 
     @Test
-    fun `panel actions toggle only their own flag and an empty viewer ignores every action`() {
+    fun `hiding the chrome closes its menus and showing it never reopens one that was closed`() {
+        val video = created(video("a"))
+        val open = video.act(ViewerAction.ShowPanel(ViewerPanel.PLAYBACK_SETTINGS))
+        val hidden = open.act(ViewerAction.ToggleChrome)
+        assertFalse(hidden.controls.chromeVisible)
+        assertNull(hidden.controls.panel)
+        assertEquals(ViewerPanel.PLAYBACK_SETTINGS, open.controls.panel)
+        assertNull(hidden.act(ViewerAction.ToggleChrome).controls.panel)
+        val info = video.act(ViewerAction.ShowPanel(ViewerPanel.INFO))
+        assertEquals(ViewerPanel.INFO, info.act(ViewerAction.ToggleChrome).controls.panel)
+    }
+
+    @Test
+    fun `one panel opens at a time, hiding closes only its own panel, and an empty viewer ignores every action`() {
         val state = created(video("a"))
-        val panels = listOf(
-            ViewerAction.ShowMetadata to ViewerAction.HideMetadata, ViewerAction.ShowActionsMenu to ViewerAction.HideActionsMenu,
-            ViewerAction.ShowPlaybackSettings to ViewerAction.HidePlaybackSettings,
-        )
-        for ((show, hide) in panels) {
-            val shown = state.act(show)
-            assertEquals(1, listOf(shown.controls.metadataVisible, shown.controls.actionsMenuVisible, shown.controls.playbackSettingsVisible).count { it })
-            assertEquals(state.controls, shown.act(hide).controls)
+        for (panel in ViewerPanel.entries) {
+            val shown = state.act(ViewerAction.ShowPanel(panel))
+            assertEquals(panel, shown.controls.panel)
+            assertEquals(state.controls, shown.act(ViewerAction.HidePanel(panel)).controls)
+            val other = ViewerPanel.entries.first { it != panel }
+            assertEquals(panel, shown.act(ViewerAction.HidePanel(other)).controls.panel)
+            assertEquals(other, shown.act(ViewerAction.ShowPanel(other)).controls.panel)
         }
+        assertNull(created(still("b")).act(ViewerAction.ShowPanel(ViewerPanel.PLAYBACK_SETTINGS)).controls.panel)
         assertEquals(ViewerUiState.Empty, ViewerUiState.Empty.act(ViewerAction.ToggleChrome))
         val errored = created().act(ViewerAction.MediaFailed(session, ViewerMediaError.Fatal(null, "no pages")))
         assertEquals("no pages", errored.mediaError?.message)
-        assertNull(errored.act(ViewerAction.ClearMediaError).mediaError)
         val term = PostTaxonomyTerm("tag")
         for (action in listOf(ViewerAction.Save, ViewerAction.ToggleLike, ViewerAction.IncludeTag(term))) {
             assertTrue(reduceViewerState(created(), action).effects.isEmpty())
@@ -139,7 +155,7 @@ class ViewerStateBoundaryTest {
     @Test
     fun `playback controls act only on playable media and reject a rate that is not positive`() {
         val image = created(still("a"))
-        val actions = listOf(ViewerAction.Play, ViewerAction.TogglePlayback, ViewerAction.RestartPlayback, ViewerAction.SetPlaybackRate(2f), ViewerAction.ShowPlaybackSettings)
+        val actions = listOf(ViewerAction.Play, ViewerAction.TogglePlayback, ViewerAction.RestartPlayback, ViewerAction.SetPlaybackRate(2f), ViewerAction.ShowPanel(ViewerPanel.PLAYBACK_SETTINGS))
         assertTrue(actions.all { image.act(it) == image })
         val video = created(video("a"))
         assertEquals(1f, video.act(ViewerAction.SetPlaybackRate(0f)).controls.playback.playbackRate)

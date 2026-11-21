@@ -112,15 +112,11 @@ fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReducti
         is ViewerAction.IncludeRelatedPosts -> state.ifCurrentSession(action.session) { includeRelatedPosts(action) }
         is ViewerAction.SelectPage -> state.selectPage(action.pageIndex)
         is ViewerAction.SelectMedia -> state.selectMedia(action.mediaIndex)
-        is ViewerAction.SelectOverviewMedia -> state.selectMedia(action.mediaIndex)
+        is ViewerAction.Navigate -> state.navigate(action.pageIndex, action.mediaIndex)
         ViewerAction.ToggleChrome -> ViewerReduction(state.toggleChrome())
         ViewerAction.ToggleOverview -> state.reduceToggleOverview()
-        ViewerAction.ShowMetadata -> state.withControls(state.controls.copy(metadataVisible = true))
-        ViewerAction.HideMetadata -> state.withControls(state.controls.copy(metadataVisible = false))
-        ViewerAction.ShowActionsMenu -> state.withControls(state.controls.copy(actionsMenuVisible = true))
-        ViewerAction.HideActionsMenu -> state.withControls(state.controls.copy(actionsMenuVisible = false))
-        ViewerAction.ShowPlaybackSettings -> state.reduceShowPlaybackSettings()
-        ViewerAction.HidePlaybackSettings -> state.withControls(state.controls.copy(playbackSettingsVisible = false))
+        is ViewerAction.ShowPanel -> ViewerReduction(state.showPanel(action.panel))
+        is ViewerAction.HidePanel -> ViewerReduction(state.hidePanel(action.panel))
         is ViewerAction.SetPlaybackMode -> state.withControls(state.controls.copy(playbackMode = action.mode))
         is ViewerAction.PlaybackCompleted -> state.completePlayback(action)
         is ViewerAction.SetSlideshow -> ViewerReduction(state.setSlideshow(action.running))
@@ -140,7 +136,6 @@ fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReducti
         is ViewerAction.QueuePrefetch -> ViewerReduction(state)
         is ViewerAction.MediaFailed -> state.reduceMediaFailed(action)
         is ViewerAction.MediaReady -> state.reduceMediaReady(action)
-        ViewerAction.ClearMediaError -> ViewerReduction(state.copy(mediaError = null))
         ViewerAction.RetryMedia -> state.retryMedia(session)
         ViewerAction.Save -> state.currentPageEffect { page, _ ->
             ViewerEffect.SavePost(session = session, postId = page.post.id)
@@ -158,6 +153,7 @@ fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReducti
         is ViewerAction.IncludeTag -> state.reduceIncludeTag(session, action)
         is ViewerAction.ExcludeTag -> state.reduceExcludeTag(session, action)
         ViewerAction.LoadMore -> ViewerReduction(state, listOf(ViewerEffect.LoadMore(session)))
+        ViewerAction.PrepareDismiss -> ViewerReduction(state.prepareDismiss())
         ViewerAction.Dismiss -> ViewerReduction(state, listOf(ViewerEffect.Dismiss(session)))
     }
 }
@@ -221,23 +217,33 @@ private fun ViewerUiState.includeRelatedPosts(action: ViewerAction.IncludeRelate
     )
 }
 
+/** Opening or closing the overview also closes the chrome's menus. */
 private fun ViewerUiState.reduceToggleOverview(): ViewerReduction =
     ViewerReduction(
         this.copy(
+            controls = controls.copy(panel = controls.panelOutsideChrome()),
             overview = this.overview.copy(
                 visible = this.overview.available && !this.overview.visible,
             ),
         ),
     )
 
-private fun ViewerUiState.reduceShowPlaybackSettings(): ViewerReduction =
-    ViewerReduction(
-        this.copy(
-            controls = this.controls.copy(
-                playbackSettingsVisible = this.controls.playback.available,
-            ),
-        ),
-    )
+/** Playback settings open only for media that plays. */
+private fun ViewerUiState.showPanel(panel: ViewerPanel): ViewerUiState {
+    if (panel == ViewerPanel.PLAYBACK_SETTINGS && !controls.playback.available) return hidePanel(panel)
+    return copy(controls = controls.copy(panel = panel))
+}
+
+private fun ViewerUiState.hidePanel(panel: ViewerPanel): ViewerUiState =
+    if (controls.panel == panel) copy(controls = controls.copy(panel = null)) else this
+
+/** The open panel, unless it is a chrome menu that closes with the chrome or a media change. */
+private fun ViewerControlsState.panelOutsideChrome(): ViewerPanel? = panel?.takeUnless(ViewerPanel::inChrome)
+
+private fun ViewerUiState.prepareDismiss(): ViewerUiState {
+    val paused = setPlaying(false)
+    return paused.copy(controls = paused.controls.copy(panel = null), overview = overview.copy(visible = false))
+}
 
 private fun ViewerUiState.reduceResolution(action: ViewerAction): ViewerReduction = when (action) {
     is ViewerAction.ResolutionCancelled -> this.ifCurrentSession(action.session) {
@@ -315,9 +321,7 @@ private fun ViewerUiState.selectPage(pageIndex: Int): ViewerReduction {
         copy(
             currentPageIndex = target,
             controls = controls.copy(
-                actionsMenuVisible = false,
-                playbackSettingsVisible = false,
-                metadataVisible = false,
+                panel = null,
                 playback = playbackControlsFor(
                     media = page?.selectedMedia,
                     playbackRate = controls.playback.playbackRate,
@@ -327,6 +331,11 @@ private fun ViewerUiState.selectPage(pageIndex: Int): ViewerReduction {
             mediaError = null,
         ),
     )
+}
+
+private fun ViewerUiState.navigate(pageIndex: Int, mediaIndex: Int): ViewerReduction {
+    val onPage = if (pageIndex.coerceInPages(pages) == currentPageIndex) this else selectPage(pageIndex).state
+    return onPage.selectMedia(mediaIndex)
 }
 
 private fun ViewerUiState.selectMedia(mediaIndex: Int): ViewerReduction {
@@ -344,8 +353,7 @@ private fun ViewerUiState.selectMedia(mediaIndex: Int): ViewerReduction {
         copy(
             pages = updatedPages,
             controls = controls.copy(
-                actionsMenuVisible = false,
-                playbackSettingsVisible = false,
+                panel = controls.panelOutsideChrome(),
                 playback = playbackControlsFor(
                     media = updatedPage.selectedMedia,
                     playbackRate = controls.playback.playbackRate,
@@ -362,8 +370,7 @@ private fun ViewerUiState.toggleChrome(): ViewerUiState {
     return copy(
         controls = controls.copy(
             chromeVisible = visible,
-            actionsMenuVisible = controls.actionsMenuVisible && visible,
-            playbackSettingsVisible = controls.playbackSettingsVisible && visible,
+            panel = if (visible) controls.panel else controls.panelOutsideChrome(),
         ),
     )
 }
@@ -393,7 +400,7 @@ private fun ViewerUiState.setSlideshow(running: Boolean): ViewerUiState {
     if (!running) return copy(controls = controls.copy(slideshow = false))
     val started = setPlaying(true)
     return started.copy(controls = started.controls.copy(
-        slideshow = true, chromeVisible = false, actionsMenuVisible = false, playbackSettingsVisible = false,
+        slideshow = true, chromeVisible = false, panel = started.controls.panelOutsideChrome(),
     ))
 }
 

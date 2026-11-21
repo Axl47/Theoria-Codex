@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeUp
+import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.createViewerUiState
 import com.theoriacodex.app.viewer.state.reduceViewerState
@@ -164,7 +165,7 @@ class ViewerSwipeAnimationTest {
         compose.waitForIdle()
         compose.onNodeWithContentDescription("Media actions").performTouchInput { swipeUp(startY = height * 0.7f, endY = height * 0.2f) }
         compose.waitForIdle()
-        compose.runOnIdle { assertTrue(state.value.controls.metadataVisible) }
+        compose.runOnIdle { assertTrue(state.value.controls.panel == ViewerPanel.INFO) }
     }
 
     private fun checkSlide(gallery: Boolean, opening: Boolean = false, thumbnail: Boolean = false, heldDrag: Boolean = false, cancelled: Boolean = false, related: Boolean = false, inverted: Boolean = false) {

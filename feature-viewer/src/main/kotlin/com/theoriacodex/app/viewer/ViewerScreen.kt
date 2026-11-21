@@ -35,6 +35,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.comments.ViewerComments
 import com.theoriacodex.app.media.isVideoMediaRef
+import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.domain.model.ImageRef
@@ -191,7 +192,7 @@ private fun ViewerLoadedScreen(
             )
         }
     }
-    if (uiState.controls.metadataVisible && !inPictureInPicture) {
+    if (uiState.controls.panel == ViewerPanel.INFO && !inPictureInPicture) {
         ViewerInfoSheet(
             selection, controls, creatorBrowsingSources, saveToCodexQuery, tagVideoCountProvider, fetchTagVideoCounts, onAction,
             onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, onGoToSearch, onOpenCreatorFallback,

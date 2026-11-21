@@ -138,7 +138,8 @@ class ViewerViewModel(
             }
         }
         reduction.effects.forEach(::handleEffect)
-        if (action is ViewerAction.SelectPage || action is ViewerAction.ReplaceSession || action is ViewerAction.AppendPosts ||
+        if (action is ViewerAction.SelectPage || action is ViewerAction.Navigate ||
+            action is ViewerAction.ReplaceSession || action is ViewerAction.AppendPosts ||
             action is ViewerAction.IncludeRelatedPosts || action is ViewerAction.PlaybackCompleted ||
             action is ViewerAction.SlideshowAdvance) {
             reconcileResolutionLookahead()

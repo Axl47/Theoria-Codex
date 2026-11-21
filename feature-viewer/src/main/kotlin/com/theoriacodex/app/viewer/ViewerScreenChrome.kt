@@ -81,6 +81,7 @@ import com.theoriacodex.app.ui.components.PostMenuAction
 import com.theoriacodex.app.ui.components.shareFor
 import com.theoriacodex.app.ui.components.availableFor
 import com.theoriacodex.app.ui.motion.TheoriaMotion
+import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -110,7 +111,7 @@ internal fun BoxScope.ViewerChromeOverlays(
 ) {
     val selection = frame.selection
     val navigation = frame.navigation
-    OpenInfoSheetForFocusedComment(comments, selection.post, frame.uiState.controls.metadataVisible, controls)
+    OpenInfoSheetForFocusedComment(comments, selection.post, frame.uiState.controls.panel == ViewerPanel.INFO, controls)
     // While scrubbing everything but the timeline steps back. Only its alpha changes, so the strip keeps its scroll position.
     val scrubFade by animateFloatAsState(if (screen.timelineInteractionActive) 0f else 1f, tween(TheoriaMotion.SHORT_MS), label = "Viewer scrub fade")
     val fadesWhileScrubbing = Modifier.graphicsLayer { alpha = scrubFade }
@@ -210,21 +211,15 @@ private fun ViewerTopBar(
             onAction(ViewerAction.ToggleLike)
             controls.markInteraction()
         },
-        actionsMenuExpanded = uiState.controls.actionsMenuVisible,
+        actionsMenuExpanded = uiState.controls.panel == ViewerPanel.ACTIONS_MENU,
         onActionsMenuExpandedChange = { expanded ->
             controls.setActionsMenuExpanded(expanded)
-            if (expanded) {
-                controls.setPlaybackSettingsExpanded(false)
-                controls.markInteraction()
-            }
+            if (expanded) controls.markInteraction()
         },
-        playbackSettingsExpanded = uiState.controls.playbackSettingsVisible,
+        playbackSettingsExpanded = uiState.controls.panel == ViewerPanel.PLAYBACK_SETTINGS,
         onPlaybackSettingsExpandedChange = { expanded ->
             controls.setPlaybackSettingsExpanded(expanded && playbackAvailable)
-            if (expanded && playbackAvailable) {
-                controls.setActionsMenuExpanded(false)
-                controls.markInteraction()
-            }
+            if (expanded && playbackAvailable) controls.markInteraction()
         },
         playbackSettingsEnabled = playbackAvailable,
         playbackRateEnabled = selection.isSeekable,
@@ -238,8 +233,6 @@ private fun ViewerTopBar(
         onToggleMediaOverview = {
             if (selection.overviewAvailable) {
                 controls.setOverviewVisible(!frame.mediaOverviewVisible)
-                controls.setActionsMenuExpanded(false)
-                controls.setPlaybackSettingsExpanded(false)
                 controls.markInteraction()
             }
         },
@@ -313,7 +306,6 @@ internal fun OpenInfoSheetForFocusedComment(comments: ViewerComments, post: Post
 
 /** Opens the info sheet from the top bar, at its top or scrolled to the comments. */
 private fun ViewerControls.showInfoSheet(atComments: Boolean) {
-    setActionsMenuExpanded(false)
     if (atComments) openInfoSheetAtComments() else setInfoSheetVisible(true)
     markInteraction()
 }

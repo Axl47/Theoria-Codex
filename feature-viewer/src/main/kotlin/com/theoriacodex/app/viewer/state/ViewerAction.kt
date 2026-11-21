@@ -36,15 +36,13 @@ sealed interface ViewerAction {
 
     data class SelectPage(val pageIndex: Int) : ViewerAction
     data class SelectMedia(val mediaIndex: Int) : ViewerAction
-    data class SelectOverviewMedia(val mediaIndex: Int) : ViewerAction
+    /** Moves to [mediaIndex] of page [pageIndex], as one step. */
+    data class Navigate(val pageIndex: Int, val mediaIndex: Int) : ViewerAction
     data object ToggleChrome : ViewerAction
     data object ToggleOverview : ViewerAction
-    data object ShowMetadata : ViewerAction
-    data object HideMetadata : ViewerAction
-    data object ShowActionsMenu : ViewerAction
-    data object HideActionsMenu : ViewerAction
-    data object ShowPlaybackSettings : ViewerAction
-    data object HidePlaybackSettings : ViewerAction
+    data class ShowPanel(val panel: ViewerPanel) : ViewerAction
+    /** Closes [panel] if it is the open one. */
+    data class HidePanel(val panel: ViewerPanel) : ViewerAction
 
     data class SetPlaybackMode(val mode: ViewerPlaybackMode) : ViewerAction
     data class PlaybackCompleted(val session: ViewerSessionIdentity, val key: ViewerMediaKey, val loadGeneration: Long) : ViewerAction
@@ -95,7 +93,6 @@ sealed interface ViewerAction {
         val loadGeneration: Long,
     ) : ViewerAction
 
-    data object ClearMediaError : ViewerAction
     data object RetryMedia : ViewerAction
 
     data object Save : ViewerAction
@@ -105,6 +102,8 @@ sealed interface ViewerAction {
     data class IncludeTag(val term: PostTaxonomyTerm) : ViewerAction
     data class ExcludeTag(val term: PostTaxonomyTerm) : ViewerAction
     data object LoadMore : ViewerAction
+    /** Pauses and closes every surface ahead of [Dismiss], so the return starts from the bare media. */
+    data object PrepareDismiss : ViewerAction
     data object Dismiss : ViewerAction
 }
 

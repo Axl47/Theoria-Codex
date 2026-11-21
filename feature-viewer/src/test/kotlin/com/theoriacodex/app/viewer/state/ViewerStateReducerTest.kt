@@ -220,7 +220,7 @@ class ViewerStateReducerTest {
         )
 
         val opened = reduceViewerState(state, ViewerAction.ToggleOverview).state
-        val selected = reduceViewerState(opened, ViewerAction.SelectOverviewMedia(2)).state
+        val selected = reduceViewerState(opened, ViewerAction.SelectMedia(2)).state
 
         assertTrue(opened.overview.visible)
         assertTrue(opened.overview.available)

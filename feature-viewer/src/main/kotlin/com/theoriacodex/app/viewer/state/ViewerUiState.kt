@@ -74,12 +74,20 @@ data class ViewerPlaybackControlsState(
 
 internal typealias ViewerPlaybackMode = com.theoriacodex.domain.model.ViewerPlaybackMode
 
+/** A transient surface over the media. At most one is open; opening one closes the other. */
+enum class ViewerPanel(
+    /** A menu in the chrome, which closes with the chrome and when the media changes. */
+    val inChrome: Boolean,
+) {
+    ACTIONS_MENU(inChrome = true),
+    PLAYBACK_SETTINGS(inChrome = true),
+    INFO(inChrome = false),
+}
+
 data class ViewerControlsState(
     val playbackMode: ViewerPlaybackMode = ViewerPlaybackMode.LOOP,
     val chromeVisible: Boolean = true,
-    val actionsMenuVisible: Boolean = false,
-    val playbackSettingsVisible: Boolean = false,
-    val metadataVisible: Boolean = false,
+    val panel: ViewerPanel? = null,
     val playback: ViewerPlaybackControlsState = ViewerPlaybackControlsState(),
     /** A slideshow is moving through the queue; session-only, never saved. */
     val slideshow: Boolean = false,
