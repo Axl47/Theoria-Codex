@@ -1,0 +1,185 @@
+name: Claude Design Review
+
+# A second reviewer beside Codex: Claude (Opus) reviews the design of a pull request, not its nits.
+# The reviewer's instructions live in .github/claude/design-review.md; edit that file to tune it.
+#
+# When it runs
+# - Once when a pull request opens, or when a draft is marked ready for review. Pushes do not re-run it.
+# - Whenever someone with write access comments @claude on a pull request (in the conversation or on
+#   a line of the diff). Anything after @claude is passed to the reviewer as what to focus on.
+# - Never automatically for bot authors (Dependabot and any other [bot]) or for pull requests from
+#   forks, which GitHub runs without secrets.
+#
+# Size limit
+# - Automatic reviews skip pull requests over MAX_AUTO_REVIEW_LINES lines changed (additions plus
+#   deletions) and post one comment saying so. @claude requests are never size-limited.
+# - The default, 5000, would have reviewed 148 of the 160 human pull requests opened in the 30 days to
+#   2026-11-21 (92%) and skipped the dozen largest, which drove about a quarter of the estimated cost.
+# - To change it without a commit, set a repository variable named CLAUDE_REVIEW_MAX_LINES
+#   (Settings > Secrets and variables > Actions > Variables). Otherwise edit the default below.
+#
+# Setup
+# - Add the Anthropic API key as a repository secret named ANTHROPIC_API_KEY
+#   (Settings > Secrets and variables > Actions > New repository secret).
+# - The action signs in to GitHub as the Claude GitHub App. If a run fails on GitHub authentication,
+#   install the app on this repository: https://github.com/apps/claude
+on:
+  pull_request:
+    types: [opened, ready_for_review]
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+env:
+  MAX_AUTO_REVIEW_LINES: ${{ vars.CLAUDE_REVIEW_MAX_LINES || '5000' }}
+  REVIEW_MARKER: '<!-- claude-design-review -->'
+  SIZE_SKIP_MARKER: '<!-- claude-design-review:size-skip -->'
+
+jobs:
+  decide:
+    name: decide
+    if: >-
+      (github.event_name == 'pull_request'
+        && !github.event.pull_request.draft
+        && github.event.pull_request.user.type != 'Bot'
+        && !endsWith(github.event.pull_request.user.login, '[bot]')
+        && github.event.pull_request.head.repo.full_name == github.repository)
+      || (github.event_name == 'issue_comment'
+        && github.event.issue.pull_request
+        && contains(github.event.comment.body, '@claude')
+        && github.event.comment.user.type != 'Bot')
+      || (github.event_name == 'pull_request_review_comment'
+        && contains(github.event.comment.body, '@claude')
+        && github.event.comment.user.type != 'Bot')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    outputs:
+      review: ${{ steps.decide.outputs.review }}
+      pr: ${{ steps.decide.outputs.pr }}
+
+    steps:
+      - name: Decide whether to review
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number }}
+          ADDITIONS: ${{ github.event.pull_request.additions || 0 }}
+          DELETIONS: ${{ github.event.pull_request.deletions || 0 }}
+        run: |
+          echo "pr=$PR" >> "$GITHUB_OUTPUT"
+          if [[ "$EVENT" != pull_request ]]; then
+            echo "review=true" >> "$GITHUB_OUTPUT"
+            echo "Reviewing #$PR on request." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          comments=$(gh pr view "$PR" --repo "$REPO" --json comments --jq '.comments[].body')
+          if grep -qF "$REVIEW_MARKER" <<< "$comments"; then
+            echo "review=false" >> "$GITHUB_OUTPUT"
+            echo "#$PR already has an automatic review; comment @claude to run another." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          lines=$((ADDITIONS + DELETIONS))
+          if (( lines > MAX_AUTO_REVIEW_LINES )); then
+            echo "review=false" >> "$GITHUB_OUTPUT"
+            echo "#$PR changes $lines lines, over the $MAX_AUTO_REVIEW_LINES-line limit, so it was skipped." >> "$GITHUB_STEP_SUMMARY"
+            if ! grep -qF "$SIZE_SKIP_MARKER" <<< "$comments"; then
+              printf '%s\nSkipped the automatic design review: this pull request changes %s lines, over the %s-line limit for automatic reviews. Comment `@claude` to request one anyway, and add what to focus on if you like.\n' \
+                "$SIZE_SKIP_MARKER" "$lines" "$MAX_AUTO_REVIEW_LINES" > skip.md
+              gh pr comment "$PR" --repo "$REPO" --body-file skip.md
+            fi
+            exit 0
+          fi
+
+          echo "review=true" >> "$GITHUB_OUTPUT"
+          echo "Reviewing #$PR ($lines lines changed)." >> "$GITHUB_STEP_SUMMARY"
+
+  review:
+    name: review
+    needs: decide
+    if: needs.decide.outputs.review == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: write
+      id-token: write
+    concurrency:
+      group: claude-design-review-${{ needs.decide.outputs.pr }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout the pull request
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: refs/pull/${{ needs.decide.outputs.pr }}/head
+          fetch-depth: 1
+
+      - name: Gather the pull request, its issues and its diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ needs.decide.outputs.pr }}
+          REQUEST: ${{ github.event.comment.body }}
+        run: |
+          mkdir -p .claude-review
+          gh pr view "$PR" --repo "$REPO" \
+            --json number,url,title,body,author,baseRefName,headRefName,isDraft,additions,deletions,changedFiles,closingIssuesReferences \
+            > .claude-review/pr.json
+          gh pr view "$PR" --repo "$REPO" --json files > .claude-review/files.json
+          if ! gh pr diff "$PR" --repo "$REPO" > .claude-review/pr.diff 2> diff-error.txt; then
+            {
+              echo "GitHub's API could not return this diff ($(head -c 300 diff-error.txt))."
+              echo "Use files.json and read the changed files in the checkout instead."
+            } > .claude-review/pr.diff
+          fi
+          jq -r '.closingIssuesReferences[]? | "\(.number) \(.url)"' .claude-review/pr.json |
+            while read -r number url; do
+              gh issue view "$url" --json title,body,url --template '# {{.title}}{{"\n"}}{{.url}}{{"\n\n"}}{{.body}}{{"\n"}}' \
+                > ".claude-review/issue-$number.md" || true
+            done
+          if [[ -n "$REQUEST" ]]; then
+            printf '%s\n' "$REQUEST" > .claude-review/request.md
+          fi
+
+      - name: Review the design
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Review the design of pull request #${{ needs.decide.outputs.pr }} in ${{ github.repository }}.
+            Read .github/claude/design-review.md first and follow it exactly. The pull request's context
+            is in .claude-review/, and the review goes in .claude-review/review.md.
+          claude_args: |
+            --model claude-opus-5-5
+            --max-turns 40
+            --allowedTools "Read,Grep,Glob,Write"
+
+      - name: Post the review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ needs.decide.outputs.pr }}
+        run: |
+          if [[ ! -s .claude-review/review.md ]]; then
+            echo "::error::Claude finished without writing .claude-review/review.md; see the step above."
+            exit 1
+          fi
+          {
+            echo "$REVIEW_MARKER"
+            cat .claude-review/review.md
+            echo
+            echo '<sub>Design review by Claude. Comment `@claude` to run it again, with what to focus on if you like.</sub>'
+          } > review-comment.md
+          gh pr comment "$PR" --repo "$REPO" --body-file review-comment.md
