@@ -65,7 +65,7 @@ class ViewerSaveOriginTest {
                             onSavePost = { _, _ -> }, onDownloadMedia = {},
                             onToggleLike = { error("Originating feed action must handle this Like") },
                             onOpenCreatorProfile = {}, onApplyTag = { _, _, _ -> },
-                            onRecoverMedia = { _, _, _ -> null }, onLoadMore = {},
+                            onRecoverMedia = { _, _, _, _ -> null }, onLoadMore = {},
                             onDismiss = {}, onRestorationUnavailable = {},
                         ),
                         screenCallbacks = ViewerScreenCallbacks(
@@ -121,7 +121,7 @@ class ViewerSaveOriginTest {
                                 savedQuery = owner?.session?.value?.saveQuery
                             },
                             onDownloadMedia = {}, onToggleLike = {}, onOpenCreatorProfile = {},
-                            onApplyTag = { _, _, _ -> }, onRecoverMedia = { _, _, _ -> null },
+                            onApplyTag = { _, _, _ -> }, onRecoverMedia = { _, _, _, _ -> null },
                             onLoadMore = {}, onDismiss = {}, onRestorationUnavailable = {},
                         ),
                         screenCallbacks = ViewerScreenCallbacks(

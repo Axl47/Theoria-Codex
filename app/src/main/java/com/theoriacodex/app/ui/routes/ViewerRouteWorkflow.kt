@@ -87,10 +87,12 @@ internal class ViewerRouteWorkflow(
         return resolved
     }
 
+    /** Recovers working media for [post]; a result that no longer [stillApplies] is dropped before anything records it. */
     suspend fun recoverMedia(
         post: Post,
         failedMedia: ImageRef,
         streamSource: ViewerStreamSource,
+        stillApplies: () -> Boolean = { true },
     ): Post? {
         val recovered = try {
             withContext(providerDispatcher) { recoverRemoteMedia(sources.registry, post, failedMedia) }
@@ -99,6 +101,7 @@ internal class ViewerRouteWorkflow(
         } catch (_: Exception) {
             null
         } ?: return null
+        if (!stillApplies()) return null
         persistResolvedPost(recovered, streamSource)
         return recovered
     }

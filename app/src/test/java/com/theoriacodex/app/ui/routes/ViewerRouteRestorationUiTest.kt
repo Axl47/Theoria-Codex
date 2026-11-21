@@ -242,7 +242,7 @@ class ViewerRouteRestorationUiTest {
                         effectCallbacks = ViewerRouteEffectCallbacks(
                             onSavePost = { _, _ -> }, onDownloadMedia = {}, onToggleLike = {},
                             onOpenCreatorProfile = {}, onApplyTag = { _, _, _ -> },
-                            onRecoverMedia = { _, _, _ -> onRecoverMedia() }, onLoadMore = {},
+                            onRecoverMedia = { _, _, _, _ -> onRecoverMedia() }, onLoadMore = {},
                             onDismiss = onDismiss, onRestorationUnavailable = {},
                         ),
                         screenCallbacks = ViewerScreenCallbacks(

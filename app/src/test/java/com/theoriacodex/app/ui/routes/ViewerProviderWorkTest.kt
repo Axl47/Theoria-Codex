@@ -151,6 +151,8 @@ class ViewerProviderWorkTest {
             assertEquals(2, dispatchers.size)
             dispatchers.forEach { assertSame(Dispatchers.Default, it) }
             assertSame(callerDispatcher, currentCoroutineContext()[ContinuationInterceptor])
+            // A recovery the Viewer no longer wants is dropped instead of recorded.
+            assertEquals(null, workflow.recoverMedia(post, post.preview, ViewerStreamSource.RELATED) { false })
 
             suspendResolution = true
             val job = launch { workflow.resolvePost(post.id, ViewerStreamSource.RELATED) }
