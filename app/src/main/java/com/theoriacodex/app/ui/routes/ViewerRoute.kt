@@ -613,6 +613,11 @@ private fun ViewerViewModel.hasNoPage(post: Post): Boolean = state.value.pages.n
 /** Prevents buffered or suspended effects from crossing a Viewer session replacement. */
 internal fun ViewerEffect.isCurrentFor(state: ViewerUiState): Boolean = session == state.session
 
+/**
+ * Asks the source for working media for [post] and applies the result. A source may return [post] itself with only the
+ * failed media refreshed, so the result is dropped when the page's post changed meanwhile (its lookup finished):
+ * applying it would replace the newer post with the older one.
+ */
 private suspend fun recoverAndApplyMedia(
     viewerOwner: ViewerViewModel,
     post: Post,
@@ -630,6 +635,6 @@ private suspend fun recoverAndApplyMedia(
     } ?: return
     val currentSession = viewerOwner.session.value
     if (currentSession?.sessionId != session.sessionId) return
-    if (viewerOwner.hasNoPage(post)) return
+    if (viewerOwner.state.value.pages.none { page -> page.post == post }) return
     viewerOwner.applyResolvedPost(recovered)
 }
