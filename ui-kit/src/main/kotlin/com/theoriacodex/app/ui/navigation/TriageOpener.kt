@@ -12,9 +12,36 @@ import com.theoriacodex.domain.model.PostId
 
 /**
  * The feed a triage deck works through: [source] with [feedKey], the same key the Viewer's launch context
- * carries (a search's query hash, or `codex:<id>` for a Codex or Likes).
+ * carries (a search's query hash, or `codex:<id>` for a Codex or Likes), and what a left swipe does there.
  */
-data class TriageRequest(val source: ViewerStreamSource, val feedKey: String)
+data class TriageRequest(
+    val source: ViewerStreamSource,
+    val feedKey: String,
+    val mode: TriageMode = TriageMode.Browse,
+) {
+    /** The Codex a [ViewerStreamSource.CODEX] request names, from its `codex:<id>` feed key. */
+    val codexId: String?
+        get() = feedKey.takeIf { source == ViewerStreamSource.CODEX && it.startsWith(CODEX_FEED_PREFIX) }
+            ?.removePrefix(CODEX_FEED_PREFIX)
+
+    companion object {
+        /** The deck over Codex [codexId]'s posts. */
+        fun codex(codexId: String, mode: TriageMode = TriageMode.Browse) =
+            TriageRequest(ViewerStreamSource.CODEX, CODEX_FEED_PREFIX + codexId, mode)
+    }
+}
+
+/** What a left swipe in the deck does. */
+sealed interface TriageMode {
+    /** Left passes over the card. */
+    data object Browse : TriageMode
+
+    /**
+     * Left takes the card out of the Codex the request names. With [alsoIn], the deck holds only that Codex's posts
+     * that one of those Codices also holds: what cleaning the Codex against them would remove.
+     */
+    data class RemoveFromCodex(val alsoIn: Set<String> = emptySet()) : TriageMode
+}
 
 /**
  * What a feed's grid shows at the moment Triage is tapped, handed to the deck as a grid hands its posts to the Viewer:
@@ -31,6 +58,11 @@ data class TriageSeed(
     /** Keeps the posts the grid would show given the lengths known so far, which it reads only while [lengthFilterActive]. */
     fun filter(posts: List<Post>, knownDurationMsByPostId: Map<PostId, Long>): List<Post> =
         filterInRange(posts, filters.dateRange, knownDurationMsByPostId)
+
+    companion object {
+        /** The seed for a deck opened from no grid, whose feed finds its own posts, as cleaning's Review does. */
+        val Unfiltered = TriageSeed(emptyList(), SearchVisibilityFilters(), lengthFilterActive = false) { posts, _, _ -> posts }
+    }
 }
 
 /** Opens the triage deck from a feed's menu. Read from [LocalTriageOpener]. */
@@ -46,17 +78,24 @@ val LocalTriageOpener = staticCompositionLocalOf { TriageOpener.None }
 
 /**
  * The action for a feed's filter sheet ([com.theoriacodex.app.ui.components.FeedFilterSheet]'s `onTriage`): opens
- * the deck over [feedKey] from [source], seeded with what the grid shows when it is tapped ([seed]). Null, so the
- * sheet offers no Triage, when there is no [feedKey] or the grid shows no posts, or when nothing in the app provides
- * a [LocalTriageOpener].
+ * the deck over [feedKey] from [source] in [mode], seeded with what the grid shows when it is tapped ([seed]). Null,
+ * so the sheet offers no Triage, when there is no [feedKey] or the grid shows no posts, or when nothing in the app
+ * provides a [LocalTriageOpener].
  */
 @Composable
-fun rememberTriageAction(source: ViewerStreamSource, feedKey: String?, seed: TriageSeed): (() -> Unit)? {
+fun rememberTriageAction(
+    source: ViewerStreamSource,
+    feedKey: String?,
+    seed: TriageSeed,
+    mode: TriageMode = TriageMode.Browse,
+): (() -> Unit)? {
     val opener = LocalTriageOpener.current
     val latest = rememberUpdatedState(seed)
     val hasPosts = seed.posts.isNotEmpty()
-    return remember(opener, source, feedKey, hasPosts) {
+    return remember(opener, source, feedKey, hasPosts, mode) {
         if (opener === TriageOpener.None || feedKey.isNullOrBlank() || !hasPosts) null
-        else ({ opener.openTriage(TriageRequest(source, feedKey), latest.value) })
+        else ({ opener.openTriage(TriageRequest(source, feedKey, mode), latest.value) })
     }
 }
+
+private const val CODEX_FEED_PREFIX = "codex:"

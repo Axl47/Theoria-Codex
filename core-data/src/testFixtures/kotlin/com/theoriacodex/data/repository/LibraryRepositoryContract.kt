@@ -212,6 +212,38 @@ abstract class LibraryRepositoryContract {
     }
 
     @Test
+    fun `recents removes one entry and restores it in place`() = runTest {
+        var now = 100L
+        val repository = createRecentsRepository(clock = { now++ })
+        val post = repositoryTestPost(id = "single")
+        val query = Query(
+            mode = QueryMode.Source(SourceKey.PIXIV),
+            includeTags = listOf("single"),
+            excludeTags = emptyList(),
+            sort = SortMode.NEWEST,
+            dateRange = null,
+            minScore = null,
+        )
+        repository.recordWatchedPost(post, ViewerStreamSource.SEARCH, "q", RecentPostSection.WATCHED)
+        repository.recordWatchedPost(post, ViewerStreamSource.CODEX, "c", RecentPostSection.CODEX)
+        repository.recordSearch(query, "kept")
+        repository.recordSearch(query.withIncludeTermsAsRequired(listOf(SearchTerm("gone"))), "gone")
+        val watched = repository.observeWatchedPosts().first().single { it.section == RecentPostSection.WATCHED }
+        val search = repository.observeSearches().first().single { it.queryHash == "gone" }
+
+        repository.removeWatchedPost(post.id, RecentPostSection.WATCHED)
+        repository.removeSearch("gone")
+
+        assertEquals(listOf(RecentPostSection.CODEX), repository.observeWatchedPosts().first().map { it.section })
+        assertEquals(listOf("kept"), repository.observeSearches().first().map { it.queryHash })
+
+        repository.restoreEntries(listOf(watched), listOf(search))
+
+        assertEquals(watched, repository.observeWatchedPosts().first().single { it.section == RecentPostSection.WATCHED })
+        assertEquals(listOf("gone", "kept"), repository.observeSearches().first().map { it.queryHash })
+    }
+
+    @Test
     fun `recents preserves a posts section when it is reopened from history`() = runTest {
         var now = 100L
         val repository = createRecentsRepository(clock = { now++ })

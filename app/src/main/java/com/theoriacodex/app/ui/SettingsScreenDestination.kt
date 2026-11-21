@@ -7,7 +7,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshotFlow
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsPage
+import com.theoriacodex.app.settings.SettingsSheet
 import com.theoriacodex.app.settings.StatsActions
+import com.theoriacodex.app.settings.rememberSettingsBackupEntry
 import com.theoriacodex.app.settings.sites.rememberCustomSitesEntry
 import com.theoriacodex.app.ui.routes.SettingsDestinationStateBoundary
 import kotlinx.coroutines.flow.first
@@ -23,8 +25,9 @@ internal fun SettingsScreenDestination(shell: TheoriaShell) {
     val entryPage = rememberSaveable { owner.state.value.page }
     LaunchedEffect(owner) { owner.onAction(SettingsAction.SettingsEntered) }
     SettingsDestinationStateBoundary(
-        owner, shell.routes.search.current, libraryStorageSummary(shell.transfers),
+        owner, libraryStorageSummary(shell.transfers),
         sites = rememberCustomSitesEntry(shell.container),
+        backup = rememberSettingsBackupEntry(shell.transfers),
         statsActions = remember(shell) {
             StatsActions(shell::openStatisticsPost, shell::shareStats, shell::readStatsFile, shell::previewStatisticsPost, shell::downloadStats)
         },
@@ -35,9 +38,12 @@ internal fun SettingsScreenDestination(shell: TheoriaShell) {
     )
 }
 
-/** Opens Settings at [page] above the current screen; a jump during startup waits for it to finish. */
-internal fun TheoriaShell.openSettings(page: SettingsPage = SettingsPage.HOME) {
-    owners.settings.onAction(SettingsAction.OpenPage(page))
+/**
+ * Opens Settings at [page], with [sheet] over its home, above the current screen; a jump during startup
+ * waits for it to finish.
+ */
+internal fun TheoriaShell.openSettings(page: SettingsPage = SettingsPage.HOME, sheet: SettingsSheet? = null) {
+    owners.settings.onAction(SettingsAction.OpenPage(page, sheet))
     showSettingsRoute()
 }
 

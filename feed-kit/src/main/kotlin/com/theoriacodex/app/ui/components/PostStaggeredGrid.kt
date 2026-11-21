@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import androidx.compose.runtime.remember
 import com.theoriacodex.app.related.RelatedFeedEntry
 import com.theoriacodex.app.related.RelatedFeedProjection
@@ -39,6 +40,7 @@ fun FeedGrid(
     footerMessage: String?,
     modifier: Modifier = Modifier.fillMaxSize(),
     showPagingTile: Boolean = false,
+    divider: FeedGridDivider? = null,
     shelf: @Composable LazyStaggeredGridItemScope.(RelatedFeedEntry.ShelfEntry) -> Unit,
     post: @Composable (visibleIndex: Int, post: Post) -> Unit,
 ) {
@@ -49,12 +51,19 @@ fun FeedGrid(
         modifier = modifier,
         showPagingTile = showPagingTile,
         footerMessage = footerMessage,
+        divider = divider,
         postContent = { _, entry -> post(visibleIndexById.getValue(entry.id), entry) },
         shelfContent = shelf,
     )
 }
 
-/** Feed projection that inserts one full-line transient section without rewriting posts. */
+/** A full-line item drawn before the post [beforePost], such as Creator's "new since last visit" divider. */
+class FeedGridDivider(val beforePost: PostId, val content: @Composable () -> Unit)
+
+/**
+ * Feed projection that inserts one full-line transient section without rewriting posts, and [divider] before its
+ * post when that post is shown and is not the first.
+ */
 @Composable
 fun TwoColumnProjectedPostStaggeredGrid(
     projection: RelatedFeedProjection,
@@ -62,46 +71,70 @@ fun TwoColumnProjectedPostStaggeredGrid(
     modifier: Modifier = Modifier,
     showPagingTile: Boolean = false,
     footerMessage: String? = null,
+    divider: FeedGridDivider? = null,
     postContent: @Composable LazyStaggeredGridItemScope.(canonicalIndex: Int, post: Post) -> Unit,
     shelfContent: @Composable LazyStaggeredGridItemScope.(RelatedFeedEntry.ShelfEntry) -> Unit,
     footerContent: (@Composable () -> Unit)? = null,
 ) {
-    val shelfIds = remember(projection) {
-        projection.entries.map { (it as? RelatedFeedEntry.ShelfEntry)?.state?.requestOrNull?.seed?.id?.let(ViewerReturnShelfId::Related) }
+    val split = remember(projection, divider?.beforePost) {
+        divider?.beforePost?.let { id ->
+            projection.entries.indexOfFirst { (it as? RelatedFeedEntry.PostEntry)?.post?.id == id }.takeIf { it > 0 }
+        }
     }
-    val posts = remember(projection) { projection.entries.map { (it as? RelatedFeedEntry.PostEntry)?.post } }
+    val shelfIds = remember(projection, split) {
+        projection.entries.map { (it as? RelatedFeedEntry.ShelfEntry)?.state?.requestOrNull?.seed?.id?.let(ViewerReturnShelfId::Related) }
+            .withGapAt(split)
+    }
+    val posts = remember(projection, split) { projection.entries.map { (it as? RelatedFeedEntry.PostEntry)?.post }.withGapAt(split) }
     AdaptivePostGrid(posts = posts, state = state, modifier = modifier, shelfIds = shelfIds) {
-        itemsIndexed(
-            items = projection.entries,
-            key = { _, entry ->
-                when (entry) {
-                    is RelatedFeedEntry.PostEntry -> "post:${entry.post.id.source.id}:${entry.post.id.sourcePostId}"
-                    is RelatedFeedEntry.ShelfEntry -> {
-                        val seed = entry.state.requestOrNull?.seed?.id
-                        "related:${seed?.source?.id}:${seed?.sourcePostId}"
-                    }
-                }
-            },
-            // Single-lane posts and the full-line related shelf must not reuse each other's compositions.
-            contentType = { _, entry -> entry.javaClass },
-            span = { _, entry ->
-                if (entry is RelatedFeedEntry.ShelfEntry) {
-                    StaggeredGridItemSpan.FullLine
-                } else {
-                    StaggeredGridItemSpan.SingleLane
-                }
-            },
-        ) { _, entry ->
-            when (entry) {
-                is RelatedFeedEntry.PostEntry -> postContent(entry.canonicalIndex, entry.post)
-                is RelatedFeedEntry.ShelfEntry -> shelfContent(entry)
-            }
+        if (split == null || divider == null) {
+            projectedEntries(projection.entries, postContent, shelfContent)
+        } else {
+            projectedEntries(projection.entries.subList(0, split), postContent, shelfContent)
+            item(key = "feed-divider", contentType = "feed-divider", span = StaggeredGridItemSpan.FullLine) { divider.content() }
+            projectedEntries(projection.entries.subList(split, projection.entries.size), postContent, shelfContent)
         }
         if (showPagingTile || footerMessage != null) {
             item(span = StaggeredGridItemSpan.FullLine) { FeedPagingTile(message = footerMessage) }
         }
         if (footerContent != null) {
             item(key = "feed-footer", span = StaggeredGridItemSpan.FullLine) { footerContent() }
+        }
+    }
+}
+
+/** A null placed at [index], for a grid item that is not a post; unchanged when [index] is null. */
+private fun <T> List<T?>.withGapAt(index: Int?): List<T?> = if (index == null) this else toMutableList().apply { add(index, null) }
+
+private fun LazyStaggeredGridScope.projectedEntries(
+    entries: List<RelatedFeedEntry>,
+    postContent: @Composable LazyStaggeredGridItemScope.(canonicalIndex: Int, post: Post) -> Unit,
+    shelfContent: @Composable LazyStaggeredGridItemScope.(RelatedFeedEntry.ShelfEntry) -> Unit,
+) {
+    itemsIndexed(
+        items = entries,
+        key = { _, entry ->
+            when (entry) {
+                is RelatedFeedEntry.PostEntry -> "post:${entry.post.id.source.id}:${entry.post.id.sourcePostId}"
+                is RelatedFeedEntry.ShelfEntry -> {
+                    val seed = entry.state.requestOrNull?.seed?.id
+                    "related:${seed?.source?.id}:${seed?.sourcePostId}"
+                }
+            }
+        },
+        // Single-lane posts and the full-line related shelf must not reuse each other's compositions.
+        contentType = { _, entry -> entry.javaClass },
+        span = { _, entry ->
+            if (entry is RelatedFeedEntry.ShelfEntry) {
+                StaggeredGridItemSpan.FullLine
+            } else {
+                StaggeredGridItemSpan.SingleLane
+            }
+        },
+    ) { _, entry ->
+        when (entry) {
+            is RelatedFeedEntry.PostEntry -> postContent(entry.canonicalIndex, entry.post)
+            is RelatedFeedEntry.ShelfEntry -> shelfContent(entry)
         }
     }
 }

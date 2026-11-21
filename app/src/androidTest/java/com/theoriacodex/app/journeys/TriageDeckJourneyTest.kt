@@ -5,6 +5,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.swipeUp
 import com.theoriacodex.app.codex.profileScopedCodexId
@@ -15,6 +16,7 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.first
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
@@ -56,5 +58,27 @@ class TriageDeckJourneyTest : AppJourneyFixture() {
         val liked = io { container.data.likesRepository.observeLikedPostIds("profile-main").first() }.single()
         val saved = io { container.content.observeCodexItems(codexId).first() }.single().postId
         assertNotEquals(liked, saved)
+    }
+
+    @Test
+    fun onACodexSwipingLeftRemovesThePostAndUndoPutsItBack() {
+        val codex = io {
+            container.content.ensureCodex(profileScopedCodexId("profile-main", "triage-remove"), "Removal deck")
+                .also { container.content.addItems(it.codexId, posts.getValue(SourceKey.PIXIV).take(3)) }
+        }
+        val original = io { container.content.observeCodexItems(codex.codexId).first().sortedBy { it.savedAtEpochMs } }
+        launch()
+        library(LibrarySection.Codices)
+        activate(compose.onNodeWithText("Removal deck"))
+        activate(compose.onNodeWithText("Triage"))
+        val deck = compose.onNodeWithTag("triage-deck")
+        compose.waitUntil(10_000) { deck.isDisplayed() }
+
+        deck.performTouchInput { swipeLeft() }
+        compose.waitUntil(10_000) { io { container.content.observeCodexItems(codex.codexId).first().size == 2 } }
+
+        activate(compose.onNodeWithTag("triage-undo"))
+        compose.waitUntil(10_000) { io { container.content.observeCodexItems(codex.codexId).first().size == 3 } }
+        assertEquals(original, io { container.content.observeCodexItems(codex.codexId).first().sortedBy { it.savedAtEpochMs } })
     }
 }

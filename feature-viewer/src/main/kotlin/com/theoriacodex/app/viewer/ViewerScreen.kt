@@ -67,7 +67,7 @@ fun ViewerScreen(
     val opening by remember(returning, returnProgress) { derivedStateOf { !returning && returnProgress.value > 0f } }
     val dismissDrag = remember { ViewerDismissDrag() }
     val activity = LocalContext.current.viewerActivity()
-    val quality = remember(config.videoQuality) { mutableStateOf(config.videoQuality) }
+    val quality = rememberViewerVideoQuality(config.videoQuality, host.onVideoQualitySelected)
     val qualityHeight = remember(uiState.currentMedia?.key) { mutableStateOf<Int?>(null) }
     val pendingPostId = remember(uiState.session) { mutableStateOf<PostId?>(null) }
     val navigation = remember(uiState.pages, uiState.currentPageIndex, uiState.related.navigation, uiState.related.extraPostIds, pendingPostId.value) {

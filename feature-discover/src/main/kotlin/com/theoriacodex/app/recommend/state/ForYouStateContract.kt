@@ -4,12 +4,16 @@ import com.theoriacodex.app.feed.FeedCursor
 import com.theoriacodex.app.recommend.ForYouFeedResult
 import com.theoriacodex.app.feed.mergeFeedPosts
 import com.theoriacodex.app.feed.mergeFeedStatuses
+import com.theoriacodex.app.recommend.ForYouUndoAnchor
+import com.theoriacodex.app.recommend.ForYouWhyTarget
 import com.theoriacodex.app.recommend.buildForYouSeedId
+import com.theoriacodex.app.recommend.hiddenLabel
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.related.relatedViewerContext
 import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.requiresAccount
+import com.theoriacodex.app.ui.undo.UndoAnchor
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.ViewerLaunchContext
@@ -119,6 +123,12 @@ sealed interface ForYouAction {
         val sortMode: SortMode,
     ) : ForYouAction
     data object BlacklistCurrentSeed : ForYouAction
+    /** Hides one [tag] of a shelf on [source] for the active profile, from the shelf's why panel. */
+    data class HideTag(val source: SourceKey, val tag: String) : ForYouAction
+    /** Unhides a struck [tag] on [source] for the active profile, from the why panel. */
+    data class UnhideTag(val source: SourceKey, val tag: String) : ForYouAction
+    /** The why panel over [target] closed; once its tag writes land, the feed it explained catches up. */
+    data class CloseWhy(val target: ForYouWhyTarget) : ForYouAction
     data class UndoSeedBlacklist(
         val profileId: String,
         val entries: List<ForYouBlacklistEntry>,
@@ -217,9 +227,12 @@ sealed interface ForYouEffect {
         override val request: ForYouRequestIdentity? = null
     }
 
+    /** Tags were hidden; the shell offers Undo labelled [label] where [anchor] draws it. */
     data class SeedHidden(
         val profileId: String,
         val entries: List<ForYouBlacklistEntry>,
+        val label: String = hiddenLabel(entries),
+        val anchor: UndoAnchor = ForYouUndoAnchor,
     ) : ForYouEffect {
         override val request: ForYouRequestIdentity? = null
     }
@@ -272,6 +285,9 @@ fun ForYouUiState.reduce(action: ForYouAction): ForYouTransition {
         ForYouAction.RefreshSections,
         is ForYouAction.PinSection,
         is ForYouAction.DismissSection,
+        is ForYouAction.HideTag,
+        is ForYouAction.UnhideTag,
+        is ForYouAction.CloseWhy,
         -> unchanged()
         is ForYouAction.RefreshCompleted -> refreshCompleted(action)
 

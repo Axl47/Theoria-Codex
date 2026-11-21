@@ -1,5 +1,6 @@
 package com.theoriacodex.app.settings.sites
 
+import com.theoriacodex.data.repository.SettingDestinations
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,7 +12,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -34,9 +34,12 @@ import com.theoriacodex.app.settings.SettingsHeader
 import com.theoriacodex.app.settings.SettingsPageColumn
 import com.theoriacodex.app.settings.SettingsRow
 import com.theoriacodex.app.settings.SettingsRowDivider
+import com.theoriacodex.app.ui.components.EmptyState
+import com.theoriacodex.app.ui.undo.DeferredRemovalRow
+import com.theoriacodex.app.ui.undo.SurfaceLeaveEffect
 
 /** The pages above anything opened from the Sites list. */
-internal val SITES_PATH = SETTINGS_PATH + "Sites"
+internal val SITES_PATH = SETTINGS_PATH + SettingDestinations.Sites.title
 
 /** Settings → Sites: built-in and user-added sites, or the page or add/edit form while one is open. */
 @Composable
@@ -46,6 +49,8 @@ fun CustomSitesScreen(
     onAction: (CustomSitesAction) -> Unit,
     onBack: () -> Unit,
 ) {
+    // Leaving Sites completes a removal still offered for Undo.
+    SurfaceLeaveEffect { onAction(CustomSitesAction.CommitRemovals) }
     BackHandler(enabled = state.form != null) { onAction(CustomSitesAction.CloseForm) }
     BackHandler(enabled = state.form == null && state.openBuiltIn != null) { onAction(CustomSitesAction.CloseBuiltIn) }
     state.verification?.let { verification ->
@@ -60,7 +65,6 @@ fun CustomSitesScreen(
             EditSitePage(form, site, state.retests[site.sourceId], site.sourceId in state.workingSiteIds, onAction)
         }
     }
-    RemoveSiteDialog(state, onAction)
     ReconnectDialog(state.form, onAction)
 }
 
@@ -78,7 +82,7 @@ private fun SitesListPage(
     onBack: () -> Unit,
 ) {
     SettingsPageColumn {
-        SettingsHeader("Sites", onBack, SETTINGS_PATH) {
+        SettingsHeader(SettingDestinations.Sites.title, onBack, SETTINGS_PATH) {
             IconButton(onClick = { onAction(CustomSitesAction.StartAdd) }) { Icon(Icons.Default.Add, "Add site") }
         }
         state.notice?.let { AnnouncedText(it, Modifier.padding(horizontal = 4.dp), error = true) }
@@ -97,19 +101,24 @@ private fun SitesListPage(
             }
         }
         if (state.sites.isEmpty()) {
-            Text(
-                "Add a booru by its address, like safebooru.org. Theoria checks which kind of site it is " +
-                    "and adds it as a source.",
-                modifier = Modifier.padding(horizontal = 4.dp),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Button(onClick = { onAction(CustomSitesAction.StartAdd) }) { Text("Add site") }
+            EmptyState("No added sites")
         } else {
-            SettingsGroup("Added", action = testAll.takeIf { state.builtInSites.isEmpty() }) {
-                state.sites.forEachIndexed { index, site ->
-                    if (index > 0) SettingsRowDivider()
-                    SiteRow(site, state.retests[site.sourceId], site.sourceId in state.workingSiteIds, onAction)
-                }
+            AddedSitesGroup(state, testAll.takeIf { state.builtInSites.isEmpty() }, onAction)
+        }
+    }
+}
+
+/** The added sites; a removed one leaves its Undo in its row until the removal commits. */
+@Composable
+private fun AddedSitesGroup(state: CustomSitesUiState, testAll: (@Composable () -> Unit)?, onAction: (CustomSitesAction) -> Unit) {
+    SettingsGroup("Added", action = testAll) {
+        state.sites.forEachIndexed { index, site ->
+            if (index > 0) SettingsRowDivider()
+            val removal = state.removals[site.sourceId]
+            if (removal != null) {
+                DeferredRemovalRow(removal, onAct = { onAction(CustomSitesAction.ActOnRemoval(site.sourceId)) })
+            } else {
+                SiteRow(site, state.retests[site.sourceId], site.sourceId in state.workingSiteIds, onAction)
             }
         }
     }
@@ -189,26 +198,6 @@ internal fun WorkingMark() {
         contentDescription = "Working",
         modifier = Modifier.size(24.dp).semantics { liveRegion = LiveRegionMode.Polite },
         tint = MaterialTheme.colorScheme.primary,
-    )
-}
-
-@Composable
-private fun RemoveSiteDialog(state: CustomSitesUiState, onAction: (CustomSitesAction) -> Unit) {
-    val site = state.removeTarget ?: return
-    AlertDialog(
-        onDismissRequest = { onAction(CustomSitesAction.DismissRemove) },
-        title = { Text("Remove site?") },
-        text = { Text(removeConfirmationText(site.label)) },
-        dismissButton = {
-            TextButton(onClick = { onAction(CustomSitesAction.DismissRemove) }, enabled = !state.removing) {
-                Text("Cancel")
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onAction(CustomSitesAction.ConfirmRemove) }, enabled = !state.removing) {
-                Text("Remove", color = MaterialTheme.colorScheme.error)
-            }
-        },
     )
 }
 

@@ -14,30 +14,29 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NewReleases
-import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.TouchApp
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,7 +47,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.videoQualityLabel
-import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.statistics.StatisticsSummary
 import com.theoriacodex.app.statistics.allProfileCodices
 import com.theoriacodex.app.statistics.shareOverall
@@ -57,12 +55,13 @@ import com.theoriacodex.app.ui.components.NameEntryDialog
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.app.ui.components.ActionMenuSheet
 import com.theoriacodex.data.repository.ScenarioPreset
-import com.theoriacodex.data.repository.SourceWeightSettings
+import com.theoriacodex.data.repository.SettingDestinations
+import com.theoriacodex.data.repository.SettingToggles
+import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.data.storage.CorruptionRecovery
-import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.launch
 
-private enum class SettingsSheet { PROFILE, SOURCE_MIX, PLAYBACK, CONTROLS }
+private val STORAGE_TOGGLES = listOf(SettingToggles.KeepMediaOffline, SettingToggles.FindAnimationDurations)
 
 /**
  * Settings hub: each row shows its current value; short choices use sheets, larger tasks use pages.
@@ -73,9 +72,9 @@ fun SettingsScreen(
     state: SettingsUiState,
     onAction: (SettingsAction) -> Unit,
     statistics: StatisticsSummary = StatisticsSummary(),
-    searchSources: Set<SourceKey> = emptySet(),
     storageSummary: String? = null,
     sites: SettingsSitesEntry? = null,
+    backup: SettingsBackupEntry? = null,
     statsActions: StatsActions = StatsActions(),
     diagnostics: SettingsDiagnosticsEntry? = null,
     storageTools: (@Composable () -> Unit)? = null,
@@ -84,20 +83,17 @@ fun SettingsScreen(
 ) {
     val openHome = { if (state.page == closesFrom) onClose() else onAction(SettingsAction.OpenPage(SettingsPage.HOME)) }
     val openPost = rememberPostOpener(statsActions.openPost)
-    val scope = rememberCoroutineScope()
-    val chooseStatsFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) scope.launch { statsActions.readFile(uri.toString())?.let { onAction(SettingsAction.SetStatsComparison(it)) } }
-    }
+    val choosingStatsFile = state.page == SettingsPage.STATS_COMPARE && state.statsComparison == null
+    StatsFilePicker(choosingStatsFile, statsActions, onAction, openHome)
     BackHandler(enabled = state.page != SettingsPage.HOME, onBack = openHome)
     AnimatedContent(
-        targetState = state.page,
+        // Home stays behind the file picker, which covers it until a file is chosen.
+        targetState = if (choosingStatsFile) SettingsPage.HOME else state.page,
         transitionSpec = { depthTransform(forward = targetState != SettingsPage.HOME) },
         label = "Settings page",
     ) { page ->
         when (page) {
-            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, searchSources, storageSummary, sites, diagnostics != null, onClose) {
-                chooseStatsFile.launch(arrayOf("application/json", "application/octet-stream", "text/plain"))
-            }
+            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, storageSummary, sites, backup, diagnostics != null, onClose)
             SettingsPage.SITES -> sites?.page?.invoke(
                 openHome,
                 BuiltInAccounts(
@@ -105,14 +101,17 @@ fun SettingsScreen(
                     controls = { BuiltInAccountControls(it, state.accounts, onAction) },
                 ),
             )
-            SettingsPage.HIDDEN_TAGS -> HiddenTagsPage(state, onAction, openHome)
             SettingsPage.STORAGE -> StoragePage(state, onAction, storageTools, openHome)
+            SettingsPage.BACKUP -> backup?.let { BackupPage(it, openHome) }
             SettingsPage.STATS -> StatsScreen(statistics, openPost, openHome)
             SettingsPage.STATS_SHARE -> StatsSharePreview(
                 statistics.profiles, statistics.shareOverall(), state.activeProfile.profileId, statsActions, openPost, openHome,
             )
             SettingsPage.STATS_COMPARE -> state.statsComparison?.let { theirs ->
-                val close = { onAction(SettingsAction.SetStatsComparison(null)) }
+                val close = {
+                    onAction(SettingsAction.SetStatsComparison(null))
+                    if (closesFrom == SettingsPage.STATS_COMPARE) onClose()
+                }
                 BackHandler(onBack = close)
                 StatsComparisonScreen(
                     allProfileCodices(statistics.profiles), statistics.shareOverall(), theirs, state.availableSources,
@@ -130,32 +129,33 @@ private fun SettingsHome(
     state: SettingsUiState,
     statistics: StatisticsSummary,
     onAction: (SettingsAction) -> Unit,
-    searchSources: Set<SourceKey>,
     storageSummary: String?,
     sites: SettingsSitesEntry?,
+    backup: SettingsBackupEntry?,
     showDiagnostics: Boolean,
     onClose: () -> Unit,
-    onCompareStats: () -> Unit,
 ) {
-    var sheet by rememberSaveable { mutableStateOf<SettingsSheet?>(null) }
+    var profileMenu by rememberSaveable { mutableStateOf(false) }
     var showAddProfile by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<RecommendationProfile?>(null) }
     val open = { page: SettingsPage -> onAction(SettingsAction.OpenPage(page)) }
     SettingsPageColumn {
-        SettingsHeader("Settings", onBack = onClose)
-        ProfileCard(state, onAction, onAdd = { showAddProfile = true }, onMenu = { sheet = SettingsSheet.PROFILE })
+        SettingsHeader(SettingDestinations.Home.title, onBack = onClose)
+        ProfileCard(state, onAction, onAdd = { showAddProfile = true }, onMenu = { profileMenu = true })
         SettingsGroup("Stats") {
-            SettingsRow("Your stats", statsSummary(statistics), Icons.Default.BarChart, onClick = {
+            SettingsRow(SettingDestinations.Stats.title, statsSummary(statistics), Icons.Default.BarChart, onClick = {
                 open(SettingsPage.STATS)
             })
             SettingsRowDivider()
-            SettingsRow("Share my stats", "Choose what to include and send it as a file", Icons.Default.Share, onClick = {
+            SettingsRow(SettingDestinations.ShareStats.title, icon = Icons.Default.Share, onClick = {
                 open(SettingsPage.STATS_SHARE)
             })
             SettingsRowDivider()
-            SettingsRow("Compare with a friend", "Open a stats file someone sent you", Icons.AutoMirrored.Filled.CompareArrows, onClick = onCompareStats)
+            SettingsRow(SettingDestinations.CompareStats.title, "Open a stats file someone sent you", Icons.AutoMirrored.Filled.CompareArrows, onClick = {
+                open(SettingsPage.STATS_COMPARE)
+            })
         }
-        SettingsHomeGroups(state, onAction, searchSources, storageSummary, sites, showDiagnostics, { sheet = it }, open)
+        SettingsHomeGroups(state, onAction, storageSummary, sites, backup, showDiagnostics) { sheet -> onAction(SettingsAction.OpenPage(SettingsPage.HOME, sheet)) }
         if (state.showDeveloperScenarios) DeveloperScenarios(state, onAction)
     }
     if (showAddProfile) {
@@ -180,8 +180,14 @@ private fun SettingsHome(
             },
         )
     }
-    sheet?.let {
-        SettingsHomeSheet(it, state, onAction, searchSources, { renameTarget = state.activeProfile }) { sheet = null }
+    if (profileMenu) ProfileMenuSheet(state, onAction, { renameTarget = state.activeProfile }) { profileMenu = false }
+    state.sheet?.let { sheet ->
+        ActionMenuSheet({ onAction(SettingsAction.OpenPage(SettingsPage.HOME)) }) {
+            when (sheet) {
+                SettingsSheet.DOWNLOADS -> DownloadPreferencesSection(state, onAction)
+                SettingsSheet.CONTROLS -> PreferencesSection(state, onAction)
+            }
+        }
     }
 }
 
@@ -189,26 +195,17 @@ private fun SettingsHome(
 private fun SettingsHomeGroups(
     state: SettingsUiState,
     onAction: (SettingsAction) -> Unit,
-    searchSources: Set<SourceKey>,
     storageSummary: String?,
     sites: SettingsSitesEntry?,
+    backup: SettingsBackupEntry?,
     showDiagnostics: Boolean,
     onSheet: (SettingsSheet) -> Unit,
-    open: (SettingsPage) -> Unit,
 ) {
-    SettingsGroup("Recommendations") {
-        SettingsRow("Hidden tags", hiddenTagsSummary(state), Icons.Default.VisibilityOff, onClick = {
-            open(SettingsPage.HIDDEN_TAGS)
-        })
-        SettingsRowDivider()
-        SettingsRow("Source mix", sourceMixSummary(state, searchSources), Icons.Default.Tune, onClick = {
-            onSheet(SettingsSheet.SOURCE_MIX)
-        })
-    }
+    val open = { page: SettingsPage -> onAction(SettingsAction.OpenPage(page)) }
     SettingsGroup("Sources") {
         if (sites != null) {
             SettingsRow(
-                "Sites", "${sites.summary} · ${sourceAccountsSummary(state.accounts)}", Icons.Default.Public,
+                SettingDestinations.Sites.title, "${sites.summary} · ${sourceAccountsSummary(state.accounts)}", Icons.Default.Public,
                 onClick = { open(SettingsPage.SITES) },
             )
             SettingsRowDivider()
@@ -216,73 +213,89 @@ private fun SettingsHomeGroups(
         OpenLinksRow()
     }
     SettingsGroup("Viewing") {
-        SettingsRow("Playback & downloads", playbackSummary(state), Icons.Default.PlayCircle, onClick = {
-            onSheet(SettingsSheet.PLAYBACK)
-        })
-        SettingsRowDivider()
-        SettingsRow("Controls", "Search bar, seeking, swipes, rotation", Icons.Default.TouchApp, onClick = {
+        SettingsRow(SettingDestinations.Controls.title, "Search bar, seeking, swipes, rotation", Icons.Default.TouchApp, onClick = {
             onSheet(SettingsSheet.CONTROLS)
         })
     }
     SettingsGroup("Storage & app") {
         SettingsRow(
-            "Storage & caching",
+            SettingDestinations.Storage.title,
             storageSummary ?: cacheSummary(state.cacheSnapshot.thumbnailCount, state.cacheSnapshot.fullImageCount),
             Icons.Default.Storage,
             onClick = { open(SettingsPage.STORAGE) },
         )
         SettingsRowDivider()
+        SettingsRow(SettingDestinations.Downloads.title, downloadsSummary(state), Icons.Default.Download, onClick = {
+            onSheet(SettingsSheet.DOWNLOADS)
+        })
+        backup?.let {
+            SettingsRowDivider()
+            SettingsRow(
+                SettingDestinations.Backup.title, it.summary?.text, Icons.Default.Backup,
+                summaryIsError = it.summary?.failed == true,
+                onClick = { open(SettingsPage.BACKUP) },
+            )
+        }
+        SettingsRowDivider()
         AppLockRow()
         SettingsRowDivider()
         SettingsRow(
-            "What's new",
-            if (state.changelogLoading) "Loading release history..." else "Changelog for available pre-releases",
+            SettingDestinations.WhatsNew.title,
+            "Loading release history…".takeIf { state.changelogLoading },
             Icons.Default.NewReleases,
             enabled = !state.changelogLoading,
             onClick = { onAction(SettingsAction.OpenChangelog) },
         )
         if (showDiagnostics) {
             SettingsRowDivider()
-            SettingsRow(
-                "Diagnostics report",
-                "Share recent errors to help fix a problem",
-                Icons.Default.BugReport,
-                onClick = { open(SettingsPage.DIAGNOSTICS) },
-            )
+            SettingsRow(SettingDestinations.Diagnostics.title, icon = Icons.Default.BugReport, onClick = { open(SettingsPage.DIAGNOSTICS) })
         }
     }
 }
 
 @Composable
-private fun SettingsHomeSheet(
-    sheet: SettingsSheet,
+private fun ProfileMenuSheet(
     state: SettingsUiState,
     onAction: (SettingsAction) -> Unit,
-    searchSources: Set<SourceKey>,
     onRenameProfile: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     ActionMenuSheet(onDismiss) {
-        when (sheet) {
-            SettingsSheet.PROFILE -> {
-                ActionMenuRow(Icons.Default.Edit, "Rename ${state.activeProfile.name}") {
-                    onDismiss()
-                    onRenameProfile()
-                }
-                ActionMenuRow(
-                    Icons.Default.Delete, "Delete ${state.activeProfile.name}",
-                    enabled = state.settings.recommendationProfiles.size > 1,
-                    tint = MaterialTheme.colorScheme.error,
-                ) {
-                    onDismiss()
-                    onAction(SettingsAction.RequestRemoveProfile(state.activeProfile.profileId))
-                }
-            }
-            SettingsSheet.SOURCE_MIX -> UnifiedSourceSettings(searchSources, state.settings.runtime) {
-                onAction(SettingsAction.SetSourceWeights(searchSources, it))
-            }
-            SettingsSheet.PLAYBACK -> MediaPreferencesSection(state, onAction)
-            SettingsSheet.CONTROLS -> PreferencesSection(state, onAction)
+        ActionMenuRow(Icons.Default.Edit, "Rename ${state.activeProfile.name}") {
+            onDismiss()
+            onRenameProfile()
+        }
+        ActionMenuRow(
+            Icons.Default.Delete, "Delete ${state.activeProfile.name}",
+            enabled = state.settings.recommendationProfiles.size > 1,
+            tint = MaterialTheme.colorScheme.error,
+        ) {
+            onDismiss()
+            onAction(SettingsAction.RequestRemoveProfile(state.activeProfile.profileId))
+        }
+    }
+}
+
+/**
+ * Opens the system file picker once each time [choosing] turns on (the Compare page without a file);
+ * a readable stats file opens the comparison, anything else goes back through [onBack].
+ */
+@Composable
+private fun StatsFilePicker(choosing: Boolean, statsActions: StatsActions, onAction: (SettingsAction) -> Unit, onBack: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val currentOnBack by rememberUpdatedState(onBack)
+    var launched by rememberSaveable { mutableStateOf(false) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        launched = false
+        scope.launch {
+            val file = uri?.let { statsActions.readFile(it.toString()) }
+            if (file != null) onAction(SettingsAction.SetStatsComparison(file)) else currentOnBack()
+        }
+    }
+    LaunchedEffect(choosing) {
+        if (choosing && !launched) {
+            launched = true
+            picker.launch(arrayOf("application/json", "application/octet-stream", "text/plain"))
         }
     }
 }
@@ -331,36 +344,6 @@ private fun ProfileCard(
 }
 
 @Composable
-private fun HiddenTagsPage(state: SettingsUiState, onAction: (SettingsAction) -> Unit, onBack: () -> Unit) {
-    SettingsPageColumn {
-        SettingsHeader("Hidden tags", onBack, SETTINGS_PATH)
-        Text(
-            "Hidden from For You on ${state.activeProfile.name}",
-            modifier = Modifier.padding(horizontal = 4.dp),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        if (state.activeProfileBlacklist.isEmpty()) {
-            Text("No hidden tags yet.", Modifier.padding(4.dp), style = MaterialTheme.typography.bodyMedium)
-        } else {
-            SettingsGroup(null) {
-                state.activeProfileBlacklist.forEachIndexed { index, entry ->
-                    if (index > 0) SettingsRowDivider()
-                    SettingsRow(
-                        entry.tags.joinToString(" + "), entry.source.displayName(),
-                        trailing = {
-                            TextButton(onClick = {
-                                onAction(SettingsAction.RemoveBlacklistEntry(entry.source, entry.tags))
-                            }) { Text("Remove") }
-                        },
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun StoragePage(
     state: SettingsUiState,
     onAction: (SettingsAction) -> Unit,
@@ -368,19 +351,12 @@ private fun StoragePage(
     onBack: () -> Unit,
 ) {
     SettingsPageColumn {
-        SettingsHeader("Storage & caching", onBack, SETTINGS_PATH)
+        SettingsHeader(SettingDestinations.Storage.title, onBack, SETTINGS_PATH)
         SettingsGroup(null) {
-            SettingsRow("Keep media offline when saving", trailing = {
-                Switch(state.settings.cache.cacheFullImageOnSave, onCheckedChange = {
-                    onAction(SettingsAction.SetCacheFullImageOnSave(it))
-                })
-            })
-            SettingsRowDivider()
-            SettingsRow("Find animation durations in background", trailing = {
-                Switch(state.settings.contentFilters.resolveUnknownAnimatedDurations, onCheckedChange = {
-                    onAction(SettingsAction.SetResolveUnknownAnimatedDurations(it))
-                })
-            })
+            STORAGE_TOGGLES.forEachIndexed { index, toggle ->
+                if (index > 0) SettingsRowDivider()
+                SwitchRow(toggle, state.settings) { onAction(SettingsAction.SetToggle(toggle, it)) }
+            }
         }
         SettingsGroup(null) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -403,15 +379,22 @@ private fun StoragePage(
     }
 }
 
+@Composable
+private fun BackupPage(backup: SettingsBackupEntry, onBack: () -> Unit) {
+    SettingsPageColumn {
+        SettingsHeader(SettingDestinations.Backup.title, onBack, SETTINGS_PATH)
+        SettingsGroup(null) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { backup.controls() }
+        }
+    }
+}
+
 /** Only reached when the library transfer tools, which include cache controls, are absent. */
 @Composable
 private fun FallbackCacheControls(state: SettingsUiState, onAction: (SettingsAction) -> Unit) {
     Text("Thumbnails: ${state.cacheSnapshot.thumbnailCount}")
     Text("Full images: ${state.cacheSnapshot.fullImageCount}")
-    Button(onClick = { onAction(SettingsAction.ToggleClearCacheOptions) }) {
-        Text(if (state.showClearCacheOptions) "Clear cache ▲" else "Clear cache ▼")
-    }
-    if (state.showClearCacheOptions) {
+    ExpandableSection("Clear cache", initiallyExpanded = false) {
         TextButton(
             modifier = Modifier.fillMaxWidth(),
             onClick = { onAction(SettingsAction.ClearThumbnailCache) },
@@ -450,7 +433,7 @@ private fun ProfileDeleteDialog(state: SettingsUiState, onAction: (SettingsActio
     AlertDialog(
         onDismissRequest = { onAction(SettingsAction.DismissRemoveProfile) },
         title = { Text("Delete Profile?") },
-        text = { Text("Delete profile \"${profile.name}\" and its likes/codex data? This cannot be undone.") },
+        text = { Text("Delete profile \"${profile.name}\" with its likes and Codices? This cannot be undone.") },
         dismissButton = {
             TextButton(onClick = { onAction(SettingsAction.DismissRemoveProfile) }) { Text("Cancel") }
         },
@@ -499,19 +482,5 @@ internal fun statsSummary(statistics: StatisticsSummary): String =
     "${formatStatsDuration(statistics.totalForegroundMs)} in app · " +
         "${statistics.watchedPostCount} watched · ${statistics.savedPostCount} saved"
 
-internal fun hiddenTagsSummary(state: SettingsUiState): String {
-    val count = state.activeProfileBlacklist.size
-    return "$count ${if (count == 1) "set" else "sets"} on ${state.activeProfile.name}"
-}
-
-internal fun sourceMixSummary(state: SettingsUiState, sources: Set<SourceKey>): String {
-    if (sources.size < 2) return "Hold sources in Search to combine them"
-    val weights = SourceWeightSettings.weightsFor(state.settings.runtime, sources)
-    return sources.sorted().joinToString(" · ") { source ->
-        "${source.displayName()} ${(weights.getValue(source) * 100).toInt()}%"
-    }
-}
-
-internal fun playbackSummary(state: SettingsUiState): String =
-    "Video ${videoQualityLabel(state.settings.viewer.videoQuality)} · " +
-        "Downloads ${videoQualityLabel(state.settings.cache.downloadQuality)}"
+internal fun downloadsSummary(state: SettingsUiState): String =
+    "${videoQualityLabel(state.settings.cache.downloadQuality)} quality"

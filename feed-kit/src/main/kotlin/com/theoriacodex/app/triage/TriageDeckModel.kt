@@ -5,6 +5,7 @@ import com.theoriacodex.app.ui.components.FeedView
 import com.theoriacodex.app.ui.navigation.TriageSeed
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import kotlinx.coroutines.flow.Flow
@@ -69,10 +70,23 @@ interface TriageActions {
     suspend fun hide(source: SourceKey, tag: String): TriageReversal?
 }
 
+/**
+ * Takes posts out of the Codex a deck was opened on. A deck given one removes on a left swipe instead of skipping, and
+ * keeps on a right swipe instead of liking.
+ */
+fun interface TriageRemoval {
+    /** Removes [post]; returns how to put it back exactly, or null when it was not there. Throws when it fails. */
+    suspend fun remove(post: Post): TriageReversal?
+}
+
 /** What a swipe asked for. */
 sealed interface TriageChoice {
     data object Like : TriageChoice
     data object Skip : TriageChoice
+
+    /** Leaves the post in the deck's Codex; like [Skip] it writes nothing, but the card says so. */
+    data object Keep : TriageChoice
+    data object Remove : TriageChoice
     data class Save(val codexId: String, val codexName: String) : TriageChoice
     data class Hide(val tag: String) : TriageChoice
 }
@@ -83,6 +97,8 @@ sealed interface TriageDecision {
 
     data class Liked(override val post: Post) : TriageDecision
     data class Skipped(override val post: Post) : TriageDecision
+    data class Kept(override val post: Post) : TriageDecision
+    data class Removed(override val post: Post) : TriageDecision
     data class Saved(override val post: Post, val codexName: String) : TriageDecision
     data class Hid(override val post: Post, val tag: String) : TriageDecision
 }
@@ -104,12 +120,23 @@ data class TriageDeckState(
     val notice: TriageNotice? = null,
     /** Tags hidden from this deck, as [normalizeMatchToken] spells them. */
     val passedOverTags: Set<String> = emptySet(),
+    /** Posts a left swipe took out of the deck's Codex, until Undo or a failed write puts them back. */
+    val removed: Set<PostId> = emptySet(),
 ) {
     val current: Post? get() = posts.getOrNull(index)
     val next: Post? get() = posts.getOrNull(shownFrom(index + 1))
 
     /** Every post is decided and the origin feed has no more. */
     val finished: Boolean get() = loaded && index >= posts.size && !canLoadMore
+
+    /**
+     * The posts a tap on the current card opens the Viewer on, less those taken out of the deck's Codex, and the
+     * current card's place among them.
+     */
+    fun viewerLaunch(): Pair<List<Post>, Int> {
+        val kept = posts.filterNot { it.id in removed }
+        return kept to kept.indexOfFirst { it.id == current?.id }.coerceAtLeast(0)
+    }
 
     /** The first card at or after [from] that is not passed over; the end of [posts] when there is none. */
     fun shownFrom(from: Int): Int {
@@ -120,14 +147,20 @@ data class TriageDeckState(
 }
 
 /**
- * What a committed swipe in [direction] asks for, given the Codex it would save to and the tag it would hide.
+ * What a committed swipe in [direction] asks for, given the Codex it would save to, the tag it would hide, and
+ * whether the deck [removes] from its Codex: then left removes rather than skipping and right keeps rather than liking.
  * Null when it asks for a save and there is no Codex to save to (none suggested, as when the post is already in
  * every Codex), which the screen answers by opening the picker.
  * A downward swipe on a post with nothing to hide is a skip.
  */
-internal fun choiceFor(direction: SwipeDirection, saveTarget: SaveSuggestion?, hideTag: String?): TriageChoice? = when (direction) {
-    SwipeDirection.Right -> TriageChoice.Like
-    SwipeDirection.Left -> TriageChoice.Skip
+internal fun choiceFor(
+    direction: SwipeDirection,
+    saveTarget: SaveSuggestion?,
+    hideTag: String?,
+    removes: Boolean = false,
+): TriageChoice? = when (direction) {
+    SwipeDirection.Right -> if (removes) TriageChoice.Keep else TriageChoice.Like
+    SwipeDirection.Left -> if (removes) TriageChoice.Remove else TriageChoice.Skip
     SwipeDirection.Up -> saveTarget?.let { TriageChoice.Save(it.codexId, it.name) }
     SwipeDirection.Down -> hideTag?.let(TriageChoice::Hide) ?: TriageChoice.Skip
 }

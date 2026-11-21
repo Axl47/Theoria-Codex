@@ -4,16 +4,35 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.unit.Dp
 import com.theoriacodex.app.comments.CommentCount
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.domain.model.VideoQuality
+import kotlinx.coroutines.flow.drop
 
 /** The dock's full height including the navigation bar under it: what the timeline, scrubber and strip sit above. */
 @Composable
 internal fun viewerDockInset(): Dp = VIEWER_DOCK_HEIGHT + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
+/**
+ * The quality videos play at, starting from the saved [default]. A quality picked from the playback menu
+ * becomes the new default through [onDefaultChanged]; a height picked there stays with that video.
+ */
+@Composable
+internal fun rememberViewerVideoQuality(default: VideoQuality, onDefaultChanged: (VideoQuality) -> Unit): MutableState<VideoQuality> {
+    val quality = remember(default) { mutableStateOf(default) }
+    val currentOnDefaultChanged by rememberUpdatedState(onDefaultChanged)
+    LaunchedEffect(quality) { snapshotFlow { quality.value }.drop(1).collect { currentOnDefaultChanged(it) } }
+    return quality
+}
 
 /** Binds the frame's state and controls to the dock's buttons and menus. */
 @Composable

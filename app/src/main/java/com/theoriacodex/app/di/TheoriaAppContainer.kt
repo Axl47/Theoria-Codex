@@ -18,6 +18,8 @@ import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.media.OfflineAwareCacheRepository
 import com.theoriacodex.app.media.OfflineMediaAcquisition
 import com.theoriacodex.app.media.OfflineMediaCoordinator
+import com.theoriacodex.app.media.PostDownloads
+import com.theoriacodex.app.media.codexOfflineOwner
 import com.theoriacodex.app.codex.LikesCodexSyncService
 import com.theoriacodex.app.codex.transfer.CodexTransferService
 import com.theoriacodex.app.recommend.ForYouCoordinator
@@ -170,6 +172,8 @@ data class FeatureDependencies(
     val mediaDurationCoordinator: MediaDurationCoordinator,
     val appUsageTracker: AppUsageTracker,
     val offlineMedia: OfflineMediaCoordinator,
+    /** The one download queue every Activity instance uses (see [appPostDownloads]). */
+    val postDownloads: PostDownloads,
 )
 
 data class WorkflowDependencies(
@@ -190,6 +194,9 @@ interface TheoriaAppContainer {
 
     /** Settings → Sites: user-added booru sites. */
     val customSites: CustomSitesController
+
+    /** Lives as long as the process: work that must finish after the screen or Activity that started it. */
+    val applicationScope: CoroutineScope
 }
 
 interface TheoriaAppContainerOwner {
@@ -210,6 +217,7 @@ internal class DefaultTheoriaAppContainer(
     private val appContext = context.applicationContext
     private val storageDirectory = File(appContext.filesDir, "theoria_codex")
     private val durableStoreScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    override val applicationScope: CoroutineScope get() = durableStoreScope
     private val offlineStore = OfflineMediaStore(File(storageDirectory, "offline_media"))
     private val fileStoreRecoveryRegistry = FileStoreRecoveryRegistry()
     // Opened before anything starts background work: a pins file from a newer build fails construction, and a retry
@@ -278,6 +286,8 @@ internal class DefaultTheoriaAppContainer(
         scope = durableStoreScope,
         publishMediaKeys = cookieBridge::updateMediaKeys,
     )
+    /** Opened at the end of [awaitDurableStores]: restored downloads and offline jobs wait on it. */
+    private val sourceReadiness = SourceReadiness(accountStore::refreshAvailability) { customSourceRuntime.awaitFirstBuild() }
     private val sourceRegistry = CompositeSourceAdapterRegistry(
         potentialBuiltIns = allPotentialSourceRegistry,
         availableBuiltIns = accountStore.availableSources,
@@ -344,6 +354,7 @@ internal class DefaultTheoriaAppContainer(
         pendingStore = OfflinePendingJobStore(File(storageDirectory, "offline_jobs.json")),
         ownerExists = { owner -> owner == com.theoriacodex.app.media.AUTOMATIC_OFFLINE_OWNER ||
             owner.startsWith("codex:") && contentRepository.observeCodex(owner.removePrefix("codex:")).first() != null },
+        awaitSources = sourceReadiness::await,
     )
     private val cacheRepository = OfflineAwareCacheRepository(FileBackedCacheRepository(storageDirectory), offlineMedia)
     private val readingPositions = FileBackedReadingPositionRepository(storageDirectory)
@@ -468,6 +479,8 @@ internal class DefaultTheoriaAppContainer(
         mediaDurationCoordinator = mediaDurationCoordinator,
         appUsageTracker = appUsageTracker,
         offlineMedia = offlineMedia,
+        postDownloads = appPostDownloads(appContext, File(storageDirectory, "download_jobs.json"), durableStoreScope,
+            settingsRepository, sources, sourceReadiness::await),
     )
 
     override val workflows = WorkflowDependencies(
@@ -485,6 +498,7 @@ internal class DefaultTheoriaAppContainer(
             cacheRepository = cacheRepository,
             sourceRegistry = sourceRegistry,
             canonicalizePost = offlineMedia::withoutOfflineLocations,
+            keepOffline = { codexId, posts -> offlineMedia.keepOffline(codexOfflineOwner(codexId), posts) },
         ),
         profileBackup = profileBackup,
         autoBackup = autoBackup,
@@ -543,7 +557,9 @@ internal class DefaultTheoriaAppContainer(
         profileBackup.recoverPendingRestore()
         profileDeletion.recoverPendingDeletion()
         offlineCatalogReady.await()
+        // Registers the saved offline queue before any screen can add to it; its jobs wait on sourceReadiness.
         offlineMedia.recoverPendingJobs()
+        sourceReadiness.open()
         // Off the startup path: searched-tag suggestions start from what Recents remembers.
         durableStoreScope.launch {
             runCatchingPreservingCancellation {

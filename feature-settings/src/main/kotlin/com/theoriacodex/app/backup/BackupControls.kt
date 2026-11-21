@@ -3,6 +3,7 @@ package com.theoriacodex.app.backup
 import android.text.format.DateUtils
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -20,10 +21,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.data.repository.ProfileBackupPreview
 
 @Composable
-fun BackupControls(state: BackupUiState, onExport: () -> Unit, onImport: () -> Unit) {
+fun BackupControls(state: BackupUiState, onIncludeRecents: (Boolean) -> Unit, onExport: () -> Unit, onImport: () -> Unit) {
+    SwitchRow(
+        title = "Include History and statistics",
+        checked = state.includeRecents,
+        enabled = !state.busy,
+        contentPadding = PaddingValues(0.dp),
+        onCheckedChange = onIncludeRecents,
+    )
+    Text(
+        "Logins and downloaded media are not included.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = onExport, enabled = !state.busy, modifier = Modifier.weight(1f)) {
             Text("Back up profiles")
@@ -82,30 +96,24 @@ private fun autoBackupProgress(status: AutoBackupStatus): String {
     }
 }
 
+/** What the Settings home row says about daily backup; [failed] when the last automatic backup failed. */
+data class AutoBackupSummary(val text: String, val failed: Boolean = false)
+
+/** The Settings home row's value: a failure where it will be seen, else how daily backup stands. */
+fun autoBackupSummary(status: AutoBackupStatus): AutoBackupSummary = when {
+    status.failure != null -> AutoBackupSummary(status.failure, failed = true)
+    !status.enabled -> AutoBackupSummary("Daily backup off")
+    else -> AutoBackupSummary("Daily · ${autoBackupProgress(status)}")
+}
+
+/** The restore preview, the one backup step that asks first: restoring adds to every matching profile. */
 @Composable
 fun BackupDialogs(
     state: BackupUiState,
     onDismiss: () -> Unit,
-    onIncludeRecents: (Boolean) -> Unit,
     onApplyPreferences: (Boolean) -> Unit,
-    onExport: () -> Unit,
     onRestore: () -> Unit,
 ) {
-    if (state.showExportOptions) {
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text("Back up profiles") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Save all profiles, collections, Likes, rules, saved searches, follows, and preferences.")
-                    Text("Login credentials and downloaded media are not included.")
-                    BackupCheckbox("Include Recents, reading positions, and statistics", state.includeRecents, onIncludeRecents)
-                }
-            },
-            confirmButton = { TextButton(onClick = onExport) { Text("Choose destination") } },
-            dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-        )
-    }
     state.preview?.let { preview ->
         RestoreBackupDialog(preview, state, onDismiss, onApplyPreferences, onRestore)
     }
@@ -127,10 +135,16 @@ private fun RestoreBackupDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text("${preview.profileNames.size} profiles · ${preview.collectionCount} collections · ${preview.savedPostCount} saved posts")
+                Text(
+                    listOf(
+                        countLabel(preview.profileNames.size, "profile"),
+                        countLabel(preview.collectionCount, "Codex", "Codices"),
+                        countLabel(preview.savedPostCount, "saved post"),
+                    ).joinToString(" · "),
+                )
                 Text(preview.profileNames.joinToString())
                 Text("${preview.likeCount} Likes · ${preview.savedSearchCount} saved searches · ${preview.followedCreatorCount} follows · ${preview.recentCount} recent entries")
-                Text("Adds what's missing to matching profiles and collections. Nothing you have is removed or changed, and restoring twice adds nothing more.")
+                Text("Adds what's missing to matching profiles and Codices. Nothing you have is removed or changed, and restoring twice adds nothing more.")
                 Text("Login credentials and downloaded media are not included.")
                 BackupCheckbox("Also apply global preferences", state.applyPreferences, onApplyPreferences, !state.busy)
                 if (state.busy) Text("Restoring backup…")

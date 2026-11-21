@@ -24,14 +24,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
+/** A feed's first load, centred on the whole screen; see [LoadingState] for the rest of the state kit. */
 @Composable
 fun FeedLoadingState(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center,
-    ) {
-        CircularProgressIndicator()
-    }
+    LoadingState(modifier.fillMaxSize())
 }
 
 /** A failure card. [onDismiss] adds a way to set aside a failure that doesn't stop the screen. */

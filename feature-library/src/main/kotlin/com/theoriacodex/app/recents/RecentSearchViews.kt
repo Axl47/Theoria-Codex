@@ -16,11 +16,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -67,25 +65,39 @@ internal fun recentSearchQueryText(query: Query, quiet: Color, excluded: Color):
     if (length == 0) withStyle(SpanStyle(color = quiet)) { append("No tags") }
 }
 
-/** One entry of the Searches section: up to two lines of query, its context, and a visible save. */
+/**
+ * One entry of the Searches section: up to two lines of query, its context, and a visible save. [onLongPress] opens
+ * its menu; [modifier] goes on its clickable node.
+ */
 @Composable
 internal fun RecentSearchRow(
     entry: RecentSearchEntry,
     now: Long,
     onClick: () -> Unit,
-    onPin: (() -> Unit)?,
+    onLongPress: (() -> Unit)?,
+    saving: RecentSearchSaving?,
+    modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
     Row(
-        modifier = Modifier
+        modifier = modifier
             .testTag("Recent search:${entry.queryHash}")
             .fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClickLabel = "Save search", onLongClick = onPin)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClickLabel = SEARCH_MENU_LABEL,
+                onLongClick = onLongPress,
+            )
             .padding(vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RecentSearchMark(entry, 36.dp)
+        val renaming = saving.renaming(entry)
+        if (saving != null && renaming != null) {
+            SavedSearchNameField(renaming, saving, MaterialTheme.typography.bodyLarge, Modifier.weight(1f))
+            return@Row
+        }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 recentSearchQueryText(entry.query, colors.onSurfaceVariant, colors.error),
@@ -105,35 +117,44 @@ internal fun RecentSearchRow(
                 Text(relativeTimeLabel(now, entry.searchedAtEpochMs), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
             }
         }
-        onPin?.let { pin ->
-            IconButton(onClick = pin) { Icon(Icons.Default.BookmarkBorder, "Save search", tint = colors.primary) }
-        }
+        saving?.let { SaveSearchControl(entry, it) }
     }
 }
 
-/** A compact search in the All view's per-day row; long-press saves it, as rows do. */
+/** A compact search in the All view's per-day row, with the same save and menu as rows. [modifier] goes on its clickable node. */
 @Composable
 internal fun RecentSearchTile(
     entry: RecentSearchEntry,
     now: Long,
     onClick: () -> Unit,
-    onPin: (() -> Unit)?,
+    onLongPress: (() -> Unit)?,
+    saving: RecentSearchSaving?,
+    modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
     Card(
-        modifier = Modifier
+        modifier = modifier
             .testTag("Recent search:${entry.queryHash}")
-            .widthIn(max = 240.dp)
+            .widthIn(max = RECENT_SEARCH_TILE_MAX_WIDTH)
             .clip(CardShape)
-            .combinedClickable(onClick = onClick, onLongClickLabel = "Save search", onLongClick = onPin),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClickLabel = SEARCH_MENU_LABEL,
+                onLongClick = onLongPress,
+            ),
         shape = CardShape,
     ) {
         Row(
-            modifier = Modifier.padding(start = 8.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+            modifier = Modifier.padding(start = 8.dp, end = if (saving == null) 12.dp else 0.dp, top = 8.dp, bottom = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             RecentSearchMark(entry, 32.dp)
+            val renaming = saving.renaming(entry)
+            if (saving != null && renaming != null) {
+                SavedSearchNameField(renaming, saving, MaterialTheme.typography.bodyMedium, Modifier.weight(1f).padding(end = 8.dp))
+                return@Row
+            }
             Column {
                 Text(
                     recentSearchQueryText(entry.query, colors.onSurfaceVariant, colors.error),
@@ -149,6 +170,7 @@ internal fun RecentSearchTile(
                     maxLines = 1,
                 )
             }
+            saving?.let { SaveSearchControl(entry, it) }
         }
     }
 }
@@ -202,6 +224,8 @@ private fun recentSearchContext(entry: RecentSearchEntry, accent: Color): Annota
     }
 }
 
+internal val RECENT_SEARCH_TILE_MAX_WIDTH = 240.dp
+private const val SEARCH_MENU_LABEL = "Search actions"
 private val CardShape = RoundedCornerShape(14.dp)
 private const val MARK_CORNER_FRACTION = 0.28f
 private const val MARK_GLYPH_FRACTION = 0.55f

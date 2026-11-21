@@ -72,6 +72,11 @@ class CreatorProfileViewModel(
     private val ownerScope = coroutineScope ?: viewModelScope
     private var requestJob: Job? = null
     private var detailsJob: Job? = null
+    private var seenJob: Job? = null
+    private val mutableSeenAtOpen = MutableStateFlow<CreatorSeenSnapshot?>(null)
+
+    /** What the creator's follow had seen when this page opened, for the "new since last visit" divider; null when not followed. */
+    val seenAtOpen: StateFlow<CreatorSeenSnapshot?> = mutableSeenAtOpen.asStateFlow()
 
     private val mutableState = MutableStateFlow(CreatorUiState())
     override val state: StateFlow<CreatorUiState> = mutableState.asStateFlow()
@@ -127,8 +132,19 @@ class CreatorProfileViewModel(
     private fun openCreator(action: CreatorAction.OpenCreator) {
         val opened = if (action.feeds.isEmpty()) action.copy(feeds = engine.accountFeeds(action.creator)) else action
         detailsJob?.cancel(CancellationException("Creator replaced"))
+        snapshotSeen(opened.creator)
         reduceAction(opened)
         if (opened.feeds.isNotEmpty()) launchDetails(opened.creator)
+    }
+
+    /** Reads the follow's seen ids before this page's first accepted visit adds to them (see [recordAcceptedVisit]). */
+    private fun snapshotSeen(creator: CreatorProfile) {
+        seenJob?.cancel(CancellationException("Creator replaced"))
+        mutableSeenAtOpen.value = null
+        seenJob = ownerScope.launch {
+            val seen = runCatchingPreservingCancellation { engine.seenPostIds(creator) }.getOrNull() ?: return@launch
+            mutableSeenAtOpen.value = CreatorSeenSnapshot(creator, seen)
+        }
     }
 
     /** A failed or empty details request leaves the header bare; the page never waits on it. */
@@ -206,7 +222,9 @@ class CreatorProfileViewModel(
     private fun recordAcceptedVisit(effect: CreatorEffect.LoadPage) {
         if (effect.request.kind != CreatorRequestKind.REFRESH || effect.feed != AccountFeed.UPLOADS) return
         val posts = mutableState.value.results
+        val snapshot = seenJob
         ownerScope.launch {
+            snapshot?.join()
             runCatchingPreservingCancellation { engine.recordAcceptedVisit(effect.creator, posts) }
         }
     }

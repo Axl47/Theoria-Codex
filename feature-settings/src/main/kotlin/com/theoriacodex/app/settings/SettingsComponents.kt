@@ -46,9 +46,10 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.data.repository.SettingDestinations
 
 /** The path of every page directly under the Settings home. */
-val SETTINGS_PATH = listOf("Settings")
+val SETTINGS_PATH = listOf(SettingDestinations.Home.title)
 
 /**
  * Header shared by the Settings home and its pages; [onBack] adds the back arrow. [parents] are the
@@ -84,7 +85,7 @@ fun SettingsHeader(
  * [initiallyExpanded] when that changes, so saving keys folds their section away.
  */
 @Composable
-internal fun ExpandableSection(label: String, initiallyExpanded: Boolean, content: @Composable () -> Unit) {
+fun ExpandableSection(label: String, initiallyExpanded: Boolean, content: @Composable () -> Unit) {
     var expanded by rememberSaveable(initiallyExpanded) { mutableStateOf(initiallyExpanded) }
     TextButton(
         onClick = { expanded = !expanded },
@@ -150,13 +151,17 @@ fun SettingsRowDivider() {
 
 private const val PARENT_PATH_ALPHA = 0.7f
 
-/** A row that shows its current value in [summary]; without [trailing] it shows a chevron. */
+/**
+ * A row that shows its current value in [summary], in the error color when [summaryIsError] (a failure that
+ * needs attention); without [trailing] it shows a chevron.
+ */
 @Composable
 fun SettingsRow(
     title: String,
     summary: String? = null,
     icon: ImageVector? = null,
     enabled: Boolean = true,
+    summaryIsError: Boolean = false,
     onClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
@@ -179,7 +184,7 @@ fun SettingsRow(
                 Text(
                     summary,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (summaryIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )

@@ -3,6 +3,7 @@ package com.theoriacodex.app.recommend
 import com.theoriacodex.app.feed.FeedCursor
 import androidx.lifecycle.SavedStateHandle
 import com.theoriacodex.app.recommend.state.ForYouAction
+import com.theoriacodex.app.recommend.state.ForYouEffect
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
@@ -17,6 +18,8 @@ import com.theoriacodex.domain.orchestration.UnifiedSearchResult
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -49,6 +52,144 @@ class ForYouSectionsStateTest {
         assertEquals(original.sections, owner.state.value.home.sections)
         assertEquals(loads, engine.sectionLoads)
         assertEquals(roots, engine.requests.size)
+    }
+
+    @Test fun `hiding one tag refills at most two freed slots in place and undo swaps the originals back`() = runTest {
+        val refills = ArrayDeque(listOf(section("city"), section("field"), section("meadow")))
+        val engine = SectionsEngine().apply {
+            sectionLoader = { request ->
+                if (request.additionalSection) listOf(refills.removeFirst())
+                else listOf(tagged("boats", "sea"), section("forest"), tagged("harbor", "boats"), section("boats"))
+            }
+        }
+        val owner = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        engine.onSettings = { owner.synchronizeEnvironment(it, 3) }
+        owner.synchronizeEnvironment(AppSettings(), 3)
+        advanceUntilIdle()
+        val original = owner.state.value.home.sections
+        val feedback = async { owner.effects.first { it is ForYouEffect.SeedHidden } as ForYouEffect.SeedHidden }
+        owner.onAction(ForYouAction.HideTag(SourceKey.PIXIV, "boats"))
+        advanceUntilIdle()
+        assertEquals(listOf("city", "forest", "field"), owner.state.value.home.sections.map { it.title })
+        assertEquals(1, refills.size)
+        val hidden = feedback.await()
+        assertEquals("Hid boats", hidden.label)
+        assertEquals(ForYouWhyUndoAnchor, hidden.anchor)
+        assertEquals(listOf(ForYouBlacklistEntry(SourceKey.PIXIV, listOf("boats"))), owner.state.value.blacklistEntries)
+        owner.onAction(ForYouAction.UndoSeedBlacklist(hidden.profileId, hidden.entries))
+        advanceUntilIdle()
+        assertEquals(original, owner.state.value.home.sections)
+        assertTrue(owner.state.value.blacklistEntries.isEmpty())
+    }
+
+    @Test fun `a refill planned before a second strike never brings back a shelf that strike hides`() = runTest {
+        val planned = CompletableDeferred<Unit>()
+        val engine = SectionsEngine().apply {
+            sectionLoader = { request ->
+                if (request.additionalSection) listOf(section("city")).also { planned.await() }
+                else listOf(section("boats"), section("forest"))
+            }
+        }
+        val owner = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        engine.onSettings = { owner.synchronizeEnvironment(it, 3) }
+        owner.synchronizeEnvironment(AppSettings(), 3)
+        advanceUntilIdle()
+        owner.onAction(ForYouAction.HideTag(SourceKey.PIXIV, "boats"))
+        runCurrent()
+        owner.onAction(ForYouAction.HideTag(SourceKey.PIXIV, "city"))
+        runCurrent()
+        planned.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(listOf("forest"), owner.state.value.home.sections.map { it.title })
+    }
+
+    @Test fun `a pinned shelf survives striking one of its tags`() = runTest {
+        val pinned = tagged("boats", "sea").copy(title = "Harbors", savedSearchId = "saved")
+        val engine = SectionsEngine().apply {
+            sectionLoader = { request -> if (request.additionalSection) emptyList() else listOf(pinned, section("boats")) }
+        }
+        val owner = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        owner.synchronizeEnvironment(AppSettings(), 3)
+        advanceUntilIdle()
+        owner.onAction(ForYouAction.HideTag(SourceKey.PIXIV, "boats"))
+        advanceUntilIdle()
+        assertEquals(listOf("Harbors"), owner.state.value.home.sections.map { it.title })
+    }
+
+    @Test fun `unhiding a just-struck tag in why puts its shelves back without a refill`() = runTest {
+        val engine = SectionsEngine().apply {
+            sectionLoader = { request -> if (request.additionalSection) emptyList() else listOf(tagged("boats", "sea"), section("forest")) }
+        }
+        val owner = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        owner.synchronizeEnvironment(AppSettings(), 3)
+        advanceUntilIdle()
+        val original = owner.state.value.home.sections
+        owner.onAction(ForYouAction.HideTag(SourceKey.PIXIV, "boats"))
+        advanceUntilIdle()
+        owner.onAction(ForYouAction.UnhideTag(SourceKey.PIXIV, "BOATS"))
+        advanceUntilIdle()
+        assertEquals(original, owner.state.value.home.sections)
+        assertTrue(owner.state.value.blacklistEntries.isEmpty())
+    }
+
+    @Test fun `undo of a hide still unhides for its profile after a profile switch`() = runTest {
+        val shelf = tagged("boats", "sea")
+        val engine = SectionsEngine().apply {
+            sectionLoader = { request -> if (request.additionalSection) emptyList() else listOf(shelf) }
+        }
+        val owner = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        owner.synchronizeEnvironment(AppSettings(), 3)
+        advanceUntilIdle()
+        owner.onAction(ForYouAction.OpenSection(shelf.id))
+        val feedback = async { owner.effects.first { it is ForYouEffect.SeedHidden } as ForYouEffect.SeedHidden }
+        owner.onAction(ForYouAction.HideTag(SourceKey.PIXIV, "boats"))
+        advanceUntilIdle()
+        val hidden = feedback.await()
+        owner.synchronizeEnvironment(AppSettings(activeProfileId = "other",
+            recommendationProfiles = listOf(RecommendationProfile("other", "Other"))), 2)
+        advanceUntilIdle()
+        owner.onAction(ForYouAction.UndoSeedBlacklist(hidden.profileId, hidden.entries))
+        advanceUntilIdle()
+        assertEquals(Triple(AppSettings().activeProfileId, hidden.entries, false), engine.blacklistWrites.last())
+    }
+
+    @Test fun `closing why while a strike is still writing returns a drilled-in shelf to the overview once it lands`() = runTest {
+        val shelf = tagged("boats", "sea")
+        val engine = SectionsEngine().apply {
+            sectionLoader = { request -> if (request.additionalSection) emptyList() else listOf(shelf, section("forest")) }
+        }
+        val owner = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        owner.synchronizeEnvironment(AppSettings(), 3)
+        advanceUntilIdle()
+        owner.onAction(ForYouAction.OpenSection(shelf.id))
+        val write = CompletableDeferred<Unit>()
+        engine.blacklistGate = write
+        owner.onAction(ForYouAction.HideTag(SourceKey.PIXIV, "boats"))
+        runCurrent()
+        owner.onAction(ForYouAction.CloseWhy(shelf.whyTarget()))
+        runCurrent()
+        assertFalse(owner.state.value.home.visible)
+        write.complete(Unit)
+        advanceUntilIdle()
+        assertTrue(owner.state.value.home.visible)
+        assertEquals(listOf("forest"), owner.state.value.home.sections.map { it.title })
+    }
+
+    @Test fun `undo after Move to Saved also removes the search it saved`() = runTest {
+        val engine = SectionsEngine().apply { sectionLoader = { listOf(section("forest"), section("city")) } }
+        val owner = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        engine.onSettings = { owner.synchronizeEnvironment(it, 3) }
+        owner.synchronizeEnvironment(AppSettings(), 3)
+        advanceUntilIdle()
+        val feedback = async { owner.effects.first { it is ForYouEffect.SeedHidden } as ForYouEffect.SeedHidden }
+        owner.onAction(ForYouAction.SaveSection("PIXIV:forest"))
+        advanceUntilIdle()
+        val hidden = feedback.await()
+        assertEquals("Moved to Saved", hidden.label)
+        owner.onAction(ForYouAction.UndoSeedBlacklist(hidden.profileId, hidden.entries))
+        advanceUntilIdle()
+        assertEquals("saved-id", engine.unsavedSection?.savedSearchId)
+        assertEquals(listOf("forest", "city"), owner.state.value.home.sections.map { it.title })
     }
 
     @Test fun `save removes only its row after saving and retains the row on storage failure`() = runTest {
@@ -230,8 +371,11 @@ private class SectionsEngine : ForYouRouteEngine {
     var sectionLoads = 0
     val sectionRequests = mutableListOf<ForYouFeedRequest>()
     var savedSection: ForYouSection? = null
+    var unsavedSection: ForYouSection? = null
     var onSettings: (AppSettings) -> Unit = {}
     var lastBlacklistEntries: List<ForYouBlacklistEntry> = emptyList()
+    val blacklistWrites = mutableListOf<Triple<String, List<ForYouBlacklistEntry>, Boolean>>()
+    var blacklistGate: CompletableDeferred<Unit>? = null
     private var settings = AppSettings()
     var failPin = false
     var pinGate: CompletableDeferred<Unit>? = null
@@ -245,7 +389,7 @@ private class SectionsEngine : ForYouRouteEngine {
     override suspend fun pinSection(section: ForYouSection, pinned: Boolean): String? {
         pinGate?.await()
         check(!failPin) { "Storage failed" }
-        if (pinned) savedSection = section
+        if (pinned) savedSection = section else unsavedSection = section
         return if (pinned) "saved-id" else null
     }
     override suspend fun execute(request: ForYouFeedRequest): ForYouFeedResult {
@@ -261,7 +405,9 @@ private class SectionsEngine : ForYouRouteEngine {
     override suspend fun recordAccepted(result: ForYouFeedResult) = Unit
     override suspend fun resolvePost(postId: PostId): Post? = null
     override suspend fun updateBlacklist(profileId: String, entries: List<ForYouBlacklistEntry>, hidden: Boolean): ForYouBlacklistChange {
+        blacklistGate?.await()
         lastBlacklistEntries = entries
+        blacklistWrites += Triple(profileId, entries, hidden)
         settings = settings.copy(forYouBlacklistByProfile = mapOf(profileId to if (hidden) entries else emptyList()))
         onSettings(settings)
         return ForYouBlacklistChange(settings, entries)
@@ -269,6 +415,10 @@ private class SectionsEngine : ForYouRouteEngine {
 }
 
 private fun section(tag: String) = ForYouSection("PIXIV:$tag", tag, feed(tag))
+
+private fun tagged(vararg tags: String) = tags.joinToString("+").let { id ->
+    ForYouSection("PIXIV:$id", tags.joinToString(" + "), feed(id).copy(seed = mapOf(SourceKey.PIXIV to tags.toList())))
+}
 
 private fun feed(tag: String, source: SourceKey = SourceKey.PIXIV, sort: SortMode = SortMode.NEWEST): ForYouFeedResult {
     val seed = mapOf(source to listOf(tag))

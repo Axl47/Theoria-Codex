@@ -7,12 +7,17 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.settings.SettingsSitesEntry
 
-/** Builds the Settings home row and page for Sites from the activity-retained [CustomSitesViewModel]. */
+/**
+ * Builds the Settings home row and page for Sites from the Settings route's [CustomSitesViewModel]. A
+ * removed site is removed in the app's scope, so leaving Settings still completes it.
+ */
 @Composable
 internal fun rememberCustomSitesEntry(container: TheoriaAppContainer): SettingsSitesEntry {
-    val owner = viewModel(key = "custom-sites") { CustomSitesViewModel(container.customSites) }
+    val owner = viewModel(key = "custom-sites") {
+        CustomSitesViewModel(container.customSites, removalScope = container.applicationScope)
+    }
     val state by owner.state.collectAsStateWithLifecycle()
-    return SettingsSitesEntry(summary = customSitesSummary(state.sites)) { onBack, accounts ->
+    return SettingsSitesEntry(summary = customSitesSummary(state.shownSites)) { onBack, accounts ->
         CustomSitesScreen(state, accounts, owner::onAction, onBack)
     }
 }

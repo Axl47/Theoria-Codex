@@ -13,6 +13,24 @@
 - Swiping the collapsed search bar sideways steps back and forward through earlier searches, each at the place you left it.
 - When you open the app it checks followed creators and your most recently saved searches for new posts, at most every three hours. Library and its Saved section show a dot, and each row shows how many are new, until you open them.
 - Search, creator profiles and For You show "No more results" at the bottom once a feed has no further pages, where the list used to just stop.
+- A Codex's name is editable in place: tap it at the top of the Codex, type, and press Done.
+- A Codex has a row of chips under its name. Filter by tag lists every tag in the Codex (type to narrow the list) and shows only posts that have all the tags you choose; the most common tags are one-tap shortcuts; the sort is a chip; Triage opens the deck. Search sites, in the tag list, searches the sites with the chosen tags.
+- With the Manual sort in Library, hold a Codex and drag it to move it, with Undo. Letting go without moving it opens its menu as before.
+- Triage on a Codex goes through its posts one at a time: swipe left to remove a post from the Codex, right to keep it. Undo reverses the last choice.
+- Cleaning a Codex shows how many posts each comparison would remove before you confirm, and Review opens exactly those posts as a deck where left removes and right keeps.
+- A Codex kept offline shows a ring on its tile and at the top of its page: how much is downloaded, and whether something failed. At the top of the Codex, tapping a full ring removes the offline copy (with Undo), tapping it during a download shows progress, and tapping an incomplete or failed one downloads the rest.
+- While anything is downloading, a pill at the top of Library shows what's left. It opens one sheet listing offline Codices and downloads.
+- Downloads keep going after you close the app, for as long as it stays in memory. They used to stop when the app was closed with Back.
+- Saving a post into a Codex kept offline downloads that post too.
+- History: swipe a search or a watched post left to remove just that entry, with Undo in its place. Holding a search opens a menu with Save search and Remove from History; a post's hold menu has Remove from History too.
+- History: the bookmark on a search saves it at once under its query, and Rename edits the name right in the row. A saved search shows a filled bookmark.
+- Creator pages show the creator's most common tags as chips. Tapping one opens a trail for that tag.
+- On a creator you follow, a divider marks where the posts you've already seen begin.
+- For You: Why, on a shelf, lists the tags behind it and how many of your likes carry each. Hiding a tag there removes every shelf that uses it and brings in up to two new ones; Undo puts everything back. Shelves you pinned stay.
+- For You: Hidden tags, in For You's menu, lists the tags you've hidden and lets you unhide them.
+- For You: with more than one profile, a chip at the top switches between them.
+- The search box finds every setting: switches flip right in the list, and the rest open where they live.
+- Followed creators: Check for new posts shows that it is running, and each creator has a Following button with Undo in the row.
 
 ### Changed
 
@@ -24,9 +42,21 @@
 - Post menus in For You and on creator pages now show tag counts, and holding a tag saves it, as they already did in Search, the Codex and the Viewer.
 - A Codex collection's "Resolving durations…" line now spans the full width, as in other feeds.
 - In a post's hold menu, the creator's name at the top now opens their profile, as in the Viewer's information sheet, replacing the separate creator button.
+- Removing no longer asks first where it can be undone. Removing posts from a Codex, deleting a Codex, and removing a custom site, a download or an offline copy happen at once, with Undo where the item was. Nothing is actually deleted until Undo is gone: a deleted Codex comes back until you leave Library, and files stay until the sheet or screen is left or the Undo runs out.
+- Follow on a creator page is a labelled button, and unfollowing shows Undo in its place.
+- Hiding a tag in For You now hides every shelf that includes it, not only shelves with exactly the same tags. This also applies to shelves you dismissed before: a dismissed one-tag shelf hides that tag everywhere. Hidden tags lists them.
+- Tapping a For You shelf's title opens the shelf; Why is its own button beside it.
+- Settings keeps what you set once. Hidden tags moved to For You, Source mix to Search's source picker (with Unified chosen), and default video quality to the Viewer: the quality you pick in a video's playback settings is used for other videos too. Offline Codices and downloads are managed from Library.
+- Custom site edits apply as you make them, without a Save button. Keys still have Save.
+- Backup has its own page in Settings. Back up profiles opens the file picker directly, with a switch for including History and statistics.
+- The app says "posts" where it sometimes said "items", and "Codices" where backups said "collections". Empty lists show a short label instead of a sentence.
 
 ### Fixed
 
+- History was blank while it loaded. It now shows that it is loading.
+- The offline storage error told you to reopen storage. It now has a Retry button.
+- A Codex's tag list could show a post's raw ID. It no longer does.
+- A backup preview said "1 profiles". Counts now use the right singular and plural.
 - Holding a video for 2× sped it up a moment after the 2× label appeared, and released it a moment after the label left. Speed now changes with the label.
 - Using the Back gesture from the edge of the full-screen Viewer often swiped to the next post on the way out, marking a post you never saw as watched. The Back gesture no longer changes posts.
 - Tapping Retry on a Hitomi page while its gallery was still loading could shrink the gallery back to its cover when the retry finished. The full gallery now stays.

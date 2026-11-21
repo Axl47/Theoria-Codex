@@ -11,9 +11,15 @@ import com.theoriacodex.domain.model.VideoVariant
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -163,6 +169,122 @@ class OfflineMediaCoordinatorTest {
         assertEquals(mediaDurationKey(source), mediaDurationKey(coordinator.withoutOfflineLocations(playback)))
         coordinator.clear()
         assertEquals(source, coordinator.withoutOfflineLocations(playback.copy()))
+    }
+
+    @Test
+    fun `posts saved into a kept owner download alone and other owners are left alone`() = runTest {
+        val store = OfflineMediaStore(temporary.newFolder(), ioDispatcher = StandardTestDispatcher(testScheduler))
+        val acquisitions = mutableListOf<String>()
+        val coordinator = OfflineMediaCoordinator(store, backgroundScope, { it }, { it.media }, { post, _, file ->
+            acquisitions += post.id.sourcePostId
+            file.writeText("bytes")
+        })
+        coordinator.keepOffline("codex:other", listOf(post("x")))
+        coordinator.makeAvailableOffline("codex:a", listOf(post("a")))
+        coordinator.jobs.first { it["codex:a"]?.isRunning == false }
+
+        coordinator.keepOffline("codex:a", listOf(post("b")))
+        val topped = coordinator.jobs.first { it["codex:a"]?.let { job -> !job.isRunning && job.completedPosts == 1 && job.totalPosts == 1 } == true }
+
+        assertEquals(1, topped.getValue("codex:a").completedPosts)
+        assertEquals(listOf("a", "b"), acquisitions)
+        assertEquals(mapOf("codex:a" to 2), store.snapshot.value.postsByOwner)
+        assertNull(coordinator.jobs.value["codex:other"])
+    }
+
+    @Test
+    fun `a cancelled request stays stopped when posts are saved until Retry runs it with them`() = runTest {
+        val store = OfflineMediaStore(temporary.newFolder(), ioDispatcher = StandardTestDispatcher(testScheduler))
+        val acquisitions = mutableListOf<String>()
+        val coordinator = OfflineMediaCoordinator(store, backgroundScope, { it }, { it.media }, { post, _, file ->
+            acquisitions += post.id.sourcePostId
+            file.writeText("bytes")
+        })
+        coordinator.makeAvailableOffline("codex:a", listOf(post("a")))
+        coordinator.cancel("codex:a")
+        coordinator.keepOffline("codex:a", listOf(post("b")))
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(acquisitions.isEmpty())
+        assertTrue(coordinator.jobs.value.getValue("codex:a").isCancelled)
+
+        coordinator.retry("codex:a")
+        coordinator.jobs.first { it["codex:a"]?.let { job -> !job.isRunning && job.completedPosts == 2 } == true }
+        assertEquals(listOf("a", "b"), acquisitions)
+    }
+
+    @Test
+    fun `an owner with neither copies nor a running job gets nothing when posts are saved`() = runTest {
+        val store = OfflineMediaStore(temporary.newFolder(), ioDispatcher = StandardTestDispatcher(testScheduler))
+        val acquisitions = mutableListOf<String>()
+        val coordinator = OfflineMediaCoordinator(store, backgroundScope, { it }, { it.media }, { post, _, _ ->
+            acquisitions += post.id.sourcePostId
+            throw IOException("offline")
+        })
+        coordinator.makeAvailableOffline("codex:a", listOf(post("a")))
+        coordinator.jobs.first { it["codex:a"]?.isRunning == false }
+
+        coordinator.keepOffline("codex:a", listOf(post("b")))
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(listOf("a"), acquisitions)
+        assertEquals(setOf(post("a").id), coordinator.jobs.value.getValue("codex:a").failedPosts)
+    }
+
+    @Test
+    fun `a replaced preparation that already loaded cannot start a job after the removal`() = runTest {
+        val (coordinator, store) = gatedCoordinator()
+        val proceed = loadedPreparation(coordinator)
+        coordinator.prepare("codex:a") { awaitCancellation() }
+        coordinator.remove("codex:a")
+        proceed.complete(Unit)
+        runCurrent()
+        assertTrue(coordinator.jobs.value.isEmpty())
+        assertEquals(0, store.snapshot.value.postCount)
+    }
+
+    @Test
+    fun `a cancelled preparation that already loaded cannot start a job`() = runTest {
+        val (coordinator, _) = gatedCoordinator()
+        val proceed = loadedPreparation(coordinator)
+        coordinator.cancel("codex:a")
+        proceed.complete(Unit)
+        runCurrent()
+        assertTrue(coordinator.jobs.value.isEmpty())
+    }
+
+    @Test
+    fun `a save while clear waits on a preparation starts no job and leaves no copy`() = runTest {
+        val (coordinator, store) = gatedCoordinator()
+        val proceed = loadedPreparation(coordinator)
+        val clearing = launch { coordinator.clear() }
+        runCurrent()
+        coordinator.saveOnCollectionSave(post("b"))
+        proceed.complete(Unit)
+        clearing.join()
+        advanceUntilIdle()
+        assertTrue(coordinator.jobs.value.isEmpty())
+        assertEquals(0, store.snapshot.value.postCount)
+    }
+
+    private fun TestScope.gatedCoordinator(): Pair<OfflineMediaCoordinator, OfflineMediaStore> {
+        val store = OfflineMediaStore(temporary.newFolder(), ioDispatcher = StandardTestDispatcher(testScheduler))
+        return OfflineMediaCoordinator(store, backgroundScope, { it }, { it.media }, { _, _, file -> file.writeText("bytes") }) to store
+    }
+
+    /** Starts a preparation that has loaded its posts and is past its last cancellable point; completing the result lets it start. */
+    private suspend fun loadedPreparation(coordinator: OfflineMediaCoordinator): CompletableDeferred<Unit> {
+        val loaded = CompletableDeferred<Unit>()
+        val proceed = CompletableDeferred<Unit>()
+        coordinator.prepare("codex:a") { start ->
+            withContext(NonCancellable) {
+                loaded.complete(Unit)
+                proceed.await()
+            }
+            start(listOf(post("a")))
+        }
+        loaded.await()
+        return proceed
     }
 
     private fun post(id: String): Post {

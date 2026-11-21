@@ -21,6 +21,7 @@ import com.theoriacodex.sources.custom.SiteFamilyRegistry
 import com.theoriacodex.sources.custom.SiteProber
 import com.theoriacodex.app.di.UpdateDependencies
 import com.theoriacodex.app.di.WorkflowDependencies
+import com.theoriacodex.app.di.appPostDownloads
 import com.theoriacodex.app.media.BoundedMediaDurationProbe
 import com.theoriacodex.app.media.MediaDurationAcquisitionEngine
 import com.theoriacodex.app.media.MediaDurationCoordinator
@@ -65,6 +66,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.pixiv.PixivAuthApi
 import java.io.File
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -90,6 +92,7 @@ class JourneyAppContainer(
     private val appContext = context.applicationContext
     private val ownerJob = SupervisorJob(scope.coroutineContext[Job])
     private val ownerScope = CoroutineScope(scope.coroutineContext + ownerJob + Dispatchers.IO)
+    override val applicationScope: CoroutineScope get() = ownerScope
     val registry = JourneySourceRegistry(
         postsBySource, pageSize,
         providerShapedSources.associateWith { ProviderShapedSource(postsBySource.getValue(it), httpClient) },
@@ -111,6 +114,8 @@ class JourneyAppContainer(
         override suspend fun latestMainPrerelease(): Result<RemoteUpdate?> = Result.success(null)
         override suspend fun mainPrereleaseHistory(limit: Int): Result<List<RemoteUpdate>> = Result.success(emptyList())
     }
+    /** Completes at the end of [awaitReady]; downloads start after it, as in the app container. */
+    private val ready = CompletableDeferred<Unit>()
     private val offline = OfflineMediaCoordinator(
         store = OfflineMediaStore(storageDirectory.resolve("offline-media")),
         scope = ownerScope,
@@ -159,6 +164,8 @@ class JourneyAppContainer(
         ),
         appUsageTracker = AppUsageTracker(statistics, ownerScope),
         offlineMedia = offline,
+        postDownloads = appPostDownloads(appContext, storageDirectory.resolve("download_jobs.json"), ownerScope, settings, sources,
+            ready::await),
     )
     override val workflows = WorkflowDependencies(
         com.theoriacodex.app.codex.CodexCleaningService(content),
@@ -196,6 +203,7 @@ class JourneyAppContainer(
         offline.store.refresh()
         settings.setEnabledSources(registry.availableSources())
         settings.setResolveUnknownAnimatedDurations(false)
+        ready.complete(Unit)
     }
     /** Await DataStore ownership release before another graph opens the same fixture files. */
     suspend fun shutdown() = withContext(Dispatchers.IO) {

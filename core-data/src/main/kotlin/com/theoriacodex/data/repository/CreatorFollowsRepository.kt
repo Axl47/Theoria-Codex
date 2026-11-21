@@ -4,6 +4,7 @@ import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 
@@ -28,6 +29,9 @@ data class FollowedCreator(
         copy(seenPostIds = marks.seenPostIds, latestPostIds = marks.latestPostIds, checkedAtEpochMs = marks.checkedAtEpochMs)
 }
 
+/** A follow [CreatorFollowsRepository.unfollow] removed and the position it held in the list. */
+data class RemovedFollow(val follow: FollowedCreator, val index: Int)
+
 /** Local membership only. Refreshes cannot resurrect a removed or replaced follow. */
 class CreatorFollowsRepository(private val settings: SettingsRepository) {
     fun observe() = settings.observeSettings().map { it.followedCreators }.distinctUntilChanged()
@@ -44,11 +48,36 @@ class CreatorFollowsRepository(private val settings: SettingsRepository) {
         }
     }
 
-    suspend fun unfollow(creator: CreatorProfile) {
-        settings.updateSettings { it.copy(followedCreators = it.followedCreators.filterNot { follow ->
-            follow.creator.followKey() == creator.followKey()
-        }) }
+    /** Removes [creator]'s follow and returns it with its place, for [restore]; null when it was not followed. */
+    suspend fun unfollow(creator: CreatorProfile): RemovedFollow? {
+        var removed: RemovedFollow? = null
+        settings.updateSettings { current ->
+            val index = current.followedCreators.indexOfFirst { it.creator.followKey() == creator.followKey() }
+            if (index < 0) current
+            else {
+                removed = RemovedFollow(current.followedCreators[index], index)
+                current.copy(followedCreators = current.followedCreators.filterIndexed { i, _ -> i != index })
+            }
+        }
+        return removed
     }
+
+    /**
+     * Puts an unfollowed record back unchanged, membership and marks included, where it stood; undoing an
+     * unfollow must not mint a new follow that counts everything as seen. A creator followed again meanwhile
+     * keeps its newer record.
+     */
+    suspend fun restore(removed: RemovedFollow) {
+        settings.updateSettings { current ->
+            val follows = current.followedCreators
+            if (follows.size >= MAX_FOLLOWED_CREATORS || follows.any { it.creator.followKey() == removed.follow.creator.followKey() }) current
+            else current.copy(followedCreators = follows.toMutableList().apply { add(removed.index.coerceIn(0, size), removed.follow) })
+        }
+    }
+
+    /** [creator]'s seen post ids, or null when it is not followed; read before a visit records more. */
+    suspend fun seenPostIds(creator: CreatorProfile): Set<String>? =
+        observe().first().firstOrNull { it.creator.followKey() == creator.followKey() }?.seenPostIds?.toSet()
 
     /**
      * Records a refresh in one settings write. [results] by membership ID hold a creator's first page,

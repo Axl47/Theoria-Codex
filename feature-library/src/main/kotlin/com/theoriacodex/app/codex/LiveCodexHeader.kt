@@ -18,6 +18,11 @@ import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.app.ui.components.rememberFeedPageDemand
 import com.theoriacodex.domain.model.Post
 
+/**
+ * A live Saved feed's app bar (Followed, Searches) over its paging and failures. [branches] names what the feed
+ * merges, as its failures' Retry says it; [manageLabel] is the button that opens their management, which a long press
+ * on the title also opens.
+ */
 @Composable
 internal fun LiveCodexHeader(
     title: String,
@@ -28,6 +33,7 @@ internal fun LiveCodexHeader(
     posts: List<Post>,
     gridState: LazyStaggeredGridState,
     onBack: () -> Unit,
+    branches: String,
     manageLabel: String,
     onManage: () -> Unit,
 ) {
@@ -51,7 +57,7 @@ internal fun LiveCodexHeader(
         projection = feed.related.projection,
         onLoadNextPage = owner::loadMore,
     )
-    LiveCodexFailures(state.errors, labels, title, manageLabel, retryEnabled = !state.loading, onRetry = owner::retry)
+    LiveCodexFailures(state.errors, labels, title, branches, retryEnabled = !state.loading, onRetry = owner::retry)
     FeedContinueLoading(demand)
 }
 
@@ -61,7 +67,7 @@ fun LiveCodexFailures(
     errors: Map<String, String>,
     labels: Map<String, String>,
     title: String,
-    manageLabel: String,
+    branches: String,
     retryEnabled: Boolean,
     onRetry: () -> Unit,
 ) {
@@ -71,7 +77,7 @@ fun LiveCodexFailures(
             if (errors.size > 2) "\n${errors.size - 2} more could not load" else "")
         Row {
             TextButton(onClick = dismiss) { Text("Dismiss") }
-            TextButton(enabled = retryEnabled, onClick = onRetry) { Text("Retry failed ${manageLabel.lowercase()}") }
+            TextButton(enabled = retryEnabled, onClick = onRetry) { Text("Retry failed ${branches.lowercase()}") }
         }
     }
 }

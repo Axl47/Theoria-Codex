@@ -10,9 +10,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.MutableState
@@ -285,8 +283,8 @@ private fun rememberShellOwners(container: TheoriaAppContainer, appContext: Cont
     val codexCommands = viewModel(key = "codex-command-owner") {
         CodexCommandViewModel(
             data.codexRepository, workflows.likesCodexSync::clearProfile, workflows.likesCodexSync::restoreClearedLikes,
-            workflows.codexTransfer::reorderVisibleCodices, workflows.codexCleaning,
-        )
+            workflows.codexTransfer::reorderVisibleCodices, workflows.codexCleaning, removalScope = container.applicationScope,
+        ) { codexId -> container.features.offlineMedia.remove(com.theoriacodex.app.media.codexOfflineOwner(codexId)) }
     }
     val postMutations = viewModel(key = "post-mutations") {
         PostMutationViewModel(data.settingsRepository, workflows.likesCodexSync::toggle)
@@ -379,15 +377,6 @@ internal class TheoriaShell(
         scope.launch {
             runCatchingPreservingCancellation { data.statisticsRepository.recordPostUrlCopy() }
         }
-    }
-
-    suspend fun showActionableFeedback(message: String, actionLabel: String): Boolean {
-        return snackbarHostState.showSnackbar(
-            message = message,
-            actionLabel = actionLabel,
-            withDismissAction = false,
-            duration = SnackbarDuration.Long,
-        ) == SnackbarResult.ActionPerformed
     }
 
     fun requestSaveToCodex(post: Post, fromForYou: Boolean = false, searchQuery: Query? = null) {
@@ -489,7 +478,7 @@ internal class TheoriaShell(
         navigation.goToTab(TopLevelDestination.Search)
         val tags = query.effectiveIncludeTermGroups.map { group -> group.terms.joinToString(" or ") { it.value } } +
             query.excludeTerms.map { "-${it.value}" }
-        toast("Searching ${source.displayName()} codex tags: ${tags.joinToString(separator = ", ")}")
+        toast("Searching ${source.displayName()} Codex tags: ${tags.joinToString(separator = ", ")}")
     }
 
     suspend fun downloadCodex(codexId: String) {
@@ -508,10 +497,10 @@ internal class TheoriaShell(
     suspend fun shareCodex(codexId: String) {
         val export = workflows.codexTransfer.export(codexId)
         if (export !is CodexExportResult.Success) {
-            toast(if (export is CodexExportResult.NotFound) "Codex not found" else "Could not export codex")
+            toast(if (export is CodexExportResult.NotFound) "Codex not found" else "Could not export Codex")
             return
         }
-        if (!shareExportDocument(export.payload, "application/json", "Share codex")) toast("Could not export codex")
+        if (!shareExportDocument(export.payload, "application/json", "Share Codex")) toast("Could not export Codex")
     }
 
     suspend fun shareStats(file: StatsShareFile) {

@@ -2,6 +2,7 @@ package com.theoriacodex.app.settings.sites
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -12,7 +13,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -33,6 +33,7 @@ import com.theoriacodex.app.settings.SettingsGroup
 import com.theoriacodex.app.settings.SettingsHeader
 import com.theoriacodex.app.settings.SettingsPageColumn
 import com.theoriacodex.app.settings.SettingsRow
+import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.domain.source.ProtocolFamily
 import com.theoriacodex.domain.source.SiteProfile
 
@@ -105,7 +106,7 @@ private fun ConfirmSection(
     saving: Boolean,
     onAction: (CustomSitesAction) -> Unit,
 ) {
-    AnnouncedText("Found a ${family.displayName} site. Name it and add it.")
+    AnnouncedText("Found a ${family.displayName} site.")
     LabelField(form.fields.label, !saving, onAction)
     IncludeSwitch(form.fields.includeInUnifiedAndForYou, !saving, onAction)
     message?.let { AnnouncedText(it, error = true) }
@@ -116,7 +117,10 @@ private fun ConfirmSection(
     }
 }
 
-/** Edit flow: name, opt-in, keys (replace or remove) and headers. Never changes the address or family. */
+/**
+ * Edit flow: name, opt-in and headers apply as they change; keys (replace or remove) have their own Save
+ * because new keys are checked once saved. Never changes the address or family.
+ */
 @Composable
 internal fun EditSitePage(
     form: SiteForm.Edit,
@@ -163,12 +167,8 @@ internal fun EditSitePage(
             }
         }
         form.message?.let { AnnouncedText(it, Modifier.padding(horizontal = 4.dp), error = true) }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = { onAction(CustomSitesAction.SaveEdit) }, enabled = editable) { Text("Save") }
-            TextButton(onClick = { onAction(CustomSitesAction.RequestRemove(site.sourceId)) }, enabled = editable) {
-                Text("Remove site", color = MaterialTheme.colorScheme.error)
-            }
-            if (form.saving) Progress("Saving…")
+        TextButton(onClick = { onAction(CustomSitesAction.Remove(site.sourceId)) }, enabled = editable) {
+            Text("Remove site", color = MaterialTheme.colorScheme.error)
         }
     }
 }
@@ -196,6 +196,11 @@ private fun EditCredentials(
                 }
             }
         }
+    }
+    val hasChange = form.clearCredentials || form.fields.user.isNotBlank() || form.fields.apiKey.isNotBlank()
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Button(onClick = { onAction(CustomSitesAction.SaveEdit) }, enabled = editable && hasChange) { Text("Save") }
+        if (form.saving) Progress("Saving…")
     }
 }
 
@@ -245,20 +250,12 @@ private fun LabelField(label: String, enabled: Boolean, onAction: (CustomSitesAc
 /** The single opt-in shared by Unified search and For You (plan D4); new sites start off. */
 @Composable
 private fun IncludeSwitch(checked: Boolean, enabled: Boolean, onAction: (CustomSitesAction) -> Unit) {
-    SettingsRow(
-        "Include in Unified and For You",
-        "Off keeps this site to its own searches",
-        trailing = {
-            Switch(
-                checked = checked,
-                onCheckedChange = { onAction(CustomSitesAction.SetIncludeInUnifiedAndForYou(it)) },
-                enabled = enabled,
-            )
-        },
-    )
+    SwitchRow("Include in Unified and For You", checked, enabled = enabled, contentPadding = PaddingValues(vertical = 4.dp)) {
+        onAction(CustomSitesAction.SetIncludeInUnifiedAndForYou(it))
+    }
 }
 
-/** Collapsed User-Agent and Referer overrides; blank fields use the defaults. */
+/** Collapsed User-Agent and Referer overrides; blank fields use the defaults, which the placeholders say. */
 @Composable
 private fun AdvancedHeaders(fields: SiteFields, enabled: Boolean, onAction: (CustomSitesAction) -> Unit) {
     // Read once: a value typed while open must not fold the section away under the person typing.
@@ -269,7 +266,7 @@ private fun AdvancedHeaders(fields: SiteFields, enabled: Boolean, onAction: (Cus
             value = fields.userAgent,
             onValueChange = { onAction(CustomSitesAction.SetUserAgent(it)) },
             label = { Text("User-Agent") },
-            supportingText = { Text("Leave blank to use the default.") },
+            placeholder = { Text("Default") },
             singleLine = true,
             enabled = enabled,
         )
@@ -278,7 +275,7 @@ private fun AdvancedHeaders(fields: SiteFields, enabled: Boolean, onAction: (Cus
             value = fields.referer,
             onValueChange = { onAction(CustomSitesAction.SetReferer(it)) },
             label = { Text("Referer") },
-            supportingText = { Text("Leave blank to use the site's address.") },
+            placeholder = { Text("Site address") },
             singleLine = true,
             enabled = enabled,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),

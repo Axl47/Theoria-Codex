@@ -1,5 +1,6 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.ui.undo.UndoAction
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.CodexCleaningRequest
 import com.theoriacodex.data.repository.CodexCleaningSnapshot
@@ -48,17 +49,17 @@ class CodexCleaningWorkflowTest {
         runCurrent()
         assertEquals("Could not clean Codex", owner.feedback.value.single().message)
         assertEquals(original, repository.observeCodexItems("target").first())
-        owner.acknowledge(owner.feedback.value.single().id, true)
+        owner.press(owner.feedback.value.single().id)
         runCurrent()
         val completion = owner.feedback.value.single()
         assertEquals("1 post removed from Codex", completion.message)
-        assertEquals("Undo", completion.actionLabel)
+        assertEquals(UndoAction.Undo, completion.undoAction)
         assertEquals(listOf(keep.id), repository.observeCodexItems("target").first().map { it.postId })
         assertTrue(requests.all { it.targetId == "target" && it.comparisonIds == setOf("source") })
-        owner.acknowledge(completion.id, true)
+        owner.press(completion.id)
         runCurrent()
         assertEquals("Could not restore cleaned posts", owner.feedback.value.single().message)
-        owner.acknowledge(owner.feedback.value.single().id, true)
+        owner.press(owner.feedback.value.single().id)
         runCurrent()
         assertEquals(original.toSet(), repository.observeCodexItems("target").first().toSet())
         assertEquals("Cleaned posts restored", owner.feedback.value.single().message)

@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -28,8 +29,10 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.navArgument
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.codex.CodexDetailScreen
+import com.theoriacodex.app.codex.CodexHeaderActions
+import com.theoriacodex.app.codex.CodexUndoAnchors
 import com.theoriacodex.app.codex.SAVED_CODEX_ID
-import com.theoriacodex.app.codex.likesCodexIdForProfile
+import com.theoriacodex.app.media.CodexOfflineRemovalUndo
 import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.related.RelatedPostsRouteController
@@ -70,6 +73,7 @@ import com.theoriacodex.app.viewer.ViewerScreenCallbacks
 import com.theoriacodex.app.viewer.ViewerScreenConfig
 import com.theoriacodex.app.viewer.viewerMediaPrefetcher
 import com.theoriacodex.data.repository.CodexSortMode
+import com.theoriacodex.data.repository.SettingChoices
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.repository.followKey
@@ -141,14 +145,16 @@ private fun CodexDetailEntry(
                 resolvePost = { shell.viewerRouteWorkflow.resolvePost(it, ViewerStreamSource.CODEX) },
                 onToggleLike = { shell.toggleLikeAndSyncCodex(it) },
             )
+            // Offline copies removed from a shelf's Codex menu here; leaving this screen commits them.
+            CodexOfflineRemovalUndo(Modifier.align(Alignment.BottomCenter))
         } else {
-            CodexDetailDestination(shell, codexId)
+            CodexDetailDestination(shell, codexId, entry.codexTagSheetRequest())
         }
     }
 }
 
 @Composable
-private fun CodexDetailDestination(shell: TheoriaShell, codexId: String) {
+private fun CodexDetailDestination(shell: TheoriaShell, codexId: String, tagSheet: CodexTagSheetRequest) {
     val fabContext = codexFeedFabContext(codexId)
     val fabRestoreState = shell.feedFabRestoreRegistry.state(fabContext) ?: return
     val sortMode = fabRestoreState.sortMode?.let { encoded ->
@@ -175,7 +181,7 @@ private fun CodexDetailDestination(shell: TheoriaShell, codexId: String) {
                 resolveInBackground = state.resolveUnknownAnimatedDurations,
             )
         }
-        CodexDetailContent(shell, codexId, sortMode, fabContext, fabRestoreState, state, durationOwner, durationStates)
+        CodexDetailContent(shell, codexId, sortMode, fabContext, fabRestoreState, state, durationOwner, durationStates, tagSheet)
     }
 }
 
@@ -189,6 +195,7 @@ private fun CodexDetailContent(
     state: CodexDetailDestinationState,
     durationOwner: MediaDurationRouteViewModel,
     durationStates: MediaDurationStates,
+    tagSheet: CodexTagSheetRequest,
 ) {
     val routes = shell.routes
     val commands = shell.owners.codexCommands
@@ -201,7 +208,11 @@ private fun CodexDetailContent(
     CodexDetailScreen(
         codexId = codexId,
         codexName = state.codex?.name,
-        onTitleLongPress = { shell.overlays.codexActionTargetId = codexId },
+        headerActions = CodexHeaderActions(
+            onRename = { name -> commands.rename(codexId, name, CodexUndoAnchors.detail(codexId)) },
+            onOpenActions = { shell.overlays.codexActionTargetId = codexId },
+            onTopUpOffline = { shell.transfers.offline.makeAvailableOffline(codexId) },
+        ),
         customHeader = markingNewPostsSeen(shell, codexId, state.loading, virtualUi?.header),
         likedPostIds = state.likedPostIds,
         onToggleLike = liveOwner?.let { owner ->
@@ -228,10 +239,11 @@ private fun CodexDetailContent(
         },
         onGoToSearch = { shell.navigation.goToTab(TopLevelDestination.Search) },
         onBack = { shell.navController.popBackStack() },
-        onDeleteCodex = { commands.delete(codexId, state.activeProfile.profileId) },
-        isLikesCodex = codexId == likesCodexIdForProfile(state.activeProfile.profileId),
         fabRestoreState = fabRestoreState,
         onFabRestoreStateChange = { updated -> shell.feedFabRestoreRegistry.update(fabContext, updated) },
+        onSearchSites = shell::searchFromCodex,
+        tagSheetRequested = tagSheet.requested,
+        onTagSheetRequestHandled = tagSheet.onHandled,
     )
 }
 
@@ -361,7 +373,7 @@ private suspend fun TheoriaShell.viewerDownloadOrigin(): String {
             "Codex · ${name ?: "Collection"}"
         }
         ViewerStreamSource.CREATOR_PROFILE -> "Creator profile"
-        ViewerStreamSource.RECENTS -> "Recents"
+        ViewerStreamSource.RECENTS -> "History"
         ViewerStreamSource.RELATED -> "Related posts"
         null -> "Viewer"
     }
@@ -425,6 +437,7 @@ private fun viewerScreenCallbacks(shell: TheoriaShell) = ViewerScreenCallbacks(
     onShowRelatedPosts = shell.viewerRouteWorkflow.relatedShelves::show,
     onRemoveFromCodex = shell.owners.codexCommands::removePost,
     onPlaybackModeSelected = { shell.owners.settings.onAction(SettingsAction.SetViewerPlaybackMode(it)) },
+    onVideoQualitySelected = { shell.owners.settings.onAction(SettingsAction.SetChoice(SettingChoices.DefaultVideoQuality, it)) },
     onCommentOrderSelected = { shell.owners.settings.onAction(SettingsAction.SetCommentOrder(it)) },
     onVisiblePostChanged = { post, viewedMediaNumber, session ->
         shell.data.markViewedNewPost(post, session)

@@ -370,7 +370,7 @@ private fun CodexPickerRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "$itemCount ${countNoun(itemCount, "item")}",
+                    text = codexPostCount(itemCount),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

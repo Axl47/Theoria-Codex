@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.app.codex.codexCleaningReviewPosts
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.animatedDurationMs
@@ -13,10 +14,13 @@ import com.theoriacodex.app.triage.HiddenTag
 import com.theoriacodex.app.triage.TriageActions
 import com.theoriacodex.app.triage.TriageFeed
 import com.theoriacodex.app.triage.TriageFeedSnapshot
+import com.theoriacodex.app.triage.TriageRemoval
 import com.theoriacodex.app.triage.TriageReversal
 import com.theoriacodex.app.triage.settled
+import com.theoriacodex.app.ui.navigation.TriageMode
 import com.theoriacodex.app.ui.navigation.TriageRequest
 import com.theoriacodex.app.ui.navigation.TriageSeed
+import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -26,14 +30,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.withContext
-
-private const val CODEX_FEED_PREFIX = "codex:"
 
 /**
  * A deck's feed, plus [candidates]: the live owner's posts the deck picks from, whose lengths the deck resolves while
@@ -50,21 +53,29 @@ internal class SeededTriageFeed(
 /**
  * The feed [request] names, seeded with what its grid handed over ([seed]). A live feed gives the grid's posts in its
  * order, then whatever else of the owner's posts the grid's filter keeps with the lengths known so far, while the owner
- * still shows the deck's query; a Codex or Likes gives exactly the posts its grid showed. Null when the owner no
- * longer shows that query.
+ * still shows the deck's query; a Codex or Likes gives exactly the posts its grid showed, and cleaning's Review (a
+ * [TriageMode.RemoveFromCodex] with Codices to compare) exactly the posts cleaning would remove. Null when the owner
+ * no longer shows that query.
  */
 internal fun TheoriaShell.triageFeed(request: TriageRequest, seed: TriageSeed): SeededTriageFeed? = when (request.source) {
     ViewerStreamSource.SEARCH, ViewerStreamSource.FOR_YOU, ViewerStreamSource.CREATOR_PROFILE ->
         routes.feed(request.source)?.takeIf { it.viewerFeed.queryHash == request.feedKey }
             ?.seededTriageFeed(request.feedKey, seed, features.mediaDurationCoordinator.states)
-    ViewerStreamSource.CODEX -> request.codexId()?.let {
-        SeededTriageFeed(flowOf(TriageFeedSnapshot(seed.posts, canLoadMore = false)), flowOf(emptyList())) {}
+    ViewerStreamSource.CODEX -> request.codexId?.let { codexId ->
+        val alsoIn = (request.mode as? TriageMode.RemoveFromCodex)?.alsoIn.orEmpty()
+        val snapshots = if (alsoIn.isEmpty()) flowOf(TriageFeedSnapshot(seed.posts, canLoadMore = false))
+        else cleaningReviewSnapshots(codexId, alsoIn)
+        SeededTriageFeed(snapshots, flowOf(emptyList())) {}
     }
     ViewerStreamSource.RELATED, ViewerStreamSource.RECENTS, ViewerStreamSource.TRAIL -> null
 }
 
-/** The Codex a [ViewerStreamSource.CODEX] request names, from its `codex:<id>` feed key. */
-internal fun TriageRequest.codexId(): String? = feedKey.takeIf { it.startsWith(CODEX_FEED_PREFIX) }?.removePrefix(CODEX_FEED_PREFIX)
+/** What the deck's left swipe removes through when [request] opens it on a Codex to remove from; null otherwise. */
+internal fun TheoriaShell.triageRemoval(request: TriageRequest): TriageRemoval? {
+    val codexId = request.codexId?.takeIf { request.mode is TriageMode.RemoveFromCodex } ?: return null
+    val commands = owners.codexCommands
+    return TriageRemoval { post -> commands.removeWithOwnUndo(codexId, post) }
+}
 
 /**
  * [request] and [seed] once Search's filters have applied: a filter change still waiting to run starts now, and its
@@ -103,6 +114,16 @@ private fun ViewerFeedOwner.seededTriageFeed(
     return SeededTriageFeed(snapshots, feed.map { current -> current?.results.orEmpty() }) {
         if (owner.viewerFeed.queryHash == queryHash) owner.loadNextPage()
     }
+}
+
+/**
+ * Codex [codexId]'s posts that one of [alsoIn] also holds, as they are when the deck opens: what cleaning against them
+ * would remove. Removals and saves made in the deck do not reshuffle them.
+ */
+private fun TheoriaShell.cleaningReviewSnapshots(codexId: String, alsoIn: Set<String>): Flow<TriageFeedSnapshot> = flow {
+    val codices = data.codexRepository
+    val posts = codices.observeCodexPosts(codexId, CodexSortMode.NEWEST_SAVED).first()
+    emit(TriageFeedSnapshot(codexCleaningReviewPosts(posts, alsoIn.map { codices.observeCodexItems(it).first() }), canLoadMore = false))
 }
 
 /** The lengths decided for [posts] whose media does not state its own, by post. */

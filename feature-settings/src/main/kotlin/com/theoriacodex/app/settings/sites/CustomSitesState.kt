@@ -1,5 +1,6 @@
 package com.theoriacodex.app.settings.sites
 
+import com.theoriacodex.app.ui.undo.PendingRemoval
 import com.theoriacodex.app.customsites.BuiltInSiteSummary
 import com.theoriacodex.app.customsites.CustomSiteSummary
 import com.theoriacodex.domain.model.SourceKey
@@ -21,14 +22,15 @@ data class CustomSitesUiState(
     val testProgress: SitesTestProgress? = null,
     /** The last finished Test all run's result line. */
     val testSummary: String? = null,
-    val removeTargetId: String? = null,
-    val removing: Boolean = false,
+    /** Sites removed but held back for Undo (or Retry), by source id; each row draws its Undo instead. */
+    val removals: Map<String, PendingRemoval> = emptyMap(),
     /** A short failure message shown above the list until the next action. */
     val notice: String? = null,
     /** The in-app browser check that is open, if any. */
     val verification: SiteVerification? = null,
 ) {
-    val removeTarget: CustomSiteSummary? get() = removeTargetId?.let { id -> sites.firstOrNull { it.sourceId == id } }
+    /** The added sites as the list shows them, without those waiting to be removed. */
+    val shownSites: List<CustomSiteSummary> get() = sites.filterNot { it.sourceId in removals }
 }
 
 /** Test all is on the [position]th of [total] sites, named [label]. */
@@ -138,9 +140,14 @@ sealed interface CustomSitesAction {
 
     data class Retest(val sourceId: String) : CustomSitesAction
     data object TestAll : CustomSitesAction
-    data class RequestRemove(val sourceId: String) : CustomSitesAction
-    data object DismissRemove : CustomSitesAction
-    data object ConfirmRemove : CustomSitesAction
+    /** Removes a site with Undo in its row; the removal commits after the Undo times out or Sites is left. */
+    data class Remove(val sourceId: String) : CustomSitesAction
+
+    /** A removed site row's Undo, or its Retry after the removal failed. */
+    data class ActOnRemoval(val sourceId: String) : CustomSitesAction
+
+    /** Commits every removal still held for Undo; sent when Sites is left. */
+    data object CommitRemovals : CustomSitesAction
     data object DismissNotice : CustomSitesAction
 
     /**

@@ -112,10 +112,8 @@ internal fun CredentialAccountControls(
             modifier = Modifier.fillMaxWidth(),
             value = apiKeyInput,
             onValueChange = onApiKeyChange,
-            label = { Text("Replacement API Key") },
-            supportingText = {
-                Text("Leave blank to keep the configured key. Paste a key or credential query to replace it.")
-            },
+            label = { Text("API key") },
+            placeholder = { Text("Paste a key or credential query") },
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
             enabled = enabled,

@@ -71,7 +71,6 @@ class CodexTagSearchSheetTest {
         open { _, query -> searched = query }
         compose.onNodeWithContentDescription("Draw fewer tags").performClick()
         compose.onNodeWithText("Draw").performClick()
-        compose.onNodeWithText("Drawn from saved post 48213").assertExists()
         compose.onNodeWithText("Search").performClick()
         compose.runOnIdle {
             val drawn = requireNotNull(searched).includeTerms

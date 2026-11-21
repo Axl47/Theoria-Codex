@@ -4,6 +4,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.graphics.Color
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.compose.foundation.layout.Column
+import com.theoriacodex.app.ui.undo.UndoAnchor
+import com.theoriacodex.app.ui.undo.UndoPill
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -20,6 +22,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -45,7 +48,12 @@ internal fun TheoriaAdaptiveScaffold(
     val rail = useNavigationRail(windowWidthDp)
     Scaffold(
         containerColor = containerColor,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                UndoPill(UndoAnchor.App)
+                SnackbarHost(snackbarHostState)
+            }
+        },
         bottomBar = {
             if (navigationVisible && !rail) TheoriaBottomNavigation(
                 selectedIndex, bottomBarHeight, bottomBarIconSize, bottomBarWindowInsets, onDestinationSelected, marked,

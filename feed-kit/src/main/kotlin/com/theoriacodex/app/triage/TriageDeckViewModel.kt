@@ -26,7 +26,8 @@ import kotlinx.coroutines.launch
  * the order they were asked for, so a reversal always follows its write and a later write follows both. [writeScope]
  * outlives the deck, so writes and reversals already asked for still run, in order, after the deck closes.
  * [TriageDeckState.notice] confirms a decision only once its write commits; a failed write brings its card back.
- * [query] and [fromForYou] describe the origin feed for save ranking.
+ * [query] and [fromForYou] describe the origin feed for save ranking. With a [removal], left takes the post out of the
+ * deck's Codex instead of skipping it, through the same ordered writes, and right keeps it instead of liking it.
  */
 class TriageDeckViewModel(
     private val feed: TriageFeed,
@@ -35,9 +36,13 @@ class TriageDeckViewModel(
     private val query: Query?,
     private val fromForYou: Boolean,
     writeScope: CoroutineScope,
+    private val removal: TriageRemoval? = null,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(TriageDeckState())
     val state: StateFlow<TriageDeckState> = mutableState.asStateFlow()
+
+    /** Whether a left swipe removes the post from the deck's Codex rather than skipping it, and a right one keeps it. */
+    val removes: Boolean get() = removal != null
 
     /** The active profile's hidden tags, which the deck does not offer to hide again. */
     val hiddenTags: Flow<Set<HiddenTag>> get() = actions.hiddenTags
@@ -88,12 +93,15 @@ class TriageDeckViewModel(
         mutableState.update { deck ->
             val decision = work.decision
             val passedOver = if (decision is TriageDecision.Hid) deck.passedOverTags + normalizeMatchToken(decision.tag) else deck.passedOverTags
-            val moved = deck.copy(last = decision, passedOverTags = passedOver)
+            val removed = if (decision is TriageDecision.Removed) deck.removed + post.id else deck.removed
+            // A keep writes nothing, so it is confirmed at once.
+            val notice = if (decision is TriageDecision.Kept) TriageNotice(decision, failed = false) else deck.notice
+            val moved = deck.copy(last = decision, notice = notice, passedOverTags = passedOver, removed = removed)
             moved.copy(index = moved.shownFrom(deck.index + 1))
         }
         pageIfNearEnd()
-        // A skip writes nothing, so it has nothing to wait for or confirm.
-        if (choice is TriageChoice.Skip) {
+        // A skip or a keep writes nothing, so it has nothing to wait for.
+        if (choice is TriageChoice.Skip || choice is TriageChoice.Keep) {
             work.reversal = NOTHING
         } else {
             writes.trySend {
@@ -115,7 +123,8 @@ class TriageDeckViewModel(
     /** Runs [choice]'s write for [post]; returns how to reverse exactly what it did, or null when it failed. */
     private suspend fun commit(choice: TriageChoice, post: Post): TriageReversal? = runCatchingPreservingCancellation<TriageReversal> {
         when (choice) {
-            TriageChoice.Skip -> NOTHING
+            TriageChoice.Skip, TriageChoice.Keep -> NOTHING
+            TriageChoice.Remove -> checkNotNull(removal) { "This deck does not remove" }.remove(post) ?: NOTHING
             TriageChoice.Like -> actions.like(post) ?: NOTHING
             is TriageChoice.Save -> {
                 val record = quickSave.quickSave(post, choice.codexId, query, fromForYou) ?: error("The save failed")
@@ -139,7 +148,7 @@ class TriageDeckViewModel(
             when {
                 !failed -> deck.copy(notice = notice)
                 stillLatest -> deck.restoring(work.decision).copy(last = null, notice = notice)
-                else -> deck.copy(notice = notice, passedOverTags = deck.passedOverTags - work.decision.passedOverTag())
+                else -> deck.unwinding(work.decision).copy(notice = notice)
             }
         }
     }
@@ -165,6 +174,8 @@ class TriageDeckViewModel(
 private fun decisionFor(choice: TriageChoice, post: Post): TriageDecision = when (choice) {
     TriageChoice.Like -> TriageDecision.Liked(post)
     TriageChoice.Skip -> TriageDecision.Skipped(post)
+    TriageChoice.Keep -> TriageDecision.Kept(post)
+    TriageChoice.Remove -> TriageDecision.Removed(post)
     is TriageChoice.Save -> TriageDecision.Saved(post, choice.codexName)
     is TriageChoice.Hide -> TriageDecision.Hid(post, choice.tag)
 }
@@ -173,8 +184,10 @@ private fun decisionFor(choice: TriageChoice, post: Post): TriageDecision = when
 private fun TriageDecision.passedOverTag(): Set<String> =
     if (this is TriageDecision.Hid) setOf(normalizeMatchToken(tag)) else emptySet()
 
-/** The deck with [decision]'s card current again and the tag it hid shown again. */
-private fun TriageDeckState.restoring(decision: TriageDecision): TriageDeckState {
-    val shown = copy(passedOverTags = passedOverTags - decision.passedOverTag())
-    return shown.copy(index = posts.indexOfFirst { it.id == decision.post.id }.coerceAtLeast(0))
-}
+/** The deck with what [decision] took out of it shown again: the tag it hid, the post it removed. */
+private fun TriageDeckState.unwinding(decision: TriageDecision): TriageDeckState =
+    copy(passedOverTags = passedOverTags - decision.passedOverTag(), removed = removed - decision.post.id)
+
+/** The deck with [decision] unwound and its card current again. */
+private fun TriageDeckState.restoring(decision: TriageDecision): TriageDeckState =
+    unwinding(decision).copy(index = posts.indexOfFirst { it.id == decision.post.id }.coerceAtLeast(0))

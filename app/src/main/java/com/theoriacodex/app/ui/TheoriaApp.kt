@@ -62,6 +62,11 @@ import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.codex.SaveToCodexSheet
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.di.TheoriaAppContainer
+import com.theoriacodex.app.ui.undo.ProvideUndoSlot
+import com.theoriacodex.app.ui.undo.UndoSlot
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.tags.PostTagContextProvider
@@ -96,13 +101,35 @@ internal fun TheoriaAppContent(
     incomingUri: Uri? = null,
     onIncomingUriConsumed: () -> Unit = {},
 ) {
+    // One undo slot per Activity, kept across recreation like the shell's other owners.
+    val undo = viewModel(key = "undo-slot") { UndoSlotOwner() }.slot
+    ProvideUndoSlot(undo) {
+        TheoriaAppShellContent(appContainer, viewerSessionOwner, appShellOwner, incomingUri, onIncomingUriConsumed)
+    }
+}
+
+/** Holds the app's one [UndoSlot] in the Activity's ViewModel store; its scope outlives a recreation. */
+private class UndoSlotOwner : ViewModel() {
+    val slot = UndoSlot(viewModelScope)
+}
+
+@Composable
+private fun TheoriaAppShellContent(
+    appContainer: TheoriaAppContainer,
+    viewerSessionOwner: ViewerSessionRetentionViewModel,
+    appShellOwner: AppShellViewModel,
+    incomingUri: Uri?,
+    onIncomingUriConsumed: () -> Unit,
+) {
     val shell = rememberTheoriaShell(appContainer, viewerSessionOwner, appShellOwner)
     ShellOwnerHosts(shell)
     val appShellState by appShellOwner.state.collectAsStateWithLifecycle()
     shell.overlays.codexActionTargetId?.let { id ->
-        // This overlay is composed above the app shell's theme, so it must apply the theme itself.
+        // This overlay is composed above the app shell's theme and locals, so it must apply them itself.
         TheoriaNightTheme {
-            key(id) { CodexLibraryDestination(shell, actionCodexId = id) }
+            CompositionLocalProvider(*libraryTransferLocals(shell.transfers)) {
+                key(id) { CodexLibraryDestination(shell, actionCodexId = id) }
+            }
         }
     }
     ShellStartupEffects(shell, appShellState)
@@ -135,6 +162,7 @@ internal fun TheoriaAppContent(
                         StartupSurface(shell, appShellState)
                     }
                     ShellLiftOverlay(shell)
+                    ShellHiddenTagsSheet(shell)
                     ShellDialogs(shell, appShellState)
                 }
             }
@@ -251,7 +279,7 @@ private fun TheoriaNavigationSurface(shell: TheoriaShell, currentRoute: String?)
             else shell.scope.launch { navigateTopLevelDestination(navigation.navController, pagerState, destination) }
         },
     ) { contentModifier ->
-        CompositionLocalProvider(LocalTabReselects provides tabReselects) {
+        CompositionLocalProvider(LocalTabReselects provides tabReselects, *libraryTransferLocals(shell.transfers)) {
             SharedTransitionLayout(contentModifier) {
                 TheoriaNavHost(shell, this)
             }
@@ -341,11 +369,13 @@ internal fun rememberPostMenuActions(shell: TheoriaShell): PostMenuActions = rem
 private fun SaveToCodexOverlay(shell: TheoriaShell) {
     val pendingSave = shell.pendingSave
     val posts = pendingSave.posts
+    // A Codex waiting to be deleted is no save target.
+    val deleting by shell.owners.codexCommands.pendingDeletes.collectAsStateWithLifecycle()
     SaveToCodexDestinationStateBoundary(shell.data, posts, pendingSave.query) { state ->
         SaveToCodexSheet(
             profiles = state.settings.recommendationProfiles,
             initialProfileId = state.activeProfile.profileId,
-            codicesByProfile = state.codicesByProfile,
+            codicesByProfile = state.codicesByProfile.mapValues { (_, codices) -> codices.filterNot { it.codexId in deleting } },
             codexItemCounts = state.itemCounts,
             codexCoverCandidates = state.coverCandidates,
             relevanceScores = remember(state.relevanceScores, pendingSave.query) {

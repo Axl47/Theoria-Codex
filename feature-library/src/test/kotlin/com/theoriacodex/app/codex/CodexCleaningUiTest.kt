@@ -15,7 +15,12 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import com.theoriacodex.data.repository.ProfileLibraryIds
+import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.domain.model.Codex
+import com.theoriacodex.domain.model.CodexItem
+import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -38,7 +43,7 @@ class CodexCleaningUiTest {
             CodexListScreen(
                 codices = codices.value, itemCounts = emptyMap(), codexCoverCandidates = emptyMap(),
                 observeActionOptions = { flowOf(CodexActionOptions()) }, onOpenCodex = {}, onImportCodex = {},
-                onDownloadCodex = {}, onShareCodex = {}, onSearchFromCodex = { _, _, _ -> }, onCommitReorder = {},
+                onDownloadCodex = {}, onShareCodex = {}, onFilterByTag = {}, onCommitReorder = {},
                 onCreateCodex = {}, onRenameCodex = { _, _ -> }, onSetAutomaticTag = { _, _, _ -> }, onDeleteCodex = {},
                 likesCodexId = likesId, onCleanCodex = { id, sources -> submitted = id to sources },
             )
@@ -72,6 +77,7 @@ class CodexCleaningUiTest {
                 target = likes,
                 codices = listOf(likes, Codex("a", "Source A", 2)),
                 isLikesCodex = true,
+                matches = mapOf("a" to setOf(PostId(SourceKey.PIXIV, "1"), PostId(SourceKey.PIXIV, "2"))),
                 onDismiss = {},
                 onClean = { submitted = it },
             )
@@ -81,7 +87,47 @@ class CodexCleaningUiTest {
         compose.onNode(hasText("Likes") and isToggleable()).assertDoesNotExist()
         compose.onNodeWithText("Clean Codex").assertIsNotEnabled()
         compose.onNode(hasText("Source A") and isToggleable()).performClick()
-        compose.onNodeWithText("Clean Codex").assertIsEnabled().performClick()
+        compose.onNodeWithText("Remove 2 posts").assertIsEnabled().performClick()
         compose.runOnIdle { assertEquals(setOf("a"), submitted) }
+    }
+
+    @Test fun `the removal count counts a post held by several comparisons once`() {
+        val shared = PostId(SourceKey.PIXIV, "1")
+        val matches = mapOf("a" to setOf(shared), "b" to setOf(shared, PostId(SourceKey.PIXIV, "2")))
+        assertEquals(2, codexCleaningRemovalCount(setOf("a", "b"), matches))
+        assertEquals(null, codexCleaningRemovalCount(setOf("a", "c"), matches))
+        assertEquals(null, codexCleaningRemovalCount(emptySet(), matches))
+    }
+
+    @Test fun `Review hands the chosen comparisons to the deck instead of removing`() {
+        val target = Codex("target", "Collection", 1)
+        var reviewed: Set<String>? = null
+        var cleaned = false
+        compose.setContent { MaterialTheme {
+            CodexCleaningSheet(
+                target = target,
+                codices = listOf(target, Codex("a", "Source A", 2), Codex("b", "Source B", 3)),
+                isLikesCodex = false,
+                matches = mapOf("a" to setOf(PostId(SourceKey.PIXIV, "1")), "b" to emptySet()),
+                onDismiss = {},
+                onClean = { cleaned = true },
+                onReview = { reviewed = it },
+            )
+        } }
+        compose.onNodeWithText("Cancel").assertDoesNotExist()
+        compose.onNodeWithText("Review").assertIsNotEnabled()
+        compose.onNode(hasText("Source B") and isToggleable()).performClick()
+        compose.onNodeWithText("Review").assertIsNotEnabled()
+        compose.onNode(hasText("Source A") and isToggleable()).performClick()
+        compose.onNodeWithText("Review").assertIsEnabled().performClick()
+        compose.runOnIdle { assertEquals(setOf("a", "b") to false, reviewed to cleaned) }
+    }
+
+    @Test fun `the deck reviews the target's posts any chosen comparison holds, in the target's order`() {
+        val posts = (1..4).map { testPost(sourcePostId = "p$it") }
+        val inA = listOf(CodexItem("a", posts[3].id, 1L), CodexItem("a", posts[1].id, 2L))
+        val inB = listOf(CodexItem("b", posts[1].id, 3L), CodexItem("b", PostId(SourceKey.PIXIV, "elsewhere"), 4L))
+        assertEquals(listOf(posts[1], posts[3]), codexCleaningReviewPosts(posts, listOf(inA, inB)))
+        assertEquals(emptyList<Post>(), codexCleaningReviewPosts(posts, emptyList()))
     }
 }

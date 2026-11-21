@@ -54,6 +54,10 @@ class TriageDeckViewModelTest {
     private fun deck(source: TriageFeed = feed) =
         TriageDeckViewModel(source, actions, quickSave, query = null, fromForYou = false, writeScope = writeScope)
 
+    /** A deck on a Codex, where left removes through [removal]. */
+    private fun removingDeck(removal: TriageRemoval) =
+        TriageDeckViewModel(feed, actions, quickSave, query = null, fromForYou = false, writeScope = writeScope, removal = removal)
+
     @Test fun `like moves on, likes the post once and confirms once committed`() = runTest {
         val deck = deck()
         deck.decideCurrent(TriageChoice.Like)
@@ -175,6 +179,68 @@ class TriageDeckViewModelTest {
         assertEquals(listOf(posts[1].id), actions.unliked)
     }
 
+    @Test fun `on a Codex, remove takes the post out, confirms once committed, and undo puts it back`() = runTest {
+        val removal = FakeRemoval()
+        val deck = removingDeck(removal)
+        assertTrue(deck.removes)
+        deck.decideCurrent(TriageChoice.Remove)
+        assertEquals(1, deck.state.value.index)
+        assertEquals(listOf(posts[0].id), removal.removed)
+        assertEquals(TriageNotice(TriageDecision.Removed(posts[0]), failed = false), deck.state.value.notice)
+        deck.undo()
+        assertEquals(listOf(posts[0].id), removal.restored)
+        assertEquals(0, deck.state.value.index)
+    }
+
+    @Test fun `a failed removal brings its card back and says so`() = runTest {
+        val deck = removingDeck(FakeRemoval(fail = true))
+        deck.decideCurrent(TriageChoice.Remove)
+        assertEquals(0, deck.state.value.index)
+        assertEquals(TriageNotice(TriageDecision.Removed(posts[0]), failed = true), deck.state.value.notice)
+        assertEquals(posts.take(3) to 0, deck.state.value.viewerLaunch())
+    }
+
+    @Test fun `the Viewer opened from a Codex deck leaves out a removed post until it is undone`() = runTest {
+        val deck = removingDeck(FakeRemoval())
+        deck.decideCurrent(TriageChoice.Skip)
+        deck.decideCurrent(TriageChoice.Remove)
+        assertEquals(listOf(posts[0], posts[2]) to 1, deck.state.value.viewerLaunch())
+        deck.undo()
+        assertEquals(posts.take(3) to 1, deck.state.value.viewerLaunch())
+    }
+
+    @Test fun `remove, undo and remove again run in order, so the post ends removed`() = runTest {
+        val removal = FakeRemoval(restoreHold = CompletableDeferred())
+        val deck = removingDeck(removal)
+        deck.decideCurrent(TriageChoice.Remove)
+        deck.undo()
+        deck.decideCurrent(TriageChoice.Remove)
+        assertEquals(listOf(posts[0].id), removal.removed)
+        removal.restoreHold!!.complete(Unit)
+        assertEquals(listOf(posts[0].id, posts[0].id), removal.removed)
+        assertEquals(listOf(posts[0].id), removal.restored)
+    }
+
+    @Test fun `on a Codex, keep writes nothing, says Kept at once, and undo brings the card back`() = runTest {
+        val removal = FakeRemoval()
+        val deck = removingDeck(removal)
+        deck.decideCurrent(TriageChoice.Keep)
+        assertEquals(1, deck.state.value.index)
+        assertEquals(TriageNotice(TriageDecision.Kept(posts[0]), failed = false), deck.state.value.notice)
+        deck.undo()
+        assertEquals(0, deck.state.value.index)
+        assertNull(deck.state.value.notice)
+        assertTrue(removal.removed.isEmpty() && removal.restored.isEmpty())
+        assertTrue(actions.liked.isEmpty() && actions.unliked.isEmpty() && quickSave.saved.isEmpty())
+    }
+
+    @Test fun `a deck that removes keeps on right and removes on left, others like and skip`() {
+        assertEquals(TriageChoice.Remove, choiceFor(SwipeDirection.Left, saveTarget = null, hideTag = null, removes = true))
+        assertEquals(TriageChoice.Keep, choiceFor(SwipeDirection.Right, saveTarget = null, hideTag = null, removes = true))
+        assertEquals(TriageChoice.Skip, choiceFor(SwipeDirection.Left, saveTarget = null, hideTag = null))
+        assertEquals(TriageChoice.Like, choiceFor(SwipeDirection.Right, saveTarget = null, hideTag = null))
+    }
+
     @Test fun `the deck asks a live feed for its next page near the end, once per page loaded`() = runTest {
         val live = FakeFeed(posts.take(7), canLoadMore = true)
         val deck = deck(live)
@@ -271,6 +337,18 @@ class TriageDeckViewModelTest {
         assertEquals(quickSave.records, quickSave.undone)
     }
 
+    @Test fun `closing a Codex deck still runs a pending removal and then the undo asked for it`() = runTest {
+        val removal = FakeRemoval(removeHold = CompletableDeferred())
+        val store = ViewModelStore()
+        val deck = ViewModelProvider.create(store, viewModelFactory { initializer { removingDeck(removal) } })[TriageDeckViewModel::class]
+        deck.decideCurrent(TriageChoice.Remove)
+        deck.undo()
+        store.clear()
+        removal.removeHold!!.complete(Unit)
+        assertEquals(listOf(posts[0].id), removal.removed)
+        assertEquals(listOf(posts[0].id), removal.restored)
+    }
+
     /** Decides for whichever card is current, as a swipe that finishes on its own card does. */
     private fun TriageDeckViewModel.decideCurrent(choice: TriageChoice) = decide(choice, checkNotNull(state.value.current).id)
 
@@ -281,6 +359,24 @@ class TriageDeckViewModelTest {
         override fun loadNextPage() { pagesRequested++ }
         fun emit(posts: List<Post>, canLoadMore: Boolean, loaded: Int = posts.size) {
             flow.value = TriageFeedSnapshot(posts, canLoadMore, loaded)
+        }
+    }
+
+    private class FakeRemoval(
+        private val fail: Boolean = false,
+        val removeHold: CompletableDeferred<Unit>? = null,
+        val restoreHold: CompletableDeferred<Unit>? = null,
+    ) : TriageRemoval {
+        val removed = mutableListOf<PostId>()
+        val restored = mutableListOf<PostId>()
+        override suspend fun remove(post: Post): TriageReversal? {
+            removeHold?.await()
+            check(!fail)
+            removed += post.id
+            return {
+                restoreHold?.await()
+                restored += post.id
+            }
         }
     }
 
