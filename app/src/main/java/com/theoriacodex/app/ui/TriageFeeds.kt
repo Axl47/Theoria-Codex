@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.app.codex.codexCleaningReviewPosts
 import com.theoriacodex.app.recommend.trainingTagsFor
 import com.theoriacodex.app.related.LikeToggleOutcome
 import com.theoriacodex.app.related.ViewerFeedOwner
@@ -11,10 +12,12 @@ import com.theoriacodex.app.triage.HiddenTag
 import com.theoriacodex.app.triage.TriageActions
 import com.theoriacodex.app.triage.TriageFeed
 import com.theoriacodex.app.triage.TriageFeedSnapshot
+import com.theoriacodex.app.triage.TriageRemoval
 import com.theoriacodex.app.triage.gridVisibilityFilters
 import com.theoriacodex.app.ui.components.FOR_YOU_FEED_FAB_CONTEXT
 import com.theoriacodex.app.ui.components.SEARCH_FEED_FAB_CONTEXT
 import com.theoriacodex.app.ui.components.creatorFeedFabContext
+import com.theoriacodex.app.ui.navigation.TriageMode
 import com.theoriacodex.app.ui.navigation.TriageRequest
 import com.theoriacodex.app.ui.routes.BrowsingMetadata
 import com.theoriacodex.data.repository.CodexSortMode
@@ -32,8 +35,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.withContext
-
-private const val CODEX_FEED_PREFIX = "codex:"
 
 /**
  * The feed [request] names: a live feed owner bound to the query the deck opened over, with the grid's visibility
@@ -57,12 +58,18 @@ internal fun TheoriaShell.triageFeed(request: TriageRequest, marks: Flow<Browsin
             )
         }
     }
-    ViewerStreamSource.CODEX -> request.codexId()?.let(::codexTriageFeed)
+    ViewerStreamSource.CODEX -> request.codexId?.let { codexId ->
+        codexTriageFeed(codexId, (request.mode as? TriageMode.RemoveFromCodex)?.alsoIn.orEmpty())
+    }
     ViewerStreamSource.RELATED, ViewerStreamSource.RECENTS, ViewerStreamSource.TRAIL -> null
 }
 
-/** The Codex a [ViewerStreamSource.CODEX] request names, from its `codex:<id>` feed key. */
-internal fun TriageRequest.codexId(): String? = feedKey.takeIf { it.startsWith(CODEX_FEED_PREFIX) }?.removePrefix(CODEX_FEED_PREFIX)
+/** What the deck's left swipe removes through when [request] opens it on a Codex to remove from; null otherwise. */
+internal fun TheoriaShell.triageRemoval(request: TriageRequest): TriageRemoval? {
+    val codexId = request.codexId?.takeIf { request.mode is TriageMode.RemoveFromCodex } ?: return null
+    val commands = owners.codexCommands
+    return TriageRemoval { post -> commands.removeWithOwnUndo(codexId, post) }
+}
 
 /**
  * [request] once Search's filters have applied: a filter change still waiting to run starts now, and its results
@@ -109,11 +116,16 @@ private fun ViewerFeedOwner.boundTriageFeed(queryHash: String, visible: suspend 
     }
 }
 
-/** The Codex's posts as they are when the deck opens; saves and hides made in the deck do not reshuffle them. */
-private fun TheoriaShell.codexTriageFeed(codexId: String): TriageFeed = object : TriageFeed {
+/**
+ * The Codex's posts as they are when the deck opens, or with [alsoIn] only those one of those Codices also holds;
+ * saves, removals and hides made in the deck do not reshuffle them.
+ */
+private fun TheoriaShell.codexTriageFeed(codexId: String, alsoIn: Set<String>): TriageFeed = object : TriageFeed {
     override val snapshots: Flow<TriageFeedSnapshot> = flow {
-        val posts = data.codexRepository.observeCodexPosts(codexId, CodexSortMode.NEWEST_SAVED).first()
-        emit(TriageFeedSnapshot(posts, canLoadMore = false))
+        val codices = data.codexRepository
+        val posts = codices.observeCodexPosts(codexId, CodexSortMode.NEWEST_SAVED).first()
+        val held = if (alsoIn.isEmpty()) posts else codexCleaningReviewPosts(posts, alsoIn.map { codices.observeCodexItems(it).first() })
+        emit(TriageFeedSnapshot(held, canLoadMore = false))
     }
 
     override fun loadNextPage() = Unit

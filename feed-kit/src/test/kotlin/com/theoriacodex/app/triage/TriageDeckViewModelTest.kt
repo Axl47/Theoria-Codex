@@ -161,6 +161,32 @@ class TriageDeckViewModelTest {
         assertEquals(listOf(posts[1].id), actions.unliked)
     }
 
+    @Test fun `on a Codex, remove takes the post out, confirms once committed, and undo puts it back`() = runTest {
+        val removal = FakeRemoval()
+        val deck = TriageDeckViewModel(feed, actions, quickSave, query = null, fromForYou = false, removal = removal)
+        assertTrue(deck.removes)
+        deck.decide(TriageChoice.Remove)
+        assertEquals(1, deck.state.value.index)
+        assertEquals(listOf(posts[0].id), removal.removed)
+        assertEquals(TriageNotice(TriageDecision.Removed(posts[0]), failed = false), deck.state.value.notice)
+        deck.undo()
+        assertEquals(listOf(posts[0].id), removal.restored)
+        assertEquals(0, deck.state.value.index)
+    }
+
+    @Test fun `a failed removal brings its card back and says so`() = runTest {
+        val deck = TriageDeckViewModel(feed, actions, quickSave, query = null, fromForYou = false, removal = FakeRemoval(fail = true))
+        deck.decide(TriageChoice.Remove)
+        assertEquals(0, deck.state.value.index)
+        assertEquals(TriageNotice(TriageDecision.Removed(posts[0]), failed = true), deck.state.value.notice)
+    }
+
+    @Test fun `left removes only in a deck that removes`() {
+        assertEquals(TriageChoice.Remove, choiceFor(SwipeDirection.Left, saveTarget = null, hideTag = null, removes = true))
+        assertEquals(TriageChoice.Skip, choiceFor(SwipeDirection.Left, saveTarget = null, hideTag = null))
+        assertEquals(TriageChoice.Like, choiceFor(SwipeDirection.Right, saveTarget = null, hideTag = null, removes = true))
+    }
+
     @Test fun `the deck asks a live feed for its next page near the end, once per size`() = runTest {
         val live = FakeFeed(posts.take(7), canLoadMore = true)
         val deck = deck(live)
@@ -199,6 +225,16 @@ class TriageDeckViewModelTest {
         override val snapshots: Flow<TriageFeedSnapshot> = flow
         override fun loadNextPage() { pagesRequested++ }
         fun emit(posts: List<Post>, canLoadMore: Boolean) { flow.value = TriageFeedSnapshot(posts, canLoadMore) }
+    }
+
+    private class FakeRemoval(private val fail: Boolean = false) : TriageRemoval {
+        val removed = mutableListOf<PostId>()
+        val restored = mutableListOf<PostId>()
+        override suspend fun remove(post: Post): (suspend () -> Unit)? {
+            check(!fail)
+            removed += post.id
+            return { restored += post.id }
+        }
     }
 
     private class FakeActions : TriageActions {

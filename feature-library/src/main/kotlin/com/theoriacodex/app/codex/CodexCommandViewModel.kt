@@ -147,6 +147,19 @@ class CodexCommandViewModel(
         scope.launch { remove(id, repository.observeCodexItems(id).first(), listOf(post), UndoAnchor.App) }
     }
 
+    /**
+     * Removes [post] from Codex [id] in line with the other commands, for a surface with its own Undo (the triage
+     * deck), so no feedback is offered. Returns what puts exactly that membership back, or null when the post was not
+     * in the Codex; throws when the write fails.
+     */
+    suspend fun removeWithOwnUndo(id: String, post: Post): (suspend () -> Unit)? {
+        val restore = mutex.withLock {
+            val items = repository.observeCodexItems(id).first().filter { it.postId == post.id }
+            if (items.isEmpty()) null else execute(CodexCommand.Remove(id, items, listOf(post))).undo
+        } ?: return null
+        return { mutex.withLock { execute(restore) } }
+    }
+
     fun acknowledge(id: Long, performAction: Boolean) {
         val item = take(id) ?: return
         if (performAction) item.action?.let { submit(it, item.anchor) }

@@ -115,3 +115,12 @@ internal fun codexCleaningMatches(target: List<CodexItem>, comparisons: Map<Stri
     val targetIds = target.mapTo(hashSetOf(), CodexItem::postId)
     return comparisons.mapValues { (_, items) -> items.mapTo(hashSetOf(), CodexItem::postId).apply { retainAll(targetIds) } }
 }
+
+/**
+ * The posts of [target] that any of [comparisons] also holds, in [target]'s order: what cleaning against them would
+ * remove, which the triage deck walks through one at a time.
+ */
+fun codexCleaningReviewPosts(target: List<Post>, comparisons: List<List<CodexItem>>): List<Post> {
+    val held = comparisons.flatMapTo(hashSetOf()) { items -> items.map(CodexItem::postId) }
+    return target.filter { it.id in held }
+}

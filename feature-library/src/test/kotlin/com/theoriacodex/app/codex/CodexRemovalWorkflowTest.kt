@@ -114,6 +114,22 @@ class CodexRemovalWorkflowTest {
         assertEquals(original, stored.observeCodexItems(codex.codexId).first().sortedBy { it.savedAtEpochMs })
     }
 
+    @Test fun `a removal with its own Undo offers no feedback and puts back exactly the membership it took`() = runTest {
+        val stored = InMemoryCodexRepository()
+        val codex = stored.createCodex("Saved")
+        val removed = testPost(sourcePostId = "removed")
+        val kept = testPost(sourcePostId = "kept")
+        val original = listOf(removed, kept).mapIndexed { index, post -> CodexItem(codex.codexId, post.id, 100L + index) }
+        stored.restoreItems(original, listOf(removed, kept))
+        val owner = CodexCommandViewModel(stored, { null }, {}, {}, CodexCleaningService(InMemoryCodexLikesTransactions(stored)), this)
+        val restore = checkNotNull(owner.removeWithOwnUndo(codex.codexId, removed))
+        assertEquals(listOf(original.last()), stored.observeCodexItems(codex.codexId).first())
+        assertEquals(null, owner.removeWithOwnUndo(codex.codexId, removed))
+        restore()
+        assertEquals(original, stored.observeCodexItems(codex.codexId).first().sortedBy { it.savedAtEpochMs })
+        assertTrue(owner.feedback.value.isEmpty())
+    }
+
     @Test
     fun `suspended rename and its completion survive a cancelled UI collector`() = runTest {
         val stored = InMemoryCodexRepository()

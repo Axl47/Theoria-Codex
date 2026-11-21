@@ -83,6 +83,7 @@ internal fun noticeLabel(notice: TriageNotice): String? = when (val decision = n
     is TriageDecision.Liked -> if (notice.failed) "Couldn't like" else "Liked"
     is TriageDecision.Saved -> if (notice.failed) "Couldn't save" else "Saved to ${decision.codexName}"
     is TriageDecision.Hid -> if (notice.failed) "Couldn't hide" else "Hid ${tagLabel(decision.tag)}"
+    is TriageDecision.Removed -> if (notice.failed) "Couldn't remove" else "Removed"
     is TriageDecision.Skipped -> null
 }
 
@@ -93,7 +94,7 @@ private fun noticeAlignment(decision: TriageDecision): Alignment = when (decisio
     is TriageDecision.Liked -> Alignment.CenterEnd
     is TriageDecision.Saved -> Alignment.TopCenter
     is TriageDecision.Hid -> Alignment.BottomCenter
-    is TriageDecision.Skipped -> Alignment.CenterStart
+    is TriageDecision.Skipped, is TriageDecision.Removed -> Alignment.CenterStart
 }
 
 internal const val TRIAGE_CONFIRMATION_TAG = "triage-confirmation"
