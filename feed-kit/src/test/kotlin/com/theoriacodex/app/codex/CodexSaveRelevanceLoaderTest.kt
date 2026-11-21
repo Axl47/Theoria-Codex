@@ -13,7 +13,6 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertSame
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -30,53 +29,47 @@ class CodexSaveRelevanceLoaderTest {
             lookups++
             library
         }
-        val menuScores = loader.observe(posts, query)
-        val menu = backgroundScope.launch { menuScores.collect() }
+        val menu = backgroundScope.launch { loader.observe(posts, query).collect() }
         runCurrent()
-        assertEquals(mapOf("target" to 1.0), menuScores.value)
+        assertEquals(mapOf("target" to 1.0), loader.latest(posts, query))
         menu.cancel()
         advanceTimeBy(250)
 
-        val pickerScores = loader.observe(posts, query)
-        assertSame(menuScores, pickerScores)
-        assertEquals(mapOf("target" to 1.0), pickerScores.value)
-        val picker = backgroundScope.launch { pickerScores.collect() }
+        assertEquals(mapOf("target" to 1.0), loader.latest(posts, query))
+        val pickerScores = mutableListOf<Map<String, Double>>()
+        val picker = backgroundScope.launch { loader.observe(posts, query).collect { pickerScores += it } }
         runCurrent()
         assertEquals(1, lookups)
         library.value = mapOf("target" to listOf(testPost(sourcePostId = "saved", canonicalTags = listOf("dog"))))
         runCurrent()
-        assertEquals(mapOf("target" to 0.0), pickerScores.value)
+        assertEquals(listOf(mapOf("target" to 1.0), mapOf("target" to 0.0)), pickerScores)
 
         picker.cancel()
         advanceTimeBy(10_001)
         runCurrent()
         assertEquals(0, library.subscriptionCount.value)
+        assertEquals(emptyMap<String, Double>(), loader.latest(posts, query))
     }
 
-    @Test fun `another post rescores the retained library instead of looking it up again`() = runTest {
+    @Test fun `concurrent requests for different posts all stay live on one library lookup`() = runTest {
         val repository = InMemoryCodexRepository()
         repository.ensureCodex("target", "Target")
-        val saved = testPost(sourcePostId = "saved", canonicalTags = listOf("cat", "dog"))
-        val library = MutableStateFlow(mapOf("target" to listOf(saved)))
+        val library = MutableStateFlow(mapOf("target" to listOf(testPost(sourcePostId = "saved", canonicalTags = listOf("cat")))))
         var lookups = 0
         val loader = CodexSaveRelevanceLoader(repository, backgroundScope, StandardTestDispatcher(testScheduler)) { _ ->
             lookups++
             library
         }
-        val first = loader.observe(listOf(post("one", "cat")), null)
-        backgroundScope.launch { first.collect() }
+        val cat = mutableListOf<Map<String, Double>>()
+        val dog = mutableListOf<Map<String, Double>>()
+        backgroundScope.launch { loader.observe(listOf(post("one", "cat")), null).collect { cat += it } }
+        backgroundScope.launch { loader.observe(listOf(post("two", "dog")), null).collect { dog += it } }
         runCurrent()
-        assertEquals(mapOf("target" to 1.0), first.value)
-
-        val second = loader.observe(listOf(post("two", "bird")), null)
-        assertEquals(emptyMap<String, Double>(), second.value)
-        backgroundScope.launch { second.collect() }
-        runCurrent()
-        assertEquals(mapOf("target" to 0.0), second.value)
-        val withQuery = loader.observe(listOf(post("two", "bird")), emptySearchQuery())
-        backgroundScope.launch { withQuery.collect() }
+        library.value = mapOf("target" to listOf(testPost(sourcePostId = "saved", canonicalTags = listOf("dog"))))
         runCurrent()
 
+        assertEquals(listOf(mapOf("target" to 1.0), mapOf("target" to 0.0)), cat)
+        assertEquals(listOf(mapOf("target" to 0.0), mapOf("target" to 1.0)), dog)
         assertEquals(1, lookups)
         assertEquals(1, library.subscriptionCount.value)
     }

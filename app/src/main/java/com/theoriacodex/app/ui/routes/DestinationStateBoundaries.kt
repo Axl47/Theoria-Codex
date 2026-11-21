@@ -367,7 +367,7 @@ internal fun SaveToCodexDestinationStateBoundary(
     val relevance = if (relevanceLoader != null) {
         remember(relevanceLoader, posts, searchQuery) {
             relevanceLoader.observe(posts, searchQuery)
-        }.collectAsStateWithLifecycle()
+        }.collectAsStateWithLifecycle(remember(relevanceLoader, posts, searchQuery) { relevanceLoader.latest(posts, searchQuery) })
     } else {
         remember(data.codexRepository, codices, posts, searchQuery) {
             CodexCollectionSource(data.codexRepository, data.storageDirectory, data.cacheRepository)
