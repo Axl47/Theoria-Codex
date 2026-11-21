@@ -37,6 +37,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -141,6 +142,7 @@ private fun <T> CollectTargetBubble(target: CollectTarget<T>, hovered: Boolean, 
             shadowElevation = 6.dp,
             modifier = Modifier
                 .size(TARGET_SIZE)
+                .testTag("Collect target ${target.key}")
                 .onGloballyPositioned { state.place(target.key, it.boundsInWindow()) }
                 .graphicsLayer { scaleX = scale; scaleY = scale }
                 .then(if (hovered) Modifier.border(3.dp, colors.primary, CircleShape) else Modifier),
