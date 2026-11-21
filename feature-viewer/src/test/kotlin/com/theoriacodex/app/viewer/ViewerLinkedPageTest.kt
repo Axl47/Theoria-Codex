@@ -31,11 +31,11 @@ class ViewerLinkedPageTest {
             pageUrl = null, width = 800, height = 1_000,
             canonicalTags = emptyList(), rawTags = emptyList(), authorName = null, createdAtEpochMs = null,
         )
-        val owner = ViewerViewModel(SavedStateHandle())
+        val owner = testViewerOwner(SavedStateHandle())
         owner.replaceSession(ViewerSession(
             posts = listOf(post),
             context = ViewerLaunchContext("deeplink", 0, ViewerStreamSource.SEARCH, 0),
-            initialMediaIndex = 2,
+            initialMediaIndices = mapOf(post.id to 2),
         ))
         compose.setContent {
             MaterialTheme {

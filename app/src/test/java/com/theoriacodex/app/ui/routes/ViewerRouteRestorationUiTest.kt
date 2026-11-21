@@ -24,6 +24,7 @@ import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerMediaError
 import com.theoriacodex.app.viewer.state.ViewerPrefetchOutcome
 import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
+import com.theoriacodex.app.viewer.testViewerOwner
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.ImageRef
@@ -58,7 +59,7 @@ class ViewerRouteRestorationUiTest {
     }
 
     @Test fun `Back dismisses while a media retry still waits on the provider`() {
-        val owner = ViewerViewModel(SavedStateHandle())
+        val owner = testViewerOwner(SavedStateHandle())
         val recovery = CompletableDeferred<com.theoriacodex.domain.model.Post?>()
         var dismissed = false
         withRoute(liveOwner = owner, onRecoverMedia = { recovery.await() }, onDismiss = { dismissed = true }) {
@@ -166,8 +167,8 @@ class ViewerRouteRestorationUiTest {
 
     private fun coldOwner(): ViewerViewModel {
         val saved = SavedStateHandle()
-        ViewerViewModel(saved).replaceSession(session)
-        return ViewerViewModel(saved)
+        testViewerOwner(saved).replaceSession(session)
+        return testViewerOwner(saved)
     }
 
     private fun assertExitingPresentation() {

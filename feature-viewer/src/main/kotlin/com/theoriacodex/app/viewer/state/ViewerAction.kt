@@ -114,51 +114,55 @@ data class ViewerPrefetchRequest(val key: ViewerMediaKey, val distance: Int, val
 sealed interface ViewerEffect {
     val session: ViewerSessionIdentity
 
+    /** Work the Viewer owner runs itself; the route never sees it. */
     data class ResolvePost(
         override val session: ViewerSessionIdentity,
         val postId: PostId,
     ) : ViewerEffect
 
+    /** An effect the owner hands to the route, which reaches the app outside the Viewer. */
+    sealed interface Route : ViewerEffect
+
     data class SavePost(
         override val session: ViewerSessionIdentity,
         val postId: PostId,
-    ) : ViewerEffect
+    ) : Route
 
     data class DownloadMedia(
         override val session: ViewerSessionIdentity,
         val postId: PostId,
         val mediaKey: ViewerMediaKey,
-    ) : ViewerEffect
+    ) : Route
 
     data class SetLiked(
         override val session: ViewerSessionIdentity,
         val postId: PostId,
-    ) : ViewerEffect
+    ) : Route
 
     data class OpenCreatorProfile(
         override val session: ViewerSessionIdentity,
         val creator: CreatorProfile,
-    ) : ViewerEffect
+    ) : Route
 
     data class ApplyTag(
         override val session: ViewerSessionIdentity,
         val postId: PostId,
         val term: PostTaxonomyTerm,
         val excluded: Boolean,
-    ) : ViewerEffect
+    ) : Route
 
     data class RetryMedia(
         override val session: ViewerSessionIdentity,
         val mediaKey: ViewerMediaKey,
-    ) : ViewerEffect
+    ) : Route
 
     data class LoadMore(
         override val session: ViewerSessionIdentity,
-    ) : ViewerEffect
+    ) : Route
 
     data class Dismiss(
         override val session: ViewerSessionIdentity,
-    ) : ViewerEffect
+    ) : Route
 }
 
 data class ViewerReduction(

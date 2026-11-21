@@ -31,16 +31,24 @@ fun createViewerUiState(
     )
 }
 
-/** A page entering a session: its launch media index, and idle until resolved when it [requiresResolution]. */
+/**
+ * A page entering a session: its launch media index, and idle until resolved when it [requiresResolution]. A launch
+ * index past the listing's media, such as a gallery link opened from its cover, waits as pending for the resolution.
+ */
 private fun Post.toNewViewerPageState(
     requiresResolution: (Post) -> Boolean,
     initialMediaIndices: Map<PostId, Int>,
-): ViewerPageState = toViewerPageState(
-    selectedMediaIndex = initialMediaIndices[id] ?: 0,
-    resolution = ViewerResolutionState(
-        status = if (requiresResolution(this)) ViewerResolutionStatus.IDLE else ViewerResolutionStatus.NOT_REQUIRED,
-    ),
-)
+): ViewerPageState {
+    val requested = initialMediaIndices[id] ?: 0
+    val resolves = requiresResolution(this)
+    val page = toViewerPageState(
+        selectedMediaIndex = requested,
+        resolution = ViewerResolutionState(
+            status = if (resolves) ViewerResolutionStatus.IDLE else ViewerResolutionStatus.NOT_REQUIRED,
+        ),
+    )
+    return if (resolves && requested > page.media.lastIndex) page.copy(pendingMediaIndex = requested) else page
+}
 
 internal fun Post.toViewerPageState(
     selectedMediaIndex: Int = 0,

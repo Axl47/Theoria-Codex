@@ -587,7 +587,7 @@ internal suspend fun appendLiveSourcePosts(
  * [routeScope] instead, where it cannot hold a later Dismiss behind it.
  */
 private suspend fun handleViewerEffect(
-    effect: ViewerEffect,
+    effect: ViewerEffect.Route,
     viewerOwner: ViewerViewModel,
     callbacks: ViewerRouteEffectCallbacks,
     dependencies: State<ViewerRouteDependencies>,
@@ -618,7 +618,6 @@ private suspend fun handleViewerEffect(
             callbacks.onDismiss()
             currentState.currentPage?.post?.id?.let { viewerReturn?.begin(it) }
         }
-        is ViewerEffect.ResolvePost -> Unit
     }
 }
 

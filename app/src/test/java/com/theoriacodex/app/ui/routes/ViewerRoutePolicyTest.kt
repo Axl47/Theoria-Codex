@@ -11,6 +11,7 @@ import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.state.ViewerEffect
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.ViewerUiState
+import com.theoriacodex.app.viewer.testViewerOwner
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.ViewerStreamSource
@@ -176,7 +177,7 @@ class ViewerRoutePolicyTest {
 
     @Test
     fun `owner handle exposes only live session coordination and rejects a cleared owner`() {
-        val owner = ViewerViewModel(SavedStateHandle())
+        val owner = testViewerOwner(SavedStateHandle())
         val store = ViewModelStore()
         val provider = ViewModelProvider(
             store,

@@ -5,8 +5,8 @@ import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.testing.SteppedDispatcher
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.viewer.ViewerSession
-import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.state.ViewerAction
+import com.theoriacodex.app.viewer.testViewerOwner
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.SourceKey
@@ -81,7 +81,7 @@ class ViewerLiveSourceAppendTest {
         assertEquals(listOf(posts[0].id), owner.state.value.pages.map { it.post.id })
     }
 
-    private fun viewer(scope: TestScope) = ViewerViewModel(SavedStateHandle(), scopeOverride = scope.backgroundScope).apply {
+    private fun viewer(scope: TestScope) = testViewerOwner(SavedStateHandle(), scopeOverride = scope.backgroundScope).apply {
         replaceSession(
             ViewerSession(
                 posts = posts.take(2),

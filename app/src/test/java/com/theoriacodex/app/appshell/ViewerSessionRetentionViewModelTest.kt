@@ -5,7 +5,7 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.SavedStateHandle
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.viewer.ViewerSession
-import com.theoriacodex.app.viewer.ViewerViewModel
+import com.theoriacodex.app.viewer.testViewerOwner
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.ImageRef
@@ -77,7 +77,7 @@ class ViewerSessionRetentionViewModelTest {
         val holder = ViewerSessionRetentionViewModel()
         val retained = viewerSession(postId = "bridge")
         holder.retain(retained)
-        val owner = ViewerViewModel(SavedStateHandle())
+        val owner = testViewerOwner(SavedStateHandle())
 
         assertTrue(holder.handoffTo(owner, retained.sessionId))
 
@@ -96,8 +96,8 @@ class ViewerSessionRetentionViewModelTest {
         val exitingClaim = exitingSession.sessionId
         holder.retain(exitingSession)
         holder.retain(reentrySession)
-        val exitingOwner = ViewerViewModel(SavedStateHandle())
-        val reentryOwner = ViewerViewModel(SavedStateHandle())
+        val exitingOwner = testViewerOwner(SavedStateHandle())
+        val reentryOwner = testViewerOwner(SavedStateHandle())
 
         assertEquals(false, holder.handoffTo(exitingOwner, exitingClaim))
         assertNull(exitingOwner.session.value)

@@ -42,7 +42,7 @@ class ViewerCommentsTest {
     @Test
     fun `each post's comments load once it is current and swiping back asks for nothing`() = runTest {
         val loader = RecordingLoader()
-        val owner = ViewerViewModel(SavedStateHandle(), scopeOverride = this, commentsLoader = loader)
+        val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this, commentsLoader = loader)
         val posts = listOf(
             testPost(sourcePostId = "first"),
             testPost(sourcePostId = "none").copy(commentHint = CommentHint.None),
@@ -66,7 +66,7 @@ class ViewerCommentsTest {
     @Test
     fun `a session launched on a comment finds it once, and relaunching the same session does not search again`() = runTest {
         val loader = RecordingLoader()
-        val owner = ViewerViewModel(SavedStateHandle(), scopeOverride = this, commentsLoader = loader)
+        val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this, commentsLoader = loader)
         val post = testPost(sourcePostId = "linked")
         val focused = session(listOf(post)).copy(focusComment = CommentTarget("c"))
 
@@ -82,7 +82,7 @@ class ViewerCommentsTest {
 
     @Test
     fun `a post resolved without a hint keeps the one its listing gave`() = runTest {
-        val owner = ViewerViewModel(SavedStateHandle(), scopeOverride = this)
+        val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this)
         val listed = testPost(sourcePostId = "p").copy(commentHint = CommentHint(4))
         owner.replaceSession(session(listOf(listed)))
 

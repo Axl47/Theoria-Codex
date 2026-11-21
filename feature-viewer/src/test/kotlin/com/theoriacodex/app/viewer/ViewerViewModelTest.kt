@@ -40,11 +40,11 @@ class ViewerViewModelTest {
         val originals = listOf(post("seed"), post("next"))
         val related = post("related")
         val handle = SavedStateHandle()
-        val owner = ViewerViewModel(handle, scopeOverride = this)
+        val owner = testViewerOwner(handle, scopeOverride = this)
         owner.replaceSession(session("branch", originals))
         owner.includeRelatedPosts(originals.first().id, listOf(related))
         owner.onAction(ViewerAction.SelectPage(2))
-        val restored = ViewerViewModel(handle, scopeOverride = this).restorationRequest
+        val restored = testViewerOwner(handle, scopeOverride = this).restorationRequest
         assertEquals(originals.map { it.id }, restored?.orderedPostIds)
         assertEquals(originals.first().id, restored?.selectedPostId)
         owner.clearSession()
@@ -53,7 +53,7 @@ class ViewerViewModelTest {
     @Test
     fun `new videos use the device play mode without persisting speed`() = runTest {
         var preference = com.theoriacodex.app.viewer.state.ViewerPlaybackMode.ONCE
-        val owner = ViewerViewModel(SavedStateHandle(), scopeOverride = this, playbackModeProvider = { preference })
+        val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this, playbackModeProvider = { preference })
         owner.replaceSession(session("first", listOf(post("first", media = listOf(video("first.mp4"))))))
         assertEquals(preference, owner.state.value.controls.playbackMode)
         owner.onAction(ViewerAction.SetPlaybackRate(2f))
@@ -74,7 +74,7 @@ class ViewerViewModelTest {
         val handle = SavedStateHandle()
         var cancelled = false
         val gallery = post("gallery", media = listOf(video("one.mp4"), video("two.mp4")))
-        val owner = ViewerViewModel(handle, postResolver = ViewerPostResolver { _, _ ->
+        val owner = testViewerOwner(handle, postResolver = ViewerPostResolver { _, _ ->
             try { awaitCancellation() } finally { cancelled = true }
         }, scopeOverride = this)
         owner.replaceSession(session("exit", listOf(gallery, post("next", SourceKey.HITOMI, emptyList()))))
@@ -108,7 +108,7 @@ class ViewerViewModelTest {
         val release = CompletableDeferred<Unit>()
         val posts = listOf(post("first"), post("next", SourceKey.HITOMI, emptyList()),
             post("third", SourceKey.HITOMI, emptyList()))
-        val owner = ViewerViewModel(SavedStateHandle(), postResolver = ViewerPostResolver { _, id ->
+        val owner = testViewerOwner(SavedStateHandle(), postResolver = ViewerPostResolver { _, id ->
             started += id
             if (id == posts[1].id) release.await()
             post(id.sourcePostId, id.source)
@@ -130,7 +130,7 @@ class ViewerViewModelTest {
     fun `lookahead resolves the previous sparse post after the next and plans its prefetch`() = runTest {
         val started = mutableListOf<PostId>()
         val posts = listOf(post("prev", SourceKey.HITOMI, emptyList()), post("current"), post("next", SourceKey.HITOMI, emptyList()))
-        val owner = ViewerViewModel(SavedStateHandle(), postResolver = ViewerPostResolver { _, id ->
+        val owner = testViewerOwner(SavedStateHandle(), postResolver = ViewerPostResolver { _, id ->
             started += id
             post(id.sourcePostId, id.source, listOf(video("${id.sourcePostId}.mp4")))
         }, scopeOverride = this)
@@ -148,7 +148,7 @@ class ViewerViewModelTest {
     fun `a failing current page resolves once and retries only when the user returns to it`() = runTest {
         val attempts = AtomicInteger()
         val posts = listOf(post("sparse", SourceKey.HITOMI, emptyList()), post("next"))
-        val owner = ViewerViewModel(SavedStateHandle(), postResolver = ViewerPostResolver { _, _ ->
+        val owner = testViewerOwner(SavedStateHandle(), postResolver = ViewerPostResolver { _, _ ->
             attempts.incrementAndGet()
             error("Provider unavailable")
         }, scopeOverride = this)
@@ -167,7 +167,7 @@ class ViewerViewModelTest {
     @Test
     fun `including related posts keeps every page's playback, readiness and work`() = runTest {
         val seed = post("seed", media = listOf(video("seed.mp4")))
-        val owner = ViewerViewModel(SavedStateHandle(), scopeOverride = this)
+        val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this)
         owner.replaceSession(session("related", listOf(seed, post("next"))))
         val identity = requireNotNull(owner.state.value.session)
         owner.onAction(ViewerAction.MediaReady(identity, requireNotNull(owner.state.value.currentMedia).key, 0L))
@@ -190,7 +190,7 @@ class ViewerViewModelTest {
     fun `jump cancels obsolete resolution without showing a timeout error`() = runTest {
         val cancelled = mutableListOf<PostId>()
         val posts = (0..3).map { post("$it", SourceKey.HITOMI, emptyList()) }
-        val owner = ViewerViewModel(SavedStateHandle(), postResolver = ViewerPostResolver { _, id ->
+        val owner = testViewerOwner(SavedStateHandle(), postResolver = ViewerPostResolver { _, id ->
             try { awaitCancellation() } finally { cancelled += id }
         }, scopeOverride = this)
         owner.replaceSession(session("jump", posts))
@@ -206,7 +206,7 @@ class ViewerViewModelTest {
     @Test
     fun `equivalent reconstruction identity retains existing saved values`() = runTest {
         val handle = SavedStateHandle()
-        val owner = ViewerViewModel(handle, scopeOverride = this)
+        val owner = testViewerOwner(handle, scopeOverride = this)
         val original = session("retained", listOf(post("first")))
         owner.replaceSession(original)
         val savedSessionId = handle.get<String>(AppRouteSavedStateKeys.VIEWER_SESSION_ID)
@@ -226,7 +226,7 @@ class ViewerViewModelTest {
     @Test
     fun `session replacement resets route state and persists only new reconstruction identity`() = runTest {
         val handle = SavedStateHandle()
-        val owner = ViewerViewModel(handle, scopeOverride = this)
+        val owner = testViewerOwner(handle, scopeOverride = this)
         owner.replaceSession(session("old", listOf(post("old", media = listOf(video("old.mp4"))))))
         owner.onAction(ViewerAction.Pause)
 
@@ -240,7 +240,7 @@ class ViewerViewModelTest {
     }
 
     @Test
-    fun `saved state keeps compact keys and restores page and media after payload reconstruction`() = runTest {
+    fun `saved state keeps compact keys and a restored session starts where it was saved`() = runTest {
         val handle = SavedStateHandle()
         val session = session(
             id = "restore",
@@ -249,20 +249,17 @@ class ViewerViewModelTest {
                 post("second", media = listOf(image("a.jpg"), video("b.mp4"))),
             ),
         )
-        val firstOwner = ViewerViewModel(handle, scopeOverride = this)
+        val firstOwner = testViewerOwner(handle, scopeOverride = this)
         firstOwner.replaceSession(session)
         firstOwner.onAction(ViewerAction.SelectPage(1))
         firstOwner.onAction(ViewerAction.SelectMedia(1))
-        firstOwner.onAction(ViewerAction.SetPlaybackMode(com.theoriacodex.app.viewer.state.ViewerPlaybackMode.NEXT))
 
         assertEquals(
             setOf(
                 AppRouteSavedStateKeys.VIEWER_SESSION_ID,
                 ViewerSavedStateKeys.QUERY_HASH,
                 ViewerSavedStateKeys.STREAM_KEY,
-                ViewerSavedStateKeys.PAGE_INDEX,
                 ViewerSavedStateKeys.MEDIA_INDEX,
-                ViewerSavedStateKeys.PLAYBACK_MODE,
                 ViewerSavedStateKeys.SELECTED_POST,
                 ViewerSavedStateKeys.ORDERED_POSTS,
                 ViewerSavedStateKeys.RECENTS_SECTION,
@@ -270,11 +267,24 @@ class ViewerViewModelTest {
             handle.keys(),
         )
 
-        val recreated = ViewerViewModel(handle, scopeOverride = this)
+        val recreated = testViewerOwner(
+            handle,
+            scopeOverride = this,
+            playbackModeProvider = { com.theoriacodex.app.viewer.state.ViewerPlaybackMode.NEXT },
+        )
         assertEquals(session.toViewerSessionIdentity(), recreated.pendingRestoration)
         assertTrue(recreated.state.value.pages.isEmpty())
+        val request = requireNotNull(recreated.restorationRequest)
+        assertEquals(session.posts[1].id, request.selectedPostId)
+        assertEquals(1, request.selectedMediaIndex)
 
-        recreated.replaceSession(session)
+        // The route's restoration rebuilds the session on its saved post and media.
+        recreated.replaceSession(
+            session.copy(
+                context = session.context.copy(startIndex = 1),
+                initialMediaIndices = mapOf(session.posts[1].id to 1),
+            ),
+        )
 
         assertNull(recreated.pendingRestoration)
         assertEquals(1, recreated.state.value.currentPageIndex)
@@ -287,12 +297,12 @@ class ViewerViewModelTest {
     fun `cold restoration selects canonical post when missing neighbors change its index`() = runTest {
         val handle = SavedStateHandle()
         val original = session("filtered-oldest", listOf(post("oldest"), post("removed"), post("selected")))
-        val first = ViewerViewModel(handle, scopeOverride = this)
+        val first = testViewerOwner(handle, scopeOverride = this)
         first.replaceSession(original)
         first.onAction(ViewerAction.SelectPage(2))
 
         val recreatedHandle = SavedStateHandle(handle.keys().associateWith { handle.get<Any?>(it) })
-        val recreated = ViewerViewModel(recreatedHandle, scopeOverride = this)
+        val recreated = testViewerOwner(recreatedHandle, scopeOverride = this)
         assertEquals(original.posts[2].id, recreated.restorationRequest?.selectedPostId)
         assertEquals(original.posts.map(Post::id), recreated.restorationRequest?.orderedPostIds)
         recreated.replaceSession(original.copy(posts = listOf(original.posts[2], original.posts[0])))
@@ -307,12 +317,12 @@ class ViewerViewModelTest {
         val cover = post("552559", SourceKey.NHENTAI, listOf(image("cover.jpg"))).copy(mediaCount = 3)
         val gallery = cover.copy(media = listOf(image("1.jpg"), image("2.jpg"), image("3.jpg")))
         val handle = SavedStateHandle()
-        val owner = ViewerViewModel(
+        val owner = testViewerOwner(
             handle,
             postResolver = ViewerPostResolver { _, _ -> resolved.await() },
             scopeOverride = this,
         )
-        owner.replaceSession(session("deeplink", listOf(cover)).copy(initialMediaIndex = 2))
+        owner.replaceSession(session("deeplink", listOf(cover)).copy(initialMediaIndices = mapOf(cover.id to 2)))
         owner.onAction(ViewerAction.RequestCurrentPageResolution)
         runCurrent()
         assertEquals(0, owner.state.value.currentPage?.selectedMediaIndex)
@@ -329,9 +339,9 @@ class ViewerViewModelTest {
 
     @Test
     fun `new recent session opens the last media without changing another session selection`() = runTest {
-        val owner = ViewerViewModel(SavedStateHandle(), scopeOverride = this)
+        val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this)
         val gallery = post("gallery", media = listOf(image("1.jpg"), image("2.jpg"), image("3.jpg")))
-        owner.replaceSession(session("recent", listOf(gallery)).copy(initialMediaIndex = 2))
+        owner.replaceSession(session("recent", listOf(gallery)).copy(initialMediaIndices = mapOf(gallery.id to 2)))
         assertEquals(2, owner.state.value.currentPage?.selectedMediaIndex)
         owner.replaceSession(session("new", listOf(gallery)))
         assertEquals(0, owner.state.value.currentPage?.selectedMediaIndex)
@@ -341,7 +351,7 @@ class ViewerViewModelTest {
     fun `restoration window remains bounded and retains the selected identity near either end`() = runTest {
         val posts = (0..199).map { post("$it") }
         val handle = SavedStateHandle()
-        val owner = ViewerViewModel(handle, scopeOverride = this)
+        val owner = testViewerOwner(handle, scopeOverride = this)
         owner.replaceSession(session("large", posts))
         owner.onAction(ViewerAction.SelectPage(199))
         val request = requireNotNull(handle.get<ArrayList<String>>(ViewerSavedStateKeys.ORDERED_POSTS))
@@ -352,7 +362,7 @@ class ViewerViewModelTest {
 
     @Test
     fun `resolved and appended pages keep the selection and leave the launch payload as it was`() = runTest {
-        val owner = ViewerViewModel(SavedStateHandle(), scopeOverride = this)
+        val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this)
         val initial = session(
             "owned",
             listOf(post("first"), post("second", media = listOf(image("second-a.jpg"), video("second-b.mp4")))),
@@ -378,7 +388,7 @@ class ViewerViewModelTest {
 
     @Test
     fun `late resolution and media events cannot mutate a replacement or current media`() = runTest {
-        val owner = ViewerViewModel(SavedStateHandle(), scopeOverride = this)
+        val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this)
         val oldSession = session("old", listOf(post("old")))
         owner.replaceSession(oldSession)
         val oldIdentity = oldSession.toViewerSessionIdentity()
@@ -409,7 +419,7 @@ class ViewerViewModelTest {
     fun `actions emit buffered host effects while resolution and prefetch stay route owned`() = runTest {
         val resolved = post("lazy", source = SourceKey.HITOMI, title = "Resolved")
         val warmed = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
-        val owner = ViewerViewModel(
+        val owner = testViewerOwner(
             savedStateHandle = SavedStateHandle(),
             postResolver = ViewerPostResolver { _, _ -> resolved },
             mediaPrefetcher = ViewerMediaPrefetcher { _, media, _ ->
@@ -445,7 +455,7 @@ class ViewerViewModelTest {
 
     @Test
     fun `missing resolved post becomes a terminal deleted post state`() = runTest {
-        val owner = ViewerViewModel(
+        val owner = testViewerOwner(
             savedStateHandle = SavedStateHandle(),
             postResolver = ViewerPostResolver { _, _ -> null },
             scopeOverride = this,
@@ -476,7 +486,7 @@ class ViewerViewModelTest {
 
     @Test
     fun `resolution returning a different post fails instead of staying requested`() = runTest {
-        val owner = ViewerViewModel(
+        val owner = testViewerOwner(
             savedStateHandle = SavedStateHandle(),
             postResolver = ViewerPostResolver { _, _ -> post("newest", source = SourceKey.GELBOORU) },
             scopeOverride = this,
@@ -494,7 +504,7 @@ class ViewerViewModelTest {
 
     @Test
     fun `provider resolution failure remains recoverable and distinct from deletion`() = runTest {
-        val owner = ViewerViewModel(
+        val owner = testViewerOwner(
             savedStateHandle = SavedStateHandle(),
             postResolver = ViewerPostResolver { _, _ -> error("Provider unavailable") },
             scopeOverride = this,
@@ -525,7 +535,7 @@ class ViewerViewModelTest {
     fun `session replacement cancels owned resolution work without publishing failure`() = runTest {
         val started = CompletableDeferred<Unit>()
         val cancelled = CompletableDeferred<Unit>()
-        val owner = ViewerViewModel(
+        val owner = testViewerOwner(
             savedStateHandle = SavedStateHandle(),
             postResolver = ViewerPostResolver { _, _ ->
                 started.complete(Unit)
@@ -564,7 +574,7 @@ class ViewerViewModelTest {
         val codexSession = session("optimistic", listOf(stale)).let { current ->
             current.copy(context = current.context.copy(streamSource = ViewerStreamSource.CODEX))
         }
-        val owner = ViewerViewModel(
+        val owner = testViewerOwner(
             savedStateHandle = SavedStateHandle(),
             postResolver = ViewerPostResolver { _, _ ->
                 refreshStarted.complete(Unit)
@@ -591,7 +601,7 @@ class ViewerViewModelTest {
     @Test
     fun `neighbors wait for the first media on screen, or until the wait runs out`() = runTest {
         val started = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
-        val owner = ViewerViewModel(
+        val owner = testViewerOwner(
             savedStateHandle = SavedStateHandle(),
             mediaPrefetcher = ViewerMediaPrefetcher { _, media, _ ->
                 started += media.key
@@ -628,7 +638,7 @@ class ViewerViewModelTest {
     @Test
     fun `decoding a downloaded image does not wait for a download slot, and happens once`() = runTest {
         val started = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
-        val owner = ViewerViewModel(
+        val owner = testViewerOwner(
             savedStateHandle = SavedStateHandle(),
             mediaPrefetcher = ViewerMediaPrefetcher { _, media, distance ->
                 started += media.key
@@ -662,7 +672,7 @@ class ViewerViewModelTest {
     @Test
     fun `prefetch skips unknown, repeated and settled media and forgets what a resolution replaced`() = runTest {
         val started = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
-        val owner = ViewerViewModel(
+        val owner = testViewerOwner(
             savedStateHandle = SavedStateHandle(),
             mediaPrefetcher = ViewerMediaPrefetcher { _, media, _ ->
                 started += media.key
@@ -697,7 +707,7 @@ class ViewerViewModelTest {
         val peak = AtomicInteger()
         val startedKeys = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
         val cancelledKeys = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
-        val owner = ViewerViewModel(
+        val owner = testViewerOwner(
             savedStateHandle = SavedStateHandle(),
             mediaPrefetcher = ViewerMediaPrefetcher { _, media, _ ->
                 val current = active.incrementAndGet()

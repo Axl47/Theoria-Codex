@@ -18,6 +18,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.VideoQuality
+import com.theoriacodex.domain.model.ViewerPlaybackMode
 import java.io.File
 import java.util.UUID
 import kotlin.math.roundToInt
@@ -321,7 +322,9 @@ class MediaBufferingBenchmarkTest {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val viewer = ViewerViewModel(
             SavedStateHandle(),
+            postResolver = { _, _ -> null },
             mediaPrefetcher = viewerMediaPrefetcher(context) { VideoQuality.AUTO },
+            playbackModeProvider = { ViewerPlaybackMode.LOOP },
             scopeOverride = scope,
         )
         scope.launch { viewer.effects.collect { } }
@@ -330,7 +333,7 @@ class MediaBufferingBenchmarkTest {
             viewer.replaceSession(
                 ViewerSession(
                     listOf(post), ViewerLaunchContext("media-bench", 0, ViewerStreamSource.SEARCH, 0),
-                    initialMediaIndex = 1,
+                    initialMediaIndices = mapOf(post.id to 1),
                 ),
             )
             viewer.queueAdjacentPrefetch()
@@ -457,7 +460,9 @@ class MediaBufferingBenchmarkTest {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val viewer = ViewerViewModel(
             SavedStateHandle(),
+            postResolver = { _, _ -> null },
             mediaPrefetcher = viewerMediaPrefetcher(context) { VideoQuality.AUTO },
+            playbackModeProvider = { ViewerPlaybackMode.LOOP },
             scopeOverride = scope,
         )
         scope.launch { viewer.effects.collect { } }
