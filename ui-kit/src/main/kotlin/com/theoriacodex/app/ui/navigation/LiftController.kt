@@ -18,6 +18,9 @@ enum class LiftRelease {
     Cancelled,
 }
 
+/** The lifted card's own like state and toggle, so the lift's Like acts exactly as the card's heart does. */
+data class LiftLike(val liked: Boolean, val toggle: () -> Unit)
+
 /**
  * Lifts a feed card's post so it can be dragged onto collect targets drawn above the navigation host. A card
  * reports its long-press drag here, with positions in window coordinates. Read from [LocalLiftController].
@@ -25,9 +28,10 @@ enum class LiftRelease {
 interface LiftController {
     /**
      * Starts lifting [post] from a card at [cardBounds] with the finger at [pointer]. [query] is the search the
-     * card belongs to, for save ranking. False means no lift started, and the card keeps its long-click.
+     * card belongs to, for save ranking; [like] is the card's like toggle, null where the card cannot like. False
+     * means no lift started, and the card keeps its long-click.
      */
-    fun start(post: Post, cardBounds: Rect, pointer: Offset, query: Query? = null): Boolean
+    fun start(post: Post, cardBounds: Rect, pointer: Offset, query: Query? = null, like: LiftLike? = null): Boolean
 
     fun move(pointer: Offset)
 
@@ -39,7 +43,7 @@ interface LiftController {
     companion object {
         /** Never lifts, so cards keep their long-click. */
         val None: LiftController = object : LiftController {
-            override fun start(post: Post, cardBounds: Rect, pointer: Offset, query: Query?) = false
+            override fun start(post: Post, cardBounds: Rect, pointer: Offset, query: Query?, like: LiftLike?) = false
             override fun move(pointer: Offset) = Unit
             override fun end(pointer: Offset) = LiftRelease.OpenMenu
             override fun cancel() = Unit

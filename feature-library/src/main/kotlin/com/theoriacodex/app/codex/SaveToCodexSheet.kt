@@ -446,7 +446,7 @@ private fun SheetActionRow(
 }
 
 @Composable
-private fun CreateCodexDialog(
+fun CreateCodexDialog(
     profileName: String?,
     onDismiss: () -> Unit,
     onCreate: (String) -> Unit,

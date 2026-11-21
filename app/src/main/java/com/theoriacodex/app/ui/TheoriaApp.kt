@@ -133,6 +133,7 @@ internal fun TheoriaAppContent(
                     } else {
                         StartupSurface(shell, appShellState)
                     }
+                    ShellLiftOverlay(shell)
                     ShellDialogs(shell, appShellState)
                 }
             }
