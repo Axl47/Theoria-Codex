@@ -1,6 +1,8 @@
 package com.theoriacodex.app.triage
 
 import com.theoriacodex.app.codex.SaveSuggestion
+import com.theoriacodex.app.ui.components.FeedView
+import com.theoriacodex.app.ui.navigation.TriageSeed
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.normalizeMatchToken
@@ -27,28 +29,31 @@ interface TriageFeed {
     }
 }
 
+/** What Triage, tapped now, takes over from this grid: what it shows and how it filters. */
+fun FeedView.triageSeed(): TriageSeed = TriageSeed(visiblePosts, filters, durationFilterActive, postFilter::filter)
+
 /** A single-tag entry of the active profile's For You hide list. */
 data class HiddenTag(val source: SourceKey, val tag: String)
 
+/** Reverses exactly what one committed write did, and returns once it has. */
+typealias TriageReversal = suspend () -> Unit
+
 /**
  * What the deck does to the world beyond saving, which [com.theoriacodex.app.codex.QuickSave] covers. Each write
- * returns once it has committed and throws when it fails.
+ * returns once it has committed and throws when it fails; none of them toggles.
  */
 interface TriageActions {
     /** The active profile's single-tag For You hide entries, as they change. */
     val hiddenTags: Flow<Set<HiddenTag>>
 
-    /** Likes [post] unless it is already liked; true when this call liked it. */
-    suspend fun like(post: Post): Boolean
+    /**
+     * Likes [post] unless it, or another site's copy of its file, is already liked. Returns how to remove exactly the
+     * Like it added, or null when it added none.
+     */
+    suspend fun like(post: Post): TriageReversal?
 
-    /** Removes [post]'s Like while it is still liked; never adds one. */
-    suspend fun unlike(post: Post)
-
-    /** Adds [tag] to the active profile's hide list; false when it was already there. */
-    suspend fun hide(source: SourceKey, tag: String): Boolean
-
-    /** Removes [tag] from the active profile's hide list. */
-    suspend fun unhide(source: SourceKey, tag: String)
+    /** Adds [tag] to the active profile's hide list; returns how to remove exactly that entry, or null when it was there. */
+    suspend fun hide(source: SourceKey, tag: String): TriageReversal?
 }
 
 /** What a swipe asked for. */

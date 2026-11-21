@@ -54,7 +54,8 @@ private data class VisibilityPostFilter(
 /**
  * What a feed's grid shows: its posts after the length step and its filters ([visiblePosts]), with any related
  * shelf placed among them ([related]). [filters] is the feed's media and mark filters, which the related shelf and
- * the Viewer apply too; [durations] is the length step over the feed's posts.
+ * the Viewer apply too; [durations] is the length step over the feed's posts; [postFilter] is the filter step itself,
+ * which the triage deck applies to the posts the feed gets later.
  */
 class FeedView(
     val filters: SearchVisibilityFilters,
@@ -62,6 +63,7 @@ class FeedView(
     val durationFilterActive: Boolean,
     val visiblePosts: List<Post>,
     val related: RelatedFeedPresentation,
+    val postFilter: FeedPostFilter,
 )
 
 /**
@@ -107,7 +109,7 @@ fun rememberFeedView(
         durationFilterActive = durationFilterActive,
         pendingLikePostIds = marks.pendingLikes,
     )
-    return remember(filters, metadata, durationFilterActive, visiblePosts, related) {
-        FeedView(filters, metadata, durationFilterActive, visiblePosts, related)
+    return remember(filters, metadata, durationFilterActive, visiblePosts, related, filter) {
+        FeedView(filters, metadata, durationFilterActive, visiblePosts, related, filter)
     }
 }

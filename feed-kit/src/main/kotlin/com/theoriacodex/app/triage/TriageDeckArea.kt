@@ -13,6 +13,7 @@ import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.CardDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -57,8 +58,8 @@ import com.theoriacodex.app.ui.components.CollectTargetsState
 import com.theoriacodex.app.ui.components.FeedPostCard
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
-import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.max
 
@@ -79,10 +80,12 @@ internal fun TriageDeckArea(
     val hideState = remember(post.id) { CollectTargetsState<String>() }
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
-    val onDecide by rememberUpdatedState { choice: TriageChoice ->
+    val onDecide by rememberUpdatedState { choice: TriageChoice, card: PostId ->
         haptics.performHapticFeedback(TheoriaHaptics.ToggleOn)
-        viewModel.decide(choice)
+        viewModel.decide(choice, card)
     }
+    // A release that outlives its card (a save waiting for targets, then Undo) must not decide for the next one.
+    DisposableEffect(drag) { onDispose(drag::cancelRelease) }
     BoxWithConstraints(Modifier.fillMaxSize().testTag(TRIAGE_DECK_TAG)) {
         val density = LocalDensity.current
         val thresholds = with(density) { SwipeThresholds(maxWidth.toPx() * COMMIT_FRACTION, FLING_SPEED.toPx(), CUE_DISTANCE.toPx()) }
@@ -96,10 +99,9 @@ internal fun TriageDeckArea(
         }
         // The gesture outlives recompositions that bring new targets, so it calls through the latest release.
         val release by rememberUpdatedState { velocity: Velocity? ->
-            scope.launch {
-                drag.release(velocity, thresholds, area, choose, onDecide) { callbacks.onOpenSavePicker(post) }
+            drag.releaseIn(scope) {
+                this.release(velocity, thresholds, area, choose, { choice -> onDecide(choice, post.id) }) { callbacks.onOpenSavePicker(post) }
             }
-            Unit
         }
         var origin by remember { mutableStateOf(Offset.Zero) }
         Box(
@@ -107,7 +109,7 @@ internal fun TriageDeckArea(
                 .fillMaxSize()
                 .onGloballyPositioned { origin = it.positionInWindow() }
                 .triageSwipe(drag, { origin }) { velocity -> release(velocity) }
-                .semantics { customActions = triageActions(targets, onDecide) },
+                .semantics { customActions = triageActions(targets) { choice -> onDecide(choice, post.id) } },
         ) {
             TriageCards(deck, drag, support, thresholds, ratioFloor) {
                 callbacks.onOpenPost(deck.posts, deck.index)

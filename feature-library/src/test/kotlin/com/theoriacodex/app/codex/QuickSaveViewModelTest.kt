@@ -7,6 +7,7 @@ import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.InMemoryCacheRepository
 import com.theoriacodex.data.repository.InMemoryCodexRepository
 import com.theoriacodex.data.repository.InMemoryStatisticsRepository
+import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.stubs.StubAdapterRegistry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -44,7 +45,8 @@ class QuickSaveViewModelTest {
 
         val record = owner.quickSave(post, "target", fromForYou = false)
 
-        assertEquals(QuickSaveRecord(post, "target", "Skies", inserted = 1, savedAtEpochMs = 42L), record)
+        val membership = codices.observeCodexItems("target").first().single().savedAtEpochMs
+        assertEquals(QuickSaveRecord(post, "target", "Skies", inserted = 1, savedAtEpochMs = 42L, membership), record)
         assertEquals(record, owner.lastQuickSave.value)
         assertEquals(listOf(post.id), codices.observeCodexItems("target").first().map { it.postId })
     }
@@ -75,6 +77,19 @@ class QuickSaveViewModelTest {
 
         assertEquals(second, owner.lastQuickSave.value)
         assertEquals(listOf(later.id), codices.observeCodexItems("target").first().map { it.postId })
+    }
+
+    @Test fun `undo leaves a later save of the same post to that Codex in place`() = runTest(dispatcher) {
+        codices.ensureCodex("target", "Skies")
+        val owner = owner()
+        val record = requireNotNull(owner.quickSave(post, "target", fromForYou = false))
+        codices.removeItems("target", setOf(post.id))
+        val replacement = CodexItem("target", post.id, requireNotNull(record.membershipSavedAtEpochMs) + 1)
+        codices.restoreItems(listOf(replacement), listOf(post))
+
+        owner.undoQuickSave(record)
+
+        assertEquals(listOf(replacement), codices.observeCodexItems("target").first())
     }
 
     @Test fun `a save that added nothing cannot be undone`() = runTest(dispatcher) {
