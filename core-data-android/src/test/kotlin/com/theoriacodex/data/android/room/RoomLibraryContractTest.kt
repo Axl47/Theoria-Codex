@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.data.repository.CodexLikesTransactions
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.LibraryRepositoryContract
+import com.theoriacodex.data.repository.LikesRepository
 import com.theoriacodex.data.repository.RecentsRepository
 import org.junit.After
 import org.junit.Before
@@ -29,6 +30,9 @@ class RoomLibraryContractTest : LibraryRepositoryContract() {
 
     override fun transactionsFor(repository: CodexRepository): CodexLikesTransactions =
         repository as RoomCodexLikesRepository
+
+    override fun likesFor(transactions: CodexLikesTransactions): LikesRepository =
+        transactions as RoomCodexLikesRepository
 
     override fun createRecentsRepository(clock: () -> Long, watchedLimit: Int, searchLimit: Int): RecentsRepository =
         RoomRecentsRepository(database, watchedLimit, searchLimit, clock)

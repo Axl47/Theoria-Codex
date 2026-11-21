@@ -279,6 +279,7 @@ private fun rememberForYouFeed(
             home.sections.flatMap { it.feed.page.items } + home.mixedFeed?.page?.items.orEmpty()
         } else state.results
     }
+    // For You ignores liked, saved and watched marks: it hides nothing by them, so it passes no FeedMarks.
     return rememberFeedView(
         "for-you", state.results, visibilityFilters, durations, relatedState, durationPosts = durationPosts,
     )

@@ -1,6 +1,7 @@
 package com.theoriacodex.app.ui.routes
 
 import androidx.compose.runtime.Composable
+import com.theoriacodex.app.ui.components.FeedMarks
 import com.theoriacodex.app.ui.components.FeedTraceSections
 import com.theoriacodex.app.ui.components.rememberComputedOffMain
 import kotlinx.coroutines.flow.collect
@@ -79,7 +80,10 @@ internal data class BrowsingDestinationState(
     val favoriteTags: List<FavoriteTagEntry>,
     val savedPostIds: Set<PostId>,
     val watchedPostIds: Set<PostId>,
-)
+) {
+    /** The one place a feed's liked, saved and watched marks come from, plus this profile's likes still being written. */
+    fun feedMarks(pendingLikes: Set<PostId> = emptySet()) = FeedMarks(likedPostIds, savedPostIds, watchedPostIds, pendingLikes)
+}
 
 internal data class RecentsDestinationState(
     val watchedPosts: List<RecentPostEntry>,

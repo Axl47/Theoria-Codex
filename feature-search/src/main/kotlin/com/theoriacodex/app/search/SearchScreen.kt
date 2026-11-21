@@ -79,10 +79,7 @@ fun SearchScreen(
     resolvePostById: suspend (PostId) -> Post?,
     recoverPostMedia: suspend (Post, ImageRef) -> Post?,
     pixivUgoiraClient: PixivUgoiraClient? = null,
-    likedPostIds: Set<PostId> = emptySet(),
-    pendingLikePostIds: Set<PostId> = emptySet(),
-    savedPostIds: Set<PostId> = emptySet(),
-    watchedPostIds: Set<PostId> = emptySet(),
+    marks: FeedMarks = FeedMarks.NONE,
     favoriteTags: List<FavoriteTagEntry> = emptyList(),
     durations: FeedDurations = FeedDurations.NONE,
     onToggleLike: ((Post) -> Unit)? = null,
@@ -107,7 +104,6 @@ fun SearchScreen(
     val scope = rememberCoroutineScope()
     val gridState = rememberRetainedFeedGridState("search")
     SearchTabReselectEffect(state.restoration, gridState, onAction)
-    val marks = FeedMarks(likedPostIds, savedPostIds, watchedPostIds, pendingLikePostIds)
     val feed = rememberSearchFeed(state, related.state, fabRestoreState, marks, durations)
     val serverFilters = state.query.serverFilters()
     val filterScroll = rememberFeedScrollSignal()
@@ -132,7 +128,7 @@ fun SearchScreen(
     ) { padding ->
         SearchChromeLayout(
             padding, state, related, feed, fabRestoreState, chrome, oldSearchBar, sourcePicker, applyDraft, gridState, pageDemand, inputFocus,
-            pixivUgoiraClient, likedPostIds, durations, onToggleLike, resolvePostById, recoverPostMedia, onAction,
+            pixivUgoiraClient, marks.liked, durations, onToggleLike, resolvePostById, recoverPostMedia, onAction,
         ) { post ->
             inputFocus.clear()
             actionPost.open(post, state.content.results, scope, resolvePostById)
@@ -142,7 +138,7 @@ fun SearchScreen(
         SearchPostSheet(
             post, actionPost, state, related, creatorBrowsingSources, onAction, onSaveToDevice,
             onRequestSaveToCodex, onAddFavoriteTag, applyDraft,
-            liked = post.id in likedPostIds, onToggleLike = onToggleLike,
+            liked = post.id in marks.liked, onToggleLike = onToggleLike,
         )
     }
     if (chrome.composerOpen) {

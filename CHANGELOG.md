@@ -16,6 +16,7 @@
 - Tapping Retry on a Hitomi page while its gallery was still loading could shrink the gallery back to its cover when the retry finished. The full gallery now stays.
 - Pixiv animations in the Viewer started over from the first frame when you swiped away and back. They now continue where they left off, as GIFs do.
 - In a Hitomi gallery saved for offline, the Viewer's page overview loaded each page from the site instead of the saved copy, so its tiles stayed blank offline. They now show the saved pages.
+- A creator page that failed to load while you were offline didn't say so, and stayed on its error after the connection came back. It now says you're offline and retries by itself, as Search and For You do.
 - Past about 1,000 posts Gelbooru refuses to return more results, which Search reported as "Gelbooru returned malformed JSON". It now says "Gelbooru won't load results past this point".
 - Coming back to Search while its results were still loading could leave the list at the top, or slightly above where you left it, instead of at your saved place. Search now returns to the exact place once the posts it needs have loaded.
 - If the system closed the app in the background and you switched away and back while Search was reloading, your saved place in the results was lost. It is now kept.
@@ -40,7 +41,6 @@
 - Back did nothing while Retry was waiting for the site to answer. It now closes the Viewer right away.
 - When related posts were added to the Viewer, playback speed went back to 1x and a paused video started playing. Both now stay as you set them.
 - The Viewer's media overview closed when the feed loaded more posts in the background. It now stays open.
-- A creator page that failed to load while you were offline didn't say so. It now shows "You're offline" above the site's error.
 - With a related shelf open and a filter on, creator pages loaded their next page before you reached the end.
 - In the Followed and Saved searches collections, an open related shelf made the next page load slightly early.
 - Cards in Codex collections and Recents waited for their own images as you scrolled. On unmetered networks they now load ahead, as in other feeds.

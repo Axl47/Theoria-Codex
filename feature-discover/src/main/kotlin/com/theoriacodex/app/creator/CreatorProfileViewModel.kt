@@ -21,6 +21,7 @@ import com.theoriacodex.app.related.ViewerFeedOwner
 import com.theoriacodex.app.related.ViewerFeedSnapshot
 import com.theoriacodex.app.related.retainedLikedPostIds
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.app.media.reconnections
 import com.theoriacodex.app.media.replacingPostSnapshot
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.AccountFeed
@@ -38,6 +39,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
@@ -50,15 +53,18 @@ class CreatorProfileViewModel(
     private val savedStateHandle: SavedStateHandle,
     coroutineScope: CoroutineScope? = null,
     relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
+    reconnections: Flow<Unit> = emptyFlow(),
 ) : ViewModel(), RouteStateOwner<CreatorUiState, CreatorAction, CreatorEffect>, ViewerFeedOwner {
     constructor(
         coordinator: CreatorProfileCoordinator,
         savedStateHandle: SavedStateHandle,
         relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
+        reconnections: Flow<Unit> = emptyFlow(),
     ) : this(
         engine = coordinator,
         savedStateHandle = savedStateHandle,
         relatedPostsLoader = relatedPostsLoader,
+        reconnections = reconnections,
     )
 
     private val ownerScope = coroutineScope ?: viewModelScope
@@ -99,6 +105,19 @@ class CreatorProfileViewModel(
             relatedDiagnostics.record("owner cleared", mutableState.value.relatedPosts)
         })
         restoredCreator()?.let { creator -> onAction(CreatorAction.OpenCreator(creator)) }
+        ownerScope.launch { reconnections.collect { retryAfterReconnect() } }
+    }
+
+    /**
+     * Retries a request that failed while offline: a failed later page retries its continuation, a failed first page
+     * refreshes. Waits out any request begun offline, which may still be failing, so its outcome gets this retry too.
+     */
+    private suspend fun retryAfterReconnect() {
+        val current = mutableState.first { !it.isRefreshing && !it.isPaging }
+        if (current.creator == null || current.errorMessage == null ||
+            current.failureReason == CreatorFailureReason.UNSUPPORTED_SOURCE
+        ) return
+        onAction(if (current.canLoadMore) CreatorAction.RetryPage else CreatorAction.Refresh)
     }
 
     override fun onAction(action: CreatorAction) {
@@ -227,12 +246,14 @@ class CreatorProfileViewModel(
         fun factory(
             coordinator: CreatorProfileCoordinator,
             relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
+            networkOnline: Flow<Boolean> = emptyFlow(),
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 CreatorProfileViewModel(
                     coordinator = coordinator,
                     savedStateHandle = createSavedStateHandle(),
                     relatedPostsLoader = relatedPostsLoader,
+                    reconnections = networkOnline.reconnections(),
                 )
             }
         }
