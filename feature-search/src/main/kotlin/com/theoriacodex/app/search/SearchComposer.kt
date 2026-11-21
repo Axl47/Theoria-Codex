@@ -97,8 +97,9 @@ private val SAVED_TAG_MAX_WIDTH = 240.dp
 /**
  * Search editor in a sheet over the results: the query reads as one expression at the top, tags are
  * edited where they sit, and new tags are typed just above the keyboard. Every committed edit runs
- * live, so the results above follow the query; the keyboard's Search action adds what was typed,
- * runs it at once and closes the sheet ([onApply]). Below the tag suggestions, typed text also
+ * live, so the results above follow the query. The keyboard's action adds what was typed and keeps
+ * the sheet open for the next tag; on an empty field it runs the draft at once and closes the sheet
+ * ([onApply]). Below the tag suggestions, typed text also
  * reaches the app's [omnibox] entries: Codices, creators, searches and commands.
  */
 @Composable
@@ -174,12 +175,8 @@ private fun SearchComposerContent(
     fun commitTyped() = commitComposerInput(
         target, input, state.suggestions.canCommitInput, focus::clear, onAction,
     )
-    fun submitTyped() {
-        val typed = composerTypedAction(target, input)
-        if (typed != null && !state.suggestions.canCommitInput) return
-        typed?.let(onAction)
-        onApply()
-    }
+    // A typed tag is only added, so a gallery ID that opens instead never applies the draft behind it.
+    fun submitTyped() = if (composerTypedAction(target, input) == null) onApply() else commitTyped()
     fun addAlternativeTo(term: SearchTerm) {
         excludeNext = false
         targetTerm = term
@@ -411,11 +408,11 @@ private fun ComposerField(
                 )
             },
             keyboardOptions = KeyboardOptions(
-                imeAction = ImeAction.Search,
+                imeAction = ImeAction.Done,
                 keyboardType = KeyboardType.Text,
                 capitalization = KeyboardCapitalization.None,
             ),
-            keyboardActions = KeyboardActions(onSearch = { onSubmit() }),
+            keyboardActions = KeyboardActions(onDone = { onSubmit() }),
             trailingIcon = if (input.isNotBlank()) {
                 { TextButton(onClick = onCommit, enabled = canCommit) { Text("Add") } }
             } else {
