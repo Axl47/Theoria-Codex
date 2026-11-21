@@ -65,6 +65,7 @@ import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.ui.undo.ProvideUndoSlot
 import com.theoriacodex.app.ui.undo.UndoSlot
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.app.settings.SettingsAction
@@ -107,9 +108,9 @@ internal fun TheoriaAppContent(
     }
 }
 
-/** Holds the app's one [UndoSlot] in the Activity's ViewModel store. */
+/** Holds the app's one [UndoSlot] in the Activity's ViewModel store; its scope outlives a recreation. */
 private class UndoSlotOwner : ViewModel() {
-    val slot = UndoSlot()
+    val slot = UndoSlot(viewModelScope)
 }
 
 @Composable

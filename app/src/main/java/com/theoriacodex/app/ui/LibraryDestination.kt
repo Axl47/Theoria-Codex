@@ -94,7 +94,7 @@ private fun SavedLibraryDestination(shell: TheoriaShell, header: LibrarySectionH
 }
 
 private fun TheoriaShell.clearRecents(target: RecentsClearTarget, state: RecentsDestinationState, undo: UndoSlot) {
-    scope.launch {
+    undo.scope.launch {
         recentsClearWorkflow.clear(
             target = target,
             watchedPosts = state.watchedPosts,
@@ -126,7 +126,7 @@ private fun rememberRecentsDurationOwner(shell: TheoriaShell, state: RecentsDest
 @Composable
 private fun RecentsDestination(shell: TheoriaShell, header: LibrarySectionHeader) {
     val undo = LocalUndoSlot.current
-    val removal = remember(shell, undo) { RecentsEntryRemoval(shell.data.recentsRepository, undo, shell.scope) }
+    val removal = remember(shell, undo) { RecentsEntryRemoval(shell.data.recentsRepository, undo, undo.scope) }
     val removedSearch by removal.removedSearch.collectAsStateWithLifecycle()
     RecentsDestinationStateBoundary(shell.data, loading = { RecentsLoading(header) }) { state ->
         val durationOwner = rememberRecentsDurationOwner(shell, state)
