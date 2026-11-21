@@ -38,8 +38,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.creator.creatorProfileActions
-import com.theoriacodex.app.recommend.LocalLikedTagCounts
-import com.theoriacodex.app.recommend.postTagSignals
+import com.theoriacodex.app.recommend.LocalTagAffinityInputs
+import com.theoriacodex.app.recommend.feedTagShare
+import com.theoriacodex.app.recommend.tagAffinities
 import com.theoriacodex.app.related.LocalRelatedPostsSupport
 import com.theoriacodex.app.ui.navigation.LocalTrailOpener
 import com.theoriacodex.app.ui.navigation.TrailOpener
@@ -57,6 +58,7 @@ import com.theoriacodex.domain.model.SourceKey
 @Composable
 internal fun ViewerTrailRow(
     post: Post,
+    levelPosts: List<Post>,
     trail: ViewerTrail,
     creatorBrowsingSources: Set<SourceKey>,
     forks: ViewerTrailForks,
@@ -65,11 +67,13 @@ internal fun ViewerTrailRow(
 ) {
     val opener = LocalTrailOpener.current
     val similarSupported = LocalRelatedPostsSupport.current(post.id.source)
-    val liked by LocalLikedTagCounts.current.collectAsStateWithLifecycle()
-    val chips = remember(post, liked, trail, similarSupported, creatorBrowsingSources, opener) {
+    val affinity by LocalTagAffinityInputs.current.collectAsStateWithLifecycle()
+    // A tag on nearly every post of this level narrows nothing here, such as a trail's own filter tag.
+    val feedShare = remember(levelPosts) { feedTagShare(levelPosts) }
+    val chips = remember(post, affinity, feedShare, trail, similarSupported, creatorBrowsingSources, opener) {
         if (opener == TrailOpener.None) emptyList() else viewerTrailChips(
             creatorProfileActions(post, creatorBrowsingSources).firstNotNullOfOrNull { it.profile },
-            similarSupported, postTagSignals(post, liked), trail.levelQuery,
+            similarSupported, tagAffinities(post, affinity, feedShare), trail.levelQuery,
         ).filterNot { it.request(post, trail.levelQuery).trailKey() == trail.levelTrailKey }
     }
     val active = forks.busy ?: forks.failed

@@ -1,7 +1,7 @@
 package com.theoriacodex.app.viewer
 
 import androidx.compose.runtime.Immutable
-import com.theoriacodex.app.recommend.PostTagSignal
+import com.theoriacodex.app.recommend.TagAffinity
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
@@ -47,17 +47,19 @@ internal sealed interface ViewerTrailChip {
 
 /**
  * The fork chips for [post]: its [creator] when browsable, Similar when its source answers it, then its most
- * characteristic tags ([signals], most first) that [levelQuery] does not already search, at most [maxTags].
+ * characteristic tags ([affinities], most first) that are not universal and that [levelQuery] does not already
+ * search, at most [maxTags].
  */
 internal fun viewerTrailChips(
     creator: CreatorProfile?,
     similarSupported: Boolean,
-    signals: List<PostTagSignal>,
+    affinities: List<TagAffinity>,
     levelQuery: Query?,
     maxTags: Int = VIEWER_TRAIL_TAG_CHIPS,
 ): List<ViewerTrailChip> {
     val searched = levelQuery?.includeTags.orEmpty().mapTo(mutableSetOf()) { it.lowercase() }
-    val tags = signals.asSequence().map { it.tag }.filter { it.lowercase() !in searched }.distinct().take(maxTags)
+    val tags = affinities.asSequence().filterNot { it.universal }.map { it.tag }
+        .filter { it.lowercase() !in searched }.distinct().take(maxTags)
     return listOfNotNull(creator?.let(ViewerTrailChip::Creator), ViewerTrailChip.Similar.takeIf { similarSupported }) +
         tags.map(ViewerTrailChip::Tag).toList()
 }

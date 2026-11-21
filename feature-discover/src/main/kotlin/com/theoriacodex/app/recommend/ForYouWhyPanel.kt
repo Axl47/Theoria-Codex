@@ -96,7 +96,7 @@ private fun ForYouWhyPanel(
     onToggle: (source: SourceKey, tag: String, hide: Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val counts by LocalLikedTagCounts.current.collectAsStateWithLifecycle()
+    val affinity by LocalTagAffinityInputs.current.collectAsStateWithLifecycle()
     ActionMenuSheet(onDismiss) {
         SheetHeader(target.title, "Close tags", onDismiss)
         target.seed.forEach { (source, tags) ->
@@ -106,7 +106,7 @@ private fun ForYouWhyPanel(
             }
             tags.forEach { tag ->
                 val struck = hidden.hidesSeed(source, listOf(tag))
-                WhyTagRow(tag, counts.counts[normalizeMatchToken(tag)] ?: 0, struck) { onToggle(source, tag, !struck) }
+                WhyTagRow(tag, affinity.likedCounts[normalizeMatchToken(tag)] ?: 0, struck) { onToggle(source, tag, !struck) }
             }
         }
         UndoRow(ForYouWhyUndoAnchor, Modifier.padding(top = 8.dp))

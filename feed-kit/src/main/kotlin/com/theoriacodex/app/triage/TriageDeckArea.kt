@@ -47,7 +47,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.codex.SaveSuggestion
 import com.theoriacodex.app.codex.SaveSuggestions
 import com.theoriacodex.app.media.previewMediaDeliveryPlan
-import com.theoriacodex.app.recommend.LocalLikedTagCounts
+import com.theoriacodex.app.recommend.LocalTagAffinityInputs
 import com.theoriacodex.app.search.FeedAsyncImage
 import com.theoriacodex.app.search.buildFeedImageRequest
 import com.theoriacodex.app.search.feedPreviewDecodeSize
@@ -133,11 +133,11 @@ private fun rememberTriageTargets(
     viewModel: TriageDeckViewModel,
 ): TriageTargets {
     val hidden by viewModel.hiddenTags.collectAsStateWithLifecycle(emptySet())
-    val likedCounts by LocalLikedTagCounts.current.collectAsStateWithLifecycle()
-    val candidates = remember(post, likedCounts, hidden, query) {
+    val affinity by LocalTagAffinityInputs.current.collectAsStateWithLifecycle()
+    val candidates = remember(post, affinity, hidden, query) {
         val skipped = query?.let { it.includeTags + it.excludeTags }.orEmpty() +
             hidden.filter { it.source == post.id.source }.map(HiddenTag::tag)
-        hideCandidates(post, likedCounts, skipped)
+        hideCandidates(post, affinity, skipped)
     }
     return remember(suggestions, candidates) {
         TriageTargets(
