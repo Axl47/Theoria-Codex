@@ -1,12 +1,14 @@
 package com.theoriacodex.app.viewer
 
 import android.app.Application
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -136,6 +138,31 @@ class ViewerVerticalGalleryTest {
     private fun pagePosition(): Pair<Int, Float> {
         val page = (1..gallery.media.size).first { runCatching { compose.onNodeWithContentDescription("Page $it").assertIsDisplayed() }.isSuccess }
         return page to compose.onNodeWithContentDescription("Page $page").fetchSemanticsNode().positionInRoot.y
+    }
+
+    @Test fun `a failed page's Retry goes through the Viewer's shared retry`() {
+        show()
+        compose.onAllNodesWithText("Retry")[0].performClick() // page 1, the selected one
+        assertTrue(actions.any { it is ViewerAction.RetryMedia })
+    }
+
+    @Test fun `picking a page shorter than a third of the screen keeps it selected`() {
+        val strips = gallery.copy(width = 3000, height = 400, media = (1..30).map { page.copy(localPath = "/missing/strip-$it.jpg") })
+        state.value = createViewerUiState(ViewerSessionIdentity("short"), listOf(strips, next))
+        show()
+        compose.runOnIdle { state.value = reduceViewerState(state.value, ViewerAction.SelectMedia(10)).state }
+        compose.waitForIdle()
+        assertEquals(10, state.value.currentPage?.selectedMediaIndex)
+    }
+
+    @Test fun `a narrower screen pulls a zoomed pan back inside the pages`() {
+        val zoomed = ViewerVerticalGalleryState(LazyListState()).apply {
+            resize(2400)
+            transform(zoomBy = 2f, focusX = 0f, focusY = 0f, panBy = -2400f)
+        }
+        assertEquals(2400f, zoomed.panX)
+        zoomed.resize(1080)
+        assertEquals(1080f, zoomed.panX)
     }
 
     @Test fun `the overview switches a gallery's reading mode`() {

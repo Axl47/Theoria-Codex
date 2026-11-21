@@ -20,11 +20,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -61,6 +61,7 @@ import coil.compose.AsyncImage
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.viewer.state.ViewerAction
+import com.theoriacodex.app.viewer.state.ViewerMediaError
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.app.viewer.state.ViewerPanel
@@ -79,6 +80,7 @@ internal class ViewerVerticalGalleryState(val list: LazyListState) {
     var panX by mutableFloatStateOf(0f)
         private set
     var viewportWidth by mutableIntStateOf(0)
+        private set
 
     val zoomed: Boolean get() = scale > 1.01f
 
@@ -97,6 +99,12 @@ internal class ViewerVerticalGalleryState(val list: LazyListState) {
             list.requestScrollToItem(list.firstVisibleItemIndex, offset)
         }
         scale = next
+    }
+
+    /** A narrower screen (rotation keeps this state) pulls the pan back inside the pages' new width. */
+    fun resize(width: Int) {
+        viewportWidth = width
+        panX = panX.coerceIn(0f, width * (scale - 1f))
     }
 
     val scrollGesture = ViewerVerticalScroll(atTop = { !list.canScrollBackward }, atEnd = { !list.canScrollForward })
@@ -147,7 +155,7 @@ internal fun ViewerVerticalGallery(
         state = list,
         modifier = Modifier.fillMaxSize()
             .viewerDismissDrag(dismissDrag, readReturnProgress)
-            .onSizeChanged { gallery.viewportWidth = it.width }
+            .onSizeChanged { gallery.resize(it.width) }
             .nestedScroll(quickReturn)
             .verticalGalleryZoom(gallery, controls)
             .verticalGalleryTaps(gallery, controls, scope, host.onAction),
@@ -158,6 +166,8 @@ internal fun ViewerVerticalGallery(
                 post, pageState, index, shape, gallery, screen.imageSession,
                 active = isCurrentPost && index == frame.selection.mediaIndex,
                 selectedEvents = selectedEvents,
+                sharedError = frame.uiState.mediaError?.takeIf { isCurrentPost && it.mediaKey == ViewerMediaKey(post.id, index) },
+                onRetry = { host.onAction(ViewerAction.RetryMedia) },
                 onPainted = { width, height ->
                     if (width > 0f && height > 0f) {
                         shapes[index] = width / height
@@ -202,7 +212,7 @@ private fun VerticalGalleryEffects(
             aligned = false
             return@LaunchedEffect
         }
-        if (!list.isScrollInProgress && list.focusedPage(pageCount) != selected) list.scrollToItem(selected)
+        if (!list.isScrollInProgress && list.focusedPage(pageCount) != selected) list.scrollToSelection(selected)
         aligned = true
     }
     VerticalGalleryPendingJump(post, list, pageCount, resuming, screen)
@@ -219,16 +229,30 @@ private fun VerticalGalleryPendingJump(post: Post, list: LazyListState, pageCoun
     }
 }
 
-/** The page under the top third of the screen, or the last page once the list can scroll no further. */
+/**
+ * The page under the selection line (a third down the screen); at either end of the list, the first or last page,
+ * so pages shorter than that third can still be selected there.
+ */
 private fun LazyListState.focusedPage(pageCount: Int): Int {
     if (pageCount <= 0) return 0
     val info = layoutInfo
     // Before its first layout the list cannot scroll either way, which must not read as the last page.
     if (info.totalItemsCount == 0) return firstVisibleItemIndex.coerceIn(0, pageCount - 1)
+    if (!canScrollBackward) return 0
     if (!canScrollForward) return pageCount - 1
-    val line = info.viewportStartOffset + (info.viewportEndOffset - info.viewportStartOffset) / 3
+    val line = selectionLine()
     val crossing = info.visibleItemsInfo.firstOrNull { it.offset <= line && it.offset + it.size > line }?.index
     return (crossing ?: firstVisibleItemIndex).coerceIn(0, pageCount - 1)
+}
+
+private fun LazyListState.selectionLine(): Int = with(layoutInfo) { viewportStartOffset + (viewportEndOffset - viewportStartOffset) / 3 }
+
+/** Scrolls [index] to the top, then, if it ends above the selection line, down until it crosses it. */
+private suspend fun LazyListState.scrollToSelection(index: Int) {
+    scrollToItem(index)
+    val page = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } ?: return
+    val gap = selectionLine() - (page.offset + page.size)
+    if (gap >= 0) scrollBy(-(gap + 1).toFloat())
 }
 
 @Composable
@@ -241,15 +265,19 @@ private fun VerticalGalleryPage(
     imageSession: ViewerImageSession,
     active: Boolean,
     selectedEvents: (ViewerMediaKey, Long) -> ViewerRendererEvents,
+    /** The Viewer's error for this page while it is selected, such as a failed gallery lookup, retried through [onRetry]. */
+    sharedError: ViewerMediaError?,
+    onRetry: () -> Unit,
     onPainted: (Float, Float) -> Unit,
     onRequestMediaRecovery: ((Post, com.theoriacodex.domain.model.ImageRef) -> Unit)?,
 ) {
     val media = pageState.media[index]
     val key = ViewerMediaKey(post.id, index)
     val generation = media.loadGeneration
-    var painted by remember(key, generation) { mutableStateOf(false) }
-    var failed by remember(key, generation) { mutableStateOf<String?>(null) }
-    var attempt by remember(key, generation) { mutableIntStateOf(0) }
+    // Resolution can swap a cover for the full page under the same key and generation, so the image keys these too.
+    var painted by remember(key, generation, media.ref) { mutableStateOf(false) }
+    var failed by remember(key, generation, media.ref) { mutableStateOf<String?>(null) }
+    var attempt by remember(key, generation, media.ref) { mutableIntStateOf(0) }
     // Readiness and failure are reported for the selected page only, and again when a settled page becomes selected.
     val events = viewerRendererEvents(
         session = null, key = key, generation = generation, onAction = {}, onTimelineInteractionActiveChanged = {}, onDurationKnown = {},
@@ -279,14 +307,8 @@ private fun VerticalGalleryPage(
                     onPainted = { size -> onPainted(size.width, size.height) },
                 )
             }
-            failed?.let { message ->
-                Column(
-                    Modifier.background(Color.Black.copy(alpha = 0.72f), RoundedCornerShape(12.dp)).padding(12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(message, color = Color.White, style = MaterialTheme.typography.bodyMedium)
-                    TextButton(onClick = { failed = null; attempt += 1 }) { Text("Retry") }
-                }
+            (sharedError ?: failed?.let { ViewerMediaError.Recoverable(key, it) })?.let { error ->
+                ViewerMediaErrorOverlay(error) { if (sharedError != null) onRetry() else { failed = null; attempt += 1 } }
             }
         }
     }
