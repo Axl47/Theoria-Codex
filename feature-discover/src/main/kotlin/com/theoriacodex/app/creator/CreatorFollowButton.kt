@@ -7,9 +7,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import com.theoriacodex.app.ui.undo.LocalUndoSlot
 import com.theoriacodex.app.ui.undo.rememberUndoOffer
 import com.theoriacodex.domain.model.CreatorProfile
@@ -29,9 +32,12 @@ internal fun CreatorFollowButton(creator: CreatorProfile, followed: Boolean, ena
     if (offer != null) {
         TextButton(
             onClick = { slot.act(offer) },
-            modifier = Modifier.semantics {
+            // Read once as "Unfollowed <name>" with Undo as its action, instead of the label plus the button's text.
+            modifier = Modifier.clearAndSetSemantics {
                 liveRegion = LiveRegionMode.Polite
-                contentDescription = "${offer.label}. ${offer.action.label}"
+                role = Role.Button
+                contentDescription = offer.label
+                onClick(label = offer.action.label) { slot.act(offer); true }
             },
         ) { Text(offer.action.label) }
     } else {
