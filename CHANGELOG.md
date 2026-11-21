@@ -20,7 +20,7 @@
 - Cleaning a Codex shows how many posts each comparison would remove before you confirm, and Review opens exactly those posts as a deck where left removes and right keeps.
 - A Codex kept offline shows a ring on its tile and at the top of its page: how much is downloaded, and whether something failed. At the top of the Codex, tapping a full ring removes the offline copy (with Undo), tapping it during a download shows progress, and tapping an incomplete or failed one downloads the rest.
 - While anything is downloading, a pill at the top of Library shows what's left. It opens one sheet listing offline Codices and downloads.
-- Downloads keep going after you close the app, for as long as it stays in memory. They used to stop when the app was closed with Back.
+- Closing the app with Back no longer cancels your downloads: files already downloading finish, and the rest of the queue continues when you come back.
 - Saving a post into a Codex kept offline downloads that post too.
 - History: swipe a search or a watched post left to remove just that entry, with Undo in its place. Holding a search opens a menu with Save search and Remove from History; a post's hold menu has Remove from History too.
 - History: the bookmark on a search saves it at once under its query, and Rename edits the name right in the row. A saved search shows a filled bookmark.

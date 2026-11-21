@@ -118,7 +118,8 @@ internal fun codexOfflineDescription(state: CodexOfflineState): String {
     val percent = (state.fraction.coerceIn(0f, 1f) * 100).roundToInt()
     return when {
         state.complete -> "Available offline"
-        state.failed -> "Offline copy failed at $percent%"
+        // No percent: failed posts count as settled, so a failed ring is often full.
+        state.failed -> "Offline copy failed"
         state.running -> "Making available offline, $percent%"
         else -> "Offline copy $percent%"
     }

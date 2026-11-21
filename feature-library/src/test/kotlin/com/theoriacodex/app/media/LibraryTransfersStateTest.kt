@@ -47,6 +47,7 @@ class LibraryTransfersStateTest {
         )
         val states = codexOfflineStates(owners, mapOf("left" to setOf(a), "run" to setOf(a)), available = setOf(a))
         assertEquals(mapOf("left" to CodexOfflineState(1f), "run" to CodexOfflineState(1f, failed = true)), states)
+        assertEquals(listOf("Available offline", "Offline copy failed"), states.values.map(::codexOfflineDescription))
     }
 
     @Test fun `the header counts posts still to save across offline jobs and downloads`() {
