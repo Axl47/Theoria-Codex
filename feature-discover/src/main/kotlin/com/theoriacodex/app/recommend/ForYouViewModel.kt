@@ -138,6 +138,7 @@ class ForYouViewModel(
         admit = ::admitPreview,
         emit = { effectChannel.trySend(it) },
         settingsChanged = { settings -> synchronizeEnvironment(settings, mutableState.value.activeProfileLikesCount) },
+        dispatch = { action -> onAction(action) },
     )
 
     /** Waits out any request begun offline, which may still be failing, so its outcome gets this retry too. */

@@ -5,10 +5,12 @@ import com.theoriacodex.app.ui.components.FeedDurations
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.hasStateDescription
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -20,6 +22,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recommend.state.ForYouUiState
+import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchResult
@@ -118,6 +121,25 @@ class ForYouHomeScreenTest {
         render(ForYouHomeState(visible = true), mutableListOf(),
             ForYouUiState(profiles = listOf(RecommendationProfile("main", "Main")), activeProfileId = "main"))
         compose.onNodeWithText("Main").assertDoesNotExist()
+    }
+
+    @Test fun `a struck tag in why reads as hidden and its button unhides it`() {
+        val actions = mutableListOf<ForYouAction>()
+        val seed = mapOf(SourceKey.PIXIV to listOf("boats", "sea"))
+        val hidden = listOf(ForYouBlacklistEntry(SourceKey.PIXIV, listOf("boats")))
+        compose.setContent {
+            MaterialTheme {
+                ForYouWhyHost(ForYouWhyTarget("boats + sea", seed, "PIXIV:boats+sea"), ForYouUiState(blacklistEntries = hidden),
+                    onAction = { actions += it }, onClose = {}) {}
+            }
+        }
+        compose.onNodeWithText("boats").assert(hasStateDescription("Hidden"))
+        compose.onNodeWithText("sea").assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
+        compose.onNodeWithContentDescription("Unhide boats").performClick()
+        compose.onNodeWithContentDescription("Hide sea").performClick()
+        compose.runOnIdle {
+            assertEquals(listOf(ForYouAction.UnhideTag(SourceKey.PIXIV, "boats"), ForYouAction.HideTag(SourceKey.PIXIV, "sea")), actions)
+        }
     }
 
     private fun render(

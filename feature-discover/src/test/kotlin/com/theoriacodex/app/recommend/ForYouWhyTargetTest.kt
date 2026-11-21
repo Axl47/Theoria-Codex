@@ -23,5 +23,6 @@ class ForYouWhyTargetTest {
         val target = ForYouWhyTarget("boats + sea", seed, "PIXIV:boats+sea")
         assertNull(target.afterClose(false, emptyList()))
         assertNull(target.afterClose(true, hidden))
+        assertNull(target.copy(pinned = true).afterClose(false, hidden))
     }
 }

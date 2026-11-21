@@ -131,29 +131,29 @@ fun ForYouScreen(
         pixivUgoiraClient, likedPostIds, feed.durations.knownDurationMsByPostId, durations, onToggleLike, resolvePostById,
     )
 
-    AnimatedContent(
-        targetState = state.home.visible,
-        transitionSpec = { depthTransform(forward = !targetState) },
-        label = "For You view",
-    ) { homeVisible ->
-        if (homeVisible) {
-            savedStates.SaveableStateProvider("overview") {
-                ForYouHomeScreen(state, cards, feed::filterHomePosts,
-                    { selectedActionPost = it }, onAction, { showSortSheet = true }, filterLabels, clearFilters,
-                    onOpenPreview = { id, posts, index -> onAction(ForYouAction.OpenSectionResult(id, index, posts, feed.filters)) },
-                    onOpenWhy = { why = it }, onSelectProfile = onSelectProfile)
+    ForYouWhyHost(why, state, onAction, onClose = { why = null }) {
+        AnimatedContent(
+            targetState = state.home.visible,
+            transitionSpec = { depthTransform(forward = !targetState) },
+            label = "For You view",
+        ) { homeVisible ->
+            if (homeVisible) {
+                savedStates.SaveableStateProvider("overview") {
+                    ForYouHomeScreen(state, cards, feed::filterHomePosts,
+                        { selectedActionPost = it }, onAction, { showSortSheet = true }, filterLabels, clearFilters,
+                        onOpenPreview = { id, posts, index -> onAction(ForYouAction.OpenSectionResult(id, index, posts, feed.filters)) },
+                        onOpenWhy = { why = it }, onSelectProfile = onSelectProfile)
+                }
+            } else {
+                ForYouResults(
+                    state, related, feed, cards, gridState, pageDemand, filterScroll, filterLabels, clearFilters, showSourceMenu,
+                    onSourceMenuChange = { showSourceMenu = it }, onShowFilters = { showSortSheet = true },
+                    onOpenSourceAccounts = onOpenSourceAccounts, onOpenWhy = { why = it },
+                    onAction = onAction, onLongPress = { selectedActionPost = it },
+                )
             }
-        } else {
-            ForYouResults(
-                state, related, feed, cards, gridState, pageDemand, filterScroll, filterLabels, clearFilters, showSourceMenu,
-                onSourceMenuChange = { showSourceMenu = it }, onShowFilters = { showSortSheet = true },
-                onOpenSourceAccounts = onOpenSourceAccounts, onOpenWhy = { why = it },
-                onAction = onAction, onLongPress = { selectedActionPost = it },
-            )
         }
     }
-
-    ForYouWhyHost(why, state, onAction) { why = null }
 
     selectedActionPost?.let { post ->
         FeedPostActionSheet(
@@ -390,7 +390,7 @@ private fun ForYouResultsHeader(state: ForYouUiState, onAction: (ForYouAction) -
 private fun ForYouSeedSummary(state: ForYouUiState, onOpenWhy: (ForYouWhyTarget) -> Unit) {
     if (state.seedSummaryBySource.isEmpty()) return
     val section = state.home.activeSection
-    val target = ForYouWhyTarget(section?.title ?: "Your mix", state.seedSummaryBySource, section?.id)
+    val target = ForYouWhyTarget(section?.title ?: "Your mix", state.seedSummaryBySource, section?.id, section?.pinned == true)
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(state.seedSummaryBySource.entries.toList()) { (source, tags) ->
             Card(Modifier.clickable(onClickLabel = "Show tags") { onOpenWhy(target) }) {
