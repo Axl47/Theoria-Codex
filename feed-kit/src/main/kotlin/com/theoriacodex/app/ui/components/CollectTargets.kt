@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -60,6 +61,9 @@ data class CollectTarget<out T>(val key: String, val label: String, val visual: 
 sealed interface CollectTargetsLayout {
     /** A column centred on the start or end screen edge. */
     data class EdgeColumn(val atEnd: Boolean = true) : CollectTargetsLayout
+
+    /** A row centred on the top or bottom screen edge, the first target leading. */
+    data class EdgeRow(val atTop: Boolean) : CollectTargetsLayout
 
     /** A stack rising from [anchor] (window coordinates, such as a button's top centre), the first target nearest. */
     data class Rising(val anchor: Offset) : CollectTargetsLayout
@@ -117,6 +121,13 @@ fun <T> CollectTargets(
                 Modifier.align(if (layout.atEnd) Alignment.CenterEnd else Alignment.CenterStart).padding(horizontal = 12.dp),
                 targets,
             )
+            is CollectTargetsLayout.EdgeRow -> Row(
+                Modifier.align(if (layout.atTop) Alignment.TopCenter else Alignment.BottomCenter).padding(vertical = 12.dp),
+                Arrangement.spacedBy(16.dp),
+                Alignment.Top,
+            ) {
+                targets.forEach { target -> CollectTargetBubble(target, target.key == hovered?.key, state) }
+            }
             is CollectTargetsLayout.Rising -> stack(Modifier.risingFrom(layout.anchor - origin), targets.asReversed())
         }
     }
