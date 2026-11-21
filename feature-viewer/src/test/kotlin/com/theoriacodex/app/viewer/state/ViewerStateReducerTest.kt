@@ -148,7 +148,7 @@ class ViewerStateReducerTest {
             requiresResolution = { true },
         )
 
-        val requested = reduceViewerState(initial, ViewerAction.RequestCurrentPageResolution)
+        val requested = reduceViewerState(initial, ViewerAction.RequestPageResolution(preview.id))
         val resolving = reduceViewerState(
             requested.state,
             ViewerAction.ResolutionStarted(session, preview.id),

@@ -55,7 +55,6 @@ sealed interface ViewerAction {
     data object RestartPlayback : ViewerAction
     data class SetPlaybackRate(val rate: Float) : ViewerAction
 
-    data object RequestCurrentPageResolution : ViewerAction
     data class RequestPageResolution(val postId: PostId) : ViewerAction
     data class ResolutionCancelled(val session: ViewerSessionIdentity, val postId: PostId) : ViewerAction
     data class ResolutionStarted(

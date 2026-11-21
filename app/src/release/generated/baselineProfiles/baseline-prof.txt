@@ -41602,8 +41602,6 @@ PLcom/theoriacodex/app/viewer/state/ViewerAction$ReplaceSession;->getRelatedNavi
 PLcom/theoriacodex/app/viewer/state/ViewerAction$ReplaceSession;->getRelatedPostIds()Ljava/util/Set;
 PLcom/theoriacodex/app/viewer/state/ViewerAction$ReplaceSession;->getResolutionRequiredPostIds()Ljava/util/Set;
 PLcom/theoriacodex/app/viewer/state/ViewerAction$ReplaceSession;->getSession()Lcom/theoriacodex/app/viewer/state/ViewerSessionIdentity;
-PLcom/theoriacodex/app/viewer/state/ViewerAction$RequestCurrentPageResolution;-><clinit>()V
-PLcom/theoriacodex/app/viewer/state/ViewerAction$RequestCurrentPageResolution;-><init>()V
 PLcom/theoriacodex/app/viewer/state/ViewerAction$RequestPageResolution;-><clinit>()V
 PLcom/theoriacodex/app/viewer/state/ViewerAction$RequestPageResolution;-><init>(Lcom/theoriacodex/domain/model/PostId;)V
 PLcom/theoriacodex/app/viewer/state/ViewerAction$RequestPageResolution;->equals(Ljava/lang/Object;)Z

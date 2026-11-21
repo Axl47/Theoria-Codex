@@ -124,14 +124,12 @@ class OfflineViewerWorkflowTest {
             assertLocalGallery(owner.state.value.currentPage!!.post, directory)
             assertEquals(2, owner.state.value.currentPage?.selectedMediaIndex)
             owner.onAction(ViewerAction.SelectPage(0))
-            owner.onAction(ViewerAction.RequestCurrentPageResolution)
             owner.state.first { it.currentPage?.resolution?.status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.RESOLVED }
             owner.onAction(ViewerAction.SelectMedia(1))
             assertLocalGallery(owner.state.value.currentPage!!.post, directory)
             assertTrue(owner.state.value.currentMedia?.displayLocation?.startsWith(directory.resolve("offline-media").path) == true)
             assertLocalGallery(requireNotNull(workflow.resolvePost(galleries.first().id, ViewerStreamSource.CODEX)), directory)
             owner.onAction(ViewerAction.SelectPage(3))
-            owner.onAction(ViewerAction.RequestCurrentPageResolution)
             owner.state.first { it.currentPage?.resolution?.status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.RESOLVED }
             assertLocalGallery(owner.state.value.currentPage!!.post, directory)
             assertTrue(graph.registry.resolveRequests.isEmpty())

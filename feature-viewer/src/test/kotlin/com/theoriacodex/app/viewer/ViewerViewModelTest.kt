@@ -118,7 +118,6 @@ class ViewerViewModelTest {
         runCurrent()
         assertEquals(listOf(posts[1].id), started)
         owner.onAction(ViewerAction.SelectPage(1))
-        owner.onAction(ViewerAction.RequestCurrentPageResolution)
         release.complete(Unit)
         advanceUntilIdle()
         assertEquals(1, started.count { it == posts[1].id })
@@ -324,13 +323,11 @@ class ViewerViewModelTest {
             scopeOverride = this,
         )
         owner.replaceSession(session("deeplink", listOf(cover)).copy(initialMediaIndices = mapOf(cover.id to 2)))
-        owner.onAction(ViewerAction.RequestCurrentPageResolution)
         runCurrent()
         assertEquals(0, owner.state.value.currentPage?.selectedMediaIndex)
         assertEquals(2, handle.get<Int>(ViewerSavedStateKeys.MEDIA_INDEX))
         owner.appendSessionPosts(requireNotNull(owner.session.value), owner.state.value.pages, listOf(post("more")))
         resolved.complete(gallery)
-        owner.onAction(ViewerAction.RequestCurrentPageResolution)
         advanceUntilIdle()
         assertEquals(2, owner.state.value.currentPage?.selectedMediaIndex)
         owner.onAction(ViewerAction.SelectMedia(1))
@@ -436,7 +433,6 @@ class ViewerViewModelTest {
             )
         )
 
-        owner.onAction(ViewerAction.RequestCurrentPageResolution)
         advanceUntilIdle()
         assertEquals(ViewerResolutionStatus.RESOLVED, owner.state.value.currentPage?.resolution?.status)
         assertEquals("Resolved", owner.state.value.currentPage?.post?.title)
@@ -474,7 +470,6 @@ class ViewerViewModelTest {
             )
         )
 
-        owner.onAction(ViewerAction.RequestCurrentPageResolution)
         advanceUntilIdle()
 
         val resolution = requireNotNull(owner.state.value.currentPage?.resolution)
@@ -494,7 +489,6 @@ class ViewerViewModelTest {
         )
         owner.replaceSession(session("mismatch", listOf(post("asked", SourceKey.GELBOORU, listOf(video("asked.mp4"))))))
 
-        owner.onAction(ViewerAction.RequestCurrentPageResolution)
         advanceUntilIdle()
 
         val resolution = requireNotNull(owner.state.value.currentPage?.resolution)
@@ -523,7 +517,6 @@ class ViewerViewModelTest {
             )
         )
 
-        owner.onAction(ViewerAction.RequestCurrentPageResolution)
         advanceUntilIdle()
 
         val resolution = requireNotNull(owner.state.value.currentPage?.resolution)
@@ -551,7 +544,6 @@ class ViewerViewModelTest {
         owner.replaceSession(
             session("blocking", listOf(post("lazy", source = SourceKey.HITOMI, media = emptyList())))
         )
-        owner.onAction(ViewerAction.RequestCurrentPageResolution)
         runCurrent()
         assertTrue(started.isCompleted)
 

@@ -189,10 +189,10 @@ class ViewerStateBoundaryTest {
     fun `resolution starts only from idle or failed, once, and clears the previous failure`() {
         val a = still("a")
         var state = createViewerUiState(session, listOf(a, still("b")), requiresResolution = { it.id == a.id })
-        val requested = reduceViewerState(state, ViewerAction.RequestCurrentPageResolution)
+        val requested = reduceViewerState(state, ViewerAction.RequestPageResolution(a.id))
         assertEquals(listOf(ViewerEffect.ResolvePost(session, a.id)), requested.effects)
         assertEquals(ViewerResolutionStatus.REQUESTED, requested.state.currentPage?.resolution?.status)
-        assertTrue(reduceViewerState(requested.state, ViewerAction.RequestCurrentPageResolution).effects.isEmpty())
+        assertTrue(reduceViewerState(requested.state, ViewerAction.RequestPageResolution(a.id)).effects.isEmpty())
         state = requested.state.act(ViewerAction.ResolutionStarted(session, a.id))
         assertTrue(reduceViewerState(state, ViewerAction.RequestPageResolution(a.id)).effects.isEmpty())
         state = state.act(ViewerAction.ResolutionFailed(session, a.id, "offline", recoverable = false))
@@ -202,7 +202,6 @@ class ViewerStateBoundaryTest {
         val done = retried.state.act(ViewerAction.ResolutionCompleted(session, a))
         assertTrue(reduceViewerState(done, ViewerAction.RequestPageResolution(a.id)).effects.isEmpty())
         assertTrue(reduceViewerState(state, ViewerAction.RequestPageResolution(PostId(SourceKey.PIXIV, "nope"))).effects.isEmpty())
-        assertTrue(reduceViewerState(created(), ViewerAction.RequestCurrentPageResolution).effects.isEmpty())
     }
 
     @Test
