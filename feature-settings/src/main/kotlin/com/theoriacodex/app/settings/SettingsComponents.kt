@@ -150,13 +150,17 @@ fun SettingsRowDivider() {
 
 private const val PARENT_PATH_ALPHA = 0.7f
 
-/** A row that shows its current value in [summary]; without [trailing] it shows a chevron. */
+/**
+ * A row that shows its current value in [summary], in the error color when [summaryIsError] (a failure that
+ * needs attention); without [trailing] it shows a chevron.
+ */
 @Composable
 fun SettingsRow(
     title: String,
     summary: String? = null,
     icon: ImageVector? = null,
     enabled: Boolean = true,
+    summaryIsError: Boolean = false,
     onClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
@@ -179,7 +183,7 @@ fun SettingsRow(
                 Text(
                     summary,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (summaryIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )

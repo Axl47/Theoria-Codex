@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -79,6 +80,7 @@ fun SettingsScreen(
     searchSources: Set<SourceKey> = emptySet(),
     storageSummary: String? = null,
     sites: SettingsSitesEntry? = null,
+    backup: SettingsBackupEntry? = null,
     statsActions: StatsActions = StatsActions(),
     diagnostics: SettingsDiagnosticsEntry? = null,
     storageTools: (@Composable () -> Unit)? = null,
@@ -98,7 +100,7 @@ fun SettingsScreen(
         label = "Settings page",
     ) { page ->
         when (page) {
-            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, searchSources, storageSummary, sites, diagnostics != null, onClose) {
+            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, searchSources, storageSummary, sites, backup, diagnostics != null, onClose) {
                 chooseStatsFile.launch(arrayOf("application/json", "application/octet-stream", "text/plain"))
             }
             SettingsPage.SITES -> sites?.page?.invoke(
@@ -109,6 +111,7 @@ fun SettingsScreen(
                 ),
             )
             SettingsPage.STORAGE -> StoragePage(state, onAction, storageTools, openHome)
+            SettingsPage.BACKUP -> backup?.let { BackupPage(it, openHome) }
             SettingsPage.STATS -> StatsScreen(statistics, openPost, openHome)
             SettingsPage.STATS_SHARE -> StatsSharePreview(
                 statistics.profiles, statistics.shareOverall(), state.activeProfile.profileId, statsActions, openPost, openHome,
@@ -135,6 +138,7 @@ private fun SettingsHome(
     searchSources: Set<SourceKey>,
     storageSummary: String?,
     sites: SettingsSitesEntry?,
+    backup: SettingsBackupEntry?,
     showDiagnostics: Boolean,
     onClose: () -> Unit,
     onCompareStats: () -> Unit,
@@ -157,7 +161,7 @@ private fun SettingsHome(
             SettingsRowDivider()
             SettingsRow(SettingDestinations.CompareStats.title, "Open a stats file someone sent you", Icons.AutoMirrored.Filled.CompareArrows, onClick = onCompareStats)
         }
-        SettingsHomeGroups(state, onAction, searchSources, storageSummary, sites, showDiagnostics, { sheet = it }, open)
+        SettingsHomeGroups(state, onAction, searchSources, storageSummary, sites, backup, showDiagnostics, { sheet = it }, open)
         if (state.showDeveloperScenarios) DeveloperScenarios(state, onAction)
     }
     if (showAddProfile) {
@@ -194,6 +198,7 @@ private fun SettingsHomeGroups(
     searchSources: Set<SourceKey>,
     storageSummary: String?,
     sites: SettingsSitesEntry?,
+    backup: SettingsBackupEntry?,
     showDiagnostics: Boolean,
     onSheet: (SettingsSheet) -> Unit,
     open: (SettingsPage) -> Unit,
@@ -229,6 +234,14 @@ private fun SettingsHomeGroups(
             Icons.Default.Storage,
             onClick = { open(SettingsPage.STORAGE) },
         )
+        backup?.let {
+            SettingsRowDivider()
+            SettingsRow(
+                SettingDestinations.Backup.title, it.summary?.text, Icons.Default.Backup,
+                summaryIsError = it.summary?.failed == true,
+                onClick = { open(SettingsPage.BACKUP) },
+            )
+        }
         SettingsRowDivider()
         AppLockRow()
         SettingsRowDivider()
@@ -360,6 +373,16 @@ private fun StoragePage(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun BackupPage(backup: SettingsBackupEntry, onBack: () -> Unit) {
+    SettingsPageColumn {
+        SettingsHeader(SettingDestinations.Backup.title, onBack, SETTINGS_PATH)
+        SettingsGroup(null) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { backup.controls() }
         }
     }
 }

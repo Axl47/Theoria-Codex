@@ -115,11 +115,12 @@ object SettingDestinations {
     val Playback = SettingDestination("playback", "Playback & downloads", listOf("video", "quality"))
     val Controls = SettingDestination("controls", "Controls", listOf("gestures", "swipes"))
     val Storage = SettingDestination("storage", "Storage & caching", listOf("cache", "space", "clear"))
+    val Backup = SettingDestination("backup", "Backup", listOf("restore", "export", "import"))
     val WhatsNew = SettingDestination("whats-new", "What's new", listOf("changelog", "release notes", "version"))
     val Diagnostics = SettingDestination("diagnostics", "Diagnostics report", listOf("diagnostics", "logs", "errors"))
 
     val all: List<SettingDestination> = listOf(
-        Stats, ShareStats, CompareStats, HiddenTags, SourceMix, Sites, Playback, Controls, Storage, WhatsNew, Diagnostics,
+        Stats, ShareStats, CompareStats, HiddenTags, SourceMix, Sites, Playback, Controls, Storage, Backup, WhatsNew, Diagnostics,
     )
 }
 

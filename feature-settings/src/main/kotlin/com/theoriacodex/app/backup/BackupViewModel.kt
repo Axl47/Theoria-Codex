@@ -36,8 +36,6 @@ enum class BackupOperation { EXPORT, READ, RESTORE }
 
 data class BackupUiState(
     val operation: BackupOperation? = null,
-    val showExportOptions: Boolean = false,
-    val includeRecents: Boolean = true,
     val preview: ProfileBackupPreview? = null,
     val applyPreferences: Boolean = false,
 ) {
@@ -56,14 +54,6 @@ class BackupViewModel(
     val effects = messages.receiveAsFlow()
     private var selectedBytes: ByteArray? = null
 
-    fun showExportOptions() {
-        if (!state.value.busy) mutableState.update { it.copy(showExportOptions = true) }
-    }
-
-    fun includeRecents(include: Boolean) {
-        if (!state.value.busy) mutableState.update { it.copy(includeRecents = include) }
-    }
-
     fun applyPreferences(apply: Boolean) {
         if (!state.value.busy) mutableState.update { it.copy(applyPreferences = apply) }
     }
@@ -71,16 +61,16 @@ class BackupViewModel(
     fun dismissDialog() {
         if (state.value.busy) return
         selectedBytes = null
-        mutableState.update { it.copy(showExportOptions = false, preview = null, applyPreferences = false) }
+        mutableState.update { it.copy(preview = null, applyPreferences = false) }
     }
 
+    /** Writes a backup of everything, Recents and statistics included, to [document] (null when picking was cancelled). */
     fun export(document: String?) {
         if (document == null || state.value.busy) return
-        val includeRecents = state.value.includeRecents
-        mutableState.update { it.copy(operation = BackupOperation.EXPORT, showExportOptions = false) }
+        mutableState.update { it.copy(operation = BackupOperation.EXPORT) }
         viewModelScope.launch {
             val result = runCatchingPreservingCancellation {
-                withContext(ioDispatcher) { writeExport(document, includeRecents) }
+                withContext(ioDispatcher) { writeExport(document) }
             }
             mutableState.update { it.copy(operation = null) }
             messages.send(result.fold(
@@ -94,7 +84,7 @@ class BackupViewModel(
         if (document == null || state.value.busy) return
         selectedBytes = null
         mutableState.update {
-            it.copy(operation = BackupOperation.READ, showExportOptions = false, preview = null, applyPreferences = false)
+            it.copy(operation = BackupOperation.READ, preview = null, applyPreferences = false)
         }
         viewModelScope.launch {
             val result = runCatchingPreservingCancellation {
@@ -138,10 +128,10 @@ class BackupViewModel(
         }
     }
 
-    private suspend fun writeExport(document: String, includeRecents: Boolean) {
+    private suspend fun writeExport(document: String) {
         var completed = false
         try {
-            documents.write(document, actions.export(includeRecents))
+            documents.write(document, actions.export(includeRecents = true))
             completed = true
         } finally {
             if (!completed) withContext(NonCancellable) {

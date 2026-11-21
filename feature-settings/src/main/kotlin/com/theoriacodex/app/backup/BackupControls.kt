@@ -82,30 +82,24 @@ private fun autoBackupProgress(status: AutoBackupStatus): String {
     }
 }
 
+/** What the Settings home row says about daily backup; [failed] when the last automatic backup failed. */
+data class AutoBackupSummary(val text: String, val failed: Boolean = false)
+
+/** The Settings home row's value: a failure where it will be seen, else how daily backup stands. */
+fun autoBackupSummary(status: AutoBackupStatus): AutoBackupSummary = when {
+    status.failure != null -> AutoBackupSummary(status.failure, failed = true)
+    !status.enabled -> AutoBackupSummary("Daily backup off")
+    else -> AutoBackupSummary("Daily · ${autoBackupProgress(status)}")
+}
+
+/** The restore preview, the one backup step that asks first: restoring adds to every matching profile. */
 @Composable
 fun BackupDialogs(
     state: BackupUiState,
     onDismiss: () -> Unit,
-    onIncludeRecents: (Boolean) -> Unit,
     onApplyPreferences: (Boolean) -> Unit,
-    onExport: () -> Unit,
     onRestore: () -> Unit,
 ) {
-    if (state.showExportOptions) {
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text("Back up profiles") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Save all profiles, collections, Likes, rules, saved searches, follows, and preferences.")
-                    Text("Login credentials and downloaded media are not included.")
-                    BackupCheckbox("Include Recents, reading positions, and statistics", state.includeRecents, onIncludeRecents)
-                }
-            },
-            confirmButton = { TextButton(onClick = onExport) { Text("Choose destination") } },
-            dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-        )
-    }
     state.preview?.let { preview ->
         RestoreBackupDialog(preview, state, onDismiss, onApplyPreferences, onRestore)
     }
