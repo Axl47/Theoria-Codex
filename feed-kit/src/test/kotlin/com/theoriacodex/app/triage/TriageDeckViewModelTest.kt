@@ -42,7 +42,7 @@ class TriageDeckViewModelTest {
 
     @Test fun `like moves on, likes the post once and confirms once committed`() = runTest {
         val deck = deck()
-        deck.decide(TriageChoice.Like)
+        deck.decideCurrent(TriageChoice.Like)
         assertEquals(1, deck.state.value.index)
         assertEquals(listOf(posts[0].id), actions.liked)
         assertEquals(TriageNotice(TriageDecision.Liked(posts[0]), failed = false), deck.state.value.notice)
@@ -51,7 +51,7 @@ class TriageDeckViewModelTest {
     @Test fun `an already liked post stays liked and undo leaves it so`() = runTest {
         actions.alreadyLiked += posts[0].id
         val deck = deck()
-        deck.decide(TriageChoice.Like)
+        deck.decideCurrent(TriageChoice.Like)
         deck.undo()
         assertEquals(emptyList<PostId>(), actions.unliked)
         assertEquals(0, deck.state.value.index)
@@ -59,7 +59,7 @@ class TriageDeckViewModelTest {
 
     @Test fun `undoing a like this deck added removes it and clears the confirmation`() = runTest {
         val deck = deck()
-        deck.decide(TriageChoice.Like)
+        deck.decideCurrent(TriageChoice.Like)
         deck.undo()
         assertEquals(listOf(posts[0].id), actions.unliked)
         assertEquals(0, deck.state.value.index)
@@ -69,7 +69,7 @@ class TriageDeckViewModelTest {
 
     @Test fun `skip only moves on, says nothing, and undo brings the card back`() = runTest {
         val deck = deck()
-        deck.decide(TriageChoice.Skip)
+        deck.decideCurrent(TriageChoice.Skip)
         assertEquals(1, deck.state.value.index)
         deck.undo()
         assertEquals(0, deck.state.value.index)
@@ -79,7 +79,7 @@ class TriageDeckViewModelTest {
     @Test fun `save goes to the chosen Codex with the feed's query and undo removes exactly that save`() = runTest {
         val query = Query.newest(SourceKey.PIXIV)
         val deck = TriageDeckViewModel(feed, actions, quickSave, query, fromForYou = true)
-        deck.decide(TriageChoice.Save("codex-1", "Skies"))
+        deck.decideCurrent(TriageChoice.Save("codex-1", "Skies"))
         assertEquals(listOf(Triple(posts[0].id, "codex-1", query)), quickSave.saved)
         assertTrue(quickSave.fromForYou)
         deck.undo()
@@ -97,7 +97,7 @@ class TriageDeckViewModelTest {
             TriageChoice.Like to TriageDecision.Liked(posts[0]),
             TriageChoice.Hide("cat") to TriageDecision.Hid(posts[0], "cat"),
         ).forEach { (choice, decision) ->
-            deck.decide(choice)
+            deck.decideCurrent(choice)
             assertEquals(0, deck.state.value.index)
             assertNull(deck.state.value.last)
             assertEquals(TriageNotice(decision, failed = true), deck.state.value.notice)
@@ -109,8 +109,8 @@ class TriageDeckViewModelTest {
         actions.failLike = true
         actions.hold = CompletableDeferred()
         val deck = deck()
-        deck.decide(TriageChoice.Like)
-        deck.decide(TriageChoice.Skip)
+        deck.decideCurrent(TriageChoice.Like)
+        deck.decideCurrent(TriageChoice.Skip)
         actions.hold!!.complete(Unit)
         assertEquals(2, deck.state.value.index)
         assertEquals(TriageDecision.Skipped(posts[1]), deck.state.value.last)
@@ -120,7 +120,7 @@ class TriageDeckViewModelTest {
     @Test fun `hide blacklists the tag, passes over later cards carrying it, and undo brings them back`() = runTest {
         val tagged = listOf(testPost(sourcePostId = "a", canonicalTags = listOf("cat")), testPost(sourcePostId = "b", canonicalTags = listOf("Cat")), posts[2])
         val deck = deck(FakeFeed(tagged, canLoadMore = false))
-        deck.decide(TriageChoice.Hide("cat"))
+        deck.decideCurrent(TriageChoice.Hide("cat"))
         assertEquals(listOf(SourceKey.PIXIV to "cat"), actions.hidden)
         assertEquals(posts[2], deck.state.value.current)
         deck.undo()
@@ -132,7 +132,7 @@ class TriageDeckViewModelTest {
     @Test fun `undo during a running save reverses it once it commits and never confirms it`() = runTest {
         quickSave.hold = CompletableDeferred()
         val deck = deck()
-        deck.decide(TriageChoice.Save("codex-1", "Skies"))
+        deck.decideCurrent(TriageChoice.Save("codex-1", "Skies"))
         assertTrue(deck.state.value.last != null)
         assertNull(deck.state.value.notice)
         deck.undo()
@@ -145,15 +145,15 @@ class TriageDeckViewModelTest {
 
     @Test fun `undo is one level and works while a decision is still running`() = runTest {
         val deck = deck()
-        deck.decide(TriageChoice.Skip)
-        deck.decide(TriageChoice.Skip)
+        deck.decideCurrent(TriageChoice.Skip)
+        deck.decideCurrent(TriageChoice.Skip)
         deck.undo()
         deck.undo()
         assertEquals(1, deck.state.value.index)
         assertNull(deck.state.value.last)
 
         actions.hold = CompletableDeferred()
-        deck.decide(TriageChoice.Like)
+        deck.decideCurrent(TriageChoice.Like)
         deck.undo()
         assertEquals(1, deck.state.value.index)
         actions.hold!!.complete(Unit)
@@ -165,10 +165,10 @@ class TriageDeckViewModelTest {
         val live = FakeFeed(posts.take(7), canLoadMore = true)
         val deck = deck(live)
         assertEquals(0, live.pagesRequested)
-        deck.decide(TriageChoice.Skip)
-        deck.decide(TriageChoice.Skip)
+        deck.decideCurrent(TriageChoice.Skip)
+        deck.decideCurrent(TriageChoice.Skip)
         assertEquals(1, live.pagesRequested)
-        deck.decide(TriageChoice.Skip)
+        deck.decideCurrent(TriageChoice.Skip)
         assertEquals(1, live.pagesRequested)
         live.emit(posts, canLoadMore = false)
         assertEquals(8, deck.state.value.posts.size)
@@ -179,7 +179,7 @@ class TriageDeckViewModelTest {
         val deck = deck()
         feed.emit(posts.take(3), canLoadMore = false)
         assertEquals(3, deck.state.value.posts.size)
-        repeat(3) { deck.decide(TriageChoice.Skip) }
+        repeat(3) { deck.decideCurrent(TriageChoice.Skip) }
         assertNull(deck.state.value.current)
         assertTrue(deck.state.value.finished)
         deck.undo()
@@ -189,9 +189,50 @@ class TriageDeckViewModelTest {
 
     @Test fun `past the last post a feed that can load more is not finished`() = runTest {
         val deck = deck(FakeFeed(posts.take(1), canLoadMore = true))
-        deck.decide(TriageChoice.Skip)
+        deck.decideCurrent(TriageChoice.Skip)
         assertFalse(deck.state.value.finished)
     }
+
+    @Test fun `like, undo and like again run in order, so the post ends liked`() = runTest {
+        actions.hold = CompletableDeferred()
+        actions.unlikeHold = CompletableDeferred()
+        val deck = deck()
+        deck.decideCurrent(TriageChoice.Like)
+        deck.undo()
+        deck.decideCurrent(TriageChoice.Like)
+        actions.hold!!.complete(Unit)
+        assertEquals(listOf(posts[0].id), actions.liked)
+        assertEquals(emptyList<PostId>(), actions.unliked)
+        actions.unlikeHold!!.complete(Unit)
+        assertEquals(listOf(posts[0].id, posts[0].id), actions.liked)
+        assertEquals(listOf(posts[0].id), actions.unliked)
+        assertEquals(setOf(posts[0].id), actions.alreadyLiked)
+        assertEquals(TriageNotice(TriageDecision.Liked(posts[0]), failed = false), deck.state.value.notice)
+    }
+
+    @Test fun `a decision made on a card that is no longer current does nothing`() = runTest {
+        val deck = deck()
+        deck.decideCurrent(TriageChoice.Skip)
+        deck.decide(TriageChoice.Like, posts[0].id)
+        assertEquals(1, deck.state.value.index)
+        assertTrue(actions.liked.isEmpty())
+    }
+
+    @Test fun `a save after undoing one waits until the first save's removal has run`() = runTest {
+        val removal = CompletableDeferred<Unit>()
+        quickSave.undoHold = removal
+        val deck = deck()
+        deck.decideCurrent(TriageChoice.Save("codex-1", "Skies"))
+        deck.undo()
+        deck.decideCurrent(TriageChoice.Save("codex-2", "Clouds"))
+        assertEquals(listOf("codex-1"), quickSave.saved.map { it.second })
+        removal.complete(Unit)
+        assertEquals(listOf("codex-1", "codex-2"), quickSave.saved.map { it.second })
+        assertEquals(listOf(quickSave.records.first()), quickSave.undone)
+    }
+
+    /** Decides for whichever card is current, as a swipe that finishes on its own card does. */
+    private fun TriageDeckViewModel.decideCurrent(choice: TriageChoice) = decide(choice, checkNotNull(state.value.current).id)
 
     private class FakeFeed(initial: List<Post>, canLoadMore: Boolean) : TriageFeed {
         private val flow = MutableStateFlow(TriageFeedSnapshot(initial, canLoadMore))
@@ -209,18 +250,23 @@ class TriageDeckViewModelTest {
         var failLike = false
         var failHide = false
         var hold: CompletableDeferred<Unit>? = null
+        var unlikeHold: CompletableDeferred<Unit>? = null
         override val hiddenTags: Flow<Set<HiddenTag>> = flowOf(emptySet())
-        override suspend fun like(post: Post): Boolean {
+        override suspend fun like(post: Post): TriageReversal? {
             hold?.await()
             check(!failLike)
-            return alreadyLiked.add(post.id).also { if (it) liked += post.id }
+            if (!alreadyLiked.add(post.id)) return null
+            liked += post.id
+            return {
+                unlikeHold?.await()
+                if (alreadyLiked.remove(post.id)) unliked += post.id
+            }
         }
-        override suspend fun unlike(post: Post) { if (alreadyLiked.remove(post.id)) unliked += post.id }
-        override suspend fun hide(source: SourceKey, tag: String): Boolean {
+        override suspend fun hide(source: SourceKey, tag: String): TriageReversal? {
             check(!failHide)
-            return hidden.add(source to tag)
+            hidden += source to tag
+            return { hidden.remove(source to tag) }
         }
-        override suspend fun unhide(source: SourceKey, tag: String) { hidden.remove(source to tag) }
     }
 
     private class FakeQuickSave : QuickSave {
@@ -230,6 +276,7 @@ class TriageDeckViewModelTest {
         var fail = false
         var fromForYou = false
         var hold: CompletableDeferred<Unit>? = null
+        var undoHold: CompletableDeferred<Unit>? = null
         override val lastQuickSave: StateFlow<QuickSaveRecord?> = MutableStateFlow(null)
         override suspend fun quickSave(post: Post, codexId: String, query: Query?, fromForYou: Boolean): QuickSaveRecord? {
             hold?.await()
@@ -239,7 +286,10 @@ class TriageDeckViewModelTest {
             return QuickSaveRecord(post, codexId, "Skies", inserted = 1, savedAtEpochMs = 0L).also { records += it }
         }
         override fun undoLastQuickSave() = error("The deck undoes its own record")
-        override fun undoQuickSave(record: QuickSaveRecord) { undone += record }
+        override suspend fun undoQuickSave(record: QuickSaveRecord) {
+            undoHold?.await()
+            undone += record
+        }
         override fun suggestions(post: Post, query: Query?, limit: Int): Flow<SaveSuggestions> = flowOf(SaveSuggestions.Empty)
     }
 }

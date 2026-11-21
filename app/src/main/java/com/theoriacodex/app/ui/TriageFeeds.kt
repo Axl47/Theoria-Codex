@@ -1,7 +1,6 @@
 package com.theoriacodex.app.ui
 
 import com.theoriacodex.app.recommend.trainingTagsFor
-import com.theoriacodex.app.related.LikeToggleOutcome
 import com.theoriacodex.app.related.ViewerFeedOwner
 import com.theoriacodex.app.related.ViewerFeedSnapshot
 import com.theoriacodex.app.search.SearchVisibilityFilters
@@ -11,6 +10,7 @@ import com.theoriacodex.app.triage.HiddenTag
 import com.theoriacodex.app.triage.TriageActions
 import com.theoriacodex.app.triage.TriageFeed
 import com.theoriacodex.app.triage.TriageFeedSnapshot
+import com.theoriacodex.app.triage.TriageReversal
 import com.theoriacodex.app.triage.gridVisibilityFilters
 import com.theoriacodex.app.ui.components.FOR_YOU_FEED_FAB_CONTEXT
 import com.theoriacodex.app.ui.components.SEARCH_FEED_FAB_CONTEXT
@@ -18,7 +18,6 @@ import com.theoriacodex.app.ui.components.creatorFeedFabContext
 import com.theoriacodex.app.ui.navigation.TriageRequest
 import com.theoriacodex.app.ui.routes.BrowsingMetadata
 import com.theoriacodex.data.repository.CodexSortMode
-import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
@@ -120,12 +119,13 @@ private fun TheoriaShell.codexTriageFeed(codexId: String): TriageFeed = object :
 }
 
 /**
- * The deck's likes and hides. Likes write straight through the likes workflow, not the queued toggle feed cards
- * use, so each call returns once its Like commits and throws when it fails; hides go to the active profile's For
- * You tag blacklist, whose single-tag entries are what hiding adds.
+ * The deck's likes and hides. Likes go straight through the likes workflow, not the queued toggle feed cards use, so
+ * each call returns once its Like commits and throws when it fails; hides go to the active profile's For You tag
+ * blacklist, whose single-tag entries are what hiding adds. Each reversal names the profile its write used.
  */
 internal class ShellTriageActions(private val shell: TheoriaShell) : TriageActions {
     private val settings get() = shell.data.settingsRepository
+    private val likes get() = shell.workflows.likesCodexSync
 
     override val hiddenTags: Flow<Set<HiddenTag>> = settings.observeSettings().map { app ->
         app.forYouBlacklistByProfile[app.activeProfileId].orEmpty()
@@ -133,30 +133,16 @@ internal class ShellTriageActions(private val shell: TheoriaShell) : TriageActio
             .mapTo(mutableSetOf()) { entry -> HiddenTag(entry.source, entry.tags.single()) }
     }.distinctUntilChanged()
 
-    override suspend fun like(post: Post): Boolean {
+    override suspend fun like(post: Post): TriageReversal? {
         val profile = shell.owners.settings.state.value.activeProfile
-        if (isLiked(profile, post)) return false
-        check(toggleLike(profile, post) == LikeToggleOutcome.LIKED) { "The Like was not added" }
-        return true
-    }
-
-    override suspend fun unlike(post: Post) {
-        val profile = shell.owners.settings.state.value.activeProfile
-        if (isLiked(profile, post)) toggleLike(profile, post)
-    }
-
-    override suspend fun hide(source: SourceKey, tag: String): Boolean =
-        settings.addForYouBlacklistEntry(settings.observeSettings().first().activeProfileId, source, listOf(tag))
-
-    override suspend fun unhide(source: SourceKey, tag: String) {
-        settings.removeForYouBlacklistEntry(settings.observeSettings().first().activeProfileId, source, listOf(tag))
-    }
-
-    private suspend fun isLiked(profile: RecommendationProfile, post: Post): Boolean =
-        post.id in shell.data.likesRepository.observeLikedPostIds(profile.profileId).first()
-
-    private suspend fun toggleLike(profile: RecommendationProfile, post: Post): LikeToggleOutcome {
         val tags = withContext(Dispatchers.Default) { trainingTagsFor(post) }
-        return shell.workflows.likesCodexSync.toggle(profile, post, tags)
+        val like = likes.likeIfAbsent(profile, post, tags) ?: return null
+        return { likes.removeLike(profile, post, like) }
+    }
+
+    override suspend fun hide(source: SourceKey, tag: String): TriageReversal? {
+        val profileId = settings.observeSettings().first().activeProfileId
+        if (!settings.addForYouBlacklistEntry(profileId, source, listOf(tag))) return null
+        return { settings.removeForYouBlacklistEntry(profileId, source, listOf(tag)) }
     }
 }
