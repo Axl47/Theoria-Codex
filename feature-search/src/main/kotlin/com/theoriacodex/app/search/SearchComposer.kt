@@ -1,5 +1,7 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.search.omnibox.OmniboxEntry
+import com.theoriacodex.app.search.omnibox.matchOmnibox
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -96,7 +98,8 @@ private val SAVED_TAG_MAX_WIDTH = 240.dp
  * Search editor in a sheet over the results: the query reads as one expression at the top, tags are
  * edited where they sit, and new tags are typed just above the keyboard. Every committed edit runs
  * live, so the results above follow the query; the keyboard's Search action adds what was typed,
- * runs it at once and closes the sheet ([onApply]).
+ * runs it at once and closes the sheet ([onApply]). Below the tag suggestions, typed text also
+ * reaches the app's [omnibox] entries: Codices, creators, searches and commands.
  */
 @Composable
 internal fun SearchComposer(
@@ -111,12 +114,13 @@ internal fun SearchComposer(
     onDismiss: () -> Unit,
     savedSearches: ComposerSavedSearches = ComposerSavedSearches(),
     savedTags: ComposerSavedTags = ComposerSavedTags(emptyList()),
+    omnibox: List<OmniboxEntry> = emptyList(),
 ) {
     SearchComposerSheet(replacing = state.replacingResults, onDismiss = onDismiss) {
         SearchComposerContent(
             state, onAction, sourcePicker, onApply, onReset, onUndo,
             onManageSavedTags, onOpenSourceAccounts, onDismiss,
-            savedSearches, savedTags,
+            savedSearches, savedTags, omnibox,
         )
     }
 }
@@ -134,6 +138,7 @@ private fun SearchComposerContent(
     onDismiss: () -> Unit,
     savedSearches: ComposerSavedSearches,
     savedTags: ComposerSavedTags,
+    omnibox: List<OmniboxEntry>,
 ) {
     val input = state.suggestions.input
     val draft = state.query.draft
@@ -152,7 +157,10 @@ private fun SearchComposerContent(
         excludeNext -> ComposerAddTarget.Excluded
         else -> ComposerAddTarget.Required
     }
+    val omniboxMatches = remember(omnibox, input) { matchOmnibox(omnibox, input) }
+    // Adding an alternative to a group only takes tags.
     val suggestions = composerSuggestions(target, state, savedTags.all)
+        .copy(omnibox = omniboxMatches.takeUnless { target is ComposerAddTarget.Alternative }.orEmpty())
     val liveSelection = selection?.takeIf { selected ->
         if (selected.excluded) selected.term in terms.excluded else terms.groups.any { selected.term in it.terms }
     }
@@ -290,7 +298,7 @@ private fun ComposerEditorBody(
                     // The query stays on screen while suggestions take the room it gives up.
                     query(compact = true, Modifier.fillMaxWidth().heightIn(max = compactMaxHeight))
                     HorizontalDivider()
-                    ComposerSuggestionList(suggestions, target, onAction, Modifier.weight(1f).fillMaxWidth())
+                    ComposerSuggestionList(suggestions, target, onAction, onDismiss, Modifier.weight(1f).fillMaxWidth())
                 } else {
                     query(compact = false, Modifier.weight(1f).fillMaxWidth())
                 }
@@ -500,6 +508,7 @@ private fun ComposerSuggestionList(
     suggestions: ComposerSuggestions,
     target: ComposerAddTarget,
     onAction: (SearchAction) -> Unit,
+    onDismiss: () -> Unit,
     modifier: Modifier,
 ) {
     LazyColumn(modifier) {
@@ -543,6 +552,7 @@ private fun ComposerSuggestionList(
                 )
             }
         }
+        omniboxRows(suggestions.omnibox, afterTags = suggestions.rows.isNotEmpty(), onLeave = onDismiss)
     }
 }
 

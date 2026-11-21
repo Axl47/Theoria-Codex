@@ -37,7 +37,6 @@ import com.theoriacodex.app.ui.routes.SearchRouteConfig
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
-import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.ViewerStreamSource
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
@@ -66,19 +65,17 @@ private fun SearchDestination(shell: TheoriaShell) {
     val routes = shell.routes
     BrowsingDestinationStateBoundary(shell.data, shell.sources) { state ->
         val fabRestoreState = shell.feedFabRestoreRegistry.state(SEARCH_FEED_FAB_CONTEXT) ?: return@BrowsingDestinationStateBoundary
+        val omnibox = rememberSearchOmniboxEntries(shell, state)
         SearchRoute(
             coordinator = shell.features.search,
             relatedPostsLoader = shell.features.relatedPosts,
             mediaDurationCoordinator = shell.features.mediaDurationCoordinator,
             pixivUgoiraClient = shell.sources.pixivUgoiraClient,
-            config = searchRouteConfig(shell, state),
+            config = searchRouteConfig(shell, state).copy(omnibox = omnibox),
             fabRestoreState = fabRestoreState,
             onFabRestoreStateChange = { updated -> shell.feedFabRestoreRegistry.update(SEARCH_FEED_FAB_CONTEXT, updated) },
             callbacks = SearchRouteCallbacks(
-                onOpenSavedSearch = { saved ->
-                    if (saved.search.kind == RecentSearchKind.FYP) shell.openHistoricalForYouSearch(saved.search)
-                    else shell.openHistoricalSearch(saved.search)
-                },
+                onOpenSavedSearch = { saved -> shell.openSearchEntry(saved.search) },
                 onSaveSearch = shell.owners.savedSearches::save,
                 onManageSavedSearches = { shell.overlays.showSavedSearchManagement = true },
                 onOpenSourceAccounts = { shell.owners.settings.onAction(SettingsAction.OpenCustomSites) },

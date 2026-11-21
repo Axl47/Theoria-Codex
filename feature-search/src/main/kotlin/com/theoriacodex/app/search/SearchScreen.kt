@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.search.omnibox.OmniboxEntry
 import com.theoriacodex.app.related.RelatedShelfBinding
 import com.theoriacodex.app.ui.components.LocalPostMenuActions
 import com.theoriacodex.app.ui.components.FeedMarks
@@ -97,6 +98,7 @@ fun SearchScreen(
     onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
     onSaveSearch: (String, RecentSearchEntry) -> Unit = { _, _ -> },
     onManageSavedSearches: () -> Unit = {},
+    omnibox: List<OmniboxEntry> = emptyList(),
 ) {
     val chrome = rememberSearchChromeState(composerOpen)
     val actionPost = remember { SearchActionPostState() }
@@ -142,7 +144,7 @@ fun SearchScreen(
     if (chrome.composerOpen) {
         val saved = composerSavedSearches(state, savedSearches, onSaveSearch, onManageSavedSearches) { chrome.closeComposer(onAction); onOpenSavedSearch(it) }
         SearchComposerDialog(state, feed, chrome, gridState, sourcePicker, applyDraft, onAction, onOpenSourceAccounts, saved,
-            favoriteTags, onAddFavoriteTag, onRemoveFavoriteTag, onRenameFavoriteTag)
+            favoriteTags, onAddFavoriteTag, onRemoveFavoriteTag, onRenameFavoriteTag, omnibox)
     }
     if (chrome.showFavoriteTagSheet) {
         SearchFavoriteTags(state, favoriteTags, onAction, onRemoveFavoriteTag, onRenameFavoriteTag) { chrome.showFavoriteTagSheet = false }
@@ -276,6 +278,7 @@ private fun SearchComposerDialog(
     onAddFavoriteTag: (SourceKey, List<String>, String?) -> Unit,
     onRemoveFavoriteTag: (SourceKey, List<String>) -> Unit,
     onRenameFavoriteTag: (SourceKey, List<String>, String) -> Unit,
+    omnibox: List<OmniboxEntry>,
 ) {
     val scope = rememberCoroutineScope()
     val favoriteSections = rememberFavoriteTagSections(state, favoriteTags)
@@ -305,6 +308,7 @@ private fun SearchComposerDialog(
             // Single-source only: Unified would expand the group across sources with tighter tag limits.
             builtIn = listOfNotNull(animatedSavedGroup((state.query.draft.mode as? QueryMode.Source)?.source)),
         ),
+        omnibox = omnibox,
     )
 }
 
