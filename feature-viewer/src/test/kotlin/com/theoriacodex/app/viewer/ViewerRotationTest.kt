@@ -29,6 +29,7 @@ class ViewerRotationTest {
     private val shown = mutableStateOf(true)
     private val chrome = mutableStateOf(true)
     private val selection = mutableStateOf(selection("a", WIDE, IMAGE))
+    private val fork = mutableStateOf<ViewerSelection?>(null)
 
     @Test fun `rotates once when the opening post resolves to a wide video, then holds`() {
         show(autoRotate = true)
@@ -63,13 +64,23 @@ class ViewerRotationTest {
         compose.runOnIdle { assertEquals(ViewerOrientation.LANDSCAPE, rotation.held) }
     }
 
-    @Test fun `with the setting off nothing rotates on its own, and leaving the Viewer releases a held rotation`() {
+    @Test fun `with the setting off nothing rotates on its own`() {
         selection.value = selection("a", WIDE, VIDEO)
         show(autoRotate = false)
         compose.runOnIdle { assertNull(rotation.held) }
         compose.onNodeWithContentDescription("Rotate to fit").performClick()
         compose.runOnIdle { assertEquals(ViewerOrientation.LANDSCAPE, rotation.held) }
+    }
+
+    @Test fun `a trail level keeps the held rotation, even once the level under it leaves, until the Viewer releases it`() {
+        selection.value = selection("a", WIDE, VIDEO)
+        show(autoRotate = true)
+        compose.runOnIdle { assertEquals(ViewerOrientation.LANDSCAPE, rotation.held) }
+        fork.value = selection("b", TALL, VIDEO)
+        compose.runOnIdle { assertEquals(ViewerOrientation.LANDSCAPE, rotation.held) }
         shown.value = false
+        compose.runOnIdle { assertEquals(ViewerOrientation.LANDSCAPE, rotation.held) }
+        rotation.release()
         compose.runOnIdle { assertNull(rotation.held) }
     }
 
@@ -93,6 +104,13 @@ class ViewerRotationTest {
                 CompositionLocalProvider(LocalViewerAutoRotateVideos provides autoRotate) {
                     Box(Modifier.fillMaxSize()) {
                         ViewerRotationControl(selection.value, rotation, inPictureInPicture = false, chrome.value, suppressed = false)
+                    }
+                }
+            }
+            fork.value?.let { forked ->
+                CompositionLocalProvider(LocalViewerAutoRotateVideos provides autoRotate) {
+                    Box(Modifier.fillMaxSize()) {
+                        ViewerRotationControl(forked, rotation, inPictureInPicture = false, chrome.value, suppressed = false)
                     }
                 }
             }
