@@ -36,8 +36,6 @@ import com.theoriacodex.app.search.state.SearchQueryUiState
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.PostTagActionSection
-import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
-import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
@@ -120,7 +118,7 @@ fun SearchScreen(
     val inputFocus = rememberSearchInputFocus()
     val scope = rememberCoroutineScope()
     val gridState = rememberRetainedFeedGridState("search")
-    ScrollToTopOnTabReselect(TopLevelDestination.Search) { gridState.animateScrollToItem(0) }
+    SearchTabReselectEffect(state.restoration, gridState, onAction)
     val feed = rememberSearchFeed(state, fabRestoreState, likedPostIds, pendingLikePostIds, savedPostIds, watchedPostIds, durationStates, resolveUnknownAnimatedDurations)
     val serverFilters = state.query.serverFilters()
     val filterScroll = rememberFeedScrollSignal()
@@ -297,7 +295,7 @@ private fun SearchComposerDialog(
 ) {
     val scope = rememberCoroutineScope()
     val favoriteSections = rememberFavoriteTagSections(state, favoriteTags)
-    val resetScroll = { scope.launch { resetSearchScroll(feed.visibleResults, gridState, onAction) } }
+    val resetScroll = { scope.launch { resetSearchScroll(feed.visibleResults, gridState, state.restoration, onAction) } }
     SearchComposer(
         state, onAction, sourcePicker, applyDraft,
         onReset = {
@@ -532,19 +530,6 @@ private fun activeSearchFilterCount(state: SearchUiState, feed: SearchFeed, fabR
         fullColor = state.query.nhentaiFullColorFilter,
         language = state.query.nhentaiLanguageFilter,
     )
-
-private suspend fun resetSearchScroll(
-    visibleResults: List<Post>,
-    gridState: LazyStaggeredGridState,
-    onAction: (SearchAction) -> Unit,
-) {
-    if (visibleResults.isNotEmpty()) {
-        runCatchingPreservingCancellation {
-            gridState.scrollToItem(index = 0, scrollOffset = 0)
-        }
-    }
-    onAction(SearchAction.ScrollChanged(0, 0))
-}
 
 /**
  * Where a tag saved from the composer goes. Saved tags belong to a source, so a search across

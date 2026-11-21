@@ -4,6 +4,10 @@ package com.theoriacodex.app.search.state
 val SearchRestorationUiState.allowsScrollPersistence: Boolean
     get() = this is SearchRestorationUiState.Restored && scrollState == null
 
+/** The id of a request still owed a move to a saved place; a deliberate scroll or open supersedes it. */
+val SearchRestorationUiState.openScrollRequestId: Long?
+    get() = (this as? SearchRestorationUiState.Restored)?.takeIf { it.scrollState != null }?.scrollRequestId
+
 /** An absent anchor is only final after the provider continuation is exhausted. */
 val SearchUiState.canApplyScrollRestoration: Boolean
     get() {
