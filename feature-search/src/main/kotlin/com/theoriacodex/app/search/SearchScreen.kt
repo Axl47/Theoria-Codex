@@ -40,6 +40,7 @@ import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
+import com.theoriacodex.app.triage.triageSeed
 import com.theoriacodex.app.ui.navigation.rememberTriageAction
 import com.theoriacodex.app.ui.components.FeedPageDemandControl
 import com.theoriacodex.app.ui.components.FeedScrollSignal
@@ -153,7 +154,7 @@ fun SearchScreen(
     if (chrome.showFilterSheet) {
         // The deck follows the applied query, so a draft that has not searched yet has nothing to triage.
         val onTriage = rememberTriageAction(
-            ViewerStreamSource.SEARCH, state.query.appliedQueryHash.takeIf(String::isNotBlank), state.content.results.isNotEmpty(),
+            ViewerStreamSource.SEARCH, state.query.appliedQueryHash.takeIf(String::isNotBlank), feed.view.triageSeed(),
         )
         SearchFilterSheet(state, feed, fabRestoreState, onAction, onFabRestoreStateChange, filterActions::resetFilterDraft, onTriage) {
             // Filters apply live as they change; closing the sheet settles the search they made.

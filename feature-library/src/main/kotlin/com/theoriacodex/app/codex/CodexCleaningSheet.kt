@@ -30,6 +30,7 @@ import com.theoriacodex.app.ui.navigation.LocalTriageOpener
 import com.theoriacodex.app.ui.navigation.TriageMode
 import com.theoriacodex.app.ui.navigation.TriageOpener
 import com.theoriacodex.app.ui.navigation.TriageRequest
+import com.theoriacodex.app.ui.navigation.TriageSeed
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.PostId
 
@@ -129,7 +130,7 @@ internal fun rememberCleaningReview(codexId: String?, onOpen: () -> Unit): ((Set
         if (codexId == null || triage === TriageOpener.None) return@remember null
         { comparisonIds: Set<String> ->
             open()
-            triage.openTriage(TriageRequest.codex(codexId, TriageMode.RemoveFromCodex(comparisonIds)))
+            triage.openTriage(TriageRequest.codex(codexId, TriageMode.RemoveFromCodex(comparisonIds)), TriageSeed.Unfiltered)
         }
     }
 }

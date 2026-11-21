@@ -20,6 +20,7 @@ import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -100,13 +101,13 @@ class CreatorFollowsViewModel(
     fun refresh() = startRefresh(automatic = false, at = System.currentTimeMillis())
 
     private fun startRefresh(automatic: Boolean, at: Long) {
-        if (refreshJob?.isActive == true) {
-            // A refresh the user asks for while the automatic one runs is theirs from then on.
-            if (!automatic) refreshIsAutomatic = false
-            return
-        }
+        val running = refreshJob?.takeIf { it.isActive }
+        if (running != null && (automatic || !refreshIsAutomatic)) return
         refreshIsAutomatic = automatic
         refreshJob = viewModelScope.launch {
+            // A refresh the user asks for during the automatic check replaces it, so it covers every follow
+            // rather than only the stale ones the automatic run was limited to; the checks it already recorded stay.
+            running?.cancelAndJoin()
             mutableRefreshing.value = true
             mutableErrors.value = emptyMap()
             try {

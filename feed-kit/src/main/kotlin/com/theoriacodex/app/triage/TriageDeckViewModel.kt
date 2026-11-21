@@ -5,10 +5,10 @@ import androidx.lifecycle.viewModelScope
 import com.theoriacodex.app.codex.QuickSave
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.tags.normalizeMatchToken
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,10 +21,11 @@ import kotlinx.coroutines.launch
  * [state], calls [decide] when a card commits and [undo] for the one level of undo. Rotation keeps it; a feed
  * that grows is appended to, never reordered, so the position stays valid.
  *
- * A decision moves the card on at once and its write runs in this owner's scope. [TriageDeckState.notice] confirms
- * it only once the write commits; a failed write brings its card back. Undo works straight away: a reversal waits
- * behind a write still running, and removes exactly what that write added. [query] and [fromForYou] describe the
- * origin feed for save ranking. With a [removal], left takes the post out of the deck's Codex instead of skipping it.
+ * A decision moves the card on at once. Its write, and any reversal Undo asks for, run in this owner's scope one at a
+ * time, in the order they were asked for, so a reversal always follows its write and a later write follows both.
+ * [TriageDeckState.notice] confirms a decision only once its write commits; a failed write brings its card back.
+ * [query] and [fromForYou] describe the origin feed for save ranking. With a [removal], left takes the post out of the
+ * deck's Codex instead of skipping it, through the same ordered writes.
  */
 class TriageDeckViewModel(
     private val feed: TriageFeed,
@@ -43,15 +44,21 @@ class TriageDeckViewModel(
     /** The active profile's hidden tags, which the deck does not offer to hide again. */
     val hiddenTags: Flow<Set<HiddenTag>> get() = actions.hiddenTags
 
-    /** The write behind [TriageDeckState.last]; it resolves to how to reverse it, or null when it failed. */
-    private class Work(val decision: TriageDecision, val reversal: Deferred<Reversal?>) {
+    /** The write behind [TriageDeckState.last], and once it has run, how to reverse it (null when it failed). */
+    private class Work(val decision: TriageDecision) {
+        var reversal: TriageReversal? = null
         var undone = false
     }
 
+    /** Every write and reversal, run one at a time in the order they were asked for. */
+    private val writes = Channel<suspend () -> Unit>(Channel.UNLIMITED)
     private var latest: Work? = null
     private var pagedAtSize = -1
 
     init {
+        viewModelScope.launch {
+            for (write in writes) runCatchingPreservingCancellation { write() }
+        }
         viewModelScope.launch {
             feed.snapshots.collect { snapshot ->
                 mutableState.update { deck ->
@@ -68,52 +75,62 @@ class TriageDeckViewModel(
         }
     }
 
-    /** Applies [choice] to the current card and moves to the next. */
-    fun decide(choice: TriageChoice) {
-        val post = mutableState.value.current ?: return
-        val decision = decisionFor(choice, post)
-        val work = Work(decision, viewModelScope.async { commit(choice, post) })
+    /**
+     * Applies [choice] to card [postId] and moves to the next. Does nothing unless that card is the current one, so a
+     * swipe that finishes late never decides for the card that replaced it.
+     */
+    fun decide(choice: TriageChoice, postId: PostId) {
+        val post = mutableState.value.current?.takeIf { it.id == postId } ?: return
+        val work = Work(decisionFor(choice, post))
         latest = work
         mutableState.update { deck ->
+            val decision = work.decision
             val passedOver = if (decision is TriageDecision.Hid) deck.passedOverTags + normalizeMatchToken(decision.tag) else deck.passedOverTags
             val moved = deck.copy(last = decision, passedOverTags = passedOver)
             moved.copy(index = moved.shownFrom(deck.index + 1))
         }
         pageIfNearEnd()
-        viewModelScope.launch { settle(work, work.reversal.await()) }
+        // A skip writes nothing, so it has nothing to wait for or confirm.
+        if (choice is TriageChoice.Skip) {
+            work.reversal = NOTHING
+        } else {
+            writes.trySend {
+                work.reversal = commit(choice, post)
+                settle(work)
+            }
+        }
     }
 
-    /** Brings the last decided card back and reverses what its decision did, after its write if that still runs. */
+    /** Brings the last decided card back and reverses exactly what its decision did, once its write has run. */
     fun undo() {
         val work = latest ?: return
         latest = null
         work.undone = true
         mutableState.update { deck -> deck.restoring(work.decision).copy(last = null, notice = null) }
-        viewModelScope.launch { work.reversal.await()?.invoke() }
+        writes.trySend { work.reversal?.invoke() }
     }
 
     /** Runs [choice]'s write for [post]; returns how to reverse exactly what it did, or null when it failed. */
-    private suspend fun commit(choice: TriageChoice, post: Post): Reversal? = runCatchingPreservingCancellation<Reversal> {
+    private suspend fun commit(choice: TriageChoice, post: Post): TriageReversal? = runCatchingPreservingCancellation<TriageReversal> {
         when (choice) {
             TriageChoice.Skip -> NOTHING
             TriageChoice.Remove -> checkNotNull(removal) { "This deck does not remove" }.remove(post) ?: NOTHING
-            TriageChoice.Like -> if (actions.like(post)) suspend { actions.unlike(post) } else NOTHING
+            TriageChoice.Like -> actions.like(post) ?: NOTHING
             is TriageChoice.Save -> {
                 val record = quickSave.quickSave(post, choice.codexId, query, fromForYou) ?: error("The save failed")
                 suspend { quickSave.undoQuickSave(record) }
             }
-            is TriageChoice.Hide ->
-                if (actions.hide(post.id.source, choice.tag)) suspend { actions.unhide(post.id.source, choice.tag) } else NOTHING
+            is TriageChoice.Hide -> actions.hide(post.id.source, choice.tag) ?: NOTHING
         }
     }.getOrNull()
 
     /**
-     * Confirms [work]'s decision once its write is known, unless it was undone. A failure brings the card back while
+     * Confirms [work]'s decision once its write has run, unless it was undone. A failure brings the card back while
      * it is still the latest decision; after newer swipes it only says so, and the deck stays where it is.
      */
-    private fun settle(work: Work, reversal: Reversal?) {
+    private fun settle(work: Work) {
         if (work.undone) return
-        val failed = reversal == null
+        val failed = work.reversal == null
         val stillLatest = latest === work
         if (failed && stillLatest) latest = null
         mutableState.update { deck ->
@@ -136,12 +153,9 @@ class TriageDeckViewModel(
     private companion object {
         /** The deck asks its feed for more when this many cards or fewer remain. */
         const val PAGE_AHEAD = 5
-        val NOTHING: Reversal = {}
+        val NOTHING: TriageReversal = {}
     }
 }
-
-/** Reverses one committed decision. */
-private typealias Reversal = suspend () -> Unit
 
 private fun decisionFor(choice: TriageChoice, post: Post): TriageDecision = when (choice) {
     TriageChoice.Like -> TriageDecision.Liked(post)

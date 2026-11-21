@@ -67,6 +67,7 @@ import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedFailureTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
+import com.theoriacodex.app.triage.triageSeed
 import com.theoriacodex.app.ui.navigation.rememberTriageAction
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.app.ui.components.FeedPageDemandControl
@@ -167,7 +168,7 @@ fun ForYouScreen(
             state.sortMode, fabRestoreState, feed, onFabRestoreStateChange, onAction,
             // The sheet reset has no undo affordance, so the undo callback is intentionally discarded.
             onReset = @Suppress("IgnoredReturnValue") { clearFilters() },
-            onTriage = rememberTriageAction(ViewerStreamSource.FOR_YOU, state.queryHash, state.results.isNotEmpty()),
+            onTriage = rememberTriageAction(ViewerStreamSource.FOR_YOU, state.queryHash, feed.triageSeed()),
             onDismiss = { showSortSheet = false },
         )
     }

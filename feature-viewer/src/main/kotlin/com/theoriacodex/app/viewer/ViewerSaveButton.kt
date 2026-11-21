@@ -73,6 +73,7 @@ import com.theoriacodex.app.ui.navigation.LocalNewCodexOpener
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -124,7 +125,8 @@ internal fun ViewerSaveButton(
             is ViewerSaveCommand.QuickSave -> scope.launch {
                 if (quickSave.quickSave(post, command.codexId, context.query, context.fromForYou) == null) onOpenPicker()
             }
-            is ViewerSaveCommand.Undo -> quickSave.undoQuickSave(command.record)
+            // Undispatched: the removal is under way before the dock can leave and cancel this scope.
+            is ViewerSaveCommand.Undo -> scope.launch(start = CoroutineStart.UNDISPATCHED) { quickSave.undoQuickSave(command.record) }
             ViewerSaveCommand.OpenPicker -> onOpenPicker()
             ViewerSaveCommand.NewCodex -> newCodex.openNewCodex(post)
         }

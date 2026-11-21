@@ -42,8 +42,7 @@ internal fun rememberQuickSave(shell: TheoriaShell, loader: CodexSaveRelevanceLo
             override val lastQuickSave: StateFlow<QuickSaveRecord?> = owner.lastQuickSave
             override suspend fun quickSave(post: Post, codexId: String, query: Query?, fromForYou: Boolean) =
                 owner.quickSave(post, codexId, fromForYou)?.also { searchSaves.record(query, codexId) }
-            override fun undoLastQuickSave() = owner.undoLastQuickSave()
-            override fun undoQuickSave(record: QuickSaveRecord) = owner.undoQuickSave(record)
+            override suspend fun undoQuickSave(record: QuickSaveRecord) = owner.undoQuickSave(record)
             override fun suggestions(post: Post, query: Query?, limit: Int): Flow<SaveSuggestions> =
                 suggestions.observe(post, query, limit)
         }

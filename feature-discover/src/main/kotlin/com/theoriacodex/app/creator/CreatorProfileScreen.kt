@@ -66,6 +66,7 @@ import com.theoriacodex.app.ui.components.DismissibleFailure
 import com.theoriacodex.app.ui.components.FeedFailureTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
+import com.theoriacodex.app.triage.triageSeed
 import com.theoriacodex.app.ui.navigation.rememberTriageAction
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.app.ui.components.FeedPageDemandControl
@@ -154,7 +155,7 @@ fun CreatorProfileScreen(
             fabRestoreState, feed.filters.animatedDurationRange, onFabRestoreStateChange,
             // The sheet reset has no undo affordance, so the undo callback is intentionally discarded.
             onReset = @Suppress("IgnoredReturnValue") { clearFilters() },
-            onTriage = rememberTriageAction(ViewerStreamSource.CREATOR_PROFILE, state.queryHash, state.results.isNotEmpty()),
+            onTriage = rememberTriageAction(ViewerStreamSource.CREATOR_PROFILE, state.queryHash, feed.triageSeed()),
             onDismiss = { showFilterSheet = false },
         )
     }

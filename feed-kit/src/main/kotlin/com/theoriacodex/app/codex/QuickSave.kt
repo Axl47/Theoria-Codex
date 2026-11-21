@@ -17,6 +17,11 @@ data class QuickSaveRecord(
     /** Posts the save added; 0 when the post was already in the Codex. */
     val inserted: Int,
     val savedAtEpochMs: Long,
+    /**
+     * When the Codex stamped the membership this save added, which tells it apart from a later save of the same post
+     * there; null when the save added none.
+     */
+    val membershipSavedAtEpochMs: Long? = null,
 ) {
     /** Undo removes exactly what the save added, so it is offered only when the save added this one post. */
     val undoable: Boolean get() = inserted == 1
@@ -36,8 +41,8 @@ data class SaveSuggestions(val targets: List<SaveSuggestion>, val inAnyCodex: Bo
  * One-tap saving for the Viewer, feed grids and the triage deck, read from [LocalQuickSave].
  *
  * Saves go through the Save-to-Codex picker's path. Nothing here shows a snackbar: each surface confirms in
- * place from [lastQuickSave] and offers [undoLastQuickSave] while the record is [QuickSaveRecord.undoable]. A surface
- * that keeps the record of its own save undoes it with [undoQuickSave], so a later save elsewhere is never the one removed.
+ * place from [lastQuickSave] or from the record its own save returned, and undoes that record with [undoQuickSave]
+ * while it is [QuickSaveRecord.undoable], so a later save elsewhere is never the one removed.
  */
 interface QuickSave {
     /** The latest successful quick save, or null after it is undone. */
@@ -50,14 +55,11 @@ interface QuickSave {
      */
     suspend fun quickSave(post: Post, codexId: String, query: Query? = null, fromForYou: Boolean = false): QuickSaveRecord?
 
-    /** Removes what the last quick save added, when it is undoable; otherwise does nothing. */
-    fun undoLastQuickSave()
-
     /**
-     * Removes exactly what [record] added, when it is undoable, and clears [lastQuickSave] only while it still is
-     * [record]; otherwise does nothing.
+     * Removes exactly the membership [record] added, while it is still there, and clears [lastQuickSave] only while it
+     * still is [record]; returns once the removal has run. A record that is not undoable changes nothing.
      */
-    fun undoQuickSave(record: QuickSaveRecord)
+    suspend fun undoQuickSave(record: QuickSaveRecord)
 
     /** The top [limit] save targets for [post] (Codices it is not in yet), ranked by [rankSaveTargets]. */
     fun suggestions(post: Post, query: Query? = null, limit: Int = DEFAULT_SUGGESTIONS): Flow<SaveSuggestions>
@@ -71,8 +73,7 @@ interface QuickSave {
 private object NoQuickSave : QuickSave {
     override val lastQuickSave: StateFlow<QuickSaveRecord?> = MutableStateFlow<QuickSaveRecord?>(null).asStateFlow()
     override suspend fun quickSave(post: Post, codexId: String, query: Query?, fromForYou: Boolean): QuickSaveRecord? = null
-    override fun undoLastQuickSave() = Unit
-    override fun undoQuickSave(record: QuickSaveRecord) = Unit
+    override suspend fun undoQuickSave(record: QuickSaveRecord) = Unit
     override fun suggestions(post: Post, query: Query?, limit: Int): Flow<SaveSuggestions> = flowOf(SaveSuggestions.Empty)
 }
 

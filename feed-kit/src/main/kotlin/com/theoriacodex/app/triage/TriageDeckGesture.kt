@@ -19,13 +19,18 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.unit.Velocity
 import com.theoriacodex.app.ui.motion.TheoriaMotion
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 /**
- * Where one triage card is dragged to, and where the finger is (window coordinates) while it is down. Each card
- * gets its own, so the card after it starts at rest.
+ * Where one triage card is dragged to, where the finger is (window coordinates) while it is down, and the release
+ * still deciding where the card goes. Each card gets its own, so the card after it starts at rest.
  */
 @Stable
 internal class TriageDrag {
+    private var releasing: Job? = null
+
     var offset by mutableStateOf(Offset.Zero)
         private set
 
@@ -47,6 +52,17 @@ internal class TriageDrag {
 
     fun lift() {
         pointer = null
+    }
+
+    /** Runs [release] in [scope] as this card's one release: a new release replaces one still running. */
+    fun releaseIn(scope: CoroutineScope, release: suspend TriageDrag.() -> Unit) {
+        releasing?.cancel()
+        releasing = scope.launch { release() }
+    }
+
+    /** Stops a release still running, as when the card leaves the deck. */
+    fun cancelRelease() {
+        releasing?.cancel()
     }
 
     /** Moves the card to [target], springing when [fly] is false and sliding quickly when it is true. */

@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.SingleChoiceMenu
 import com.theoriacodex.app.ui.navigation.TriageMode
 import com.theoriacodex.app.ui.navigation.TriageRequest
+import com.theoriacodex.app.ui.navigation.TriageSeed
 import com.theoriacodex.app.ui.navigation.rememberTriageAction
 import com.theoriacodex.data.repository.CodexSortMode
 
@@ -55,13 +56,14 @@ internal fun rememberCodexTagFilter(codexId: String, tags: List<CodexTagCount>):
 /**
  * The Triage chip's action for Codex [codexId], where a left swipe removes the post from it. Likes keeps the plain
  * deck, where left skips: removing there would unlike, which reads wrong beside right meaning like. Null without
- * posts, and for the virtual Codices ([real] false), which the deck cannot open.
+ * posts in the grid, and for the virtual Codices ([real] false), which the deck cannot open. The deck is seeded with
+ * what the grid shows ([seed]).
  */
 @Composable
-internal fun rememberCodexTriageAction(codexId: String, real: Boolean, hasPosts: Boolean): (() -> Unit)? {
+internal fun rememberCodexTriageAction(codexId: String, real: Boolean, seed: TriageSeed): (() -> Unit)? {
     val mode = if (codexId.startsWith(LIKES_CODEX_ID_PREFIX)) TriageMode.Browse else TriageMode.RemoveFromCodex()
     val request = TriageRequest.codex(codexId, mode)
-    return rememberTriageAction(request.source, request.feedKey.takeIf { real }, hasPosts, request.mode)
+    return rememberTriageAction(request.source, request.feedKey.takeIf { real }, seed, request.mode)
 }
 
 /** The sorts a collection offers: length sorts mean nothing without animations, unless one is already chosen. */

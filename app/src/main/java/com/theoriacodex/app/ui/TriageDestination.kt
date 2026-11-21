@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -7,6 +8,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NamedNavArgument
@@ -18,14 +21,13 @@ import com.theoriacodex.app.triage.TriageCardSupport
 import com.theoriacodex.app.triage.TriageDeckCallbacks
 import com.theoriacodex.app.triage.TriageDeckScreen
 import com.theoriacodex.app.triage.TriageDeckViewModel
-import com.theoriacodex.app.triage.TriageFeed
 import com.theoriacodex.app.ui.components.feedDurations
 import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
 import com.theoriacodex.app.ui.navigation.TriageMode
 import com.theoriacodex.app.ui.navigation.TriageOpener
 import com.theoriacodex.app.ui.navigation.TriageRequest
+import com.theoriacodex.app.ui.navigation.TriageSeed
 import com.theoriacodex.app.ui.routes.BrowsingDestinationStateBoundary
-import com.theoriacodex.app.ui.routes.browsingMetadataOwner
 import com.theoriacodex.app.ui.routes.rememberMediaDurationRouteBinding
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
@@ -33,6 +35,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 /** [AppRoute.Triage]'s arguments. */
@@ -55,26 +58,66 @@ internal fun NavBackStackEntry.triageRequest(): TriageRequest {
 }
 
 /**
- * Opens the triage deck by pushing [AppRoute.Triage]. A feed's menu calls it with the feed's own source and key:
- * Search, For You and a Creator page with their query hash, a Codex or Likes with `codex:<id>`. Search's pending
- * filters apply first (see [settledTriageRequest]); a second tap meanwhile replaces the first.
+ * Holds what the tapped grid handed over for the deck its [TriageRequest] opens, until the next Triage tap replaces
+ * it. Activity-scoped, so a deck that rotation recreates finds it again; after process death it is empty and the deck
+ * closes, back to its origin feed.
+ */
+internal class TriageHandOffViewModel : ViewModel() {
+    private var handed: Pair<TriageRequest, TriageSeed>? = null
+
+    fun hand(request: TriageRequest, seed: TriageSeed) {
+        handed = request to seed
+    }
+
+    fun seedFor(request: TriageRequest): TriageSeed? = handed?.takeIf { it.first == request }?.second
+}
+
+/** The activity's [TriageHandOffViewModel], the same instance from the shell and from the deck's entry. */
+@Composable
+private fun rememberTriageHandOff(): TriageHandOffViewModel =
+    viewModel(viewModelStoreOwner = LocalContext.current.findActivity() as ComponentActivity)
+
+/**
+ * Opens the triage deck by pushing [AppRoute.Triage]. A feed's menu calls it with the feed's own source and key
+ * (Search, For You and a Creator page with their query hash, a Codex or Likes with `codex:<id>`) and what its grid
+ * shows. A second tap meanwhile replaces the first.
  */
 @Composable
-internal fun rememberTriageOpener(shell: TheoriaShell): TriageOpener = remember(shell) {
-    var opening: Job? = null
-    TriageOpener { request ->
-        opening?.cancel()
-        opening = shell.scope.launch { shell.navController.navigate(AppRoute.triage(shell.settledTriageRequest(request))) }
+internal fun rememberTriageOpener(shell: TheoriaShell): TriageOpener {
+    val handOff = rememberTriageHandOff()
+    return remember(shell, handOff) {
+        var opening: Job? = null
+        TriageOpener { request, seed ->
+            opening?.cancel()
+            opening = shell.scope.launch { shell.openTriage(request, seed, handOff) }
+        }
     }
 }
 
-/** The triage deck over [request]'s feed; with no feed to work through, such as after process death, it closes. */
+/**
+ * Pushes the deck over [request] once Search's pending filters have applied (see [settledTriageRequest]), but only
+ * over the screen and tab Triage was tapped on: when the user has moved on meanwhile it opens nothing. When applying
+ * them changed the query, the deck takes none of the old grid's posts, only how it filters.
+ */
+private suspend fun TheoriaShell.openTriage(request: TriageRequest, seed: TriageSeed, handOff: TriageHandOffViewModel) {
+    val origin = navController.currentBackStackEntry
+    val tab = navigation.homeTabRoute
+    val settled = settledTriageRequest(request)
+    if (navController.currentBackStackEntry !== origin || navigation.homeTabRoute != tab) return
+    handOff.hand(settled, if (settled == request) seed else seed.copy(posts = emptyList()))
+    navController.navigate(AppRoute.triage(settled))
+}
+
+/**
+ * The triage deck over [request]'s feed, seeded from what its grid handed over; with no hand-off, such as after
+ * process death, it closes.
+ */
 @Composable
 internal fun TriageDestination(shell: TheoriaShell, request: TriageRequest) {
-    // The deck's owner keeps the feed it was built with, so this runs again only to find nothing.
-    val marks = browsingMetadataOwner(shell.data).state
-    val feed = remember(request) { shell.triageFeed(request, marks) }
-    if (feed == null) {
+    val seed = rememberTriageHandOff().seedFor(request)
+    // The deck's owner keeps the feed it was built with; a rebuilt one only supplies the posts to resolve lengths for.
+    val feed = remember(request, seed) { seed?.let { shell.triageFeed(request, it) } }
+    if (seed == null || feed == null) {
         LaunchedEffect(request) { shell.navController.popBackStack() }
         Box(Modifier.fillMaxSize())
         return
@@ -86,15 +129,20 @@ internal fun TriageDestination(shell: TheoriaShell, request: TriageRequest) {
         TriageDeckViewModel(feed, ShellTriageActions(shell), quickSave, query, fromForYou, shell.triageRemoval(request))
     }
     val deck by owner.state.collectAsStateWithLifecycle()
+    // While the grid filters by length, the deck resolves the lengths of the owner's posts it has yet to show.
+    val candidates by remember(feed, seed) { if (seed.lengthFilterActive) feed.candidates else flowOf(emptyList()) }
+        .collectAsStateWithLifecycle(emptyList())
+    val durationPosts = remember(deck.posts, candidates) { if (candidates.isEmpty()) deck.posts else (deck.posts + candidates).distinctBy(Post::id) }
     BrowsingDestinationStateBoundary(shell.data, shell.sources) { state ->
         val duration = rememberMediaDurationRouteBinding(
             coordinator = shell.features.mediaDurationCoordinator,
             routeName = "triage",
             ownerKey = "triage-duration-owner",
             contentIdentity = request.feedKey,
-            posts = deck.posts,
+            posts = durationPosts,
             resolveInBackground = false,
         )
+        LaunchedEffect(duration.owner, seed.lengthFilterActive) { duration.owner.onFilterChanged(seed.lengthFilterActive) }
         val marks = state.feedMarks(shell.pendingLikePostIds[state.activeProfile.profileId].orEmpty())
         // Remembered, so the cards' environment is not rebuilt (and every card recomposed) by each state change.
         val onToggleLike = remember(shell, request.source) { { post: Post -> shell.feedLikeAction(request.source)(post) } }
@@ -115,7 +163,7 @@ internal fun TriageDestination(shell: TheoriaShell, request: TriageRequest) {
             query = query,
             support = support,
             callbacks = TriageDeckCallbacks(
-                onOpenPost = { posts, index -> shell.openTriagePost(request, query, posts, index) },
+                onOpenPost = { posts, index -> shell.openTriagePost(request, seed, query, posts, index) },
                 onOpenSavePicker = { post ->
                     shell.requestSaveToCodex(post, fromForYou = request.source == ViewerStreamSource.FOR_YOU, searchQuery = query)
                 },
@@ -135,16 +183,16 @@ private fun TheoriaShell.triageQuery(request: TriageRequest): Query? =
 
 /**
  * Opens the Viewer on the deck's post [index]. A live feed's Viewer keeps following its owner while it shows the
- * deck's query, as a tap on that feed's own grid does, so paging in the deck and in the Viewer share one feed.
+ * deck's query, with the filters its grid handed over ([seed]), as a tap on that feed's own grid does, so paging in
+ * the deck and in the Viewer share one feed.
  */
-private fun TheoriaShell.openTriagePost(request: TriageRequest, query: Query?, posts: List<Post>, index: Int) {
+private fun TheoriaShell.openTriagePost(request: TriageRequest, seed: TriageSeed, query: Query?, posts: List<Post>, index: Int) {
     request.codexId?.let { codexId -> return openCodexViewer(codexId, posts, index) }
     val context = ViewerLaunchContext(request.feedKey, index, request.source, scrollOffsetHint = 0)
-    val filters = gridVisibilityFilters(request.source)
     scope.launch {
         openFeedViewer(
             request.source,
-            FeedViewerLaunch(posts, context, liveSearchBinding = true, visibilityFilters = filters),
+            FeedViewerLaunch(posts, context, liveSearchBinding = true, visibilityFilters = seed.filters),
             saveContext = false,
             singleTop = false,
             saveQuery = query,

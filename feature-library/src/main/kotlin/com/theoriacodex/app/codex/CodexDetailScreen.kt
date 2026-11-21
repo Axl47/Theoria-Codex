@@ -58,6 +58,7 @@ import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
+import com.theoriacodex.app.triage.triageSeed
 import com.theoriacodex.app.ui.undo.UndoPill
 import com.theoriacodex.app.ui.components.FeedScrollSignal
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
@@ -141,7 +142,7 @@ fun CodexDetailScreen(
         { updatedSort -> onFabRestoreStateChange(fabRestoreState.copy(sortMode = updatedSort.name)) },
         tags, tagKey, { tagKey = it },
         // Followed and Saved searches pass a custom header; the deck only knows Codices, which Likes is one of.
-        rememberCodexTriageAction(codexId, real = customHeader == null, hasPosts = posts.isNotEmpty()),
+        rememberCodexTriageAction(codexId, real = customHeader == null, seed = feed.triageSeed()),
     )
     Scaffold(
         modifier = Modifier.nestedScroll(filterScroll.connection),
