@@ -57,7 +57,7 @@ private fun SearchDestination(shell: TheoriaShell) {
             fabRestoreState = fabRestoreState,
             onFabRestoreStateChange = { updated -> shell.feedFabRestoreRegistry.update(SEARCH_FEED_FAB_CONTEXT, updated) },
             callbacks = SearchRouteCallbacks(
-                onOpenSavedSearch = { saved -> shell.openSearchEntry(saved.search) },
+                onOpenSavedSearch = shell::openSavedSearch,
                 onSaveSearch = shell.owners.savedSearches::save,
                 onManageSavedSearches = { shell.overlays.showSavedSearchManagement = true },
                 onOpenSourceAccounts = { shell.owners.settings.onAction(SettingsAction.OpenCustomSites) },

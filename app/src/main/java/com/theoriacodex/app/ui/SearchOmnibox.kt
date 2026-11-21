@@ -3,6 +3,7 @@ package com.theoriacodex.app.ui
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.theoriacodex.app.codex.codexBelongsToProfile
+import com.theoriacodex.app.codex.markSavedSearchesSeen
 import com.theoriacodex.app.recents.recentSearchPresentation
 import com.theoriacodex.app.search.omnibox.OmniboxEntry
 import com.theoriacodex.app.search.omnibox.OmniboxKind
@@ -14,6 +15,7 @@ import com.theoriacodex.app.ui.routes.rememberRetained
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
+import com.theoriacodex.data.repository.SavedSearchEntry
 import kotlinx.coroutines.launch
 
 /** A preference the one box switches in place: how it reads from settings and the Settings action that writes it. */
@@ -78,7 +80,7 @@ internal fun rememberSearchOmniboxEntries(shell: TheoriaShell, state: BrowsingDe
             }
             saved.mapTo(this) { entry ->
                 OmniboxEntry.Action(OmniboxKind.SAVED_SEARCH, entry.name, recentSearchPresentation(entry.search).title) {
-                    shell.openSearchEntry(entry.search)
+                    shell.openSavedSearch(entry)
                 }
             }
             recents.mapTo(this) { entry ->
@@ -103,4 +105,10 @@ private fun destinationCommands(shell: TheoriaShell): List<OmniboxEntry> {
 /** Runs a saved or recent search where it belongs: For You searches in For You, the rest in Search. */
 internal fun TheoriaShell.openSearchEntry(entry: RecentSearchEntry) {
     if (entry.kind == RecentSearchKind.FYP) openHistoricalForYouSearch(entry) else openHistoricalSearch(entry)
+}
+
+/** Opens a saved search from Search, which shows its latest posts, so its "new posts" count is read. */
+internal fun TheoriaShell.openSavedSearch(entry: SavedSearchEntry) {
+    openSearchEntry(entry.search)
+    scope.launch { data.uiRestoreRepository.markSavedSearchesSeen(setOf(entry.id)) }
 }
