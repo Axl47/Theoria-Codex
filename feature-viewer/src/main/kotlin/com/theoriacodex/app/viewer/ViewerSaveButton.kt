@@ -71,6 +71,7 @@ import com.theoriacodex.app.ui.components.CollectTargetsState
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
 import com.theoriacodex.app.ui.navigation.LocalNewCodexOpener
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -142,7 +143,7 @@ internal fun ViewerSaveButton(
             .clip(RoundedCornerShape(50))
             .background(ViewerVeil.Capsule)
             .onGloballyPositioned { hold.coordinates = it }
-            .viewerSaveGestures(hold)
+            .viewerSaveGestures(hold, post.id)
             .clearAndSetSemantics {
                 role = Role.Button
                 contentDescription = state.description()
@@ -227,8 +228,11 @@ private class ViewerSaveHold(private val fan: ViewerSaveFanState, private val ha
     }
 }
 
-/** Tap, or hold then slide: the button's own pointer input, so the media's gestures are untouched. */
-private fun Modifier.viewerSaveGestures(hold: ViewerSaveHold): Modifier = pointerInput(hold) {
+/**
+ * Tap, or hold then slide: the button's own pointer input, so the media's gestures are untouched. Keyed to [postId], so
+ * paging mid-hold cancels the gesture and closes the fan instead of saving the next post to a target ranked for this one.
+ */
+private fun Modifier.viewerSaveGestures(hold: ViewerSaveHold, postId: PostId): Modifier = pointerInput(hold, postId) {
     awaitEachGesture {
         val down = awaitFirstDown()
         val tapped = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) { waitForUpOrCancellation() != null }
@@ -238,7 +242,7 @@ private fun Modifier.viewerSaveGestures(hold: ViewerSaveHold): Modifier = pointe
         }
         hold.start(down.position)
         var released = false
-        // Also when the button leaves mid-hold and cancels this gesture, so the fan never stays open.
+        // Also when the button leaves or the post changes mid-hold and cancels this gesture, so the fan never stays open.
         try {
             while (true) {
                 val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
