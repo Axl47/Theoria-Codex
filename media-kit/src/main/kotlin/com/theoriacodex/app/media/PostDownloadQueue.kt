@@ -27,6 +27,10 @@ data class SelectedDownloadMedia(val media: ImageRef, val pageIndex: Int, val to
 
 enum class PostDownloadStatus { QUEUED, PREPARING, DOWNLOADING, WAITING, SAVED, ALREADY_EXISTS, FAILED, CANCELLED }
 
+/**
+ * One download in a batch. [expandedFrom] is the gallery row this page replaced when the gallery expanded during
+ * this run (not saved), so a removal of that row also covers its pages and the sheet keeps one Undo for them.
+ */
 data class PostDownloadItem(
     val id: Long,
     val request: PostDownloadRequest,
@@ -36,6 +40,7 @@ data class PostDownloadItem(
     val totalBytes: Long? = null,
     val message: String? = null,
     val enqueuePending: Boolean = false,
+    val expandedFrom: Long? = null,
 ) {
     val active: Boolean get() = status in ACTIVE_DOWNLOAD_STATUSES
 }
@@ -85,7 +90,6 @@ class PostDownloadQueue(
     private val mutableBatches = MutableStateFlow<List<PostDownloadBatch>>(emptyList())
     val batches = mutableBatches.asStateFlow()
     private val workers = mutableMapOf<Long, Job>()
-    private val expandedItems = mutableMapOf<Long, Set<Long>>()
     private var nextId = 0L
     private val persistence = Mutex()
     private val restoration = Mutex()
@@ -149,8 +153,7 @@ class PostDownloadQueue(
     suspend fun removeItems(itemIds: Set<Long>, deleteFiles: Boolean) {
         restore()
         // A confirmation can outlive the parent row while a gallery becomes page downloads.
-        val selectedIds = itemIds.flatMapTo(mutableSetOf()) { expandedItems[it].orEmpty() + it }
-        val selected = mutableBatches.value.flatMap { it.items }.filter { it.id in selectedIds }
+        val selected = mutableBatches.value.flatMap { it.items }.filter { it.id in itemIds || it.expandedFrom in itemIds }
         selected.filter { it.active }.forEach { item ->
             update(item.id) { it.copy(status = PostDownloadStatus.CANCELLED, message = null) }
             workers[item.id]?.cancel()
@@ -285,7 +288,6 @@ class PostDownloadQueue(
     /** Publishes [next] and saves it; if the save fails, publishes [rollback]'s list instead and rethrows. */
     private suspend fun commit(next: List<PostDownloadBatch>, rollback: () -> List<PostDownloadBatch>) {
         mutableBatches.value = next
-        forgetRemovedExpansions()
         var committed = false
         try {
             checkpoint()
@@ -317,16 +319,9 @@ class PostDownloadQueue(
             val seen = batch.items.filterNot { it.id == itemId }
                 .mapTo(mutableSetOf()) { it.request.post.id to it.request.selectedMedia?.pageIndex }
             val children = pages.filter { seen.add(it.post.id to it.selectedMedia?.pageIndex) }
-                .map { PostDownloadItem(id = ++nextId, request = it.copy(originLabel = origin)) }
-            expandedItems[itemId] = children.mapTo(mutableSetOf()) { it.id }
+                .map { PostDownloadItem(id = ++nextId, request = it.copy(originLabel = origin), expandedFrom = itemId) }
             batch.copy(items = batch.items.flatMap { if (it.id == itemId) children else listOf(it) })
         }
-    }
-
-    /** A gallery whose page rows are all gone no longer redirects removal requests for its old row. */
-    private fun forgetRemovedExpansions() {
-        val ids = mutableBatches.value.flatMapTo(HashSet()) { batch -> batch.items.map(PostDownloadItem::id) }
-        expandedItems.entries.removeAll { (_, children) -> children.none { it in ids } }
     }
 
     private fun currentItem(itemId: Long): PostDownloadItem? =

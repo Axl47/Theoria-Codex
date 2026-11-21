@@ -96,9 +96,10 @@ class DownloadRemovalRows(val pending: Map<DownloadRemoval, PendingRemoval>, val
 
 /**
  * What the sheet lists given the pending removals: a download removed from its tile keeps that slot, drawn as
- * Undo; section-wide removals draw under their section's header.
+ * Undo; section-wide removals draw under their section's header. A removal also covers the pages a removed gallery
+ * expands into while it waits, so they stay hidden and the gallery's first page keeps its one Undo row.
  */
-private class TransfersSheetContent(
+internal class TransfersSheetContent(
     offline: OfflineStorageUiState,
     batches: List<PostDownloadBatch>,
     downloadRemovals: Map<DownloadRemoval, PendingRemoval>,
@@ -106,11 +107,11 @@ private class TransfersSheetContent(
     private val items = batches.asReversed().flatMap { it.items }
     private val hidden = downloadRemovals.keys.flatMapTo(mutableSetOf()) { it.ids }
 
-    /** Each download removed from its own tile, by id: its row takes that tile's place. */
+    /** Each download removed from its own tile, by the id of the first tile it covers: its row takes that place. */
     val tileRemovals = downloadRemovals.keys.filter { it.anchor != DownloadsUndoAnchor }
-        .flatMap { removal -> removal.ids.map { it to removal } }.toMap()
-    val visibleItems = items.filter { it.id !in hidden }
-    val shownItems = items.filter { it.id !in hidden || it.id in tileRemovals }
+        .mapNotNull { removal -> items.firstOrNull { it.removedBy(removal.ids) }?.let { it.id to removal } }.toMap()
+    val visibleItems = items.filterNot { it.removedBy(hidden) }
+    val shownItems = items.filter { !it.removedBy(hidden) || it.id in tileRemovals }
     val bulkRemovals = downloadRemovals.keys.filter { it.anchor == DownloadsUndoAnchor }
     val showOffline = offline.owners.isNotEmpty() || offline.pendingRemovals.isNotEmpty() || offline.message != null
     val showDownloads = shownItems.isNotEmpty() || bulkRemovals.isNotEmpty()
@@ -118,6 +119,8 @@ private class TransfersSheetContent(
     /** The grid index of the first offline owner row: after the header, any message and any Undo rows. */
     val offlineRowsStart = 1 + listOfNotNull(offline.message).size + offline.pendingRemovals.size
 }
+
+private fun PostDownloadItem.removedBy(ids: Set<Long>) = id in ids || expandedFrom in ids
 
 private fun LazyGridScope.downloadsSection(
     content: TransfersSheetContent,

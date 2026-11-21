@@ -2,6 +2,7 @@ package com.theoriacodex.app.media
 
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.ui.undo.DEFAULT_UNDO_DURATION
+import com.theoriacodex.app.ui.undo.PendingRemoval
 import com.theoriacodex.domain.model.ImageRef
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -60,6 +61,18 @@ class LibraryTransfersStateTest {
         runCurrent()
         assertEquals(listOf(setOf(1L) to true, setOf(2L, 3L) to false), commits)
         assertTrue(removals.pending.value.isEmpty())
+    }
+
+    @Test fun `a removed gallery that expands into pages keeps one Undo row in its place and hides the pages`() {
+        val removal = DownloadRemoval(setOf(1L), deleteFiles = false, downloadUndoAnchor(1))
+        val pages = (2L..4L).map { download(it, PostDownloadStatus.QUEUED).copy(expandedFrom = 1L) }
+        val batches = listOf(PostDownloadBatch(10, "Gallery", pages + download(5, PostDownloadStatus.SAVED)))
+
+        val content = TransfersSheetContent(OfflineStorageUiState(), batches, mapOf(removal to PendingRemoval("Removed")))
+
+        assertEquals(listOf(2L, 5L), content.shownItems.map { it.id })
+        assertEquals(mapOf(2L to removal), content.tileRemovals)
+        assertEquals(listOf(5L), content.visibleItems.map { it.id })
     }
 
     private fun download(id: Long, status: PostDownloadStatus) = PostDownloadItem(
