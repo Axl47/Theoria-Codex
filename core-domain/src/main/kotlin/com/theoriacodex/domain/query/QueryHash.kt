@@ -1,5 +1,6 @@
 package com.theoriacodex.domain.query
 
+import com.theoriacodex.domain.model.MediaFilter
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
@@ -28,7 +29,10 @@ object QueryHash {
         val terms = (includeGroups + exclusions).joinToString(separator = ";")
         val date = query.dateRange?.let { "${it.fromEpochMs ?: "-"}:${it.toEpochMs ?: "-"}" } ?: "none"
         val score = query.minScore?.toString() ?: "none"
-        return listOf(VERSION, mode, terms, query.sort.name, date, score).joinToString("|")
+        val parts = listOf(VERSION, mode, terms, query.sort.name, date, score)
+        // Added only when set, so every query stored before the field existed keeps its hash.
+        val media = if (query.media == MediaFilter.ANIMATED) listOf("media=animated") else emptyList()
+        return (parts + media).joinToString("|")
     }
 
     private fun SearchTerm.hashEntry(polarity: String): String? {

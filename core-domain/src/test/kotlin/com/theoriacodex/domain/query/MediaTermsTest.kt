@@ -1,0 +1,51 @@
+package com.theoriacodex.domain.query
+
+import com.theoriacodex.domain.adapter.AnimatedSearchTerm
+import com.theoriacodex.domain.adapter.SourceCapabilities
+import com.theoriacodex.domain.model.MediaFilter
+import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SortMode
+import com.theoriacodex.domain.model.SourceKey
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+class MediaTermsTest {
+    private val danbooruLike = SourceCapabilities(
+        supportsSortNewest = true,
+        supportsSortPopular = true,
+        supportsSortTop = true,
+        supportsSortRandom = false,
+        supportsExcludeTagsServerSide = true,
+        searchTermLimit = SearchTermLimit(maxTerms = 2, rankedSortUsesTerm = true),
+        animatedTerm = AnimatedSearchTerm(
+            com.theoriacodex.domain.model.SearchTerm("animated"),
+            overLimit = com.theoriacodex.domain.model.SearchTerm("filetype:mp4,webm,zip"),
+        ),
+    )
+
+    private fun query(vararg tags: String, sort: SortMode = SortMode.NEWEST, media: MediaFilter = MediaFilter.ANIMATED) =
+        Query(QueryMode.Source(SourceKey.DANBOORU), tags.toList(), emptyList(), sort, null, null).copy(media = media)
+
+    @Test
+    fun `an animated search gains the source's term while it fits the limit`() {
+        assertEquals(listOf("cat", "animated"), query("cat").withMediaTerms(danbooruLike).includeTags)
+    }
+
+    @Test
+    fun `a full term limit falls back to the no-cost term`() {
+        assertEquals(listOf("cat", "dog", "filetype:mp4,webm,zip"), query("cat", "dog").withMediaTerms(danbooruLike).includeTags)
+        // A ranked sort spends one of the two terms on its order metatag.
+        assertEquals(
+            listOf("cat", "filetype:mp4,webm,zip"),
+            query("cat", sort = SortMode.TOP).withMediaTerms(danbooruLike).includeTags,
+        )
+    }
+
+    @Test
+    fun `nothing is added when unasked, already asked, or the source has no term`() {
+        assertEquals(listOf("cat"), query("cat", media = MediaFilter.ANY).withMediaTerms(danbooruLike).includeTags)
+        assertEquals(listOf("Animated"), query("Animated").withMediaTerms(danbooruLike).includeTags)
+        assertEquals(listOf("cat"), query("cat").withMediaTerms(danbooruLike.copy(animatedTerm = null)).includeTags)
+    }
+}

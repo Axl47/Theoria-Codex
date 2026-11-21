@@ -1,5 +1,7 @@
 package com.theoriacodex.sources.pixiv
 
+import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.adapter.AnimatedSearchTerm
 import com.google.gson.Gson
 import com.theoriacodex.domain.adapter.AccountProfileSourceAdapter
 import com.theoriacodex.domain.adapter.CommentsSourceAdapter
@@ -73,6 +75,8 @@ class PixivSourceAdapter(
         supportsSortTop = true,
         supportsSortRandom = true,
         supportsExcludeTagsServerSide = false,
+        // The ugoira tag: nearly every match is an ugoira, though it finds only most of them, checked live 2026-11.
+        animatedTerm = AnimatedSearchTerm(SearchTerm("うごイラ")),
     )
 
     /** Feed pages and settings lookups; background duration lookups never queue in front of them. */

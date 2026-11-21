@@ -65,7 +65,7 @@ class DataStoreFormatTest {
             source = "PIXIV",
             language = "english",
             fullColorOnly = true,
-            searchAnimationByScope = mapOf("scope" to SearchAnimationFilterRestoreState(true, 1, 9)),
+            searchAnimationByScope = mapOf("scope" to SearchAnimationFilterRestoreState(1, 9)),
         )
         val state = UiRestoreStoreRecord(
             lastTab = "codex",

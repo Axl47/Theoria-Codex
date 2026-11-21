@@ -13,13 +13,13 @@ import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Post
-import com.theoriacodex.domain.model.normalizedForMode
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.normalizedForMode
 import com.theoriacodex.domain.query.SearchTermLimit
 import com.theoriacodex.domain.tags.sourceAutocompletePrefix
 import com.theoriacodex.domain.tags.sourceTagsMatch
@@ -34,6 +34,7 @@ object SearchDraftReducer {
     /** Applies one draft edit; [nowEpochMs] anchors a date-range preset. A rejected edit returns its reduction's state. */
     fun edit(state: SearchUiState, edit: SearchAction.DraftEdit, nowEpochMs: Long): SearchUiState = when (edit) {
         is SearchAction.SelectSort -> mutateQuery(state) { it.copy(sort = edit.sort) }
+        is SearchAction.SetMedia -> mutateQuery(state) { it.copy(media = edit.media) }
         is SearchAction.SetDateRange -> mutateQuery(state) { it.copy(dateRange = edit.range) }
         is SearchAction.SetDateRangePreset -> mutateQuery(state) { it.copy(dateRange = edit.preset.rangeEndingAt(nowEpochMs)) }
         is SearchAction.AddIncludeTerm -> addTerm(state, edit.term, excluded = false)
@@ -387,7 +388,9 @@ object SearchDraftReducer {
 
     fun clearDraft(state: SearchUiState): SearchDraftReduction {
         val scope = state.query.draftSourceScope
-        return SearchDraftReduction(state.switchDraft(emptySearchQuery(scope.queryMode()), scope))
+        // "Animated only" outlives the terms, as it did when it was a screen setting; only the filter reset clears it.
+        val cleared = emptySearchQuery(scope.queryMode()).copy(media = state.query.draft.media)
+        return SearchDraftReduction(state.switchDraft(cleared, scope))
     }
 
     fun prepareTagSearch(
@@ -405,7 +408,7 @@ object SearchDraftReducer {
             return SearchDraftReduction(state, accepted = false)
         }
         val query = emptySearchQuery(mode).withIncludeTermGroups(includes.map(::SearchTermGroup))
-            .copy(excludeTerms = excludes)
+            .copy(excludeTerms = excludes, media = state.query.draft.media)
         return SearchDraftReduction(
             state.switchDraft(query, selectedScope = FacetedSearchScope.All).copy(
                 content = state.content.copy(

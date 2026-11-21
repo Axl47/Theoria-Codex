@@ -5,6 +5,7 @@ import com.theoriacodex.app.search.SearchAutocompleteResult
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.MediaFilter
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
@@ -30,15 +31,20 @@ class SearchDraftReducerTest {
     private val scopes = listOf(FacetedSearchScope.All, tag, female, artist, character, series)
 
     @Test
-    fun `clearing the draft keeps the current mode`() {
+    fun `clearing the draft keeps the current mode and media`() {
         val applied = query(QueryMode.Source(SourceKey.PIXIV), listOf(SearchTerm("applied")))
-        val edited = state(applied).copy(
-            query = state(applied).query.copy(draft = applied.withIncludeTermsAsRequired(applied.includeTerms + SearchTerm("draft"))),
+        val edited = SearchDraftReducer.edit(
+            state(applied).copy(
+                query = state(applied).query.copy(draft = applied.withIncludeTermsAsRequired(applied.includeTerms + SearchTerm("draft"))),
+            ),
+            SearchAction.SetMedia(MediaFilter.ANIMATED),
+            nowEpochMs = 0,
         )
 
         val cleared = SearchDraftReducer.clearDraft(edited).state
 
         assertEquals(QueryMode.Source(SourceKey.PIXIV), cleared.query.draft.mode)
+        assertEquals(MediaFilter.ANIMATED, cleared.query.draft.media)
         assertTrue(cleared.query.draft.includeTerms.isEmpty())
     }
 

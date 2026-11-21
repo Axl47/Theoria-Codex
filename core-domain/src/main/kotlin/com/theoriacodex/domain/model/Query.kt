@@ -85,6 +85,8 @@ data class Query(
     val dateRange: DateRange?,
     /** Retired filter kept so stored queries still decode and hash; sources ignore it. */
     val minScore: Int?,
+    /** What kind of media to ask for; each source translates it (see `withMediaTerms`). */
+    val media: MediaFilter = MediaFilter.ANY,
 ) {
     // Cached projection is derived during construction and cannot be changed by copy independently.
     val includeTerms: List<SearchTerm> = includeTermGroups.flatMap(SearchTermGroup::terms)
@@ -142,6 +144,12 @@ fun Iterable<String>.asGeneralSearchTerms(): List<SearchTerm> {
 sealed interface QueryMode {
     data object Unified : QueryMode
     data class Source(val source: SourceKey) : QueryMode
+}
+
+/** A media restriction a search asks its sources for, on top of its terms. */
+enum class MediaFilter {
+    ANY,
+    ANIMATED,
 }
 
 enum class SortMode {

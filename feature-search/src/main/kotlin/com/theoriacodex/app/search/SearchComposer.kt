@@ -161,7 +161,7 @@ private fun SearchComposerContent(
     }
     val omniboxMatches = remember(omnibox, input) { matchOmnibox(omnibox, input) }
     // Adding an alternative to a group only takes tags.
-    val suggestions = composerSuggestions(target, state, savedTags.all)
+    val suggestions = composerSuggestions(target, state, savedTags.entries)
         .copy(omnibox = omniboxMatches.takeUnless { target is ComposerAddTarget.Alternative }.orEmpty())
     val liveSelection = selection?.takeIf { selected ->
         if (selected.excluded) selected.term in terms.excluded else terms.groups.any { selected.term in it.terms }
@@ -646,7 +646,7 @@ private fun ComposerSavedSection(
             )
         }
     }
-    if (savedTags.all.isEmpty()) return
+    if (savedTags.entries.isEmpty()) return
     if (showSearches) HorizontalDivider(Modifier.padding(top = 8.dp))
     SavedPartHeader("Saved tags", "Tap to add to your search") {
         if (savedTags.entries.isNotEmpty()) {
@@ -698,10 +698,9 @@ private fun SavedTagChips(savedTags: ComposerSavedTags, draft: Query, targetInde
     var menuFor by remember { mutableStateOf<FavoriteTagEntry?>(null) }
     var renaming by remember { mutableStateOf<FavoriteTagEntry?>(null) }
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(savedTags.all, key = FavoriteTagEntry::key) { tag ->
+        items(savedTags.entries, key = FavoriteTagEntry::key) { tag ->
             val chipState = tag.state(draft)
             val group = tag.tags.size > 1
-            val editable = savedTags.isEditable(tag)
             Box {
                 TagPickerChip(
                     label = tag.label,
@@ -714,8 +713,8 @@ private fun SavedTagChips(savedTags: ComposerSavedTags, draft: Query, targetInde
                     reserveCountSlot = false,
                     // A scrolling row offers unbounded width, which would leave the chip's label none.
                     modifier = Modifier.widthIn(max = SAVED_TAG_MAX_WIDTH),
-                    onLongPress = if (editable) ({ menuFor = tag }) else null,
-                    longPressLabel = if (editable) "Edit ${tag.label}" else null,
+                    onLongPress = { menuFor = tag },
+                    longPressLabel = "Edit ${tag.label}",
                 )
                 SavedTagMenu(
                     expanded = menuFor == tag,
