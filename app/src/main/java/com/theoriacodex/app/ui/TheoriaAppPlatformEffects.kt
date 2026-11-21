@@ -8,18 +8,25 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.theoriacodex.app.viewer.ViewerOrientation
+import com.theoriacodex.app.viewer.ViewerRotationState
 
 /**
  * Owns only Android window policy; route and navigation state remain app-shell-owned. The Viewer follows
- * the phone's rotation unless it holds [viewerHeldOrientation], set by auto-rotate or the rotate button.
+ * the phone's rotation unless [viewerRotation] holds an orientation, set by auto-rotate or the rotate button.
+ * The hold lasts while any Viewer level is on top, so moving between trail levels never rotates.
  */
 @Composable
 internal fun TheoriaAppPlatformEffects(
     hostActivity: Activity?,
     viewerActive: Boolean,
-    viewerHeldOrientation: ViewerOrientation?,
+    viewerRotation: ViewerRotationState?,
     orientation: Int,
 ) {
+    DisposableEffect(viewerRotation, viewerActive) {
+        onDispose { if (viewerActive) viewerRotation?.release() }
+    }
+
+    val viewerHeldOrientation = viewerRotation?.held
     DisposableEffect(hostActivity, viewerActive, viewerHeldOrientation) {
         hostActivity?.requestedOrientation = when {
             !viewerActive -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED

@@ -278,7 +278,7 @@ internal fun ShellPlatformEffects(shell: TheoriaShell, currentRoute: String?) {
     TheoriaAppPlatformEffects(
         hostActivity = hostActivity,
         viewerActive = currentRoute == AppRoute.Viewer,
-        viewerHeldOrientation = (hostActivity as? MainActivity)?.viewerRotation?.held,
+        viewerRotation = (hostActivity as? MainActivity)?.viewerRotation,
         orientation = LocalConfiguration.current.orientation,
     )
     val lifecycleOwner = LocalLifecycleOwner.current
