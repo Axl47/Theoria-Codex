@@ -3,7 +3,10 @@ package com.theoriacodex.app.ui
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -65,7 +68,7 @@ private fun savedSearchChecker(shell: TheoriaShell): SavedSearchNewPostsChecker 
 
 /**
  * Wraps a live collection's [header] so that once its feed has drawn its first page, the posts that page
- * showed (after the grid's display filters) are seen. A check that lands later, posts the filters hid,
+ * showed (after the grid's display filters) are seen, once per opening of the collection. A check that lands later, posts the filters hid,
  * posts only in later pages, and posts the feed never showed (offline, a failed load) stay new.
  */
 internal fun markingNewPostsSeen(
@@ -78,10 +81,13 @@ internal fun markingNewPostsSeen(
         drawHeader(feed, grid)
         val shown = feed.visiblePosts
         val rendered = !loading && shown.isNotEmpty() && codexId in newPostCodexIds
+        // Once per opening: loading a later page flips [rendered] again but must not mark its posts or late checks seen.
+        var marked by remember(codexId) { mutableStateOf(false) }
         LaunchedEffect(codexId, rendered) {
-            if (!rendered) return@LaunchedEffect
+            if (!rendered || marked) return@LaunchedEffect
             withFrameNanos {}
             shell.data.markNewPostsSeen(codexId, shown.mapTo(mutableSetOf()) { it.id.markKey() })
+            marked = true
         }
     }
 }
