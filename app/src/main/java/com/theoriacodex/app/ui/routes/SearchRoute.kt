@@ -38,6 +38,7 @@ import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.app.search.SearchSourceMix
 
@@ -65,6 +66,8 @@ internal data class SearchRouteCallbacks(
     /** Writes the Unified source mix the source picker edits; see [SearchSourceMix]. */
     val onSetSourceWeights: (Set<SourceKey>, Map<SourceKey, Double>) -> Unit = { _, _ -> },
     val onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
+    /** The applied search finished without error and shows these results. */
+    val onResultsShown: suspend (Query, List<Post>) -> Unit = { _, _ -> },
     val onSaveSearch: (String, RecentSearchEntry) -> Unit = { _, _ -> },
     val onManageSavedSearches: () -> Unit = {},
     val onAddFavoriteTag: (SourceKey, List<String>, String?) -> Unit,
@@ -109,6 +112,16 @@ internal class SearchRouteResumeObserver(
     }
 }
 
+/** Tells [onResultsShown] each applied search that finished without error and shows posts. */
+@Composable
+private fun ReportShownResults(state: SearchUiState, onResultsShown: suspend (Query, List<Post>) -> Unit) {
+    val current by rememberUpdatedState(onResultsShown)
+    val shown = state.content.results.takeIf { !state.loading && state.content.error == null && state.content.hasExecutedSearch }
+    LaunchedEffect(shown, state.query.applied) {
+        if (!shown.isNullOrEmpty()) current(state.query.applied, shown)
+    }
+}
+
 /** Navigation-scoped Search owner plus its immutable rendering boundary. */
 @Composable
 internal fun SearchRoute(
@@ -144,6 +157,8 @@ internal fun SearchRoute(
     val lifecycleOwner = LocalLifecycleOwner.current
 
     SideEffect { currentOnOwnerAvailable(owner) }
+
+    ReportShownResults(state, callbacks.onResultsShown)
 
     LaunchedEffect(owner) {
         owner.onAction(SearchAction.Restore)

@@ -34,6 +34,7 @@ import androidx.navigation.compose.rememberNavController
 import com.theoriacodex.app.appshell.AppShellAction
 import com.theoriacodex.app.appshell.AppShellViewModel
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
+import com.theoriacodex.app.codex.SavedSearchOpenMarks
 import com.theoriacodex.app.codex.CodexCommandViewModel
 import com.theoriacodex.app.codex.CodexSaveViewModel
 import com.theoriacodex.app.codex.FOLLOWED_CODEX_ID
@@ -349,6 +350,7 @@ internal class TheoriaShell(
     var navReady by mutableStateOf(appShellOwner.state.value.appReady)
     val creatorOpening = CreatorOpeningWorkflow(sources.registry, sources.httpClient)
     private val fileCopies = FileCopyLookup(sources.registry)
+    val savedSearchOpens = SavedSearchOpenMarks(data.uiRestoreRepository)
     val recentsClearWorkflow = RecentsClearWorkflow(data.recentsRepository)
     val viewerRouteWorkflow = ViewerRouteWorkflow(
         data = data,
