@@ -365,7 +365,7 @@ private suspend fun TheoriaShell.viewerDownloadOrigin(): String {
             "Codex · ${name ?: "Collection"}"
         }
         ViewerStreamSource.CREATOR_PROFILE -> "Creator profile"
-        ViewerStreamSource.RECENTS -> "Recents"
+        ViewerStreamSource.RECENTS -> "History"
         ViewerStreamSource.RELATED -> "Related posts"
         null -> "Viewer"
     }

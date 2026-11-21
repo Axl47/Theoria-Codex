@@ -82,8 +82,8 @@ private fun CodexUnavailable(loading: Boolean, onBack: () -> Unit) {
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("This codex no longer exists.", style = MaterialTheme.typography.titleMedium)
-        TextButton(onClick = onBack) { Text("Back to codex list") }
+        Text("Codex not found", style = MaterialTheme.typography.titleMedium)
+        TextButton(onClick = onBack) { Text("Back") }
     }
 }
 
@@ -379,13 +379,9 @@ private fun CodexDetailEmptyState(collectionIsEmpty: Boolean, loading: Boolean, 
     } else {
         FeedEmptyTile(
             // A live feed (Followed, saved searches) is not a Codex, so it states only what to do.
-            title = when {
-                emptyMessage != null -> null
-                collectionIsEmpty -> "This codex is empty"
-                else -> "No matching posts"
-            },
+            title = "No matching posts".takeUnless { emptyMessage != null || collectionIsEmpty },
             message = emptyMessage ?: when {
-                collectionIsEmpty -> "Browse and save posts"
+                collectionIsEmpty -> "No posts"
                 resolvingDurations -> "Resolving durations…"
                 else -> "Adjust your filters"
             },
