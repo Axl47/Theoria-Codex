@@ -19,8 +19,8 @@ Everything the workflow gathered is in `.claude-review/`:
   When the comment was left on a line of the diff, the file starts with that file, line and hunk, so
   "this" in the request refers to that code.
 
-The pull request's head is checked out, so read whatever surrounding code you need to understand the
-change: callers, the modules it touches, and the shared code it should or should not be using.
+The pull request's head is checked out, and your tools (`read_file`, `list_files`, `search`) take paths
+relative to its root, so read whatever surrounding code you need to understand the change: callers, the modules it touches, and the shared code it should or should not be using.
 `AGENTS.md` holds the product intent and durable constraints (smallest sufficient implementation,
 shared logic over local logic, cross-source parity, the Android support window); hold the change to
 them.
@@ -50,8 +50,8 @@ If the change is sound, say so in a few sentences. Do not invent problems to fil
 
 ## Output
 
-Write the review, in Markdown, to `.claude-review/review.md` and to nowhere else. Do not edit any
-other file. The workflow posts that file as one comment on the pull request.
+Your final message is the review, in Markdown, and nothing else: no preamble before it and no notes
+after it. The workflow posts that message as one comment on the pull request.
 
 Use this shape:
 

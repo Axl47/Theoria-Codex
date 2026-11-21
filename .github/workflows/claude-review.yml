@@ -2,11 +2,14 @@ name: Claude Design Review
 
 # A second reviewer beside Codex: Claude (Opus) reviews the design of a pull request, not its nits.
 # The reviewer's instructions live in .github/claude/design-review.md; edit that file to tune it.
+# .github/claude/design_review.py calls the Claude API directly (no Claude Code), giving Claude
+# read-only tools to open, list and search files in the pull request. Its final message is the review.
 #
 # When it runs
 # - Once when a pull request opens, or when a draft is marked ready for review. Pushes do not re-run it.
-# - Whenever someone with write access comments @claude on a pull request (in the conversation or on
-#   a line of the diff). Anything after @claude is passed to the reviewer as what to focus on.
+# - Whenever someone with write access (owner, member or collaborator) comments @claude on a pull
+#   request, in the conversation or on a line of the diff. Anything after @claude is passed to the
+#   reviewer as what to focus on.
 # - Never automatically for bot authors (Dependabot and any other [bot]) or for pull requests from
 #   forks, which GitHub runs without secrets.
 #
@@ -19,12 +22,17 @@ name: Claude Design Review
 #   (Settings > Secrets and variables > Actions > Variables). Otherwise edit the default below.
 #
 # Setup
-# - Add the Anthropic API key as a repository secret named ANTHROPIC_API_KEY
+# - Add an Anthropic API key as a repository secret named ANTHROPIC_API_KEY
 #   (Settings > Secrets and variables > Actions > New repository secret).
-# - The action signs in to GitHub as the Claude GitHub App. If a run fails on GitHub authentication,
-#   install the app on this repository: https://github.com/apps/claude
-# - The action refuses to run unless this file matches the copy on main, so a pull request that edits
-#   it gets no review (the run passes with a notice). Changes to the reviewer prompt are not affected.
+#
+# Safety
+# - The script and the prompt always come from the default branch, never from the pull request, and
+#   the pull request's code is only read, never run. Claude's tools cannot leave the pull request's
+#   checkout or its .claude-review/ folder, and it has no shell, file writing or web access.
+#
+# Cost
+# - Each run prints a "claude-design-review usage:" line (tokens and estimated USD) in the review step
+#   and a usage table in the job summary. On an API error it prints Anthropic's exact error.
 on:
   pull_request:
     types: [opened, ready_for_review]
@@ -53,9 +61,11 @@ jobs:
       || (github.event_name == 'issue_comment'
         && github.event.issue.pull_request
         && contains(github.event.comment.body, '@claude')
+        && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
         && github.event.comment.user.type != 'Bot')
       || (github.event_name == 'pull_request_review_comment'
         && contains(github.event.comment.body, '@claude')
+        && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
         && github.event.comment.user.type != 'Bot')
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -116,19 +126,29 @@ jobs:
       contents: read
       issues: read
       pull-requests: write
-      id-token: write
     concurrency:
       group: claude-design-review-${{ needs.decide.outputs.pr }}
       cancel-in-progress: false
 
     steps:
-      - name: Checkout the pull request
+      - name: Check out the reviewer from the default branch
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: base
+          sparse-checkout: .github/claude
+          persist-credentials: false
+
+      - name: Check out the pull request
         uses: actions/checkout@v7.0.1
         with:
           ref: refs/pull/${{ needs.decide.outputs.pr }}/head
+          path: pr
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Gather the pull request, its issues and its diff
+        working-directory: pr
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -143,15 +163,15 @@ jobs:
             --json number,url,title,body,author,baseRefName,headRefName,isDraft,additions,deletions,changedFiles,closingIssuesReferences \
             > .claude-review/pr.json
           gh pr view "$PR" --repo "$REPO" --json files > .claude-review/files.json
-          if ! gh pr diff "$PR" --repo "$REPO" > .claude-review/pr.diff 2> diff-error.txt; then
+          if ! gh pr diff "$PR" --repo "$REPO" > .claude-review/pr.diff 2> ../diff-error.txt; then
             # GitHub's API refuses very large diffs, so build it locally from the base branch instead.
             base=$(jq -r .baseRefName .claude-review/pr.json)
             if git fetch --quiet --no-tags --unshallow --filter=blob:none origin "+refs/heads/$base:refs/remotes/origin/$base" &&
                git diff "origin/$base...HEAD" > .claude-review/pr.diff; then
-              echo "::notice::GitHub's API could not return the diff ($(head -c 200 diff-error.txt)), so it was built locally."
+              echo "::notice::GitHub's API could not return the diff ($(head -c 200 ../diff-error.txt)), so it was built locally."
             else
               echo "::error::Neither GitHub's API nor git could produce this pull request's diff."
-              cat diff-error.txt
+              cat ../diff-error.txt
               exit 1
             fi
           fi
@@ -170,32 +190,22 @@ jobs:
             } > .claude-review/request.md
           fi
 
-      - name: Review the design
-        id: claude
-        uses: anthropics/claude-code-action@v1
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          prompt: |
-            Review the design of pull request #${{ needs.decide.outputs.pr }} in ${{ github.repository }}.
-            Read .github/claude/design-review.md first and follow it exactly. The pull request's context
-            is in .claude-review/, and the review goes in .claude-review/review.md.
-          claude_args: |
-            --model claude-opus-5-5
-            --max-turns 40
-            --allowedTools "Read,Grep,Glob,Write"
-            --disallowedTools "Bash,Edit,MultiEdit,NotebookEdit,WebFetch,WebSearch"
-
-      - name: Show why the review failed
-        # The action hides Claude's output, so an API error (a bad key, an empty credit balance, an
-        # unknown model) only shows as "is_error:true". Print the final result line, which carries it.
-        if: failure() && steps.claude.outputs.execution_file != ''
-        env:
-          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+      - name: Install the Anthropic SDK
         run: |
-          reason=$(jq -rs 'flatten | map(select(.type? == "result")) | last | .result // empty' "$EXECUTION_FILE" | head -c 2000)
-          reason=${reason:-Claude reported no reason.}
-          printf 'Claude stopped with: %s\n' "$reason"
-          printf '### Claude design review failed\n\n```\n%s\n```\n' "$reason" >> "$GITHUB_STEP_SUMMARY"
+          python3 -m venv "$RUNNER_TEMP/claude-review-venv"
+          "$RUNNER_TEMP/claude-review-venv/bin/pip" install --quiet --disable-pip-version-check 'anthropic==2.6.0'
+
+      - name: Review the design
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          REPO: ${{ github.repository }}
+          PR: ${{ needs.decide.outputs.pr }}
+        run: |
+          "$RUNNER_TEMP/claude-review-venv/bin/python" -I base/.github/claude/design_review.py \
+            --root pr \
+            --prompt base/.github/claude/design-review.md \
+            --task "Review the design of pull request #$PR in $REPO. Its context is in .claude-review/." \
+            --out review.md
 
       - name: Post the review
         env:
@@ -203,19 +213,9 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ needs.decide.outputs.pr }}
         run: |
-          if [[ ! -s .claude-review/review.md ]]; then
-            # The action only runs when this workflow file matches main's, so a pull request that edits
-            # it is skipped by design rather than broken.
-            if jq -e '.files[] | select(.path == ".github/workflows/claude-review.yml")' .claude-review/files.json > /dev/null; then
-              echo "::notice::This pull request changes the review workflow, which the action refuses to run until it is on main."
-              exit 0
-            fi
-            echo "::error::Claude finished without writing .claude-review/review.md; see the step above."
-            exit 1
-          fi
           {
             echo "$REVIEW_MARKER"
-            cat .claude-review/review.md
+            cat review.md
             echo
             echo '<sub>Design review by Claude. Comment `@claude` to run it again, with what to focus on if you like.</sub>'
           } > review-comment.md

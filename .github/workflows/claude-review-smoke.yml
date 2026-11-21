@@ -1,0 +1,28 @@
+name: Claude review smoke test (temporary)
+on:
+  push:
+    branches: [claude/project-thread-idpo35]
+    paths: [.github/workflows/claude-review-smoke.yml]
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the Anthropic SDK
+        run: |
+          python3 -m venv "$RUNNER_TEMP/v"
+          "$RUNNER_TEMP/v/bin/pip" install --quiet --disable-pip-version-check 'anthropic==2.6.0'
+      - name: One small tool-using request through the review script
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          printf 'You are testing a tool loop. Follow the user exactly and keep the answer to one line.\n' > "$RUNNER_TEMP/p.md"
+          "$RUNNER_TEMP/v/bin/python" -I .github/claude/design_review.py --root . --prompt "$RUNNER_TEMP/p.md" \
+            --task "Call list_files with the pattern '.github/claude/*', then reply with only the number of files it returned." \
+            --out "$RUNNER_TEMP/out.md"
+          echo "Answer: $(cat "$RUNNER_TEMP/out.md")"
