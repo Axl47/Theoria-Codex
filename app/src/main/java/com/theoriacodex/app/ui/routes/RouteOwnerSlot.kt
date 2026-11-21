@@ -31,6 +31,11 @@ internal class RouteOwnerSlot<Owner : ViewModel> {
         if (current === owner) clearedRegistration = registration else registration.close()
     }
 
+    /** Empties the slot if [owner] still holds it, so a leaving destination cannot unpublish the one that replaced it. */
+    fun withdraw(owner: Owner) {
+        if (current === owner) clear()
+    }
+
     /** Empties the slot without touching the owner. */
     fun clear() {
         clearedRegistration?.close()

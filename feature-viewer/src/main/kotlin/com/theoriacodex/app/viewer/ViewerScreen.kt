@@ -59,6 +59,7 @@ fun ViewerScreen(
     contextActions: ViewerContextActions = ViewerContextActions(),
     relatedShelf: ViewerRelatedShelf = ViewerRelatedShelf.None,
     comments: ViewerComments = ViewerComments.None,
+    trail: ViewerTrail = ViewerTrail.None,
 ) {
     val returnProgress = rememberViewerReturnProgress()
     val returning = LocalViewerReturnTransition.current?.request != null
@@ -72,7 +73,7 @@ fun ViewerScreen(
         viewerPostNavigation(uiState, pendingPostId.value)
     }
     val posts = remember(navigation.pages) { navigation.pages.map { it.post } }
-    val videoPositions = remember(uiState.session) { ViewerVideoPositions() }
+    val videoPositions = rememberViewerVideoPositions(uiState.session)
     if (posts.isEmpty()) {
         ViewerNoPosts()
         return
@@ -84,7 +85,7 @@ fun ViewerScreen(
         ViewerLoadedScreen(
             uiState, navigation, posts, returnProgress, returning, opening, dismissDrag, activity, quality, qualityHeight, pendingPostId,
             videoPositions, host, config, ViewerSaveContext(saveToCodexQuery, saveFromForYou), canLoadMoreFromSource, loadingMoreFromSource, contextActions,
-            relatedShelf, comments,
+            relatedShelf, comments, trail,
         )
     }
 }
@@ -112,6 +113,7 @@ private fun ViewerLoadedScreen(
     contextActions: ViewerContextActions,
     relatedShelf: ViewerRelatedShelf,
     comments: ViewerComments,
+    trail: ViewerTrail,
 ) {
     val onAction = host.onAction
     val readReturnProgress = remember(returnProgress) { { returnProgress.value } }
@@ -161,7 +163,7 @@ private fun ViewerLoadedScreen(
             }
             ViewerChromeOverlays(
                 frame, postPagerState, screen, controls, swipe, activity, quality, qualityHeight, pendingPostId, host, config,
-                loadMoreFromStrip, relatedShelf, comments, saveContext,
+                loadMoreFromStrip, relatedShelf, comments, saveContext, trail,
             )
         }
     }

@@ -35,6 +35,9 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 import java.util.UUID
@@ -133,6 +136,23 @@ abstract class AppJourneyFixture {
         activate(compose.onNodeWithContentDescription("Filter Recents by section"))
         activate(compose.onNodeWithText(label))
         compose.waitForIdle()
+    }
+
+    /** Opens PIXIV's fixture post at [index] in the Viewer, from a Recents search recorded as [recentSearch]. */
+    protected fun openSearchPost(index: Int, recentSearch: String) {
+        io {
+            container.data.recentsRepository.recordSearch(
+                Query(QueryMode.Source(SourceKey.PIXIV), listOf("multi"), emptyList(), SortMode.POPULAR, null, null),
+                recentSearch,
+            )
+        }
+        launch()
+        tab("Recents")
+        openRecentsSection("Searches")
+        activate(compose.onNodeWithTag("Recent search:$recentSearch"))
+        val card = compose.onNodeWithTag(searchCardTestTag(posts.getValue(SourceKey.PIXIV)[index].id))
+        compose.waitUntil(10_000) { card.isDisplayed() }
+        activate(card)
     }
 
     /** Exercise the visible control's action without racing its animated touch coordinates. */

@@ -24,7 +24,7 @@ import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.domain.model.PostId
 
-/** Everything drawn over the media: top bar, dock, post strip, rotate and slideshow buttons, related drawer and the save fan. */
+/** Everything drawn over the media: top bar and trail row, dock, post strip, rotate and slideshow buttons, related drawer and the save fan. */
 @Composable
 internal fun BoxScope.ViewerChromeOverlays(
     frame: ViewerFrame,
@@ -42,6 +42,7 @@ internal fun BoxScope.ViewerChromeOverlays(
     relatedShelf: ViewerRelatedShelf,
     comments: ViewerComments,
     saveContext: ViewerSaveContext,
+    trail: ViewerTrail,
 ) {
     val selection = frame.selection
     val navigation = frame.navigation
@@ -63,9 +64,9 @@ internal fun BoxScope.ViewerChromeOverlays(
             source = selection.post.id.source.displayName(),
             indexLabel = if (selection.mediaItems.size > 1) "${selection.mediaIndex + 1} / ${selection.mediaItems.size}" else null,
             onBack = { controls.requestDismiss() },
-        )
+        ) { ViewerTrailRow(selection.post, trail, config.creatorBrowsingSources) }
     }
-    ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_STRIPS && !frame.mediaOverviewVisible, Modifier.align(Alignment.TopEnd).padding(top = 72.dp).then(fadesWhileScrubbing)) {
+    ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_STRIPS && !frame.mediaOverviewVisible, Modifier.align(Alignment.TopEnd).padding(top = 112.dp).then(fadesWhileScrubbing)) {
         ViewerRelatedStrip(
             state = relatedShelf.state, posts = relatedShelf.posts, currentPostId = selection.post.id,
             onSelect = { post ->
