@@ -14,6 +14,7 @@ import androidx.activity.compose.BackHandler
 import com.theoriacodex.app.media.isAnimatedPost
 import androidx.compose.runtime.MutableState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.theoriacodex.app.media.animatedDurationRangeLabel
@@ -51,6 +52,8 @@ import androidx.compose.runtime.setValue
 import com.theoriacodex.app.ui.components.LoadingState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
@@ -220,8 +223,11 @@ private fun CodexDetailBody(
     onAddPostsToAnotherCodex: (List<Post>) -> Unit,
     onRemovePosts: (List<Post>) -> Unit,
 ) {
+    val focusManager = LocalFocusManager.current
     Column(
-        modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 12.dp)
+            // A tap nothing else takes leaves the title's rename field, which commits it.
+            .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } },
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (customHeader != null) {
