@@ -43,6 +43,8 @@ fun PixivUgoiraPlayer(
     onTimelineInteractionActiveChanged: (Boolean) -> Unit = {},
     onTogglePlayback: (() -> Unit)? = null,
     onDurationKnown: (Long) -> Unit = {},
+    /** Called once frames of a load are available to draw. */
+    onReady: () -> Unit = {},
     onError: (String) -> Unit = {},
     loadingPreview: (@Composable () -> Unit)? = null,
     showPassiveProgress: Boolean = false,
@@ -108,6 +110,7 @@ fun PixivUgoiraPlayer(
         isScrubbing = isScrubbing,
         onPlaybackCompleted = onPlaybackCompleted,
         onDurationKnown = onDurationKnown,
+        onReady = onReady,
         onTimelineInteractionActiveChanged = onTimelineInteractionActiveChanged,
         onTogglePlayback = togglePlayback,
     )
@@ -137,6 +140,7 @@ private fun UgoiraLoadedPlayer(
     isScrubbing: MutableState<Boolean>,
     onPlaybackCompleted: () -> Unit,
     onDurationKnown: (Long) -> Unit,
+    onReady: () -> Unit,
     onTimelineInteractionActiveChanged: (Boolean) -> Unit,
     onTogglePlayback: () -> Unit,
 ) {
@@ -149,6 +153,7 @@ private fun UgoiraLoadedPlayer(
         derivedStateOf { animationFrameIndexAt(animation.positionMs, frameEndsMs) }
     }
     LaunchedEffect(postId, totalDurationMs) { onDurationKnown(totalDurationMs) }
+    LaunchedEffect(animation) { onReady() }
     val maxSeekablePositionMs = totalDurationMs - 1L
     fun seekToPosition(targetMs: Long) {
         animation.seekTo(targetMs.coerceIn(0L, maxSeekablePositionMs))

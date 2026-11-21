@@ -58,6 +58,7 @@ internal fun ViewerMediaContent(
                 onTimelineInteractionActiveChanged = events.onTimelineInteractionActiveChanged,
                 onTogglePlayback = events.onTogglePlayback,
                 onDurationKnown = events.onDurationKnown,
+                onReady = events.onReady,
                 onError = events.onError,
                 loadingPreview = { ViewerLoadingPreview(post, media) },
             )
