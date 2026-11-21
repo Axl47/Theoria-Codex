@@ -16,6 +16,7 @@ import com.theoriacodex.app.search.state.SearchStateChange
 import com.theoriacodex.app.search.state.SearchStateReducer
 import com.theoriacodex.app.search.state.SearchSuggestionsUiState
 import com.theoriacodex.app.search.state.SearchUiState
+import com.theoriacodex.app.search.state.reconciledWith
 import com.theoriacodex.app.search.state.allowsScrollPersistence
 import com.theoriacodex.app.search.state.withResolvedPosts
 import com.theoriacodex.app.search.state.withSuggestionInput
@@ -277,12 +278,7 @@ class SearchViewModel(
         val reduction = SearchDraftReducer.toggleTemporarySource(mutableState.value, source)
         if (!reduction.accepted) return
         suggestionRefresh.cancelAutocomplete()
-        mutableState.value = reduction.state.copy(
-            suggestions = reduction.state.suggestions.copy(
-                input = "",
-                canCommitInput = false,
-            ),
-        )
+        mutableState.value = reduction.state
         persistDraftQuery()
         if (input.isBlank()) suggestionRefresh.refreshTrending()
         suggestionRefresh.refreshAutocomplete(input)
@@ -391,33 +387,22 @@ class SearchViewModel(
         val availableSources = coordinator.availableSources
         val available = availableSources.toSet()
         val sourcesChanged = available != current.query.availableSources.toSet()
-        val draftScope = current.query.draftSourceScope.reconciledWith(available)
-        val appliedScope = current.query.appliedSourceScope.reconciledWith(available)
-        val draft = current.query.draft.reconciledWith(draftScope)
-        val applied = current.query.applied.reconciledWith(appliedScope)
-        val query = current.query.copy(
-            draft = draft,
-            applied = applied,
-            draftSourceScope = draftScope,
-            appliedSourceScope = appliedScope,
+        val next = SearchDraftReducer.reconcileEnvironment(
+            current,
             availableSources = availableSources,
-            unifiedSources = settings.runtime.enabledSources.intersect(available),
+            enabledSources = settings.runtime.enabledSources,
             sourceTermLimits = coordinator.sourceTermLimits(),
             scopesBySource = coordinator.searchScopesBySource(),
         )
-        mutableState.value = current.copy(
-            query = query.copy(
-                selectedScope = query.selectedScope.takeIf { it in query.supportedScopes }
-                    ?: com.theoriacodex.domain.adapter.FacetedSearchScope.All,
-            ),
-        )
+        mutableState.value = next
+        val draftChanged = next.query.draft != current.query.draft
+        val appliedChanged = next.query.applied != current.query.applied
         persistDraftQuery()
-        val requiresRetry = hadExecutedSearch && (settingsChanged || sourcesChanged ||
-            draft != current.query.draft || applied != current.query.applied)
+        val requiresRetry = hadExecutedSearch && (settingsChanged || sourcesChanged || draftChanged || appliedChanged)
         if (requiresRetry && scheduleRetry) {
             rerunApplied(
                 relatedResetReason = "environment: runtime=$settingsChanged sources=$sourcesChanged " +
-                    "draft=${draft != current.query.draft} applied=${applied != current.query.applied}",
+                    "draft=$draftChanged applied=$appliedChanged",
             )
         }
         return requiresRetry

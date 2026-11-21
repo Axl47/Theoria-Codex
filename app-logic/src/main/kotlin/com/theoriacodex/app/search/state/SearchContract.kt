@@ -114,6 +114,20 @@ fun SearchSourceScope.sources(unified: Set<SourceKey>, available: Set<SourceKey>
     else -> explicitSources.toSet()
 }.intersect(available)
 
+/** This scope without the sources missing from [available]; a scope left with none becomes Unified. */
+fun SearchSourceScope.reconciledWith(available: Set<SourceKey>): SearchSourceScope = when (this) {
+    SearchSourceScope.GlobalUnified -> this
+    is SearchSourceScope.Single -> SearchSourceScope.fromSources(listOf(source).filter { it in available })
+    is SearchSourceScope.Temporary -> SearchSourceScope.fromSources(sources.filter { it in available })
+}
+
+/** This query in [scope]'s mode; a Unified scope keeps only the terms every source understands. */
+fun Query.reconciledWith(scope: SearchSourceScope): Query = when (val mode = scope.queryMode()) {
+    QueryMode.Unified -> withIncludeTermGroups(effectiveIncludeTermGroups.filter(SearchTermGroup::isPortableGeneralTagGroup))
+        .copy(mode = mode, excludeTerms = excludeTerms.filter(SearchTerm::isPortableGeneralTag))
+    is QueryMode.Source -> copy(mode = mode)
+}
+
 data class SearchQueryUiState(
     val draft: Query = emptySearchQuery(),
     val applied: Query = emptySearchQuery(),

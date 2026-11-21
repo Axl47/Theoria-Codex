@@ -19,6 +19,7 @@ import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.query.SearchTermLimit
 import com.theoriacodex.domain.tags.normalizeGelbooruToken
 import com.theoriacodex.domain.tags.sourceTagsMatch
 
@@ -34,24 +35,11 @@ object SearchDraftReducer {
         val resolvedMode = mode.takeIf { it.isAvailable(state.query.availableSources) } ?: QueryMode.Unified
         val restored = state.query.appliedByMode[modeKey(resolvedMode)] ?: emptySearchQuery(resolvedMode)
         val sanitized = restored.copy(mode = resolvedMode).normalizedForMode(resolvedMode)
-        val scopes = state.query.scopesFor(resolvedMode)
-        val selectedScope = state.query.selectedScope.takeIf { it in scopes }
-            ?: FacetedSearchScope.All
         val validation = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE.takeIf {
             resolvedMode == QueryMode.Unified &&
                 (hadSourceOwnedTerms || sanitized.removedSourceOwnedTerms)
         }
-        return SearchDraftReduction(
-            state.copy(
-                query = state.query.copy(
-                    draft = sanitized.query,
-                    draftSourceScope = SearchSourceScope.fromQuery(sanitized.query),
-                    selectedScope = selectedScope,
-                    validationMessage = validation,
-                ),
-                suggestions = SearchSuggestionsUiState(),
-            ),
-        )
+        return SearchDraftReduction(state.switchDraft(sanitized.query, validationMessage = validation))
     }
 
     fun toggleTemporarySource(state: SearchUiState, source: SourceKey): SearchDraftReduction {
@@ -76,24 +64,42 @@ object SearchDraftReducer {
             return SearchDraftReduction(state, accepted = false)
         }
         val sanitized = state.query.draft.normalizedForMode(nextScope.queryMode())
-        val scopes = state.query.scopesFor(sanitized.query.mode)
         return SearchDraftReduction(
-            state.copy(
-                query = state.query.copy(
-                    draft = sanitized.query,
-                    draftSourceScope = nextScope,
-                    selectedScope = state.query.selectedScope.takeIf { it in scopes }
-                        ?: FacetedSearchScope.All,
-                    validationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
-                        .takeIf { sanitized.removedSourceOwnedTerms },
-                ),
-                suggestions = state.suggestions.copy(
-                    autocomplete = emptyList(),
-                    facetedAutocomplete = emptyList(),
-                    searchedTags = emptyList(),
-                ),
+            state.switchDraft(
+                sanitized.query,
+                nextScope,
+                validationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE.takeIf { sanitized.removedSourceOwnedTerms },
+                // The typed input stays for the new sources, so its error stays until their suggestions answer.
+                suggestions = state.suggestions.withoutMatches(),
             ),
         )
+    }
+
+    /**
+     * Fits the draft and the applied search to the sources available now, and takes what the engine reports about
+     * them. A picked suggestion scope the draft's source no longer offers falls back to All.
+     */
+    fun reconcileEnvironment(
+        state: SearchUiState,
+        availableSources: List<SourceKey>,
+        enabledSources: Set<SourceKey>,
+        sourceTermLimits: Map<SourceKey, SearchTermLimit>,
+        scopesBySource: Map<SourceKey, List<FacetedSearchScope>>,
+    ): SearchUiState {
+        val available = availableSources.toSet()
+        val draftScope = state.query.draftSourceScope.reconciledWith(available)
+        val appliedScope = state.query.appliedSourceScope.reconciledWith(available)
+        val query = state.query.copy(
+            draft = state.query.draft.reconciledWith(draftScope),
+            applied = state.query.applied.reconciledWith(appliedScope),
+            draftSourceScope = draftScope,
+            appliedSourceScope = appliedScope,
+            availableSources = availableSources,
+            unifiedSources = enabledSources.intersect(available),
+            sourceTermLimits = sourceTermLimits,
+            scopesBySource = scopesBySource,
+        )
+        return state.copy(query = query.copy(selectedScope = query.validSelectedScope(query.selectedScope, query.draft)))
     }
 
     fun mutateQuery(state: SearchUiState, transform: (Query) -> Query): SearchDraftReduction =
@@ -272,15 +278,7 @@ object SearchDraftReducer {
                     mode = sourceMode,
                     excludeTerms = state.query.draft.excludeTerms.filter(SearchTerm::isPortableGeneralTag),
                 )
-                prepared = state.copy(
-                    query = state.query.copy(
-                        draft = query,
-                        draftSourceScope = SearchSourceScope.Single(post.id.source),
-                        selectedScope = FacetedSearchScope.All,
-                        validationMessage = null,
-                    ),
-                    suggestions = SearchSuggestionsUiState(),
-                )
+                prepared = state.switchDraft(query, selectedScope = FacetedSearchScope.All)
             }
         }
         return addTerm(prepared, normalized, excluded)
@@ -339,12 +337,7 @@ object SearchDraftReducer {
         return SearchDraftReduction(
             state.copy(
                 query = state.query.copy(selectedScope = scope),
-                suggestions = state.suggestions.copy(
-                    inputError = null,
-                    autocomplete = emptyList(),
-                    facetedAutocomplete = emptyList(),
-                    searchedTags = emptyList(),
-                ),
+                suggestions = state.suggestions.withoutMatches().copy(inputError = null),
             ),
         )
     }
@@ -355,36 +348,20 @@ object SearchDraftReducer {
         }
         val sanitized = query.normalizedForMode(query.mode)
         return SearchDraftReduction(
-            state.copy(
-                query = state.query.copy(
-                    draft = sanitized.query,
-                    draftSourceScope = SearchSourceScope.fromQuery(sanitized.query),
-                    selectedScope = FacetedSearchScope.All,
-                    validationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
-                        .takeIf { sanitized.removedSourceOwnedTerms },
-                ),
-                suggestions = SearchSuggestionsUiState(),
+            state.switchDraft(
+                sanitized.query,
+                validationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE.takeIf { sanitized.removedSourceOwnedTerms },
+                selectedScope = FacetedSearchScope.All,
             ),
         )
     }
 
-    fun resetDraft(state: SearchUiState): SearchDraftReduction {
-        val query = state.query.applied
-        return SearchDraftReduction(
-            state.copy(
-                query = state.query.copy(
-                    draft = query,
-                    draftSourceScope = state.query.appliedSourceScope,
-                    validationMessage = null,
-                ),
-                suggestions = SearchSuggestionsUiState(),
-            ),
-        )
-    }
+    fun resetDraft(state: SearchUiState): SearchDraftReduction =
+        SearchDraftReduction(state.switchDraft(state.query.applied, state.query.appliedSourceScope))
 
     fun clearDraft(state: SearchUiState): SearchDraftReduction {
-        val mode = state.query.draftSourceScope.queryMode()
-        return SearchDraftReduction(resetInputState(state, emptySearchQuery(mode)))
+        val scope = state.query.draftSourceScope
+        return SearchDraftReduction(state.switchDraft(emptySearchQuery(scope.queryMode()), scope))
     }
 
     fun prepareTagSearch(
@@ -403,15 +380,8 @@ object SearchDraftReducer {
         }
         val query = emptySearchQuery(mode).withIncludeTermGroups(includes.map(::SearchTermGroup))
             .copy(excludeTerms = excludes)
-        val reset = resetInputState(state, query)
         return SearchDraftReduction(
-            reset.copy(
-                query = reset.query.copy(
-                    draft = query,
-                    draftSourceScope = SearchSourceScope.fromQuery(query),
-                    selectedScope = FacetedSearchScope.All,
-                    validationMessage = null,
-                ),
+            state.switchDraft(query, selectedScope = FacetedSearchScope.All).copy(
                 content = state.content.copy(
                     results = emptyList(),
                     statuses = emptyList(),
@@ -492,10 +462,32 @@ object SearchDraftReducer {
 
     fun directNhentaiGalleryIdCandidate(query: Query): String? = query.directNhentaiGalleryIdCandidate()
 
-    private fun resetInputState(state: SearchUiState, query: Query): SearchUiState = state.copy(
-        query = state.query.copy(draft = query, validationMessage = null),
-        suggestions = SearchSuggestionsUiState(),
+    /**
+     * Replaces the draft with [draft] searched over [scope]. [selectedScope] stays picked when [draft]'s source offers
+     * it, and the suggestions shown for the old draft go unless [suggestions] says what remains.
+     */
+    private fun SearchUiState.switchDraft(
+        draft: Query,
+        scope: SearchSourceScope = SearchSourceScope.fromQuery(draft),
+        validationMessage: String? = null,
+        selectedScope: FacetedSearchScope = query.selectedScope,
+        suggestions: SearchSuggestionsUiState = SearchSuggestionsUiState(),
+    ): SearchUiState = copy(
+        query = query.copy(
+            draft = draft,
+            draftSourceScope = scope,
+            selectedScope = query.validSelectedScope(selectedScope, draft),
+            validationMessage = validationMessage,
+        ),
+        suggestions = suggestions,
     )
+
+    private fun SearchQueryUiState.validSelectedScope(selected: FacetedSearchScope, draft: Query): FacetedSearchScope =
+        selected.takeIf { it in scopesFor(draft.mode) } ?: FacetedSearchScope.All
+
+    /** Keeps the typed input and its error, dropping the matches found for it. */
+    private fun SearchSuggestionsUiState.withoutMatches() =
+        copy(autocomplete = emptyList(), facetedAutocomplete = emptyList(), searchedTags = emptyList())
 
     private fun resolveCommittedInput(state: SearchUiState, input: String): String {
         val trimmed = input.trim()

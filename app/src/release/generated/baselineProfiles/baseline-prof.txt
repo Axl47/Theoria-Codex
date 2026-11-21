@@ -34167,8 +34167,8 @@ Lcom/theoriacodex/app/search/SearchCoordinatorPolicyKt;
 SPLcom/theoriacodex/app/search/SearchCoordinatorPolicyKt;-><clinit>()V
 SPLcom/theoriacodex/app/search/SearchCoordinatorPolicyKt;->defaultQuery$default(Lcom/theoriacodex/domain/model/QueryMode;ILjava/lang/Object;)Lcom/theoriacodex/domain/model/Query;
 SPLcom/theoriacodex/app/search/SearchCoordinatorPolicyKt;->defaultQuery(Lcom/theoriacodex/domain/model/QueryMode;)Lcom/theoriacodex/domain/model/Query;
-SPLcom/theoriacodex/app/search/SearchCoordinatorPolicyKt;->reconciledWith(Lcom/theoriacodex/app/search/state/SearchSourceScope;Ljava/util/Set;)Lcom/theoriacodex/app/search/state/SearchSourceScope;
-SPLcom/theoriacodex/app/search/SearchCoordinatorPolicyKt;->reconciledWith(Lcom/theoriacodex/domain/model/Query;Lcom/theoriacodex/app/search/state/SearchSourceScope;)Lcom/theoriacodex/domain/model/Query;
+SPLcom/theoriacodex/app/search/state/SearchContractKt;->reconciledWith(Lcom/theoriacodex/app/search/state/SearchSourceScope;Ljava/util/Set;)Lcom/theoriacodex/app/search/state/SearchSourceScope;
+SPLcom/theoriacodex/app/search/state/SearchContractKt;->reconciledWith(Lcom/theoriacodex/domain/model/Query;Lcom/theoriacodex/app/search/state/SearchSourceScope;)Lcom/theoriacodex/domain/model/Query;
 Lcom/theoriacodex/app/search/SearchCoordinatorPolicyKt$special$$inlined$compareBy$1;
 SPLcom/theoriacodex/app/search/SearchCoordinatorPolicyKt$special$$inlined$compareBy$1;-><init>()V
 Lcom/theoriacodex/app/search/SearchCoordinatorPolicyKt$special$$inlined$thenBy$1;

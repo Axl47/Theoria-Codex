@@ -1,6 +1,5 @@
 package com.theoriacodex.app.search
 
-import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.SourceFailureReason
@@ -8,29 +7,7 @@ import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
-import com.theoriacodex.domain.model.SearchTerm
-import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
-
-fun SearchSourceScope.reconciledWith(available: Set<com.theoriacodex.domain.model.SourceKey>) =
-    when (this) {
-        SearchSourceScope.GlobalUnified -> this
-        is SearchSourceScope.Single -> SearchSourceScope.fromSources(listOf(source).filter { it in available })
-        is SearchSourceScope.Temporary -> SearchSourceScope.fromSources(sources.filter { it in available })
-    }
-
-fun Query.reconciledWith(scope: SearchSourceScope): Query {
-    val mode = when (scope) {
-        SearchSourceScope.GlobalUnified, is SearchSourceScope.Temporary -> QueryMode.Unified
-        is SearchSourceScope.Single -> QueryMode.Source(scope.source)
-    }
-    return if (mode == QueryMode.Unified) {
-        withIncludeTermGroups(effectiveIncludeTermGroups.filter(SearchTermGroup::isPortableGeneralTagGroup))
-            .copy(mode = mode, excludeTerms = excludeTerms.filter(SearchTerm::isPortableGeneralTag))
-    } else {
-        copy(mode = mode)
-    }
-}
 
 internal fun FacetedSearchScope.scopeOrder(): Int =
     if (sourceNamespace == null || facet == SearchFacet.TAG && sourceNamespace == "tag") 0 else 1
