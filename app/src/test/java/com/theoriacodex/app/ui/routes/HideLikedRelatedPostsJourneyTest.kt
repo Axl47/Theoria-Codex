@@ -90,8 +90,8 @@ class HideLikedRelatedPostsJourneyTest {
             compose.onNodeWithContentDescription("Library").performClick()
             compose.waitUntil(10_000) { compose.onAllNodesWithTag(librarySectionTag(LibrarySection.History)).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag(librarySectionTag(LibrarySection.History)).performClick()
-            compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Filter Recents by section").isDisplayed() }
-            compose.onNodeWithContentDescription("Filter Recents by section").performClick()
+            compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Filter History by section").isDisplayed() }
+            compose.onNodeWithContentDescription("Filter History by section").performClick()
             compose.onNodeWithText("Searches").performClick()
             compose.waitUntil(10_000) { compose.onAllNodesWithTag("Recent search:likes-query").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("Recent search:likes-query").performClick()

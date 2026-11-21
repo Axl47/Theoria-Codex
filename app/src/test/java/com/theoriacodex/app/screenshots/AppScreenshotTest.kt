@@ -143,8 +143,8 @@ class AppScreenshotTest {
 
     private fun openSearchResults() {
         openLibrary(LibrarySection.History)
-        waitFor { compose.onNodeWithContentDescription("Filter Recents by section").isDisplayed() }
-        compose.onNodeWithContentDescription("Filter Recents by section").performClick()
+        waitFor { compose.onNodeWithContentDescription("Filter History by section").isDisplayed() }
+        compose.onNodeWithContentDescription("Filter History by section").performClick()
         compose.onNodeWithText("Searches").performClick()
         waitFor { compose.onAllNodesWithTag("Recent search:$SEARCH_ID").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("Recent search:$SEARCH_ID").performClick()
