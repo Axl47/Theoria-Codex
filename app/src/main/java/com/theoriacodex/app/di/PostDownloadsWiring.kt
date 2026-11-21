@@ -9,7 +9,8 @@ import kotlinx.coroutines.flow.first
 
 /**
  * Builds the app's one [PostDownloads] over [jobFile]; each app container calls this once, so every Activity shares
- * it. Posts resolve through [sources]' registry and Pixiv animations export through its Ugoira client.
+ * it. Posts resolve through [sources]' registry and Pixiv animations export through its Ugoira client. Downloads
+ * start only after [sourcesReady]: the container's readiness, when site adapters and saved browser headers are set.
  */
 internal fun appPostDownloads(
     context: Context,
@@ -17,6 +18,7 @@ internal fun appPostDownloads(
     scope: CoroutineScope,
     settings: SettingsRepository,
     sources: SourceDependencies,
+    sourcesReady: suspend () -> Unit,
 ): PostDownloads = PostDownloads(
     context = context,
     jobFile = jobFile,
@@ -26,4 +28,5 @@ internal fun appPostDownloads(
     exportAnimation = { post, marker ->
         sources.pixivUgoiraClient.exportToMp4(context, post.id.sourcePostId, post.title, marker).map { }
     },
+    sourcesReady = sourcesReady,
 )

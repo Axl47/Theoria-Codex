@@ -82,13 +82,18 @@ interface PostDownloadBackend {
     suspend fun deleteFile(item: PostDownloadItem) { error("File deletion is unavailable") }
 }
 
-/** All calls and state updates use the owner's dispatcher. Two workers bound preparation and transfers. */
+/**
+ * All calls and state updates use the owner's dispatcher. Two workers bound preparation and transfers. Each worker
+ * waits on [startGate] before running its item, so restored work cannot run, or fail, before the sources it
+ * resolves through are ready; the list itself restores and shows at once.
+ */
 class PostDownloadQueue(
     private val scope: CoroutineScope,
     private val backend: PostDownloadBackend,
     private val concurrency: Int = 2,
     private val pollIntervalMs: Long = 1_000,
     private val jobStore: PostDownloadJobStore? = null,
+    private val startGate: suspend () -> Unit = {},
 ) {
     private val mutableBatches = MutableStateFlow<List<PostDownloadBatch>>(emptyList())
     val batches = mutableBatches.asStateFlow()
@@ -212,6 +217,7 @@ class PostDownloadQueue(
         queued.forEach { item ->
             val worker = scope.launch(start = CoroutineStart.LAZY) {
                 yield()
+                startGate()
                 execute(item)
             }
             workers[item.id] = worker
