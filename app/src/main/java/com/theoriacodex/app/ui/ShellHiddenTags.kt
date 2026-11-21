@@ -13,6 +13,7 @@ import com.theoriacodex.app.ui.navigation.LocalHiddenTagsOpener
 import com.theoriacodex.app.ui.undo.LocalUndoSlot
 import com.theoriacodex.app.ui.undo.UndoOffer
 import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import kotlinx.coroutines.launch
 
 /** Whether the hidden tags sheet is open; provided as [LocalHiddenTagsOpener] by [ShellCompositionLocals]. */
@@ -39,14 +40,20 @@ internal fun ShellHiddenTagsSheet(shell: TheoriaShell) {
     val undo = LocalUndoSlot.current
     // Not the sheet's scope: closing the sheet, or a rotation, must not drop the Undo.
     val scope = undo.scope
+    val saved: suspend (suspend () -> Boolean) -> Boolean? = { write ->
+        runCatchingPreservingCancellation { write() }
+            .onFailure { shell.snackbarHostState.showSnackbar("Hidden tags could not be saved.") }.getOrNull()
+    }
     HiddenTagsSheet(
         entries = settings?.activeHiddenTags().orEmpty(),
         onUnhide = { entry ->
             profileId?.let { profile ->
                 scope.launch {
-                    if (!repository.removeForYouBlacklistEntry(profile, entry.source, entry.tags)) return@launch
+                    // A failed settings write (storage full) is reported, not thrown into a scope with no handler.
+                    val removed = saved { repository.removeForYouBlacklistEntry(profile, entry.source, entry.tags) }
+                    if (removed != true) return@launch
                     undo.offer(scope, UndoOffer("Unhid ${entry.tags.joinToString(" + ")}", HiddenTagsUndoAnchor) {
-                        repository.addForYouBlacklistEntry(profile, entry.source, entry.tags)
+                        saved { repository.addForYouBlacklistEntry(profile, entry.source, entry.tags) }
                     })
                 }
             }

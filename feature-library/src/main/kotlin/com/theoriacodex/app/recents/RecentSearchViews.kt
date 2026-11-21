@@ -155,7 +155,8 @@ internal fun RecentSearchTile(
                 SavedSearchNameField(renaming, saving, MaterialTheme.typography.bodyMedium, Modifier.weight(1f).padding(end = 8.dp))
                 return@Row
             }
-            Column {
+            // Weighted so a long query leaves room for the save control; not filled, so a short tile stays narrow.
+            Column(Modifier.weight(1f, fill = false)) {
                 Text(
                     recentSearchQueryText(entry.query, colors.onSurfaceVariant, colors.error),
                     style = MaterialTheme.typography.bodyMedium,

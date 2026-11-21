@@ -16,8 +16,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
@@ -50,8 +53,11 @@ fun LibraryTransfersButton(status: LibraryTransfersStatus, onClick: () -> Unit) 
             onClick = onClick,
             shape = MaterialTheme.shapes.extraLarge,
             color = MaterialTheme.colorScheme.secondaryContainer,
+            // Read as one button: the label with what is left, instead of the pill's own "3 left" text.
             modifier = Modifier.heightIn(min = 36.dp).clearAndSetSemantics {
                 contentDescription = transfersDescription(status.remaining)
+                role = Role.Button
+                onClick { onClick(); true }
             },
         ) {
             Row(

@@ -96,6 +96,16 @@ class SavedSearchControlsTest {
     }
 
     @Test
+    fun `a tile with a long query still shows its bookmark`() {
+        val long = search(RecentSearchKind.SOURCE).copy(query = Query(QueryMode.Source(SourceKey.PIXIV),
+            List(12) { "very_long_tag_$it" }, emptyList(), SortMode.NEWEST, null, null))
+        val saving = RecentSearchSaving(RecentSearchSaves(emptyList(), null, { _, _ -> }, { _, _ -> }), emptyMap(), null, {}, {})
+        compose.setContent { MaterialTheme { RecentSearchTile(long, now = 200, onClick = {}, onLongPress = null, saving = saving) } }
+        val bookmark = compose.onNodeWithContentDescription("Save search").fetchSemanticsNode()
+        assertEquals(true, bookmark.size.width > 0)
+    }
+
+    @Test
     fun `source dropdown filters searches and FYP without changing multi-source replay`() {
         val pixiv = search(RecentSearchKind.SOURCE)
         val gelbooru = pixiv.copy(

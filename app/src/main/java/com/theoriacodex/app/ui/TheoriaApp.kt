@@ -67,6 +67,7 @@ import com.theoriacodex.app.ui.undo.UndoSlot
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.theoriacodex.app.ui.navigation.LocalTriageOpener
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.tags.PostTagContextProvider
@@ -127,7 +128,11 @@ private fun TheoriaAppShellContent(
     shell.overlays.codexActionTargetId?.let { id ->
         // This overlay is composed above the app shell's theme and locals, so it must apply them itself.
         TheoriaNightTheme {
-            CompositionLocalProvider(*libraryTransferLocals(shell.transfers)) {
+            // Cleaning's Review opens the deck through the triage opener, which the shell provides only below.
+            CompositionLocalProvider(
+                *libraryTransferLocals(shell.transfers),
+                LocalTriageOpener provides rememberTriageOpener(shell),
+            ) {
                 key(id) { CodexLibraryDestination(shell, actionCodexId = id) }
             }
         }

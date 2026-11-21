@@ -31,6 +31,13 @@ class LibraryTransfersSheetTest {
     private val removals = mutableListOf<Triple<Set<Long>, Boolean, UndoAnchor>>()
     private val offlineCalls = mutableListOf<String>()
 
+    @Test fun `the running pill is one button a screen reader can activate`() {
+        var opened = 0
+        compose.setContent { TheoriaNightTheme { LibraryTransfersButton(LibraryTransfersStatus(true, 3, true)) { opened++ } } }
+        compose.onNodeWithContentDescription("Offline and downloads, 3 left").performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(1, opened)
+    }
+
     @Test fun `download tiles sit two to a row and act from their own menu without confirm dialogs`() {
         var opened: Long? = null
         show(downloads = listOf(item(2, "Search"), item(3, "Codex · Favorites")), onOpen = { opened = it })
