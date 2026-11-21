@@ -152,8 +152,7 @@ internal fun DateRangeFilterSection(range: DateRange?, onPreset: (DateRangePrese
 internal fun SearchSourcePicker(
     draftSourceScope: SearchSourceScope,
     sources: List<SourceKey>,
-    unifiedSourceCount: Int,
-    unifiedSources: Set<SourceKey> = emptySet(),
+    unifiedSources: Set<SourceKey>,
     onOpen: () -> Unit = {},
     onModeSelected: (QueryMode) -> Unit,
     onTemporarySourceToggled: (SourceKey) -> Unit,
@@ -165,7 +164,7 @@ internal fun SearchSourcePicker(
         draftSourceScope.explicitSources
     }
     val scopeLabel = when (draftSourceScope) {
-        SearchSourceScope.GlobalUnified -> "Unified, $unifiedSourceCount sources"
+        SearchSourceScope.GlobalUnified -> "Unified, ${unifiedSources.size} sources"
         is SearchSourceScope.Single -> draftSourceScope.source.displayName()
         is SearchSourceScope.Temporary -> "Unified, ${draftSourceScope.sources.size} sources"
     }
@@ -181,7 +180,7 @@ internal fun SearchSourcePicker(
             Box(Modifier.clearAndSetSemantics {}) {
                 SourceScopeIndicator(
                     selectedSource,
-                    (draftSourceScope as? SearchSourceScope.Temporary)?.sources?.size ?: unifiedSourceCount,
+                    (draftSourceScope as? SearchSourceScope.Temporary)?.sources?.size ?: unifiedSources.size,
                 )
             }
         }

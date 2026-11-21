@@ -50,7 +50,6 @@ import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
 import com.theoriacodex.app.ui.components.rememberFeedScrollSignal
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.FeedFabRestoreState
-import com.theoriacodex.app.ui.components.NameEntryDialog
 import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.app.search.state.SearchSourceScope
@@ -237,7 +236,7 @@ private fun SearchChromeLayout(
         onExpand = { chrome.composerOpen = true },
         sourcePicker = sourcePicker,
         horizontalPadding = 16.dp,
-        modifier = Modifier.then(inputFocus.rootModifier).fillMaxSize().padding(padding)
+        modifier = Modifier.fillMaxSize().padding(padding)
             .padding(top = if (oldSearchBar) 6.dp else 0.dp, bottom = 8.dp),
         inputField = { SearchChromeInput(state, feed, fabRestoreState, chrome, oldSearchBar, sourcePicker, applyDraft) },
     ) {
@@ -337,7 +336,6 @@ private fun SearchScreenSourcePicker(
     SearchSourcePicker(
         draftSourceScope = state.query.draftSourceScope,
         sources = state.query.availableSources,
-        unifiedSourceCount = state.query.unifiedSources.size,
         unifiedSources = state.query.unifiedSources,
         onOpen = { inputFocus.clear() },
         onModeSelected = { mode ->
@@ -642,17 +640,10 @@ private fun SearchFavoriteTags(
         onDismiss = onDismiss,
     )
     renaming?.let { entry ->
-        NameEntryDialog(
-            title = "Name “or” group",
-            initialName = entry.name.orEmpty(),
-            optional = true,
-            hint = "Leave blank to show it as ${entry.alternativesText}.",
-            onDismiss = { renaming = null },
-            onSave = { name ->
-                onRenameFavoriteTag(entry.source, entry.tags, name)
-                renaming = null
-            },
-        )
+        OrGroupNameDialog(entry, onDismiss = { renaming = null }) { name ->
+            onRenameFavoriteTag(entry.source, entry.tags, name)
+            renaming = null
+        }
     }
 }
 

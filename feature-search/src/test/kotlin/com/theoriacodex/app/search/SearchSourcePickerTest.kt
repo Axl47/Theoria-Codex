@@ -47,7 +47,7 @@ class SearchSourcePickerTest {
                 SearchSourcePicker(
                     draftSourceScope = scope,
                     sources = listOf(SourceKey.PIXIV, SourceKey.GELBOORU),
-                    unifiedSourceCount = 2,
+                    unifiedSources = emptySet(),
                     onModeSelected = { clicked += it },
                     onTemporarySourceToggled = { source ->
                         toggled += source
@@ -103,7 +103,6 @@ class SearchSourcePickerTest {
                         SourceKey.PIXIV, SourceKey.IWARA, SourceKey.RULE34XXX,
                         SourceKey.RULE34PAHEAL, SourceKey.RULE34VIDEO,
                     ),
-                    unifiedSourceCount = 2,
                     unifiedSources = setOf(SourceKey.PIXIV, SourceKey.RULE34XXX),
                     onModeSelected = { clicked += it },
                     onTemporarySourceToggled = {},

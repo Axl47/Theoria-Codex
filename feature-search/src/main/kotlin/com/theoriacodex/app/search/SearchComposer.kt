@@ -726,18 +726,24 @@ private fun SavedTagChips(savedTags: ComposerSavedTags, draft: Query, targetInde
         }
     }
     renaming?.let { entry ->
-        NameEntryDialog(
-            title = "Name “or” group",
-            initialName = entry.name.orEmpty(),
-            optional = true,
-            hint = "Leave blank to show it as ${entry.alternativesText}.",
-            onDismiss = { renaming = null },
-            onSave = { name ->
-                savedTags.onRename(entry.source, entry.tags, name)
-                renaming = null
-            },
-        )
+        OrGroupNameDialog(entry, onDismiss = { renaming = null }) { name ->
+            savedTags.onRename(entry.source, entry.tags, name)
+            renaming = null
+        }
     }
+}
+
+/** Names a saved "or" group; a blank name shows the group as its alternatives. */
+@Composable
+internal fun OrGroupNameDialog(entry: FavoriteTagEntry, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    NameEntryDialog(
+        title = "Name “or” group",
+        initialName = entry.name.orEmpty(),
+        optional = true,
+        hint = "Leave blank to show it as ${entry.alternativesText}.",
+        onDismiss = onDismiss,
+        onSave = onSave,
+    )
 }
 
 /** A held saved tag's menu: Rename for "or" groups, and Remove. */
