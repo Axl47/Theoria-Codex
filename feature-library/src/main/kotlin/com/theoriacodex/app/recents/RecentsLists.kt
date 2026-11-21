@@ -181,9 +181,9 @@ private fun WatchedGrid(
                 is RecentsGridRow.Post -> {
                     val post = row.entry.post
                     item(key = "${post.id.source.id}:${post.id.sourcePostId}") {
-                        RemovableEntry(onRemove?.let { remove -> { remove(row.entry) } }) {
+                        RemovableEntry(onRemove?.let { remove -> { remove(row.entry) } }) { removeAction ->
                             RecentPostCard(
-                                row.entry, now, cards,
+                                row.entry, now, cards, removeAction,
                                 viewedMediaNumber = row.entry.maxViewedMediaNumber.takeIf { showMediaProgress },
                                 onClick = { onOpenWatchedPost(row.index) },
                                 onLongPress = { onLongPress(post) },
@@ -212,6 +212,7 @@ private fun RecentPostCard(
     entry: RecentPostEntry,
     now: Long,
     cards: RecentsPostCards,
+    modifier: Modifier,
     viewedMediaNumber: Int?,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
@@ -233,6 +234,7 @@ private fun RecentPostCard(
         ),
         viewedMediaNumber = viewedMediaNumber,
         mediaAspectRatio = mediaAspectRatio,
+        modifier = modifier,
     )
 }
 
@@ -274,8 +276,8 @@ private fun SearchHistoryList(
                     if (entry == removed) {
                         UndoRow(recentSearchRemovalAnchor(entry), Modifier.padding(vertical = 4.dp))
                     } else {
-                        RemovableEntry(rows.onRemoveSearch?.let { remove -> { remove(entry) } }) {
-                            RecentSearchRow(entry, now, onClick = { onOpenSearch(entry) }, saving = rows.saving)
+                        RemovableEntry(rows.onRemoveSearch?.let { remove -> { remove(entry) } }) { removeAction ->
+                            RecentSearchRow(entry, now, onClick = { onOpenSearch(entry) }, saving = rows.saving, removeAction)
                         }
                     }
                 }
@@ -363,7 +365,7 @@ private fun RecentPostsRow(
             items(entries, key = { "${it.section}:${it.post.id.source.id}:${it.post.id.sourcePostId}" }) { entry ->
                 Box(Modifier.width(POST_SHELF_CARD_WIDTH)) {
                     RecentPostCard(
-                        entry, now, cards,
+                        entry, now, cards, Modifier,
                         viewedMediaNumber = null,
                         onClick = { onOpen(entry) },
                         onLongPress = { onLongPress(entry.post, entry.section) },
@@ -410,10 +412,13 @@ private fun openRecentPost(
     }
 }
 
-/** Swipe-left removal for one History entry, or just [content] when it cannot be removed here. */
+/**
+ * Swipe-left removal for one History entry, or just [content] when it cannot be removed here. [content] applies the
+ * modifier it receives to its clickable node, which carries the removal for TalkBack.
+ */
 @Composable
-private fun RemovableEntry(onRemove: (() -> Unit)?, content: @Composable () -> Unit) {
-    if (onRemove == null) content() else SwipeToRemove("Remove from History", onRemove, content = content)
+private fun RemovableEntry(onRemove: (() -> Unit)?, content: @Composable (Modifier) -> Unit) {
+    if (onRemove == null) content(Modifier) else SwipeToRemove("Remove from History", onRemove, content = content)
 }
 
 /** [removed] back in its time order while its row shows the Undo offer, unless it is already restored. */

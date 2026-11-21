@@ -72,10 +72,11 @@ internal fun RecentSearchRow(
     now: Long,
     onClick: () -> Unit,
     saving: RecentSearchSaving?,
+    modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
     Row(
-        modifier = Modifier
+        modifier = modifier
             .testTag("Recent search:${entry.queryHash}")
             .fillMaxWidth()
             .combinedClickable(
