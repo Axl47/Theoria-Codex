@@ -47,24 +47,24 @@ internal fun BoxScope.TriageEdgeCue(icon: ImageVector, alignment: Alignment, pro
 }
 
 /**
- * Confirms the deck's last decision for a couple of seconds at the edge it went to. A skip says nothing: the
- * card leaving is the confirmation.
+ * Says for a couple of seconds, at the edge the card went to, that the deck's latest decision is done or that it
+ * failed and its card is back. A skip says nothing: the card leaving is the confirmation.
  */
 @Composable
-internal fun BoxScope.TriageConfirmation(decision: TriageDecision?) {
+internal fun BoxScope.TriageConfirmation(notice: TriageNotice?) {
     var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(decision?.post?.id) {
-        visible = decision != null
+    LaunchedEffect(notice) {
+        visible = notice != null
         delay(CONFIRMATION_MS)
         visible = false
     }
-    val label = decision?.takeIf { visible }?.let(::confirmationLabel) ?: return
+    val label = notice?.takeIf { visible }?.let(::noticeLabel) ?: return
     Surface(
         shape = CircleShape,
         color = MaterialTheme.colorScheme.inverseSurface,
         contentColor = MaterialTheme.colorScheme.inverseOnSurface,
         modifier = Modifier
-            .align(confirmationAlignment(decision))
+            .align(noticeAlignment(notice.decision))
             .padding(16.dp)
             .testTag(TRIAGE_CONFIRMATION_TAG)
             .semantics { contentDescription = label },
@@ -79,14 +79,17 @@ internal fun BoxScope.TriageConfirmation(decision: TriageDecision?) {
     }
 }
 
-internal fun confirmationLabel(decision: TriageDecision): String? = when (decision) {
-    is TriageDecision.Liked -> "Liked"
-    is TriageDecision.Saved -> "Saved to ${decision.codexName}"
-    is TriageDecision.Hid -> "Hid ${decision.tag}"
+internal fun noticeLabel(notice: TriageNotice): String? = when (val decision = notice.decision) {
+    is TriageDecision.Liked -> if (notice.failed) "Couldn't like" else "Liked"
+    is TriageDecision.Saved -> if (notice.failed) "Couldn't save" else "Saved to ${decision.codexName}"
+    is TriageDecision.Hid -> if (notice.failed) "Couldn't hide" else "Hid ${tagLabel(decision.tag)}"
     is TriageDecision.Skipped -> null
 }
 
-private fun confirmationAlignment(decision: TriageDecision): Alignment = when (decision) {
+/** A tag as the Viewer's tag chips show it. */
+internal fun tagLabel(tag: String): String = tag.replace('_', ' ')
+
+private fun noticeAlignment(decision: TriageDecision): Alignment = when (decision) {
     is TriageDecision.Liked -> Alignment.CenterEnd
     is TriageDecision.Saved -> Alignment.TopCenter
     is TriageDecision.Hid -> Alignment.BottomCenter

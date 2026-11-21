@@ -45,11 +45,11 @@ class ViewerTrailLevelTest {
     fun `a handed fork goes only to the entry claiming its session, once, and a newer one closes it`() {
         val handoff = TrailHandoffViewModel()
         val firstJob = Job()
-        val first = TrailLevel("cat", feed(firstJob))
+        val first = TrailLevel("cat", "tag:cat", feed(firstJob))
         handoff.hand("s1", first)
 
         assertNull(handoff.claim("other"))
-        handoff.hand("s2", TrailLevel("dog", feed()))
+        handoff.hand("s2", TrailLevel("dog", "tag:dog", feed()))
         assertTrue(firstJob.isCancelled)
         assertNull(handoff.claim("s1"))
         assertEquals("dog", handoff.claim("s2")?.label)

@@ -110,7 +110,7 @@ fun RecentsScreen(
         header {
             RecentsSectionSelector(filter, onSelected = { filter = it })
             RecentsSourceSelector(selectedSource, onSelected = { selectedSource = it })
-            IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, "Recents actions") }
+            IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, "History actions") }
         }
 
         RecentsTab(
@@ -201,7 +201,7 @@ private fun RecentsSourceSelector(selectedSource: SourceKey?, onSelected: (Sourc
         selectedSource = selectedSource,
         availableSources = SourceKey.builtIns + SourcePresentationCatalog.customSources(),
         allSourcesLabel = "All sources",
-        accessibilityLabel = "Filter Recents by source",
+        accessibilityLabel = "Filter History by source",
         enabled = true,
         expanded = expanded,
         onExpandedChange = { expanded = it },
@@ -307,7 +307,7 @@ private fun RecentsClearMenu(
             "Clear For You searches" to RecentsClearTarget.FYP,
         )
     }
-    val targets = sectionTargets + ("Clear all Recents" to RecentsClearTarget.ALL)
+    val targets = sectionTargets + ("Clear all History" to RecentsClearTarget.ALL)
     ActionMenuSheet(onDismiss) {
         targets.forEach { (label, target) ->
             ActionMenuRow(
@@ -341,7 +341,7 @@ internal enum class RecentsFilter(val label: String) {
     SEARCHES("Searches"),
 }
 
-private const val RECENTS_SECTION_SELECTOR_LABEL = "Filter Recents by section"
+private const val RECENTS_SECTION_SELECTOR_LABEL = "Filter History by section"
 
 fun RecentSearchEntry.fypSeedBySource(): Map<SourceKey, List<String>> {
     return sourceTags.ifEmpty {

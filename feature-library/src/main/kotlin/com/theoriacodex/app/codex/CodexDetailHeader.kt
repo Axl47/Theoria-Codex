@@ -207,7 +207,7 @@ internal fun codexItemSummary(
 }
 
 /** "1 post", "3 posts": the one word the Codex screens use for what they hold. */
-internal fun codexPostCount(count: Int): String = "$count ${if (count == 1) "post" else "posts"}"
+internal fun codexPostCount(count: Int): String = "$count ${countNoun(count, "post")}"
 
 internal fun codexSelectedPostActionDescription(
     action: String,

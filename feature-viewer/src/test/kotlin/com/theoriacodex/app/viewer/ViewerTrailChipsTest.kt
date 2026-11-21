@@ -9,6 +9,7 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 class ViewerTrailChipsTest {
@@ -40,5 +41,13 @@ class ViewerTrailChipsTest {
 
         assertEquals(TrailRequest.Tag("long_hair", SourceKey.DANBOORU, level, from), ViewerTrailChip.Tag("long_hair").request(from, level))
         assertEquals("long hair", ViewerTrailChip.Tag("long_hair").label)
+    }
+
+    @Test
+    fun `a creator's chip names the trail its level was opened as, from any of the creator's posts`() {
+        val chip = ViewerTrailChip.Creator(creator).request(post("p"), null)
+
+        assertEquals(TrailRequest.Creator(creator, post("q")).trailKey(), chip.trailKey())
+        assertNotEquals(TrailRequest.Creator(creator.copy(displayName = "Other"), post("p")).trailKey(), chip.trailKey())
     }
 }

@@ -36,7 +36,8 @@ data class SaveSuggestions(val targets: List<SaveSuggestion>, val inAnyCodex: Bo
  * One-tap saving for the Viewer, feed grids and the triage deck, read from [LocalQuickSave].
  *
  * Saves go through the Save-to-Codex picker's path. Nothing here shows a snackbar: each surface confirms in
- * place from [lastQuickSave] and offers [undoLastQuickSave] while the record is [QuickSaveRecord.undoable].
+ * place from [lastQuickSave] and offers [undoLastQuickSave] while the record is [QuickSaveRecord.undoable]. A surface
+ * that keeps the record of its own save undoes it with [undoQuickSave], so a later save elsewhere is never the one removed.
  */
 interface QuickSave {
     /** The latest successful quick save, or null after it is undone. */
@@ -52,6 +53,12 @@ interface QuickSave {
     /** Removes what the last quick save added, when it is undoable; otherwise does nothing. */
     fun undoLastQuickSave()
 
+    /**
+     * Removes exactly what [record] added, when it is undoable, and clears [lastQuickSave] only while it still is
+     * [record]; otherwise does nothing.
+     */
+    fun undoQuickSave(record: QuickSaveRecord)
+
     /** The top [limit] save targets for [post] (Codices it is not in yet), ranked by [rankSaveTargets]. */
     fun suggestions(post: Post, query: Query? = null, limit: Int = DEFAULT_SUGGESTIONS): Flow<SaveSuggestions>
 
@@ -65,6 +72,7 @@ private object NoQuickSave : QuickSave {
     override val lastQuickSave: StateFlow<QuickSaveRecord?> = MutableStateFlow<QuickSaveRecord?>(null).asStateFlow()
     override suspend fun quickSave(post: Post, codexId: String, query: Query?, fromForYou: Boolean): QuickSaveRecord? = null
     override fun undoLastQuickSave() = Unit
+    override fun undoQuickSave(record: QuickSaveRecord) = Unit
     override fun suggestions(post: Post, query: Query?, limit: Int): Flow<SaveSuggestions> = flowOf(SaveSuggestions.Empty)
 }
 

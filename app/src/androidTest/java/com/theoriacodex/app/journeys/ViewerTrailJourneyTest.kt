@@ -34,9 +34,9 @@ class ViewerTrailJourneyTest : AppJourneyFixture() {
         compose.waitUntil(15_000) { forkCrumb.isDisplayed() }
         val forkStart = selectedPost()
 
-        // The active overlay owns the swipe detector; stay clear of the gesture-navigation back edges.
+        // The active media overlay owns the paging swipe; stay off the system back-gesture edges.
         compose.onNodeWithContentDescription("Media actions", useUnmergedTree = true).performTouchInput {
-            swipe(Offset(width * 0.85f, height * 0.5f), Offset(width * 0.15f, height * 0.5f), durationMillis = 400L)
+            swipe(start = Offset(width * 0.85f, height * 0.5f), end = Offset(width * 0.15f, height * 0.5f), durationMillis = 400L)
         }
         compose.waitUntil(10_000) { selectedPost().let { it != null && it != forkStart } }
 

@@ -138,6 +138,75 @@ internal class LiveSearchViewModelTest : SearchViewModelTestFixture() {
         assertFalse(owner.state.value.canRedoSearch)
     }
 
+    @Test fun `scrolling a search stepped back to does not record it again`() = runTest(mainDispatcherRule.dispatcher) {
+        val owner = searched(ViewModelSearchAdapter(), "a")
+        liveEdit(owner, "b")
+        owner.onAction(SearchAction.SettleSearch)
+        advanceUntilIdle()
+        owner.onAction(SearchAction.UndoSearch)
+        advanceUntilIdle()
+        acknowledgeScrollRequest(owner)
+
+        owner.onAction(SearchAction.ScrollChanged(2, 10))
+        advanceUntilIdle()
+        assertEquals(listOf("a+b", "a"), recordedSearches())
+        assertTrue(owner.state.value.canRedoSearch)
+    }
+
+    @Test fun `a search settled on partial results is recorded when a newer edit replaces it`() = runTest(mainDispatcherRule.dispatcher) {
+        val pixiv = ViewModelSearchAdapter()
+        val aibooru = ViewModelSearchAdapter(SourceKey.AIBOORU)
+        val owner = viewModel(pixiv, recentsRepository = recents, additionalAdapters = listOf(aibooru))
+        restore(owner)
+        owner.onAction(SearchAction.ApplyTagSearch(listOf(SearchTermGroup.single(SearchTerm("a")))))
+        advanceUntilIdle()
+        owner.onAction(SearchAction.RestoreDraftTerms(listOf(SearchTermGroup.single(SearchTerm("slow"))), emptyList()))
+        advanceTimeBy(901); runCurrent()
+        aibooru.releaseSlowSearch.complete(Unit)
+        // Past the wait for other sources to answer alongside the first one.
+        advanceTimeBy(5_000); runCurrent()
+        assertEquals(listOf("slow"), owner.state.value.query.applied.includeTags)
+
+        owner.onAction(SearchAction.SettleSearch)
+        owner.onAction(SearchAction.RestoreDraftTerms(listOf(SearchTermGroup.single(SearchTerm("b"))), emptyList()))
+        pixiv.releaseSlowSearch.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(listOf("slow", "a"), recordedSearches())
+    }
+
+    @Test fun `applying a draft that live search already runs or shows asks the source only once`() = runTest(mainDispatcherRule.dispatcher) {
+        val adapter = ViewModelSearchAdapter()
+        val owner = searched(adapter, "base")
+        owner.onAction(SearchAction.RestoreDraftTerms(listOf(SearchTermGroup.single(SearchTerm("slow"))), emptyList()))
+        advanceTimeBy(601); runCurrent()
+        adapter.slowSearchStarted.await()
+        val before = adapter.searchCount
+        owner.onAction(SearchAction.ApplyDraft)
+        adapter.releaseSlowSearch.complete(Unit)
+        advanceUntilIdle()
+        owner.onAction(SearchAction.ApplyDraft)
+        advanceUntilIdle()
+
+        assertEquals(before, adapter.searchCount)
+        assertEquals(listOf("slow", "base"), recordedSearches())
+    }
+
+    @Test fun `an edit staged over Search runs only once Search is shown again`() = runTest(mainDispatcherRule.dispatcher) {
+        val adapter = ViewModelSearchAdapter()
+        val owner = searched(adapter, "a")
+        val before = adapter.searchCount
+        owner.onAction(SearchAction.StageDraftEdit(SearchAction.AddIncludeTerm(SearchTerm("b"))))
+        advanceUntilIdle()
+        assertEquals(before, adapter.searchCount)
+        assertEquals(listOf("a", "b"), owner.state.value.query.draft.includeTags)
+
+        owner.onAction(SearchAction.Resume)
+        advanceTimeBy(601); runCurrent()
+        advanceUntilIdle()
+        assertEquals(before + 1, adapter.searchCount)
+        assertEquals(listOf("a", "b"), owner.state.value.query.applied.includeTags)
+    }
+
     private suspend fun TestScope.searched(adapter: ViewModelSearchAdapter, tag: String): SearchViewModel {
         val owner = viewModel(adapter, recentsRepository = recents)
         restore(owner)

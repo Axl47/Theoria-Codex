@@ -18,6 +18,8 @@ data class FollowedCreator(
     val seenPostIds: List<String> = emptyList(),
     val latestPostIds: List<String> = emptyList(),
     val checkedAtEpochMs: Long? = null,
+    /** When a check of this creator last failed, so a failing source waits out the check interval, restarts included. */
+    val attemptedAtEpochMs: Long? = null,
 ) {
     val marks: NewPostMarks get() = NewPostMarks(seenPostIds, latestPostIds, checkedAtEpochMs)
     val newPostCount: Int get() = marks.newPostCount
@@ -77,18 +79,27 @@ class CreatorFollowsRepository(private val settings: SettingsRepository) {
     suspend fun seenPostIds(creator: CreatorProfile): Set<String>? =
         observe().first().firstOrNull { it.creator.followKey() == creator.followKey() }?.seenPostIds?.toSet()
 
-    suspend fun recordCheck(follow: FollowedCreator, posts: List<Post>, checkedAt: Long) {
-        val ids = posts.filter { it.id.source == follow.creator.source }.map { it.id.sourcePostId }
-        settings.updateSettings { current -> current.copy(followedCreators = current.followedCreators.map {
-            if (it.membershipId == follow.membershipId) it.withMarks(it.marks.checked(ids, checkedAt)) else it
+    /**
+     * Records a refresh in one settings write. [results] by membership ID hold a creator's first page,
+     * or null where its check failed (stamped as an attempt so the failure waits out the interval).
+     */
+    suspend fun recordChecks(results: Map<String, List<Post>?>, at: Long) {
+        if (results.isEmpty()) return
+        settings.updateSettings { current -> current.copy(followedCreators = current.followedCreators.map { follow ->
+            if (!results.containsKey(follow.membershipId)) return@map follow
+            val posts = results[follow.membershipId] ?: return@map follow.copy(attemptedAtEpochMs = at)
+            val ids = posts.filter { it.id.source == follow.creator.source }.map { it.id.sourcePostId }
+            follow.withMarks(follow.marks.checked(ids, at))
         }) }
     }
 
-    /** Opening the Followed feed shows every creator's latest posts, so none of them stays new. */
-    suspend fun markLatestSeen() {
+    /** The Followed feed showed [shown] ([markKey]s), so those of its creators' latest posts are no longer new. */
+    suspend fun markSeen(shown: Set<String>) {
         settings.updateSettings { current ->
-            if (current.followedCreators.none { it.newPostCount > 0 }) current
-            else current.copy(followedCreators = current.followedCreators.map { it.withMarks(it.marks.seen()) })
+            if (current.followedCreators.none { follow -> follow.newPostIds.any { it.markKey() in shown } }) current
+            else current.copy(followedCreators = current.followedCreators.map { follow ->
+                follow.withMarks(follow.marks.seen { PostId(follow.creator.source, it).markKey() in shown })
+            })
         }
     }
 

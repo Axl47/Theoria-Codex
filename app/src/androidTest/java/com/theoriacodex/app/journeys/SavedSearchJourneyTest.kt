@@ -46,8 +46,8 @@ class SavedSearchJourneyTest : AppJourneyFixture() {
             io { container.data.savedSearches.observeSavedSearches().first().singleOrNull()?.name == "My landscapes" }
         }
         val savedSearch = io { container.data.savedSearches.observeSavedSearches().first().single() }
-        compose.onNodeWithContentDescription("Recents actions").performClick()
-        compose.onNodeWithText("Clear all Recents").performClick()
+        compose.onNodeWithContentDescription("History actions").performClick()
+        compose.onNodeWithText("Clear all History").performClick()
         compose.waitUntil(10_000) { io { container.data.recentsRepository.observeSearches().first().isEmpty() } }
         coldGraphRelaunch()
         assertEquals(listOf(savedSearch), io { container.data.savedSearches.observeSavedSearches().first() })

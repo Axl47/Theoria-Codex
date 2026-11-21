@@ -81,7 +81,7 @@ class SavedSearchControlsTest {
         compose.setContent { MaterialTheme {
             TestRecents(searches = listOf(pixiv, gelbooru, multi), fyp = listOf(fyp), onOpen = { opened = it })
         } }
-        compose.onNodeWithContentDescription("Filter Recents by source").performClick()
+        compose.onNodeWithContentDescription("Filter History by source").performClick()
         compose.onNodeWithContentDescription("Pixiv").performClick()
         openSearches()
         compose.onNodeWithTag("Recent search:${pixiv.queryHash}").assertExists()
@@ -95,7 +95,7 @@ class SavedSearchControlsTest {
         compose.onNodeWithTag("Recent search:${fyp.queryHash}").assertExists()
         compose.onNodeWithTag("Recent search:${pixiv.queryHash}").assertDoesNotExist()
         compose.onNodeWithText("All", substring = false).performClick()
-        compose.onNodeWithContentDescription("Filter Recents by source").performClick()
+        compose.onNodeWithContentDescription("Filter History by source").performClick()
         compose.onNodeWithContentDescription("All sources").performClick()
         compose.onNodeWithTag("Recent search:${gelbooru.queryHash}").assertExists()
     }
@@ -117,13 +117,13 @@ class SavedSearchControlsTest {
                 onOpenPost = { entries, index -> opened = entries to index },
             )
         } }
-        compose.onNodeWithContentDescription("Filter Recents by source").performClick()
+        compose.onNodeWithContentDescription("Filter History by source").performClick()
         compose.onNode(hasContentDescription("Pixiv") and hasAnyAncestor(isPopup())).performClick()
         compose.onNodeWithTag(searchCardTestTag(gelbooru.post.id)).assertDoesNotExist()
         compose.onNodeWithTag(searchCardTestTag(pixiv.post.id)).performClick()
         assertEquals(listOf(pixiv) to 0, opened)
-        compose.onNodeWithContentDescription("Recents actions").performClick()
-        compose.onNodeWithText("Clear all Recents (all sources)").assertExists()
+        compose.onNodeWithContentDescription("History actions").performClick()
+        compose.onNodeWithText("Clear all History (all sources)").assertExists()
     }
 
     @Composable
@@ -148,7 +148,7 @@ class SavedSearchControlsTest {
     }
 
     private fun openSearches() {
-        compose.onNodeWithContentDescription("Filter Recents by section").performClick()
+        compose.onNodeWithContentDescription("Filter History by section").performClick()
         compose.onNodeWithText("Searches").performClick()
     }
 

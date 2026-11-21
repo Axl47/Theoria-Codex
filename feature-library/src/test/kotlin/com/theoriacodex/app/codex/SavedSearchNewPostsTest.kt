@@ -8,7 +8,11 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -18,8 +22,12 @@ class SavedSearchNewPostsTest {
     private val store = InMemoryUiRestoreRepository()
     private var pages = mapOf<String, List<String>?>()
     private val checked = mutableListOf<String>()
+    private val checkedSorts = mutableListOf<SortMode>()
+    private var hang = false
     private val checker = SavedSearchNewPostsChecker(store) { entry ->
         checked += entry.id
+        checkedSorts += entry.search.query.sort
+        if (hang) awaitCancellation()
         pages[entry.id]?.map { testPost(SourceKey.PIXIV, it) }
     }
 
@@ -37,6 +45,18 @@ class SavedSearchNewPostsTest {
         assertEquals(mapOf("a" to 0), counts())
     }
 
+    @Test fun `a feed clears only the posts it showed`() = runTest {
+        val searches = listOf(entry("a", 1))
+        pages = mapOf("a" to listOf("1"))
+        checker.checkIfStale(searches, 0L)
+        pages = mapOf("a" to listOf("2", "1"))
+        checker.checkIfStale(searches, 3 * hour)
+        store.markSavedSearchPostsSeen(setOf("PIXIV:9"))
+        assertEquals(mapOf("a" to 1), counts())
+        store.markSavedSearchPostsSeen(setOf("PIXIV:2"))
+        assertEquals(mapOf("a" to 0), counts())
+    }
+
     @Test fun `checks wait out the interval after a failure and take the eight newest`() = runTest {
         val searches = (1..10).map { entry("s$it", it.toLong()) }
         pages = searches.associate { it.id to null }
@@ -47,7 +67,26 @@ class SavedSearchNewPostsTest {
         assertEquals(emptyMap<String, Int>(), counts())
     }
 
-    private fun entry(id: String, savedAt: Long) = SavedSearchEntry(id, id, RecentSearchEntry(
-        Query(QueryMode.Unified, listOf("tag"), emptyList(), SortMode.NEWEST, null, null), id, 1,
+    @Test fun `searches are checked newest first whatever sort they were saved with`() = runTest {
+        pages = mapOf("a" to listOf("1"))
+        checker.checkIfStale(listOf(entry("a", 1, SortMode.RANDOM)), 0L)
+        assertEquals(listOf(SortMode.NEWEST), checkedSorts)
+    }
+
+    @Test fun `a check cancelled by leaving the app does not use up the interval`() = runTest {
+        val searches = listOf(entry("a", 1))
+        hang = true
+        val cancelled = launch { checker.checkIfStale(searches, 0L) }
+        runCurrent()
+        cancelled.cancelAndJoin()
+        hang = false
+        pages = mapOf("a" to listOf("1"))
+        checker.checkIfStale(searches, hour)
+        assertEquals(listOf("a", "a"), checked)
+        assertEquals(mapOf("a" to 0), counts())
+    }
+
+    private fun entry(id: String, savedAt: Long, sort: SortMode = SortMode.NEWEST) = SavedSearchEntry(id, id, RecentSearchEntry(
+        Query(QueryMode.Unified, listOf("tag"), emptyList(), sort, null, null), id, 1,
     ), savedAt)
 }

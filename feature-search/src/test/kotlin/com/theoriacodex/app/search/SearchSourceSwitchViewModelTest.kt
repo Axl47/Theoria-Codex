@@ -6,7 +6,9 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -41,5 +43,24 @@ internal class SearchSourceSwitchViewModelTest : SearchViewModelTestFixture() {
         assertEquals(listOf("fox"), state.query.applied.includeTags)
         assertEquals(SortMode.POPULAR, state.query.applied.sort)
         assertFalse(state.hasPendingChanges)
+    }
+
+    @Test fun `switching source while the first search runs replaces that search`() = runTest(mainDispatcherRule.dispatcher) {
+        val pixiv = ViewModelSearchAdapter()
+        val aibooru = ViewModelSearchAdapter(SourceKey.AIBOORU)
+        val owner = viewModel(pixiv, additionalAdapters = listOf(aibooru))
+        restore(owner)
+        owner.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
+        owner.onAction(SearchAction.AddIncludeTerm(SearchTerm("slow")))
+        advanceTimeBy(601); runCurrent()
+        pixiv.slowSearchStarted.await()
+
+        owner.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.AIBOORU)))
+        pixiv.releaseSlowSearch.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(1, aibooru.searchCount)
+        assertEquals(QueryMode.Source(SourceKey.AIBOORU), owner.state.value.query.applied.mode)
+        assertFalse(owner.state.value.hasPendingChanges)
     }
 }

@@ -33,7 +33,7 @@ import com.theoriacodex.app.search.omnibox.OmniboxEntry
 import com.theoriacodex.app.search.omnibox.OmniboxKind
 
 /**
- * The composer's non-tag matches, below its tag suggestions: picking an [OmniboxEntry.Action] closes the
+ * The composer's non-tag matches, after its leading tag suggestions: picking an [OmniboxEntry.Action] closes the
  * composer ([onLeave]) and runs it; a [OmniboxEntry.Toggle] switches in place.
  */
 internal fun LazyListScope.omniboxRows(entries: List<OmniboxEntry>, afterTags: Boolean, onLeave: () -> Unit) {

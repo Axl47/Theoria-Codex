@@ -106,6 +106,7 @@ object SettingChoices {
 
 /** Every place that holds settings, as Settings and the search box name it. */
 object SettingDestinations {
+    val Home = SettingDestination("settings", "Settings", listOf("preferences", "options"))
     val Stats = SettingDestination("stats", "Your stats", listOf("stats", "statistics", "usage"))
     val ShareStats = SettingDestination("share-stats", "Share my stats")
     val CompareStats = SettingDestination("compare-stats", "Compare with a friend")
@@ -120,7 +121,7 @@ object SettingDestinations {
     val Diagnostics = SettingDestination("diagnostics", "Diagnostics report", listOf("diagnostics", "logs", "errors"))
 
     val all: List<SettingDestination> = listOf(
-        Stats, ShareStats, CompareStats, HiddenTags, SourceMix, Sites, Downloads, Controls, Storage, Backup, WhatsNew, Diagnostics,
+        Home, Stats, ShareStats, CompareStats, HiddenTags, SourceMix, Sites, Downloads, Controls, Storage, Backup, WhatsNew, Diagnostics,
     )
 }
 

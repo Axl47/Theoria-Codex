@@ -14,7 +14,7 @@ class DataStoreFormatTest {
             followedCreators = listOf(
                 FollowedCreatorRecord(
                     "PIXIV", "Artist & <co>", "3", "https://www.pixiv.net/users/3", "user:3", "follow-1",
-                    listOf("seen"), listOf("latest"), 9L,
+                    listOf("seen"), listOf("latest"), 9L, 10L,
                 ),
             ),
             sourceCatalogVersion = 3,

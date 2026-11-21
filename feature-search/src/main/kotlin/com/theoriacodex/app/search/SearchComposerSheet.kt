@@ -33,8 +33,11 @@ import androidx.compose.ui.window.DialogWindowProvider
 /** The most of the window the composer takes, so the results it edits stay in view above it. */
 private const val SHEET_MAX_FRACTION = 0.62f
 
-/** Results that always stay visible above the composer, even with the keyboard up. */
-private val RESULTS_PEEK = 96.dp
+/**
+ * Room always left above the composer, even with the keyboard up, measured from the window's top: the status bar
+ * and the search bar take about half, so the rest keeps a row of results in view while tags are added.
+ */
+private val RESULTS_PEEK = 200.dp
 
 /** On short windows the sheet takes up to this much before results get any room. */
 private val SHEET_MIN_HEIGHT = 360.dp

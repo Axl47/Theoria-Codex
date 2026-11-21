@@ -65,7 +65,7 @@ class SearchInputSubmissionTest {
     }
 
     @Test
-    fun `IME adds the typed tag, runs the search and closes, but blocked input stays`() {
+    fun `IME adds the typed tag and keeps the editor open, but blocked input stays`() {
         val state = mutableStateOf(SearchUiState())
         val submitted = mutableListOf<String>()
         val actions = mutableListOf<SearchAction>()
@@ -91,10 +91,10 @@ class SearchInputSubmissionTest {
 
         compose.runOnIdle {
             assertEquals(listOf("landscape"), submitted)
-            assertTrue("actions=$actions", actions.indexOf(SearchAction.ApplyDraft) > actions.indexOfFirst { it is SearchAction.CommitTagInput })
+            assertFalse("actions=$actions", SearchAction.ApplyDraft in actions)
             assertTrue("Focus refresh must not resurrect submitted input: $focusRefreshInputs", focusRefreshInputs.all(String::isEmpty))
         }
-        compose.onNodeWithTag("Search composer").assertDoesNotExist()
+        compose.onNodeWithTag("Search composer").assertExists()
     }
 
     @Test

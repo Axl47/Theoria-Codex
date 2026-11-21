@@ -8,13 +8,19 @@ import com.theoriacodex.domain.model.PostId
 /** How long the dock's Save button keeps "Saved · Undo" after a one-tap save. */
 internal const val VIEWER_SAVED_UNDO_MS = 4_000L
 
+/** Save suggestions and the post they were scored for. */
+internal data class ViewerPostSuggestions(val postId: PostId, val suggestions: SaveSuggestions)
+
 /** What the dock's Save button shows for the current post. */
 internal sealed interface ViewerSaveButtonState {
     /** Suggestions have not arrived for any post yet. */
     data object Loading : ViewerSaveButtonState
 
-    /** The best Codex the post is not in; [inAnyCodex] adds a small check. */
-    data class Suggest(val target: SaveSuggestion, val inAnyCodex: Boolean) : ViewerSaveButtonState
+    /**
+     * The best Codex the post is not in; [inAnyCodex] adds a small check. Until [ready], [target] is still the previous
+     * post's, shown so the button does not flicker but not saved to.
+     */
+    data class Suggest(val target: SaveSuggestion, val inAnyCodex: Boolean, val ready: Boolean = true) : ViewerSaveButtonState
 
     /** A one-tap save of this post just landed; tapping undoes it while [QuickSaveRecord.undoable]. */
     data class Saved(val record: QuickSaveRecord) : ViewerSaveButtonState
@@ -42,12 +48,12 @@ internal sealed interface ViewerSaveFanTarget {
 }
 
 /**
- * The Save button's state for [postId]. [suggestions] are the latest that arrived, possibly still another post's while
- * this post's load; [lastSave] is the app's latest one-tap save, shown for [VIEWER_SAVED_UNDO_MS] when it was this post.
+ * The Save button's state for [postId]. [latest] are the latest suggestions that arrived, possibly still another post's
+ * while this post's load; [lastSave] is the app's latest one-tap save, shown for [VIEWER_SAVED_UNDO_MS] when it was this post.
  */
 internal fun viewerSaveButtonState(
     postId: PostId,
-    suggestions: SaveSuggestions?,
+    latest: ViewerPostSuggestions?,
     lastSave: QuickSaveRecord?,
     nowEpochMs: Long,
 ): ViewerSaveButtonState {
@@ -55,23 +61,26 @@ internal fun viewerSaveButtonState(
     if (lastSave != null && lastSave.post.id == postId && nowEpochMs - lastSave.savedAtEpochMs < VIEWER_SAVED_UNDO_MS) {
         return ViewerSaveButtonState.Saved(lastSave)
     }
-    if (suggestions == null) return ViewerSaveButtonState.Loading
-    val top = suggestions.targets.firstOrNull() ?: return ViewerSaveButtonState.NoTarget(suggestions.inAnyCodex)
-    return ViewerSaveButtonState.Suggest(top, suggestions.inAnyCodex)
+    val suggestions = latest?.suggestions ?: return ViewerSaveButtonState.Loading
+    val ready = latest.postId == postId
+    // Whether the post is in every Codex is the previous post's answer until this one's arrive.
+    val top = suggestions.targets.firstOrNull()
+        ?: return if (ready) ViewerSaveButtonState.NoTarget(suggestions.inAnyCodex) else ViewerSaveButtonState.Loading
+    return ViewerSaveButtonState.Suggest(top, inAnyCodex = ready && suggestions.inAnyCodex, ready = ready)
 }
 
 /** What tapping the button does in this state. */
 internal fun ViewerSaveButtonState.tapCommand(): ViewerSaveCommand = when (this) {
-    is ViewerSaveButtonState.Suggest -> ViewerSaveCommand.QuickSave(target.codexId)
+    is ViewerSaveButtonState.Suggest -> if (ready) ViewerSaveCommand.QuickSave(target.codexId) else ViewerSaveCommand.OpenPicker
     is ViewerSaveButtonState.Saved -> if (record.undoable) ViewerSaveCommand.Undo else ViewerSaveCommand.OpenPicker
     ViewerSaveButtonState.Loading -> ViewerSaveCommand.OpenPicker
     // Suggestions never include Likes, so with none and the post in no Codex, the profile has no Codex yet.
     is ViewerSaveButtonState.NoTarget -> if (inAnyCodex) ViewerSaveCommand.OpenPicker else ViewerSaveCommand.NewCodex
 }
 
-/** The hold fan: the suggestions after the top one (at most three), then New. */
-internal fun viewerSaveFanTargets(suggestions: SaveSuggestions?): List<ViewerSaveFanTarget> =
-    suggestions?.targets.orEmpty().drop(1).take(VIEWER_SAVE_FAN_CODICES).map(ViewerSaveFanTarget::Codex) + ViewerSaveFanTarget.New
+/** The hold fan for [postId]: the suggestions after the top one (at most three) when they are this post's, then New. */
+internal fun viewerSaveFanTargets(postId: PostId, latest: ViewerPostSuggestions?): List<ViewerSaveFanTarget> =
+    latest?.takeIf { it.postId == postId }?.suggestions?.targets.orEmpty().drop(1).take(VIEWER_SAVE_FAN_CODICES).map(ViewerSaveFanTarget::Codex) + ViewerSaveFanTarget.New
 
 /** Releasing the fan on [target] saves there, or on New names a new Codex; off every target it opens the full picker. */
 internal fun viewerSaveFanRelease(target: ViewerSaveFanTarget?): ViewerSaveCommand = when (target) {

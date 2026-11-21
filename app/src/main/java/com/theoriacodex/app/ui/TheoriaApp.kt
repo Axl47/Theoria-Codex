@@ -29,6 +29,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.http.HostOutageKind
+import com.theoriacodex.app.library.LibrarySection
 import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.app.source.startSourceHealthCheck
 import com.theoriacodex.app.source.startupCheckSources
@@ -267,6 +268,10 @@ private fun TheoriaNavigationSurface(shell: TheoriaShell, currentRoute: String?)
             val alreadyShowing = navigation.currentRoute == AppRoute.Home &&
                 TopLevelDestination.entries[pagerState.currentPage] == destination
             navigation.homeTabRoute = destination.route
+            // New posts wait in Saved, so a lit Library tab opens there; without the dot the remembered section stays.
+            if (destination == TopLevelDestination.Library && !alreadyShowing && libraryHasNew) {
+                shell.data.librarySections.select(LibrarySection.Saved)
+            }
             if (alreadyShowing) tabReselects.tryEmit(destination)
             else shell.scope.launch { navigateTopLevelDestination(navigation.navController, pagerState, destination) }
         },

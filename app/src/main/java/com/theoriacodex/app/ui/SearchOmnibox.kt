@@ -15,11 +15,13 @@ import com.theoriacodex.app.ui.navigation.LocalHiddenTagsOpener
 import com.theoriacodex.app.ui.routes.BrowsingDestinationState
 import com.theoriacodex.app.ui.routes.rememberRetained
 import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.data.repository.SettingDestinations
 import com.theoriacodex.data.repository.SettingToggles
+import com.theoriacodex.domain.model.CreatorProfile
 import kotlinx.coroutines.launch
 
 /** Every setting switch as it stands in [settings]; switching one sends its Settings action to [dispatch]. */
@@ -28,24 +30,29 @@ internal fun searchToggleEntries(settings: AppSettings, dispatch: (SettingsActio
         OmniboxEntry.Toggle(toggle.title, toggle.read(settings), toggle.keywords) { checked -> dispatch(SettingsAction.SetToggle(toggle, checked)) }
     }
 
+/** Creators of recently watched posts the one box offers after the followed ones. */
+private const val RECENT_CREATOR_LIMIT = 20
+
 /**
  * Everything besides tags that Search's composer matches typed text against: the active profile's Codices,
- * followed creators, saved and recent searches, and commands, each bound to what picking it does.
+ * followed creators and those of recently watched posts, saved and recent searches, and commands, each bound to
+ * what picking it does.
  */
 @Composable
 internal fun rememberSearchOmniboxEntries(shell: TheoriaShell, state: BrowsingDestinationState): List<OmniboxEntry> {
     val codices = rememberRetained("omnibox-codices") { shell.data.codexRepository.observeCodices() }.value.orEmpty()
     val recents = rememberRetained("omnibox-recent-searches") { shell.data.recentsRepository.observeSearches() }.value.orEmpty()
+    val watched = rememberRetained("omnibox-watched-posts") { shell.data.recentsRepository.observeWatchedPosts() }.value.orEmpty()
     val saved = shell.savedSearches
     val profileId = state.activeProfile.profileId
     val hiddenTags = LocalHiddenTagsOpener.current
-    return remember(shell, codices, recents, saved, state.settings, profileId, hiddenTags) {
+    return remember(shell, codices, recents, watched, saved, state.settings, profileId, hiddenTags) {
         buildList {
             codices.filter { codexBelongsToProfile(it.codexId, profileId) }.mapTo(this) { codex ->
                 OmniboxEntry.Action(OmniboxKind.CODEX, codex.name) { shell.navController.navigate(AppRoute.codexDetail(codex.codexId)) }
             }
-            state.settings.followedCreators.mapTo(this) { follow ->
-                val creator = follow.creator
+            val followed = state.settings.followedCreators.map { it.creator }
+            (followed + recentCreators(watched, followed)).mapTo(this) { creator ->
                 OmniboxEntry.Action(OmniboxKind.CREATOR, creator.displayName, creator.source.displayName()) {
                     shell.scope.launch { shell.openCreatorProfile(creator) }
                 }
@@ -65,8 +72,24 @@ internal fun rememberSearchOmniboxEntries(shell: TheoriaShell, state: BrowsingDe
     }
 }
 
+/** The creators of [watched] posts, latest first and each once, leaving out those already [followed]. */
+internal fun recentCreators(
+    watched: List<RecentPostEntry>,
+    followed: List<CreatorProfile>,
+    limit: Int = RECENT_CREATOR_LIMIT,
+): List<CreatorProfile> {
+    fun CreatorProfile.key() = source to (profileId ?: displayName)
+    val seen = followed.mapTo(mutableSetOf()) { it.key() }
+    return watched.sortedByDescending(RecentPostEntry::viewedAtEpochMs).asSequence()
+        .flatMap { it.post.creatorProfiles }
+        .filter { seen.add(it.key()) }
+        .take(limit)
+        .toList()
+}
+
 /** The setting destinations the one box opens, each bound to what opens it here. */
 private fun destinationCommands(shell: TheoriaShell, hiddenTags: HiddenTagsOpener): List<OmniboxEntry> = listOfNotNull(
+    SettingDestinations.Home to { shell.openSettings(SettingsPage.HOME) },
     SettingDestinations.Sites to { shell.openSettings(SettingsPage.SITES) },
     SettingDestinations.HiddenTags to hiddenTags::openHiddenTags,
     SettingDestinations.Storage to { shell.openSettings(SettingsPage.STORAGE) },

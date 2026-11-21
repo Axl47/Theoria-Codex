@@ -104,15 +104,13 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         var nativeTouchModeBeforeApply = false
         scenario.onActivity { nativeTouchModeBeforeApply = it.window.decorView.isInTouchMode }
         submitSearch()
-        // Each committed edit also runs live after a pause, so slower tag entry can reach the provider with a
-        // partial query first; only the grouped one matters here.
-        val grouped = listOf(listOf("landscape"), listOf("blue", "green"))
-        compose.waitUntil(conditionDescription = "Provider receives the grouped search", timeoutMillis = 10_000) {
-            container.registry.requests.any { request ->
-                request.source == SourceKey.PIXIV && request.pageToken == null &&
-                    request.query.effectiveIncludeTermGroups.map { group -> group.terms.map { it.value } } == grouped
-            }
+        // Search runs live, so each tag edit may reach the provider before the final grouped query does; that one is asked once.
+        val expectedGroups = listOf(listOf("landscape"), listOf("blue", "green"))
+        fun groupedRoots() = container.registry.requests.toList().filter { request ->
+            request.source == SourceKey.PIXIV && request.pageToken == null &&
+                request.query.effectiveIncludeTermGroups.map { group -> group.terms.map { it.value } } == expectedGroups
         }
+        compose.waitUntil(conditionDescription = "Provider receives the grouped search", timeoutMillis = 10_000) { groupedRoots().isNotEmpty() }
         val summary = compose.onNodeWithText("landscape, blue or green", useUnmergedTree = true)
         try {
             compose.waitUntil(conditionDescription = "Grouped query is applied and its field is collapsed", timeoutMillis = 10_000) {
@@ -130,6 +128,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         }
         waitForCard(0)
         summary.assertIsDisplayed()
+        assertEquals(1, groupedRoots().size)
         scrollToFirstVisibleCard(SourceKey.PIXIV, 18)
         compose.waitUntil(10_000) { container.registry.requests.any { it.pageToken == "20" } }
         scrollToFirstVisibleCard(SourceKey.PIXIV, 22)

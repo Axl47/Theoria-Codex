@@ -274,13 +274,20 @@ internal fun composerHiddenSuggestionsNote(hiddenCount: Int, group: SearchTermGr
 
 /** Applies the add target to typed text, or returns null when the input cannot be committed. */
 internal fun composerTypedAction(target: ComposerAddTarget, input: String): SearchAction? {
-    val typed = input.trim().takeIf(String::isNotBlank) ?: return null
+    val typed = trimTagSeparators(input).takeIf(String::isNotBlank) ?: return null
     return when (target) {
         is ComposerAddTarget.Alternative ->
             SearchAction.AddIncludeAlternative(target.index, target.group.terms.first().copy(value = typed))
-        ComposerAddTarget.Excluded -> if (typed.startsWith("-")) SearchAction.CommitTagInput(input) else SearchAction.CommitTagInput("-$typed")
-        ComposerAddTarget.Required -> SearchAction.CommitTagInput(input)
+        ComposerAddTarget.Excluded -> SearchAction.CommitTagInput(if (typed.startsWith("-")) typed else "-$typed")
+        ComposerAddTarget.Required -> SearchAction.CommitTagInput(typed)
     }
+}
+
+/** Commas and semicolons around typed text come from a paste or a habit and are never part of the tag. */
+internal fun trimTagSeparators(input: String): String {
+    fun String.stripped() = trim { it.isWhitespace() || it == ',' || it == ';' }
+    val trimmed = input.stripped()
+    return if (trimmed.startsWith('-')) "-" + trimmed.drop(1).stripped() else trimmed
 }
 
 /** The part of the draft the composer edits, and the source scope those tags belong to. */

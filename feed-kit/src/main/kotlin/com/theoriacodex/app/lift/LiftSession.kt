@@ -15,9 +15,12 @@ import com.theoriacodex.app.ui.navigation.LiftLike
 import com.theoriacodex.app.ui.navigation.LiftRelease
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.job
 
 /** What dropping a lifted post on a target does. */
 sealed interface LiftAction {
@@ -47,8 +50,9 @@ sealed interface LiftPhase {
 /**
  * The shell's [LiftController]: holds the one lift in progress for the overlay to draw. Positions are window
  * coordinates. The overlay tells it which target lies under a position ([targetAt]), collects [drops] to act
- * on them, and reports [settled] when a released copy has landed. Only the overlay reads [pointer], so a moving
- * finger recomposes nothing else.
+ * on them, and reports [settled] when a released copy has landed. Only the overlay reads [pointer] and
+ * [hoverPointer], so a moving finger recomposes nothing else. A finger that has not moved past touch slop from
+ * where it picked the card up is not aiming at a target: it hovers nothing, and releasing it opens the post menu.
  */
 @Stable
 class LiftSession(private val touchSlopPx: Float) : LiftController {
@@ -57,6 +61,16 @@ class LiftSession(private val touchSlopPx: Float) : LiftController {
 
     var pointer: Offset by mutableStateOf(Offset.Zero)
         private set
+
+    override val lifting: Boolean get() = phase is LiftPhase.Lifted
+
+    /** The Similar lookup a drop started, shown as pending until it returns; [cancel] stops it. */
+    var pending: Job? by mutableStateOf(null)
+        private set
+
+    /** [pointer] once it is past touch slop of the pick-up point, else null: the position that may hover a target. */
+    val hoverPointer: Offset?
+        get() = pointer.takeIf { (phase as? LiftPhase.Lifted)?.lift?.let { lift -> movedPastSlop(lift, it) } == true }
 
     /** The target under a window position, or null; the overlay points it at the targets it shows. */
     var targetAt: (Offset) -> LiftAction? = { null }
@@ -82,27 +96,34 @@ class LiftSession(private val touchSlopPx: Float) : LiftController {
     override fun end(pointer: Offset): LiftRelease {
         val lift = (phase as? LiftPhase.Lifted)?.lift ?: return LiftRelease.Cancelled
         this.pointer = pointer
-        val action = targetAt(pointer)
-        return when {
-            action != null -> {
-                phase = LiftPhase.Settling(lift, pointer, action)
-                dropChannel.trySend(LiftDrop(lift, action))
-                LiftRelease.Acted
-            }
-            (pointer - lift.origin).getDistance() <= touchSlopPx -> {
-                phase = LiftPhase.Idle
-                LiftRelease.OpenMenu
-            }
-            else -> {
-                phase = LiftPhase.Settling(lift, pointer, null)
-                LiftRelease.Cancelled
-            }
+        if (!movedPastSlop(lift, pointer)) {
+            phase = LiftPhase.Idle
+            return LiftRelease.OpenMenu
         }
+        val action = targetAt(pointer)
+        phase = LiftPhase.Settling(lift, pointer, action)
+        if (action == null) return LiftRelease.Cancelled
+        dropChannel.trySend(LiftDrop(lift, action))
+        return LiftRelease.Acted
     }
 
     override fun cancel() {
         phase = LiftPhase.Idle
+        pending?.cancel()
     }
+
+    /** Runs [block] as the lift's pending work: the overlay keeps its stage up until it returns or is cancelled. */
+    suspend fun <T> whilePending(block: suspend () -> T): T {
+        val job = currentCoroutineContext().job
+        pending = job
+        try {
+            return block()
+        } finally {
+            if (pending === job) pending = null
+        }
+    }
+
+    private fun movedPastSlop(lift: LiftedPost, at: Offset) = (at - lift.origin).getDistance() > touchSlopPx
 
     /** The overlay finished landing [settling]; a lift started since is left alone. */
     fun settled(settling: LiftPhase.Settling) {

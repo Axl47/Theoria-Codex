@@ -92,7 +92,35 @@ class CreatorFollowsViewModelTest {
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 
-    @Test fun `cancelling manual checks keeps previous durable results`() = runTest {
+    @Test fun `leaving the app cancels the automatic check but not one the user started`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            val settings = InMemorySettingsRepository()
+            val creator = CreatorProfile(SourceKey.PIXIV, "Artist", "1", uploadsQuery = "user:1")
+            val repository = CreatorFollowsRepository(settings)
+            repository.follow(creator, emptyList())
+            val adapter = object : SourceAdapter by TestAdapter(SourceKey.PIXIV), CreatorPostsSourceAdapter {
+                override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?): Page<Post> {
+                    delay(5_000)
+                    return Page(emptyList(), null)
+                }
+            }
+            val owner = CreatorFollowsViewModel(settings, TestRegistry(listOf(adapter)))
+            store.put("follows", owner)
+            owner.refreshIfStale(0L)
+            runCurrent()
+            owner.refresh()
+            owner.cancelAutomaticRefresh()
+            runCurrent()
+            assertTrue(owner.refreshing.value)
+            advanceUntilIdle()
+            assertFalse(owner.refreshing.value)
+            assertTrue(repository.observe().first().single().checkedAtEpochMs != null)
+        } finally { store.clear(); Dispatchers.resetMain() }
+    }
+
+    @Test fun `cancelling the automatic check keeps previous durable results and leaves it due`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val store = ViewModelStore()
         try {
@@ -108,13 +136,14 @@ class CreatorFollowsViewModelTest {
             }
             val owner = CreatorFollowsViewModel(settings, TestRegistry(listOf(adapter)))
             store.put("follows", owner)
-            owner.refresh()
+            owner.refreshIfStale(0L)
             runCurrent()
-            owner.cancelRefresh()
+            owner.cancelAutomaticRefresh()
             runCurrent()
             assertFalse(owner.refreshing.value)
             assertTrue(owner.errors.value.isEmpty())
             assertEquals(null, repository.observe().first().single().checkedAtEpochMs)
+            assertEquals(null, repository.observe().first().single().attemptedAtEpochMs)
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 
@@ -138,6 +167,12 @@ class CreatorFollowsViewModelTest {
                 owner.refreshIfStale(now)
                 advanceUntilIdle()
             }
+            assertEquals(2, calls)
+            // A restarted app has no memory of the attempt, only what the follows saved.
+            val restarted = CreatorFollowsViewModel(settings, TestRegistry(listOf(adapter)))
+            store.put("restarted", restarted)
+            restarted.refreshIfStale(3 * hour + hour / 2)
+            advanceUntilIdle()
             assertEquals(2, calls)
         } finally { store.clear(); Dispatchers.resetMain() }
     }

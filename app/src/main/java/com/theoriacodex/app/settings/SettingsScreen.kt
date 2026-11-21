@@ -147,7 +147,7 @@ private fun SettingsHome(
     var renameTarget by remember { mutableStateOf<RecommendationProfile?>(null) }
     val open = { page: SettingsPage -> onAction(SettingsAction.OpenPage(page)) }
     SettingsPageColumn {
-        SettingsHeader("Settings", onBack = onClose)
+        SettingsHeader(SettingDestinations.Home.title, onBack = onClose)
         ProfileCard(state, onAction, onAdd = { showAddProfile = true }, onMenu = { sheet = SettingsSheet.PROFILE })
         SettingsGroup("Stats") {
             SettingsRow(SettingDestinations.Stats.title, statsSummary(statistics), Icons.Default.BarChart, onClick = {

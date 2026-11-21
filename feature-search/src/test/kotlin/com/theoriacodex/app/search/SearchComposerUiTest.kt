@@ -93,7 +93,6 @@ class SearchComposerUiTest {
         var opened: SavedSearchEntry? = null
         open(SourceKey.GELBOORU, emptyList(), listOf(entry), onOpenSaved = { opened = it })
         compose.onNodeWithText("Saved searches").assertExists()
-        compose.onNodeWithText("Tap to run").assertExists()
         compose.onNodeWithText("My landscapes").performClick()
         compose.runOnIdle { assertEquals(entry, opened) }
     }

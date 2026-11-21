@@ -35,7 +35,7 @@ internal fun UiDevice.completeFiveFeedJourney() {
     exerciseCurrentFeed("For You", sideways = true)
     clickDescription("Library")
     clickText("History")
-    clickDescription("Filter Recents by section")
+    clickDescription("Filter History by section")
     clickText("Watched")
     exerciseCurrentFeed("Watched Recents")
     clickText("Codices")

@@ -1,9 +1,10 @@
 package com.theoriacodex.app.search
 
 import androidx.compose.animation.core.animate
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
@@ -11,14 +12,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.sign
 
@@ -41,8 +47,6 @@ internal class SearchBarHistory(
     val canForward: Boolean,
     val onStep: (back: Boolean) -> Unit,
 ) {
-    val enabled: Boolean get() = canBack || canForward
-
     fun allows(back: Boolean): Boolean = if (back) canBack else canForward
 
     companion object {
@@ -61,19 +65,34 @@ internal class SearchBarSwipe {
         translationX = offsetPx
         alpha = 1f - (abs(offsetPx) / widthPx.coerceAtLeast(1)).coerceIn(0f, 1f) * 0.6f
     }
+
+    /** Follows the finger by [delta]; past the start toward a missing step it only gives a little. */
+    fun drag(delta: Float, history: SearchBarHistory) {
+        val next = offsetPx + delta
+        offsetPx = if (history.allows(back = next > 0)) next else offsetPx + delta * BLOCKED_RESISTANCE
+    }
+
+    /** Steps when the swipe went far enough toward an available step, then slides the text home. */
+    suspend fun release(history: SearchBarHistory) {
+        val travelled = offsetPx
+        val back = travelled > 0
+        if (history.allows(back) && abs(travelled) > widthPx * STEP_FRACTION) {
+            history.onStep(back)
+            offsetPx = -travelled.sign * widthPx * ENTRY_FRACTION
+        }
+        animate(offsetPx, 0f) { value, _ -> offsetPx = value }
+    }
 }
 
 /**
- * Lets the bar be swiped sideways through [history]. The drag claims the gesture once it passes touch slop, so the
- * home pager does not page while the bar is swiped. TalkBack gets the same steps as custom actions.
+ * Lets the bar be swiped sideways through [history]. Only a swipe toward an available step claims the gesture once
+ * it passes touch slop, so the home pager does not page while the bar steps; a swipe the other way stays the
+ * pager's and changes tab. TalkBack gets the same steps as custom actions.
  */
 @Composable
 internal fun Modifier.searchBarHistorySwipe(history: SearchBarHistory, swipe: SearchBarSwipe): Modifier {
     val current by rememberUpdatedState(history)
-    val dragState = rememberDraggableState { delta ->
-        val next = swipe.offsetPx + delta
-        swipe.offsetPx = if (current.allows(back = next > 0)) next else swipe.offsetPx + delta * BLOCKED_RESISTANCE
-    }
+    val scope = rememberCoroutineScope()
     val actions = remember(history) {
         listOfNotNull(
             CustomAccessibilityAction("Previous search") { history.onStep(true); true }.takeIf { history.canBack },
@@ -82,18 +101,22 @@ internal fun Modifier.searchBarHistorySwipe(history: SearchBarHistory, swipe: Se
     }
     return onSizeChanged { swipe.widthPx = it.width }
         .semantics { customActions = actions }
-        .draggable(
-            state = dragState,
-            orientation = Orientation.Horizontal,
-            enabled = history.enabled,
-            onDragStopped = {
-                val travelled = swipe.offsetPx
-                val back = travelled > 0
-                if (current.allows(back) && abs(travelled) > swipe.widthPx * STEP_FRACTION) {
-                    current.onStep(back)
-                    swipe.offsetPx = -travelled.sign * swipe.widthPx * ENTRY_FRACTION
+        .pointerInput(swipe) {
+            var settling: Job? = null
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                val start = awaitHorizontalTouchSlopOrCancellation(down.id) { change, overSlop ->
+                    if (current.allows(back = overSlop > 0)) {
+                        change.consume()
+                        settling?.cancel()
+                        swipe.drag(overSlop, current)
+                    }
+                } ?: return@awaitEachGesture
+                horizontalDrag(start.id) { change ->
+                    swipe.drag(change.positionChange().x, current)
+                    change.consume()
                 }
-                animate(swipe.offsetPx, 0f) { value, _ -> swipe.offsetPx = value }
-            },
-        )
+                settling = scope.launch { swipe.release(current) }
+            }
+        }
 }

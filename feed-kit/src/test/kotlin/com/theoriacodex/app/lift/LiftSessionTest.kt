@@ -4,7 +4,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.ui.navigation.LiftRelease
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.assertEquals
@@ -52,6 +55,28 @@ class LiftSessionTest {
     }
 
     @Test
+    fun `a release in place opens the menu even over a target`() {
+        session.start(post, card, Offset(50f, 50f))
+        session.targetAt = { save }
+
+        assertEquals(LiftRelease.OpenMenu, session.end(Offset(53f, 50f)))
+        assertEquals(LiftPhase.Idle, session.phase)
+        assertNull(runBlocking { withTimeoutOrNull(50) { session.drops.first() } })
+    }
+
+    @Test
+    fun `a finger hovers a target only once it moves past touch slop`() {
+        session.start(post, card, Offset(50f, 50f))
+        assertNull(session.hoverPointer)
+
+        session.move(Offset(55f, 50f))
+        assertNull(session.hoverPointer)
+
+        session.move(Offset(70f, 50f))
+        assertEquals(Offset(70f, 50f), session.hoverPointer)
+    }
+
+    @Test
     fun `releasing anywhere else cancels and returns the copy to its card`() {
         session.start(post, card, Offset(50f, 50f))
         session.move(Offset(150f, 200f))
@@ -87,5 +112,27 @@ class LiftSessionTest {
         session.settled(landing)
 
         assertTrue(session.phase is LiftPhase.Lifted)
+    }
+
+    @Test
+    fun `cancelling stops the pending work and clears it`() = runBlocking {
+        val job = launch(start = CoroutineStart.UNDISPATCHED) {
+            session.whilePending { awaitCancellation() }
+        }
+        assertEquals(job, session.pending)
+
+        session.cancel()
+        job.join()
+
+        assertNull(session.pending)
+    }
+
+    @Test
+    fun `only a lift in hand reports lifting`() {
+        assertFalse(session.lifting)
+        session.start(post, card, Offset(50f, 50f))
+        assertTrue(session.lifting)
+        session.end(Offset(300f, 300f))
+        assertFalse(session.lifting)
     }
 }

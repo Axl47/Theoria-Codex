@@ -40,7 +40,7 @@ fun NameEntryDialog(
         title = { Text(title) },
         text = {
             OutlinedTextField(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().focusOnOpen(),
                 value = value,
                 onValueChange = { value = it.replace("\n", " ") },
                 label = { Text(if (optional) "Name (optional)" else "Name") },

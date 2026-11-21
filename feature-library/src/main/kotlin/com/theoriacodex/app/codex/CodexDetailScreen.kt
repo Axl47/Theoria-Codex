@@ -379,7 +379,12 @@ private fun CodexDetailEmptyState(collectionIsEmpty: Boolean, loading: Boolean, 
         LoadingState(Modifier.fillMaxSize())
     } else {
         FeedEmptyTile(
-            title = if (collectionIsEmpty) "This codex is empty" else "No matching posts",
+            // A live feed (Followed, saved searches) is not a Codex, so it states only what to do.
+            title = when {
+                emptyMessage != null -> null
+                collectionIsEmpty -> "This codex is empty"
+                else -> "No matching posts"
+            },
             message = emptyMessage ?: when {
                 collectionIsEmpty -> "Browse and save posts"
                 resolvingDurations -> "Resolving durations…"

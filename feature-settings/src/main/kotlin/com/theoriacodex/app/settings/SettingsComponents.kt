@@ -46,9 +46,10 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.data.repository.SettingDestinations
 
 /** The path of every page directly under the Settings home. */
-val SETTINGS_PATH = listOf("Settings")
+val SETTINGS_PATH = listOf(SettingDestinations.Home.title)
 
 /**
  * Header shared by the Settings home and its pages; [onBack] adds the back arrow. [parents] are the

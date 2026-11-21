@@ -13,9 +13,12 @@ import com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID
 import com.theoriacodex.app.codex.SavedSearchBranch
 import com.theoriacodex.app.codex.SavedSearchFeedLoader
 import com.theoriacodex.app.codex.SavedSearchNewPostsChecker
-import com.theoriacodex.app.codex.markSavedSearchesSeen
+import com.theoriacodex.app.codex.markSavedSearchPostsSeen
 import com.theoriacodex.app.codex.savedNewPosts
 import com.theoriacodex.app.di.DataDependencies
+import com.theoriacodex.data.repository.CreatorFollowsRepository
+import com.theoriacodex.data.repository.markKey
+import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -41,7 +44,7 @@ internal fun NewPostsCheckEffect(shell: TheoriaShell) {
                 follows.refreshIfStale(now)
                 awaitCancellation()
             } finally {
-                follows.cancelRefresh()
+                follows.cancelAutomaticRefresh()
             }
         }
     }
@@ -58,13 +61,37 @@ private fun savedSearchChecker(shell: TheoriaShell): SavedSearchNewPostsChecker 
     }
 }
 
-/** Opening the Followed or Searches feed marks its latest posts seen. */
+/**
+ * Once the Followed or Searches feed has drawn its first page, those posts are seen. A check that
+ * lands later, or posts the feed never showed (offline, a failed load), stay new.
+ */
 @Composable
-internal fun MarkNewPostsSeenEffect(shell: TheoriaShell, codexId: String) {
-    when (codexId) {
-        FOLLOWED_CODEX_ID -> LaunchedEffect(codexId) { shell.owners.follows.markLatestSeen() }
-        SAVED_SEARCHES_CODEX_ID -> LaunchedEffect(codexId) { shell.data.uiRestoreRepository.markSavedSearchesSeen() }
+internal fun MarkNewPostsSeenEffect(shell: TheoriaShell, codexId: String, loading: Boolean, posts: List<Post>) {
+    val rendered = !loading && posts.isNotEmpty() && codexId in newPostCodexIds
+    LaunchedEffect(codexId, rendered) {
+        if (!rendered) return@LaunchedEffect
+        withFrameNanos {}
+        shell.data.markNewPostsSeen(codexId, posts.mapTo(mutableSetOf()) { it.id.markKey() })
     }
+}
+
+private val newPostCodexIds = setOf(FOLLOWED_CODEX_ID, SAVED_SEARCHES_CODEX_ID)
+
+/** Marks [shown] ([markKey]s) seen in the Followed or Searches collection [codexId]; any other collection has no new posts. */
+private suspend fun DataDependencies.markNewPostsSeen(codexId: String, shown: Set<String>) {
+    when (codexId) {
+        FOLLOWED_CODEX_ID -> CreatorFollowsRepository(settingsRepository).markSeen(shown)
+        SAVED_SEARCHES_CODEX_ID -> uiRestoreRepository.markSavedSearchPostsSeen(shown)
+    }
+}
+
+/**
+ * Opens the Viewer on a Saved shelf's posts. Opening them there shows them, so the shelf's new
+ * posts are seen without the full Followed or Searches collection being opened.
+ */
+internal fun TheoriaShell.openSavedShelfViewer(codexId: String, posts: List<Post>, index: Int) {
+    if (codexId in newPostCodexIds) scope.launch { data.markNewPostsSeen(codexId, posts.mapTo(mutableSetOf()) { it.id.markKey() }) }
+    openCodexViewer(codexId, posts, index)
 }
 
 /** [savedNewPosts] as it changes, counting only searches that are still saved; empty while nothing is new. */

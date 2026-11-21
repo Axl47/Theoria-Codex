@@ -10,7 +10,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.launch
 
 /**
@@ -37,8 +36,13 @@ class QuickSaveViewModel(
 
     /** Removes the post the last quick save added; a save that added nothing has nothing to undo. */
     fun undoLastQuickSave() {
-        val record = last.getAndUpdate { current -> if (current?.undoable == true) null else current }
-            ?.takeIf(QuickSaveRecord::undoable) ?: return
+        last.value?.let(::undoQuickSave)
+    }
+
+    /** Removes the post [record] added, and forgets it as the last quick save only while it still is. */
+    fun undoQuickSave(record: QuickSaveRecord) {
+        if (!record.undoable) return
+        last.compareAndSet(record, null)
         viewModelScope.launch {
             runCatchingPreservingCancellation { codices.removeItems(record.codexId, setOf(record.post.id)) }
         }

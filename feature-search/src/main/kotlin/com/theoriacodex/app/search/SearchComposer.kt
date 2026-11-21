@@ -2,6 +2,7 @@ package com.theoriacodex.app.search
 
 import com.theoriacodex.app.search.omnibox.OmniboxEntry
 import com.theoriacodex.app.search.omnibox.matchOmnibox
+import com.theoriacodex.app.search.omnibox.placeOmniboxMatches
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -97,8 +98,9 @@ private val SAVED_TAG_MAX_WIDTH = 240.dp
 /**
  * Search editor in a sheet over the results: the query reads as one expression at the top, tags are
  * edited where they sit, and new tags are typed just above the keyboard. Every committed edit runs
- * live, so the results above follow the query; the keyboard's Search action adds what was typed,
- * runs it at once and closes the sheet ([onApply]). Below the tag suggestions, typed text also
+ * live, so the results above follow the query. The keyboard's action adds what was typed and keeps
+ * the sheet open for the next tag; on an empty field it runs the draft at once and closes the sheet
+ * ([onApply]). After the top tag suggestions, typed text also
  * reaches the app's [omnibox] entries: Codices, creators, searches and commands.
  */
 @Composable
@@ -174,12 +176,8 @@ private fun SearchComposerContent(
     fun commitTyped() = commitComposerInput(
         target, input, state.suggestions.canCommitInput, focus::clear, onAction,
     )
-    fun submitTyped() {
-        val typed = composerTypedAction(target, input)
-        if (typed != null && !state.suggestions.canCommitInput) return
-        typed?.let(onAction)
-        onApply()
-    }
+    // A typed tag is only added, so a gallery ID that opens instead never applies the draft behind it.
+    fun submitTyped() = if (composerTypedAction(target, input) == null) onApply() else commitTyped()
     fun addAlternativeTo(term: SearchTerm) {
         excludeNext = false
         targetTerm = term
@@ -411,11 +409,11 @@ private fun ComposerField(
                 )
             },
             keyboardOptions = KeyboardOptions(
-                imeAction = ImeAction.Search,
+                imeAction = ImeAction.Done,
                 keyboardType = KeyboardType.Text,
                 capitalization = KeyboardCapitalization.None,
             ),
-            keyboardActions = KeyboardActions(onSearch = { onSubmit() }),
+            keyboardActions = KeyboardActions(onDone = { onSubmit() }),
             trailingIcon = if (input.isNotBlank()) {
                 { TextButton(onClick = onCommit, enabled = canCommit) { Text("Add") } }
             } else {
@@ -511,37 +509,9 @@ private fun ComposerSuggestionList(
     onDismiss: () -> Unit,
     modifier: Modifier,
 ) {
+    val placed = placeOmniboxMatches(suggestions.rows, suggestions.omnibox)
     LazyColumn(modifier) {
-        items(suggestions.rows) { suggestion ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        onAction(suggestion.add)
-                        onAction(SearchAction.ClearAutocomplete)
-                    }
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                if (suggestion.saved) {
-                    Icon(Icons.Default.Star, "Saved tag", Modifier.size(18.dp), MaterialTheme.colorScheme.primary)
-                } else if (suggestion.searched) {
-                    Icon(Icons.Default.History, "Searched before", Modifier.size(18.dp), MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Column(Modifier.weight(1f)) {
-                    Text(suggestion.text, style = MaterialTheme.typography.bodyLarge)
-                    if (suggestion.meta.isNotBlank()) {
-                        Text(
-                            suggestion.meta,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                Icon(Icons.Default.Add, "Add ${suggestion.text}", tint = MaterialTheme.colorScheme.primary)
-            }
-        }
+        items(placed.leading) { suggestion -> ComposerSuggestionRow(suggestion, onAction) }
         if (suggestions.hiddenCount > 0 && target is ComposerAddTarget.Alternative) {
             item {
                 Text(
@@ -552,7 +522,41 @@ private fun ComposerSuggestionList(
                 )
             }
         }
-        omniboxRows(suggestions.omnibox, afterTags = suggestions.rows.isNotEmpty(), onLeave = onDismiss)
+        omniboxRows(placed.matches, afterTags = placed.leading.isNotEmpty(), onLeave = onDismiss)
+        if (placed.trailing.isNotEmpty()) item { HorizontalDivider() }
+        items(placed.trailing) { suggestion -> ComposerSuggestionRow(suggestion, onAction) }
+    }
+}
+
+@Composable
+private fun ComposerSuggestionRow(suggestion: ComposerSuggestion, onAction: (SearchAction) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                onAction(suggestion.add)
+                onAction(SearchAction.ClearAutocomplete)
+            }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (suggestion.saved) {
+            Icon(Icons.Default.Star, "Saved tag", Modifier.size(18.dp), MaterialTheme.colorScheme.primary)
+        } else if (suggestion.searched) {
+            Icon(Icons.Default.History, "Searched before", Modifier.size(18.dp), MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Column(Modifier.weight(1f)) {
+            Text(suggestion.text, style = MaterialTheme.typography.bodyLarge)
+            if (suggestion.meta.isNotBlank()) {
+                Text(
+                    suggestion.meta,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Icon(Icons.Default.Add, "Add ${suggestion.text}", tint = MaterialTheme.colorScheme.primary)
     }
 }
 
@@ -615,7 +619,7 @@ private fun ComposerSavedSection(
     val showSearches = savedSearches.entries.isNotEmpty() || savedSearches.canSaveCurrent
     if (showSearches) {
         var naming by remember { mutableStateOf(false) }
-        SavedPartHeader("Saved searches", "Tap to run") {
+        SavedPartHeader("Saved searches") {
             savedSearches.onSaveCurrent?.let {
                 TextButton(onClick = { naming = true }) {
                     Icon(Icons.Default.BookmarkAdd, null, Modifier.size(18.dp))
@@ -629,11 +633,7 @@ private fun ComposerSavedSection(
                 ) { Text("Manage") }
             }
         }
-        if (savedSearches.entries.isNotEmpty()) {
-            SavedSearchChips(savedSearches)
-        } else {
-            SavedPartHint("Save this search to run it again in one tap.")
-        }
+        if (savedSearches.entries.isNotEmpty()) SavedSearchChips(savedSearches)
         if (naming) {
             SavedSearchNameDialog(
                 initialName = savedSearches.suggestedName,
@@ -659,21 +659,18 @@ private fun ComposerSavedSection(
     SavedTagChips(savedTags, draft, targetIndex, onAction)
 }
 
-/** A part's title with what tapping its chips does, and its buttons at the end. */
+/** A part's title, what tapping its chips does when that is not obvious, and its buttons at the end. */
 @Composable
-private fun SavedPartHeader(title: String, tapHint: String, actions: @Composable () -> Unit) {
+private fun SavedPartHeader(title: String, tapHint: String? = null, actions: @Composable () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             ComposerSectionTitle(title)
-            Text(tapHint, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            tapHint?.let {
+                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         actions()
     }
-}
-
-@Composable
-private fun SavedPartHint(text: String) {
-    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 /** One tap reruns a saved search, replacing the current draft. */

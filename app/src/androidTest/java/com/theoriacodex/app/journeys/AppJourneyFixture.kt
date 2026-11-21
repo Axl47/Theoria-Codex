@@ -151,7 +151,7 @@ abstract class AppJourneyFixture {
     }
 
     protected fun openRecentsSection(label: String) {
-        activate(compose.onNodeWithContentDescription("Filter Recents by section"))
+        activate(compose.onNodeWithContentDescription("Filter History by section"))
         activate(compose.onNodeWithText(label))
         compose.waitForIdle()
     }
