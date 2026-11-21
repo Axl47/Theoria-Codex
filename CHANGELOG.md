@@ -4,10 +4,23 @@
 
 ### Added
 
+- Trails: in the Viewer, a row under the top bar shows the post's creator, Similar, and its most characteristic tags. Tapping one opens that stream in place, and you keep swiping from there. The steps you followed are listed beside it: tap one to return to it, or go Back one step at a time to the post you started from.
+- Tapping a tag in the Viewer's information sheet starts a trail too. Holding the tag opens the Search moves (include, exclude, save).
+- The Viewer's Save button shows the Codex the post most likely belongs in. Tap to save there, with Undo on the button for a few seconds. Hold it and slide onto another Codex, or New, to save there instead.
+- Holding a post in any grid or shelf picks it up. Drop it on a Codex or New at the right edge to save it, or on Like or Similar at the left. Letting go where you picked it up opens the post menu as before.
+- Triage: a one-post-at-a-time way through a feed, opened from Triage in the feed's filter sheet. Swipe right to like, left to skip, up to save to a suggested Codex, and down to hide one of the post's tags from For You. Undo reverses the last choice.
+- The search box also finds your Codices, followed creators, saved and recent searches, Settings pages, and a few switches you can flip right in the list.
+- Swiping the collapsed search bar sideways steps back and forward through earlier searches, each at the place you left it.
+- When you open the app it checks followed creators and your most recently saved searches for new posts, at most every three hours. Library and its Saved section show a dot, and each row shows how many are new, until you open them.
 - Search, creator profiles and For You show "No more results" at the bottom once a feed has no further pages, where the list used to just stop.
 
 ### Changed
 
+- The app has three tabs: Search, For You and Library. Library holds Codices, Saved (Likes, Followed, Searches) and History, which was Recents. Settings opens from the gear at the top of Library.
+- The Viewer's actions (Like, Info, playback settings, page overview, More) moved from the top bar to a dock at the bottom of the screen.
+- Search runs as you edit it: adding, removing or excluding a tag, or changing the source, sort or dates, updates the results after a short pause. The Search button is gone, and the keyboard's Search key runs the search at once and closes the editor.
+- The search editor is a sheet over the results instead of a full screen, so you can watch the results change.
+- A search is added to History once you close the editor on it, scroll its results, or open a post, so half-built searches no longer appear there.
 - Post menus in For You and on creator pages now show tag counts, and holding a tag saves it, as they already did in Search, the Codex and the Viewer.
 - A Codex collection's "Resolving durations…" line now spans the full width, as in other feeds.
 - In a post's hold menu, the creator's name at the top now opens their profile, as in the Viewer's information sheet, replacing the separate creator button.
