@@ -13,6 +13,7 @@ import androidx.compose.ui.geometry.center
 import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
@@ -46,18 +47,23 @@ internal fun LiftedCopy(session: LiftSession, lift: LiftedPost, settling: LiftPh
                 shadowElevation = LIFTED_ELEVATION.toPx()
                 this.shape = shape
                 clip = true
-            },
-    ) {
-        // The grid's own card, so an animated or video post keeps playing under the finger.
-        SearchResultCard(
-            post = lift.post,
-            pixivUgoiraClient = LocalLiftUgoiraClient.current,
-            showTitle = false,
-            mediaAspectRatio = bounds.width / bounds.height,
-            liked = lift.like?.liked == true,
-            onClick = {},
-        )
-    }
+            }
+            // A picture of the card, not a second one: TalkBack and tests keep finding the original only.
+            .clearAndSetSemantics {},
+    ) { LiftedCard(lift, bounds.width / bounds.height) }
+}
+
+/** The grid's own card, so an animated or video post keeps playing under the finger. */
+@Composable
+internal fun LiftedCard(lift: LiftedPost, aspectRatio: Float) {
+    SearchResultCard(
+        post = lift.post,
+        pixivUgoiraClient = LocalLiftUgoiraClient.current,
+        showTitle = false,
+        mediaAspectRatio = aspectRatio,
+        liked = lift.like?.liked == true,
+        onClick = {},
+    )
 }
 
 /** Where the copy's top-left sits: under the finger while lifted, then easing to where it lands. */
