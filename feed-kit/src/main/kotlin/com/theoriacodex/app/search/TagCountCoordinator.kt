@@ -26,10 +26,10 @@ class TagCountCoordinator(
     private val sourceLocks = ConcurrentHashMap<SourceKey, Mutex>()
     private val missingUntil = LinkedHashMap<Pair<SourceKey, String>, Long>()
 
-    suspend fun fetch(source: SourceKey, tags: List<String>, supplemental: Map<String, Int?>): Map<String, Int?> =
+    suspend fun fetch(source: SourceKey, tags: List<String>): Map<String, Int?> =
         withContext(dispatcher) {
             val requested = tags.map(String::trim).filter(String::isNotBlank).distinct()
-            val resolved = requested.associateWith { store.getCount(source, it) ?: supplemental[it] }.toMutableMap()
+            val resolved = requested.associateWith { store.getCount(source, it) }.toMutableMap()
             val adapter = registry.adapterFor(source) as? TagCountLookupSourceAdapter ?: return@withContext resolved
             val completed = withTimeoutOrNull(timeoutMs) {
                 sourceLocks.computeIfAbsent(source) { Mutex() }.withLock {

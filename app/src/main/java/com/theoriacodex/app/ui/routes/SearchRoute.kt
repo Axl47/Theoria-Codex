@@ -368,8 +368,6 @@ private fun SearchRouteContent(
     val resolvePostById: suspend (PostId) -> Post? = remember(coordinator, appliedQueryHash) {
         { id -> coordinator.resolvePostForSearch(id, appliedQueryHash) }
     }
-    val autocomplete = state.suggestions.autocomplete
-    val trending = state.suggestions.trending
     SearchScreen(
         state = state,
         composerOpen = composerOpen,
@@ -382,8 +380,8 @@ private fun SearchRouteContent(
         onAction = owner::onAction,
         resolvePostById = resolvePostById,
         recoverPostMedia = coordinator::recoverPostMedia,
-        tagVideoCountProvider = { source, tag -> coordinator.tagVideoCount(source, tag, autocomplete, trending) },
-        fetchTagVideoCounts = { source, tags -> coordinator.fetchTagVideoCounts(source, tags, autocomplete, trending) },
+        tagVideoCountProvider = coordinator::tagVideoCount,
+        fetchTagVideoCounts = coordinator::fetchTagVideoCounts,
         pixivUgoiraClient = pixivUgoiraClient,
         likedPostIds = config.likedPostIds,
         pendingLikePostIds = config.pendingLikePostIds,

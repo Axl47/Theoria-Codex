@@ -154,7 +154,6 @@ data class SearchContentUiState(
 
 data class SearchSuggestionsUiState(
     val input: String = "",
-    val trending: List<TagSuggestion> = emptyList(),
     val autocomplete: List<TagSuggestion> = emptyList(),
     val facetedAutocomplete: List<FacetedTagSuggestion> = emptyList(),
     /** Terms the user searched before that match [input] and its scope, shown ahead of [autocomplete]. */

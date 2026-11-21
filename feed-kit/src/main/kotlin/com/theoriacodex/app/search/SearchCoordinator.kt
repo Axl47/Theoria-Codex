@@ -45,7 +45,6 @@ import com.theoriacodex.domain.tags.pixivSearchToken
 import com.theoriacodex.domain.tags.normalizeFavoriteTagForStorage
 import com.theoriacodex.domain.tags.sourceAutocompletePrefix
 import com.theoriacodex.domain.tags.normalizeMatchToken
-import com.theoriacodex.domain.tags.sourceTagsMatch
 import java.util.LinkedHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -547,30 +546,15 @@ class SearchCoordinator(
         sources: Set<SourceKey>,
         selectedScope: FacetedSearchScope,
         input: String,
-        trending: List<TagSuggestion>,
         onUpdate: suspend (SearchAutocompleteResult) -> Unit = {},
-    ): SearchAutocompleteResult = suggestionCoordinator.fetchAutocomplete(
-        query,
-        sources,
-        selectedScope,
-        input,
-        trending,
-        onUpdate,
-    )
+    ): SearchAutocompleteResult = suggestionCoordinator.fetchAutocomplete(query, sources, selectedScope, input, onUpdate)
 
     fun cachedAutocomplete(
         query: Query,
         sources: Set<SourceKey>,
         selectedScope: FacetedSearchScope,
         input: String,
-        trending: List<TagSuggestion>,
-    ): SearchAutocompleteResult = suggestionCoordinator.cachedAutocomplete(
-        query,
-        sources,
-        selectedScope,
-        input,
-        trending,
-    )
+    ): SearchAutocompleteResult = suggestionCoordinator.cachedAutocomplete(query, sources, selectedScope, input)
 
     suspend fun fetchTrending(
         query: Query,
@@ -583,36 +567,12 @@ class SearchCoordinator(
         sources: Set<SourceKey>,
     ): List<TagSuggestion> = suggestionCoordinator.cachedTrending(query, sources)
 
-    fun tagVideoCount(
-        source: SourceKey,
-        tag: String,
-        autocomplete: List<TagSuggestion>,
-        trending: List<TagSuggestion>,
-    ): Int? {
-        val normalized = tag.trim()
-        if (normalized.isBlank()) return null
-        return tagSuggestionStore.getCount(source, normalized)
-            ?: autocomplete.firstOrNull { sourceTagsMatch(source, it.text, normalized) }?.count
-            ?: trending.firstOrNull { sourceTagsMatch(source, it.text, normalized) }?.count
-    }
+    /** The post count the tag store knows for [tag] on [source]; counts are only ever matched per source. */
+    fun tagVideoCount(source: SourceKey, tag: String): Int? =
+        tag.trim().takeIf(String::isNotBlank)?.let { tagSuggestionStore.getCount(source, it) }
 
-    fun tagVideoCount(source: SourceKey, tag: String): Int? {
-        return tagVideoCount(source, tag, emptyList(), emptyList())
-    }
-
-    suspend fun fetchTagVideoCounts(
-        source: SourceKey,
-        tags: List<String>,
-        autocomplete: List<TagSuggestion>,
-        trending: List<TagSuggestion>,
-    ): Map<String, Int?> {
-        val supplemental = tags.associateWith { tagVideoCount(source, it, autocomplete, trending) }
-        return tagCounts.fetch(source, tags, supplemental)
-    }
-
-    suspend fun fetchTagVideoCounts(source: SourceKey, tags: List<String>): Map<String, Int?> {
-        return fetchTagVideoCounts(source, tags, emptyList(), emptyList())
-    }
+    suspend fun fetchTagVideoCounts(source: SourceKey, tags: List<String>): Map<String, Int?> =
+        tagCounts.fetch(source, tags)
 
     suspend fun fetchSearchTermCounts(source: SourceKey, terms: List<SearchTerm>): Map<SearchTerm, Int?> =
         searchTermCounts.fetch(source, terms)

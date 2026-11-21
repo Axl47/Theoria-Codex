@@ -149,7 +149,6 @@ internal class LiveSearchCoordinatorRouteTestHitomiTest : LiveSearchCoordinatorR
             SearchSourceScope.Single(SourceKey.HITOMI),
             FacetedSearchScope.All,
             "naj",
-            emptyList(),
         )
         assertTrue(
             "Hitomi global autocomplete did not preserve the Najar artist taxonomy",
@@ -164,7 +163,6 @@ internal class LiveSearchCoordinatorRouteTestHitomiTest : LiveSearchCoordinatorR
             SearchSourceScope.Single(SourceKey.HITOMI),
             FacetedSearchScope.All,
             "artist:naj",
-            emptyList(),
         )
         assertEquals(
             FacetedSearchScope(SearchFacet.ARTIST, "artist"),

@@ -63,7 +63,7 @@ object SearchDraftReducer {
                     nhentaiLanguageFilter = sanitized.query.nhentaiLanguageFilter(),
                     nhentaiFullColorFilter = sanitized.query.nhentaiFullColorFilter(),
                 ),
-                suggestions = SearchSuggestionsUiState(trending = state.suggestions.trending),
+                suggestions = SearchSuggestionsUiState(),
             ),
         )
     }
@@ -318,7 +318,7 @@ object SearchDraftReducer {
                         selectedScope = FacetedSearchScope.All,
                         validationMessage = null,
                     ),
-                    suggestions = SearchSuggestionsUiState(trending = state.suggestions.trending),
+                    suggestions = SearchSuggestionsUiState(),
                 )
             }
         }
@@ -412,7 +412,7 @@ object SearchDraftReducer {
                     nhentaiLanguageFilter = sanitized.query.nhentaiLanguageFilter(),
                     nhentaiFullColorFilter = sanitized.query.nhentaiFullColorFilter(),
                 ),
-                suggestions = SearchSuggestionsUiState(trending = state.suggestions.trending),
+                suggestions = SearchSuggestionsUiState(),
             ),
         )
     }
@@ -428,7 +428,7 @@ object SearchDraftReducer {
                     nhentaiLanguageFilter = query.nhentaiLanguageFilter(),
                     nhentaiFullColorFilter = query.nhentaiFullColorFilter(),
                 ),
-                suggestions = SearchSuggestionsUiState(trending = state.suggestions.trending),
+                suggestions = SearchSuggestionsUiState(),
             ),
         )
     }
@@ -554,7 +554,7 @@ object SearchDraftReducer {
             nhentaiLanguageFilter = query.nhentaiLanguageFilter(),
             nhentaiFullColorFilter = query.nhentaiFullColorFilter(),
         ),
-        suggestions = SearchSuggestionsUiState(trending = state.suggestions.trending),
+        suggestions = SearchSuggestionsUiState(),
     )
 
     private fun resolveCommittedInput(state: SearchUiState, input: String): String {

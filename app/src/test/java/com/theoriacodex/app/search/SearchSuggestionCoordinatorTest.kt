@@ -65,7 +65,7 @@ class SearchSuggestionCoordinatorTest {
         val updates = mutableListOf<Pair<Long, List<String>>>()
         coordinator.fetchAutocomplete(unifiedQuery(""),
             SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV)),
-            FacetedSearchScope.All, "blue", emptyList(),
+            FacetedSearchScope.All, "blue",
             onUpdate = { updates += testScheduler.currentTime to it.autocomplete.map(TagSuggestion::text) })
         assertEquals(100L, updates.first().first)
         assertEquals(listOf("blue fast"), updates.first().second)
@@ -96,21 +96,18 @@ class SearchSuggestionCoordinatorTest {
             SearchSourceScope.Single(SourceKey.PIXIV),
             FacetedSearchScope.All,
             "hatsune",
-            emptyList(),
         )
         coordinator.fetchAutocomplete(
             query,
             SearchSourceScope.Single(SourceKey.PIXIV),
             FacetedSearchScope.All,
             "hatsune",
-            emptyList(),
         )
         coordinator.fetchAutocomplete(
             query,
             SearchSourceScope.Single(SourceKey.PIXIV),
             FacetedSearchScope.All,
             "hatsune",
-            emptyList(),
         )
 
         assertEquals(listOf("初音ミク"), cached.autocomplete.map(TagSuggestion::text))
@@ -136,7 +133,6 @@ class SearchSuggestionCoordinatorTest {
             SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV)),
             FacetedSearchScope.All,
             "blue",
-            emptyList(),
         )
 
         assertEquals(1_000L, testScheduler.currentTime - startedAt)
@@ -163,7 +159,6 @@ class SearchSuggestionCoordinatorTest {
             SearchSourceScope.Single(SourceKey.PIXIV),
             FacetedSearchScope.All,
             "blue",
-            emptyList(),
         )
 
         assertEquals(AUTOCOMPLETE_REQUEST_TIMEOUT_MS, testScheduler.currentTime - startedAt)

@@ -1,7 +1,6 @@
 package com.theoriacodex.app.search.state
 
 import com.theoriacodex.app.search.SearchAutocompleteResult
-import com.theoriacodex.domain.adapter.TagSuggestion
 
 /** Pure state transitions for the two-stage local/remote suggestion pipeline. */
 fun SearchUiState.withAutocompleteResult(result: SearchAutocompleteResult): SearchUiState = copy(
@@ -18,9 +17,6 @@ fun SearchUiState.withAutocompleteResult(result: SearchAutocompleteResult): Sear
         ),
     ),
 )
-
-fun SearchUiState.withTrendingSuggestions(trending: List<TagSuggestion>): SearchUiState =
-    copy(suggestions = suggestions.copy(trending = trending))
 
 fun SearchUiState.withSuggestionInput(input: String): SearchUiState = copy(
     suggestions = suggestions.copy(

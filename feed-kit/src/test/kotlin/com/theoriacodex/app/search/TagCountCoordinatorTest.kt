@@ -30,12 +30,12 @@ class TagCountCoordinatorTest {
         val store = RecordingTagStore()
         val owner = TagCountCoordinator(TestRegistry(listOf(adapter)), store, { _, tag -> tag },
             dispatcher = StandardTestDispatcher(testScheduler))
-        val result = owner.fetch(SourceKey.NHENTAI, listOf("known", "slow"), emptyMap())
+        val result = owner.fetch(SourceKey.NHENTAI, listOf("known", "slow"))
 
         assertEquals(4_000L, testScheduler.currentTime)
         assertEquals(mapOf("known" to 7, "slow" to null), result)
         assertEquals(7, store.getCount(SourceKey.NHENTAI, "known"))
-        assertEquals(result, owner.fetch(SourceKey.NHENTAI, listOf("known", "slow"), emptyMap()))
+        assertEquals(result, owner.fetch(SourceKey.NHENTAI, listOf("known", "slow")))
         assertEquals(1, lookups)
     }
 
@@ -44,7 +44,7 @@ class TagCountCoordinatorTest {
             val adapter = TestAdapter(source)
             val owner = TagCountCoordinator(TestRegistry(listOf(adapter)), RecordingTagStore(), { _, tag -> tag },
                 dispatcher = StandardTestDispatcher(testScheduler))
-            assertEquals(mapOf("unknown" to null), owner.fetch(source, listOf("unknown"), emptyMap()))
+            assertEquals(mapOf("unknown" to null), owner.fetch(source, listOf("unknown")))
             assertTrue(adapter.autocompletePrefixes.isEmpty())
         }
     }
@@ -63,11 +63,11 @@ class TagCountCoordinatorTest {
         val owner = TagCountCoordinator(TestRegistry(listOf(adapter)), RecordingTagStore(), { _, tag -> tag },
             clock = { now }, dispatcher = StandardTestDispatcher(testScheduler))
         val tags = listOf("known", "missing")
-        assertEquals(mapOf("known" to 7, "missing" to null), owner.fetch(SourceKey.GELBOORU, tags, emptyMap()))
-        owner.fetch(SourceKey.GELBOORU, tags, emptyMap())
+        assertEquals(mapOf("known" to 7, "missing" to null), owner.fetch(SourceKey.GELBOORU, tags))
+        owner.fetch(SourceKey.GELBOORU, tags)
         assertEquals(1, calls)
         now = 60_001L
-        owner.fetch(SourceKey.GELBOORU, tags, emptyMap())
+        owner.fetch(SourceKey.GELBOORU, tags)
         assertEquals(2, calls)
     }
 
@@ -86,12 +86,12 @@ class TagCountCoordinatorTest {
         val owner = TagCountCoordinator(TestRegistry(listOf(adapter)), RecordingTagStore(), { _, tag -> tag },
             dispatcher = StandardTestDispatcher(testScheduler))
         val start = testScheduler.currentTime
-        owner.fetch(SourceKey.GELBOORU, listOf("slow"), emptyMap())
+        owner.fetch(SourceKey.GELBOORU, listOf("slow"))
         assertEquals(4_000L, testScheduler.currentTime - start)
-        owner.fetch(SourceKey.GELBOORU, listOf("slow"), emptyMap())
+        owner.fetch(SourceKey.GELBOORU, listOf("slow"))
         assertEquals(1, calls)
         cancelParent = true
-        assertTrue(runCatching { owner.fetch(SourceKey.GELBOORU, listOf("new"), emptyMap()) }
+        assertTrue(runCatching { owner.fetch(SourceKey.GELBOORU, listOf("new")) }
             .exceptionOrNull() is CancellationException)
     }
 }

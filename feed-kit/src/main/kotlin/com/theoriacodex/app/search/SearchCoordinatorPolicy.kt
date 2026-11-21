@@ -35,9 +35,6 @@ fun Query.reconciledWith(scope: SearchSourceScope): Query {
 internal fun FacetedSearchScope.scopeOrder(): Int =
     if (sourceNamespace == null || facet == SearchFacet.TAG && sourceNamespace == "tag") 0 else 1
 
-internal fun FacetedTagSuggestion.toLegacySuggestion() =
-    TagSuggestion(text, sourceNamespace ?: facet.name.lowercase(), count)
-
 internal fun FacetedTagSuggestion.isPortableTagSuggestion() =
     facet == SearchFacet.TAG && sourceNamespace in setOf(null, "tag")
 

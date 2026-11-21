@@ -298,7 +298,6 @@ class SearchCoordinatorTest {
             SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV)),
             com.theoriacodex.domain.adapter.FacetedSearchScope.All,
             "blue hair",
-            emptyList(),
         )
 
         assertEquals("blue hair", pixiv.autocompletePrefixes.single())
@@ -365,7 +364,6 @@ class SearchCoordinatorTest {
                 SearchSourceScope.Single(SourceKey.PIXIV),
                 com.theoriacodex.domain.adapter.FacetedSearchScope.All,
                 "tag",
-                emptyList(),
             )
         }.exceptionOrNull()
         assertTrue(cancellation is CancellationException)
@@ -398,14 +396,12 @@ class SearchCoordinatorTest {
             SearchSourceScope.Single(SourceKey.HITOMI),
             FacetedSearchScope.All,
             "artist:naj",
-            emptyList(),
         )
         val featured = coordinator.fetchAutocomplete(
             query,
             SearchSourceScope.Single(SourceKey.HITOMI),
             artist,
             "",
-            emptyList(),
         )
 
         assertEquals(artist, autocomplete.selectedScope)
@@ -418,7 +414,6 @@ class SearchCoordinatorTest {
                 SearchSourceScope.GlobalUnified,
                 FacetedSearchScope.All,
                 "artist:naj",
-                emptyList(),
             ).validationMessage,
         )
         assertEquals(
@@ -428,7 +423,6 @@ class SearchCoordinatorTest {
                 SearchSourceScope.Single(SourceKey.HITOMI),
                 FacetedSearchScope.All,
                 "female:naj",
-                emptyList(),
             ).validationMessage,
         )
         assertAutocompleteCancellation(adapter, coordinator, query, artist)
@@ -508,7 +502,6 @@ class SearchCoordinatorTest {
                     SearchSourceScope.Single(SourceKey.HITOMI),
                     artist,
                     "naja",
-                    emptyList(),
                 )
             }.exceptionOrNull() is CancellationException,
         )

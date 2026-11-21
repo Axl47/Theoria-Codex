@@ -794,7 +794,7 @@ class SearchViewModel(
     private fun clearSuggestionState() {
         suggestionRefresh.cancelAutocomplete()
         val current = mutableState.value
-        mutableState.value = current.copy(suggestions = SearchSuggestionsUiState(trending = current.suggestions.trending))
+        mutableState.value = current.copy(suggestions = SearchSuggestionsUiState())
     }
 
     private fun reduce(change: SearchStateChange) {

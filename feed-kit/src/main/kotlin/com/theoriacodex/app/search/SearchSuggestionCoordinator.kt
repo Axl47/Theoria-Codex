@@ -45,7 +45,6 @@ internal class SearchSuggestionCoordinator(
         sources: Set<SourceKey>,
         selectedScope: FacetedSearchScope,
         input: String,
-        trending: List<TagSuggestion>,
         onUpdate: suspend (SearchAutocompleteResult) -> Unit = {},
     ): SearchAutocompleteResult {
         val request = resolveAutocompleteRequest(query, selectedScope, input)
@@ -58,7 +57,7 @@ internal class SearchSuggestionCoordinator(
             QueryMode.Unified -> fetchUnifiedAutocomplete(sources, request.scope, input, request.prefix) { update ->
                 onUpdate(update.copy(searchedTags = searched))
             }
-            is QueryMode.Source -> fetchSourceAutocomplete(mode, request.scope, input, request.prefix, trending)
+            is QueryMode.Source -> fetchSourceAutocomplete(mode, request.scope, input, request.prefix)
         }.copy(searchedTags = searched)
     }
 
@@ -68,7 +67,6 @@ internal class SearchSuggestionCoordinator(
         sources: Set<SourceKey>,
         selectedScope: FacetedSearchScope,
         input: String,
-        trending: List<TagSuggestion>,
     ): SearchAutocompleteResult {
         val request = resolveAutocompleteRequest(query, selectedScope, input)
         request.validationMessage?.let { message ->
@@ -79,7 +77,7 @@ internal class SearchSuggestionCoordinator(
         }
         return when (val mode = query.mode) {
             QueryMode.Unified -> cachedUnifiedAutocomplete(sources, request.scope, input, request.prefix)
-            is QueryMode.Source -> cachedSourceAutocomplete(mode, request.scope, input, request.prefix, trending)
+            is QueryMode.Source -> cachedSourceAutocomplete(mode, request.scope, input, request.prefix)
         }.copy(searchedTags = searchedTags(query.mode, sources, request.scope, request.prefix))
     }
 
@@ -230,7 +228,6 @@ internal class SearchSuggestionCoordinator(
         selectedScope: FacetedSearchScope,
         input: String,
         prefix: String,
-        trending: List<TagSuggestion>,
     ): SearchAutocompleteResult {
         val adapter = registry.adapterFor(mode.source)
         if (adapter is FacetedSearchSourceAdapter) {
@@ -254,7 +251,6 @@ internal class SearchSuggestionCoordinator(
             return SearchAutocompleteResult(
                 input,
                 scope,
-                autocomplete = ranked.map(FacetedTagSuggestion::toLegacySuggestion),
                 facetedAutocomplete = ranked,
             )
         }
@@ -272,9 +268,7 @@ internal class SearchSuggestionCoordinator(
             tagSuggestionStore.put(mode.source, fetched, TagSuggestionOrigin.AUTOCOMPLETE)
         }
         val cached = tagSuggestionStore.find(mode.source, prefix, AUTOCOMPLETE_CACHE_MATCH_LIMIT)
-        val candidates = fetched + cached + trending.filter { suggestion ->
-            tagSuggestionMatches(suggestion, prefix)
-        }
+        val candidates = fetched + cached + trendingMatches(mode.source, prefix)
         return SearchAutocompleteResult(
             input,
             selectedScope,
@@ -287,7 +281,6 @@ internal class SearchSuggestionCoordinator(
         selectedScope: FacetedSearchScope,
         input: String,
         prefix: String,
-        trending: List<TagSuggestion>,
     ): SearchAutocompleteResult {
         val adapter = registry.adapterFor(mode.source)
         if (adapter is FacetedSearchSourceAdapter) {
@@ -306,7 +299,6 @@ internal class SearchSuggestionCoordinator(
             return SearchAutocompleteResult(
                 input,
                 scope,
-                autocomplete = ranked.map(FacetedTagSuggestion::toLegacySuggestion),
                 facetedAutocomplete = ranked,
             )
         }
@@ -314,7 +306,7 @@ internal class SearchSuggestionCoordinator(
             mode.source,
             prefix,
             AUTOCOMPLETE_CACHE_MATCH_LIMIT,
-        ) + trending.filter { suggestion -> tagSuggestionMatches(suggestion, prefix) }
+) + trendingMatches(mode.source, prefix)
         return SearchAutocompleteResult(
             input,
             selectedScope,
@@ -351,7 +343,6 @@ internal class SearchSuggestionCoordinator(
         return SearchAutocompleteResult(
             input,
             scope,
-            autocomplete = suggestions.map(FacetedTagSuggestion::toLegacySuggestion),
             facetedAutocomplete = suggestions,
         )
     }
@@ -375,7 +366,6 @@ internal class SearchSuggestionCoordinator(
         return SearchAutocompleteResult(
             input,
             scope,
-            autocomplete = suggestions.map(FacetedTagSuggestion::toLegacySuggestion),
             facetedAutocomplete = suggestions,
         )
     }
@@ -466,6 +456,10 @@ internal class SearchSuggestionCoordinator(
         }
         is QueryMode.Source -> rankedTrending(mode.source, SOURCE_TRENDING_LIMIT)
     }
+
+    /** The source's current trending tags that match [prefix], offered alongside its autocomplete. */
+    private fun trendingMatches(source: SourceKey, prefix: String): List<TagSuggestion> =
+        rankedTrending(source, SOURCE_TRENDING_LIMIT).filter { suggestion -> tagSuggestionMatches(suggestion, prefix) }
 
     private fun rankedTrending(source: SourceKey, limit: Int): List<TagSuggestion> =
         rankTagSuggestions(tagSuggestionStore.getTrending(source, Int.MAX_VALUE), prefix = "", limit = limit)
