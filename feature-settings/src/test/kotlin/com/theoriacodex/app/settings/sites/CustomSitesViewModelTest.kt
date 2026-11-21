@@ -7,6 +7,7 @@ import com.theoriacodex.app.customsites.CredentialEdit
 import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.customsites.CustomSiteEdit
 import com.theoriacodex.app.customsites.CustomSiteMutation
+import com.theoriacodex.app.customsites.HeaderEdit
 import com.theoriacodex.app.ui.undo.DEFAULT_UNDO_DURATION
 import com.theoriacodex.app.ui.undo.PendingRemoval
 import com.theoriacodex.domain.model.SourceKey
@@ -277,7 +278,7 @@ class CustomSitesViewModelTest {
         advanceTimeBy(2)
         val (id, edit) = controller.edits.last()
         assertEquals("custom_safebooru_org", id)
-        assertEquals(CustomSiteEdit("Safe", CredentialEdit.Keep, SiteHeaders(), includeInUnifiedAndForYou = true), edit)
+        assertEquals(CustomSiteEdit(label = "Safe", referer = HeaderEdit.Replace(null)), edit)
         assertEquals(2, controller.edits.size)
         assertTrue(owner.state.value.form is SiteForm.Edit)
     }
