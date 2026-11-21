@@ -9,6 +9,8 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.tags.isLegacyFacetType
+import com.theoriacodex.domain.tags.legacyTagType
 import com.theoriacodex.domain.tags.sourceAutocompletePrefix
 
 internal fun FacetedSearchScope.scopeOrder(): Int =
@@ -19,9 +21,8 @@ internal fun FacetedTagSuggestion.isPortableTagSuggestion() =
 
 internal fun FacetedTagSuggestion.toPortableLegacySuggestion() = TagSuggestion(text, "tag", count)
 
-internal fun TagSuggestion.isPortableTagSuggestion() = type?.trim()?.lowercase() !in setOf(
-    "artist", "character", "series", "parody", "group", "type", "category", "language", "female", "male",
-)
+internal fun TagSuggestion.isPortableTagSuggestion() =
+    !isLegacyFacetType(type) && legacyTagType(type) !in setOf("female", "male")
 
 fun defaultQuery(mode: QueryMode = QueryMode.Unified) = Query(
     mode = mode,
