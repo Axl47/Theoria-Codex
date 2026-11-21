@@ -9,29 +9,37 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.theoriacodex.app.media.CodexOfflineSheetOpener
+import com.theoriacodex.app.media.CodexOfflineControls
 import com.theoriacodex.app.media.DownloadTileActions
 import com.theoriacodex.app.media.LibraryTransfersButton
 import com.theoriacodex.app.media.LibraryTransfersSheet
-import com.theoriacodex.app.media.LocalCodexOfflineSheetOpener
+import com.theoriacodex.app.media.LocalCodexOfflineControls
 import com.theoriacodex.app.media.LocalCodexOfflineStates
 import com.theoriacodex.app.media.OfflineRowActions
 import com.theoriacodex.app.media.PostDownloadItem
+import com.theoriacodex.app.media.codexOfflineOwner
 import com.theoriacodex.app.media.libraryTransfersStatus
 import com.theoriacodex.app.media.openDownloadedPostFile
 import com.theoriacodex.app.media.openPostDownload
 import com.theoriacodex.app.ui.undo.LocalUndoSlot
+import com.theoriacodex.app.ui.undo.UndoAnchor
 import kotlinx.coroutines.launch
 
 /**
- * The offline ring's state for every Codex kept offline and the opener for the Library's offline sheet,
- * provided over the whole app so Codex tiles and detail screens can draw the ring.
+ * The offline ring's state for every Codex kept offline and what the ring and the Codex menu can do to a copy,
+ * provided over the whole app so Codex tiles, detail screens and menus can use them.
  */
 @Composable
 internal fun libraryTransferLocals(tools: LibraryTransferTools): Array<ProvidedValue<*>> {
     val offline by tools.offline.state.collectAsStateWithLifecycle()
-    val opener = remember(tools) { CodexOfflineSheetOpener(tools::openTransfers) }
-    return arrayOf(LocalCodexOfflineStates provides offline.codexStates, LocalCodexOfflineSheetOpener provides opener)
+    val undo = LocalUndoSlot.current
+    val controls = remember(tools, undo) {
+        object : CodexOfflineControls {
+            override fun openSheet(codexId: String?) = tools.openTransfers(codexId)
+            override fun remove(codexId: String, anchor: UndoAnchor) = tools.offline.remove(codexOfflineOwner(codexId), undo, anchor)
+        }
+    }
+    return arrayOf(LocalCodexOfflineStates provides offline.codexStates, LocalCodexOfflineControls provides controls)
 }
 
 /** The Library header's entry to the offline and downloads sheet: a progress pill while work runs. */

@@ -170,12 +170,13 @@ class OfflineStorageViewModel(
     }
 
     /**
-     * Removes [owner]'s offline copies as deferred destruction: the row hides at once with Undo in its place,
-     * and the files go only when the offer expires (copies another owner retains stay).
+     * Removes [owner]'s offline copies as deferred destruction: the row and the Codex's ring hide at once with
+     * Undo at [anchor] (the row's place in the Library's sheet by default), and the files go only when the offer
+     * expires (copies another owner retains stay).
      */
-    fun remove(owner: String, undo: UndoSlot) {
-        val row = state.value.owners.firstOrNull { it.id == owner } ?: return
-        removeDeferred(undo, setOf(owner), OfflineRemovalTarget.Owner(owner), offlineOwnerUndoAnchor(owner), "Removed ${row.name}")
+    fun remove(owner: String, undo: UndoSlot, anchor: UndoAnchor = offlineOwnerUndoAnchor(owner)) {
+        if (state.value.owners.none { it.id == owner }) return
+        removeDeferred(undo, setOf(owner), OfflineRemovalTarget.Owner(owner), anchor, "Removed offline copy")
     }
 
     /** Removes every offline copy as deferred destruction, like [remove]. */

@@ -1,6 +1,8 @@
 package com.theoriacodex.app.media
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
@@ -8,18 +10,21 @@ import androidx.compose.material.icons.filled.OfflinePin
 import androidx.compose.material.icons.filled.PriorityHigh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.ui.undo.UndoAnchor
 import kotlin.math.roundToInt
 
 /**
@@ -33,22 +38,44 @@ data class CodexOfflineState(val fraction: Float, val running: Boolean = false, 
 /** Offline state by Codex id, for Codices kept offline only. Empty until the Library provides it, so no ring shows. */
 val LocalCodexOfflineStates = compositionLocalOf<Map<String, CodexOfflineState>> { emptyMap() }
 
-/** Opens the Library's offline sheet, scrolled to and marking [codexId]'s row when one is given. */
-fun interface CodexOfflineSheetOpener {
-    fun open(codexId: String?)
+/**
+ * What can be done to a Codex's offline copy from outside the Library's offline sheet. The app provides it over
+ * every screen through [LocalCodexOfflineControls]; the default does nothing, for previews and tests.
+ */
+interface CodexOfflineControls {
+    /** Opens the Library's offline sheet, scrolled to and marking [codexId]'s row when one is given. */
+    fun openSheet(codexId: String?)
+
+    /** Removes [codexId]'s offline copy as deferred destruction, with its Undo drawn at [anchor]. */
+    fun remove(codexId: String, anchor: UndoAnchor)
 
     companion object {
-        val None = CodexOfflineSheetOpener { }
+        val None = object : CodexOfflineControls {
+            override fun openSheet(codexId: String?) = Unit
+            override fun remove(codexId: String, anchor: UndoAnchor) = Unit
+        }
     }
 }
 
-val LocalCodexOfflineSheetOpener = staticCompositionLocalOf { CodexOfflineSheetOpener.None }
+val LocalCodexOfflineControls = staticCompositionLocalOf { CodexOfflineControls.None }
 
-/** A small progress ring for a Codex kept offline: full, running and failed each look different. */
+/**
+ * A small progress ring for a Codex kept offline: full, running and failed each look different. With [onClick]
+ * it is a button whose [clickLabel] says what a tap does; without, it is status only.
+ */
 @Composable
-fun CodexOfflineRing(state: CodexOfflineState, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun CodexOfflineRing(
+    state: CodexOfflineState,
+    modifier: Modifier = Modifier,
+    clickLabel: String? = null,
+    onClick: (() -> Unit)? = null,
+) {
     val description = codexOfflineDescription(state)
-    IconButton(onClick = onClick, modifier = modifier.semantics { contentDescription = description }) {
+    val tappable = if (onClick == null) Modifier else {
+        Modifier.minimumInteractiveComponentSize().clip(CircleShape)
+            .clickable(onClickLabel = clickLabel, role = Role.Button, onClick = onClick)
+    }
+    Box(modifier.then(tappable).semantics { contentDescription = description }, contentAlignment = Alignment.Center) {
         if (state.complete) {
             Icon(Icons.Default.OfflinePin, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
         } else {

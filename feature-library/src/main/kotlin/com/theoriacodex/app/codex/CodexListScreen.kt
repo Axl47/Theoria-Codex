@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CleaningServices
-import androidx.compose.material.icons.filled.OfflinePin
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -258,11 +257,7 @@ private fun CodexActionRows(
     ActionMenuRow(Icons.Default.Share, "Share") { close(); actions.shareCodex(codex.codexId) }
     ActionMenuDivider()
     ActionMenuRow(Icons.Default.Download, "Download") { close(); actions.downloadCodex(codex.codexId) }
-    actions.makeAvailableOffline?.let { makeOffline ->
-        ActionMenuRow(Icons.Default.OfflinePin, "Make available offline") {
-            close(); makeOffline(codex.codexId)
-        }
-    }
+    actions.makeAvailableOffline?.let { makeOffline -> CodexOfflineMenuRow(codex.codexId, close, makeOffline) }
     ActionMenuDivider()
     ActionMenuRow(Icons.Default.Edit, "Rename") { state.renameTarget = codex; close() }
     ActionMenuRow(Icons.Default.CleaningServices, "Clean") { close(); state.cleaningTargetId = codex.codexId }
