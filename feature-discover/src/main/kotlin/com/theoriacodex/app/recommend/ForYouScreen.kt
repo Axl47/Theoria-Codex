@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recommend
 
+import com.theoriacodex.app.ui.components.FeedGrid
 import com.theoriacodex.app.ui.components.rememberFeedView
 import com.theoriacodex.app.ui.components.FeedView
 import com.theoriacodex.app.ui.components.FeedDurations
@@ -70,7 +71,6 @@ import com.theoriacodex.app.ui.components.FeedScrollSignal
 import com.theoriacodex.app.ui.components.FeedLoadingState
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.SourceSelector
-import com.theoriacodex.app.ui.components.TwoColumnProjectedPostStaggeredGrid
 import com.theoriacodex.app.ui.components.pagedFeedFooterMessage
 import com.theoriacodex.app.ui.components.FeedCardEnvironment
 import com.theoriacodex.app.ui.components.FeedPostActionSheet
@@ -424,13 +424,12 @@ private fun ForYouFeedBody(
                 onRefresh = { onAction(ForYouAction.Refresh(shuffle = false)) },
                 modifier = Modifier.fillMaxSize(),
             ) {
-                TwoColumnProjectedPostStaggeredGrid(
-                    projection = feed.related.projection,
+                FeedGrid(
+                    view = feed,
                     state = gridState,
-                    modifier = Modifier.fillMaxSize(),
-                    showPagingTile = state.isPaging,
                     footerMessage = forYouFooterMessage(state, feed),
-                    postContent = { _, post ->
+                    showPagingTile = state.isPaging,
+                    post = { index, post ->
                         FeedPostCard(
                             post = post,
                             environment = cards,
@@ -439,7 +438,7 @@ private fun ForYouFeedBody(
                             onClick = {
                                 onAction(
                                     ForYouAction.OpenResult(
-                                        index = feed.visiblePosts.indexOfFirst { candidate -> candidate.id == post.id },
+                                        index = index,
                                         scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
                                         visibleResults = feed.visiblePosts,
                                         visibilityFilters = feed.filters,
@@ -449,7 +448,7 @@ private fun ForYouFeedBody(
                             onLongPress = { onLongPress(post) },
                         )
                     },
-                    shelfContent = {
+                    shelf = {
                         FeedRelatedPostsShelf(
                             state = state.relatedPosts,
                             presentation = feed.related,

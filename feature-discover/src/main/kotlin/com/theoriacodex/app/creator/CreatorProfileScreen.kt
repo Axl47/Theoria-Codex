@@ -1,5 +1,6 @@
 package com.theoriacodex.app.creator
 
+import com.theoriacodex.app.ui.components.FeedGrid
 import com.theoriacodex.app.ui.components.rememberFeedView
 import com.theoriacodex.app.ui.components.FeedMarks
 import com.theoriacodex.app.ui.components.FeedView
@@ -68,7 +69,6 @@ import com.theoriacodex.app.ui.components.FeedLoadingState
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
-import com.theoriacodex.app.ui.components.TwoColumnProjectedPostStaggeredGrid
 import com.theoriacodex.app.ui.components.pagedFeedFooterMessage
 import com.theoriacodex.app.ui.components.FeedCardEnvironment
 import com.theoriacodex.app.ui.components.FeedPostCard
@@ -426,12 +426,8 @@ private fun CreatorGrid(
     onAction: (CreatorAction) -> Unit,
     onLongPress: (Post) -> Unit,
 ) {
-    val visibleIndexById = remember(feed.visiblePosts) {
-        feed.visiblePosts.withIndex().associate { it.value.id to it.index }
-    }
-    TwoColumnProjectedPostStaggeredGrid(
-        projection = feed.related.projection,
-        modifier = Modifier.fillMaxSize(),
+    FeedGrid(
+        view = feed,
         state = gridState,
         footerMessage = pagedFeedFooterMessage(
             resolvingDurations = feed.durations.readiness.isResolving,
@@ -440,14 +436,14 @@ private fun CreatorGrid(
             requestRunning = state.isRefreshing || state.isPaging,
             failed = state.errorMessage != null,
         ),
-        postContent = { _, post ->
+        post = { index, post ->
             FeedPostCard(
                 post = post,
                 environment = cards,
                 onClick = {
                     onAction(
                         CreatorAction.OpenResult(
-                            index = visibleIndexById.getValue(post.id),
+                            index = index,
                             scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
                             visibleResults = feed.visiblePosts,
                             visibilityFilters = feed.filters,
@@ -457,7 +453,7 @@ private fun CreatorGrid(
                 onLongPress = { onLongPress(post) },
             )
         },
-        shelfContent = {
+        shelf = {
             FeedRelatedPostsShelf(
                 state = state.relatedPosts,
                 presentation = feed.related,

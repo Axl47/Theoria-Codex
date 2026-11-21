@@ -27,26 +27,31 @@ import com.theoriacodex.app.related.RelatedFeedEntry
 import com.theoriacodex.app.related.RelatedFeedProjection
 import com.theoriacodex.app.related.requestOrNull
 
-/** Shared adaptive feed geometry (two columns on phones); each route still owns card behavior and paging policy. */
+/**
+ * For You, Creator and Codex's one feed grid over a [FeedView]: its visible posts with the related shelf placed among
+ * them. [post] gets each post's index in [FeedView.visiblePosts], the list the Viewer opens; [shelf] draws the shelf.
+ * Each screen still owns its cards and paging policy.
+ */
 @Composable
-fun TwoColumnPostStaggeredGrid(
-    posts: List<Post>,
+fun FeedGrid(
+    view: FeedView,
     state: LazyStaggeredGridState,
-    modifier: Modifier = Modifier,
+    footerMessage: String?,
+    modifier: Modifier = Modifier.fillMaxSize(),
     showPagingTile: Boolean = false,
-    footerMessage: String? = null,
-    itemContent: @Composable LazyStaggeredGridItemScope.(index: Int, post: Post) -> Unit,
+    shelf: @Composable LazyStaggeredGridItemScope.(RelatedFeedEntry.ShelfEntry) -> Unit,
+    post: @Composable (visibleIndex: Int, post: Post) -> Unit,
 ) {
-    AdaptivePostGrid(posts = posts, state = state, modifier = modifier) {
-        itemsIndexed(
-            items = posts,
-            key = { _, post -> "${post.id.source.id}:${post.id.sourcePostId}" },
-            itemContent = itemContent,
-        )
-        if (showPagingTile || footerMessage != null) {
-            item { FeedPagingTile(message = footerMessage) }
-        }
-    }
+    val visibleIndexById = remember(view.visiblePosts) { view.visiblePosts.withIndex().associate { it.value.id to it.index } }
+    TwoColumnProjectedPostStaggeredGrid(
+        projection = view.related.projection,
+        state = state,
+        modifier = modifier,
+        showPagingTile = showPagingTile,
+        footerMessage = footerMessage,
+        postContent = { _, entry -> post(visibleIndexById.getValue(entry.id), entry) },
+        shelfContent = shelf,
+    )
 }
 
 /** Feed projection that inserts one full-line transient section without rewriting posts. */

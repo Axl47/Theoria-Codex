@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.components
 
+import androidx.compose.foundation.lazy.staggeredgrid.items
 import android.app.Application
 import android.content.Context
 import android.net.ConnectivityManager
@@ -62,9 +63,9 @@ class FeedImagePreloadTest {
     @Test fun `a plain post grid preloads the card images just past what it shows`() {
         val posts = List(40) { testPost(sourcePostId = "p$it") }
         compose.setContent {
-            // A grid without a related projection, as Codex and Recents show, preloads like every other feed.
-            TwoColumnPostStaggeredGrid(posts, rememberLazyStaggeredGridState(), Modifier.width(360.dp).height(400.dp)) { _, _ ->
-                Box(Modifier.height(100.dp))
+            // Recents' grid holds headings among its posts; any grid built on AdaptivePostGrid preloads like every feed.
+            AdaptivePostGrid(posts, rememberLazyStaggeredGridState(), Modifier.width(360.dp).height(400.dp)) {
+                items(posts.size) { Box(Modifier.height(100.dp)) }
             }
         }
         compose.waitForIdle()

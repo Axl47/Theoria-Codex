@@ -1,9 +1,9 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.ui.components.FeedGrid
 import com.theoriacodex.app.ui.components.FeedPostCard
 import com.theoriacodex.app.ui.components.FeedCardEnvironment
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
-import com.theoriacodex.app.ui.components.RelatedFeedPresentation
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.ui.components.rememberFeedView
@@ -67,7 +67,6 @@ import com.theoriacodex.app.ui.components.FeedScrollSignal
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.FeedPostActionSheet
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
-import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
 import com.theoriacodex.app.related.RelatedShelfBinding
 import com.theoriacodex.app.viewer.PixivUgoiraClient
@@ -249,11 +248,10 @@ private fun CodexDetailBody(
             pixivUgoiraClient, likedPostIds, feed.durations.knownDurationMsByPostId, durations, onToggleLike,
         )
         CodexDetailGrid(
-            feed.visiblePosts, cards, posts.isEmpty(), loading, feed.durations.readiness.isResolving,
-            editSelection, gridState, resolvePostById,
+            feed, cards, posts.isEmpty(), loading, editSelection, gridState, resolvePostById,
             { index -> onOpenViewer(feed.visiblePosts, index) },
             { postId -> onEditSelectionChange(editSelection.toggle(postId)) },
-            onEditSelectionChange, onOpenPostActions, emptyMessage, related, feed.related,
+            onEditSelectionChange, onOpenPostActions, emptyMessage, related,
         )
     }
 }
@@ -509,11 +507,10 @@ private fun CodexDetailHeaderActions(
 
 @Composable
 private fun CodexDetailGrid(
-    posts: List<Post>,
+    feed: FeedView,
     cards: FeedCardEnvironment,
     collectionIsEmpty: Boolean,
     loading: Boolean,
-    resolvingDurations: Boolean,
     editSelection: CodexEditSelection,
     gridState: androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState,
     resolvePostById: suspend (PostId) -> Post?,
@@ -523,11 +520,21 @@ private fun CodexDetailGrid(
     onOpenPostActions: (Post) -> Unit,
     emptyMessage: String?,
     relatedShelf: RelatedShelfBinding?,
-    related: RelatedFeedPresentation,
 ) {
+    val posts = feed.visiblePosts
+    val resolvingDurations = feed.durations.readiness.isResolving
     if (posts.isEmpty()) return CodexDetailEmptyState(collectionIsEmpty, loading, resolvingDurations, emptyMessage)
     val footerMessage = if (resolvingDurations) "Resolving durations…" else null
-    val card: @Composable (Int, Post) -> Unit = { index, post ->
+    // Drag-select reads grid positions as post indices, so it runs only while no related shelf shifts them.
+    val postIds = remember(posts) { posts.map(Post::id) }
+    val dragSelect = if (relatedShelf == null) Modifier.codexDragSelect(gridState, postIds, editSelection, onSelectionChange) else Modifier
+    FeedGrid(
+        view = feed,
+        state = gridState,
+        footerMessage = footerMessage,
+        modifier = Modifier.fillMaxSize().then(dragSelect),
+        shelf = { relatedShelf?.let { CodexRelatedShelf(it, feed.related, cards, onOpenPostActions) } },
+    ) { index, post ->
         CodexSelectablePostCard(
             post = post,
             cards = cards,
@@ -539,17 +546,6 @@ private fun CodexDetailGrid(
             onOpenPostActions = onOpenPostActions,
         )
     }
-    if (relatedShelf != null) {
-        CodexRelatedPostGrid(relatedShelf, related, posts, gridState, footerMessage, cards, onOpenPostActions, card)
-        return
-    }
-    val postIds = remember(posts) { posts.map(Post::id) }
-    TwoColumnPostStaggeredGrid(
-        posts = posts,
-        state = gridState,
-        modifier = Modifier.fillMaxSize().codexDragSelect(gridState, postIds, editSelection, onSelectionChange),
-        footerMessage = footerMessage,
-    ) { index, post -> card(index, post) }
 }
 
 /** The grid's place-holder while a live collection loads or when nothing matches. */
