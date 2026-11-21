@@ -1,14 +1,17 @@
 package com.theoriacodex.app.triage
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.CardDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -19,13 +22,17 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
@@ -37,7 +44,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.codex.LocalQuickSave
 import com.theoriacodex.app.codex.SaveSuggestion
 import com.theoriacodex.app.codex.SaveSuggestions
+import com.theoriacodex.app.media.previewMediaDeliveryPlan
 import com.theoriacodex.app.recommend.LocalLikedTagCounts
+import com.theoriacodex.app.search.FeedAsyncImage
+import com.theoriacodex.app.search.buildFeedImageRequest
+import com.theoriacodex.app.search.feedPreviewDecodeSize
 import com.theoriacodex.app.search.previewAspectRatio
 import com.theoriacodex.app.ui.components.CollectTarget
 import com.theoriacodex.app.ui.components.CollectTargetVisual
@@ -77,7 +88,7 @@ internal fun TriageDeckArea(
         val thresholds = with(density) { SwipeThresholds(maxWidth.toPx() * COMMIT_FRACTION, FLING_SPEED.toPx(), CUE_DISTANCE.toPx()) }
         val ratioFloor = maxWidth / (maxHeight - CAPTION_ALLOWANCE)
         val area = with(density) { Size(maxWidth.toPx(), maxHeight.toPx()) }
-        val choose = { direction: SwipeDirection ->
+        val choose: suspend (SwipeDirection) -> TriageChoice? = { direction ->
             choiceFor(
                 direction,
                 saveState.hovered?.payload ?: targets.save.firstOrNull()?.payload,
@@ -85,7 +96,7 @@ internal fun TriageDeckArea(
             )
         }
         // The gesture outlives recompositions that bring new targets, so it calls through the latest release.
-        val release by rememberUpdatedState { velocity: Velocity ->
+        val release by rememberUpdatedState { velocity: Velocity? ->
             scope.launch {
                 drag.release(velocity, thresholds, area, choose, onDecide) { callbacks.onOpenSavePicker(post) }
             }
@@ -106,9 +117,6 @@ internal fun TriageDeckArea(
         }
     }
 }
-
-/** What a swipe must travel or reach to commit, and how far a vertical pull must go before its targets show. */
-private class SwipeThresholds(val commitPx: Float, val flingPx: Float, val cuePx: Float)
 
 /** The edge targets for the current card: Codices to save to (best first) and tags to hide (least liked first). */
 private class TriageTargets(val save: List<CollectTarget<SaveSuggestion>>, val hide: List<CollectTarget<String>>)
@@ -135,7 +143,10 @@ private fun rememberTriageTargets(post: Post, query: Query?, viewModel: TriageDe
     }
 }
 
-/** The card, with the next one peeking behind it while the card is away from rest. */
+/**
+ * The card, with the next one peeking behind it while the card is away from rest. The peek is a still: only the
+ * card on top plays, and the next card's player starts when it becomes the top card.
+ */
 @Composable
 private fun TriageCards(
     deck: TriageDeckState,
@@ -146,41 +157,67 @@ private fun TriageCards(
     onOpen: () -> Unit,
 ) {
     val current = checkNotNull(deck.current)
-    // One loop and keys, so the peeking card keeps its player when it becomes the top card.
-    val shown = listOfNotNull(deck.next?.takeIf { drag.moving }, current)
-    shown.forEach { post ->
-        key(post.id) {
-            val top = post.id == current.id
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-                    .graphicsLayer {
-                        if (top) {
-                            translationX = drag.offset.x
-                            translationY = drag.offset.y
-                            rotationZ = drag.offset.x / size.width * MAX_TILT_DEGREES
-                        } else {
-                            val reveal = (max(abs(drag.offset.x), abs(drag.offset.y)) / thresholds.commitPx).coerceIn(0f, 1f)
-                            val scale = PEEK_SCALE + (1f - PEEK_SCALE) * reveal
-                            scaleX = scale
-                            scaleY = scale
-                        }
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                FeedPostCard(
-                    post = post,
-                    environment = support.environment,
-                    onClick = onOpen,
-                    onLongPress = null,
-                    mediaAspectRatio = max(previewAspectRatio(post), ratioFloor),
-                    resolvePostById = support.resolvePostById,
-                    recoverPostMedia = support.recoverPostMedia,
-                )
-            }
+    deck.next?.takeIf { drag.moving }?.let { next ->
+        Box(
+            Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .graphicsLayer {
+                    val reveal = (max(abs(drag.offset.x), abs(drag.offset.y)) / thresholds.commitPx).coerceIn(0f, 1f)
+                    val scale = PEEK_SCALE + (1f - PEEK_SCALE) * reveal
+                    scaleX = scale
+                    scaleY = scale
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            TriagePeek(next, max(previewAspectRatio(next), ratioFloor))
         }
     }
+    key(current.id) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .graphicsLayer {
+                    translationX = drag.offset.x
+                    translationY = drag.offset.y
+                    rotationZ = drag.offset.x / size.width * MAX_TILT_DEGREES
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            FeedPostCard(
+                post = current,
+                environment = support.environment,
+                onClick = onOpen,
+                onLongPress = null,
+                mediaAspectRatio = max(previewAspectRatio(current), ratioFloor),
+                resolvePostById = support.resolvePostById,
+                recoverPostMedia = support.recoverPostMedia,
+            )
+        }
+    }
+}
+
+/** The next card's first preview image at the card's shape, requested as the card does; never animated. */
+@Composable
+private fun TriagePeek(post: Post, aspectRatio: Float) {
+    val context = LocalContext.current
+    val windowWidth = LocalWindowInfo.current.containerSize.width
+    val request = remember(post.id, windowWidth) {
+        previewMediaDeliveryPlan(post).candidates.firstOrNull()?.let { candidate ->
+            buildFeedImageRequest(
+                context, candidate.location, post.id.source,
+                feedPreviewDecodeSize(screenWidthPx = windowWidth, aspectRatio = previewAspectRatio(post)),
+            )
+        }
+    }
+    FeedAsyncImage(
+        request,
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        isActive = false,
+        modifier = Modifier.fillMaxWidth().aspectRatio(aspectRatio).clip(CardDefaults.elevatedShape),
+    )
 }
 
 /** Lets TalkBack users decide without dragging. */
@@ -194,32 +231,6 @@ private fun triageActions(targets: TriageTargets, onDecide: (TriageChoice) -> Un
         CustomAccessibilityAction("Hide $tag") { onDecide(TriageChoice.Hide(tag)); true }
     },
 )
-
-/** What a released drag does: spring back, or fly off and commit the choice for the direction it went. */
-private suspend fun TriageDrag.release(
-    velocity: Velocity,
-    thresholds: SwipeThresholds,
-    area: Size,
-    choose: (SwipeDirection) -> TriageChoice?,
-    onDecide: (TriageChoice) -> Unit,
-    onNothingToSaveTo: () -> Unit,
-) {
-    val direction = swipeDirection(offset.x, offset.y, velocity.x, velocity.y, thresholds.commitPx, thresholds.flingPx)
-    val choice = direction?.let(choose)
-    if (direction == null || choice == null) {
-        if (direction != null) onNothingToSaveTo()
-        moveTo(Offset.Zero, fly = false)
-        return
-    }
-    val exit = when (direction) {
-        SwipeDirection.Right -> Offset(area.width, offset.y)
-        SwipeDirection.Left -> Offset(-area.width, offset.y)
-        SwipeDirection.Up -> Offset(offset.x, -area.height)
-        SwipeDirection.Down -> Offset(offset.x, area.height)
-    }
-    moveTo(exit, fly = true)
-    onDecide(choice)
-}
 
 /** Edge targets for a vertical pull, and the like and skip cues for a horizontal one; none of it takes touches. */
 @Composable
