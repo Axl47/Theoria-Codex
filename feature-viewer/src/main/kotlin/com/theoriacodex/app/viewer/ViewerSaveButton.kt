@@ -30,7 +30,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -77,7 +79,10 @@ import kotlinx.coroutines.launch
 /** Where the Viewer's posts are saved from: the search they came from and whether that was For You. */
 data class ViewerSaveContext(val query: Query? = null, val fromForYou: Boolean = false)
 
-/** The hold fan's live gesture, shared by the Save button that drives it and [ViewerSaveFanOverlay] that draws it. */
+/**
+ * The hold fan's live gesture, shared by the Save button that drives it and [ViewerSaveFanOverlay] that draws it, and
+ * whether the button needs the chrome to stay up ([holdsChrome]).
+ */
 @Stable
 internal class ViewerSaveFanState {
     /** The finger in window coordinates while the fan is open, else null. */
@@ -85,15 +90,27 @@ internal class ViewerSaveFanState {
     var anchor by mutableStateOf(Offset.Zero)
     var targets by mutableStateOf<List<CollectTarget<ViewerSaveFanTarget>>>(emptyList())
     val collect = CollectTargetsState<ViewerSaveFanTarget>()
+
+    /** Whether the button shows a save that just landed, with its Undo. */
+    var showingSaved by mutableStateOf(false)
+
+    /** The chrome must not hide while the fan is open or the button offers Undo. */
+    val holdsChrome: Boolean get() = pointer != null || showingSaved
 }
 
 /**
  * The dock's Save button for [post]. Tap saves to the top suggested Codex and then offers Undo for a few seconds; hold
  * opens [fan], where sliding onto a Codex saves there, New names a new Codex, and releasing anywhere else opens the full
- * picker ([onOpenPicker]). With no Codex at all, a tap names a new one.
+ * picker ([onOpenPicker]). With no Codex at all, a tap names a new one. Taps and holds report [onInteraction].
  */
 @Composable
-internal fun ViewerSaveButton(post: Post, context: ViewerSaveContext, fan: ViewerSaveFanState, onOpenPicker: () -> Unit) {
+internal fun ViewerSaveButton(
+    post: Post,
+    context: ViewerSaveContext,
+    fan: ViewerSaveFanState,
+    onInteraction: () -> Unit,
+    onOpenPicker: () -> Unit,
+) {
     val quickSave = LocalQuickSave.current
     val newCodex = LocalNewCodexOpener.current
     val suggestions = rememberSettledSaveSuggestions(quickSave, post, context.query)
@@ -101,6 +118,7 @@ internal fun ViewerSaveButton(post: Post, context: ViewerSaveContext, fan: Viewe
     val state = viewerSaveButtonState(post.id, suggestions, lastSave, rememberSavedUndoClock(lastSave))
     val scope = rememberCoroutineScope()
     val run: (ViewerSaveCommand) -> Unit = { command ->
+        onInteraction()
         when (command) {
             // A failed save falls back to the picker, which reports its own errors.
             is ViewerSaveCommand.QuickSave -> scope.launch {
@@ -113,6 +131,10 @@ internal fun ViewerSaveButton(post: Post, context: ViewerSaveContext, fan: Viewe
     }
     val haptics = LocalHapticFeedback.current
     val hold = remember(fan) { ViewerSaveHold(fan, haptics) }
+    SideEffect { fan.showingSaved = state is ViewerSaveButtonState.Saved }
+    // The dock can still leave (a tap on the media, PiP): nothing it opened may outlive it.
+    DisposableEffect(fan) { onDispose { fan.pointer = null; fan.showingSaved = false } }
+    hold.onStart = onInteraction
     hold.onTap = { run(state.tapCommand()) }
     hold.onRelease = { run(viewerSaveFanRelease(it)) }
     hold.targets = { viewerSaveFanTargets(suggestions).map { it.collectTarget() } }
@@ -180,12 +202,14 @@ private fun rememberSavedUndoClock(lastSave: QuickSaveRecord?): Long {
 private class ViewerSaveHold(private val fan: ViewerSaveFanState, private val haptics: HapticFeedback) {
     var coordinates: LayoutCoordinates? = null
     var targets: () -> List<CollectTarget<ViewerSaveFanTarget>> = { emptyList() }
+    var onStart: () -> Unit = {}
     var onTap: () -> Unit = {}
     var onRelease: (ViewerSaveFanTarget?) -> Unit = {}
 
     fun start(local: Offset) {
         val layout = coordinates ?: return
         haptics.performHapticFeedback(TheoriaHaptics.Hold)
+        onStart()
         fan.targets = targets()
         fan.anchor = layout.localToWindow(Offset(layout.size.width / 2f, 0f))
         fan.pointer = layout.localToWindow(local)
@@ -215,16 +239,20 @@ private fun Modifier.viewerSaveGestures(hold: ViewerSaveHold): Modifier = pointe
         }
         hold.start(down.position)
         var released = false
-        while (true) {
-            val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
-            change.consume()
-            if (!change.pressed) {
-                released = true
-                break
+        // Also when the button leaves mid-hold and cancels this gesture, so the fan never stays open.
+        try {
+            while (true) {
+                val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                change.consume()
+                if (!change.pressed) {
+                    released = true
+                    break
+                }
+                hold.move(change.position)
             }
-            hold.move(change.position)
+        } finally {
+            hold.end(released)
         }
-        hold.end(released)
     }
 }
 

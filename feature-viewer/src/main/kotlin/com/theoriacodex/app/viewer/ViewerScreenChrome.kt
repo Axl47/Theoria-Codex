@@ -10,7 +10,6 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.key
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -53,10 +52,9 @@ internal fun BoxScope.ViewerChromeOverlays(
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_STRIPS && !frame.mediaOverviewVisible, Modifier.align(Alignment.BottomCenter)) {
         ViewerBottomStack(frame, postPagerState, controls, pendingPostId, config, loadMoreFromStrip, fadesWhileScrubbing)
     }
-    val saveFan = remember { ViewerSaveFanState() }
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_TOP_BAR, Modifier.align(Alignment.BottomCenter).then(fadesWhileScrubbing)) {
         val dock = viewerDockActions(frame, controls, activity, quality, qualityHeight, selection.post.id in config.likedPostIds, comments.countOf(selection.post), host.onAction)
-        ViewerDock(dock) { ViewerSaveButton(selection.post, saveContext, saveFan) { host.onAction(ViewerAction.Save) } }
+        ViewerDock(dock) { ViewerSaveButton(selection.post, saveContext, screen.saveFan, controls::markInteraction) { host.onAction(ViewerAction.Save) } }
     }
     ViewerFooterButtons(frame, screen, activity, host.onAction)
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_TOP_BAR, Modifier.align(Alignment.TopCenter).then(fadesWhileScrubbing)) {
@@ -83,7 +81,7 @@ internal fun BoxScope.ViewerChromeOverlays(
             onInteraction = { controls.markInteraction() },
         )
     }
-    ViewerSaveFanOverlay(saveFan)
+    ViewerSaveFanOverlay(screen.saveFan)
 }
 
 /** The post strip and, on multi-page posts, the page scrubber below it, lifted above the dock and any timeline. */

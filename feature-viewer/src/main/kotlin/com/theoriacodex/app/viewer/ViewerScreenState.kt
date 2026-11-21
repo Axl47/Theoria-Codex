@@ -34,6 +34,9 @@ internal class ViewerScreenState {
     var relatedStripExpanded by mutableStateOf(false)
     var pendingDismiss by mutableStateOf(false)
 
+    /** The dock's Save fan; lives here so the auto-hide can see when the Save button holds the chrome. */
+    val saveFan = ViewerSaveFanState()
+
     /** Read when the info sheet opens; the sheet resets it on close, so any other way of opening it starts at the top. */
     var infoSheetTarget by mutableStateOf(InfoSheetTarget.Top)
 }
