@@ -45,7 +45,6 @@ import com.theoriacodex.app.related.ViewerFeedOwner
 import com.theoriacodex.app.related.ViewerFeedSnapshot
 import com.theoriacodex.app.search.SearchViewModel
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
-import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsScreen
 import com.theoriacodex.app.settings.SettingsDiagnosticsEntry
 import com.theoriacodex.app.settings.SettingsSitesEntry
@@ -59,9 +58,7 @@ import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostEntry
-import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchEntry
-import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.ViewerStreamSource

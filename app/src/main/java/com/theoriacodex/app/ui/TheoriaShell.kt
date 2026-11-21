@@ -106,7 +106,6 @@ import com.theoriacodex.app.tags.PostTagSearchActions
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.Dispatchers

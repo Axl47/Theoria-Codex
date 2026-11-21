@@ -30,7 +30,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.sources.http.SiteHealthCheck
 import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.app.source.startSourceHealthCheck
