@@ -68,4 +68,21 @@ class ViewerTrailForksTest {
         assertTrue(cancelled)
         assertEquals(ViewerTrailChip.Similar, forks.busy)
     }
+
+    @Test
+    fun `a swipe heading to another post cancels the fork before the page lands`() = runTest {
+        val forks = ViewerTrailForks(backgroundScope)
+        var opened = false
+        val search = CompletableDeferred<Boolean>()
+        forks.open(dog, art) { search.await().also { opened = true } }
+        runCurrent()
+
+        forks.leave()
+        search.complete(true)
+        runCurrent()
+
+        assertFalse(opened)
+        assertNull(forks.busy)
+        assertTrue(forks.open(dog, art) { true })
+    }
 }
