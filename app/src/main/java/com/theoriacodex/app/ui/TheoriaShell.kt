@@ -51,6 +51,7 @@ import com.theoriacodex.app.codex.transfer.readBoundedTextDocument
 import com.theoriacodex.app.codex.transfer.saveExportToDownloads
 import com.theoriacodex.app.codex.transfer.writeExportDocument
 import com.theoriacodex.app.creator.CreatorFollowsViewModel
+import com.theoriacodex.app.creator.CreatorProfileViewModel
 import com.theoriacodex.app.creator.CreatorOpeningWorkflow
 import com.theoriacodex.app.source.FileCopyLookup
 import com.theoriacodex.app.creator.state.CreatorAction
@@ -60,8 +61,10 @@ import com.theoriacodex.app.post.PostMutationViewModel
 import com.theoriacodex.app.recents.RecentsClearWorkflow
 import com.theoriacodex.app.recents.SavedSearchViewModel
 import com.theoriacodex.app.recents.fypSeedBySource
+import com.theoriacodex.app.recommend.ForYouViewModel
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.related.LikeToggleOutcome
+import com.theoriacodex.app.search.SearchViewModel
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.codex.SearchSaveMemory
@@ -85,16 +88,13 @@ import com.theoriacodex.app.source.ExternalPostDeepLink
 import com.theoriacodex.app.ui.components.FeedFabRestoreRegistry
 import com.theoriacodex.app.ui.components.rememberFeedFabRestoreRegistry
 import com.theoriacodex.app.ui.routes.CreatorProfileStateSaver
-import com.theoriacodex.app.ui.routes.CreatorRouteOwnerHandle
-import com.theoriacodex.app.ui.routes.ForYouRouteOwnerHandle
 import com.theoriacodex.app.ui.routes.PendingRouteActions
-import com.theoriacodex.app.ui.routes.RouteOwnerHandleBinding
-import com.theoriacodex.app.ui.routes.SearchRouteOwnerHandle
-import com.theoriacodex.app.ui.routes.ViewerRouteOwnerHandle
+import com.theoriacodex.app.ui.routes.RouteOwnerSlot
 import com.theoriacodex.app.ui.routes.ViewerRouteWorkflow
 import com.theoriacodex.app.ui.routes.activeRecommendationProfile
 import com.theoriacodex.app.update.ReleaseChangelogEntry
 import com.theoriacodex.app.viewer.ViewerSession
+import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
@@ -120,47 +120,44 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * The Search, For You, and Creator owners the shell may reach, and actions waiting for one to exist.
+ * The navigation-owned ViewModels the shell may reach, and actions waiting for Search or For You to exist.
  *
- * These bindings outlive individual destination compositions. Viewer can keep paging through a
- * still-live back-stack owner; only ViewModel lease closure removes the matching handle. Hold one
- * instance for the shell's whole lifetime and close it only when the shell leaves composition.
+ * The slots outlive individual destination compositions: Viewer can keep paging through a still-live
+ * back-stack owner, and only that owner's clear empties its slot. Hold one instance for the shell's
+ * whole lifetime and close it only when the shell leaves composition.
  */
 @Stable
 internal class RouteOwners {
-    var searchOwner by mutableStateOf<SearchRouteOwnerHandle?>(null)
-        private set
-    var forYouOwner by mutableStateOf<ForYouRouteOwnerHandle?>(null)
-        private set
-    var creatorOwner by mutableStateOf<CreatorRouteOwnerHandle?>(null)
-        private set
-    val searchBinding = RouteOwnerHandleBinding<SearchRouteOwnerHandle> { owner -> searchOwner = owner }
-    val forYouBinding = RouteOwnerHandleBinding<ForYouRouteOwnerHandle> { owner -> forYouOwner = owner }
-    val creatorBinding = RouteOwnerHandleBinding<CreatorRouteOwnerHandle> { owner -> creatorOwner = owner }
+    val search = RouteOwnerSlot<SearchViewModel>()
+    val forYou = RouteOwnerSlot<ForYouViewModel>()
+    val creator = RouteOwnerSlot<CreatorProfileViewModel>()
+    /** The Viewer while its destination is composed. */
+    val viewer = RouteOwnerSlot<ViewerViewModel>()
     private val pendingSearchActions = PendingRouteActions<SearchAction>()
     private val pendingForYouActions = PendingRouteActions<ForYouAction>()
 
     fun close() {
-        searchBinding.close()
-        forYouBinding.close()
-        creatorBinding.close()
+        search.clear()
+        forYou.clear()
+        creator.clear()
+        viewer.clear()
     }
 
-    fun publishSearch(owner: SearchRouteOwnerHandle) {
-        searchBinding.publish(owner)
-        pendingSearchActions.flush(owner::dispatch)
+    fun publishSearch(owner: SearchViewModel) {
+        search.publish(owner)
+        pendingSearchActions.flush { action -> owner.onAction(action); true }
     }
 
-    fun publishForYou(owner: ForYouRouteOwnerHandle) {
-        forYouBinding.publish(owner)
-        pendingForYouActions.flush(owner::dispatch)
+    fun publishForYou(owner: ForYouViewModel) {
+        forYou.publish(owner)
+        pendingForYouActions.flush { action -> owner.onAction(action); true }
     }
 
     fun dispatchOrQueue(action: SearchAction): Boolean =
-        pendingSearchActions.dispatchOrEnqueue(action) { queuedAction -> searchOwner?.dispatch(queuedAction) == true }
+        pendingSearchActions.dispatchOrEnqueue(action) { queued -> search.current?.onAction(queued) != null }
 
     fun dispatchOrQueue(action: ForYouAction): Boolean =
-        pendingForYouActions.dispatchOrEnqueue(action) { queuedAction -> forYouOwner?.dispatch(queuedAction) == true }
+        pendingForYouActions.dispatchOrEnqueue(action) { queued -> forYou.current?.onAction(queued) != null }
 
     val addSearchIncludeTerm: (Post, SearchTerm) -> Boolean = { post, term ->
         dispatchOrQueue(SearchAction.AddPostIncludeTerm(post, term))
@@ -375,7 +372,6 @@ internal class TheoriaShell(
     var pendingCreatorProfile by pendingCreatorProfile
     var thumbnailCacheGeneration by thumbnailCacheGeneration
     var navReady by mutableStateOf(appShellOwner.state.value.appReady)
-    var activeViewerOwner by mutableStateOf<ViewerRouteOwnerHandle?>(null)
     val creatorOpening = CreatorOpeningWorkflow(sources.registry, sources.httpClient)
     private val fileCopies = FileCopyLookup(sources.registry)
     val recentsClearWorkflow = RecentsClearWorkflow(data.recentsRepository)
@@ -383,9 +379,9 @@ internal class TheoriaShell(
         data = data,
         cacheScope = scope,
         sources = sources,
-        searchOwner = { routes.searchOwner },
-        forYouOwner = { routes.forYouOwner },
-        creatorOwner = { routes.creatorOwner },
+        searchOwner = { routes.search.current },
+        forYouOwner = { routes.forYou.current },
+        creatorOwner = { routes.creator.current },
         offlineMedia = features.offlineMedia,
     )
     /** Saves one tag, or an "or" group with an optional name, for the active profile. */
@@ -441,11 +437,11 @@ internal class TheoriaShell(
      */
     suspend fun openCreatorProfile(creator: CreatorProfile) {
         pendingCreatorProfile = creator
-        val viewerSession = activeViewerOwner?.session?.value
+        val viewerSession = routes.viewer.current?.session?.value
         val viewerUsesCreatorFeed = viewerSession != null && ViewerStreamSource.CREATOR_PROFILE in
             listOf(viewerSession.context.streamSource, viewerSession.relatedBinding?.source)
         if (navigation.currentRoute == AppRoute.Viewer && viewerUsesCreatorFeed) {
-            activeViewerOwner?.clearSession()
+            routes.viewer.current?.clearSession(retainPresentation = true)
             viewerSessions.clear()
             features.search.setViewerLaunchContext(null)
             navController.popBackStack(AppRoute.Viewer, inclusive = true)
@@ -492,12 +488,12 @@ internal class TheoriaShell(
 
     /** A like action bound to the Search owner and query current now; a later query ignores its result. */
     fun searchLikeAction(): (Post) -> Unit {
-        val owner = routes.searchBinding.current
+        val owner = routes.search.current
         val query = owner?.state?.value?.query?.appliedQueryHash
         return { post ->
             toggleLikeAndSyncCodex(post) { outcome ->
                 if (owner?.state?.value?.query?.appliedQueryHash == query) {
-                    owner?.dispatch(SearchAction.RelatedLikeCommitted(post, outcome))
+                    owner?.onAction(SearchAction.RelatedLikeCommitted(post, outcome))
                 }
             }
         }
@@ -505,12 +501,12 @@ internal class TheoriaShell(
 
     /** A like action bound to the For You owner and seed current now; a later seed ignores its result. */
     fun forYouLikeAction(): (Post) -> Unit {
-        val owner = routes.forYouBinding.current
+        val owner = routes.forYou.current
         val seed = owner?.state?.value?.seedId
         return { post ->
             toggleLikeAndSyncCodex(post) { outcome ->
                 if (owner?.state?.value?.seedId == seed) {
-                    owner?.dispatch(ForYouAction.RelatedLikeCommitted(post, outcome))
+                    owner?.onAction(ForYouAction.RelatedLikeCommitted(post, outcome))
                 }
             }
         }
@@ -518,12 +514,12 @@ internal class TheoriaShell(
 
     /** A like action bound to the Creator owner and query current now; a later query ignores its result. */
     fun creatorLikeAction(): (Post) -> Unit {
-        val owner = routes.creatorBinding.current
-        val query = owner?.currentState()?.queryHash
+        val owner = routes.creator.current
+        val query = owner?.state?.value?.queryHash
         return { post ->
             toggleLikeAndSyncCodex(post) { outcome ->
-                if (owner?.currentState()?.queryHash == query) {
-                    owner?.dispatch(CreatorAction.RelatedLikeCommitted(post, outcome))
+                if (owner?.state?.value?.queryHash == query) {
+                    owner?.onAction(CreatorAction.RelatedLikeCommitted(post, outcome))
                 }
             }
         }
@@ -808,7 +804,7 @@ internal class TheoriaShell(
     private suspend fun openViewerSession(queryHash: String, posts: List<Post>, initialMediaIndex: Int = 0) {
         data.fileMirrors.learn(posts)
         if (navigation.currentRoute == AppRoute.Viewer) {
-            activeViewerOwner?.clearSession()
+            routes.viewer.current?.clearSession(retainPresentation = true)
             viewerSessions.clear()
             navController.popBackStack(AppRoute.Viewer, inclusive = true)
         }

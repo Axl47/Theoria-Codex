@@ -107,11 +107,11 @@ class ViewerRouteRestorationUiTest {
     }
 
     @Test fun `shell-owned Creator exit clears owner without showing restoration UI`() {
-        var owner: ViewerRouteOwnerHandle? = null
+        var owner: ViewerViewModel? = null
         withRoute(onOwner = { owner = it }) {
             compose.onNodeWithContentDescription("Back").assertIsDisplayed()
             compose.runOnIdle {
-                assertEquals(true, requireNotNull(owner).clearSession())
+                requireNotNull(owner).clearSession(retainPresentation = true)
                 assertNull(owner?.session?.value)
             }
             assertExitingPresentation()
@@ -149,7 +149,7 @@ class ViewerRouteRestorationUiTest {
     }
 
     @Test fun `Codex viewing publishes canonical attribution and clears it on exit despite retained pages`() {
-        var owner: ViewerRouteOwnerHandle? = null
+        var owner: ViewerViewModel? = null
         var target: com.theoriacodex.data.repository.CodexUsageTarget? = null
         withRoute(
             launchSession = session.copy(context = session.context.copy(
@@ -161,7 +161,7 @@ class ViewerRouteRestorationUiTest {
                 assertEquals("collection", target?.codexId)
                 assertEquals("${post.id.source.id}:${post.id.sourcePostId}", target?.postKey)
                 assertEquals(false, target?.video)
-                requireNotNull(owner).clearSession()
+                requireNotNull(owner).clearSession(retainPresentation = true)
             }
             compose.runOnIdle { assertNull(target) }
         }
@@ -188,7 +188,7 @@ class ViewerRouteRestorationUiTest {
         onRecoverMedia: suspend () -> com.theoriacodex.domain.model.Post? = { null },
         restore: suspend () -> ViewerSession? = { error("A live handoff or exit must not restore") },
         onDismiss: suspend () -> Unit = {},
-        onOwner: (ViewerRouteOwnerHandle?) -> Unit = {},
+        onOwner: (ViewerViewModel?) -> Unit = {},
         onGoToSearch: () -> Unit = {},
         onRemoveFromCodex: (String, com.theoriacodex.domain.model.Post) -> Unit = { _, _ -> },
         verify: () -> Unit,

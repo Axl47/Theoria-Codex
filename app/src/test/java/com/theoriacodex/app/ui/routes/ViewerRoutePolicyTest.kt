@@ -176,7 +176,7 @@ class ViewerRoutePolicyTest {
     }
 
     @Test
-    fun `owner handle exposes only live session coordination and rejects a cleared owner`() {
+    fun `the shell's Viewer slot empties when the Viewer's owner is cleared`() {
         val owner = testViewerOwner(SavedStateHandle())
         val store = ViewModelStore()
         val provider = ViewModelProvider(
@@ -187,17 +187,14 @@ class ViewerRoutePolicyTest {
             },
         )
         provider[ViewerViewModel::class.java]
-        val handle = ViewerRouteOwnerHandle(owner)
+        val slot = RouteOwnerSlot<ViewerViewModel>().apply { publish(owner) }
         owner.replaceSession(session("search:owned", ViewerStreamSource.SEARCH))
 
-        assertEquals("search:owned", handle.session?.value?.context?.queryHash)
-        assertTrue(handle.clearSession())
-        assertNull(handle.session?.value)
+        assertEquals("search:owned", slot.current?.session?.value?.context?.queryHash)
 
         store.clear()
 
-        assertNull(handle.session)
-        assertFalse(handle.clearSession())
+        assertNull(slot.current)
     }
 
     private fun session(

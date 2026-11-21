@@ -163,7 +163,7 @@ internal fun TheoriaAppContent(
     ) {
         com.theoriacodex.app.codex.SavedCodexSession {
             PostTagContextProvider(
-                shell.routes.searchOwner?.state,
+                shell.routes.search.current?.state,
                 shell.features.search::fetchSearchTermCounts,
                 shell.routes.postTagSearchActions,
                 savedTags,

@@ -267,7 +267,7 @@ private fun CreatorDestination(shell: TheoriaShell) {
                             searchVisibilityFilters = effect.visibilityFilters,
                             onToggleLike = likeAction,
                             relatedBinding = ViewerRelatedBinding(
-                                ViewerStreamSource.CREATOR_PROFILE, routes.creatorBinding.current?.currentState()?.queryHash.orEmpty(),
+                                ViewerStreamSource.CREATOR_PROFILE, routes.creator.current?.state?.value?.queryHash.orEmpty(),
                             ),
                         )),
                     )
@@ -285,7 +285,7 @@ private fun CreatorDestination(shell: TheoriaShell) {
                 onRemoveIncludeTerm = routes.removeSearchIncludeTerm,
                 onRemoveExcludeTerm = routes.removeSearchExcludeTerm,
             ),
-            onOwnerAvailable = routes.creatorBinding::publish,
+            onOwnerAvailable = routes.creator::publish,
         )
     }
 }
@@ -299,9 +299,9 @@ private fun ViewerDestination(shell: TheoriaShell) {
     ViewerDestinationStateBoundary(
         data = shell.data,
         sources = shell.sources,
-        searchOwner = routes.searchOwner,
-        forYouOwner = routes.forYouOwner,
-        creatorOwner = routes.creatorOwner,
+        searchOwner = routes.search.current,
+        forYouOwner = routes.forYou.current,
+        creatorOwner = routes.creator.current,
     ) { state ->
         ViewerRoute(
             dependencies = ViewerRouteDependencies(
@@ -335,7 +335,7 @@ private fun ViewerDestination(shell: TheoriaShell) {
             liveSourceState = viewerLiveSourceState(state, shell.pendingLikePostIds[state.browsing.activeProfile.profileId].orEmpty()),
             effectCallbacks = effectCallbacks,
             screenCallbacks = screenCallbacks,
-            onOwnerChanged = { owner -> shell.activeViewerOwner = owner },
+            onOwnerChanged = { owner -> if (owner == null) routes.viewer.clear() else routes.viewer.publish(owner) },
         )
     }
 }
@@ -375,7 +375,7 @@ private fun viewerLiveSourceState(
 
 /** Names where a Viewer download came from, by the stream the session was launched from. */
 private suspend fun TheoriaShell.viewerDownloadOrigin(): String {
-    val launch = activeViewerOwner?.session?.value?.context
+    val launch = routes.viewer.current?.session?.value?.context
     return when (launch?.streamSource) {
         ViewerStreamSource.SEARCH -> "Search"
         ViewerStreamSource.FOR_YOU -> "FYP"
@@ -396,7 +396,7 @@ private fun viewerEffectCallbacks(shell: TheoriaShell) = ViewerRouteEffectCallba
         shell.requestSaveToCodex(
             post = post,
             fromForYou = context.streamSource == ViewerStreamSource.FOR_YOU,
-            searchQuery = shell.activeViewerOwner?.session?.value
+            searchQuery = shell.routes.viewer.current?.session?.value
                 ?.takeIf { it.context.queryHash == context.queryHash }?.saveQuery,
         )
     },

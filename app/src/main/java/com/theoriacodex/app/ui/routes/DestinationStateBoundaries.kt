@@ -43,6 +43,9 @@ import com.theoriacodex.app.codex.CodexCoverCandidate
 import com.theoriacodex.app.codex.codexBelongsToProfile
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.di.SourceDependencies
+import com.theoriacodex.app.creator.CreatorProfileViewModel
+import com.theoriacodex.app.recommend.ForYouViewModel
+import com.theoriacodex.app.search.SearchViewModel
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsScreen
@@ -411,7 +414,7 @@ internal fun SaveToCodexDestinationStateBoundary(
 @Composable
 internal fun SettingsDestinationStateBoundary(
     owner: SettingsViewModel,
-    searchOwner: SearchRouteOwnerHandle?,
+    searchOwner: SearchViewModel?,
     storageSummary: String? = null,
     sites: SettingsSitesEntry? = null,
     statsActions: StatsActions = StatsActions(),
@@ -471,9 +474,9 @@ internal fun PixivAuthorizationCallbackEffect(
 internal fun ViewerDestinationStateBoundary(
     data: DataDependencies,
     sources: SourceDependencies,
-    searchOwner: SearchRouteOwnerHandle?,
-    forYouOwner: ForYouRouteOwnerHandle?,
-    creatorOwner: CreatorRouteOwnerHandle?,
+    searchOwner: SearchViewModel?,
+    forYouOwner: ForYouViewModel?,
+    creatorOwner: CreatorProfileViewModel?,
     content: @Composable (ViewerDestinationState) -> Unit,
 ) {
     BrowsingDestinationStateBoundary(data, sources) { browsing ->

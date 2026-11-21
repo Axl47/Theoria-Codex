@@ -62,7 +62,7 @@ internal fun HomePager(shell: TheoriaShell) {
             TopLevelDestination.Codex -> CodexLibraryDestination(shell, actionCodexId = null)
             TopLevelDestination.Settings -> {
                 SettingsDestinationStateBoundary(
-                    shell.owners.settings, shell.routes.searchOwner, libraryStorageSummary(shell.transfers),
+                    shell.owners.settings, shell.routes.search.current, libraryStorageSummary(shell.transfers),
                     sites = rememberCustomSitesEntry(shell.container),
                     statsActions = remember(shell) {
                         StatsActions(shell::openStatisticsPost, shell::shareStats, shell::readStatsFile, shell::previewStatisticsPost, shell::downloadStats)
@@ -103,7 +103,7 @@ private fun SearchDestination(shell: TheoriaShell) {
                 onOpenCreatorProfile = shell::launchOpenCreator,
                 onOpenLegacyCreatorProfile = shell::launchOpenCreator,
                 onRequestSaveToCodex = { post ->
-                    shell.requestSaveToCodex(post, searchQuery = routes.searchOwner?.currentState()?.query?.applied)
+                    shell.requestSaveToCodex(post, searchQuery = routes.search.current?.state?.value?.query?.applied)
                 },
                 onSaveToDevice = shell::requestSaveToDevice,
                 onAddFavoriteTag = shell.addFavoriteTags,
@@ -131,7 +131,7 @@ private fun searchRouteConfig(shell: TheoriaShell, state: BrowsingDestinationSta
 /** Binds the Viewer's like action and related posts to the Search query current at this tap. */
 private suspend fun TheoriaShell.openSearchViewer(effect: SearchEffect.OpenViewer) {
     val likeAction = searchLikeAction()
-    val current = routes.searchOwner?.currentState()?.query
+    val current = routes.search.current?.state?.value?.query
     viewerSessions.retain(
         viewerRouteWorkflow.prepareResumableSession(ViewerSession(
             posts = effect.posts,
@@ -207,7 +207,7 @@ private suspend fun TheoriaShell.openForYouViewer(effect: ForYouEffect.OpenViewe
             searchVisibilityFilters = effect.visibilityFilters,
             onToggleLike = likeAction,
             relatedBinding = ViewerRelatedBinding(
-                ViewerStreamSource.FOR_YOU, "for_you:${routes.forYouBinding.current?.state?.value?.seedId}",
+                ViewerStreamSource.FOR_YOU, "for_you:${routes.forYou.current?.state?.value?.seedId}",
             ),
         )),
     )

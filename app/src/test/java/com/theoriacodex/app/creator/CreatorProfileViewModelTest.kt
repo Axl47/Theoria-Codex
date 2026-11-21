@@ -12,7 +12,6 @@ import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.app.creator.state.CreatorEffect
 import com.theoriacodex.app.creator.state.CreatorFailureReason
 import com.theoriacodex.app.testing.testPost
-import com.theoriacodex.app.ui.routes.CreatorRouteOwnerHandle
 import com.theoriacodex.app.ui.routes.ViewerRelatedShelves
 import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.domain.model.CreatorProfile
@@ -238,7 +237,7 @@ class CreatorProfileViewModelTest {
         val owner = CreatorProfileViewModel(engine, SavedStateHandle(), this, CreatorRelatedLoader { listOf(testPost(sourcePostId = "similar")) })
         owner.onAction(CreatorAction.OpenCreator(creator(SourceKey.PIXIV, "creator")))
         advanceUntilIdle()
-        val shelves = ViewerRelatedShelves({ null }, { null }, { CreatorRouteOwnerHandle(owner) })
+        val shelves = ViewerRelatedShelves({ null }, { null }, { owner })
 
         listOf(ViewerStreamSource.SEARCH, ViewerStreamSource.FOR_YOU, ViewerStreamSource.CODEX).forEach { shelves.show(it, seed) }
         advanceUntilIdle()

@@ -6,7 +6,10 @@ import com.theoriacodex.app.statistics.statisticsPostKey
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.di.SourceDependencies
 import com.theoriacodex.app.media.recoverRemoteMedia
+import com.theoriacodex.app.creator.CreatorProfileViewModel
 import com.theoriacodex.app.creator.state.CreatorAction
+import com.theoriacodex.app.recommend.ForYouViewModel
+import com.theoriacodex.app.search.SearchViewModel
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.statistics.statisticsTagsForPost
@@ -47,9 +50,9 @@ internal class ViewerRouteWorkflow(
     private val data: DataDependencies,
     private val cacheScope: CoroutineScope,
     private val sources: SourceDependencies,
-    private val searchOwner: () -> SearchRouteOwnerHandle?,
-    private val forYouOwner: () -> ForYouRouteOwnerHandle?,
-    private val creatorOwner: () -> CreatorRouteOwnerHandle?,
+    private val searchOwner: () -> SearchViewModel?,
+    private val forYouOwner: () -> ForYouViewModel?,
+    private val creatorOwner: () -> CreatorProfileViewModel?,
     private val offlineMedia: com.theoriacodex.app.media.OfflineMediaCoordinator? = null,
     private val providerDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewerPostResolver {
@@ -65,19 +68,9 @@ internal class ViewerRouteWorkflow(
     suspend fun persistResolvedPost(resolvedPost: Post, streamSource: ViewerStreamSource) {
         val post = offlineMedia?.withoutOfflineLocations(resolvedPost) ?: resolvedPost
         when (streamSource) {
-            ViewerStreamSource.SEARCH -> if (
-                searchOwner()?.dispatch(SearchAction.RememberResolvedPost(post)) != true
-            ) {
-                return
-            }
-            ViewerStreamSource.FOR_YOU -> if (forYouOwner()?.rememberResolvedPost(post) != true) {
-                return
-            }
-            ViewerStreamSource.CREATOR_PROFILE -> if (
-                creatorOwner()?.rememberResolvedPost(post) != true
-            ) {
-                return
-            }
+            ViewerStreamSource.SEARCH -> searchOwner()?.onAction(SearchAction.RememberResolvedPost(post))
+            ViewerStreamSource.FOR_YOU -> forYouOwner()?.rememberResolvedPost(post)
+            ViewerStreamSource.CREATOR_PROFILE -> creatorOwner()?.rememberResolvedPost(post)
             ViewerStreamSource.RELATED -> Unit
             ViewerStreamSource.CODEX,
             ViewerStreamSource.RECENTS,
@@ -124,10 +117,9 @@ internal class ViewerRouteWorkflow(
 
     fun loadMore(streamSource: ViewerStreamSource) {
         when (streamSource) {
-            ViewerStreamSource.SEARCH -> searchOwner()?.dispatch(SearchAction.LoadNextPage)
-            ViewerStreamSource.FOR_YOU -> forYouOwner()?.dispatch(ForYouAction.LoadNextPage)
-            ViewerStreamSource.CREATOR_PROFILE -> creatorOwner()
-                ?.dispatch(com.theoriacodex.app.creator.state.CreatorAction.LoadNextPage)
+            ViewerStreamSource.SEARCH -> searchOwner()?.onAction(SearchAction.LoadNextPage)
+            ViewerStreamSource.FOR_YOU -> forYouOwner()?.onAction(ForYouAction.LoadNextPage)
+            ViewerStreamSource.CREATOR_PROFILE -> creatorOwner()?.onAction(CreatorAction.LoadNextPage)
             ViewerStreamSource.RELATED,
             ViewerStreamSource.CODEX,
             ViewerStreamSource.RECENTS,
@@ -318,9 +310,9 @@ internal fun recentPostSectionForViewer(context: ViewerLaunchContext?): RecentPo
  * [SOURCES] keep one; for any other source each call does nothing.
  */
 internal class ViewerRelatedShelves(
-    private val searchOwner: () -> SearchRouteOwnerHandle?,
-    private val forYouOwner: () -> ForYouRouteOwnerHandle?,
-    private val creatorOwner: () -> CreatorRouteOwnerHandle?,
+    private val searchOwner: () -> SearchViewModel?,
+    private val forYouOwner: () -> ForYouViewModel?,
+    private val creatorOwner: () -> CreatorProfileViewModel?,
 ) {
     /** "More like this" from the Viewer. */
     fun show(source: ViewerStreamSource, post: Post) =
@@ -334,9 +326,9 @@ internal class ViewerRelatedShelves(
 
     private fun dispatch(source: ViewerStreamSource, search: SearchAction, forYou: ForYouAction, creator: CreatorAction) {
         when (source) {
-            ViewerStreamSource.SEARCH -> searchOwner()?.dispatch(search)
-            ViewerStreamSource.FOR_YOU -> forYouOwner()?.dispatch(forYou)
-            ViewerStreamSource.CREATOR_PROFILE -> creatorOwner()?.dispatch(creator)
+            ViewerStreamSource.SEARCH -> searchOwner()?.onAction(search)
+            ViewerStreamSource.FOR_YOU -> forYouOwner()?.onAction(forYou)
+            ViewerStreamSource.CREATOR_PROFILE -> creatorOwner()?.onAction(creator)
             else -> Unit
         }
     }
