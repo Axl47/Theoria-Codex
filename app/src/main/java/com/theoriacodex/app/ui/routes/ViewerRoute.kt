@@ -395,7 +395,8 @@ private fun ViewerRouteRenderer(
         uiState = viewerState,
         saveToCodexQuery = activeSession?.saveQuery,
         creatorBrowsingSources = renderConfig.creatorBrowsingSources,
-        onAction = { action -> viewerOwner.dispatch(action, screenCallbacks) },
+        // One function for the owner's lifetime, so the screen's controls stay put; it reads the latest callbacks.
+        onAction = remember(viewerOwner) { { action -> viewerOwner.dispatch(action, latestScreenCallbacks.value) } },
         pixivUgoiraClient = renderConfig.pixivUgoiraClient,
         tagVideoCountProvider = renderConfig.tagVideoCountProvider,
         fetchTagVideoCounts = renderConfig.fetchTagVideoCounts,

@@ -291,6 +291,9 @@ private fun CreatorDestination(shell: TheoriaShell) {
 @Composable
 private fun ViewerDestination(shell: TheoriaShell) {
     val routes = shell.routes
+    // Built once per shell, so a Search, For You or Creator state change leaves the Viewer's controls as they are.
+    val effectCallbacks = remember(shell) { viewerEffectCallbacks(shell) }
+    val screenCallbacks = remember(shell) { viewerScreenCallbacks(shell) }
     ViewerDestinationStateBoundary(
         data = shell.data,
         sources = shell.sources,
@@ -327,8 +330,8 @@ private fun ViewerDestination(shell: TheoriaShell) {
                 creatorBrowsingSources = state.browsing.creatorBrowsingSources,
             ),
             liveSourceState = viewerLiveSourceState(state, shell.pendingLikePostIds[state.browsing.activeProfile.profileId].orEmpty()),
-            effectCallbacks = viewerEffectCallbacks(shell),
-            screenCallbacks = viewerScreenCallbacks(shell),
+            effectCallbacks = effectCallbacks,
+            screenCallbacks = screenCallbacks,
         )
     }
 }
