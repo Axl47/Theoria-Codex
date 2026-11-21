@@ -256,6 +256,29 @@ class ViewerStateReducerTest {
     }
 
     @Test
+    fun `retry after a failed lookup of the current post requests the post again`() {
+        val session = session("retry-resolution")
+        val cover = samplePost("cover")
+        val state = createViewerUiState(session, listOf(cover), requiresResolution = { true })
+
+        val failed = reduceViewerState(
+            state,
+            ViewerAction.ResolutionFailed(session, cover.id, message = "detail request failed", recoverable = true),
+        ).state
+        val retry = reduceViewerState(failed, ViewerAction.RetryMedia)
+
+        assertTrue(failed.mediaError is ViewerMediaError.Recoverable)
+        assertEquals(
+            listOf(
+                ViewerEffect.RetryMedia(session, requireNotNull(failed.currentMedia?.key)),
+                ViewerEffect.ResolvePost(session, cover.id),
+            ),
+            retry.effects,
+        )
+        assertEquals(ViewerResolutionStatus.REQUESTED, retry.state.currentPage?.resolution?.status)
+    }
+
+    @Test
     fun `late failure for previously selected media cannot interrupt current media`() {
         val session = session("same-session-media")
         val initial = createViewerUiState(

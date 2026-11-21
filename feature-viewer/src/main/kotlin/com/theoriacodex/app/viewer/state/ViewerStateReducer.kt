@@ -553,14 +553,18 @@ private fun ViewerUiState.retryMedia(session: ViewerSessionIdentity): ViewerRedu
     val updatedPages = pages.toMutableList().also { currentPages ->
         currentPages[pageIndex] = page.copy(media = updatedMedia)
     }
-    return ViewerReduction(
-        state = copy(
-            pages = updatedPages,
-            mediaError = null,
-            controls = controls.copy(playback = controls.playback.copy(playing = controls.playback.available)),
-        ),
-        effects = listOf(ViewerEffect.RetryMedia(session, recoverable.mediaKey)),
+    val retried = copy(
+        pages = updatedPages,
+        mediaError = null,
+        controls = controls.copy(playback = controls.playback.copy(playing = controls.playback.available)),
     )
+    val retry = ViewerEffect.RetryMedia(session, recoverable.mediaKey)
+    // The error may be the post's failed lookup, which nothing re-requests on its own (see ViewerViewModel).
+    if (page.resolution.status != ViewerResolutionStatus.FAILED || !page.resolution.recoverable) {
+        return ViewerReduction(retried, listOf(retry))
+    }
+    val resolving = retried.requestResolution(session, page.post.id)
+    return ViewerReduction(resolving.state, listOf(retry) + resolving.effects)
 }
 
 private inline fun ViewerUiState.currentPageEffect(
