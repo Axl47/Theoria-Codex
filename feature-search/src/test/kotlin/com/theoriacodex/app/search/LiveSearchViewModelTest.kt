@@ -191,6 +191,22 @@ internal class LiveSearchViewModelTest : SearchViewModelTestFixture() {
         assertEquals(listOf("slow", "base"), recordedSearches())
     }
 
+    @Test fun `an edit staged over Search runs only once Search is shown again`() = runTest(mainDispatcherRule.dispatcher) {
+        val adapter = ViewModelSearchAdapter()
+        val owner = searched(adapter, "a")
+        val before = adapter.searchCount
+        owner.onAction(SearchAction.StageDraftEdit(SearchAction.AddIncludeTerm(SearchTerm("b"))))
+        advanceUntilIdle()
+        assertEquals(before, adapter.searchCount)
+        assertEquals(listOf("a", "b"), owner.state.value.query.draft.includeTags)
+
+        owner.onAction(SearchAction.Resume)
+        advanceTimeBy(601); runCurrent()
+        advanceUntilIdle()
+        assertEquals(before + 1, adapter.searchCount)
+        assertEquals(listOf("a", "b"), owner.state.value.query.applied.includeTags)
+    }
+
     private suspend fun TestScope.searched(adapter: ViewModelSearchAdapter, tag: String): SearchViewModel {
         val owner = viewModel(adapter, recentsRepository = recents)
         restore(owner)

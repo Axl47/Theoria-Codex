@@ -121,6 +121,8 @@ class SearchViewModel(
     private var activeRequestJob: Job? = null
     private var restorationJob: Job? = null
     private var pendingRootSearch: (() -> Unit)? = null
+    /** A draft edit made over Search waits to run until Search is shown again. */
+    private var draftStaged = false
     private var latestEnvironmentSettings: AppSettings? = null
     /** The source settings the state was last reconciled with; null until Search has restored. */
     private var runtime: SourceRuntimeSettings? = null
@@ -156,6 +158,8 @@ class SearchViewModel(
             }
 
             is SearchAction.DraftEdit -> applyDraftAction(action)
+
+            is SearchAction.StageDraftEdit -> stageDraftEdit(action.edit)
 
             is SearchAction.SelectMode -> selectMode(action.mode)
 
@@ -200,6 +204,10 @@ class SearchViewModel(
 
             SearchAction.Resume -> {
                 requestRouteEntryScrollRestoration()
+                if (draftStaged) {
+                    draftStaged = false
+                    scheduleLiveSearch()
+                }
                 resumeSearchIfNeeded()
             }
 
@@ -250,6 +258,14 @@ class SearchViewModel(
 
     private fun applyDraftAction(action: SearchAction.DraftEdit) {
         mutateDraft { SearchDraftReducer.edit(it, action, System.currentTimeMillis()) }
+    }
+
+    /** Edits the draft from over Search without running it behind that screen; [SearchAction.Resume] runs it. */
+    private fun stageDraftEdit(edit: SearchAction.DraftEdit) {
+        liveSearch.cancel()
+        mutableState.value = SearchDraftReducer.edit(mutableState.value, edit, System.currentTimeMillis())
+        persistDraftQuery()
+        draftStaged = true
     }
 
     /**
