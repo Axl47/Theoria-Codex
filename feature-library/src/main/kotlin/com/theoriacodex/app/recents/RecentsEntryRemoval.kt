@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recents
 
+import androidx.lifecycle.ViewModel
 import com.theoriacodex.app.ui.undo.UndoAction
 import com.theoriacodex.app.ui.undo.UndoAnchor
 import com.theoriacodex.app.ui.undo.UndoOffer
@@ -21,13 +22,14 @@ fun recentSearchRemovalAnchor(entry: RecentSearchEntry) = RecentsUndoAnchor.copy
  * Removes one History entry the user swiped away at once, then offers Undo, which restores that exact
  * entry (time, origin and progress included). A removed search stays in the list as [removedSearch] so its
  * row can draw the offer in place; a removed post tile offers Undo in History's pill, since the grid closes
- * the gap. Offers and their restores run in [scope], which should outlive History (the shell's scope).
+ * the gap. Offers and their restores run in [scope], which should outlive History (the undo slot's scope). It is
+ * a ViewModel so the placeholder survives a recreation, as the slot's offer does.
  */
 class RecentsEntryRemoval(
     private val repository: RecentsRepository,
     private val undo: UndoSlot,
     private val scope: CoroutineScope,
-) {
+) : ViewModel() {
     private val removed = MutableStateFlow<RecentSearchEntry?>(null)
 
     /** The search whose row currently shows the offer, or null. */

@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -133,7 +132,7 @@ private fun rememberRecentsDurationOwner(shell: TheoriaShell, state: RecentsDest
 @Composable
 private fun RecentsDestination(shell: TheoriaShell, header: LibrarySectionHeader) {
     val undo = LocalUndoSlot.current
-    val removal = remember(shell, undo) { RecentsEntryRemoval(shell.data.recentsRepository, undo, undo.scope) }
+    val removal = viewModel(key = "recents-entry-removal") { RecentsEntryRemoval(shell.data.recentsRepository, undo, undo.scope) }
     val removedSearch by removal.removedSearch.collectAsStateWithLifecycle()
     val savedSearchOwner = shell.owners.savedSearches
     val savedSearches by savedSearchOwner.savedSearches.collectAsStateWithLifecycle()
