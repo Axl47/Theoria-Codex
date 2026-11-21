@@ -223,7 +223,7 @@ class CreatorProfileViewModelTest {
         assertEquals("next", owner.state.value.nextPageToken)
         assertEquals(sibling.id, owner.state.value.relatedPosts.requestOrNull?.seed?.id)
         assertTrue(owner.state.value.relatedPosts.loadedPosts.isEmpty())
-        owner.onAction(CreatorAction.ShowPreviousRelatedPosts)
+        owner.related.showPreviousPage()
         assertFalse(sibling in owner.state.value.relatedPosts.loadedPosts)
         owner.related.onLikeCommitted(sibling, LikeToggleOutcome.UNLIKED)
         assertEquals(RelatedPostsUiState.Idle, owner.state.value.relatedPosts)
@@ -291,7 +291,7 @@ class CreatorProfileViewModelTest {
         advanceUntilIdle()
         assertTrue(owner.state.value.relatedPosts is RelatedPostsUiState.Failed)
         fail = false
-        owner.onAction(CreatorAction.RetryRelatedPosts)
+        owner.related.retry()
         advanceUntilIdle()
         assertTrue(owner.state.value.relatedPosts is RelatedPostsUiState.Empty)
         engine.capabilityAvailable = false

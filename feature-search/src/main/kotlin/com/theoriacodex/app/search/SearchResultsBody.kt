@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.related.RelatedShelfBinding
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -45,6 +46,7 @@ import com.theoriacodex.domain.model.PostId
 @Composable
 internal fun ColumnScope.SearchResultsBody(
     state: SearchUiState,
+    related: RelatedShelfBinding,
     feed: SearchFeed,
     cards: com.theoriacodex.app.ui.components.FeedCardEnvironment,
     gridState: LazyStaggeredGridState,
@@ -92,7 +94,7 @@ internal fun ColumnScope.SearchResultsBody(
                 onRefresh = retrySearch,
                 modifier = Modifier.weight(1f),
             ) {
-                SearchResultsGrid(state, feed, cards, gridState, pageDemand, inputFocus, resolvePostById, recoverPostMedia, onAction, openPostActions)
+                SearchResultsGrid(state, related, feed, cards, gridState, pageDemand, inputFocus, resolvePostById, recoverPostMedia, onAction, openPostActions)
             }
         }
     }
@@ -138,6 +140,7 @@ private fun SearchEmptyResults(
 @Composable
 private fun SearchResultsGrid(
     state: SearchUiState,
+    related: RelatedShelfBinding,
     feed: SearchFeed,
     cards: com.theoriacodex.app.ui.components.FeedCardEnvironment,
     gridState: LazyStaggeredGridState,
@@ -150,7 +153,6 @@ private fun SearchResultsGrid(
 ) {
     // Cards capture this rather than the whole state, which changes on every keystroke and page.
     val showSourceBadge = state.query.appliedSourceScope !is SearchSourceScope.Single
-    val relatedPosts = state.relatedPosts
     // Read at tap time: the filtered list is rebuilt on every like, and cards must not recompose for it.
     val currentFeed by rememberUpdatedState(feed)
     TwoColumnProjectedPostStaggeredGrid(
@@ -185,18 +187,7 @@ private fun SearchResultsGrid(
             )
         },
         shelfContent = {
-            FeedRelatedPostsShelf(
-                state = relatedPosts,
-                presentation = feed.related,
-                environment = cards,
-                recoverPostMedia = recoverPostMedia,
-                onOpenPost = { posts, index -> onAction(SearchAction.OpenRelatedResult(index, posts)) },
-                onLongPress = openPostActions,
-                onDismiss = { onAction(SearchAction.DismissRelatedPosts) },
-                onRetry = { onAction(SearchAction.RetryRelatedPosts) },
-                onPreviousPage = { onAction(SearchAction.ShowPreviousRelatedPosts) },
-                onNextPage = { onAction(SearchAction.ShowNextRelatedPosts) },
-            )
+            FeedRelatedPostsShelf(related, feed.related, cards, openPostActions, recoverPostMedia)
         },
     )
 }

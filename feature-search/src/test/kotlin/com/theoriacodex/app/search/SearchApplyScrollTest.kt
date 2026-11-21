@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.related.testRelatedShelf
 import com.theoriacodex.app.feed.FeedCursor
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
@@ -156,6 +157,7 @@ class SearchApplyScrollTest {
             MaterialTheme {
                 SearchScreen(
                     state = state.value,
+                    related = testRelatedShelf(),
                     creatorBrowsingSources = emptySet(),
                     fabRestoreState = FeedFabRestoreState().withSearchAnimationFilter(state.value.query.draft.mode) {
                         it.copy(animatedOnly = animatedOnly)

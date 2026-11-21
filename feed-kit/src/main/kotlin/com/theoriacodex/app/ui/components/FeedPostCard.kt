@@ -10,6 +10,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.related.RelatedPostsUiState
+import com.theoriacodex.app.related.RelatedShelfBinding
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.tags.LocalPostTagSearchActions
 import com.theoriacodex.app.viewer.PixivUgoiraClient
@@ -139,6 +140,30 @@ fun FeedRelatedPostsShelf(
         onRetry = onRetry,
         onPreviousPage = onPreviousPage,
         onNextPage = onNextPage,
+    )
+}
+
+/** The shelf [shelf] drives: its controller handles dismiss, retry and paging, and its posts open through the binding. */
+@Composable
+fun FeedRelatedPostsShelf(
+    shelf: RelatedShelfBinding,
+    presentation: RelatedFeedPresentation,
+    environment: FeedCardEnvironment,
+    onLongPress: (Post) -> Unit,
+    recoverPostMedia: (suspend (Post, ImageRef) -> Post?)? = null,
+) {
+    val controller = shelf.controller
+    FeedRelatedPostsShelf(
+        state = shelf.state,
+        presentation = presentation,
+        environment = environment,
+        onOpenPost = shelf.onOpenPost,
+        onLongPress = onLongPress,
+        onDismiss = { controller.clear() },
+        onRetry = controller::retry,
+        onPreviousPage = controller::showPreviousPage,
+        onNextPage = controller::showNextPage,
+        recoverPostMedia = recoverPostMedia,
     )
 }
 

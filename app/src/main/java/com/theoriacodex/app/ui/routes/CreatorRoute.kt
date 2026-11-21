@@ -113,7 +113,11 @@ private fun CreatorRouteContent(
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
     callbacks: CreatorRouteCallbacks,
 ) {
+    val related = rememberFeedRelatedShelf(state.relatedPosts, owner.related) { posts, index ->
+        owner.onAction(CreatorAction.OpenRelatedResult(index, posts))
+    }
     CreatorProfileScreen(
+        related = related,
         followed = config.followed,
         onToggleFollow = { state.creator?.let { callbacks.onToggleFollow(it, state.uploads) } },
         state = state,

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.related.testRelatedShelf
 import android.app.Application
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -45,7 +46,7 @@ class SearchInputSubmissionTest {
         val actions = mutableListOf<SearchAction>()
         compose.setContent { MaterialTheme { Box(Modifier.size(400.dp, 700.dp)) {
             SearchScreen(
-                state = state.value, creatorBrowsingSources = emptySet(), onAction = { actions += it },
+                state = state.value, related = testRelatedShelf(), creatorBrowsingSources = emptySet(), onAction = { actions += it },
                 resolvePostById = { null }, recoverPostMedia = { _, _ -> null },
                 onRequestSaveToCodex = {}, onSaveToDevice = {},
             )
@@ -125,6 +126,7 @@ class SearchInputSubmissionTest {
                 Box(Modifier.size(400.dp, 700.dp)) {
                     SearchScreen(
                         state = state.value,
+                        related = testRelatedShelf(),
                         creatorBrowsingSources = emptySet(),
                         onAction = { action ->
                             actions += action

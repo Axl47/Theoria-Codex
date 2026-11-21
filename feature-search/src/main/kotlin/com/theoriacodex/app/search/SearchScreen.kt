@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.related.RelatedShelfBinding
 import com.theoriacodex.app.ui.components.LocalPostMenuActions
 import com.theoriacodex.app.ui.components.FeedMarks
 import com.theoriacodex.app.ui.components.FeedDurations
@@ -72,6 +73,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun SearchScreen(
     state: SearchUiState,
+    related: RelatedShelfBinding,
     creatorBrowsingSources: Set<SourceKey>,
     onAction: (SearchAction) -> Unit,
     resolvePostById: suspend (PostId) -> Post?,
@@ -106,7 +108,7 @@ fun SearchScreen(
     val gridState = rememberRetainedFeedGridState("search")
     SearchTabReselectEffect(state.restoration, gridState, onAction)
     val marks = FeedMarks(likedPostIds, savedPostIds, watchedPostIds, pendingLikePostIds)
-    val feed = rememberSearchFeed(state, fabRestoreState, marks, durations)
+    val feed = rememberSearchFeed(state, related.state, fabRestoreState, marks, durations)
     val serverFilters = state.query.serverFilters()
     val filterScroll = rememberFeedScrollSignal()
     var filterSheetBaseline by remember { mutableStateOf(serverFilters) }
@@ -129,7 +131,7 @@ fun SearchScreen(
         }
     ) { padding ->
         SearchChromeLayout(
-            padding, state, feed, fabRestoreState, chrome, oldSearchBar, sourcePicker, applyDraft, gridState, pageDemand, inputFocus,
+            padding, state, related, feed, fabRestoreState, chrome, oldSearchBar, sourcePicker, applyDraft, gridState, pageDemand, inputFocus,
             pixivUgoiraClient, likedPostIds, durations, onToggleLike, resolvePostById, recoverPostMedia, onAction,
         ) { post ->
             inputFocus.clear()
@@ -138,7 +140,7 @@ fun SearchScreen(
     }
     actionPost.post?.let { post ->
         SearchPostSheet(
-            post, actionPost, state, creatorBrowsingSources, onAction, onSaveToDevice,
+            post, actionPost, state, related, creatorBrowsingSources, onAction, onSaveToDevice,
             onRequestSaveToCodex, onAddFavoriteTag, applyDraft,
             liked = post.id in likedPostIds, onToggleLike = onToggleLike,
         )
@@ -194,6 +196,7 @@ private fun SearchFilterFab(
 private fun SearchChromeLayout(
     padding: PaddingValues,
     state: SearchUiState,
+    related: RelatedShelfBinding,
     feed: SearchFeed,
     fabRestoreState: FeedFabRestoreState,
     chrome: SearchChromeState,
@@ -225,7 +228,7 @@ private fun SearchChromeLayout(
         val cards = rememberFeedCardEnvironment(
             pixivUgoiraClient, likedPostIds, feed.durationMetadata.knownDurationMsByPostId, durations, onToggleLike,
         )
-        SearchResultsBody(state, feed, cards, gridState, pageDemand, inputFocus, resolvePostById, recoverPostMedia, onAction, openPostActions)
+        SearchResultsBody(state, related, feed, cards, gridState, pageDemand, inputFocus, resolvePostById, recoverPostMedia, onAction, openPostActions)
     }
 }
 
@@ -355,6 +358,7 @@ private fun SearchPostSheet(
     post: Post,
     actionPost: SearchActionPostState,
     state: SearchUiState,
+    related: RelatedShelfBinding,
     creatorBrowsingSources: Set<SourceKey>,
     onAction: (SearchAction) -> Unit,
     onSaveToDevice: (Post) -> Unit,
@@ -376,7 +380,7 @@ private fun SearchPostSheet(
         saveToCodexQuery = state.query.applied,
         onOpenCreatorProfile = menuActions.openCreator,
         onOpenLegacyCreatorProfile = { menuActions.openPostCreator(post) },
-        onShowRelated = { onAction(SearchAction.ShowRelatedPosts(post)) },
+        onShowRelated = { related.controller.show(post) },
         tagContent = {
             PostTagActionSection(
                 draftQuery = state.query.draft,

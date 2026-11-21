@@ -75,6 +75,8 @@ import com.theoriacodex.app.ui.components.pagedFeedFooterMessage
 import com.theoriacodex.app.ui.components.FeedCardEnvironment
 import com.theoriacodex.app.ui.components.FeedPostActionSheet
 import com.theoriacodex.app.ui.components.FeedPostCard
+import com.theoriacodex.app.related.RelatedPostsUiState
+import com.theoriacodex.app.related.RelatedShelfBinding
 import com.theoriacodex.app.ui.components.FeedRelatedPostsShelf
 import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
 import com.theoriacodex.app.viewer.PixivUgoiraClient
@@ -88,6 +90,7 @@ import com.theoriacodex.domain.model.SourceKey
 @Composable
 fun ForYouScreen(
     state: ForYouUiState,
+    related: RelatedShelfBinding,
     likedPostIds: Set<PostId>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     durations: FeedDurations = FeedDurations.NONE,
@@ -112,7 +115,7 @@ fun ForYouScreen(
     var showSortSheet by remember { mutableStateOf(false) }
     var showSourceMenu by remember { mutableStateOf(false) }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
-    val feed = rememberForYouFeed(state, fabRestoreState, durations)
+    val feed = rememberForYouFeed(state, related.state, fabRestoreState, durations)
     LaunchedEffect(feed.durationFilterActive) { durations.onFilterChanged(feed.durationFilterActive) }
     DurationRouteEnvironmentEffect(gridState, durations.onEnvironmentChanged)
     val filterScroll = rememberFeedScrollSignal()
@@ -138,7 +141,7 @@ fun ForYouScreen(
             }
         } else {
             ForYouResults(
-                state, feed, cards, gridState, pageDemand, filterScroll, filterLabels, clearFilters, showSourceMenu,
+                state, related, feed, cards, gridState, pageDemand, filterScroll, filterLabels, clearFilters, showSourceMenu,
                 onSourceMenuChange = { showSourceMenu = it }, onShowFilters = { showSortSheet = true },
                 onOpenSourceAccounts = onOpenSourceAccounts,
                 onAction = onAction, onLongPress = { selectedActionPost = it },
@@ -150,7 +153,7 @@ fun ForYouScreen(
         FeedPostActionSheet(
             post, creatorBrowsingSources, { selectedActionPost = null }, onSaveToDevice, onRequestSaveToCodex,
             onGoToSearch, liked = post.id in likedPostIds, onToggleLike = onToggleLike,
-            onShowRelated = { onAction(ForYouAction.ShowRelatedPosts(post)) },
+            onShowRelated = { related.controller.show(post) },
         )
     }
 
@@ -184,6 +187,7 @@ private fun forYouFilterLabels(sortMode: SortMode, feed: FeedView): List<String>
 @Composable
 private fun ForYouResults(
     state: ForYouUiState,
+    related: RelatedShelfBinding,
     feed: FeedView,
     cards: FeedCardEnvironment,
     gridState: LazyStaggeredGridState,
@@ -239,7 +243,7 @@ private fun ForYouResults(
                 onOpenAccounts = onOpenSourceAccounts,
             )
             FeedContinueLoading(pageDemand)
-            ForYouFeedBody(state, feed, cards, gridState, onAction, onLongPress)
+            ForYouFeedBody(state, related, feed, cards, gridState, onAction, onLongPress)
         }
     }
 }
@@ -254,6 +258,7 @@ private fun FeedView.filterHomePosts(posts: List<Post>): List<Post> = filterSear
 @Composable
 private fun rememberForYouFeed(
     state: ForYouUiState,
+    relatedState: RelatedPostsUiState,
     fabRestoreState: FeedFabRestoreState,
     durations: FeedDurations,
 ): FeedView {
@@ -275,7 +280,7 @@ private fun rememberForYouFeed(
         } else state.results
     }
     return rememberFeedView(
-        "for-you", state.results, visibilityFilters, durations, state.relatedPosts, durationPosts = durationPosts,
+        "for-you", state.results, visibilityFilters, durations, relatedState, durationPosts = durationPosts,
     )
 }
 
@@ -391,6 +396,7 @@ private fun forYouFooterMessage(state: ForYouUiState, feed: FeedView): String? =
 @Composable
 private fun ForYouFeedBody(
     state: ForYouUiState,
+    related: RelatedShelfBinding,
     feed: FeedView,
     cards: FeedCardEnvironment,
     gridState: LazyStaggeredGridState,
@@ -439,17 +445,7 @@ private fun ForYouFeedBody(
                         )
                     },
                     shelf = {
-                        FeedRelatedPostsShelf(
-                            state = state.relatedPosts,
-                            presentation = feed.related,
-                            environment = cards,
-                            onOpenPost = { posts, index -> onAction(ForYouAction.OpenRelatedResult(index, posts)) },
-                            onLongPress = onLongPress,
-                            onDismiss = { onAction(ForYouAction.DismissRelatedPosts) },
-                            onRetry = { onAction(ForYouAction.RetryRelatedPosts) },
-                            onPreviousPage = { onAction(ForYouAction.ShowPreviousRelatedPosts) },
-                            onNextPage = { onAction(ForYouAction.ShowNextRelatedPosts) },
-                        )
+                        FeedRelatedPostsShelf(related, feed.related, cards, onLongPress)
                     },
                 )
             }

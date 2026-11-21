@@ -171,29 +171,6 @@ class ForYouViewModel(
             return
         }
         if (home.handle(action)) return
-        when (action) {
-            is ForYouAction.ShowRelatedPosts -> {
-                relatedPosts.show(action.post)
-                return
-            }
-            ForYouAction.RetryRelatedPosts -> {
-                relatedPosts.retry()
-                return
-            }
-            ForYouAction.DismissRelatedPosts -> {
-                relatedPosts.clear()
-                return
-            }
-            ForYouAction.ShowPreviousRelatedPosts -> {
-                relatedPosts.showPreviousPage()
-                return
-            }
-            ForYouAction.ShowNextRelatedPosts -> {
-                relatedPosts.showNextPage()
-                return
-            }
-            else -> Unit
-        }
         if (action is ForYouAction.ReplaySearch && !(environmentSynchronized && sourceAvailabilitySynchronized)) {
             mutableState.value = mutableState.value.copy(home = mutableState.value.home.copy(visible = false))
             pendingReplaySearch = action

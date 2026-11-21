@@ -1,5 +1,6 @@
 package com.theoriacodex.app.creator
 
+import com.theoriacodex.app.related.testRelatedShelf
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
@@ -33,6 +34,7 @@ class CreatorFeedFailureTest {
                             queryHash = "creator:PIXIV:artist",
                             errorMessage = "Pixiv could not be reached.",
                         ),
+                        related = testRelatedShelf(),
                         likedPostIds = emptySet(),
                         savedPostIds = emptySet(),
                         onToggleLike = {},

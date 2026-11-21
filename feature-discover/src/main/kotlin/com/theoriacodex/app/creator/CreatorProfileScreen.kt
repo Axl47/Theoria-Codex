@@ -75,6 +75,7 @@ import com.theoriacodex.app.ui.components.FeedPostCard
 import com.theoriacodex.app.ui.components.FeedRelatedPostsShelf
 import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
 import com.theoriacodex.app.related.RelatedPostsUiState
+import com.theoriacodex.app.related.RelatedShelfBinding
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.AccountFeed
@@ -96,6 +97,7 @@ fun CreatorProfileScreen(
     resolvePostById: (suspend (PostId) -> Post?)? = null,
     onToggleLike: (Post) -> Unit,
     onAction: (CreatorAction) -> Unit,
+    related: RelatedShelfBinding,
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
     onOpenUrl: (String) -> Unit,
@@ -106,7 +108,7 @@ fun CreatorProfileScreen(
     var showFilterSheet by remember { mutableStateOf(false) }
     // Each feed keeps its own scroll position and duration reveal order.
     val gridState = rememberRetainedFeedGridState(state.selectedFeed.retainKey)
-    val feed = rememberCreatorFeed(state, pendingLikePostIds, likedPostIds, savedPostIds, fabRestoreState, durations)
+    val feed = rememberCreatorFeed(state, related.state, pendingLikePostIds, likedPostIds, savedPostIds, fabRestoreState, durations)
     LaunchedEffect(feed.durationFilterActive) { durations.onFilterChanged(feed.durationFilterActive) }
     DurationRouteEnvironmentEffect(gridState, durations.onEnvironmentChanged)
     val pageDemand = rememberCreatorPageDemand(state, feed, gridState, onAction)
@@ -141,7 +143,7 @@ fun CreatorProfileScreen(
             val account = state.feeds.isNotEmpty()
             val followEnabled = !state.uploadsRefreshing
             CreatorHeader(state, creator, account, followed, followEnabled, onToggleFollow, onOpenUrl, onAction)
-            CreatorFeedBody(state, feed, cards, gridState, pageDemand, onAction, onLongPress = { selectedActionPost = it })
+            CreatorFeedBody(state, related, feed, cards, gridState, pageDemand, onAction, onLongPress = { selectedActionPost = it })
         }
     }
     if (showFilterSheet) {
@@ -156,7 +158,7 @@ fun CreatorProfileScreen(
             post, onDismiss = { selectedActionPost = null }, onSaveToDevice = { onSaveToDevice(post) },
             liked = post.id in likedPostIds, onToggleLike = { onToggleLike(post) },
             onSaveToCodex = { onRequestSaveToCodex(post) },
-            onShowRelated = { onAction(CreatorAction.ShowRelatedPosts(post)) },
+            onShowRelated = { related.controller.show(post) },
         ) { PostTagActionSection(post) }
     }
 }
@@ -190,6 +192,7 @@ private fun rememberCreatorPageDemand(
 @Composable
 private fun rememberCreatorFeed(
     state: CreatorUiState,
+    relatedState: RelatedPostsUiState,
     pendingLikePostIds: Set<PostId>,
     likedPostIds: Set<PostId>,
     savedPostIds: Set<PostId>,
@@ -212,7 +215,7 @@ private fun rememberCreatorFeed(
     val marks = remember(likedPostIds, savedPostIds, pendingLikePostIds) {
         FeedMarks(liked = likedPostIds, saved = savedPostIds, pendingLikes = pendingLikePostIds)
     }
-    return rememberFeedView(state.selectedFeed.retainKey, state.results, visibilityFilters, durations, state.relatedPosts, marks)
+    return rememberFeedView(state.selectedFeed.retainKey, state.results, visibilityFilters, durations, relatedState, marks)
 }
 
 @Composable
@@ -380,6 +383,7 @@ private fun CreatorShareMenu(profileUrl: String) {
 @Composable
 private fun CreatorFeedBody(
     state: CreatorUiState,
+    related: RelatedShelfBinding,
     feed: FeedView,
     cards: FeedCardEnvironment,
     gridState: LazyStaggeredGridState,
@@ -401,13 +405,13 @@ private fun CreatorFeedBody(
             FeedFailureTile(state.errorMessage.orEmpty(), onRetry = { onAction(CreatorAction.Refresh) }, retriesOnReconnect = false)
         }
 
-        feed.visiblePosts.isEmpty() && state.relatedPosts == RelatedPostsUiState.Idle -> {
+        feed.visiblePosts.isEmpty() && related.state == RelatedPostsUiState.Idle -> {
             FeedEmptyTile(message = creatorEmptyMessage(state, feed))
         }
 
         // Pull to refresh is how paging resumes after a dismissed page failure.
         else -> PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = { onAction(CreatorAction.Refresh) }) {
-            CreatorGrid(state, feed, cards, gridState, onAction, onLongPress)
+            CreatorGrid(state, related, feed, cards, gridState, onAction, onLongPress)
         }
     }
 }
@@ -415,6 +419,7 @@ private fun CreatorFeedBody(
 @Composable
 private fun CreatorGrid(
     state: CreatorUiState,
+    related: RelatedShelfBinding,
     feed: FeedView,
     cards: FeedCardEnvironment,
     gridState: LazyStaggeredGridState,
@@ -449,17 +454,7 @@ private fun CreatorGrid(
             )
         },
         shelf = {
-            FeedRelatedPostsShelf(
-                state = state.relatedPosts,
-                presentation = feed.related,
-                environment = cards,
-                onOpenPost = { posts, index -> onAction(CreatorAction.OpenRelatedResult(index, posts)) },
-                onLongPress = onLongPress,
-                onDismiss = { onAction(CreatorAction.DismissRelatedPosts) },
-                onRetry = { onAction(CreatorAction.RetryRelatedPosts) },
-                onPreviousPage = { onAction(CreatorAction.ShowPreviousRelatedPosts) },
-                onNextPage = { onAction(CreatorAction.ShowNextRelatedPosts) },
-            )
+            FeedRelatedPostsShelf(related, feed.related, cards, onLongPress)
         },
     )
 }

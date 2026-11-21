@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.ui.components.rememberFeedView
 import com.theoriacodex.app.ui.components.FeedMarks
 import com.theoriacodex.app.ui.components.FeedView
@@ -40,6 +41,7 @@ class SearchFeed(
 @Composable
 fun rememberSearchFeed(
     state: SearchUiState,
+    relatedState: RelatedPostsUiState,
     fabRestoreState: FeedFabRestoreState,
     marks: FeedMarks,
     durations: FeedDurations,
@@ -67,7 +69,7 @@ fun rememberSearchFeed(
     }
     val view = rememberFeedView(
         retainKey = "search", posts = displayResults, filters = visibilityFilters, durations = durations,
-        relatedState = state.relatedPosts, marks = marks,
+        relatedState = relatedState, marks = marks,
         durationFilterActive = !animatedDurationRange.isFullRange && !isNhentaiSourceMode,
     )
     return remember(animatedFilterActive, animatedDurationRange, isNhentaiSourceMode, displayResults, view) {

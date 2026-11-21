@@ -1,6 +1,7 @@
 package com.theoriacodex.app.codex
 
 import com.theoriacodex.app.ui.components.FeedGrid
+import com.theoriacodex.app.ui.components.FeedRelatedPostsShelf
 import com.theoriacodex.app.ui.components.FeedPostCard
 import com.theoriacodex.app.ui.components.FeedCardEnvironment
 import com.theoriacodex.app.related.RelatedPostsUiState
@@ -520,7 +521,7 @@ private fun CodexDetailGrid(
         state = gridState,
         footerMessage = footerMessage,
         modifier = Modifier.fillMaxSize().then(dragSelect),
-        shelf = { relatedShelf?.let { CodexRelatedShelf(it, feed.related, cards, onOpenPostActions) } },
+        shelf = { relatedShelf?.let { FeedRelatedPostsShelf(it, feed.related, cards, onOpenPostActions) } },
     ) { index, post ->
         CodexSelectablePostCard(
             post = post,

@@ -9,11 +9,12 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import com.theoriacodex.app.creator.state.CreatorAction
 import com.theoriacodex.app.creator.state.CreatorUiState
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.related.begin
 import com.theoriacodex.app.related.complete
+import com.theoriacodex.app.related.testRelatedController
+import com.theoriacodex.app.related.testRelatedShelf
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.CreatorProfile
@@ -40,11 +41,13 @@ class CreatorRelatedPostsScreenTest {
         ))
         val liked = mutableStateOf(false)
         val pending = mutableStateOf(false)
-        val actions = mutableListOf<CreatorAction>()
+        val related = mutableStateOf<RelatedPostsUiState>(RelatedPostsUiState.Idle)
+        val controller = testRelatedController(state = { related.value }, updateState = { related.value = it })
         compose.setContent {
             MaterialTheme {
                 CreatorProfileScreen(
                     state = state.value,
+                    related = testRelatedShelf(related.value, controller),
                     likedPostIds = if (liked.value) setOf(seed.id) else emptySet(),
                     savedPostIds = if (liked.value) setOf(seed.id) else emptySet(),
                     pendingLikePostIds = if (pending.value) setOf(seed.id) else emptySet(),
@@ -54,9 +57,7 @@ class CreatorRelatedPostsScreenTest {
                         pending.value = true
                         liked.value = true
                     },
-                    onAction = { action ->
-                        recordAction(state, actions, action)
-                    },
+                    onAction = {},
                     onRequestSaveToCodex = {},
                     onSaveToDevice = {},
                     onOpenUrl = {},
@@ -68,9 +69,7 @@ class CreatorRelatedPostsScreenTest {
         compose.onNodeWithContentDescription("Unlike post").assertIsDisplayed()
         compose.runOnIdle {
             val loading = RelatedPostsUiState.Idle.begin(seed, 0, 1)
-            state.value = state.value.copy(
-                relatedPosts = loading.complete(loading.request, emptyList(), setOf(seed.id)),
-            )
+            related.value = loading.complete(loading.request, emptyList(), setOf(seed.id))
             pending.value = false
         }
         compose.onNodeWithText("No new related posts").assertIsDisplayed()
@@ -80,18 +79,5 @@ class CreatorRelatedPostsScreenTest {
         val emptyMessage = "No uploads match the current filters."
         compose.waitUntil(5_000) { compose.onAllNodesWithText(emptyMessage).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(emptyMessage).assertIsDisplayed()
-        compose.runOnIdle { assertEquals(listOf(CreatorAction.DismissRelatedPosts), actions) }
     }
-
-    private fun recordAction(
-        state: androidx.compose.runtime.MutableState<CreatorUiState>,
-        actions: MutableList<CreatorAction>,
-        action: CreatorAction,
-    ) {
-        actions += action
-        if (action == CreatorAction.DismissRelatedPosts) {
-            state.value = state.value.copy(relatedPosts = RelatedPostsUiState.Idle)
-        }
-    }
-
 }

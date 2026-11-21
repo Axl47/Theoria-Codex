@@ -108,7 +108,7 @@ class RelatedShelfFramesTest {
                     return@CompositionLocalProvider
                 }
                 val feed = rememberSearchFeed(
-                    state, fab, FeedMarks.NONE, durations = FeedDurations(durationStates, resolveInBackground = true),
+                    state, state.relatedPosts, fab, FeedMarks.NONE, durations = FeedDurations(durationStates, resolveInBackground = true),
                 )
                 val related = feed.related
                 SideEffect {
