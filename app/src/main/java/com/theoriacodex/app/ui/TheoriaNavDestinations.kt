@@ -24,6 +24,7 @@ import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavType
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.navArgument
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.codex.CodexDetailScreen
@@ -58,6 +59,7 @@ import com.theoriacodex.app.ui.trails.forLevel
 import com.theoriacodex.app.ui.trails.rememberViewerLevel
 import com.theoriacodex.app.ui.trails.viewerForkFadeIn
 import com.theoriacodex.app.ui.trails.viewerForkFadeOut
+import com.theoriacodex.app.viewer.ViewerCoveredLifecycle
 import com.theoriacodex.app.viewer.ViewerReturnLifetime
 import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.ViewerScreenCallbacks
@@ -93,8 +95,13 @@ internal fun NavGraphBuilder.theoriaDestinations(shell: TheoriaShell, sharedScop
         popEnterTransition = { if (initialState.destination.route == AppRoute.Viewer) viewerForkFadeIn() else null },
         popExitTransition = { if (targetState.destination.route == AppRoute.Viewer) viewerForkFadeOut() else ExitTransition.None },
     ) { entry ->
-        ViewerReturnLifetime(this)
-        ViewerDestination(shell, entry)
+        // Viewer to Viewer (a fork opening, or closing to its parent) holds no card return, and the level going under
+        // stops at once, so two levels never play side by side.
+        val top by shell.navController.currentBackStackEntryAsState()
+        ViewerReturnLifetime(this) { shell.navController.currentDestination?.route != AppRoute.Viewer }
+        ViewerCoveredLifecycle(covered = top.let { it != null && it.id != entry.id && it.destination.route == AppRoute.Viewer }) {
+            ViewerDestination(shell, entry)
+        }
     }
     composable(AppRoute.Settings) { SettingsScreenDestination(shell) }
     composable(AppRoute.Triage, arguments = triageArguments) { entry -> TriageDestination(shell, entry.triageRequest()) }

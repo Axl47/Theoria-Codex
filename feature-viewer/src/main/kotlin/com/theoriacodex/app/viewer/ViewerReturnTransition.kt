@@ -7,6 +7,8 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
@@ -14,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
@@ -27,6 +30,11 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -37,14 +45,63 @@ internal const val VIEWER_RETURN_DURATION_MS = TheoriaMotion.SCREEN_MS
 internal const val VIEWER_RETURN_HOLD_MS = 700
 private const val VIEWER_RETURN_TARGET_WAIT_MS = 300L
 
-/** Keep both destinations alive while the media moves between its card and fullscreen bounds. */
+/**
+ * Keep both destinations alive while the media moves between its card and fullscreen bounds. [holdsExit] is read as an
+ * exit starts; false (an exit to another Viewer level, which has no card to return to) skips the hold.
+ */
 @Composable
-fun ViewerReturnLifetime(scope: AnimatedVisibilityScope) {
+fun ViewerReturnLifetime(scope: AnimatedVisibilityScope, holdsExit: () -> Boolean) {
     scope.transition.animateFloat(
         transitionSpec = {
-            tween(if (targetState == EnterExitState.PostExit) VIEWER_RETURN_HOLD_MS else VIEWER_RETURN_DURATION_MS)
+            tween(
+                when {
+                    targetState != EnterExitState.PostExit -> VIEWER_RETURN_DURATION_MS
+                    holdsExit() -> VIEWER_RETURN_HOLD_MS
+                    else -> 0
+                },
+            )
         }, label = "Viewer media transition lifetime",
     ) { state -> if (state == EnterExitState.Visible) 0f else 1f }
+}
+
+/**
+ * Gives [content] its host's lifecycle, but stopped while [covered]: a Viewer level that another level covers stops its
+ * playback the moment that level opens, instead of when the transition between them ends.
+ */
+@Composable
+fun ViewerCoveredLifecycle(covered: Boolean, content: @Composable () -> Unit) {
+    val host = LocalLifecycleOwner.current
+    val owner = remember(host) { CoveredLifecycleOwner(host) }
+    DisposableEffect(owner) {
+        host.lifecycle.addObserver(owner.follow)
+        onDispose { host.lifecycle.removeObserver(owner.follow) }
+    }
+    SideEffect { owner.covered = covered }
+    CompositionLocalProvider(LocalLifecycleOwner provides owner, content = content)
+}
+
+/** Follows [host]'s state, capped at CREATED while [covered]. */
+private class CoveredLifecycleOwner(private val host: LifecycleOwner) : LifecycleOwner {
+    private val registry = LifecycleRegistry(this)
+    override val lifecycle: Lifecycle get() = registry
+    val follow = LifecycleEventObserver { _, _ -> sync() }
+
+    var covered = false
+        set(value) {
+            field = value
+            sync()
+        }
+
+    init {
+        sync()
+    }
+
+    private fun sync() {
+        val hostState = host.lifecycle.currentState
+        // The registry cannot return to INITIALIZED, and a destroyed host ends it whatever the cap.
+        if (hostState == Lifecycle.State.INITIALIZED || registry.currentState == Lifecycle.State.DESTROYED) return
+        registry.currentState = if (covered && hostState != Lifecycle.State.DESTROYED) minOf(hostState, Lifecycle.State.CREATED) else hostState
+    }
 }
 
 private const val DISMISS_DRAG_RANGE_FRACTION = 0.5f
