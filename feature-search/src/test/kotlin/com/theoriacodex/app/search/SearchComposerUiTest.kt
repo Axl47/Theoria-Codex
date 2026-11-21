@@ -37,8 +37,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
+// The composer is a sheet over the results; a tall window gives its saved rows room without scrolling.
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class)
+@Config(application = Application::class, qualifiers = "w400dp-h900dp")
 class SearchComposerUiTest {
     @get:Rule val compose = createComposeRule()
     private val actions = mutableListOf<SearchAction>()
@@ -128,6 +129,8 @@ class SearchComposerUiTest {
         compose.runOnIdle { assertEquals(SearchAction.AddSavedTagGroup(group.terms), actions.last()) }
     }
 
+    // The default window: on the tall one, Robolectric never idles once the name dialog takes text.
+    @Config(qualifiers = "w320dp-h470dp")
     @Test fun `saving an or group asks for an optional name and the chip shows it`() {
         var saved: Triple<SourceKey, List<String>, String?>? = null
         val sea = SearchTermGroup(listOf(SearchTerm("sea"), SearchTerm("sky")))

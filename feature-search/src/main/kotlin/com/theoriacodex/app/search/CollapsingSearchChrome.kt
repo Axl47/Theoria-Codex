@@ -26,10 +26,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -86,21 +86,24 @@ internal fun CollapsingSearchChrome(
 }
 
 
-/** One-line search summary shown above results; tapping it opens the [SearchComposer]. */
+/**
+ * One-line summary of the search on screen, shown above results; tapping it opens the [SearchComposer], and
+ * swiping it sideways steps through [history].
+ */
 @Composable
 internal fun SearchSummaryBar(
     summary: String?,
     validationMessage: String?,
-    showSearchAction: Boolean,
     onOpen: () -> Unit,
-    onSearch: () -> Unit,
     trailing: @Composable () -> Unit,
+    history: SearchBarHistory = SearchBarHistory.None,
 ) {
+    val swipe = remember { SearchBarSwipe() }
     Surface(
         onClick = onOpen,
         shape = RoundedCornerShape(28.dp),
         color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("Search bar"),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("Search bar").searchBarHistorySwipe(history, swipe),
     ) {
         Row(
             modifier = Modifier.padding(start = 16.dp, end = 8.dp),
@@ -110,7 +113,7 @@ internal fun SearchSummaryBar(
             Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
                 text = validationMessage ?: summary ?: "Search tags",
-                modifier = Modifier.weight(1f),
+                modifier = with(swipe) { Modifier.weight(1f).followingSwipe() },
                 color = when {
                     validationMessage != null -> MaterialTheme.colorScheme.error
                     summary != null -> MaterialTheme.colorScheme.onSurface
@@ -119,7 +122,6 @@ internal fun SearchSummaryBar(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (showSearchAction) TextButton(onClick = onSearch) { Text("Search") }
             trailing()
         }
     }

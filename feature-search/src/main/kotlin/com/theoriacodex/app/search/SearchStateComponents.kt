@@ -12,16 +12,9 @@ import com.theoriacodex.app.ui.components.FeedFailureTile
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 
 @Composable
-internal fun EmptyBlock(
-    hasPendingChanges: Boolean,
-    messageOverride: String? = null,
-) {
+internal fun EmptyBlock(messageOverride: String? = null) {
     FeedEmptyTile(
-        message = messageOverride ?: if (hasPendingChanges) {
-            "Draft updated. Press Apply to refresh results."
-        } else {
-            "No results yet. Add tags and press Apply to start searching."
-        },
+        message = messageOverride ?: "No results.",
         contentPadding = 24.dp,
     )
 }

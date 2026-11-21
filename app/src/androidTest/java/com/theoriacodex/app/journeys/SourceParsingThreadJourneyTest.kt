@@ -37,7 +37,7 @@ class SourceParsingThreadJourneyTest : AppJourneyFixture() {
         activate(compose.onNodeWithContentDescription("Booru"))
         activate(compose.onNodeWithContentDescription("Danbooru"))
         addSearchTag("landscape")
-        activate(compose.onNodeWithTag("Search composer apply"))
+        submitSearch()
         val client = container.registry.providerShaped.getValue(SOURCE)
         val firstCard = searchCardTestTag(posts.getValue(SOURCE).first().id)
         compose.waitUntil(conditionDescription = "First provider page is shown", timeoutMillis = 10_000) {

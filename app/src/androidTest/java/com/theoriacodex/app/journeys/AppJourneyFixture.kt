@@ -22,6 +22,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performTouchInput
@@ -148,6 +149,13 @@ abstract class AppJourneyFixture {
     }
 
     /** Types [value] into the open Search composer and adds it as a tag. */
+    /** Runs the composer's query now and closes it, through the keyboard's Search action. */
+    protected fun submitSearch() {
+        val input = compose.onNodeWithTag("Search query input")
+        compose.waitUntil(10_000) { input.isDisplayed() }
+        input.performImeAction()
+    }
+
     protected fun addSearchTag(value: String) {
         val input = compose.onNodeWithTag("Search query input")
         compose.waitUntil(10_000) {

@@ -33,17 +33,27 @@ data class SearchUiState(
     val execution: SearchExecutionUiState = SearchExecutionUiState(),
     val restoration: SearchRestorationUiState = SearchRestorationUiState.NotStarted,
     val relatedPosts: RelatedPostsUiState = RelatedPostsUiState.Idle,
-    val searchHistory: List<SearchHistoryEntry> = emptyList(),
+    val history: SearchQueryHistory = SearchQueryHistory(),
 ) {
-    val canUndoSearch: Boolean get() = searchHistory.isNotEmpty() && execution.activeRequestId == null
+    val canUndoSearch: Boolean get() = history.canStepBack(appliedHistoryEntry())
+
+    val canRedoSearch: Boolean get() = history.canStepForward
 
     val loading: Boolean
         get() = execution.activeKind != null && execution.activeKind != SearchRequestKind.PAGE
 
-    /** A new query/source must have its own loading surface. */
+    /** Every search is live, so the results on screen stay until the next search's results replace them. */
     val retainsResultsWhileRefreshing: Boolean
-        get() = loading && content.results.isNotEmpty() && execution.submittedQuery == query.applied &&
-            query.draftSourceScope == query.appliedSourceScope
+        get() = loading && content.results.isNotEmpty()
+
+    /** The search on screen is running again, so pulling to refresh shows its own indicator. */
+    val refreshingAppliedSearch: Boolean
+        get() = retainsResultsWhileRefreshing && execution.submittedQuery == query.applied &&
+            execution.request?.sourceScope == query.appliedSourceScope
+
+    /** A newer search is waiting out its live pause or loading while the results of the last one stay on screen. */
+    val replacingResults: Boolean
+        get() = (execution.liveSearchWaiting || loading) && !refreshingAppliedSearch
 
     val loadingMore: Boolean
         get() = execution.activeKind == SearchRequestKind.PAGE
@@ -202,6 +212,8 @@ data class SearchExecutionUiState(
     val pageRetrySource: SourceKey? = null,
     val lastCompletedRequestId: Long? = null,
     val lastCancelledRequestId: Long? = null,
+    /** A draft edit is waiting out its pause before it runs live. */
+    val liveSearchWaiting: Boolean = false,
 ) {
     val activeRequestId: Long? get() = request?.id
     val activeKind: SearchRequestKind? get() = request?.kind
@@ -276,7 +288,7 @@ sealed interface SearchRestorationUiState {
 
 /** User intent accepted by the future SearchViewModel. */
 sealed interface SearchAction {
-    /** Actions that only edit the draft query; none of them runs a search by itself. */
+    /** Actions that edit the draft query; each one runs the draft live after a short pause. */
     sealed interface DraftEdit : SearchAction
 
     data class SelectMode(val mode: QueryMode) : SearchAction
@@ -304,8 +316,14 @@ sealed interface SearchAction {
     data class AutocompleteChanged(val input: String) : SearchAction
     data object RefreshAutocomplete : SearchAction
     data object ClearAutocomplete : SearchAction
+    /** Steps back through settled searches, restoring each one's place; see [SearchQueryHistory]. */
     data object UndoSearch : SearchAction
+    /** Steps forward again after [UndoSearch]. */
+    data object RedoSearch : SearchAction
+    /** Runs the draft now, without waiting out the live pause, and settles it. */
     data object ApplyDraft : SearchAction
+    /** The user is done with the search on screen (the composer closed): a waiting edit runs now, and it settles. */
+    data object SettleSearch : SearchAction
     data class ApplyHistoricalQuery(
         val query: Query,
         val sourceScope: SearchSourceScope = SearchSourceScope.fromQuery(query),

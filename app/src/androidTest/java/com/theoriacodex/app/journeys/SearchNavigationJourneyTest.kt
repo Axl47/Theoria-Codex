@@ -44,7 +44,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
             hasAnyAncestor(hasTestTag("Search composer"))))
         activate(compose.onNodeWithContentDescription("Pixiv"))
         addSearchTag("landscape")
-        activate(compose.onNodeWithTag("Search composer apply"))
+        submitSearch()
         compose.waitUntil(10_000) {
             io { container.data.queryRepository.observeAppliedQuery("source:PIXIV").first() }
                 ?.includeTags?.contains("landscape") == true
@@ -72,7 +72,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         activate(compose.onNode(hasText("journeytag") and hasClickLabel("Include journeytag in Search")))
         activate(compose.onNode(hasText("journeytag") and hasClickLabel("Exclude journeytag from Search")))
         compose.onNodeWithText("Excluded").assertIsDisplayed()
-        compose.onNodeWithTag("Search composer apply").performClick()
+        submitSearch()
         compose.waitUntil(conditionDescription = "Provider excludes the saved tag", timeoutMillis = 10_000) {
             container.registry.requests.any { request ->
                 request.source == SourceKey.PIXIV && request.pageToken == null &&
@@ -99,10 +99,10 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         activate(compose.onNodeWithText("Add an alternative"))
         addSearchTag("green")
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        // This assertion concerns touch-driven focus dismissal, so Apply receives a real tap.
+        // Touch mode is reported if the composer fails to collapse after the keyboard submits.
         var nativeTouchModeBeforeApply = false
         scenario.onActivity { nativeTouchModeBeforeApply = it.window.decorView.isInTouchMode }
-        compose.onNodeWithTag("Search composer apply").performClick()
+        submitSearch()
         compose.waitUntil(conditionDescription = "Provider receives the grouped search", timeoutMillis = 10_000) {
             container.registry.requests.any { it.source == SourceKey.PIXIV && it.pageToken == null }
         }
@@ -165,7 +165,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
             hasAnyAncestor(hasTestTag("Search composer"))))
         activate(compose.onNodeWithContentDescription("Pixiv"))
         addSearchTag("landscape")
-        activate(compose.onNodeWithTag("Search composer apply"))
+        submitSearch()
         waitForCard(0)
         val applied = container.registry.requests.single { it.source == SourceKey.PIXIV && it.pageToken == null }.query
         val queryHash = QueryHash.from(applied)
