@@ -1,5 +1,6 @@
 package com.theoriacodex.app.creator
 
+import com.theoriacodex.app.ui.components.FeedMarks
 import com.theoriacodex.app.related.testRelatedShelf
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
@@ -35,8 +36,7 @@ class CreatorFeedFailureTest {
                             errorMessage = "Pixiv could not be reached.",
                         ),
                         related = testRelatedShelf(),
-                        likedPostIds = emptySet(),
-                        savedPostIds = emptySet(),
+                        marks = FeedMarks.NONE,
                         onToggleLike = {},
                         onAction = {},
                         onRequestSaveToCodex = {},

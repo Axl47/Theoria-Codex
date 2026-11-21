@@ -89,9 +89,7 @@ fun CreatorProfileScreen(
     state: CreatorUiState,
     followed: Boolean = false,
     onToggleFollow: () -> Unit = {},
-    likedPostIds: Set<PostId>,
-    pendingLikePostIds: Set<PostId> = emptySet(),
-    savedPostIds: Set<PostId>,
+    marks: FeedMarks,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     durations: FeedDurations = FeedDurations.NONE,
     resolvePostById: (suspend (PostId) -> Post?)? = null,
@@ -108,7 +106,7 @@ fun CreatorProfileScreen(
     var showFilterSheet by remember { mutableStateOf(false) }
     // Each feed keeps its own scroll position and duration reveal order.
     val gridState = rememberRetainedFeedGridState(state.selectedFeed.retainKey)
-    val feed = rememberCreatorFeed(state, related.state, pendingLikePostIds, likedPostIds, savedPostIds, fabRestoreState, durations)
+    val feed = rememberCreatorFeed(state, related.state, marks, fabRestoreState, durations)
     LaunchedEffect(feed.durationFilterActive) { durations.onFilterChanged(feed.durationFilterActive) }
     DurationRouteEnvironmentEffect(gridState, durations.onEnvironmentChanged)
     val pageDemand = rememberCreatorPageDemand(state, feed, gridState, onAction)
@@ -118,7 +116,7 @@ fun CreatorProfileScreen(
         return
     }
     val cards = rememberFeedCardEnvironment(
-        pixivUgoiraClient, likedPostIds, feed.durations.knownDurationMsByPostId, durations, onToggleLike, resolvePostById,
+        pixivUgoiraClient, marks.liked, feed.durations.knownDurationMsByPostId, durations, onToggleLike, resolvePostById,
     )
     val filterScroll = rememberFeedScrollSignal()
     val clearFilters: () -> () -> Unit = { clearCreatorFilters(fabRestoreState, onFabRestoreStateChange) }
@@ -156,7 +154,7 @@ fun CreatorProfileScreen(
     selectedActionPost?.let { post ->
         PostActionSheet(
             post, onDismiss = { selectedActionPost = null }, onSaveToDevice = { onSaveToDevice(post) },
-            liked = post.id in likedPostIds, onToggleLike = { onToggleLike(post) },
+            liked = post.id in marks.liked, onToggleLike = { onToggleLike(post) },
             onSaveToCodex = { onRequestSaveToCodex(post) },
             onShowRelated = { related.controller.show(post) },
         ) { PostTagActionSection(post) }
@@ -193,9 +191,7 @@ private fun rememberCreatorPageDemand(
 private fun rememberCreatorFeed(
     state: CreatorUiState,
     relatedState: RelatedPostsUiState,
-    pendingLikePostIds: Set<PostId>,
-    likedPostIds: Set<PostId>,
-    savedPostIds: Set<PostId>,
+    marks: FeedMarks,
     fabRestoreState: FeedFabRestoreState,
     durations: FeedDurations,
 ): FeedView {
@@ -211,9 +207,6 @@ private fun rememberCreatorFeed(
             hideSaved = hideSaved,
             animatedDurationRange = AnimatedDurationRange(minBucket = durationMinBucket, maxBucket = durationMaxBucket),
         )
-    }
-    val marks = remember(likedPostIds, savedPostIds, pendingLikePostIds) {
-        FeedMarks(liked = likedPostIds, saved = savedPostIds, pendingLikes = pendingLikePostIds)
     }
     return rememberFeedView(state.selectedFeed.retainKey, state.results, visibilityFilters, durations, relatedState, marks)
 }

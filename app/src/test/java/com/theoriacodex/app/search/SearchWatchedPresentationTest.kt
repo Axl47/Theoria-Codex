@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.ui.components.FeedMarks
 import com.theoriacodex.app.related.testRelatedShelf
 import android.app.Application
 import androidx.compose.foundation.layout.Box
@@ -65,7 +66,7 @@ class SearchWatchedPresentationTest {
                             state = SearchUiState(content = SearchContentUiState(results = listOf(post), hasExecutedSearch = true)),
                             related = testRelatedShelf(),
                             creatorBrowsingSources = emptySet(), onAction = {},
-                            watchedPostIds = setOf(post.id),
+                            marks = FeedMarks(watched = setOf(post.id)),
                             resolvePostById = { null }, recoverPostMedia = { _, _ -> null },
                             onRequestSaveToCodex = {}, onSaveToDevice = {},
                         )

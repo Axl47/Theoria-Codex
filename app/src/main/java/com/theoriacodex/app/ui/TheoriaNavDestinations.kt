@@ -227,12 +227,10 @@ private fun CreatorDestination(shell: TheoriaShell) {
             mediaDurationCoordinator = shell.features.mediaDurationCoordinator,
             pixivUgoiraClient = shell.sources.pixivUgoiraClient,
             config = CreatorRouteConfig(
-                pendingLikePostIds = shell.pendingLikePostIds[state.activeProfile.profileId].orEmpty(),
+                marks = state.feedMarks(shell.pendingLikePostIds[state.activeProfile.profileId].orEmpty()),
                 followed = state.settings.followedCreators.any { it.creator.followKey() == creator.followKey() },
                 activeCreator = creator,
                 availableSources = state.availableSources,
-                likedPostIds = state.likedPostIds,
-                savedPostIds = state.savedPostIds,
                 resolveUnknownAnimatedDurations = state.settings.contentFilters.resolveUnknownAnimatedDurations,
             ),
             fabRestoreState = fabRestoreState,

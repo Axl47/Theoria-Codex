@@ -1,5 +1,6 @@
 package com.theoriacodex.app.creator
 
+import com.theoriacodex.app.ui.components.FeedMarks
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
@@ -48,9 +49,11 @@ class CreatorRelatedPostsScreenTest {
                 CreatorProfileScreen(
                     state = state.value,
                     related = testRelatedShelf(related.value, controller),
-                    likedPostIds = if (liked.value) setOf(seed.id) else emptySet(),
-                    savedPostIds = if (liked.value) setOf(seed.id) else emptySet(),
-                    pendingLikePostIds = if (pending.value) setOf(seed.id) else emptySet(),
+                    marks = FeedMarks(
+                        liked = if (liked.value) setOf(seed.id) else emptySet(),
+                        saved = if (liked.value) setOf(seed.id) else emptySet(),
+                        pendingLikes = if (pending.value) setOf(seed.id) else emptySet(),
+                    ),
                     fabRestoreState = FeedFabRestoreState(hideLiked = true, hideSaved = true),
                     onToggleLike = { post ->
                         assertEquals(seed.id, post.id)

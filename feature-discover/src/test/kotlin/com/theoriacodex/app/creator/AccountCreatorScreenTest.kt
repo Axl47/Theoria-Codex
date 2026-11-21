@@ -1,5 +1,6 @@
 package com.theoriacodex.app.creator
 
+import com.theoriacodex.app.ui.components.FeedMarks
 import com.theoriacodex.app.related.testRelatedShelf
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
@@ -36,8 +37,7 @@ class AccountCreatorScreenTest {
                 CreatorProfileScreen(
                     state = state,
                     related = testRelatedShelf(),
-                    likedPostIds = emptySet(),
-                    savedPostIds = emptySet(),
+                    marks = FeedMarks.NONE,
                     onToggleLike = {},
                     onAction = { actions += it },
                     onRequestSaveToCodex = {},
