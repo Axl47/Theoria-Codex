@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.related.testRelatedShelf
 import android.app.Application
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -43,10 +44,9 @@ class SearchRefreshPresentationTest {
         val actions = mutableListOf<SearchAction>()
         compose.setContent {
             MaterialTheme { Box(Modifier.size(400.dp, 700.dp)) {
-                SearchScreen(state.value, emptySet(), actions::add,
+                SearchScreen(state.value, testRelatedShelf(), emptySet(), actions::add,
                     resolvePostById = { null }, recoverPostMedia = { _, _ -> null },
-                    tagVideoCountProvider = { _, _ -> null }, fetchTagVideoCounts = { _, _ -> emptyMap() },
-                    onOpenCreatorProfile = {}, onOpenLegacyCreatorProfile = {}, onRequestSaveToCodex = {}, onSaveToDevice = {})
+ onRequestSaveToCodex = {}, onSaveToDevice = {})
             } }
         }
         val card = compose.onNodeWithTag(searchCardTestTag(post.id))
@@ -69,10 +69,9 @@ class SearchRefreshPresentationTest {
         compose.setContent {
             MaterialTheme { Box(Modifier.size(400.dp, 700.dp)) {
                 SearchScreen(
-                    state = state.value, creatorBrowsingSources = emptySet(), onAction = {},
+                    state = state.value, related = testRelatedShelf(), creatorBrowsingSources = emptySet(), onAction = {},
                     resolvePostById = { null }, recoverPostMedia = { _, _ -> null },
-                    tagVideoCountProvider = { _, _ -> null }, fetchTagVideoCounts = { _, _ -> emptyMap() },
-                    onOpenCreatorProfile = {}, onOpenLegacyCreatorProfile = {}, onRequestSaveToCodex = {}, onSaveToDevice = {},
+ onRequestSaveToCodex = {}, onSaveToDevice = {},
                 )
             } }
         }

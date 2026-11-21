@@ -119,7 +119,7 @@ class RoomCodexCleaningTest {
         assertTrue(runCatching { repository.cleanCodex(CodexCleaningRequest(profile, "target", setOf("source", "missing"))) }.isFailure)
         assertEquals(setOf(shared.id), ids("target"))
         val snapshot = repository.cleanCodex(CodexCleaningRequest(profile, "target", setOf("source")))
-        repository.deleteCodex("target")
+        repository.deleteCodexForUndo("target")
         assertTrue(runCatching { repository.restoreCleanedCodex(snapshot) }.isFailure)
         assertEquals(null, repository.observeCodex("target").first())
         assertEquals(setOf(shared.id), ids("source"))

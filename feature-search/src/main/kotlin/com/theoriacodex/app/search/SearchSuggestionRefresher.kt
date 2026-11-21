@@ -3,7 +3,6 @@ package com.theoriacodex.app.search
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.search.state.withAutocompleteResult
 import com.theoriacodex.app.search.state.withSuggestionInput
-import com.theoriacodex.app.search.state.withTrendingSuggestions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -38,17 +37,17 @@ internal class SearchSuggestionRefresher(
         val localState = state.value
         autocompleteJob = scope.launch {
             val cached = withContext(dispatcher) {
-                coordinator.cachedAutocomplete(
-                    localState.query.draft, localState.query.draftSourceScope,
-                    localState.query.selectedScope, input, localState.suggestions.trending,
+                coordinator.suggestions.cachedAutocomplete(
+                    localState.query.draft, localState.query.draftSources,
+                    localState.query.selectedScope, input,
                 )
             }
             publishAutocompleteIfCurrent(generation, cached)
             if (autocompleteDelayMs > 0) delay(autocompleteDelayMs)
             val result = withContext(dispatcher) {
-                coordinator.fetchAutocomplete(
-                    localState.query.draft, localState.query.draftSourceScope,
-                    localState.query.selectedScope, input, localState.suggestions.trending,
+                coordinator.suggestions.fetchAutocomplete(
+                    localState.query.draft, localState.query.draftSources,
+                    localState.query.selectedScope, input,
                     onUpdate = { update ->
                         withContext(Dispatchers.Main.immediate) { publishAutocompleteIfCurrent(generation, update) }
                     },
@@ -70,23 +69,12 @@ internal class SearchSuggestionRefresher(
         autocompleteJob = null
     }
 
+    /** Refreshes the draft's sources' trending tags in the tag store, where source autocomplete finds them. */
     fun refreshTrending() {
         trendingJob?.cancel(CancellationException("Trending refresh superseded"))
-        val requestState = state.value
+        val query = state.value.query
         trendingJob = scope.launch {
-            val cached = withContext(dispatcher) {
-                coordinator.cachedTrending(requestState.query.draft, requestState.query.draftSourceScope)
-            }
-            if (cached.isNotEmpty()) state.value = state.value.withTrendingSuggestions(cached)
-            val trending = withContext(dispatcher) {
-                coordinator.fetchTrending(requestState.query.draft, requestState.query.draftSourceScope)
-            }
-            coroutineContext.ensureActive()
-            val current = state.value
-            if (current.query.draft != requestState.query.draft ||
-                current.query.draftSourceScope != requestState.query.draftSourceScope
-            ) return@launch
-            state.value = current.withTrendingSuggestions(trending)
+            withContext(dispatcher) { coordinator.suggestions.fetchTrending(query.draft, query.draftSources) }
         }
     }
 }

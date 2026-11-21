@@ -7,7 +7,6 @@ import androidx.lifecycle.viewModelScope
 import com.theoriacodex.app.search.state.withAcceptedSearchHistory
 import com.theoriacodex.app.search.state.CachedFirstPage
 import com.theoriacodex.app.search.state.SearchAction
-import com.theoriacodex.app.search.state.SearchDraftContext
 import com.theoriacodex.app.search.state.SearchDraftReducer
 import com.theoriacodex.app.search.state.SearchEffect
 import com.theoriacodex.app.search.state.SearchRequest
@@ -15,7 +14,9 @@ import com.theoriacodex.app.search.state.SearchRequestKind
 import com.theoriacodex.app.search.state.SearchRestorationUiState
 import com.theoriacodex.app.search.state.SearchStateChange
 import com.theoriacodex.app.search.state.SearchStateReducer
+import com.theoriacodex.app.search.state.SearchSuggestionsUiState
 import com.theoriacodex.app.search.state.SearchUiState
+import com.theoriacodex.app.search.state.reconciledWith
 import com.theoriacodex.app.search.state.allowsScrollPersistence
 import com.theoriacodex.app.search.state.openScrollRequestId
 import com.theoriacodex.app.search.state.withResolvedPosts
@@ -24,12 +25,17 @@ import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.related.RelatedPostsLoading
 import com.theoriacodex.app.related.RelatedPostsRouteController
 import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
+import com.theoriacodex.app.related.ViewerFeedOwner
+import com.theoriacodex.app.related.ViewerFeedSnapshot
+import com.theoriacodex.app.related.retainedLikedPostIds
+import com.theoriacodex.app.related.relatedViewerContext
 import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.ui.state.RouteStateOwner
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.AppSettings
-import com.theoriacodex.data.repository.ViewerLaunchContext
+import com.theoriacodex.data.repository.SourceRuntimeSettings
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
@@ -48,6 +54,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -74,8 +82,8 @@ class SearchViewModel(
     scrollPersistenceDelayMs: Long = DEFAULT_SCROLL_PERSISTENCE_DELAY_MS,
     scrollPersistenceDispatcher: CoroutineDispatcher = Dispatchers.IO,
     reconnections: Flow<Unit> = emptyFlow(),
-) : ViewModel(), RouteStateOwner<SearchUiState, SearchAction, SearchEffect> {
-    private val mutableState = MutableStateFlow(initialSearchState(coordinator.availableSources, executionService))
+) : ViewModel(), RouteStateOwner<SearchUiState, SearchAction, SearchEffect>, ViewerFeedOwner {
+    private val mutableState = MutableStateFlow(initialSearchState(coordinator.availableSources))
     private val effectChannel = Channel<SearchEffect>(capacity = Channel.BUFFERED)
     private val relatedDiagnostics = com.theoriacodex.app.related.RelatedPostsDiagnostics("Search", this)
     private val relatedPosts = RelatedPostsRouteController(
@@ -105,12 +113,18 @@ class SearchViewModel(
 
     override val state: StateFlow<SearchUiState> = mutableState.asStateFlow()
     override val effects: Flow<SearchEffect> = effectChannel.receiveAsFlow()
+    override val streamSource = ViewerStreamSource.SEARCH
+    override val viewerFeed: ViewerFeedSnapshot get() = mutableState.value.viewerFeed()
+    override val viewerFeedChanges: Flow<ViewerFeedSnapshot> = mutableState.map { it.viewerFeed() }.distinctUntilChanged()
+    override val related: RelatedPostsRouteController get() = relatedPosts
 
     private var nextRequestId = 0L
     private var activeRequestJob: Job? = null
     private var restorationJob: Job? = null
     private var pendingRootSearch: (() -> Unit)? = null
     private var latestEnvironmentSettings: AppSettings? = null
+    /** The source settings the state was last reconciled with; null until Search has restored. */
+    private var runtime: SourceRuntimeSettings? = null
     private val suggestionRefresh =
         SearchSuggestionRefresher(viewModelScope, mutableState, coordinator, suggestionDispatcher, autocompleteDelayMs)
     private val scrollPersistence = coordinator.scrollPersistence(scrollPersistenceDispatcher, scrollPersistenceDelayMs)
@@ -129,6 +143,11 @@ class SearchViewModel(
 
     override fun onAction(action: SearchAction) {
         when (action) {
+            SearchAction.ClearDraft -> {
+                suggestionRefresh.cancelAutocomplete()
+                applyDraftAction(SearchAction.ClearDraft)
+            }
+
             is SearchAction.DraftEdit -> applyDraftAction(action)
 
             is SearchAction.SelectMode -> selectMode(action.mode)
@@ -141,15 +160,17 @@ class SearchViewModel(
 
             SearchAction.RefreshAutocomplete -> suggestionRefresh.refreshAutocomplete(mutableState.value.suggestions.input)
 
-            SearchAction.ClearAutocomplete -> {
-                suggestionRefresh.cancelAutocomplete()
+            SearchAction.ClearAutocomplete -> clearSuggestionState()
+
+            SearchAction.UndoSearch -> {
+                undoSearch()
                 clearSuggestionState()
             }
 
-            SearchAction.UndoSearch -> mutableState.value.takeIf { it.canUndoSearch }?.searchHistory?.lastOrNull()?.let {
-                applyHistoricalQuery(it.query, it.sourceScope, undo = true)
+            SearchAction.ApplyDraft -> {
+                applyDraft()
+                clearSuggestionState()
             }
-            SearchAction.ApplyDraft -> applyDraft()
 
             is SearchAction.ApplyHistoricalQuery -> runAfterRestoration {
                 applyHistoricalQuery(action.query, action.sourceScope)
@@ -166,8 +187,6 @@ class SearchViewModel(
             SearchAction.CancelActiveRequest -> cancelActiveRequest()
 
 
-            SearchAction.DismissValidation -> dismissValidation()
-
             SearchAction.Restore -> restore()
 
             SearchAction.Resume -> {
@@ -182,17 +201,6 @@ class SearchViewModel(
                     mutableState.value.query.appliedQueryHash, listOf(action.post),
                 )
             }
-
-            is SearchAction.RelatedLikeCommitted -> relatedPosts.onLikeCommitted(action.post, action.outcome)
-            is SearchAction.ShowRelatedPosts -> relatedPosts.show(action.post)
-
-            SearchAction.RetryRelatedPosts -> relatedPosts.retry()
-
-            SearchAction.DismissRelatedPosts -> relatedPosts.clear()
-
-            SearchAction.ShowPreviousRelatedPosts -> relatedPosts.showPreviousPage()
-
-            SearchAction.ShowNextRelatedPosts -> relatedPosts.showNextPage()
 
             is SearchAction.OpenRelatedResult -> openRelatedResult(action)
 
@@ -216,61 +224,15 @@ class SearchViewModel(
         }
     }
 
-    private fun dismissValidation() {
-        mutableState.value = mutableState.value.copy(
-            query = mutableState.value.query.copy(validationMessage = null),
-        )
+    /** Runs the search before the last one again, when there is one. */
+    private fun undoSearch() {
+        mutableState.value.takeIf { it.canUndoSearch }?.searchHistory?.lastOrNull()?.let {
+            applyHistoricalQuery(it.query, it.sourceScope, undo = true)
+        }
     }
 
     private fun applyDraftAction(action: SearchAction.DraftEdit) {
-        mutateDraft {
-            when (action) {
-                is SearchAction.SelectSort -> SearchDraftReducer.mutateQuery(it) { query -> query.copy(sort = action.sort) }.state
-                is SearchAction.SetDateRange -> SearchDraftReducer.mutateQuery(it) { query -> query.copy(dateRange = action.range) }.state
-                is SearchAction.SetDateRangePreset -> {
-                    val range = action.preset.rangeEndingAt(System.currentTimeMillis())
-                    SearchDraftReducer.mutateQuery(it) { query -> query.copy(dateRange = range) }.state
-                }
-                is SearchAction.AddIncludeTerm -> SearchDraftReducer.addTerm(it, action.term, excluded = false).state
-                is SearchAction.AddExcludeTerm -> SearchDraftReducer.addTerm(it, action.term, excluded = true).state
-                is SearchAction.RemoveIncludeTerm -> SearchDraftReducer.removeTerm(it, action.term, excluded = false).state
-                is SearchAction.RemoveExcludeTerm -> SearchDraftReducer.removeTerm(it, action.term, excluded = true).state
-                is SearchAction.AddIncludeAlternative -> SearchDraftReducer.addIncludeAlternative(it, action.groupIndex, action.term).state
-                is SearchAction.SplitIncludeAlternative -> SearchDraftReducer.splitIncludeAlternative(it, action.groupIndex, action.term).state
-                is SearchAction.RemoveIncludeGroup -> SearchDraftReducer.removeIncludeGroup(it, action.groupIndex).state
-                is SearchAction.AddSavedTagGroup -> SearchDraftReducer.addIncludeGroup(it, action.terms).state
-                is SearchAction.RestoreDraftTerms -> SearchDraftReducer.restoreTerms(it, action.includeTermGroups, action.excludeTerms).state
-                is SearchAction.IncludeSuggestion -> SearchDraftReducer.addTerm(it, action.suggestion.toSearchTerm(), excluded = false).state
-                is SearchAction.ExcludeSuggestion -> SearchDraftReducer.addTerm(it, action.suggestion.toSearchTerm(), excluded = true).state
-                SearchAction.ResetDraft -> SearchDraftReducer.resetDraft(it).state
-                SearchAction.ClearDraft -> SearchDraftReducer.clearDraft(it).state
-                is SearchAction.AddPostIncludeTerm -> {
-                    SearchDraftReducer.addPostTerm(
-                        it, action.post, action.term, excluded = false,
-                        availableSources = it.query.availableSources.toSet(),
-                        supportedScopes = coordinator::supportedSearchScopes,
-                    ).state
-                }
-                is SearchAction.AddPostExcludeTerm -> {
-                    SearchDraftReducer.addPostTerm(
-                        it, action.post, action.term, excluded = true,
-                        availableSources = it.query.availableSources.toSet(),
-                        supportedScopes = coordinator::supportedSearchScopes,
-                    ).state
-                }
-                is SearchAction.AddPostIncludeAlternative ->
-                    SearchDraftReducer.addKnownIncludeAlternative(it, action.post.id.source, action.groupIndex, action.term).state
-                is SearchAction.AddSavedTagAlternative ->
-                    SearchDraftReducer.addKnownIncludeAlternative(it, action.source, action.groupIndex, action.term).state
-                is SearchAction.SetNhentaiLanguage -> SearchDraftReducer.setNhentaiLanguage(it, action.filter).state
-                is SearchAction.SetNhentaiFullColor -> SearchDraftReducer.setNhentaiFullColor(it, action.enabled).state
-                SearchAction.ResetFilters -> {
-                    SearchDraftReducer.mutateQuery(it) { query ->
-                        query.copy(sort = com.theoriacodex.domain.model.SortMode.NEWEST, dateRange = null)
-                    }.state
-                }
-            }
-        }
+        mutateDraft { SearchDraftReducer.edit(it, action, System.currentTimeMillis()) }
     }
 
     /**
@@ -279,12 +241,7 @@ class SearchViewModel(
      */
     private fun selectMode(mode: QueryMode) {
         suggestionRefresh.cancelAutocomplete()
-        val current = SearchDraftReducer.selectMode(
-            state = mutableState.value,
-            mode = mode,
-            context = draftContext(),
-            supportedScopes = coordinator::supportedSearchScopes,
-        ).state
+        val current = SearchDraftReducer.selectMode(mutableState.value, mode).state
         mutableState.value = current
         persistDraftQuery()
         suggestionRefresh.refreshTrending()
@@ -293,20 +250,10 @@ class SearchViewModel(
 
     private fun toggleTemporarySource(source: SourceKey) {
         val input = mutableState.value.suggestions.input
-        val reduction = SearchDraftReducer.toggleTemporarySource(
-            state = mutableState.value,
-            source = source,
-            context = draftContext(),
-            supportedScopes = coordinator::supportedSearchScopes,
-        )
+        val reduction = SearchDraftReducer.toggleTemporarySource(mutableState.value, source)
         if (!reduction.accepted) return
         suggestionRefresh.cancelAutocomplete()
-        mutableState.value = reduction.state.copy(
-            suggestions = reduction.state.suggestions.copy(
-                input = "",
-                canCommitInput = false,
-            ),
-        )
+        mutableState.value = reduction.state
         persistDraftQuery()
         if (input.isBlank()) suggestionRefresh.refreshTrending()
         suggestionRefresh.refreshAutocomplete(input)
@@ -329,8 +276,6 @@ class SearchViewModel(
             includeTermGroups = action.includeTermGroups,
             excludeTerms = action.excludeTerms,
             mode = action.mode,
-            availableSources = mutableState.value.query.availableSources.toSet(),
-            supportedScopes = coordinator::supportedSearchScopes,
         )
         if (!reduction.accepted) {
             effectChannel.trySend(SearchEffect.ShowMessage("Search source is unavailable"))
@@ -355,12 +300,7 @@ class SearchViewModel(
     }
 
     private fun applyHistoricalQuery(query: Query, sourceScope: SearchSourceScope, undo: Boolean = false) {
-        val reduction = SearchDraftReducer.restoreDraft(
-            state = mutableState.value,
-            query = query,
-            availableSources = mutableState.value.query.availableSources.toSet(),
-            supportedScopes = coordinator::supportedSearchScopes,
-        )
+        val reduction = SearchDraftReducer.restoreDraft(mutableState.value, query)
         if (!reduction.accepted) {
             effectChannel.trySend(SearchEffect.ShowMessage("Search source is unavailable"))
             return
@@ -379,10 +319,12 @@ class SearchViewModel(
         runDraft(acceptance = SearchAcceptance(undo, undoScrollState))
     }
 
-    private fun loadNextPage() {
+    override fun loadNextPage() {
         val current = mutableState.value
         if (current.content.canLoadMore && current.execution.continuation != null) launchPage()
     }
+
+    override fun rememberResolvedPost(post: Post) = onAction(SearchAction.RememberResolvedPost(post))
 
     private fun openRelatedResult(action: SearchAction.OpenRelatedResult) {
         if (action.index !in action.visibleResults.indices) return
@@ -390,12 +332,7 @@ class SearchViewModel(
         effectChannel.trySend(
             SearchEffect.OpenViewer(
                 posts = action.visibleResults.toList(),
-                context = ViewerLaunchContext(
-                    queryHash = "related:${request.seed.id.source.id}:${request.seed.id.sourcePostId}",
-                    startIndex = action.index,
-                    streamSource = ViewerStreamSource.RELATED,
-                    scrollOffsetHint = 0,
-                ),
+                context = relatedViewerContext(request.seed, action.index),
                 liveSearchBinding = false,
             )
         )
@@ -408,7 +345,7 @@ class SearchViewModel(
     fun synchronizeEnvironment(settings: AppSettings) {
         val previous = latestEnvironmentSettings
         latestEnvironmentSettings = settings
-        if (!coordinator.isInitialized) return
+        if (runtime == null) return
         val selectedSources = mutableState.value.query.draftSources
         val weightsChanged = previous != null && selectedSources.size > 1 &&
             com.theoriacodex.data.repository.SourceWeightSettings.weightsFor(previous.runtime, selectedSources) !=
@@ -420,42 +357,29 @@ class SearchViewModel(
 
     private fun reconcileEnvironment(settings: AppSettings, scheduleRetry: Boolean): Boolean {
         val hadExecutedSearch = mutableState.value.content.hasExecutedSearch
-        val change = coordinator.updateEnvironment(settings)
+        val settingsChanged = runtime != settings.runtime
+        runtime = settings.runtime
         val current = mutableState.value
-        val available = change.availableSources.toSet()
-        val draftScope = current.query.draftSourceScope.reconciledWith(available)
-        val appliedScope = current.query.appliedSourceScope.reconciledWith(available)
-        val draft = current.query.draft.reconciledWith(draftScope)
-        val applied = current.query.applied.reconciledWith(appliedScope)
-        val scopes = coordinator.supportedSearchScopes(draft.mode)
-        val enabledCount = when (draftScope) {
-            SearchSourceScope.GlobalUnified -> settings.runtime.enabledSources.intersect(available).size
-            is SearchSourceScope.Single -> setOf(draftScope.source).intersect(available).size
-            is SearchSourceScope.Temporary -> draftScope.sources.toSet().intersect(available).size
-        }
-        mutableState.value = current.copy(
-            query = current.query.copy(
-                draft = draft,
-                applied = applied,
-                draftSourceScope = draftScope,
-                appliedSourceScope = appliedScope,
-                availableSources = change.availableSources,
-                modeOptions = listOf(QueryMode.Unified) + change.availableSources.map(QueryMode::Source),
-                enabledSourceCount = enabledCount,
-                unifiedSources = settings.runtime.enabledSources.intersect(available),
-                sourceTermLimits = change.sourceTermLimits,
-                supportedScopes = scopes,
-                selectedScope = current.query.selectedScope.takeIf { it in scopes }
-                    ?: com.theoriacodex.domain.adapter.FacetedSearchScope.All,
-            ),
+        val availableSources = coordinator.availableSources
+        val available = availableSources.toSet()
+        val sourcesChanged = available != current.query.availableSources.toSet()
+        val next = SearchDraftReducer.reconcileEnvironment(
+            current,
+            availableSources = availableSources,
+            enabledSources = settings.runtime.enabledSources,
+            sourceTermLimits = coordinator.sourceTermLimits(),
+            scopesBySource = coordinator.searchScopesBySource(),
+            exactTagSources = coordinator.exactTagSources(),
         )
+        mutableState.value = next
+        val draftChanged = next.query.draft != current.query.draft
+        val appliedChanged = next.query.applied != current.query.applied
         persistDraftQuery()
-        val requiresRetry = hadExecutedSearch && (change.settingsChanged || change.sourcesChanged ||
-            draft != current.query.draft || applied != current.query.applied)
+        val requiresRetry = hadExecutedSearch && (settingsChanged || sourcesChanged || draftChanged || appliedChanged)
         if (requiresRetry && scheduleRetry) {
             rerunApplied(
-                relatedResetReason = "environment: runtime=${change.settingsChanged} sources=${change.sourcesChanged} " +
-                    "draft=${draft != current.query.draft} applied=${applied != current.query.applied}",
+                relatedResetReason = "environment: runtime=$settingsChanged sources=$sourcesChanged " +
+                    "draft=$draftChanged applied=$appliedChanged",
             )
         }
         return requiresRetry
@@ -537,13 +461,13 @@ class SearchViewModel(
     ) {
         relatedPosts.clear(relatedResetReason)
         cancelActiveRequest()
-        val executionKey = executionService.executionKeyFor(query, sourceScope)
+        val executionKey = searchExecutionKey(query, sourceScope)
         val request = SearchRequest(++nextRequestId, kind, query, sourceScope, executionKey)
         reduce(SearchStateChange.BeginRequest(request))
         launchRequest(request, failureMessage = "Search failed") {
             try {
                 if (paintCachedFirstPage) {
-                    val posts = executionService.cachedFirstPage(request.executionKey, request.sourceScope)
+                    val posts = executionService.cachedFirstPage(request.executionKey, sourcesFor(request.sourceScope).enabled)
                     reduce(SearchStateChange.ShowCachedFirstPage(request.id, posts))
                 }
                 executeRootRequest(request, acceptance)
@@ -577,7 +501,8 @@ class SearchViewModel(
     private suspend fun executeRootRequest(request: SearchRequest, acceptance: SearchAcceptance?) =
         withTimeout(rootRequestTimeoutMs) {
             val publisher = RootResultPublisher(request, acceptance)
-            val result = executionService.executeInitialProgressively(request.query, request.sourceScope) { partial ->
+            val sources = sourcesFor(request.sourceScope)
+            val result = executionService.executeInitial(request.query, request.sourceScope, sources) { partial ->
                 if (mutableState.value.showsPartialResults(request.id, partial)) {
                     publisher.publish(partial, SearchStateChange.PartialResult(request.id, partial))
                 }
@@ -669,7 +594,9 @@ class SearchViewModel(
         reduce(SearchStateChange.BeginRequest(request, retrySource))
         launchRequest(request, failureMessage = "Could not load more results") {
             val result = if (retrySource == null) executionService.executePage(requireNotNull(continuation))
-            else coordinator.retrySource(request.query, request.sourceScope, continuation, retrySource)
+            else executionService.retrySource(
+                request.query, request.sourceScope, sourcesFor(request.sourceScope), continuation, retrySource,
+            )
             coroutineContext.ensureActive()
             reduce(SearchStateChange.PageResult(request.id, result))
         }
@@ -690,13 +617,12 @@ class SearchViewModel(
         restorationJob = viewModelScope.launch {
             try {
                 val initialization = coordinator.initializeRoute()
-                val appliedHash = executionService.executionKeyFor(
+                runtime = initialization.runtime
+                val appliedHash = searchExecutionKey(
                     initialization.query,
                     initialization.sourceScope,
                 )
-                mutableState.value = SearchStateReducer.restore(
-                    initialization, appliedHash, coordinator::supportedSearchScopes,
-                )
+                mutableState.value = SearchStateReducer.restore(initialization, appliedHash)
                 val environmentChanged = latestEnvironmentSettings?.let { settings ->
                     reconcileEnvironment(settings, scheduleRetry = false)
                 } == true
@@ -734,12 +660,7 @@ class SearchViewModel(
     private fun restoreSavedDraft(): Boolean {
         val savedQuery = savedStateHandle.get<String>(SearchSavedStateKeys.DRAFT_QUERY)
             ?.let(SearchSavedQueryCodec::decode) ?: return false
-        val reduction = SearchDraftReducer.restoreDraft(
-            mutableState.value,
-            savedQuery,
-            mutableState.value.query.availableSources.toSet(),
-            coordinator::supportedSearchScopes,
-        )
+        val reduction = SearchDraftReducer.restoreDraft(mutableState.value, savedQuery)
         if (reduction.accepted) mutableState.value = reduction.state
         return reduction.accepted
     }
@@ -786,23 +707,15 @@ class SearchViewModel(
     private fun updateSuggestionInput(input: String) {
         mutableState.value = mutableState.value.withSuggestionInput(input)
     }
-    private fun draftContext(): SearchDraftContext = SearchDraftContext(
-        availableSources = mutableState.value.query.availableSources.toSet(),
-        appliedByMode = mutableState.value.query.appliedByMode,
+    /** What a search in [scope] runs on under the current source settings. */
+    private fun sourcesFor(scope: SearchSourceScope): SearchSources = SearchSources.of(
+        runtime ?: SourceRuntimeSettings(), scope, coordinator.availableSources.toSet(),
     )
 
     private fun clearSuggestionState() {
         suggestionRefresh.cancelAutocomplete()
         val current = mutableState.value
-        mutableState.value = current.copy(
-            suggestions = current.suggestions.copy(
-                input = "",
-                autocomplete = emptyList(),
-                facetedAutocomplete = emptyList(),
-                searchedTags = emptyList(),
-                canCommitInput = false,
-            ),
-        )
+        mutableState.value = current.copy(suggestions = SearchSuggestionsUiState())
     }
 
     private fun reduce(change: SearchStateChange) {
@@ -846,3 +759,12 @@ class SearchViewModel(
         const val ROOT_REQUEST_TIMEOUT_MESSAGE = "Search timed out. Check your connection and try again."
     }
 }
+
+private fun SearchUiState.viewerFeed() = ViewerFeedSnapshot(
+    queryHash = query.appliedQueryHash.takeIf(String::isNotBlank),
+    results = content.results,
+    canLoadMore = content.canLoadMore,
+    loadingMore = loadingMore,
+    retainedLikedPostIds = relatedPosts.retainedLikedPostIds,
+    relatedPosts = relatedPosts,
+)

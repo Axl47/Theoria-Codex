@@ -3,7 +3,6 @@ package com.theoriacodex.app.media
 import coil.network.HttpException
 import com.theoriacodex.domain.adapter.MediaRecoverySourceAdapter
 import com.theoriacodex.domain.adapter.Page
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.SourceCapabilities
@@ -12,8 +11,6 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
-import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import java.util.concurrent.CancellationException
@@ -113,9 +110,6 @@ class RemoteMediaRecoveryTest {
             supportsSortTop = false,
             supportsSortRandom = false,
             supportsExcludeTagsServerSide = false,
-            supportsDateRangeServerSide = false,
-            supportsMinScoreServerSide = false,
-            requiresCredentials = false,
         )
 
         override suspend fun recoverPostMedia(post: Post, failedMedia: ImageRef): Post? =
@@ -124,14 +118,6 @@ class RemoteMediaRecoveryTest {
         override suspend fun search(query: Query, pageToken: String?): Page<Post> = error("Not used")
         override suspend fun trendingTags(limit: Int): List<TagSuggestion> = error("Not used")
         override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = error("Not used")
-        override suspend fun quickQuery(kind: QuickQueryKind): Query = Query(
-            mode = QueryMode.Source(SourceKey.HITOMI),
-            includeTags = emptyList(),
-            excludeTags = emptyList(),
-            sort = SortMode.NEWEST,
-            dateRange = null,
-            minScore = null,
-        )
 
         override suspend fun resolvePost(id: PostId): Post? = error("Not used")
     }
@@ -146,15 +132,11 @@ class RemoteMediaRecoveryTest {
             supportsSortTop = false,
             supportsSortRandom = false,
             supportsExcludeTagsServerSide = false,
-            supportsDateRangeServerSide = false,
-            supportsMinScoreServerSide = false,
-            requiresCredentials = false,
         )
 
         override suspend fun search(query: Query, pageToken: String?): Page<Post> = error("Not used")
         override suspend fun trendingTags(limit: Int): List<TagSuggestion> = error("Not used")
         override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = error("Not used")
-        override suspend fun quickQuery(kind: QuickQueryKind): Query = error("Not used")
         override suspend fun resolvePost(id: PostId): Post? = resolved
     }
 }

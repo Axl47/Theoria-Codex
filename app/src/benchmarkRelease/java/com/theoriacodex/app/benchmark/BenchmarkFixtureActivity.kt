@@ -38,9 +38,11 @@ import com.theoriacodex.app.R
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
-import com.theoriacodex.app.media.mediaDurationKeysByPostId
+import com.theoriacodex.app.media.mediaDurationStates
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
 import com.theoriacodex.app.viewer.ViewerScreen
+import com.theoriacodex.app.viewer.ViewerScreenConfig
+import com.theoriacodex.app.viewer.ViewerScreenHost
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.createViewerUiState
@@ -162,11 +164,10 @@ private fun BenchmarkSearchFixture(
             durationMs = if (durationEnrichmentEnabled) null else BENCHMARK_MEDIA_DURATION_MS,
         )
     }
-    val durationStates = rememberBenchmarkDurationStates(posts, durationEnrichmentEnabled)
-    val durationKeysByPostId = remember(posts) { mediaDurationKeysByPostId(posts) }
+    val decisions = rememberBenchmarkDurationStates(posts, durationEnrichmentEnabled)
+    val durationStates = remember(posts, decisions) { mediaDurationStates(posts, decisions) }
     val resolvedCount = posts.count { post ->
-        post.durationMs != null ||
-            durationKeysByPostId[post.id]?.let(durationStates::get) is MediaDurationState.Known
+        post.durationMs != null || durationStates[post] is MediaDurationState.Known
     }
     val statusDescription = when {
         resolvedCount == SEARCH_POST_COUNT -> DURATION_SETTLED_DESCRIPTION
@@ -203,9 +204,7 @@ private fun BenchmarkSearchFixture(
                 SearchResultCard(
                     post = post,
                     pixivUgoiraClient = null,
-                    acquiredDurationMs = durationKeysByPostId[post.id]
-                        ?.let(durationStates::get)
-                        ?.let { state -> (state as? MediaDurationState.Known)?.durationMs },
+                    acquiredDurationMs = (durationStates[post] as? MediaDurationState.Known)?.durationMs,
                     playbackDiagnosticsEnabled = true,
                     onClick = {},
                 )
@@ -239,14 +238,12 @@ private fun BenchmarkViewerFixture(mediaUri: String) {
     ) {
         ViewerScreen(
             uiState = viewerState,
-            creatorBrowsingSources = emptySet(),
-            onAction = { action: ViewerAction ->
-                viewerState = reduceViewerState(viewerState, action).state
-            },
-            onRemoveIncludeTerm = { _, _ -> },
-            onRemoveExcludeTerm = { _, _ -> },
-            onGoToSearch = {},
-            playbackDiagnosticsEnabled = true,
+            host = ViewerScreenHost(
+                onAction = { action: ViewerAction ->
+                    viewerState = reduceViewerState(viewerState, action).state
+                },
+            ),
+            config = ViewerScreenConfig(playbackDiagnosticsEnabled = true),
         )
     }
 }

@@ -9,6 +9,7 @@ import androidx.compose.ui.unit.dp
 import coil.Coil
 import coil.transition.CrossfadeTransition
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.viewer.state.ViewerMediaKind
 import com.theoriacodex.domain.model.ImageRef
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -31,7 +32,7 @@ class ViewerMediaOverviewGridTest {
         // Page 1 has no separate thumbnail, so its one image is the original.
         val items = List(4) { index ->
             val thumbnail = if (index == 1) "/full/1.jpg" else "/thumb/$index.jpg"
-            ViewerMediaOverviewItem(index, ImageRef(null, "/full/$index.jpg", "image/jpeg"), ViewerMediaOverviewKind.STILL_IMAGE, "/full/$index.jpg", thumbnail)
+            ViewerMediaOverviewItem(index, ImageRef(null, "/full/$index.jpg", "image/jpeg"), ViewerMediaKind.IMAGE, "/full/$index.jpg", thumbnail)
         }
         compose.mainClock.autoAdvance = false
         compose.setContent {

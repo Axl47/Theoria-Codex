@@ -11,9 +11,9 @@ import com.theoriacodex.app.media.mediaDurationKey
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.viewer.ViewerRestorationRequest
 import com.theoriacodex.app.viewer.ViewerSession
-import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
+import com.theoriacodex.app.viewer.testViewerOwner
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.repository.RecommendationProfile
@@ -118,20 +118,18 @@ class OfflineViewerWorkflowTest {
             assertLocalGallery(prepared[1], directory)
             assertLocalGallery(prepared[2], directory)
             assertNull(prepared[3].full?.localPath)
-            val owner = ViewerViewModel(SavedStateHandle(), postResolver = workflow, scopeOverride = kotlinx.coroutines.CoroutineScope(coroutineContext + kotlinx.coroutines.Dispatchers.Default))
-            owner.replaceSession(ViewerSession(prepared, launchContext, initialMediaIndex = 2))
+            val owner = testViewerOwner(SavedStateHandle(), postResolver = workflow, scopeOverride = kotlinx.coroutines.CoroutineScope(coroutineContext + kotlinx.coroutines.Dispatchers.Default))
+            owner.replaceSession(ViewerSession(prepared, launchContext, initialMediaIndices = mapOf(prepared[1].id to 2)))
             assertEquals(galleries[1].id, owner.state.value.currentPage?.post?.id)
             assertLocalGallery(owner.state.value.currentPage!!.post, directory)
             assertEquals(2, owner.state.value.currentPage?.selectedMediaIndex)
             owner.onAction(ViewerAction.SelectPage(0))
-            owner.onAction(ViewerAction.RequestCurrentPageResolution)
             owner.state.first { it.currentPage?.resolution?.status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.RESOLVED }
             owner.onAction(ViewerAction.SelectMedia(1))
             assertLocalGallery(owner.state.value.currentPage!!.post, directory)
             assertTrue(owner.state.value.currentMedia?.displayLocation?.startsWith(directory.resolve("offline-media").path) == true)
             assertLocalGallery(requireNotNull(workflow.resolvePost(galleries.first().id, ViewerStreamSource.CODEX)), directory)
             owner.onAction(ViewerAction.SelectPage(3))
-            owner.onAction(ViewerAction.RequestCurrentPageResolution)
             owner.state.first { it.currentPage?.resolution?.status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.RESOLVED }
             assertLocalGallery(owner.state.value.currentPage!!.post, directory)
             assertTrue(graph.registry.resolveRequests.isEmpty())
@@ -152,7 +150,7 @@ class OfflineViewerWorkflowTest {
     }
 
     private fun kotlinx.coroutines.test.TestScope.workflow(graph: JourneyAppContainer) = ViewerRouteWorkflow(
-        graph.data, this, graph.sources, { null }, { null }, { null }, offlineMedia = graph.features.offlineMedia,
+        graph.data, this, graph.sources, { null }, offlineMedia = graph.features.offlineMedia,
     )
 
     private fun assertLocalGallery(post: Post, directory: File) {
@@ -194,7 +192,7 @@ class OfflineViewerWorkflowTest {
         directory: File,
     ) {
         assertEquals(1, restored.context.startIndex)
-        assertEquals(2, restored.initialMediaIndex)
+        assertEquals(2, restored.initialMediaIndices[galleries[1].id])
         assertEquals(galleries.map(Post::id), restored.posts.map(Post::id))
         assertNull(restored.posts[0].full?.localPath)
         assertLocalGallery(restored.posts[1], directory)

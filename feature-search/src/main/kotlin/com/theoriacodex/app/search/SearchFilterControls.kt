@@ -44,8 +44,6 @@ import com.theoriacodex.domain.model.SourceKey
 @Composable
 internal fun FavoriteTagSheet(
     sections: List<FavoriteTagSection>,
-    tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
-    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
     emptyMessage: String,
     onAddTag: (FavoriteTagEntry) -> Unit,
     onRemoveTag: (SourceKey, List<String>) -> Unit,
@@ -74,7 +72,7 @@ internal fun FavoriteTagSheet(
             } else {
                 sections.forEachIndexed { index, section ->
                     FavoriteTagSectionContent(
-                        section, tagVideoCountProvider, fetchTagVideoCounts, onAddTag, onRemoveTag, onRenameTag,
+                        section, onAddTag, onRemoveTag, onRenameTag,
                     )
                     if (index != sections.lastIndex) HorizontalDivider()
                 }
@@ -86,8 +84,6 @@ internal fun FavoriteTagSheet(
 @Composable
 private fun FavoriteTagSectionContent(
     section: FavoriteTagSection,
-    tagVideoCountProvider: (SourceKey, String) -> Int?,
-    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?>,
     onAddTag: (FavoriteTagEntry) -> Unit,
     onRemoveTag: (SourceKey, List<String>) -> Unit,
     onRenameTag: (FavoriteTagEntry) -> Unit,
@@ -97,8 +93,6 @@ private fun FavoriteTagSectionContent(
         FavoriteTagActionGrid(
             source = section.source,
             entries = section.entries,
-            tagVideoCountProvider = tagVideoCountProvider,
-            fetchTagVideoCounts = fetchTagVideoCounts,
             onAddTag = onAddTag,
             onRemoveTag = { entry -> onRemoveTag(section.source, entry.tags) },
             onRenameTag = onRenameTag,
@@ -151,9 +145,8 @@ internal fun DateRangeFilterSection(range: DateRange?, onPreset: (DateRangePrese
 @Composable
 internal fun SearchSourcePicker(
     draftSourceScope: SearchSourceScope,
-    options: List<QueryMode>,
-    unifiedSourceCount: Int,
-    unifiedSources: Set<SourceKey> = emptySet(),
+    sources: List<SourceKey>,
+    unifiedSources: Set<SourceKey>,
     onOpen: () -> Unit = {},
     onModeSelected: (QueryMode) -> Unit,
     onTemporarySourceToggled: (SourceKey) -> Unit,
@@ -165,7 +158,7 @@ internal fun SearchSourcePicker(
         draftSourceScope.explicitSources
     }
     val scopeLabel = when (draftSourceScope) {
-        SearchSourceScope.GlobalUnified -> "Unified, $unifiedSourceCount sources"
+        SearchSourceScope.GlobalUnified -> "Unified, ${unifiedSources.size} sources"
         is SearchSourceScope.Single -> draftSourceScope.source.displayName()
         is SearchSourceScope.Temporary -> "Unified, ${draftSourceScope.sources.size} sources"
     }
@@ -181,14 +174,14 @@ internal fun SearchSourcePicker(
             Box(Modifier.clearAndSetSemantics {}) {
                 SourceScopeIndicator(
                     selectedSource,
-                    (draftSourceScope as? SearchSourceScope.Temporary)?.sources?.size ?: unifiedSourceCount,
+                    (draftSourceScope as? SearchSourceScope.Temporary)?.sources?.size ?: unifiedSources.size,
                 )
             }
         }
         SourceIconMenu(
             expanded = expanded,
             onDismiss = { expanded = false },
-            options = options.filterIsInstance<QueryMode.Source>().map { it.source } - selectedSource,
+            options = sources - selectedSource,
             highlightedSources = highlightedSources,
             combinedLabel = "Unified",
             onSelect = { source ->

@@ -1,5 +1,6 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.MemoryStateCell
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
@@ -11,6 +12,7 @@ import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -79,7 +81,7 @@ class InMemoryCodexRepository : CodexRepository {
         }
     }
 
-    override suspend fun reorderCodex(codexId: String, targetIndex: Int) {
+    suspend fun reorderCodex(codexId: String, targetIndex: Int) {
         mutex.withLock {
             codices.value = FixtureRepositoryPolicies.reorderCodices(
                 codices = codices.value,
@@ -123,7 +125,7 @@ class InMemoryCodexRepository : CodexRepository {
         }
     }
 
-    override suspend fun deleteCodex(codexId: String) {
+    suspend fun deleteCodex(codexId: String) {
         mutex.withLock {
             codices.value = codices.value.filterNot { it.codexId == codexId }
             itemsByCodex.value = itemsByCodex.value - codexId
@@ -211,17 +213,6 @@ class InMemoryCodexRepository : CodexRepository {
         }
     }
 
-    override suspend fun removeItem(codexId: String, sourceKey: SourceKey, sourcePostId: String) {
-        mutex.withLock {
-            val targetPostId = PostId(source = sourceKey, sourcePostId = sourcePostId)
-            val updated = FixtureRepositoryPolicies.removeCodexItem(
-                items = itemsByCodex.value[codexId].orEmpty(),
-                postId = targetPostId,
-            )
-            itemsByCodex.value = itemsByCodex.value + (codexId to updated)
-        }
-    }
-
     override suspend fun removeItems(codexId: String, postIds: Set<PostId>) {
         if (postIds.isEmpty()) return
         mutex.withLock {
@@ -257,21 +248,7 @@ class InMemoryCodexRepository : CodexRepository {
     }
 }
 
-class InMemoryQueryRepository : QueryRepository {
-    private val mutex = Mutex()
-    private val queryState = MutableStateFlow<Map<String, Query>>(emptyMap())
-
-    override fun observeAppliedQuery(modeKey: String): Flow<Query?> {
-        return queryState.map { it[modeKey] }
-    }
-
-    override suspend fun upsertAppliedQuery(modeKey: String, query: Query) {
-        mutex.withLock {
-            queryState.value = queryState.value + (modeKey to query)
-        }
-    }
-
-}
+class InMemoryQueryRepository : QueryRepository by CellQueryRepository(MemoryStateCell(emptyMap()))
 
 class InMemoryRecentsRepository(
     private val watchedLimit: Int = DEFAULT_RECENT_WATCHED_LIMIT,
@@ -292,12 +269,6 @@ class InMemoryRecentsRepository(
 
     override fun observeSearches(): Flow<List<RecentSearchEntry>> {
         return searches
-    }
-
-    override fun observeActivity(): Flow<List<RecentActivityEntry>> {
-        return combine(watched, searches) { watchedPosts, searchEntries ->
-            mergeRecentActivity(watchedPosts, searchEntries)
-        }
     }
 
     override suspend fun recordWatchedPost(
@@ -419,23 +390,9 @@ class InMemoryRecentsRepository(
         }
     }
 
-    override suspend fun clearWatchedPosts() {
-        mutex.withLock {
-            watched.value = emptyList()
-        }
-    }
-
     override suspend fun clearWatchedPosts(section: RecentPostSection) {
         mutex.withLock {
             watched.value = watched.value.filterNot { entry -> entry.section == section }
-        }
-    }
-
-    override suspend fun clearSearches(queryHashPrefix: String?) {
-        mutex.withLock {
-            searches.value = queryHashPrefix?.let { prefix ->
-                searches.value.filterNot { entry -> entry.queryHash.startsWith(prefix) }
-            }.orEmpty()
         }
     }
 
@@ -453,141 +410,9 @@ class InMemoryRecentsRepository(
     }
 }
 
-class InMemorySettingsRepository : SettingsRepository {
-    private val mutex = Mutex()
-    private val settings = MutableStateFlow(RepositoryPolicies.normalizeSettings(AppSettings()))
-
-    override fun observeSettings(): Flow<AppSettings> {
-        return settings
-    }
-
-    override suspend fun updateSettings(transform: (AppSettings) -> AppSettings) {
-        mutateSettings { current ->
-            RepositoryPolicies.Result(state = transform(current), value = Unit)
-        }
-    }
-
-    override suspend fun setEnabledSources(enabledSources: Set<SourceKey>) {
-        updateSettings { current ->
-            current.copy(
-                runtime = SourceWeightSettings.selectSources(current.runtime, enabledSources),
-            )
-        }
-    }
-
-    override suspend fun setSourceWeights(sourceWeights: Map<SourceKey, Double>) {
-        updateSettings { current ->
-            current.copy(
-                runtime = current.runtime.copy(sourceWeights = sourceWeights),
-            )
-        }
-    }
-
-    override suspend fun setCacheFullImageOnSave(enabled: Boolean) {
-        updateSettings { current ->
-            current.copy(cache = current.cache.copy(cacheFullImageOnSave = enabled))
-        }
-    }
-
-    override suspend fun setResolveUnknownAnimatedDurations(enabled: Boolean) {
-        updateSettings { current ->
-            current.copy(
-                contentFilters = current.contentFilters.copy(resolveUnknownAnimatedDurations = enabled),
-            )
-        }
-    }
-
-    override suspend fun setInvertMultiImageScrollDirection(enabled: Boolean) {
-        updateSettings { current ->
-            current.copy(viewer = current.viewer.copy(invertMultiImageScrollDirection = enabled))
-        }
-    }
-
-    override suspend fun setAutomaticTextTranslationEnabled(enabled: Boolean) {
-        updateSettings { current ->
-            current.copy(viewer = current.viewer.copy(automaticTextTranslationEnabled = enabled))
-        }
-    }
-
-    override suspend fun setOcrLanguageEnabled(language: ViewerOcrLanguage, enabled: Boolean) {
-        updateSettings { current ->
-            val updated = current.viewer.enabledOcrLanguages.toMutableSet()
-            if (enabled) updated += language else updated -= language
-            current.copy(viewer = current.viewer.copy(enabledOcrLanguages = updated))
-        }
-    }
-
-    override suspend fun setScenarioPreset(preset: ScenarioPreset) {
-        updateSettings { current -> current.copy(scenarioPreset = preset) }
-    }
-
-    override suspend fun setActiveProfile(profileId: String) {
-        updateSettings { current -> current.copy(activeProfileId = profileId) }
-    }
-
-    override suspend fun addRecommendationProfile(name: String): RecommendationProfile {
-        val profileId = UUID.randomUUID().toString()
-        return mutateSettings { current ->
-            RepositoryPolicies.addRecommendationProfile(current, name, profileId)
-        }
-    }
-
-    override suspend fun renameRecommendationProfile(profileId: String, name: String): Boolean {
-        return mutateSettings { current ->
-            RepositoryPolicies.renameRecommendationProfile(current, profileId, name)
-        }
-    }
-
-    override suspend fun removeRecommendationProfile(profileId: String): Boolean {
-        return mutateSettings { current ->
-            RepositoryPolicies.removeRecommendationProfile(current, profileId)
-        }
-    }
-
-    override suspend fun addForYouBlacklistEntry(profileId: String, source: SourceKey, tags: List<String>): Boolean {
-        return mutateSettings { current ->
-            RepositoryPolicies.addBlacklistEntry(current, profileId, source, tags)
-        }
-    }
-
-    override suspend fun removeForYouBlacklistEntry(profileId: String, source: SourceKey, tags: List<String>): Boolean {
-        return mutateSettings { current ->
-            RepositoryPolicies.removeBlacklistEntry(current, profileId, source, tags)
-        }
-    }
-
-    override suspend fun addFavoriteTag(profileId: String, source: SourceKey, tags: List<String>, name: String?): Boolean {
-        return mutateSettings { current ->
-            RepositoryPolicies.addFavoriteTag(current, profileId, source, tags, name)
-        }
-    }
-
-    override suspend fun removeFavoriteTag(profileId: String, source: SourceKey, tags: List<String>): Boolean {
-        return mutateSettings { current ->
-            RepositoryPolicies.removeFavoriteTag(current, profileId, source, tags)
-        }
-    }
-
-    override suspend fun renameFavoriteTag(profileId: String, source: SourceKey, tags: List<String>, name: String?): Boolean {
-        return mutateSettings { current ->
-            RepositoryPolicies.renameFavoriteTag(current, profileId, source, tags, name)
-        }
-    }
-
-    override suspend fun setProviderHealthSnapshots(snapshots: List<ProviderHealthSnapshot>) {
-        updateSettings { current -> RepositoryPolicies.mergeProviderHealth(current, snapshots) }
-    }
-
-    private suspend fun <T> mutateSettings(
-        policy: (AppSettings) -> RepositoryPolicies.Result<AppSettings, T>,
-    ): T {
-        return mutex.withLock {
-            val result = policy(settings.value)
-            settings.value = RepositoryPolicies.normalizeSettings(result.state).requireSettingsCapacity()
-            result.value
-        }
-    }
-}
+class InMemorySettingsRepository : SettingsRepository by CellSettingsRepository(
+    MemoryStateCell(RepositoryPolicies.normalizeSettings(AppSettings())),
+)
 
 class InMemoryUiRestoreRepository : UiRestoreRepository {
     private val mutex = Mutex()
@@ -636,3 +461,7 @@ class InMemoryUiRestoreRepository : UiRestoreRepository {
         viewerLaunchContext.value = context
     }
 }
+
+/** The combined Recents activity list the app shows, read once from this repository's watched posts and searches. */
+suspend fun RecentsRepository.activity(): List<RecentActivityEntry> =
+    mergeRecentActivity(observeWatchedPosts().first(), observeSearches().first())

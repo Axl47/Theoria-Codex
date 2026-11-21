@@ -5,21 +5,25 @@ import com.theoriacodex.domain.coroutines.mapConcurrent
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchTermGroup
-import com.theoriacodex.domain.tags.normalizeGelbooruToken
+import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.tags.sourceAutocompletePrefix
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** Reuses successful compatibility lookups; preparation belongs to the Gelbooru request only. */
+/**
+ * Spells a Unified query's tags as a source that matches only exact tags lists them, reusing successful lookups.
+ * Preparation belongs to that source's request only.
+ */
 internal class UnifiedQueryPreparation(
-    /** True for a tag Gelbooru has already reported a count for, which is spelled as Gelbooru spells it. */
-    private val isKnownTag: (String) -> Boolean = { false },
+    /** True for a tag the source has already reported a count for, which is spelled as the source spells it. */
+    private val isKnownTag: (SourceKey, String) -> Boolean = { _, _ -> false },
     private val clock: () -> Long,
 ) {
     private val mutex = Mutex()
-    private val cache = linkedMapOf<String, Mapping>()
+    private val cache = linkedMapOf<Pair<SourceKey, String>, Mapping>()
 
-    suspend fun prepareGelbooru(adapter: SourceAdapter, query: Query): Query {
+    suspend fun prepareExactTags(adapter: SourceAdapter, query: Query): Query {
         val terms = (query.effectiveIncludeTermGroups.flatMap { it.terms } + query.excludeTerms)
             .map { it.value.trim() }.filter(String::isNotBlank).distinct()
         val mappings = terms.mapConcurrent { value -> value to resolve(adapter, value) }.toMap()
@@ -31,16 +35,17 @@ internal class UnifiedQueryPreparation(
     }
 
     private suspend fun resolve(adapter: SourceAdapter, value: String): String {
-        val key = normalizeGelbooruToken(value)
-        mutex.withLock { cache[key]?.takeIf { clock() - it.atMs < CACHE_TTL_MS } }?.let { return it.value }
-        if (isKnownTag(key)) return key
+        val key = sourceAutocompletePrefix(adapter.sourceKey, value)
+        val cacheKey = adapter.sourceKey to key
+        mutex.withLock { cache[cacheKey]?.takeIf { clock() - it.atMs < CACHE_TTL_MS } }?.let { return it.value }
+        if (isKnownTag(adapter.sourceKey, key)) return key
         val result = runCatchingPreservingCancellation {
             withTimeoutOrNull(LOOKUP_TIMEOUT_MS) { adapter.autocompleteTags(key, 1) }
         }.getOrNull() ?: return value
         val mapped = result.firstOrNull()?.text?.trim()?.takeIf(String::isNotBlank) ?: value
         mutex.withLock {
-            cache.remove(key)
-            cache[key] = Mapping(mapped, clock())
+            cache.remove(cacheKey)
+            cache[cacheKey] = Mapping(mapped, clock())
             while (cache.size > MAX_MAPPINGS) cache.remove(cache.keys.first())
         }
         return mapped

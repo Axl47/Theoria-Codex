@@ -6,12 +6,11 @@ import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.booleanValue
-import com.theoriacodex.sources.common.elementsOrEmpty
 import com.theoriacodex.sources.common.longValue
-import com.theoriacodex.sources.common.optionalJsonArray
 import com.theoriacodex.sources.common.optionalJsonObject
 import com.theoriacodex.sources.common.parseOffsetDateTimeMs
 import com.theoriacodex.sources.common.stringValue
+import com.theoriacodex.sources.common.objects
 
 /**
  * Maps one `/v3/illust/comments` or `/v2/illust/comment/replies` response. The next page is the
@@ -19,9 +18,7 @@ import com.theoriacodex.sources.common.stringValue
  * on the illustration, so [total] comes from the caller.
  */
 internal fun parsePixivCommentPage(root: JsonObject, total: Int?): CommentPage = CommentPage(
-    comments = root.optionalJsonArray("comments").elementsOrEmpty().mapNotNull { element ->
-        element.takeIf { it.isJsonObject }?.asJsonObject?.let(::parsePixivComment)
-    },
+    comments = root.objects("comments").mapNotNull(::parsePixivComment),
     total = total,
     nextPageToken = root.stringValue("next_url")?.trim()?.takeIf(String::isNotBlank),
 )

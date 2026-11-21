@@ -11,10 +11,8 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.withContext
 
-/** One key preparation per result snapshot; no fingerprint work on duration publication. */
-class DurationFilterProjection(private val keyFactory: (Post) -> MediaDurationKey = ::mediaDurationKey) {
-    private var previousPosts: List<Post>? = null
-    private var keys = emptyMap<PostId, MediaDurationKey>()
+/** Turns a route's duration decisions into the filter's reveal order and presented list. */
+class DurationFilterProjection {
     private var reveal = DurationReveal()
     private var presented: List<Post>? = null
     private var presentedDurations = emptyMap<PostId, Long>()
@@ -25,21 +23,17 @@ class DurationFilterProjection(private val keyFactory: (Post) -> MediaDurationKe
         private set
 
     /** [project] as a frame. The posts, states and switch of [lastFrame] answer with [lastFrame] itself. */
-    @Synchronized fun frame(posts: List<Post>, states: Map<MediaDurationKey, MediaDurationState>, active: Boolean): DurationFilterFrame =
+    @Synchronized fun frame(posts: List<Post>, states: MediaDurationStates, active: Boolean): DurationFilterFrame =
         lastFrame?.takeIf { it.posts === posts && it.active == active && it.states == states }
             ?: DurationFilterFrame(posts, states, active, project(posts, states, active)).also { lastFrame = it }
 
-    @Synchronized fun project(posts: List<Post>, states: Map<MediaDurationKey, MediaDurationState>, active: Boolean): DurationFilterMetadata {
+    @Synchronized fun project(posts: List<Post>, states: MediaDurationStates, active: Boolean): DurationFilterMetadata {
         if (!active) {
             reveal = DurationReveal()
             presented = null
             return DurationFilterMetadata.EMPTY
         }
-        if (previousPosts !== posts) {
-            keys = posts.filter(::isAnimatedPost).associate { it.id to keyFactory(it) }
-            previousPosts = posts
-        }
-        val metadata = durationFilterMetadata(posts, states, active, keys)
+        val metadata = durationFilterMetadata(posts, states, active)
         reveal = advanceDurationReveal(reveal, posts, metadata.stateByPostId, metadata.knownDurationMsByPostId)
         val presentedPosts = stablePresented(reveal.present(posts), metadata.knownDurationMsByPostId)
         return metadata.copy(
@@ -67,7 +61,7 @@ class DurationFilterProjection(private val keyFactory: (Post) -> MediaDurationKe
 
 data class DurationFilterFrame(
     val posts: List<Post>,
-    val states: Map<MediaDurationKey, MediaDurationState>,
+    val states: MediaDurationStates,
     val active: Boolean,
     val metadata: DurationFilterMetadata,
 )
@@ -89,7 +83,7 @@ private fun DurationFilterFrame.covers(posts: List<Post>): Boolean {
 @Composable
 fun rememberDurationFilterMetadata(
     posts: List<Post>,
-    states: Map<MediaDurationKey, MediaDurationState>,
+    states: MediaDurationStates,
     active: Boolean,
     retainKey: String? = null,
 ): DurationFilterMetadata {

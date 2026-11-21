@@ -8,7 +8,9 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.http.SourceHttpResponse
+import com.theoriacodex.sources.testing.ChallengingHost
 import com.theoriacodex.sources.testing.FakeHttpClient
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -540,6 +542,25 @@ class IwaraSourceAdapterTest {
             "page=0 must be encoded so Jina does not treat it as its own page parameter",
             "page%3D0" in httpClient.requests.last().first,
         )
+    }
+
+    @Test
+    fun `a challenge the http client turned into an outage still falls back to the mirror`() = runBlocking {
+        ChallengingHost(
+            mirrorPrefix = "https://r.jina.ai/",
+            mirrorResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """Markdown Content:
+                    {"page":0,"count":0,"limit":32,"results":[],"type":"videos"}""",
+            ),
+        ).use { host ->
+            val adapter = IwaraSourceAdapter(httpClient = host.client)
+
+            repeat(2) { assertTrue(adapter.search(sampleQuery(sort = SortMode.POPULAR), pageToken = null).items.isEmpty()) }
+
+            assertEquals("the outage keeps later requests off the challenged host", 1, host.hits.get())
+            assertEquals(2, host.mirrorRequests.size)
+        }
     }
 
     private fun sampleQuery(sort: SortMode): Query {

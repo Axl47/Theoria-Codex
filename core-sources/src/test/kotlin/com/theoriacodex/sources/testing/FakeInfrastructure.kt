@@ -1,10 +1,10 @@
 package com.theoriacodex.sources.testing
 
-import com.theoriacodex.sources.credentials.GelbooruCredentials
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.credentials.PixivAuthTokens
 import com.theoriacodex.sources.credentials.PixivCredentialSession
-import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
+import com.theoriacodex.sources.credentials.UserApiKey
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 
@@ -58,8 +58,8 @@ data class RecordedPost(
 
 class FakeCredentialsProvider : SourceCredentialsProvider {
     var pixivTokens: PixivAuthTokens? = null
-    var gelbooruCredentials: GelbooruCredentials? = null
-    var rule34XxxCredentials: Rule34XxxCredentials? = null
+    var gelbooruCredentials: UserApiKey? = null
+    var rule34XxxCredentials: UserApiKey? = null
 
     override suspend fun getPixivTokens(): PixivAuthTokens? = pixivTokens
     override suspend fun savePixivTokens(tokens: PixivAuthTokens) {
@@ -76,21 +76,21 @@ class FakeCredentialsProvider : SourceCredentialsProvider {
         pixivTokens = null
     }
 
-    override suspend fun getGelbooruCredentials(): GelbooruCredentials? = gelbooruCredentials
-    override suspend fun saveGelbooruCredentials(credentials: GelbooruCredentials) {
-        gelbooruCredentials = credentials
+    override suspend fun userApiKey(source: SourceKey): UserApiKey? = when (source) {
+        SourceKey.GELBOORU -> gelbooruCredentials
+        SourceKey.RULE34XXX -> rule34XxxCredentials
+        else -> null
     }
 
-    override suspend fun clearGelbooruCredentials() {
-        gelbooruCredentials = null
-    }
+    override suspend fun saveUserApiKey(source: SourceKey, key: UserApiKey) = setUserApiKey(source, key)
 
-    override suspend fun getRule34XxxCredentials(): Rule34XxxCredentials? = rule34XxxCredentials
-    override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) {
-        rule34XxxCredentials = credentials
-    }
+    override suspend fun clearUserApiKey(source: SourceKey) = setUserApiKey(source, null)
 
-    override suspend fun clearRule34XxxCredentials() {
-        rule34XxxCredentials = null
+    private fun setUserApiKey(source: SourceKey, key: UserApiKey?) {
+        when (source) {
+            SourceKey.GELBOORU -> gelbooruCredentials = key
+            SourceKey.RULE34XXX -> rule34XxxCredentials = key
+            else -> error("$source takes no API key")
+        }
     }
 }

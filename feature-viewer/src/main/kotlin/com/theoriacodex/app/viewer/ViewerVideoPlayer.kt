@@ -188,10 +188,10 @@ private fun ViewerVideoBinding(
     DisposableEffect(state, location, source) {
         val pool = context.videoPlaybackInfrastructure().viewerVideoPlayerPool
         val lease = pool.acquire(location, source.requestHeaders())
-        val player = lease.resource
+        val player = lease.player
         // Read after the previous binding's disposal has saved its final position.
         resumePosition().takeIf { it > 0L }?.let(player::seekTo)
-        player.playbackParameters = PlaybackParameters(controls.playbackRate.coerceAtLeast(MIN_VIEWER_PLAYBACK_RATE))
+        player.playbackParameters = PlaybackParameters(controls.playbackRate)
         val listener = viewerVideoListener(player, state, recovery) { latestEvents }
         player.addListener(listener)
         state.player = player
@@ -306,7 +306,7 @@ private fun ViewerVideoCommands(state: ViewerVideoState, controls: ViewerRendere
         state.player?.repeatMode = if (controls.loopPlayback) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
     }
     LaunchedEffect(state.player, controls.playbackRate) {
-        runCatching { state.player?.playbackParameters = PlaybackParameters(controls.playbackRate.coerceAtLeast(MIN_VIEWER_PLAYBACK_RATE)) }
+        runCatching { state.player?.playbackParameters = PlaybackParameters(controls.playbackRate) }
     }
     LaunchedEffect(state.player, controls.restartRequest) {
         if (controls.restartRequest != handledRestart) {
@@ -315,16 +315,7 @@ private fun ViewerVideoCommands(state: ViewerVideoState, controls: ViewerRendere
             state.setPlaying(controls.isActive && controls.isPlaying)
         }
     }
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-    LaunchedEffect(state.player, controls.isActive, controls.isPlaying, state.failed) {
-        state.setPlaying(controls.isActive && controls.isPlaying && !state.failed &&
-            lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
-    }
-    LaunchedEffect(state.player, controls.seekJumpSerial, controls.seekJumpDeltaMs, controls.isActive, state.failed, state.duration) {
-        if (controls.seekJumpSerial > 0 && controls.seekJumpDeltaMs != 0L && controls.isActive && !state.failed && !state.scrubbing) {
-            state.jump(controls.seekJumpDeltaMs)
-        }
-    }
+    ViewerSeekJumps(controls.seekJumpSerial, controls.seekJumpDeltaMs, { controls.isActive && !state.failed && !state.scrubbing }, state::jump)
 }
 
 @Composable
@@ -332,6 +323,9 @@ private fun ViewerVideoLifecycle(state: ViewerVideoState, controls: ViewerRender
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
     DisposableEffect(owner, state.player, controls.isActive, controls.isPlaying, state.failed) {
+        // Applies a command at once; adding the observer replays ON_START/ON_RESUME only while the host is started.
+        state.setPlaying(controls.isActive && controls.isPlaying && !state.failed &&
+            owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_START, Lifecycle.Event.ON_RESUME -> state.setPlaying(controls.isActive && controls.isPlaying && !state.failed)
@@ -403,39 +397,21 @@ private fun ViewerVideoTimelineOverlay(
         return
     }
     ViewerChromeVisibility(controls.showControls, modifier) {
-        ViewerTimelineVeil { ViewerVideoTimeline(state, source, controls, events) }
-    }
-    if (controls.showPassiveProgress) ViewerMediaPassiveProgress({ state.position }, state.duration, aspectRatio)
-}
-
-@Composable
-private fun ViewerVideoTimeline(
-    state: ViewerVideoState,
-    source: SourceKey,
-    controls: ViewerRendererControls,
-    events: ViewerRendererEvents,
-) {
-    val previews = rememberViewerScrubPreviews(state.player, source)
-    ViewerPlaybackFooter {
-        MediaTimelineBar(
-            positionMs = { state.position }, durationMs = state.duration,
-            onSeekStarted = { state.scrubbing = true },
-            onSeekMoved = state::scrubTo,
-            onSeekFinished = { target -> state.release(target, previews) },
-            onSeekCancelled = state::cancelScrub,
-            preview = { target -> previews?.let { ViewerVideoScrubPreview(it, target) } },
-            onInteractionActiveChanged = events.onTimelineInteractionActiveChanged,
-            playbackRate = controls.playbackRate,
-            leading = {
-                TimelinePlaybackButton(isPaused = !controls.isPlaying, onToggle = {
-                    events.onTogglePlayback()
-                    state.setPlaying(!controls.isPlaying && controls.isActive)
-                    events.onTimelineInteractionActiveChanged(true)
-                    events.onTimelineInteractionActiveChanged(false)
-                })
-            },
+        // Inside the visibility, so scrub previews are prepared only while the timeline shows.
+        val previews = rememberViewerScrubPreviews(state.player, source)
+        ViewerPlaybackTimeline(
+            controls, events, { state.position }, state.duration,
+            seek = ViewerTimelineSeek(
+                onStarted = { state.scrubbing = true },
+                onMoved = state::scrubTo,
+                onFinished = { target -> state.release(target, previews) },
+                onCancelled = state::cancelScrub,
+                preview = { target -> previews?.let { ViewerVideoScrubPreview(it, target) } },
+            ),
+            onToggled = { state.setPlaying(!controls.isPlaying && controls.isActive) },
         )
     }
+    if (controls.showPassiveProgress) ViewerMediaPassiveProgress({ state.position }, state.duration, aspectRatio)
 }
 
 @Composable

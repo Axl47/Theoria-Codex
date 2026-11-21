@@ -4,8 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.produceState
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.theoriacodex.app.media.MediaDurationKey
-import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.media.knownMediaDurations
 import com.theoriacodex.app.search.postMediaCount
@@ -118,7 +117,7 @@ internal fun sortCodexPosts(
 fun rememberCodexPostDurations(
     posts: List<Post>?,
     sort: CodexSortMode,
-    states: Map<MediaDurationKey, MediaDurationState>,
+    states: MediaDurationStates,
     codexId: String,
 ): Map<PostId, Long> {
     if (!sort.usesDuration || posts == null) return emptyMap()
@@ -140,7 +139,7 @@ fun rememberSortedCodexPosts(
     posts: List<Post>?,
     sort: CodexSortMode,
     usage: Map<String, CodexUsage>?,
-    durationStates: Map<MediaDurationKey, MediaDurationState>,
+    durationStates: MediaDurationStates,
 ): List<Post>? {
     val durations = rememberCodexPostDurations(posts, sort, durationStates, codexId)
     return posts?.let {

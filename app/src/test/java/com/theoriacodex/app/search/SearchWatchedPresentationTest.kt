@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.related.testRelatedShelf
 import android.app.Application
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -55,19 +56,17 @@ class SearchWatchedPresentationTest {
                     Box(Modifier.size(400.dp, 700.dp)) {
                         if (forYou) {
                             ForYouScreen(
-                                state = ForYouUiState(results = listOf(post)), likedPostIds = emptySet(),
+                                state = ForYouUiState(results = listOf(post)), related = testRelatedShelf(), likedPostIds = emptySet(),
                                 onToggleLike = {}, onAction = {}, onRequestSaveToCodex = {}, onSaveToDevice = {},
-                                onOpenCreatorProfile = {}, onOpenLegacyCreatorProfile = {},
-                                onAddIncludeTerm = { _, _ -> false }, onAddExcludeTerm = { _, _ -> false },
-                                onRemoveIncludeTerm = { _, _ -> }, onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
+                               
+                                onGoToSearch = {},
                             )
                         } else SearchScreen(
                             state = SearchUiState(content = SearchContentUiState(results = listOf(post), hasExecutedSearch = true)),
+                            related = testRelatedShelf(),
                             creatorBrowsingSources = emptySet(), onAction = {},
                             watchedPostIds = setOf(post.id),
                             resolvePostById = { null }, recoverPostMedia = { _, _ -> null },
-                            tagVideoCountProvider = { _, _ -> null }, fetchTagVideoCounts = { _, _ -> emptyMap() },
-                            onOpenCreatorProfile = {}, onOpenLegacyCreatorProfile = {},
                             onRequestSaveToCodex = {}, onSaveToDevice = {},
                         )
                     }

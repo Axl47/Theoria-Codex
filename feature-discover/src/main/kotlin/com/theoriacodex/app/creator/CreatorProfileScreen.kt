@@ -1,5 +1,11 @@
 package com.theoriacodex.app.creator
 
+import com.theoriacodex.app.tags.PostTagActionSection
+import com.theoriacodex.app.ui.components.FeedGrid
+import com.theoriacodex.app.ui.components.rememberFeedView
+import com.theoriacodex.app.ui.components.FeedMarks
+import com.theoriacodex.app.ui.components.FeedView
+import com.theoriacodex.app.ui.components.FeedDurations
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.theoriacodex.app.media.animatedDurationRangeLabel
@@ -32,7 +38,6 @@ import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import com.theoriacodex.app.viewer.retainPostsUntilViewerCloses
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,21 +55,13 @@ import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.feed.FeedPageDemandInput
 import com.theoriacodex.app.ui.components.rememberFeedPageDemand
 import com.theoriacodex.app.ui.components.FeedContinueLoading
-import com.theoriacodex.app.media.MediaDurationKey
-import com.theoriacodex.app.media.MediaDurationState
-import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.media.copyTextToClipboard
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
-import com.theoriacodex.app.search.SearchDurationFilterPresentation
 import com.theoriacodex.app.search.SearchVisibilityFilters
-import com.theoriacodex.app.search.markInputs
-import com.theoriacodex.app.search.rememberFilteredFeed
-import com.theoriacodex.app.search.rememberSearchDurationFilterPresentation
 import com.theoriacodex.app.source.displayName
-import com.theoriacodex.app.tags.PostBoundTagSection
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.DismissibleFailure
-import com.theoriacodex.app.ui.components.FeedErrorTile
+import com.theoriacodex.app.ui.components.FeedFailureTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
 import com.theoriacodex.app.ui.components.FeedPageDemandControl
@@ -72,24 +69,19 @@ import com.theoriacodex.app.ui.components.FeedLoadingState
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
-import com.theoriacodex.app.ui.components.TwoColumnProjectedPostStaggeredGrid
 import com.theoriacodex.app.ui.components.pagedFeedFooterMessage
 import com.theoriacodex.app.ui.components.FeedCardEnvironment
 import com.theoriacodex.app.ui.components.FeedPostCard
 import com.theoriacodex.app.ui.components.FeedRelatedPostsShelf
 import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
-import com.theoriacodex.app.ui.components.RelatedFeedPresentation
-import com.theoriacodex.app.related.retainedLikedPostIds
-import com.theoriacodex.app.ui.components.rememberRelatedFeedPresentation
 import com.theoriacodex.app.related.RelatedPostsUiState
+import com.theoriacodex.app.related.RelatedShelfBinding
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.SearchTerm
-import kotlinx.coroutines.flow.Flow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -101,23 +93,14 @@ fun CreatorProfileScreen(
     pendingLikePostIds: Set<PostId> = emptySet(),
     savedPostIds: Set<PostId>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
-    resolveUnknownAnimatedDurations: Boolean = false,
-    durationStates: Map<MediaDurationKey, MediaDurationState> = emptyMap(),
-    durationStateForPost: (Post) -> Flow<MediaDurationState?> = noMediaDurationStateForPost,
-    onDurationFilterChanged: (Boolean) -> Unit = {},
-    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit = { _, _ -> },
-    onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit = { _, _ -> },
-    onAuthoritativeDurationKnown: (Post, Long) -> Unit = { _, _ -> },
+    durations: FeedDurations = FeedDurations.NONE,
     resolvePostById: (suspend (PostId) -> Post?)? = null,
     onToggleLike: (Post) -> Unit,
     onAction: (CreatorAction) -> Unit,
+    related: RelatedShelfBinding,
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
     onOpenUrl: (String) -> Unit,
-    onAddIncludeTerm: (Post, SearchTerm) -> Boolean = { _, _ -> false },
-    onAddExcludeTerm: (Post, SearchTerm) -> Boolean = { _, _ -> false },
-    onRemoveIncludeTerm: (Post, SearchTerm) -> Unit = { _, _ -> },
-    onRemoveExcludeTerm: (Post, SearchTerm) -> Unit = { _, _ -> },
     fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
 ) {
@@ -125,9 +108,9 @@ fun CreatorProfileScreen(
     var showFilterSheet by remember { mutableStateOf(false) }
     // Each feed keeps its own scroll position and duration reveal order.
     val gridState = rememberRetainedFeedGridState(state.selectedFeed.retainKey)
-    val feed = rememberCreatorFeed(state, pendingLikePostIds, likedPostIds, savedPostIds, fabRestoreState, durationStates, resolveUnknownAnimatedDurations)
-    LaunchedEffect(feed.durationFilter.active) { onDurationFilterChanged(feed.durationFilter.active) }
-    DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
+    val feed = rememberCreatorFeed(state, related.state, pendingLikePostIds, likedPostIds, savedPostIds, fabRestoreState, durations)
+    LaunchedEffect(feed.durationFilterActive) { durations.onFilterChanged(feed.durationFilterActive) }
+    DurationRouteEnvironmentEffect(gridState, durations.onEnvironmentChanged)
     val pageDemand = rememberCreatorPageDemand(state, feed, gridState, onAction)
     val creator = state.creator
     if (creator == null) {
@@ -135,8 +118,7 @@ fun CreatorProfileScreen(
         return
     }
     val cards = rememberFeedCardEnvironment(
-        pixivUgoiraClient, likedPostIds, feed.durationFilter.knownDurationMsByPostId, durationStateForPost,
-        onToggleLike, onDurationPostVisibilityChanged, onAuthoritativeDurationKnown, resolvePostById,
+        pixivUgoiraClient, likedPostIds, feed.durations.knownDurationMsByPostId, durations, onToggleLike, resolvePostById,
     )
     val filterScroll = rememberFeedScrollSignal()
     val clearFilters: () -> () -> Unit = { clearCreatorFilters(fabRestoreState, onFabRestoreStateChange) }
@@ -161,12 +143,12 @@ fun CreatorProfileScreen(
             val account = state.feeds.isNotEmpty()
             val followEnabled = !state.uploadsRefreshing
             CreatorHeader(state, creator, account, followed, followEnabled, onToggleFollow, onOpenUrl, onAction)
-            CreatorFeedBody(state, feed, cards, gridState, pageDemand, onAction, onLongPress = { selectedActionPost = it })
+            CreatorFeedBody(state, related, feed, cards, gridState, pageDemand, onAction, onLongPress = { selectedActionPost = it })
         }
     }
     if (showFilterSheet) {
         CreatorFilterSheet(
-            fabRestoreState, feed.animatedDurationRange, onFabRestoreStateChange,
+            fabRestoreState, feed.filters.animatedDurationRange, onFabRestoreStateChange,
             // The sheet reset has no undo affordance, so the undo callback is intentionally discarded.
             onReset = @Suppress("IgnoredReturnValue") { clearFilters() }, onDismiss = { showFilterSheet = false },
         )
@@ -176,15 +158,15 @@ fun CreatorProfileScreen(
             post, onDismiss = { selectedActionPost = null }, onSaveToDevice = { onSaveToDevice(post) },
             liked = post.id in likedPostIds, onToggleLike = { onToggleLike(post) },
             onSaveToCodex = { onRequestSaveToCodex(post) },
-            onShowRelated = { onAction(CreatorAction.ShowRelatedPosts(post)) },
-        ) { PostBoundTagSection(post, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm) }
+            onShowRelated = { related.controller.show(post) },
+        ) { PostTagActionSection(post) }
     }
 }
 
 @Composable
 private fun rememberCreatorPageDemand(
     state: CreatorUiState,
-    feed: CreatorFeed,
+    feed: FeedView,
     gridState: LazyStaggeredGridState,
     onAction: (CreatorAction) -> Unit,
 ) = rememberFeedPageDemand(
@@ -192,84 +174,48 @@ private fun rememberCreatorPageDemand(
         contextKey = state.queryHash.orEmpty(),
         completedGeneration = state.nextRequestGeneration,
         canonicalCount = state.results.size,
-        visibleCount = feed.visibleResults.size,
+        visibleCount = feed.visiblePosts.size,
         canLoadMore = state.canLoadMore,
         ready = state.creator != null && state.queryHash != null,
         refreshing = state.isRefreshing,
         paging = state.isPaging,
         failed = state.errorMessage != null,
-        durationsBlockPaging = feed.durationFilter.blocksPaging,
+        durationsBlockPaging = feed.durations.blocksPaging,
     ),
-    filters = feed.visibilityFilters,
+    filters = feed.filters,
     gridState = gridState,
-    canonicalIndexForVisibleItems = feed.related.projection::greatestVisibleCanonicalIndex,
+    projection = feed.related.projection,
     onLoadNextPage = { onAction(CreatorAction.LoadNextPage) },
 )
 
-/** What the creator's grid shows after its filters, durations, and related posts are applied. */
-private data class CreatorFeed(
-    val animatedDurationRange: AnimatedDurationRange,
-    val visibilityFilters: SearchVisibilityFilters,
-    val durationFilter: SearchDurationFilterPresentation,
-    val visibleResults: List<Post>,
-    val related: RelatedFeedPresentation,
-)
-
+/** The creator's grid: its feed after the sheet's filters, known lengths, and the related shelf. */
 @Composable
 private fun rememberCreatorFeed(
     state: CreatorUiState,
+    relatedState: RelatedPostsUiState,
     pendingLikePostIds: Set<PostId>,
     likedPostIds: Set<PostId>,
     savedPostIds: Set<PostId>,
     fabRestoreState: FeedFabRestoreState,
-    durationStates: Map<MediaDurationKey, MediaDurationState>,
-    resolveUnknownAnimatedDurations: Boolean,
-): CreatorFeed {
+    durations: FeedDurations,
+): FeedView {
     val animatedOnly = fabRestoreState.animatedOnly
     val hideLiked = fabRestoreState.hideLiked
     val hideSaved = fabRestoreState.hideSaved
     val durationMinBucket = fabRestoreState.durationMinBucket
     val durationMaxBucket = fabRestoreState.durationMaxBucket
-    val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
-        AnimatedDurationRange(minBucket = durationMinBucket, maxBucket = durationMaxBucket)
-    }
-    val visibilityFilters = remember(animatedOnly, hideLiked, hideSaved, animatedDurationRange) {
+    val visibilityFilters = remember(animatedOnly, hideLiked, hideSaved, durationMinBucket, durationMaxBucket) {
         SearchVisibilityFilters(
             animatedOnly = animatedOnly,
             hideLiked = hideLiked,
             hideSaved = hideSaved,
-            animatedDurationRange = animatedDurationRange,
+            animatedDurationRange = AnimatedDurationRange(minBucket = durationMinBucket, maxBucket = durationMaxBucket),
         )
     }
-    val durationFilter = rememberSearchDurationFilterPresentation(
-        state.results, animatedDurationRange, durationStates, resolveUnknownAnimatedDurations, retainKey = state.selectedFeed.retainKey,
-    )
-    val presentedResults = durationFilter.presentedPosts ?: state.results
-    val retainedLikedPostIds = retainPostsUntilViewerCloses(remember(state.relatedPosts, pendingLikePostIds) {
-        state.relatedPosts.retainedLikedPostIds + pendingLikePostIds
-    })
-    val marks = visibilityFilters.markInputs(likedPostIds, savedPostIds, emptySet(), retainedLikedPostIds)
-    val visibleResults = rememberFilteredFeed(
-        presentedResults, visibilityFilters, durationFilter.unknownPolicy, durationFilter.metadata, marks,
-        retainKey = state.selectedFeed.retainKey,
-    )
-    val related = rememberRelatedFeedPresentation(
-        retainKey = state.selectedFeed.retainKey,
-        pendingLikePostIds = pendingLikePostIds,
-        canonicalPosts = state.results,
-        visibleCanonicalPosts = visibleResults,
-        relatedState = state.relatedPosts,
-        visibilityFilters = visibilityFilters,
-        likedPostIds = likedPostIds,
-        savedPostIds = savedPostIds,
-        watchedPostIds = emptySet(),
-        unknownAnimatedDurationPolicy = durationFilter.unknownPolicy,
-        durationStates = durationStates,
-        durationFilterActive = durationFilter.active,
-    )
-    return remember(animatedDurationRange, visibilityFilters, durationFilter, visibleResults, related) {
-        CreatorFeed(animatedDurationRange, visibilityFilters, durationFilter, visibleResults, related)
+    val marks = remember(likedPostIds, savedPostIds, pendingLikePostIds) {
+        FeedMarks(liked = likedPostIds, saved = savedPostIds, pendingLikes = pendingLikePostIds)
     }
+    return rememberFeedView(state.selectedFeed.retainKey, state.results, visibilityFilters, durations, relatedState, marks)
 }
 
 @Composable
@@ -279,9 +225,9 @@ private fun CreatorNotSelected() {
     }
 }
 
-private fun creatorFilterLabels(fabRestoreState: FeedFabRestoreState, feed: CreatorFeed): List<String> = listOfNotNull(
+private fun creatorFilterLabels(fabRestoreState: FeedFabRestoreState, feed: FeedView): List<String> = listOfNotNull(
     "Animated".takeIf { fabRestoreState.animatedOnly },
-    animatedDurationRangeLabel(feed.animatedDurationRange).takeIf { feed.durationFilter.active },
+    animatedDurationRangeLabel(feed.filters.animatedDurationRange).takeIf { feed.durationFilterActive },
     "Hide liked".takeIf { fabRestoreState.hideLiked },
     "Hide saved".takeIf { fabRestoreState.hideSaved },
 )
@@ -437,7 +383,8 @@ private fun CreatorShareMenu(profileUrl: String) {
 @Composable
 private fun CreatorFeedBody(
     state: CreatorUiState,
-    feed: CreatorFeed,
+    related: RelatedShelfBinding,
+    feed: FeedView,
     cards: FeedCardEnvironment,
     gridState: LazyStaggeredGridState,
     pageDemand: FeedPageDemandControl,
@@ -446,27 +393,25 @@ private fun CreatorFeedBody(
 ) {
     state.errorMessage?.takeIf { state.canLoadMore }?.let { message ->
         DismissibleFailure(message) { dismiss ->
-            FeedErrorTile(message = message, onRetry = { onAction(CreatorAction.RetryPage) }, onDismiss = dismiss)
+            FeedFailureTile(message, onRetry = { onAction(CreatorAction.RetryPage) }, retriesOnReconnect = false, onDismiss = dismiss)
         }
     }
     FeedContinueLoading(pageDemand)
     when {
-        state.isRefreshing && feed.visibleResults.isEmpty() -> FeedLoadingState()
+        state.isRefreshing && feed.visiblePosts.isEmpty() -> FeedLoadingState()
 
-        state.errorMessage != null && !state.canLoadMore && feed.visibleResults.isEmpty() -> {
-            FeedErrorTile(
-                message = state.errorMessage.orEmpty(),
-                onRetry = { onAction(CreatorAction.Refresh) },
-            )
+        state.errorMessage != null && !state.canLoadMore && feed.visiblePosts.isEmpty() -> {
+            // Creator pages do not retry by themselves on reconnect, so the failure keeps its own message.
+            FeedFailureTile(state.errorMessage.orEmpty(), onRetry = { onAction(CreatorAction.Refresh) }, retriesOnReconnect = false)
         }
 
-        feed.visibleResults.isEmpty() && state.relatedPosts == RelatedPostsUiState.Idle -> {
+        feed.visiblePosts.isEmpty() && related.state == RelatedPostsUiState.Idle -> {
             FeedEmptyTile(message = creatorEmptyMessage(state, feed))
         }
 
         // Pull to refresh is how paging resumes after a dismissed page failure.
         else -> PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = { onAction(CreatorAction.Refresh) }) {
-            CreatorGrid(state, feed, cards, gridState, onAction, onLongPress)
+            CreatorGrid(state, related, feed, cards, gridState, onAction, onLongPress)
         }
     }
 }
@@ -474,63 +419,50 @@ private fun CreatorFeedBody(
 @Composable
 private fun CreatorGrid(
     state: CreatorUiState,
-    feed: CreatorFeed,
+    related: RelatedShelfBinding,
+    feed: FeedView,
     cards: FeedCardEnvironment,
     gridState: LazyStaggeredGridState,
     onAction: (CreatorAction) -> Unit,
     onLongPress: (Post) -> Unit,
 ) {
-    val visibleIndexById = remember(feed.visibleResults) {
-        feed.visibleResults.withIndex().associate { it.value.id to it.index }
-    }
-    TwoColumnProjectedPostStaggeredGrid(
-        projection = feed.related.projection,
-        modifier = Modifier.fillMaxSize(),
+    FeedGrid(
+        view = feed,
         state = gridState,
         footerMessage = pagedFeedFooterMessage(
-            resolvingDurations = feed.durationFilter.readiness.isResolving,
-            hasVisibleResults = feed.visibleResults.isNotEmpty(),
+            resolvingDurations = feed.durations.readiness.isResolving,
+            hasVisibleResults = feed.visiblePosts.isNotEmpty(),
             canLoadMore = state.canLoadMore,
             requestRunning = state.isRefreshing || state.isPaging,
             failed = state.errorMessage != null,
         ),
-        postContent = { _, post ->
+        post = { index, post ->
             FeedPostCard(
                 post = post,
                 environment = cards,
                 onClick = {
                     onAction(
                         CreatorAction.OpenResult(
-                            index = visibleIndexById.getValue(post.id),
+                            index = index,
                             scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
-                            visibleResults = feed.visibleResults,
-                            visibilityFilters = feed.visibilityFilters,
+                            visibleResults = feed.visiblePosts,
+                            visibilityFilters = feed.filters,
                         )
                     )
                 },
                 onLongPress = { onLongPress(post) },
             )
         },
-        shelfContent = {
-            FeedRelatedPostsShelf(
-                state = state.relatedPosts,
-                presentation = feed.related,
-                environment = cards,
-                onOpenPost = { posts, index -> onAction(CreatorAction.OpenRelatedResult(index, posts)) },
-                onLongPress = onLongPress,
-                onDismiss = { onAction(CreatorAction.DismissRelatedPosts) },
-                onRetry = { onAction(CreatorAction.RetryRelatedPosts) },
-                onPreviousPage = { onAction(CreatorAction.ShowPreviousRelatedPosts) },
-                onNextPage = { onAction(CreatorAction.ShowNextRelatedPosts) },
-            )
+        shelf = {
+            FeedRelatedPostsShelf(related, feed.related, cards, onLongPress)
         },
     )
 }
 
-private fun creatorEmptyMessage(state: CreatorUiState, feed: CreatorFeed): String = when {
-    feed.durationFilter.readiness.isResolving -> "Resolving durations…"
+private fun creatorEmptyMessage(state: CreatorUiState, feed: FeedView): String = when {
+    feed.durations.readiness.isResolving -> "Resolving durations…"
     state.results.isEmpty() -> "No ${state.selectedFeed.noun} found for this creator."
-    !feed.visibilityFilters.animatedDurationRange.isFullRange ->
+    !feed.filters.animatedDurationRange.isFullRange ->
         "No animated media found in the selected duration range."
     else -> "No ${state.selectedFeed.noun} match the current filters."
 }

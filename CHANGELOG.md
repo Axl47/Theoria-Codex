@@ -6,6 +6,11 @@
 
 - Search, creator profiles and For You show "No more results" at the bottom once a feed has no further pages, where the list used to just stop.
 
+### Changed
+
+- Post menus in For You and on creator pages now show tag counts, and holding a tag saves it, as they already did in Search, the Codex and the Viewer.
+- A Codex collection's "Resolving durations…" line now spans the full width, as in other feeds.
+
 ### Fixed
 
 - Past about 1,000 posts Gelbooru refuses to return more results, which Search reported as "Gelbooru returned malformed JSON". It now says "Gelbooru won't load results past this point".
@@ -14,6 +19,28 @@
 - Resetting a search, tapping the Search tab again, or opening a post from a related shelf while Search was still returning to your saved place could be undone a moment later, when the list jumped back to the old place. The list now stays where you sent it.
 - Coming back from a post to Search with the search bar open made the results slide down for a moment. They now appear in place.
 - A creator's bio that you had expanded collapsed again after you opened one of their posts and came back. It now stays expanded.
+- When Cloudflare challenged Iwara or nhentai, every request failed as if the site were down. They now switch to the site's mirror, as they do during other outages.
+- Leaving a Hitomi search while another search was loading the same index could make the other search fail. It now finishes loading.
+- A Hitomi gallery too large to read made the whole search fail with an internal error. Search now leaves that gallery out, as it does with galleries that fail to load.
+- A Danbooru page with a post dated beyond the range the app can read failed to load entirely. That post now shows without a date.
+- Restoring a profile backup with more Recents than the limit left the trimmed posts' data behind in storage. It's now deleted.
+- The Saved searches collection left work running in the background each time its list redrew, which added up over a long session. It no longer does.
+- When a restored Unified search had source-only terms removed, the notice saying so disappeared. It now stays.
+- Multi-Search's notice that it removed source-only terms never appeared when you turned on a source that needed it. It now shows.
+- Diagnostics now records a single-source search whose first page failed, as it already did for later pages and retries.
+- A Unified search that failed for a reason outside any one source showed "Pixiv returned a temporary unknown error", even with Pixiv off. It now shows the actual error.
+- Tag counts in Search's post menu could show another source's count for a tag with the same name. They now come from the post's own source, as on other screens.
+- With Hide liked or Hide saved on together with Hide watched, Search's empty state named only liked or saved posts. It now names every kind it hid.
+- After changing video quality, tapping Retry or coming back to a video, the Viewer could repeat your last double-tap seek. Each double-tap now seeks once.
+- Pixiv animations held back the Viewer's comments and the preloading of nearby posts for about a second and a half, because they never reported that they had loaded. They now report it as soon as their first frames are ready, including when you swipe to one that loaded in advance.
+- When a post kept failing to load, the Viewer kept retrying it without end. It now tries once, and again when you come back to the post or tap Retry.
+- Back did nothing while Retry was waiting for the site to answer. It now closes the Viewer right away.
+- When related posts were added to the Viewer, playback speed went back to 1x and a paused video started playing. Both now stay as you set them.
+- The Viewer's media overview closed when the feed loaded more posts in the background. It now stays open.
+- A creator page that failed to load while you were offline didn't say so. It now shows "You're offline" above the site's error.
+- With a related shelf open and a filter on, creator pages loaded their next page before you reached the end.
+- In the Followed and Saved searches collections, an open related shelf made the next page load slightly early.
+- Cards in Codex collections and Recents waited for their own images as you scrolled. On unmetered networks they now load ahead, as in other feeds.
 
 ## [1.9.2] - 2026-11-18
 

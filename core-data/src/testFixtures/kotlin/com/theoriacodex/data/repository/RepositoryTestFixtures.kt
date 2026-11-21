@@ -6,7 +6,8 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 
-internal fun repositoryTestPost(
+/** A complete post with stable URLs and one tag, for repository tests on any backing. */
+fun repositoryTestPost(
     id: String,
     localPath: String? = null,
     source: SourceKey = SourceKey.PIXIV,

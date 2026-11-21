@@ -8,7 +8,6 @@ import com.theoriacodex.app.media.postPlaybackMediaCandidate
 import com.theoriacodex.app.source.exposedRealSources
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.search.state.SearchSourceScope
-import com.theoriacodex.app.viewer.ViewerMediaOverviewKind
 import com.theoriacodex.app.viewer.viewerMediaOverviewItems
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.model.PostId
@@ -19,9 +18,7 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.RealAdapterRegistry
-import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.PixivAuthTokens
-import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.health.ProviderAutocompleteProbe
 import com.theoriacodex.sources.health.ProviderProbeCase
@@ -147,9 +144,8 @@ internal class LiveSearchCoordinatorRouteTest : LiveSearchCoordinatorRouteTestFi
                 sourceScope = run.sourceScope,
                 selectedScope = FacetedSearchScope.All,
                 input = scopedPrefix,
-                trending = emptyList(),
             )
-            if (autocomplete.autocomplete.isEmpty()) {
+            if (autocomplete.autocomplete.isEmpty() && autocomplete.facetedAutocomplete.isEmpty()) {
                 issues += "${probeCase.source.id}: ${autocompleteProbe.checkName} returned no tags for prefix $scopedPrefix"
             }
             val expectedFacet = autocompleteProbe.facet

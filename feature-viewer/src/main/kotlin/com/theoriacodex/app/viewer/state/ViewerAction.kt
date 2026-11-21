@@ -12,8 +12,6 @@ sealed interface ViewerAction {
         val initialPageIndex: Int = 0,
         val resolutionRequiredPostIds: Set<PostId> = emptySet(),
         val initialMediaIndices: Map<PostId, Int> = emptyMap(),
-        val relatedNavigation: ViewerRelatedNavigation? = null,
-        val relatedPostIds: Set<PostId> = emptySet(),
     ) : ViewerAction
 
     /** Adds [posts] after the live [session]'s pages, leaving the pages, selection and controls it has untouched. */
@@ -24,17 +22,27 @@ sealed interface ViewerAction {
         val initialMediaIndices: Map<PostId, Int> = emptyMap(),
     ) : ViewerAction
 
+    /**
+     * Enters, or extends, the recommendation branch from [seedId] with the related shelf's [posts]. Like
+     * [AppendPosts] it adds pages only for the posts the session lacks and leaves every other page untouched.
+     */
+    data class IncludeRelatedPosts(
+        val session: ViewerSessionIdentity,
+        val seedId: PostId,
+        val posts: List<Post>,
+        val resolutionRequiredPostIds: Set<PostId> = emptySet(),
+        val initialMediaIndices: Map<PostId, Int> = emptyMap(),
+    ) : ViewerAction
+
     data class SelectPage(val pageIndex: Int) : ViewerAction
     data class SelectMedia(val mediaIndex: Int) : ViewerAction
-    data class SelectOverviewMedia(val mediaIndex: Int) : ViewerAction
+    /** Moves to [mediaIndex] of page [pageIndex], as one step. */
+    data class Navigate(val pageIndex: Int, val mediaIndex: Int) : ViewerAction
     data object ToggleChrome : ViewerAction
     data object ToggleOverview : ViewerAction
-    data object ShowMetadata : ViewerAction
-    data object HideMetadata : ViewerAction
-    data object ShowActionsMenu : ViewerAction
-    data object HideActionsMenu : ViewerAction
-    data object ShowPlaybackSettings : ViewerAction
-    data object HidePlaybackSettings : ViewerAction
+    data class ShowPanel(val panel: ViewerPanel) : ViewerAction
+    /** Closes [panel] if it is the open one. */
+    data class HidePanel(val panel: ViewerPanel) : ViewerAction
 
     data class SetPlaybackMode(val mode: ViewerPlaybackMode) : ViewerAction
     data class PlaybackCompleted(val session: ViewerSessionIdentity, val key: ViewerMediaKey, val loadGeneration: Long) : ViewerAction
@@ -47,7 +55,6 @@ sealed interface ViewerAction {
     data object RestartPlayback : ViewerAction
     data class SetPlaybackRate(val rate: Float) : ViewerAction
 
-    data object RequestCurrentPageResolution : ViewerAction
     data class RequestPageResolution(val postId: PostId) : ViewerAction
     data class ResolutionCancelled(val session: ViewerSessionIdentity, val postId: PostId) : ViewerAction
     data class ResolutionStarted(
@@ -67,21 +74,11 @@ sealed interface ViewerAction {
         val recoverable: Boolean,
     ) : ViewerAction
 
-    /** [decodeKeys]: images among [mediaKeys] close enough to the current media to keep decoded in memory. */
-    data class QueuePrefetch(
-        val mediaKeys: List<ViewerMediaKey>,
-        val decodeKeys: Set<ViewerMediaKey> = emptySet(),
-    ) : ViewerAction
-    data class PrefetchStarted(
-        val session: ViewerSessionIdentity,
-        val mediaKey: ViewerMediaKey,
-    ) : ViewerAction
-
-    data class PrefetchCompleted(
-        val session: ViewerSessionIdentity,
-        val mediaKey: ViewerMediaKey,
-        val result: ViewerPrefetchResult,
-    ) : ViewerAction
+    /**
+     * The media the Viewer wants warm now, most wanted first; anything else in flight is cancelled. The ViewModel
+     * runs it and keeps its progress to itself, so prefetching never changes [ViewerUiState].
+     */
+    data class QueuePrefetch(val requests: List<ViewerPrefetchRequest>) : ViewerAction
 
     data class MediaFailed(
         val session: ViewerSessionIdentity,
@@ -95,7 +92,6 @@ sealed interface ViewerAction {
         val loadGeneration: Long,
     ) : ViewerAction
 
-    data object ClearMediaError : ViewerAction
     data object RetryMedia : ViewerAction
 
     data object Save : ViewerAction
@@ -105,62 +101,66 @@ sealed interface ViewerAction {
     data class IncludeTag(val term: PostTaxonomyTerm) : ViewerAction
     data class ExcludeTag(val term: PostTaxonomyTerm) : ViewerAction
     data object LoadMore : ViewerAction
+    /** Pauses and closes every surface ahead of [Dismiss], so the return starts from the bare media. */
+    data object PrepareDismiss : ViewerAction
     data object Dismiss : ViewerAction
 }
+
+/** One media item to warm, [distance] media items from the one on screen; [decode] keeps an image decoded in memory. */
+data class ViewerPrefetchRequest(val key: ViewerMediaKey, val distance: Int, val decode: Boolean)
 
 sealed interface ViewerEffect {
     val session: ViewerSessionIdentity
 
+    /** Work the Viewer owner runs itself; the route never sees it. */
     data class ResolvePost(
         override val session: ViewerSessionIdentity,
         val postId: PostId,
     ) : ViewerEffect
 
-    data class PrefetchMedia(
-        override val session: ViewerSessionIdentity,
-        val mediaKeys: List<ViewerMediaKey>,
-    ) : ViewerEffect
+    /** An effect the owner hands to the route, which reaches the app outside the Viewer. */
+    sealed interface Route : ViewerEffect
 
     data class SavePost(
         override val session: ViewerSessionIdentity,
         val postId: PostId,
-    ) : ViewerEffect
+    ) : Route
 
     data class DownloadMedia(
         override val session: ViewerSessionIdentity,
         val postId: PostId,
         val mediaKey: ViewerMediaKey,
-    ) : ViewerEffect
+    ) : Route
 
     data class SetLiked(
         override val session: ViewerSessionIdentity,
         val postId: PostId,
-    ) : ViewerEffect
+    ) : Route
 
     data class OpenCreatorProfile(
         override val session: ViewerSessionIdentity,
         val creator: CreatorProfile,
-    ) : ViewerEffect
+    ) : Route
 
     data class ApplyTag(
         override val session: ViewerSessionIdentity,
         val postId: PostId,
         val term: PostTaxonomyTerm,
         val excluded: Boolean,
-    ) : ViewerEffect
+    ) : Route
 
     data class RetryMedia(
         override val session: ViewerSessionIdentity,
         val mediaKey: ViewerMediaKey,
-    ) : ViewerEffect
+    ) : Route
 
     data class LoadMore(
         override val session: ViewerSessionIdentity,
-    ) : ViewerEffect
+    ) : Route
 
     data class Dismiss(
         override val session: ViewerSessionIdentity,
-    ) : ViewerEffect
+    ) : Route
 }
 
 data class ViewerReduction(

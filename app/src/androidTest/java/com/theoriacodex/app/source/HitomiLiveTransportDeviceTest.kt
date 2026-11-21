@@ -52,7 +52,6 @@ class HitomiLiveTransportDeviceTest {
                         format = HitomiMediaFormat.WEBP,
                         shard = 1,
                         isAlternateShard = false,
-                        configurationBasePath = "device-test",
                         configurationVersion = "device-test",
                     ),
                 )

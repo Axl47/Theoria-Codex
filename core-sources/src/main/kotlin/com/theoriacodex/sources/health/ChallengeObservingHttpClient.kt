@@ -57,22 +57,3 @@ internal class ChallengeObservingHttpClient(
 /** A challenge served instead of the API. A maintenance page is an outage, so it does not count. */
 internal fun SourceHttpResponse.isBrowserChallenge(): Boolean =
     HostOutageTracker.outageKindOf(statusCode, headers) == HostOutageKind.CHALLENGE || isVerificationChallenge()
-
-/**
- * Runs one probe step. A problem during which a browser challenge answered says nothing about the
- * provider, so it is reported as [ProviderHealthStatus.CANNOT_CHECK].
- */
-internal suspend fun observingChallenges(
-    challengesSeen: () -> Int,
-    step: suspend () -> ProviderProbeStepResult,
-): ProviderProbeStepResult {
-    val challengesBefore = challengesSeen()
-    val result = step()
-    val isProblem = result.status == ProviderHealthStatus.FAILED || result.status == ProviderHealthStatus.DEGRADED
-    if (!isProblem || challengesSeen() == challengesBefore) return result
-    return result.copy(
-        status = ProviderHealthStatus.CANNOT_CHECK,
-        failureReason = null,
-        message = "A browser challenge answered instead of the provider",
-    )
-}

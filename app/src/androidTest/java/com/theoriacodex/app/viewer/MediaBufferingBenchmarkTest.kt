@@ -5,7 +5,6 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import coil.imageLoader
@@ -18,6 +17,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.VideoQuality
+import com.theoriacodex.domain.model.ViewerPlaybackMode
 import java.io.File
 import java.util.UUID
 import kotlin.math.roundToInt
@@ -102,9 +102,9 @@ class MediaBufferingBenchmarkTest {
         val viewer = onMain {
             feed.forEach { (probe, _) -> probe.player.playWhenReady = false }
             val lease = infrastructure.viewerVideoPlayerPool.acquire(clips.first(), headers)
-            PlayerProbe(lease.resource, surfaces.last().surface).also { probe ->
+            PlayerProbe(lease.player, surfaces.last().surface).also { probe ->
                 probe.attach()
-                lease.resource.playWhenReady = true
+                lease.player.playWhenReady = true
             } to lease
         }
         delay(FEED_PLAYER_RELEASE_GRACE_MS)
@@ -181,9 +181,9 @@ class MediaBufferingBenchmarkTest {
         val surface = BenchSurface()
         val (probe, lease) = onMain {
             val lease = infrastructure.viewerVideoPlayerPool.acquire(video, headers)
-            PlayerProbe(lease.resource, surface.surface).also { probe ->
+            PlayerProbe(lease.player, surface.surface).also { probe ->
                 probe.attach()
-                lease.resource.playWhenReady = true
+                lease.player.playWhenReady = true
             } to lease
         }
         val firstFrame = probe.awaitFirstFrame()
@@ -321,7 +321,9 @@ class MediaBufferingBenchmarkTest {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val viewer = ViewerViewModel(
             SavedStateHandle(),
+            postResolver = { _, _ -> null },
             mediaPrefetcher = viewerMediaPrefetcher(context) { VideoQuality.AUTO },
+            playbackModeProvider = { ViewerPlaybackMode.LOOP },
             scopeOverride = scope,
         )
         scope.launch { viewer.effects.collect { } }
@@ -330,7 +332,7 @@ class MediaBufferingBenchmarkTest {
             viewer.replaceSession(
                 ViewerSession(
                     listOf(post), ViewerLaunchContext("media-bench", 0, ViewerStreamSource.SEARCH, 0),
-                    initialMediaIndex = 1,
+                    initialMediaIndices = mapOf(post.id to 1),
                 ),
             )
             viewer.queueAdjacentPrefetch()
@@ -457,7 +459,9 @@ class MediaBufferingBenchmarkTest {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val viewer = ViewerViewModel(
             SavedStateHandle(),
+            postResolver = { _, _ -> null },
             mediaPrefetcher = viewerMediaPrefetcher(context) { VideoQuality.AUTO },
+            playbackModeProvider = { ViewerPlaybackMode.LOOP },
             scopeOverride = scope,
         )
         scope.launch { viewer.effects.collect { } }
@@ -577,16 +581,16 @@ class MediaBufferingBenchmarkTest {
         surface: BenchSurface,
         play: Boolean,
         requestHeaders: Map<String, String> = headers,
-    ): Pair<PlayerProbe, ReusableVideoSlotPool.Lease<ExoPlayer>> {
+    ): Pair<PlayerProbe, VideoPlayerLease> {
         val lease = context.videoPlaybackInfrastructure().viewerVideoPlayerPool.acquire(location, requestHeaders)
-        return PlayerProbe(lease.resource, surface.surface).also { probe ->
+        return PlayerProbe(lease.player, surface.surface).also { probe ->
             probe.attach()
-            lease.resource.playWhenReady = play
+            lease.player.playWhenReady = play
         } to lease
     }
 
     /** A visible feed card: it leases its player and autoplays. */
-    private fun feedCard(location: String, surface: BenchSurface): Pair<PlayerProbe, FeedPreviewPlayerLease> {
+    private fun feedCard(location: String, surface: BenchSurface): Pair<PlayerProbe, VideoPlayerLease> {
         val lease = context.videoPlaybackInfrastructure().feedPreviewPlayerPool.acquire(location, headers)
         return PlayerProbe(lease.player, surface.surface).also { probe ->
             probe.attach()
@@ -595,7 +599,7 @@ class MediaBufferingBenchmarkTest {
     }
 
     /** A card scrolled out of composition returns its player with its binding, as its disposal does. */
-    private fun returnFeedCard(probe: PlayerProbe, lease: FeedPreviewPlayerLease) {
+    private fun returnFeedCard(probe: PlayerProbe, lease: VideoPlayerLease) {
         probe.detach()
         context.videoPlaybackInfrastructure().feedPreviewPlayerPool.recycle(lease, retainBinding = true)
     }

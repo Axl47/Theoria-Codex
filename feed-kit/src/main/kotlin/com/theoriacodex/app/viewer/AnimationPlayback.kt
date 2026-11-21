@@ -78,7 +78,7 @@ class AnimationPlaybackState(durationMs: Long) {
 }
 
 @Composable
-fun AnimatePlayback(
+internal fun AnimatePlayback(
     state: AnimationPlaybackState,
     enabled: Boolean,
     rate: Float,

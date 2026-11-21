@@ -1,14 +1,12 @@
 package com.theoriacodex.sources.pixiv
 
 import com.google.gson.Gson
-import com.google.gson.JsonObject
 import com.theoriacodex.domain.adapter.AccountProfileSourceAdapter
 import com.theoriacodex.domain.adapter.CommentsSourceAdapter
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.DurationMetadataSourceAdapter
 import com.theoriacodex.domain.adapter.DurationMetadataSourceResult
 import com.theoriacodex.domain.adapter.Page
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.MAX_RELATED_POST_CANDIDATES
 import com.theoriacodex.domain.adapter.RelatedPostsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapter
@@ -21,33 +19,26 @@ import com.theoriacodex.domain.model.AccountDetails
 import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.domain.model.CommentPage
 import com.theoriacodex.domain.model.CreatorProfile
-import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.pixivSearchToken
-import com.theoriacodex.sources.common.asLongOrNull
-import com.theoriacodex.sources.common.asStringOrNull
 import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.classifyHttpFailure
-import com.theoriacodex.sources.common.elementsOrEmpty
-import com.theoriacodex.sources.common.intValue
 import com.theoriacodex.sources.common.isSuccessful
-import com.theoriacodex.sources.common.longValue
-import com.theoriacodex.sources.common.optionalJsonArray
 import com.theoriacodex.sources.common.optionalJsonObject
 import com.theoriacodex.sources.common.parseJsonObject
 import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.common.sourceNetworkFailure
-import com.theoriacodex.sources.common.sourceQuickQuery
 import com.theoriacodex.sources.common.stringValue
+import com.theoriacodex.sources.credentials.PixivAuthTokens
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
+import com.theoriacodex.sources.http.RequestPacer
 import com.theoriacodex.sources.http.SourceHttpClient
-import com.theoriacodex.sources.media.inferMimeFromUrl
+import com.theoriacodex.sources.http.SourceHttpResponse
 import java.io.IOException
 import java.time.Instant
 import java.time.ZoneOffset
@@ -56,9 +47,7 @@ import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import com.theoriacodex.sources.common.objects
 
 class PixivSourceAdapter(
     private val httpClient: SourceHttpClient,
@@ -84,45 +73,32 @@ class PixivSourceAdapter(
         supportsSortTop = true,
         supportsSortRandom = true,
         supportsExcludeTagsServerSide = false,
-        supportsDateRangeServerSide = true,
-        supportsMinScoreServerSide = false,
-        requiresCredentials = true,
     )
 
     /** Feed pages and settings lookups; background duration lookups never queue in front of them. */
-    private val browsePacer = PixivRequestPacer(minRequestIntervalMs, clock)
+    private val browsePacer = RequestPacer(minRequestIntervalMs, clock)
 
     /** Ugoira duration lookups are already paced per source by the duration engine; this lane keeps them apart. */
-    private val durationPacer = PixivRequestPacer(minRequestIntervalMs, clock)
+    private val durationPacer = RequestPacer(minRequestIntervalMs, clock)
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> = sourceCall(callContext) {
-        val offset = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0
-        val params = mutableMapOf(
+        val params = offsetPageParams(
+            pageToken,
             "word" to compileTagQuery(query),
             "search_target" to "partial_match_for_tags",
             "sort" to mapSort(query.sort),
             "filter" to "for_android",
         )
-        if (offset > 0) {
-            params["offset"] = offset.toString()
-        }
         query.dateRange?.let { range ->
             range.fromEpochMs?.let { params["start_date"] = formatEpochDate(it) }
             range.toEpochMs?.let { params["end_date"] = formatEpochDate(it) }
         }
 
-        val response = authorizedGet(
-            url = "$PIXIV_API_BASE/v1/search/illust",
-            query = params,
+        val illusts = fetchIllusts("$PIXIV_API_BASE/v1/search/illust", params)
+        canonicalPostPage(
+            items = if (query.sort == SortMode.RANDOM) illusts.posts.shuffled() else illusts.posts,
+            nextPageToken = parseNextOffset(illusts.nextUrl),
         )
-        val root = parseJsonObject(response, gson, "Pixiv")
-        val illusts = root.optionalJsonArray("illusts")
-        val posts = illusts?.mapNotNull { element ->
-            element.takeIf { it.isJsonObject }?.asJsonObject?.let(::parseIllust)
-        }.orEmpty()
-        val normalizedPosts = if (query.sort == SortMode.RANDOM) posts.shuffled() else posts
-        val nextToken = parseNextOffset(root.stringValue("next_url"))
-        canonicalPostPage(items = normalizedPosts, nextPageToken = nextToken)
     }
 
     override suspend fun trendingTags(limit: Int): List<TagSuggestion> = sourceCall(callContext) {
@@ -131,13 +107,8 @@ class PixivSourceAdapter(
             query = mapOf("filter" to "for_android"),
         )
         val root = parseJsonObject(response, gson, "Pixiv")
-        val tags = root.optionalJsonArray("trend_tags").elementsOrEmpty()
-        tags.mapNotNull { item ->
-            val tag = item.takeIf { it.isJsonObject }
-                ?.asJsonObject
-                ?.optionalJsonObject("tag")
-                ?: return@mapNotNull null
-            parseTagSuggestion(tag, type = "trending")
+        root.objects("trend_tags").mapNotNull { item ->
+            item.optionalJsonObject("tag")?.let { tag -> parsePixivTagSuggestion(tag, type = "trending") }
         }.take(limit)
     }
 
@@ -148,19 +119,7 @@ class PixivSourceAdapter(
             query = mapOf("word" to prefix),
         )
         val root = parseJsonObject(response, gson, "Pixiv")
-        val tags = root.optionalJsonArray("tags").elementsOrEmpty()
-        tags.mapNotNull { item ->
-            val tag = item.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
-            parseTagSuggestion(tag, type = "tag")
-        }.take(limit)
-    }
-
-    override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceCall(callContext) {
-        sourceQuickQuery(
-            source = SourceKey.PIXIV,
-            kind = kind,
-            nowEpochMs = clock(),
-        )
+        root.objects("tags").mapNotNull { tag -> parsePixivTagSuggestion(tag, type = "tag") }.take(limit)
     }
 
     override suspend fun resolvePost(id: PostId): Post? = sourceCall(callContext) {
@@ -171,7 +130,7 @@ class PixivSourceAdapter(
         )
         val root = parseJsonObject(response, gson, "Pixiv")
         val illust = root.optionalJsonObject("illust") ?: return@sourceCall null
-        val parsed = parseIllust(illust) ?: return@sourceCall null
+        val parsed = parsePixivIllust(illust) ?: return@sourceCall null
         if (illust.stringValue("type") == "ugoira" && parsed.durationMs == null) {
             parsed.copy(durationMs = fetchUgoiraDurationMs(id.sourcePostId))
         } else {
@@ -181,19 +140,11 @@ class PixivSourceAdapter(
 
     override suspend fun relatedPosts(seed: PostId, limit: Int): List<Post> = sourceCall(callContext) {
         if (seed.source != SourceKey.PIXIV || limit <= 0) return@sourceCall emptyList()
-        val response = authorizedGet(
+        fetchIllusts(
             url = "$PIXIV_API_BASE/v2/illust/related",
-            query = mapOf(
-                "illust_id" to seed.sourcePostId,
-                "filter" to "for_android",
-            ),
-        )
-        val root = parseJsonObject(response, gson, "Pixiv related illustrations")
-        root.optionalJsonArray("illusts")
-            .elementsOrEmpty()
-            .mapNotNull { element ->
-                element.takeIf { it.isJsonObject }?.asJsonObject?.let(::parseIllust)
-            }
+            query = mapOf("illust_id" to seed.sourcePostId, "filter" to "for_android"),
+            label = "Pixiv related illustrations",
+        ).posts
             .asSequence()
             .filterNot { post -> post.id == seed }
             .distinctBy(Post::id)
@@ -209,29 +160,11 @@ class PixivSourceAdapter(
         val userId = creator.uploadsQuery?.trim().takeIf { !it.isNullOrBlank() }
             ?: creator.profileId?.trim().takeIf { !it.isNullOrBlank() }
             ?: return@sourceCall canonicalPostPage(items = emptyList(), nextPageToken = null)
-        val offset = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0
-        val params = linkedMapOf(
-            "user_id" to userId,
-            "type" to "illust",
-            "filter" to "for_android",
-        )
-        if (offset > 0) {
-            params["offset"] = offset.toString()
-        }
-        val response = authorizedGet(
+        val illusts = fetchIllusts(
             url = "$PIXIV_API_BASE/v1/user/illusts",
-            query = params,
+            query = offsetPageParams(pageToken, "user_id" to userId, "type" to "illust", "filter" to "for_android"),
         )
-        val root = parseJsonObject(response, gson, "Pixiv")
-        val posts = root.optionalJsonArray("illusts")
-            ?.mapNotNull { element ->
-                element.takeIf { it.isJsonObject }?.asJsonObject?.let(::parseIllust)
-            }
-            .orEmpty()
-        canonicalPostPage(
-            items = posts,
-            nextPageToken = parseNextOffset(root.stringValue("next_url")),
-        )
+        canonicalPostPage(items = illusts.posts, nextPageToken = parseNextOffset(illusts.nextUrl))
     }
 
     override fun accountFeeds(creator: CreatorProfile): List<AccountFeed> =
@@ -264,19 +197,21 @@ class PixivSourceAdapter(
      * previous response's absolute `next_url`, requested as given.
      */
     private suspend fun publicBookmarks(userId: String, pageToken: String?): Page<Post> {
-        val response = if (pageToken == null) {
-            authorizedGet(
+        val illusts = if (pageToken == null) {
+            fetchIllusts(
                 url = "$PIXIV_API_BASE/v1/user/bookmarks/illust",
                 query = mapOf("user_id" to userId, "restrict" to "public", "filter" to "for_android"),
             )
         } else {
-            authorizedGet(trustedPixivLink(pageToken), emptyMap())
+            fetchIllusts(trustedPixivLink(pageToken), emptyMap())
         }
-        val root = parseJsonObject(response, gson, "Pixiv")
-        val posts = root.optionalJsonArray("illusts").elementsOrEmpty().mapNotNull { element ->
-            element.takeIf { it.isJsonObject }?.asJsonObject?.let(::parseIllust)
-        }
-        return canonicalPostPage(items = posts, nextPageToken = root.stringValue("next_url")?.trim()?.takeIf(String::isNotBlank))
+        return canonicalPostPage(items = illusts.posts, nextPageToken = illusts.nextUrl?.trim()?.takeIf(String::isNotBlank))
+    }
+
+    /** One authorized illustration list and the response's `next_url`. */
+    private suspend fun fetchIllusts(url: String, query: Map<String, String>, label: String = "Pixiv"): PixivIllusts {
+        val root = parseJsonObject(authorizedGet(url, query), gson, label)
+        return PixivIllusts(posts = root.pixivIllusts(), nextUrl = root.stringValue("next_url"))
     }
 
     /** The bearer token only ever goes to Pixiv's own API, so a stored `next_url` must point there. */
@@ -326,51 +261,37 @@ class PixivSourceAdapter(
         }
     }
 
+    /** Sends one authorized GET; a 401/403 refreshes the token (unless another call already did) and retries once. */
     private suspend fun authorizedGet(
         url: String,
         query: Map<String, String>,
-        pacer: PixivRequestPacer = browsePacer,
+        pacer: RequestPacer = browsePacer,
     ): String {
         pacer.awaitTurn()
-        val currentTokens = tokenCoordinator.activeTokens()
-        val response = try {
-            httpClient.get(
-                url = url,
-                query = query,
-                headers = authorizedHeaders(currentTokens.accessToken),
-            )
-        } catch (error: IOException) {
-            sourceNetworkFailure("Pixiv network", error)
-        }
-
+        var tokens = tokenCoordinator.activeTokens()
+        var response = authorizedAttempt(url, query, tokens, failureLabel = "Pixiv network")
         if (response.statusCode == 401 || response.statusCode == 403) {
-            val refreshed = tokenCoordinator.refreshAfterAuthFailure(currentTokens)
-            val retry = try {
-                httpClient.get(
-                    url = url,
-                    query = query,
-                    headers = authorizedHeaders(refreshed.accessToken),
-                )
-            } catch (error: IOException) {
-                sourceNetworkFailure("Pixiv retry", error)
-            }
-            if (!retry.isSuccessful()) {
-                throw SourceAdapterException(
-                    reason = mapHttpFailure(retry.statusCode),
-                    message = "Pixiv request failed (${retry.statusCode})",
-                )
-            }
-            return retry.body
+            tokens = tokenCoordinator.refreshAfterAuthFailure(tokens)
+            response = authorizedAttempt(url, query, tokens, failureLabel = "Pixiv retry")
         }
-
         if (!response.isSuccessful()) {
             throw SourceAdapterException(
                 reason = mapHttpFailure(response.statusCode),
                 message = "Pixiv request failed (${response.statusCode})",
             )
         }
-
         return response.body
+    }
+
+    private suspend fun authorizedAttempt(
+        url: String,
+        query: Map<String, String>,
+        tokens: PixivAuthTokens,
+        failureLabel: String,
+    ): SourceHttpResponse = try {
+        httpClient.get(url = url, query = query, headers = authorizedHeaders(tokens.accessToken))
+    } catch (error: IOException) {
+        sourceNetworkFailure(failureLabel, error)
     }
 
     /** Translations are always requested in English so they line up with the booru vocabulary. */
@@ -378,51 +299,6 @@ class PixivSourceAdapter(
         "Authorization" to "Bearer $accessToken",
         "Accept-Language" to PIXIV_TRANSLATION_LANGUAGE,
     )
-
-    private fun parseTagSuggestion(tag: JsonObject, type: String): TagSuggestion? {
-        val name = tag.stringValue("name")?.trim().orEmpty()
-        if (name.isBlank()) return null
-        val translatedName = tag.stringValue("translated_name")
-            ?.trim()
-            ?.takeIf { translated ->
-                translated.isNotBlank() && !translated.equals(name, ignoreCase = true)
-            }
-        return TagSuggestion(
-            text = name,
-            type = type,
-            count = null,
-            alternateText = translatedName,
-        )
-    }
-
-    private fun parseIllust(raw: JsonObject): Post? {
-        val id = raw.longValue("id")?.toString() ?: return null
-        val media = parsePixivMedia(raw)
-        val tags = parsePixivTags(raw)
-        val createdAt = parseIsoInstant(raw.stringValue("create_date"))
-        val user = raw.optionalJsonObject("user")
-        val userName = user?.stringValue("name")?.trim().orEmpty().ifBlank { null }
-        val userId = user?.longValue("id")?.toString()
-        val title = raw.stringValue("title")
-
-        return Post(
-            id = PostId(SourceKey.PIXIV, id),
-            preview = media.preview,
-            full = media.full,
-            media = media.pages,
-            pageUrl = "https://www.pixiv.net/en/artworks/$id",
-            width = raw.intValue("width"),
-            height = raw.intValue("height"),
-            canonicalTags = tags.canonical,
-            rawTags = tags.raw,
-            taxonomy = tags.taxonomy,
-            authorName = userName,
-            createdAtEpochMs = createdAt,
-            title = title,
-            creatorProfile = userName?.let { pixivUserProfile(userId, it) },
-            durationMs = null,
-        )
-    }
 
     /** Search pages omit ugoira frames; failures propagate so the engine can retry them later. */
     override suspend fun resolveDurationMetadata(post: Post): DurationMetadataSourceResult = sourceCall(callContext) {
@@ -440,17 +316,7 @@ class PixivSourceAdapter(
             query = mapOf("illust_id" to postId),
             pacer = durationPacer,
         ).also { body -> ugoiraMetadataCache.put(postId, body) }
-        val root = parseJsonObject(response, gson, "Pixiv")
-        val metadata = root.optionalJsonObject("ugoira_metadata") ?: return null
-        val frames = metadata.optionalJsonArray("frames").elementsOrEmpty()
-        return frames.sumOf { frame ->
-            frame.takeIf { it.isJsonObject }
-                ?.asJsonObject
-                ?.get("delay")
-                .asLongOrNull()
-                ?.coerceAtLeast(16L)
-                ?: 0L
-        }.takeIf { it > 0L }
+        return parsePixivUgoiraDurationMs(parseJsonObject(response, gson, "Pixiv"))
     }
 
     private fun mapSort(sortMode: SortMode): String {
@@ -463,31 +329,14 @@ class PixivSourceAdapter(
     }
 }
 
-/** Spaces requests on one lane at least [minIntervalMs] apart. */
-private class PixivRequestPacer(private val minIntervalMs: Long, private val clock: () -> Long) {
-    private val mutex = Mutex()
-    private var lastRequestAtEpochMs = 0L
+private class PixivIllusts(val posts: List<Post>, val nextUrl: String?)
 
-    suspend fun awaitTurn() = mutex.withLock {
-        val waitMs = minIntervalMs - (clock() - lastRequestAtEpochMs)
-        if (waitMs > 0L) delay(waitMs)
-        lastRequestAtEpochMs = clock()
+/** Query parameters for an offset-paged feed; the page token is the offset, omitted on the first page. */
+private fun offsetPageParams(pageToken: String?, vararg params: Pair<String, String>): MutableMap<String, String> =
+    linkedMapOf(*params).apply {
+        val offset = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+        if (offset > 0) put("offset", offset.toString())
     }
-}
-
-private fun buildPixivProgressiveUrls(
-    vararg candidateUrls: String?,
-    canonicalUrl: String?,
-): List<String> {
-    return candidateUrls
-        .mapNotNull(::normalizedUrl)
-        .filter { it != canonicalUrl }
-        .distinct()
-}
-
-private fun normalizedUrl(url: String?): String? {
-    return url?.trim()?.takeIf(String::isNotBlank)
-}
 
 private fun parseNextOffset(nextUrl: String?): String? {
     if (nextUrl.isNullOrBlank()) return null
@@ -514,11 +363,6 @@ private fun compileTagQuery(query: Query): String {
     return (include + exclude).joinToString(" ")
 }
 
-private fun parseIsoInstant(value: String?): Long? {
-    if (value.isNullOrBlank()) return null
-    return runCatching { Instant.parse(value).toEpochMilli() }.getOrNull()
-}
-
 private fun formatEpochDate(value: Long): String {
     return DateTimeFormatter.ofPattern("yyyy-MM-dd")
         .withZone(ZoneOffset.UTC)
@@ -528,105 +372,3 @@ private fun formatEpochDate(value: Long): String {
 private const val PIXIV_API_BASE: String = "https://app-api.pixiv.net"
 private const val PIXIV_TRANSLATION_LANGUAGE: String = "en-US"
 const val PIXIV_UGOIRA_MIME: String = com.theoriacodex.domain.model.PIXIV_UGOIRA_MIME
-
-private data class ParsedPixivMedia(val preview: ImageRef, val full: ImageRef?, val pages: List<ImageRef>)
-/**
- * [canonical] keeps each translation right after its native tag (Codex automatic tags and the
- * clipboard match English there); [taxonomy] pairs them so chips and learning see one tag.
- */
-private data class ParsedPixivTags(
-    val raw: List<String>,
-    val canonical: List<String>,
-    val taxonomy: List<PostTaxonomyTerm>,
-)
-
-private fun parsePixivMedia(raw: JsonObject): ParsedPixivMedia {
-    val isUgoira = raw.stringValue("type") == "ugoira"
-    val imageUrls = raw.optionalJsonObject("image_urls")
-    val previewUrl = normalizedUrl(
-        imageUrls?.stringValue("medium") ?: imageUrls?.stringValue("square_medium"),
-    )
-    val singlePageMediumUrl = normalizedUrl(imageUrls?.stringValue("medium"))
-    val singlePageLargeUrl = normalizedUrl(imageUrls?.stringValue("large"))
-    val singlePageOriginalUrl = normalizedUrl(
-        raw.optionalJsonObject("meta_single_page")
-            ?.stringValue("original_image_url"),
-    )
-    val fullUrl = singlePageOriginalUrl ?: singlePageLargeUrl ?: singlePageMediumUrl
-    val fullMime = if (isUgoira) PIXIV_UGOIRA_MIME else inferMimeFromUrl(fullUrl)
-    val previewMime = inferMimeFromUrl(previewUrl) ?: fullMime
-    val previewRef = ImageRef(url = previewUrl, localPath = null, mime = previewMime)
-    val singlePageRef = fullUrl?.let { canonicalUrl ->
-        ImageRef(
-            url = canonicalUrl,
-            localPath = null,
-            mime = fullMime,
-            progressiveUrls = if (isUgoira) {
-                emptyList()
-            } else {
-                buildPixivProgressiveUrls(
-                    singlePageMediumUrl,
-                    singlePageLargeUrl,
-                    canonicalUrl = canonicalUrl,
-                )
-            },
-        )
-    }
-    val multiPageRefs = parsePixivPages(raw)
-    val fallbackFullRef = singlePageRef
-    val mediaRefs = when {
-        multiPageRefs.isNotEmpty() -> multiPageRefs
-        fallbackFullRef != null -> listOf(fallbackFullRef)
-        !previewUrl.isNullOrBlank() -> listOf(previewRef)
-        else -> emptyList()
-    }
-
-    return ParsedPixivMedia(previewRef, fallbackFullRef ?: mediaRefs.firstOrNull(), mediaRefs)
-}
-
-private fun parsePixivPages(raw: JsonObject): List<ImageRef> {
-    return raw.optionalJsonArray("meta_pages").elementsOrEmpty().mapNotNull { page ->
-        val pageObject = page.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
-        val pageUrls = pageObject.optionalJsonObject("image_urls") ?: return@mapNotNull null
-        val mediumUrl = normalizedUrl(pageUrls.stringValue("medium"))
-        val largeUrl = normalizedUrl(pageUrls.stringValue("large"))
-        val originalUrl = normalizedUrl(pageUrls.stringValue("original"))
-        val pageUrl = originalUrl ?: largeUrl ?: mediumUrl ?: return@mapNotNull null
-        ImageRef(
-            url = pageUrl,
-            localPath = null,
-            mime = inferMimeFromUrl(pageUrl),
-            progressiveUrls = buildPixivProgressiveUrls(
-                mediumUrl,
-                largeUrl,
-                canonicalUrl = pageUrl,
-            ),
-        )
-    }
-}
-
-private fun parsePixivTags(raw: JsonObject): ParsedPixivTags {
-    val translationsByNative = linkedMapOf<String, String?>()
-    val canonicalTags = linkedSetOf<String>()
-    raw.optionalJsonArray("tags").elementsOrEmpty().forEach { tagElement ->
-        val tagObject = tagElement.takeIf { it.isJsonObject }?.asJsonObject ?: return@forEach
-        val name = tagObject.stringValue("name")?.trim().orEmpty()
-        val translatedName = tagObject.get("translated_name").asStringOrNull()
-            ?.trim()
-            ?.takeIf { it.isNotBlank() && !it.equals(name, ignoreCase = true) }
-        if (name.isNotBlank()) {
-            canonicalTags += name
-            if (name !in translationsByNative || translationsByNative[name] == null) {
-                translationsByNative[name] = translatedName
-            }
-        }
-        translatedName?.let { canonicalTags += it }
-    }
-    return ParsedPixivTags(
-        raw = translationsByNative.keys.toList(),
-        canonical = canonicalTags.toList(),
-        taxonomy = translationsByNative.map { (name, translation) ->
-            PostTaxonomyTerm(value = name, translation = translation)
-        },
-    )
-}

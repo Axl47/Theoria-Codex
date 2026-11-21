@@ -7,9 +7,9 @@ import com.theoriacodex.app.fixtures.JourneyAppContainer
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.viewer.ViewerRestorationRequest
 import com.theoriacodex.app.viewer.ViewerSession
-import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
+import com.theoriacodex.app.viewer.testViewerOwner
 import com.theoriacodex.data.repository.FileBackedReadingPositionRepository
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.ViewerLaunchContext
@@ -47,10 +47,10 @@ class ViewerRestorationWorkflowTest {
                 context = context(ViewerStreamSource.CODEX, "codex:collection"),
             )
             val saved = SavedStateHandle()
-            val firstOwner = ViewerViewModel(saved, scopeOverride = this@runTest)
+            val firstOwner = testViewerOwner(saved, scopeOverride = this@runTest)
             firstOwner.replaceSession(launch)
             firstOwner.onAction(ViewerAction.SelectPage(1))
-            val coldOwner = ViewerViewModel(
+            val coldOwner = testViewerOwner(
                 SavedStateHandle(saved.keys().associateWith { saved.get<Any?>(it) }),
                 scopeOverride = this@runTest,
             )
@@ -94,13 +94,13 @@ class ViewerRestorationWorkflowTest {
             workflow.recordVisiblePost(gallery, 5, launch)
             workflow.recordVisibleMediaProgress(gallery, 2, launch)
             val resumed = workflow.prepareResumableSession(launch)
-            assertEquals(1, resumed.initialMediaIndex)
+            assertEquals(1, resumed.initialMediaIndices[gallery.id])
             assertEquals(5, graph.data.recentsRepository.observeWatchedPosts().first().single().maxViewedMediaNumber)
             val neighbor = testPost(SourceKey.PIXIV, "unwatched-neighbor")
             val neighborLaunch = workflow.prepareResumableSession(launch.copy(posts = listOf(neighbor, gallery)))
-            assertEquals(0, neighborLaunch.initialMediaIndex)
+            assertEquals(0, neighborLaunch.initialMediaIndices[neighbor.id])
             assertEquals(1, neighborLaunch.initialMediaIndices[gallery.id])
-            val viewer = ViewerViewModel(SavedStateHandle(), scopeOverride = this@runTest)
+            val viewer = testViewerOwner(SavedStateHandle(), scopeOverride = this@runTest)
             viewer.replaceSession(neighborLaunch)
             viewer.onAction(ViewerAction.SelectPage(1))
             assertEquals(1, viewer.state.value.currentPage?.selectedMediaIndex)
@@ -108,7 +108,7 @@ class ViewerRestorationWorkflowTest {
             assertEquals(2, fromDisk.get(gallery.id, RecentPostSection.WATCHED)?.mediaNumber)
 
             val restarted = workflow.prepareResumableSession(launch, startOver = true)
-            assertEquals(0, restarted.initialMediaIndex)
+            assertEquals(0, restarted.initialMediaIndices[gallery.id])
             assertEquals(5, graph.data.recentsRepository.observeWatchedPosts().first().single().maxViewedMediaNumber)
         }
     }
@@ -128,8 +128,8 @@ class ViewerRestorationWorkflowTest {
                 for (destination in origins) {
                     val target = launch.copy(context = context(destination, "target"))
                     val resumed = workflow.prepareResumableSession(target)
-                    assertEquals(1, resumed.initialMediaIndex)
-                    assertEquals(target.copy(posts = resumed.posts, initialMediaIndex = 1, initialMediaIndices = mapOf(gallery.id to 1)), resumed)
+                    assertEquals(1, resumed.initialMediaIndices[gallery.id])
+                    assertEquals(target.copy(posts = resumed.posts, initialMediaIndices = mapOf(gallery.id to 1)), resumed)
                 }
                 val recent = graph.data.recentsRepository.observeWatchedPosts().first().single()
                 assertEquals(RecentPostSection.WATCHED, recent.section)
@@ -161,7 +161,7 @@ class ViewerRestorationWorkflowTest {
             graph.awaitReady()
             val workflow = ViewerRouteWorkflow(
                 graph.data.copy(readingPositions = FileBackedReadingPositionRepository(graph.data.storageDirectory)),
-                this, graph.sources, { null }, { null }, { null },
+                this, graph.sources, { null },
                 providerDispatcher = StandardTestDispatcher(testScheduler),
             )
             block(graph, workflow)

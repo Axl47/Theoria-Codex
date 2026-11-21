@@ -6,12 +6,11 @@ import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.asIntOrNull
-import com.theoriacodex.sources.common.elementsOrEmpty
 import com.theoriacodex.sources.common.intValue
 import com.theoriacodex.sources.common.longValue
-import com.theoriacodex.sources.common.optionalJsonArray
 import com.theoriacodex.sources.common.optionalJsonObject
 import com.theoriacodex.sources.common.stringValue
+import com.theoriacodex.sources.common.objects
 
 /** Comments are requested 50 to a page, the largest size the API accepts. */
 internal const val NHENTAI_COMMENTS_PER_PAGE = 50
@@ -21,9 +20,7 @@ internal const val NHENTAI_COMMENTS_PER_PAGE = 50
  * that was requested, so the next token exists only while `num_pages` says more follow.
  */
 internal fun parseNhentaiCommentPage(root: JsonObject, pageIndex: Int): CommentPage {
-    val comments = root.optionalJsonArray("result").elementsOrEmpty().mapNotNull { element ->
-        element.takeIf { it.isJsonObject }?.asJsonObject?.let(::parseNhentaiComment)
-    }
+    val comments = root.objects("result").mapNotNull(::parseNhentaiComment)
     val totalPages = root.get("num_pages").asIntOrNull()
     return CommentPage(
         comments = comments,

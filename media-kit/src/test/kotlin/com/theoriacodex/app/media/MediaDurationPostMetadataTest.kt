@@ -17,12 +17,12 @@ class MediaDurationPostMetadataTest {
 
         assertEquals(
             mapOf(animated.id to mediaDurationKey(animated)),
-            mediaDurationKeysByPostId(listOf(animated, static)),
+            mediaDurationPostSnapshot(listOf(animated, static)).keysByPostId,
         )
     }
 
     @Test
-    fun `route snapshot computes animated keys once and separates known from candidates`() {
+    fun `route snapshot computes animated keys once and leaves known durations out of candidates`() {
         val unknown = animatedTestPost(sourcePostId = "unknown")
         val known = animatedTestPost(sourcePostId = "known", durationMs = 7_000L)
         val static = testPost(sourcePostId = "static")
@@ -40,7 +40,6 @@ class MediaDurationPostMetadataTest {
         assertEquals(setOf(unknown.id, known.id, static.id), snapshot.postsById.keys)
         assertEquals(setOf(unknown.id, known.id), snapshot.keysByPostId.keys)
         assertEquals(setOf(mediaDurationKey(unknown)), snapshot.candidatesByKey.keys)
-        assertEquals(mapOf(mediaDurationKey(known) to 7_000L), snapshot.knownDurationsByKey)
     }
 
     @Test
@@ -99,7 +98,7 @@ class MediaDurationPostMetadataTest {
 
         val durations = knownMediaDurations(
             posts = listOf(post),
-            states = mapOf(mediaDurationKey(post) to state),
+            states = mediaDurationStates(listOf(post), mapOf(mediaDurationKey(post) to state)),
         )
 
         assertEquals(8_000L, durations[post.id])
@@ -124,7 +123,7 @@ class MediaDurationPostMetadataTest {
         assertTrue(
             knownMediaDurations(
                 posts = listOf(newPost),
-                states = mapOf(mediaDurationKey(oldPost) to oldState),
+                states = mediaDurationStates(listOf(newPost), mapOf(mediaDurationKey(oldPost) to oldState)),
             ).isEmpty(),
         )
     }

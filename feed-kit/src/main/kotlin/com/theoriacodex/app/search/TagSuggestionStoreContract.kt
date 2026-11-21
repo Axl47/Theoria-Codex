@@ -57,7 +57,7 @@ interface TagSuggestionStore {
     fun getFaceted(
         source: SourceKey,
         limit: Int,
-        scope: FacetedSearchScope = FacetedSearchScope.All,
+        scope: FacetedSearchScope,
     ): List<FacetedTagSuggestion> {
         if (!scope.isAll && (scope.facet != SearchFacet.TAG || scope.sourceNamespace != null)) {
             return emptyList()
@@ -76,12 +76,12 @@ interface TagSuggestionStore {
         source: SourceKey,
         prefix: String,
         limit: Int,
-        scope: FacetedSearchScope = FacetedSearchScope.All,
+        scope: FacetedSearchScope,
     ): List<FacetedTagSuggestion> = getFaceted(source, Int.MAX_VALUE, scope)
         .asSequence()
         .filter { suggestion ->
-            val normalizedPrefix = com.theoriacodex.domain.tags.normalizeMatchToken(prefix)
-            com.theoriacodex.domain.tags.normalizeMatchToken(suggestion.text).contains(normalizedPrefix)
+            val normalizedPrefix = normalizeMatchToken(prefix)
+            normalizeMatchToken(suggestion.text).contains(normalizedPrefix)
         }
         .take(limit.coerceAtLeast(0))
         .toList()

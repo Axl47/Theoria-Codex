@@ -15,8 +15,8 @@ import org.junit.Test
 class ViewerPostNavigationTest {
     private val originals = listOf("before", "seed", "next", "after").map { testPost(sourcePostId = it) }
     private val recommendations = listOf("r1", "r2").map { testPost(sourcePostId = it) }
-    private val session = ViewerSession(originals, ViewerLaunchContext("query", 1, ViewerStreamSource.SEARCH, 0), sessionId = "order")
-        .withRelatedPosts(originals[1].id, recommendations)
+    private val launch = ViewerSession(originals, ViewerLaunchContext("query", 1, ViewerStreamSource.SEARCH, 0), sessionId = "order")
+    private val session = launched(launch).including(originals[1], recommendations)
 
     @Test fun `original next ignores recommendations while the branch ends at that same original next`() {
         val source = state(session, originals[1])
@@ -33,7 +33,7 @@ class ViewerPostNavigationTest {
 
     @Test fun `new source pages stay in original order and never promote branch members into the bottom strip`() {
         val nextPage = testPost(sourcePostId = "new-page")
-        val paged = session.copy(posts = mergeViewerPosts(session.posts, recommendations + nextPage))
+        val paged = session.appending(nextPage)
         assertEquals(originals + nextPage, viewerPostNavigation(state(paged, recommendations.last())).originalPosts)
         val selectedOriginal = viewerPostNavigation(state(paged, recommendations.last()), pendingPostId = nextPage.id)
         assertEquals(nextPage, selectedOriginal.pages.last().post)
@@ -41,7 +41,7 @@ class ViewerPostNavigationTest {
 
     @Test fun `liking a recommendation keeps its ancestor and original return target`() {
         val newer = testPost(sourcePostId = "new-related")
-        val chain = session.withRelatedPosts(recommendations.first().id, listOf(newer))
+        val chain = session.including(recommendations.first(), listOf(newer))
         val navigation = viewerPostNavigation(state(chain, newer))
         assertEquals(originals, navigation.originalPosts)
         assertEquals(listOf(originals[1], recommendations.first(), newer, originals[2]), navigation.pages.map { it.post })
@@ -49,11 +49,11 @@ class ViewerPostNavigationTest {
     }
 
     @Test fun `recommendations at the original end have no next until another source page arrives`() {
-        val end = ViewerSession(listOf(originals[1]), session.context.copy(startIndex = 0))
-            .withRelatedPosts(originals[1].id, recommendations)
+        val end = launched(ViewerSession(listOf(originals[1]), launch.context.copy(startIndex = 0)))
+            .including(originals[1], recommendations)
         val branch = viewerPostNavigation(state(end, recommendations.last()))
         assertEquals(branch.pages.lastIndex, branch.currentIndex)
-        val paged = end.copy(posts = mergeViewerPosts(end.posts, listOf(originals[2])))
+        val paged = end.appending(originals[2])
         val extended = viewerPostNavigation(state(paged, recommendations.last()))
         assertEquals(originals[2], extended.pages[extended.currentIndex + 1].post)
     }
@@ -72,9 +72,14 @@ class ViewerPostNavigationTest {
         assertFalse(complete(originals.last()).controls.playback.playing)
     }
 
-    private fun state(session: ViewerSession, selected: Post): ViewerUiState {
-        val index = session.posts.indexOfFirst { it.id == selected.id }
-        return reduceViewerState(ViewerUiState.Empty,
-            session.copy(context = session.context.copy(startIndex = index)).toReplaceViewerSessionAction()).state
-    }
+    private fun launched(session: ViewerSession) = reduceViewerState(ViewerUiState.Empty, session.toReplaceViewerSessionAction()).state
+
+    private fun ViewerUiState.including(seed: Post, posts: List<Post>) =
+        reduceViewerState(this, ViewerAction.IncludeRelatedPosts(requireNotNull(session), seed.id, posts)).state
+
+    private fun ViewerUiState.appending(post: Post) =
+        reduceViewerState(this, ViewerAction.AppendPosts(requireNotNull(session), listOf(post))).state
+
+    private fun state(source: ViewerUiState, selected: Post): ViewerUiState =
+        reduceViewerState(source, ViewerAction.SelectPage(source.pages.indexOfFirst { it.post.id == selected.id })).state
 }

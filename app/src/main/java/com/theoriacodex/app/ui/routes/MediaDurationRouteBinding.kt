@@ -6,15 +6,15 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.media.MediaDurationCoordinator
-import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.flow.Flow
 
 internal data class MediaDurationRouteBinding(
     val owner: MediaDurationRouteViewModel,
-    val states: Map<MediaDurationKey, MediaDurationState>,
+    val states: MediaDurationStates,
     val stateForPost: (Post) -> Flow<MediaDurationState?>,
 )
 

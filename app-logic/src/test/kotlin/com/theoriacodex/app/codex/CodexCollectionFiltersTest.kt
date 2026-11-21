@@ -1,7 +1,6 @@
 package com.theoriacodex.app.codex
 
 import com.theoriacodex.app.media.AnimatedDurationRange
-import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -28,7 +27,6 @@ class CodexCollectionFiltersTest {
                 animatedDurationRange = AnimatedDurationRange(minBucket = 1, maxBucket = 2),
                 source = SourceKey.PIXIV,
             ),
-            unknownAnimatedDurationPolicy = UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS,
         )
 
         assertEquals(listOf(pixivShort), visible)
@@ -48,7 +46,6 @@ class CodexCollectionFiltersTest {
         val visible = filterCodexCollectionPosts(
             posts = listOf(typedEnglish, legacyEnglish, unsupportedEnglish, japanese),
             filters = CodexCollectionFilters(language = CodexLanguageFilter.ENGLISH),
-            unknownAnimatedDurationPolicy = UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS,
         )
 
         assertEquals(listOf(typedEnglish, legacyEnglish), visible)
@@ -67,7 +64,6 @@ class CodexCollectionFiltersTest {
         val visible = filterCodexCollectionPosts(
             posts = listOf(nhentai, hitomi, unsupported),
             filters = CodexCollectionFilters(fullColorOnly = true),
-            unknownAnimatedDurationPolicy = UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS,
         )
 
         assertEquals(listOf(nhentai, hitomi), visible)
@@ -114,6 +110,6 @@ class CodexCollectionFiltersTest {
     @org.junit.Test
     fun `an inactive filter returns the same list without copying it`() {
         val posts = listOf(post(SourceKey.PIXIV, "first"), post(SourceKey.GELBOORU, "second"))
-        org.junit.Assert.assertSame(posts, filterCodexCollectionPosts(posts, CodexCollectionFilters(), UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS))
+        org.junit.Assert.assertSame(posts, filterCodexCollectionPosts(posts, CodexCollectionFilters()))
     }
 }

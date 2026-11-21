@@ -37,9 +37,6 @@ import kotlinx.coroutines.delay
 import coil.request.repeatCount
 import coil.request.onAnimationEnd
 
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 @Composable
 internal fun ViewerGifPlayer(
     sourceKey: SourceKey,
@@ -50,7 +47,7 @@ internal fun ViewerGifPlayer(
     events: ViewerRendererEvents,
 ) {
     val state = remember(locations, controls.loadGeneration) { ViewerGifState(locations) }
-    ViewerGifLoadEffect(state, sourceKey, locations, events)
+    ViewerGifLoadEffect(state, sourceKey, locations)
     val movie = state.movie
     if (movie == null) ViewerGifFallback(state, sourceKey, modifier, mediaModifier, controls, events)
     else ViewerGifMovie(movie, modifier, mediaModifier, controls, events)
@@ -65,7 +62,7 @@ private class ViewerGifState(locations: List<String>) {
 }
 
 @Composable
-private fun ViewerGifLoadEffect(state: ViewerGifState, source: SourceKey, locations: List<String>, events: ViewerRendererEvents) {
+private fun ViewerGifLoadEffect(state: ViewerGifState, source: SourceKey, locations: List<String>) {
     val context = LocalContext.current
     LaunchedEffect(state, source) {
         var movie: Movie? = null
@@ -77,7 +74,6 @@ private fun ViewerGifLoadEffect(state: ViewerGifState, source: SourceKey, locati
         state.fallbackLocations = locations.map { cachedViewerGifLocation(context, source, it) }
         state.movie = movie
         state.loading = false
-        if (movie != null) events.onReady()
     }
 }
 
@@ -106,7 +102,8 @@ private fun ViewerGifFallbackImage(
 ) {
     val context = LocalContext.current
     var drawable by remember(location, controls.restartRequest) { mutableStateOf<android.graphics.drawable.Animatable?>(null) }
-    ViewerGifFallbackLifecycle(drawable, controls)
+    val shown = drawable
+    ViewerPlayWhileStarted(shown, controls.isActive && controls.isPlaying, { shown?.start() }, { shown?.stop() })
     AsyncImage(
         model = MediaRequestFactory.imageRequest(context, location, source, crossfade = false).newBuilder(context)
             .repeatCount(if (controls.loopPlayback) -1 else 0)
@@ -124,45 +121,17 @@ private fun ViewerGifFallbackImage(
 }
 
 @Composable
-private fun ViewerGifFallbackLifecycle(drawable: android.graphics.drawable.Animatable?, controls: ViewerRendererControls) {
-    val owner = LocalLifecycleOwner.current
-    DisposableEffect(drawable, owner, controls.isActive, controls.isPlaying) {
-        fun sync() {
-            if (controls.isActive && controls.isPlaying && owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) drawable?.start()
-            else drawable?.stop()
-        }
-        val observer = LifecycleEventObserver { _, _ -> sync() }
-        owner.lifecycle.addObserver(observer)
-        sync()
-        onDispose { owner.lifecycle.removeObserver(observer); drawable?.stop() }
-    }
-}
-
-@Composable
 private fun ViewerGifMovie(
     movie: Movie, modifier: Modifier, mediaModifier: Modifier,
     controls: ViewerRendererControls, events: ViewerRendererEvents,
 ) {
     val duration = remember(movie) { movie.duration().takeIf { it > 0 }?.toLong() ?: GIF_FALLBACK_DURATION_MS }
-    val animation = remember(movie, duration) { AnimationPlaybackState(duration) }
-    var scrubbing by remember(movie) { mutableStateOf(false) }
-    LaunchedEffect(movie, duration) { events.onDurationKnown(duration) }
-    AnimatePlayback(animation, controls.isActive && controls.isPlaying,
-        controls.playbackRate.coerceAtLeast(MIN_VIEWER_PLAYBACK_RATE), controls.loopPlayback, events.onPlaybackCompleted)
-    LaunchedEffect(controls.restartRequest, animation) { if (controls.restartRequest > 0L) animation.seekTo(0L) }
-    LaunchedEffect(controls.seekJumpSerial, controls.seekJumpDeltaMs, duration, controls.isActive) {
-        if (controls.seekJumpSerial > 0 && controls.seekJumpDeltaMs != 0L && !scrubbing && controls.isActive) {
-            animation.seekTo(animation.positionMs + controls.seekJumpDeltaMs)
-        }
-    }
-    Box(modifier, contentAlignment = Alignment.Center) {
-        ViewerGifCanvas(movie, { animation.positionMs }, Modifier.fillMaxSize().then(mediaModifier))
-        ViewerChromeVisibility(controls.showControls, Modifier.align(Alignment.BottomCenter)) {
-            ViewerTimelineVeil { ViewerGifTimeline(movie, animation, duration, controls, events) { scrubbing = it } }
-        }
-        if (controls.showPassiveProgress) {
-            ViewerMediaPassiveProgress({ animation.positionMs }, duration, viewerAspectRatio(movie.width(), movie.height()))
-        }
+    val frames = rememberAnimatedFrames(movie, durationMs = duration, controls = controls, events = events)
+    AnimatedFramesPlayer(
+        frames, controls, events, viewerAspectRatio(movie.width(), movie.height()), modifier,
+        preview = { target -> ViewerGifCanvas(movie, { target.coerceAtMost(duration - 1L) }, Modifier.fillMaxSize()) },
+    ) {
+        ViewerGifCanvas(movie, { frames.positionMs }, Modifier.fillMaxSize().then(mediaModifier))
     }
 }
 
@@ -181,34 +150,6 @@ private fun ViewerGifCanvas(movie: Movie, positionMs: () -> Long, modifier: Modi
             frame,
             dstOffset = IntOffset((size.width.roundToInt() - drawn.width) / 2, (size.height.roundToInt() - drawn.height) / 2),
             dstSize = drawn,
-        )
-    }
-}
-
-@Composable
-private fun ViewerGifTimeline(
-    movie: Movie, animation: AnimationPlaybackState, duration: Long, controls: ViewerRendererControls, events: ViewerRendererEvents,
-    onScrubbing: (Boolean) -> Unit,
-) {
-    ViewerPlaybackFooter {
-        MediaTimelineBar(
-            positionMs = { animation.positionMs }, durationMs = duration,
-            onSeekStarted = { onScrubbing(true) },
-            onSeekMoved = animation::seekTo,
-            onSeekCancelled = { onScrubbing(false) },
-            preview = { target ->
-                ViewerGifCanvas(movie, { target.coerceAtMost(duration - 1L) }, Modifier.fillMaxSize())
-            },
-            onSeekFinished = { animation.seekTo(it); onScrubbing(false) },
-            onInteractionActiveChanged = events.onTimelineInteractionActiveChanged,
-            playbackRate = controls.playbackRate,
-            leading = {
-                TimelinePlaybackButton(isPaused = !controls.isPlaying, onToggle = {
-                    events.onTogglePlayback()
-                    events.onTimelineInteractionActiveChanged(true)
-                    events.onTimelineInteractionActiveChanged(false)
-                })
-            },
         )
     }
 }

@@ -5,7 +5,6 @@ import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.SourceCapabilities
@@ -33,6 +32,8 @@ class TestRegistry(adapters: List<SourceAdapter>) : SourceAdapterRegistry {
 class TestAdapter(
     override val sourceKey: SourceKey,
     searchTermLimit: SearchTermLimit? = null,
+    /** Like the real Gelbooru preset, the Gelbooru stand-in matches only exactly spelled tags. */
+    requiresExactTags: Boolean = sourceKey == SourceKey.GELBOORU,
 ) : SourceAdapter {
     var failure: Throwable? = null
     var autocompleteFailure: Throwable? = null
@@ -53,10 +54,8 @@ class TestAdapter(
         supportsSortTop = true,
         supportsSortRandom = true,
         supportsExcludeTagsServerSide = true,
-        supportsDateRangeServerSide = true,
-        supportsMinScoreServerSide = true,
-        requiresCredentials = false,
         searchTermLimit = searchTermLimit,
+        requiresExactTags = requiresExactTags,
     )
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> {
@@ -80,8 +79,6 @@ class TestAdapter(
         if (autocompleteResponseDelayMs > 0L) delay(autocompleteResponseDelayMs)
         return autocompleteByPrefix[prefix]?.take(limit) ?: autocomplete.take(limit)
     }
-
-    override suspend fun quickQuery(kind: QuickQueryKind): Query = query(sourceKey, "")
 
     override suspend fun resolvePost(id: PostId): Post? {
         resolveCalls += 1

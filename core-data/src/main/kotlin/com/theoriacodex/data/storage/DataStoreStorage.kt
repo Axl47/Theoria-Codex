@@ -105,13 +105,16 @@ internal class JsonDataStoreSerializer<T : Any>(
  * until a later [awaitReady] (the startup screen's Retry) opens it. Collectors started while the app is being built
  * therefore cannot crash the process, and every store that can fail must be awaited by the startup gate.
  */
-internal class JsonDataStore<T>(private val store: DataStore<T>) : AsynchronousStore {
+internal class JsonDataStore<T>(
+    private val store: DataStore<T>,
+    private val canonical: (T) -> T = { it },
+) : AsynchronousStore, StateCell<T> {
     private val status = MutableStateFlow(DurableStoreStatus())
     private val opening = Mutex()
 
     override val storageStatus: StateFlow<DurableStoreStatus> = status.asStateFlow()
 
-    val data: Flow<T> = flow {
+    override val data: Flow<T> = flow {
         try {
             awaitReady()
         } catch (cancellation: CancellationException) {
@@ -135,8 +138,22 @@ internal class JsonDataStore<T>(private val store: DataStore<T>) : AsynchronousS
         status.value = DurableStoreStatus(DurableStorePhase.READY)
     }
 
-    /** Throws, like [awaitReady], when the store cannot open; nothing is written then. */
-    suspend fun update(transform: suspend (T) -> T): T = store.updateDataInBackground(transform)
+    /**
+     * Throws, like [awaitReady], when the store cannot open; nothing is written then. An unchanged result keeps the
+     * held value; a changed one is held as the file would read it back ([canonical]), and written when that differs.
+     */
+    suspend fun update(transform: suspend (T) -> T): T = store.updateDataInBackground { current ->
+        val next = transform(current)
+        if (next == current) current else canonical(next)
+    }
+
+    override suspend fun value(): T = data.first()
+
+    override suspend fun <R> updateReturning(transform: (T) -> Pair<T, R>): R {
+        var outcome: Pair<T, R>? = null
+        update { current -> transform(current).also { outcome = it }.first }
+        return checkNotNull(outcome).second
+    }
 }
 
 /**
@@ -155,21 +172,52 @@ internal fun <T : Any> openJsonDataStore(
     scope: CoroutineScope,
     recoveries: FileStoreRecoveryRegistry,
     validate: (T) -> Unit = {},
-): JsonDataStore<T> = JsonDataStore(
-    DataStoreFactory.create(
-        serializer = JsonDataStoreSerializer(file.name, schemaVersion, defaultValue, serializer, validate),
-        corruptionHandler = ReplaceFileCorruptionHandler { corruption ->
-            val reason = corruption.message ?: "${file.name} was unreadable"
-            recoveries.record(setAsideCorruptFile(file, file.readBytes(), logicalStore, reason))
-            defaultValue
-        },
-        scope = scope,
-        produceFile = {
-            recoveries.registerStore(logicalStore, file)
-            file
-        },
-    ),
+): JsonDataStore<T> = openDecodedJsonDataStore(
+    file, logicalStore, schemaVersion, defaultValue, serializer, scope, recoveries, validate,
+    decode = { it },
+    encode = { it },
 )
+
+/**
+ * Like [openJsonDataStore], but the store holds [decode]d values while the file keeps its record [S], so readers never
+ * decode. [decode] runs after [validate], once per file read; [encode] runs per write. Updates hold `decode(encode(x))`,
+ * what a later read of the file would produce, so memory never shows a value the file cannot carry.
+ */
+internal fun <S : Any, T : Any> openDecodedJsonDataStore(
+    file: File,
+    logicalStore: String,
+    schemaVersion: Int,
+    defaultValue: S,
+    serializer: KSerializer<S>,
+    scope: CoroutineScope,
+    recoveries: FileStoreRecoveryRegistry,
+    validate: (S) -> Unit = {},
+    decode: (S) -> T,
+    encode: (T) -> S,
+): JsonDataStore<T> {
+    val fileSerializer = JsonDataStoreSerializer(file.name, schemaVersion, defaultValue, serializer, validate)
+    val decodedDefault = decode(defaultValue)
+    return JsonDataStore(
+        DataStoreFactory.create(
+            serializer = object : Serializer<T> {
+                override val defaultValue: T = decodedDefault
+                override suspend fun readFrom(input: InputStream): T = decode(fileSerializer.readFrom(input))
+                override suspend fun writeTo(t: T, output: OutputStream) = fileSerializer.writeTo(encode(t), output)
+            },
+            corruptionHandler = ReplaceFileCorruptionHandler { corruption ->
+                val reason = corruption.message ?: "${file.name} was unreadable"
+                recoveries.record(setAsideCorruptFile(file, file.readBytes(), logicalStore, reason))
+                decodedDefault
+            },
+            scope = scope,
+            produceFile = {
+                recoveries.registerStore(logicalStore, file)
+                file
+            },
+        ),
+        canonical = { value -> decode(encode(value)) },
+    )
+}
 
 internal fun ByteArray.sha256(): String {
     return MessageDigest.getInstance("SHA-256")

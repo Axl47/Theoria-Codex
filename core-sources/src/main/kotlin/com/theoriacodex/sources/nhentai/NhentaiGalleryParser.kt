@@ -7,7 +7,6 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.sources.common.asBooleanOrNull
 import com.theoriacodex.sources.common.asIntOrNull
 import com.theoriacodex.sources.common.asLongOrNull
 import com.theoriacodex.sources.common.asStringOrNull
@@ -15,8 +14,9 @@ import com.theoriacodex.sources.common.elementsOrEmpty
 import com.theoriacodex.sources.common.optionalJsonArray
 import com.theoriacodex.sources.common.optionalJsonObject
 import com.theoriacodex.sources.media.mimeFromFileExt
+import com.theoriacodex.sources.common.objects
 
-/** Pure gallery mapping shared by API results and sparse mirrored-search records. */
+/** Pure mapping of one API gallery record to a post. */
 internal fun parseNhentaiGallery(raw: JsonObject): Post? {
     val galleryId = raw.get("id").asLongOrNull()?.toString()
         ?: raw.get("id").asStringOrNull()?.trim()?.takeIf { it.isNotBlank() }
@@ -96,7 +96,11 @@ private fun parseNhentaiImages(raw: JsonObject, mediaId: String): NhentaiGallery
         mime = mimeFromFileExt(newCoverPath?.substringAfterLast('.') ?: oldCoverExt),
     )
 
-    val mediaRefs = selectNhentaiMedia(raw, pageRefs, fallbackCoverRef, oldCover != null)
+    val mediaRefs = when {
+        pageRefs.isNotEmpty() -> pageRefs
+        raw.has("cover") || oldCover != null -> listOf(fallbackCoverRef)
+        else -> emptyList()
+    }
 
     val fullRef = mediaRefs.firstOrNull()
     val previewRef = ImageRef(
@@ -144,27 +148,8 @@ private fun parseNhentaiPages(pages: List<JsonElement>, mediaId: String): List<I
     }
 }
 
-private fun selectNhentaiMedia(
-    raw: JsonObject,
-    pageRefs: List<ImageRef>,
-    fallbackCoverRef: ImageRef,
-    hasOldCover: Boolean,
-): List<ImageRef> {
-    val mirrorSparse = raw.get("mirror_sparse").asBooleanOrNull() ?: false
-    return if (mirrorSparse) {
-        emptyList()
-    } else if (pageRefs.isNotEmpty()) {
-        pageRefs
-    } else if (raw.has("cover") || hasOldCover) {
-        listOf(fallbackCoverRef)
-    } else {
-        emptyList()
-    }
-}
-
 private fun parseNhentaiTags(raw: JsonObject): List<ParsedNhentaiTag> {
-    return raw.optionalJsonArray("tags").elementsOrEmpty().mapNotNull { tagElement ->
-        val tag = tagElement.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@mapNotNull null
+    return raw.objects("tags").mapNotNull { tag ->
         val name = tag.get("name").asStringOrNull()?.trim().orEmpty()
         if (name.isBlank()) return@mapNotNull null
         ParsedNhentaiTag(

@@ -1,8 +1,6 @@
 package com.theoriacodex.sources.pixiv
 
-import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.PixivAuthTokens
-import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.credentials.SessionBoundSourceCredentials
 import com.theoriacodex.sources.http.SourceHttpClient
@@ -75,12 +73,6 @@ class PixivTokenCoordinatorTest {
         override suspend fun clearPixivTokens() {
             pixiv = null
         }
-        override suspend fun getGelbooruCredentials(): GelbooruCredentials? = null
-        override suspend fun saveGelbooruCredentials(credentials: GelbooruCredentials) = Unit
-        override suspend fun clearGelbooruCredentials() = Unit
-        override suspend fun getRule34XxxCredentials(): Rule34XxxCredentials? = null
-        override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) = Unit
-        override suspend fun clearRule34XxxCredentials() = Unit
     }
 
     private object UnusedHttpClient : SourceHttpClient {

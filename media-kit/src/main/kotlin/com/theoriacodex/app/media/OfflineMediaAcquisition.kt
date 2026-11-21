@@ -41,7 +41,7 @@ class OfflineMediaAcquisition(
 
     suspend fun selectMedia(post: Post): List<ImageRef> {
         val preferences = settings.observeSettings().first().cache
-        val media = post.media.ifEmpty { listOfNotNull(post.full) }
+        val media = post.downloadablePages
         check(media.isNotEmpty()) { "The provider returned no full media" }
         return media.map { ref ->
             ref.copy(url = normalizeMediaUrl(post.id.source, ref.url))

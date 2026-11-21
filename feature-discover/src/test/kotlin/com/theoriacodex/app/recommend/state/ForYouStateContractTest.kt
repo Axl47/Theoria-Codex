@@ -1,6 +1,6 @@
 package com.theoriacodex.app.recommend.state
 
-import com.theoriacodex.app.recommend.ForYouContinuation
+import com.theoriacodex.app.feed.FeedCursor
 import com.theoriacodex.app.recommend.ForYouFeedResult
 import com.theoriacodex.app.recommend.forYouBaseQuery
 import com.theoriacodex.app.recommend.forYouSourceQuery
@@ -172,7 +172,7 @@ class ForYouStateContractTest {
         val base = ForYouUiState(activeProfileLikesCount = 2).reduce(ForYouAction.Refresh()).state
         val seed = mapOf(SourceKey.PIXIV to listOf("seed"))
         val page = UnifiedSearchResult(posts, mapOf(SourceKey.PIXIV to token), listOf(success(SourceKey.PIXIV)))
-        val continuation = ForYouContinuation(forYouBaseQuery(SortMode.NEWEST),
+        val continuation = FeedCursor(forYouBaseQuery(SortMode.NEWEST),
             mapOf(SourceKey.PIXIV to forYouSourceQuery(SourceKey.PIXIV, listOf("seed"), SortMode.NEWEST)),
             emptyMap(), mapOf(SourceKey.PIXIV to null)).accept(page, seed.keys)
         return base.reduce(ForYouAction.RefreshCompleted(requireNotNull(base.activeRequest),

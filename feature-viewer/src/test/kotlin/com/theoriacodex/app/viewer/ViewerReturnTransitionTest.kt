@@ -28,7 +28,6 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.ui.components.TwoColumnProjectedPostStaggeredGrid
 import com.theoriacodex.app.ui.components.RelatedPostsShelf
 import com.theoriacodex.app.related.RelatedFeedEntry
@@ -248,20 +247,18 @@ class ViewerReturnTransitionTest {
                         })
                     }
                     val modifier = Modifier.height(600.dp).onGloballyPositioned { viewport = it.boundsInWindow() }
+                    val entries = posts.mapIndexed { index, post -> RelatedFeedEntry.PostEntry(post, index) }
+                        .toMutableList<RelatedFeedEntry>()
                     if (projected) {
-                        val entries = posts.mapIndexed { index, post -> RelatedFeedEntry.PostEntry(post, index) }
-                            .toMutableList<RelatedFeedEntry>()
                         entries.add(5, RelatedFeedEntry.ShelfEntry(
                             RelatedPostsUiState.Loading(RelatedPostsRequest(posts[4], 4, 1)), 4,
                         ))
-                        TwoColumnProjectedPostStaggeredGrid(
-                            RelatedFeedProjection(entries), state, modifier,
-                            postContent = { index, post -> card(index, post) },
-                            shelfContent = { Box(Modifier.fillMaxWidth().height(180.dp)) },
-                        )
-                    } else {
-                        TwoColumnPostStaggeredGrid(posts, state, modifier) { index, post -> card(index, post) }
                     }
+                    TwoColumnProjectedPostStaggeredGrid(
+                        RelatedFeedProjection(entries), state, modifier,
+                        postContent = { index, post -> card(index, post) },
+                        shelfContent = { Box(Modifier.fillMaxWidth().height(180.dp)) },
+                    )
                 }
             }
         }

@@ -6,6 +6,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -25,8 +26,8 @@ class DurationBacklogIntegrationTest {
         owner.onEnvironmentChanged(lifecycleStarted = true, scrollIdle = true)
         runCurrent()
         assertEquals(513, acquisitions)
-        assertEquals(513, owner.states.value.values.count { it is MediaDurationState.Known })
-        assertFalse(durationFilterReadiness(posts, true, owner.states.value.mapKeys { it.key.postId }).isResolving)
+        assertEquals(513, posts.count { owner.states.value[it] is MediaDurationState.Known })
+        assertFalse(durationFilterMetadata(posts, owner.states.value, true).readiness.isResolving)
         coordinator.close()
     }
 
@@ -40,12 +41,12 @@ class DurationBacklogIntegrationTest {
         val shared = animatedTestPost(sourcePostId = "shared")
         val urgent = animatedTestPost(sourcePostId = "urgent")
         coordinator.submit(background, demand("background-owner", background, DurationDemandPriority.BACKGROUND_IDLE))
-        assertEquals(DurationDemandAdmission.DEFERRED,
-            coordinator.submit(shared, demand("search", shared, DurationDemandPriority.BACKGROUND_IDLE)))
+        coordinator.submit(shared, demand("search", shared, DurationDemandPriority.BACKGROUND_IDLE))
+        assertNull("A full queue defers the demand without marking it pending", coordinator.states.value[mediaDurationKey(shared)])
         coordinator.submit(urgent, demand("filter", urgent, DurationDemandPriority.ACTIVE_FILTER))
         coordinator.submit(shared, demand("creator", shared, DurationDemandPriority.VISIBLE))
         coordinator.releaseIdentities(setOf("search", "background-owner"))
-        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        coordinator.updateEnvironment("environment", lifecycleStarted = true, scrollIdle = true)
         runCurrent()
         assertEquals(listOf("urgent", "shared"), requested)
         coordinator.close()
@@ -64,11 +65,11 @@ class DurationBacklogIntegrationTest {
         owner.onEnvironmentChanged(lifecycleStarted = true, scrollIdle = true)
         runCurrent()
         assertEquals(2, coordinator.states.value.size)
-        assertEquals(5, owner.states.value.values.count { it is MediaDurationState.Known })
+        assertEquals(5, posts.count { owner.states.value[it] is MediaDurationState.Known })
         coordinator.close()
     }
 
     private fun known() = MediaDurationState.Known(10_000L, MediaDurationProvenance.CONTAINER_PROBE)
     private fun demand(owner: String, post: com.theoriacodex.domain.model.Post, priority: DurationDemandPriority) =
-        DurationDemand(owner, mediaDurationKey(post), priority, DurationDemandReason.FILTER)
+        DurationDemand(owner, mediaDurationKey(post), priority)
 }

@@ -78,7 +78,7 @@ class DataStoreRepositoriesTest {
         val first = DataStoreSettingsRepository(directory, firstScope)
         val pair = setOf(SourceKey.PIXIV, SourceKey.GELBOORU)
         first.setEnabledSources(pair)
-        first.setSourceWeights(mapOf(SourceKey.PIXIV to 4.0, SourceKey.GELBOORU to 1.0))
+        first.updateSettings { it.copy(runtime = it.runtime.copy(sourceWeights = mapOf(SourceKey.PIXIV to 4.0, SourceKey.GELBOORU to 1.0))) }
         first.setEnabledSources(setOf(SourceKey.HITOMI))
         closeScope(firstScope)
 

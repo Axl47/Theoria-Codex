@@ -2,6 +2,7 @@ package com.theoriacodex.app.search
 
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.assertStoredFormat
+import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.SearchFacet
@@ -35,7 +36,7 @@ class TagSuggestionStoreGoldenTest {
             assertEquals(listOf(TagSuggestion("a=b", "artist", 3)), store.getTrending(SourceKey.GELBOORU, 10))
             assertEquals(
                 listOf(FacetedTagSuggestion("風景", SearchFacet.TAG, null, 99, "landscape")),
-                store.getFaceted(SourceKey.PIXIV, 10),
+                store.getFaceted(SourceKey.PIXIV, 10, FacetedSearchScope.All),
             )
         }
     }

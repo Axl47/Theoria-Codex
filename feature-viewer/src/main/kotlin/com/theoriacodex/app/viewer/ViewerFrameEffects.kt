@@ -15,8 +15,8 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.media.postMediaItems
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
+import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -50,12 +50,12 @@ internal fun rememberViewerSwipe(
                 viewerHorizontalSwipeTarget(
                     currentPostIndex = origin.postIndex,
                     currentMediaIndex = origin.mediaIndex,
-                    currentMediaCount = postMediaItems(it.post).size,
+                    currentMediaCount = it.media.size,
                     postCount = posts.size,
-                    targetPostMediaCount = posts.getOrNull(neighbor)?.let { post -> postMediaItems(post).size } ?: 0,
+                    targetPostMediaCount = pages.getOrNull(neighbor)?.media?.size ?: 0,
                     direction = direction,
                     galleryMediaPending = it.hasPendingGalleryMedia(),
-                    targetMediaIndex = targetMediaIndex(pages.getOrNull(neighbor)),
+                    targetMediaIndex = pages.getOrNull(neighbor)?.targetMediaIndex ?: 0,
                 )
             }
         },
@@ -68,10 +68,7 @@ internal fun rememberViewerSwipe(
         },
         commit = { postId, mediaIndex ->
             val index = posts.indexOfFirst { it.id == postId }
-            if (index >= 0) {
-                if (postId != frame.uiState.currentPage?.post?.id) onAction(ViewerAction.SelectPage(frame.navigation.sourceIndices[index]))
-                onAction(ViewerAction.SelectMedia(mediaIndex))
-            }
+            if (index >= 0) onAction(ViewerAction.Navigate(frame.navigation.sourceIndices[index], mediaIndex))
         },
         onInteraction = { controls.markPassiveInteraction() },
         onLimit = { haptics.performHapticFeedback(TheoriaHaptics.Limit) },
@@ -100,7 +97,7 @@ internal fun ViewerFrameEffects(
     onVisiblePostChanged: ((Post, Int) -> Unit)?,
 ) {
     val uiState = frame.uiState
-    val showInfoSheet = uiState.controls.metadataVisible && !frame.inPictureInPicture
+    val showInfoSheet = uiState.controls.panel == ViewerPanel.INFO && !frame.inPictureInPicture
     ViewerSelectionEffects(frame, screen, controls, swipe.settling, onAction)
     ViewerBackHandlers(frame, screen, controls, dismissDrag)
     ViewerNavigationEffects(frame, swipe, postPagerState, controls, canLoadMoreFromSource, loadingMoreFromSource, loadMoreFromStrip, onAction, onVisiblePostChanged)
@@ -108,7 +105,7 @@ internal fun ViewerFrameEffects(
         chromeVisible = frame.chromeVisible,
         interactionSerial = screen.interactionSerial,
         interactionBlocked = screen.timelineInteractionActive || frame.mediaOverviewVisible || showInfoSheet ||
-            uiState.controls.actionsMenuVisible || uiState.controls.playbackSettingsVisible || screen.relatedStripExpanded,
+            uiState.controls.panel?.inChrome == true || screen.relatedStripExpanded,
         touchExplorationEnabled = frame.touchExplorationEnabled,
         onHide = { onAction(ViewerAction.ToggleChrome) },
     )
@@ -127,7 +124,6 @@ private fun ViewerSelectionEffects(
     onAction: (ViewerAction) -> Unit,
 ) {
     val uiState = frame.uiState
-    val post = frame.selection.post
     LaunchedEffect(uiState.session) {
         screen.pendingDismiss = false
     }
@@ -136,25 +132,6 @@ private fun ViewerSelectionEffects(
         if (!frame.chromeVisible) {
             controls.setActionsMenuExpanded(false)
             controls.setPlaybackSettingsExpanded(false)
-        }
-    }
-    LaunchedEffect(frame.selection.overviewAvailable) {
-        if (!frame.selection.overviewAvailable) controls.setOverviewVisible(false)
-    }
-    LaunchedEffect(
-        post.id.source,
-        post.id.sourcePostId,
-        post.full?.url,
-        post.full?.localPath,
-        uiState.currentPage?.resolution?.status,
-    ) {
-        val status = uiState.currentPage?.resolution?.status
-        if (
-            status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.IDLE ||
-            status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.FAILED &&
-            uiState.currentPage?.resolution?.recoverable == true
-        ) {
-            onAction(ViewerAction.RequestCurrentPageResolution)
         }
     }
     LaunchedEffect(screen.pendingDismiss, swipeInProgress, frame.opening) {
@@ -233,8 +210,8 @@ private fun ViewerNavigationEffects(
             postPagerState.scrollToPage(currentPostIndex)
         }
     }
+    // Selecting another page already closes the overview in the reducer; a feed page arriving must not.
     LaunchedEffect(uiState.currentPageIndex, posts.size, postPagerState) {
-        controls.setOverviewVisible(false)
         controls.markPassiveInteraction()
     }
     LaunchedEffect(frame.selection.post.id, currentPostIndex, uiState.currentPage?.pendingMediaIndex) {
@@ -280,7 +257,7 @@ private fun advanceToPendingPost(
         return
     }
     if (screen.pendingDismiss || frame.returning) return
-    swipe.navigateTo(ViewerHorizontalSwipeTarget(index, targetMediaIndex(frame.navigation.pages[index])))
+    swipe.navigateTo(ViewerHorizontalSwipeTarget(index, frame.navigation.pages[index].targetMediaIndex))
 }
 
 private val VIEWER_BACK_DISTANCE = 48.dp

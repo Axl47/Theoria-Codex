@@ -19,45 +19,40 @@ class DurationFilterProjectionTest {
         val posts = listOf(anchor, other)
         val projection = DurationFilterProjection()
         assertFalse(DurationFilterMetadata.RESOLVING.isVisibilityResolved(anchor, resolveInBackground = false))
-        val pending = projection.project(posts, emptyMap(), true)
+        val pending = projection.project(posts, MediaDurationStates.EMPTY, true)
         assertFalse(pending.isVisibilityResolved(anchor, resolveInBackground = true))
         assertTrue(pending.isVisibilityResolved(anchor, resolveInBackground = false))
-        val known = projection.project(posts, mapOf(mediaDurationKey(anchor) to
-            MediaDurationState.Known(1_000, MediaDurationProvenance.CONTAINER_PROBE)), true)
+        val known = projection.project(posts, mediaDurationStates(posts, mapOf(mediaDurationKey(anchor) to
+            MediaDurationState.Known(1_000, MediaDurationProvenance.CONTAINER_PROBE))), true)
         assertTrue(known.readiness.isResolving)
         assertTrue(known.isVisibilityResolved(anchor, resolveInBackground = true))
-        val failed = projection.project(posts, mapOf(mediaDurationKey(anchor) to
-            MediaDurationState.RetryableFailure(1_000, MediaDurationFailureReason.TIMEOUT)), true)
+        val failed = projection.project(posts, mediaDurationStates(posts, mapOf(mediaDurationKey(anchor) to
+            MediaDurationState.RetryableFailure(1_000, MediaDurationFailureReason.TIMEOUT))), true)
         assertTrue(failed.isVisibilityResolved(anchor, resolveInBackground = true))
     }
 
-    @Test fun `duration publications reuse prepared media keys and a replacement snapshot prepares fresh authority`() {
-        var keys = 0
-        val projection = DurationFilterProjection { post -> keys++; mediaDurationKey(post) }
+    @Test fun `decisions published for one snapshot do not answer a replacement of the same post`() {
+        val projection = DurationFilterProjection()
         val post = testPost().copy(full = ImageRef("https://example.test/movie.mp4", null, "video/mp4"), media = emptyList())
         val posts = listOf(post)
-        val key = mediaDurationKey(post)
-        val pending = projection.project(posts, emptyMap(), true)
+        val decisions = mapOf(mediaDurationKey(post) to MediaDurationState.Known(1_000, MediaDurationProvenance.PROVIDER))
+        val pending = projection.project(posts, MediaDurationStates.EMPTY, true)
         assertEquals(1, pending.readiness.pendingCount)
-        val decided = projection.project(posts,
-            mapOf(key to MediaDurationState.Known(1_000, MediaDurationProvenance.PROVIDER)), true)
-        assertEquals(1, keys)
+        val decided = projection.project(posts, mediaDurationStates(posts, decisions), true)
         assertEquals(0, decided.readiness.pendingCount)
         assertEquals(1_000L, decided.knownDurationMsByPostId[post.id])
         val replacement = post.copy(full = ImageRef("https://example.test/replaced.mp4", null, "video/mp4"))
-        val fresh = projection.project(listOf(replacement),
-            mapOf(key to MediaDurationState.Known(1_000, MediaDurationProvenance.PROVIDER)), true)
-        assertEquals(2, keys)
+        val fresh = projection.project(listOf(replacement), mediaDurationStates(posts, decisions), true)
         assertEquals(1, fresh.readiness.pendingCount)
-        org.junit.Assert.assertTrue(fresh.knownDurationMsByPostId.isEmpty())
+        assertTrue(fresh.knownDurationMsByPostId.isEmpty())
     }
 
     @Test fun `a length that changes nothing shown keeps the presented list, and only an in-place length change renews its key`() {
         val posts = List(12) { testPost(SourceKey.RULE34VIDEO, "v$it") }
         val projection = DurationFilterProjection()
-        fun known(vararg lengths: Pair<Int, Long>) = lengths.associate { (index, ms) ->
+        fun known(vararg lengths: Pair<Int, Long>) = mediaDurationStates(posts, lengths.associate { (index, ms) ->
             mediaDurationKey(posts[index]) to MediaDurationState.Known(ms, MediaDurationProvenance.CONTAINER_PROBE)
-        }
+        })
         val first = projection.project(posts, known(0 to 1_000), true)
         assertEquals(listOf(posts[0]), first.presentedPosts)
 

@@ -96,6 +96,7 @@ class PostTagSheetExtras(
 /**
  * A post's tags beside the search they feed. Tapping a tag edits the live Search draft, and the tray
  * below shows the result. [onSearch] runs the draft; it is null where this screen cannot reach Search.
+ * Counts, term edits and saving default to what [PostTagContextProvider] supplies; Search passes its own edits.
  */
 @Composable
 fun PostTagActionSection(
@@ -103,13 +104,13 @@ fun PostTagActionSection(
     header: @Composable () -> Unit = {},
     footer: @Composable () -> Unit = {},
     loading: Boolean = false,
-    tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
-    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
-    onAddIncludeTerm: (SearchTerm) -> Boolean,
-    onAddExcludeTerm: (SearchTerm) -> Boolean,
-    onRemoveIncludeTerm: (SearchTerm) -> Unit,
-    onRemoveExcludeTerm: (SearchTerm) -> Unit,
-    onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
+    tagVideoCountProvider: (SourceKey, String) -> Int? = LocalPostTagCounts.current.videoCount,
+    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = LocalPostTagCounts.current.fetchVideoCounts,
+    onAddIncludeTerm: (SearchTerm) -> Boolean = LocalPostTagSearchActions.current.let { actions -> { term -> actions.addInclude(post, term) } },
+    onAddExcludeTerm: (SearchTerm) -> Boolean = LocalPostTagSearchActions.current.let { actions -> { term -> actions.addExclude(post, term) } },
+    onRemoveIncludeTerm: (SearchTerm) -> Unit = LocalPostTagSearchActions.current.let { actions -> { term -> actions.removeInclude(post, term) } },
+    onRemoveExcludeTerm: (SearchTerm) -> Unit = LocalPostTagSearchActions.current.let { actions -> { term -> actions.removeExclude(post, term) } },
+    onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = LocalPostTagSavedTags.current.add,
     draftQuery: Query? = null,
     onSearch: (() -> Unit)? = null,
     sheetExtras: PostTagSheetExtras? = null,
@@ -345,8 +346,8 @@ private fun PostTagChip(
 fun FavoriteTagActionGrid(
     source: SourceKey,
     entries: List<FavoriteTagEntry>,
-    tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
-    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
+    tagVideoCountProvider: (SourceKey, String) -> Int? = LocalPostTagCounts.current.videoCount,
+    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = LocalPostTagCounts.current.fetchVideoCounts,
     emptyText: String = "No favorite tags",
     onAddTag: (FavoriteTagEntry) -> Unit,
     onRemoveTag: (FavoriteTagEntry) -> Unit,

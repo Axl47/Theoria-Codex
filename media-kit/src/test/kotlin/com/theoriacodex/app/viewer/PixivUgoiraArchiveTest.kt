@@ -88,7 +88,7 @@ class PixivUgoiraArchiveTest {
     @Test
     fun `ugoira client source retains disk single-flight size and weighted-cache boundaries`() {
         val source = repositoryFile(
-            "media-kit/src/main/kotlin/com/theoriacodex/app/viewer/PixivUgoiraPlayer.kt",
+            "media-kit/src/main/kotlin/com/theoriacodex/app/viewer/PixivUgoiraClient.kt",
         ).readText()
         val search = repositoryFile(
             "feed-kit/src/main/kotlin/com/theoriacodex/app/search/SearchResultCard.kt",

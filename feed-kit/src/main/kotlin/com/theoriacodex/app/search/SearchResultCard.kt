@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -43,7 +44,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.currentStateAsState
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.imageLoader
 import coil.memory.MemoryCache
@@ -67,6 +68,8 @@ import com.theoriacodex.app.viewer.LocalViewerReturnTransition
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.PixivUgoiraPlayer
 import com.theoriacodex.app.viewer.UgoiraSizeBucket
+import com.theoriacodex.app.viewer.ViewerRendererControls
+import com.theoriacodex.app.viewer.ViewerRendererEvents
 import com.theoriacodex.app.viewer.ViewerReturnCorners
 import com.theoriacodex.app.viewer.viewerReturnCorners
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -107,10 +110,10 @@ fun SearchResultCard(
     val viewerReturnShelf = LocalViewerReturnShelf.current
     val mediaGeometry = remember(post.id) { SearchCardMediaGeometry() }
     var isInViewport by remember(post.id) { mutableStateOf(false) }
-    val playbackActive = shouldFeedMediaPlay(
-        isInViewport = isInViewport,
-        isLifecycleStarted = rememberLifecycleStarted(),
-    )
+    val lifecycleState = LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    // Derived, so a pause or resume that leaves the host started does not recompose the card.
+    val lifecycleStarted by remember(lifecycleState) { derivedStateOf { lifecycleState.value.isAtLeast(Lifecycle.State.STARTED) } }
+    val playbackActive = isInViewport && lifecycleStarted
     val resolution = remember(post.id) { SearchCardResolution(post.id) }
     DisposableEffect(post.id) {
         onDispose {
@@ -152,8 +155,7 @@ fun SearchResultCard(
                         mediaGeometry.corners(cardShape, layoutDirection, cardDensity),
                     )
                 }
-                val visible = coordinates.isAttached &&
-                    isVisibleFeedBounds(coordinates.boundsInWindow(clipBounds = true))
+                val visible = coordinates.isAttached && !coordinates.boundsInWindow(clipBounds = true).isEmpty
                 if (isInViewport != visible) {
                     isInViewport = visible
                     onViewportChanged(visible)
@@ -181,23 +183,6 @@ private class SearchCardMediaGeometry {
             cornersTitleBelowMedia = titleBelowMedia
         }
     }
-}
-
-/** Whether the host is at least started, kept current as its lifecycle moves. */
-@Composable
-private fun rememberLifecycleStarted(): Boolean {
-    val lifecycleOwner = LocalLifecycleOwner.current
-    var started by remember(lifecycleOwner) {
-        mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
-    }
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, _ ->
-            started = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-    return started
 }
 
 /** One post's replacement data from its provider: resolving a preview, and recovering dead media. */
@@ -498,12 +483,12 @@ private fun SearchCardMedia(
         isPixivUgoiraPost(post) && pixivUgoiraClient != null -> PixivUgoiraPlayer(
             postId = post.id.sourcePostId,
             client = pixivUgoiraClient,
+            controls = ViewerRendererControls.feedCard(playbackActive),
+            events = remember(onAuthoritativeDurationKnown) { ViewerRendererEvents.feedCard(onAuthoritativeDurationKnown) },
             modifier = Modifier.fillMaxSize(),
             contentDescription = description,
             contentScale = ContentScale.Crop,
             sizeBucket = UgoiraSizeBucket.CARD,
-            isActive = playbackActive,
-            onDurationKnown = onAuthoritativeDurationKnown,
             loadingPreview = { SearchCardAnimationPoster(imageModel, description, progress, lastCandidateIndex) },
         )
         videoRef != null && !videoPlaybackFailed -> SearchVideoPreview(
@@ -616,12 +601,7 @@ internal fun imageCountBadgeLabel(count: Int, viewedMediaNumber: Int?): String {
 
 fun postMediaCount(post: Post): Int {
     post.mediaCount?.takeIf { it > 0 }?.let { return it }
-    val explicitCount = post.media.count { !it.url.isNullOrBlank() || !it.localPath.isNullOrBlank() }
-    return when {
-        explicitCount > 0 -> explicitCount
-        post.full != null -> 1
-        else -> 1
-    }
+    return post.media.count { !it.url.isNullOrBlank() || !it.localPath.isNullOrBlank() }.coerceAtLeast(1)
 }
 
 private fun resolveCardVideoRef(post: Post): ImageRef? {

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.ui.components.feedDurations
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -21,11 +22,8 @@ import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.data.repository.FeedFabRestoreState
-import java.io.Closeable
-import kotlinx.coroutines.flow.StateFlow
 
 /** App-level inputs rendered by Creator or used to reconcile source capability. */
 internal data class CreatorRouteConfig(
@@ -47,42 +45,7 @@ internal data class CreatorRouteCallbacks(
     val onSaveToDevice: (Post) -> Unit,
     val onToggleFollow: (CreatorProfile, List<Post>) -> Unit = { _, _ -> },
     val onOpenUrl: (String) -> Unit,
-    val onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
-    val onAddExcludeTerm: (Post, SearchTerm) -> Boolean,
-    val onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
-    val onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
 )
-
-/** Non-owning access used by Viewer while the Creator back-stack entry owns the ViewModel. */
-internal class CreatorRouteOwnerHandle(
-    owner: CreatorProfileViewModel,
-) : ObservableRouteOwnerHandle {
-    private val ownerLease = owner.createRouteOwnerLease()
-
-    /** Read-only state while the navigation-owned ViewModel remains alive. */
-    val state: StateFlow<CreatorUiState>?
-        get() = ownerLease.withOwner { activeOwner -> activeOwner.state }
-
-    override fun invokeOnOwnerCleared(listener: () -> Unit): Closeable {
-        return ownerLease.invokeOnClose(listener)
-    }
-
-    fun dispatch(action: CreatorAction): Boolean {
-        return ownerLease.withOwner { activeOwner ->
-            activeOwner.onAction(action)
-            true
-        } ?: false
-    }
-
-    fun rememberResolvedPost(post: Post): Boolean {
-        return ownerLease.withOwner { activeOwner ->
-            activeOwner.rememberResolvedPost(post)
-            true
-        } ?: false
-    }
-
-    fun currentState(): CreatorUiState? = ownerLease.withOwner { activeOwner -> activeOwner.state.value }
-}
 
 /** Navigation-scoped Creator owner plus its immutable rendering boundary. */
 @Composable
@@ -95,7 +58,7 @@ internal fun CreatorRoute(
     fabRestoreState: FeedFabRestoreState,
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
     callbacks: CreatorRouteCallbacks,
-    onOwnerAvailable: (CreatorRouteOwnerHandle) -> Unit = {},
+    onOwnerAvailable: (CreatorProfileViewModel) -> Unit = {},
 ) {
     val owner = viewModel<CreatorProfileViewModel>(
         factory = CreatorProfileViewModel.factory(coordinator, relatedPostsLoader),
@@ -112,10 +75,9 @@ internal fun CreatorRoute(
         posts = durationPosts,
         resolveInBackground = config.resolveUnknownAnimatedDurations,
     )
-    val ownerHandle = remember(owner) { CreatorRouteOwnerHandle(owner) }
     val currentOnOwnerAvailable by rememberUpdatedState(onOwnerAvailable)
 
-    SideEffect { currentOnOwnerAvailable(ownerHandle) }
+    SideEffect { currentOnOwnerAvailable(owner) }
 
     LaunchedEffect(owner, config.activeCreator) {
         config.activeCreator?.let { creator ->
@@ -151,7 +113,11 @@ private fun CreatorRouteContent(
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
     callbacks: CreatorRouteCallbacks,
 ) {
+    val related = rememberFeedRelatedShelf(state.relatedPosts, owner.related) { posts, index ->
+        owner.onAction(CreatorAction.OpenRelatedResult(index, posts))
+    }
     CreatorProfileScreen(
+        related = related,
         followed = config.followed,
         onToggleFollow = { state.creator?.let { callbacks.onToggleFollow(it, state.uploads) } },
         state = state,
@@ -159,23 +125,13 @@ private fun CreatorRouteContent(
         pendingLikePostIds = config.pendingLikePostIds,
         savedPostIds = config.savedPostIds,
         pixivUgoiraClient = pixivUgoiraClient,
-        resolveUnknownAnimatedDurations = config.resolveUnknownAnimatedDurations,
-        durationStates = duration.states,
-        durationStateForPost = duration.stateForPost,
-        onDurationFilterChanged = duration.owner::onFilterChanged,
-        onDurationPostVisibilityChanged = duration.owner::onPostVisibilityChanged,
-        onDurationEnvironmentChanged = duration.owner::onEnvironmentChanged,
-        onAuthoritativeDurationKnown = duration.owner::publishPlayerDuration,
+        durations = duration.owner.feedDurations(duration.states, config.resolveUnknownAnimatedDurations),
         resolvePostById = owner::resolvePost,
         onToggleLike = callbacks.onToggleLike,
         onAction = owner::onAction,
         onRequestSaveToCodex = callbacks.onRequestSaveToCodex,
         onSaveToDevice = callbacks.onSaveToDevice,
         onOpenUrl = callbacks.onOpenUrl,
-        onAddIncludeTerm = callbacks.onAddIncludeTerm,
-        onAddExcludeTerm = callbacks.onAddExcludeTerm,
-        onRemoveIncludeTerm = callbacks.onRemoveIncludeTerm,
-        onRemoveExcludeTerm = callbacks.onRemoveExcludeTerm,
         fabRestoreState = fabRestoreState,
         onFabRestoreStateChange = onFabRestoreStateChange,
     )

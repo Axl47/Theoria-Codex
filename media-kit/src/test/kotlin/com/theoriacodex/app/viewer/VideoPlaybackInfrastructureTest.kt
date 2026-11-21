@@ -18,25 +18,6 @@ import org.junit.Test
 
 class VideoPlaybackInfrastructureTest {
     @Test
-    fun `bindings reuse one shared resource while retaining request identity`() {
-        val sharedFactory = Any()
-        val pool = SharedVideoResourcePool(sharedFactory)
-
-        val first = pool.bind(
-            location = "https://media.example/preview.mp4",
-            headers = mapOf("Referer" to "https://first.example/"),
-        )
-        val second = pool.bind(
-            location = "https://media.example/other.mp4",
-            headers = mapOf("Referer" to "https://second.example/"),
-        )
-
-        assertSame(sharedFactory, first.sharedResource)
-        assertSame(first.sharedResource, second.sharedResource)
-        assertNotEquals(first.identity, second.identity)
-    }
-
-    @Test
     fun `cache identity is deterministic order independent and credential isolated`() {
         val location = "https://media.example/protected.mp4"
         val first = videoPlaybackIdentity(
@@ -182,6 +163,7 @@ class VideoPlaybackInfrastructureTest {
         assertTrue(pool.recycle(second))
         assertTrue(pool.recycle(third))
         assertEquals(3, pool.idleResourceCount)
+        assertEquals(FEED_PREVIEW_EXCESS_RELEASE_DELAY_MS, pool.nextCleanupDelayMs())
 
         val releasedFirst = pool.pollExpired()
         assertSame(first.resource, releasedFirst)

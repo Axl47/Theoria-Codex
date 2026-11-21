@@ -4,6 +4,7 @@ import com.google.gson.Gson
 import com.theoriacodex.domain.diagnostics.OffMainChecker
 import com.theoriacodex.domain.diagnostics.OffMainWork
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class SourceParsingTest {
@@ -31,5 +32,11 @@ class SourceParsingTest {
         val text = htmlFragmentToText("<title>Spoiler:</title> ending<br>second line")
 
         assertEquals("Spoiler: ending\nsecond line", text)
+    }
+
+    @Test
+    fun `a timestamp outside the epoch-millisecond range reads as no date`() {
+        assertEquals(1_763_642_096_000L, parseOffsetDateTimeMs("2025-11-20T12:34:56Z"))
+        assertNull(parseOffsetDateTimeMs("+300000000-01-01T00:00:00Z"))
     }
 }

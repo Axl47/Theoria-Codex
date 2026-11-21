@@ -1,9 +1,11 @@
 package com.theoriacodex.sources.gelbooru
 
+import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.credentials.ApiKeyUse
-import com.theoriacodex.sources.rule34.RULE34_BROWSER_HEADERS
+import com.theoriacodex.sources.credentials.UserApiKey
+import com.theoriacodex.sources.http.BROWSER_USER_AGENT
 
 /**
  * One site running the Gelbooru 0.2 DAPI (`index.php?page=dapi`). Every field is plain data, so a
@@ -40,6 +42,8 @@ data class GelbooruSite(
     val publicProfiles: Boolean = false,
     /** Searches answer `fav:<account id>` with that account's public favorites (verified on gelbooru.com with a key, 2026-11-11). */
     val favoritesList: Boolean = false,
+    /** Searches match only tags spelled as the site lists them; see [SourceCapabilities.requiresExactTags]. */
+    val exactTags: Boolean = false,
 ) {
     /**
      * A site account as a creator: [owner] is the user name (searched as `user:<owner>`), [creatorId] the
@@ -58,6 +62,10 @@ data class GelbooruSite(
     }
 
     companion object {
+        /** API keys as DAPI query parameters; empty without keys. */
+        fun authQuery(keys: UserApiKey?): Map<String, String> =
+            keys?.let { mapOf("user_id" to it.userId, "api_key" to it.apiKey) }.orEmpty()
+
         val GELBOORU = GelbooruSite(
             source = SourceKey.GELBOORU,
             label = "Gelbooru",
@@ -69,6 +77,7 @@ data class GelbooruSite(
             commentAnchors = false,
             publicProfiles = true,
             favoritesList = true,
+            exactTags = true,
         )
 
         /** The API host differs from the site, every API call needs a key, and tags come from `autocomplete.php`. */
@@ -78,7 +87,7 @@ data class GelbooruSite(
             siteUrl = "https://rule34.xxx",
             apiUrl = "https://api.rule34.xxx/index.php",
             autocompleteUrl = "https://api.rule34.xxx/autocomplete.php",
-            headers = RULE34_BROWSER_HEADERS,
+            headers = mapOf("User-Agent" to BROWSER_USER_AGENT),
             credentials = ApiKeyUse.REQUIRED,
             postLookup = GelbooruPostLookup.ID_TAG,
             scoreSortTag = "sort:score",

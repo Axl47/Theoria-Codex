@@ -1,4 +1,4 @@
-package com.theoriacodex.app.source
+package com.theoriacodex.domain.coroutines
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -22,6 +22,9 @@ class SharedFlights<K : Any, V> {
 
     private val lock = Any()
     private val flights = mutableMapOf<K, Flight<V>>()
+
+    /** How many keys have a request in flight now; caches report it in their diagnostics snapshots. */
+    val inFlightCount: Int get() = synchronized(lock) { flights.size }
 
     /** Runs [fetch] unless a request for [key] is already in flight, then waits for that request's result. */
     suspend fun share(key: K, fetch: suspend () -> V): V {

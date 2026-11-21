@@ -1,5 +1,7 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.related.testRelatedShelf
+import com.theoriacodex.app.feed.FeedCursor
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
@@ -155,6 +157,7 @@ class SearchApplyScrollTest {
             MaterialTheme {
                 SearchScreen(
                     state = state.value,
+                    related = testRelatedShelf(),
                     creatorBrowsingSources = emptySet(),
                     fabRestoreState = FeedFabRestoreState().withSearchAnimationFilter(state.value.query.draft.mode) {
                         it.copy(animatedOnly = animatedOnly)
@@ -162,10 +165,6 @@ class SearchApplyScrollTest {
                     onAction = onAction,
                     resolvePostById = { null },
                     recoverPostMedia = { _, _ -> null },
-                    tagVideoCountProvider = { _, _ -> null },
-                    fetchTagVideoCounts = { _, _ -> emptyMap() },
-                    onOpenCreatorProfile = {},
-                    onOpenLegacyCreatorProfile = {},
                     onRequestSaveToCodex = {},
                     onSaveToDevice = {},
                 )
@@ -203,7 +202,7 @@ class SearchApplyScrollTest {
 
     /** A continuation with nothing after it, for the search this state shows. */
     private fun SearchUiState.lastPage() = SearchContinuation(
-        query.appliedQueryHash, query.applied, query.appliedSourceScope, emptySet(), emptyList(), emptyMap(),
+        query.appliedQueryHash, query.appliedSourceScope, emptySet(), emptyList(), FeedCursor(query.applied),
     )
 
     private fun resetPosts(animatedOnly: Boolean): List<com.theoriacodex.domain.model.Post> {

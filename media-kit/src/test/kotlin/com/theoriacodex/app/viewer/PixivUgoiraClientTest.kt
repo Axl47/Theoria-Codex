@@ -13,9 +13,7 @@ import org.junit.Assert.assertFalse
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.PixivAuthTokens
-import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
@@ -327,12 +325,6 @@ class PixivUgoiraClientTest {
         override suspend fun getPixivTokens(): PixivAuthTokens? = throw cancellation
         override suspend fun savePixivTokens(tokens: PixivAuthTokens) = Unit
         override suspend fun clearPixivTokens() = Unit
-        override suspend fun getGelbooruCredentials(): GelbooruCredentials? = null
-        override suspend fun saveGelbooruCredentials(credentials: GelbooruCredentials) = Unit
-        override suspend fun clearGelbooruCredentials() = Unit
-        override suspend fun getRule34XxxCredentials(): Rule34XxxCredentials? = null
-        override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) = Unit
-        override suspend fun clearRule34XxxCredentials() = Unit
     }
 
     private object FixedCredentialsProvider : SourceCredentialsProvider {
@@ -343,12 +335,6 @@ class PixivUgoiraClientTest {
         )
         override suspend fun savePixivTokens(tokens: PixivAuthTokens) = Unit
         override suspend fun clearPixivTokens() = Unit
-        override suspend fun getGelbooruCredentials(): GelbooruCredentials? = null
-        override suspend fun saveGelbooruCredentials(credentials: GelbooruCredentials) = Unit
-        override suspend fun clearGelbooruCredentials() = Unit
-        override suspend fun getRule34XxxCredentials(): Rule34XxxCredentials? = null
-        override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) = Unit
-        override suspend fun clearRule34XxxCredentials() = Unit
     }
 
     private object UnusedHttpClient : SourceHttpClient {

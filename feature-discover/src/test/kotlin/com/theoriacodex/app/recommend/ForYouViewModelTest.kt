@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recommend
 
+import com.theoriacodex.app.feed.FeedCursor
 import androidx.lifecycle.SavedStateHandle
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recommend.state.ForYouEmptyReason
@@ -255,13 +256,13 @@ class ForYouViewModelTest {
         val owner = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this, relatedPostsLoader = loader)
         owner.synchronizeEnvironment(AppSettings(), 1)
         advanceUntilIdle()
-        owner.onAction(ForYouAction.RelatedLikeCommitted(seed, LikeToggleOutcome.LIKED))
+        owner.related.onLikeCommitted(seed, LikeToggleOutcome.LIKED)
         advanceUntilIdle()
-        owner.onAction(ForYouAction.RelatedLikeCommitted(promoted, LikeToggleOutcome.LIKED))
+        owner.related.onLikeCommitted(promoted, LikeToggleOutcome.LIKED)
         advanceUntilIdle()
-        owner.onAction(ForYouAction.ShowPreviousRelatedPosts)
+        owner.related.showPreviousPage()
         assertEquals(listOf(sibling), owner.state.value.relatedPosts.loadedPosts)
-        owner.onAction(ForYouAction.ShowNextRelatedPosts)
+        owner.related.showNextPage()
         assertEquals(listOf(next), owner.state.value.relatedPosts.loadedPosts)
         val effect = async { owner.effects.first() }
         owner.onAction(ForYouAction.OpenRelatedResult(0, listOf(next)))
@@ -349,13 +350,13 @@ private class FakeForYouRouteEngine : ForYouRouteEngine {
         val posts = if (stale) listOf(testPost(sourcePostId = "stale")) else refreshResult
         val page = UnifiedSearchResult(posts, seed.keys.associateWith { if (refreshCanLoadMore) "next" else null },
             seed.keys.map { SourceRunStatus(it, SourceRunState.SUCCESS) })
-        val continuation = ForYouContinuation(forYouBaseQuery(request.sortMode),
+        val continuation = FeedCursor(forYouBaseQuery(request.sortMode),
             seed.mapValues { (source, tags) -> forYouSourceQuery(source, tags, request.sortMode) }, emptyMap(),
             seed.keys.associateWith { null }).accept(page, seed.keys)
         return ForYouFeedResult(seed, buildForYouSeedId(seed), request.likesCount, page, continuation)
     }
 
-    override suspend fun loadPage(continuation: ForYouContinuation, sources: Set<SourceKey>): UnifiedSearchResult {
+    override suspend fun loadPage(continuation: FeedCursor, sources: Set<SourceKey>): UnifiedSearchResult {
         pageTokens += sources.map { continuation.pageTokens[it] }
         pageGate?.await()
         pageError?.let { error(it) }

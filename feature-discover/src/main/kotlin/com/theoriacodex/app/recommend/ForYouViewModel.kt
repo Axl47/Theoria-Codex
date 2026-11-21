@@ -25,8 +25,10 @@ import com.theoriacodex.domain.orchestration.UnifiedSearchResult
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.app.related.RelatedPostsLoading
 import com.theoriacodex.app.related.RelatedPostsRouteController
-import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
+import com.theoriacodex.app.related.ViewerFeedOwner
+import com.theoriacodex.app.related.ViewerFeedSnapshot
+import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.app.ui.state.RouteStateOwner
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
@@ -44,6 +46,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
@@ -59,7 +63,7 @@ class ForYouViewModel(
     coroutineScope: CoroutineScope? = null,
     relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
     reconnections: Flow<Unit> = emptyFlow(),
-) : ViewModel(), RouteStateOwner<ForYouUiState, ForYouAction, ForYouEffect> {
+) : ViewModel(), RouteStateOwner<ForYouUiState, ForYouAction, ForYouEffect>, ViewerFeedOwner {
     constructor(
         coordinator: ForYouCoordinator,
         savedStateHandle: SavedStateHandle,
@@ -116,6 +120,10 @@ class ForYouViewModel(
     override val state: StateFlow<ForYouUiState> = mutableState.asStateFlow()
     private val effectChannel = Channel<ForYouEffect>(capacity = Channel.BUFFERED)
     override val effects: Flow<ForYouEffect> = effectChannel.receiveAsFlow()
+    override val streamSource = ViewerStreamSource.FOR_YOU
+    override val viewerFeed: ViewerFeedSnapshot get() = mutableState.value.viewerFeed()
+    override val viewerFeedChanges: Flow<ViewerFeedSnapshot> = mutableState.map { it.viewerFeed() }.distinctUntilChanged()
+    override val related: RelatedPostsRouteController get() = relatedPosts
 
     private val home = ForYouHomeController(
         scope = ownerScope, engine = engine, state = { mutableState.value },
@@ -163,33 +171,6 @@ class ForYouViewModel(
             return
         }
         if (home.handle(action)) return
-        when (action) {
-            is ForYouAction.RelatedLikeCommitted -> {
-                relatedPosts.onLikeCommitted(action.post, action.outcome)
-                return
-            }
-            is ForYouAction.ShowRelatedPosts -> {
-                relatedPosts.show(action.post)
-                return
-            }
-            ForYouAction.RetryRelatedPosts -> {
-                relatedPosts.retry()
-                return
-            }
-            ForYouAction.DismissRelatedPosts -> {
-                relatedPosts.clear()
-                return
-            }
-            ForYouAction.ShowPreviousRelatedPosts -> {
-                relatedPosts.showPreviousPage()
-                return
-            }
-            ForYouAction.ShowNextRelatedPosts -> {
-                relatedPosts.showNextPage()
-                return
-            }
-            else -> Unit
-        }
         if (action is ForYouAction.ReplaySearch && !(environmentSynchronized && sourceAvailabilitySynchronized)) {
             mutableState.value = mutableState.value.copy(home = mutableState.value.home.copy(visible = false))
             pendingReplaySearch = action
@@ -205,6 +186,8 @@ class ForYouViewModel(
         val transition = if (startsNewScope) reduced.copy(
             state = reduced.state.copy(home = reduced.state.home.copy(activeSection = null)),
         ) else reduced
+        mutableState.value = transition.state
+        // A new recommendation root starts without a shelf; the controller alone clears it, cancelling its load.
         if (transition.state.activeRequest?.kind == ForYouRequestKind.REFRESH &&
             transition.state.activeRequest != previous.activeRequest
         ) {
@@ -212,7 +195,6 @@ class ForYouViewModel(
             hasRequestedFeed = true
             replaySearch = action as? ForYouAction.ReplaySearch
         }
-        mutableState.value = transition.state
         persistRouteInputs(transition.state)
         transition.effect?.let(::handleEffect)
         if (action is ForYouAction.SelectSource || action is ForYouAction.SelectSort) home.synchronize()
@@ -322,7 +304,9 @@ class ForYouViewModel(
 
     suspend fun resolvePost(postId: PostId): Post? = engine.resolvePost(postId)?.also(::rememberResolvedPost)
 
-    fun rememberResolvedPost(post: Post) {
+    override fun loadNextPage() = onAction(ForYouAction.LoadNextPage)
+
+    override fun rememberResolvedPost(post: Post) {
         val current = mutableState.value
         mutableState.value = current.copy(results = current.results.replacingPostSnapshot(post))
     }
@@ -476,3 +460,11 @@ class ForYouViewModel(
         internal const val KEY_SORT_MODE = "for_you_sort_mode"
     }
 }
+
+private fun ForYouUiState.viewerFeed() = ViewerFeedSnapshot(
+    queryHash = "for_you:$seedId",
+    results = results,
+    canLoadMore = canLoadMore,
+    loadingMore = isPaging,
+    relatedPosts = relatedPosts,
+)

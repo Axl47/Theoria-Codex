@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -172,6 +173,33 @@ class MediaDurationRouteViewModelTest {
     }
 
     @Test
+    fun `a feed-supplied duration answers from the post without lookup or storage`() = runTest {
+        var acquisitions = 0
+        val coordinator = coordinator {
+            acquisitions += 1
+            MediaDurationState.Known(1_000L, MediaDurationProvenance.CONTAINER_PROBE)
+        }
+        val owner = MediaDurationRouteViewModel(coordinator, "provider-test", backgroundScope)
+        val post = animatedTestPost(sourcePostId = "provider", durationMs = 6_000L)
+
+        owner.synchronize("query", listOf(post), resolveInBackground = true)
+        owner.onFilterChanged(true)
+        owner.onNearbyPostsChanged(setOf(post.id))
+        owner.onEnvironmentChanged(lifecycleStarted = true, scrollIdle = true)
+        owner.publishPlayerDuration(post, 6_100L)
+        coordinator.submit(post, DurationDemand("direct", mediaDurationKey(post), DurationDemandPriority.VISIBLE))
+        runCurrent()
+
+        assertEquals(
+            MediaDurationState.Known(6_000L, MediaDurationProvenance.PROVIDER),
+            owner.observeState(post).first(),
+        )
+        assertEquals(0, acquisitions)
+        assertTrue(coordinator.states.value.isEmpty())
+        coordinator.close()
+    }
+
+    @Test
     fun `same identity append submits only the new duration candidate`() = runTest {
         val traces = DemandCountingTraceRecorder()
         val coordinator = coordinator(
@@ -239,8 +267,8 @@ class MediaDurationRouteViewModelTest {
         creatorOwner.publishPlayerDuration(creatorPost, 5_000L)
         runCurrent()
 
-        assertTrue(searchOwner.states.value.isEmpty())
-        assertTrue(creatorOwner.states.value.isEmpty())
+        assertSame(MediaDurationStates.EMPTY, searchOwner.states.value)
+        assertSame(MediaDurationStates.EMPTY, creatorOwner.states.value)
         assertEquals(null, searchOwner.observeState(searchPost).first())
         assertEquals(
             MediaDurationState.Known(5_000L, MediaDurationProvenance.ACTIVE_PLAYER),
@@ -350,17 +378,12 @@ class MediaDurationRouteViewModelTest {
         var demands: Int = 0
         var publications: Int = 0
 
-        override fun demand() {
-            demands += 1
+        override fun record(event: DurationTraceEvent) {
+            when (event) {
+                DurationTraceEvent.Demand -> demands += 1
+                DurationTraceEvent.Publication -> publications += 1
+                else -> Unit
+            }
         }
-
-        override fun providerResolve() = Unit
-        override fun probe() = Unit
-        override fun workloadStarted(cookie: Int) = Unit
-        override fun workloadFinished(cookie: Int) = Unit
-        override fun publication() {
-            publications += 1
-        }
-        override fun settled() = Unit
     }
 }

@@ -115,7 +115,7 @@ class DestinationFirstFrameTest {
             navigation = rememberNavController()
             if (show.value) NavHost(navigation, startDestination = "codex") {
                 composable("codex") {
-                    CodexDetailDestinationStateBoundary("kept", CodexSortMode.NEWEST_SAVED, data, graph.sources, FeedFabRestoreState()) { state ->
+                    CodexDetailDestinationStateBoundary("kept", CodexSortMode.NEWEST_SAVED, data, graph.sources, graph.features, FeedFabRestoreState()) { state ->
                         Text(if (state.loading) "still loading" else state.codex?.name ?: "codex missing")
                     }
                 }

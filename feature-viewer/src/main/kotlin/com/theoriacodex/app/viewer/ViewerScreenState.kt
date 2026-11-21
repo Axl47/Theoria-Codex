@@ -10,12 +10,11 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import com.theoriacodex.app.media.isGifMediaRef
-import com.theoriacodex.app.media.isPixivUgoiraMedia
-import com.theoriacodex.app.media.isVideoMediaRef
-import com.theoriacodex.app.media.postMediaItems
 import com.theoriacodex.app.viewer.state.ViewerAction
+import com.theoriacodex.app.viewer.state.ViewerMediaKind
+import com.theoriacodex.app.viewer.state.ViewerMediaState
 import com.theoriacodex.app.viewer.state.ViewerPageState
+import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -52,9 +51,7 @@ internal class ViewerControls(
     private val opening: Boolean,
     private val returning: Boolean,
 ) {
-    fun setInfoSheetVisible(visible: Boolean) {
-        onAction(if (visible) ViewerAction.ShowMetadata else ViewerAction.HideMetadata)
-    }
+    fun setInfoSheetVisible(visible: Boolean) = setPanelOpen(ViewerPanel.INFO, visible)
 
     /** Opens the info sheet scrolled to the post's comments. */
     fun openInfoSheetAtComments() {
@@ -73,12 +70,13 @@ internal class ViewerControls(
         onAction(if (enabled) ViewerAction.Play else ViewerAction.Pause)
     }
 
-    fun setActionsMenuExpanded(expanded: Boolean) {
-        onAction(if (expanded) ViewerAction.ShowActionsMenu else ViewerAction.HideActionsMenu)
-    }
+    fun setActionsMenuExpanded(expanded: Boolean) = setPanelOpen(ViewerPanel.ACTIONS_MENU, expanded)
 
-    fun setPlaybackSettingsExpanded(expanded: Boolean) {
-        onAction(if (expanded) ViewerAction.ShowPlaybackSettings else ViewerAction.HidePlaybackSettings)
+    fun setPlaybackSettingsExpanded(expanded: Boolean) = setPanelOpen(ViewerPanel.PLAYBACK_SETTINGS, expanded)
+
+    /** Opening a panel closes the one that was open. */
+    private fun setPanelOpen(panel: ViewerPanel, open: Boolean) {
+        onAction(if (open) ViewerAction.ShowPanel(panel) else ViewerAction.HidePanel(panel))
     }
 
     fun setOverviewVisible(visible: Boolean) {
@@ -106,7 +104,7 @@ internal class ViewerControls(
 
     /** Moves the open post to one of its pages at once, for controls that pick a page directly. */
     fun jumpToMedia(postId: PostId, mediaIndex: Int) {
-        onAction(ViewerAction.SelectOverviewMedia(mediaIndex))
+        onAction(ViewerAction.SelectMedia(mediaIndex))
         screen.pendingMediaJumpByPost[postId] = mediaIndex
         markInteraction()
     }
@@ -118,11 +116,7 @@ internal class ViewerControls(
 
     fun requestDismiss() {
         if (screen.pendingDismiss) return
-        setPlaybackEnabled(false)
-        setInfoSheetVisible(false)
-        setActionsMenuExpanded(false)
-        setPlaybackSettingsExpanded(false)
-        setOverviewVisible(false)
+        onAction(ViewerAction.PrepareDismiss)
         screen.pendingDismiss = true
     }
 }
@@ -148,21 +142,20 @@ internal class ViewerSelection(
     val overviewItems: List<ViewerMediaOverviewItem>,
 ) {
     val media: ImageRef? = mediaItems.getOrNull(mediaIndex)
-    val isSeekable = media?.let { media ->
-        isVideoMediaRef(media) || isGifMediaRef(media) || (isPixivUgoiraMedia(post, media) && canPlayUgoira)
-    } == true
-    val canDownload = media?.let { media ->
-        (isPixivUgoiraMedia(post, media) && canPlayUgoira) || !media.url.isNullOrBlank()
-    } == true
-    val isAnimated = media?.let { viewerMediaIsAnimated(post, it, canPlayUgoira) } == true
+    private val kind = media?.let { viewerRendererMediaKind(post, it, canPlayUgoira) }
+    val isSeekable = kind?.seekable == true
+    val canDownload = kind == ViewerMediaKind.UGOIRA || !media?.url.isNullOrBlank()
+    val isAnimated = kind?.animated == true
     val overviewAvailable = viewerMediaOverviewAvailable(overviewItems)
 }
 
 @Composable
-internal fun rememberViewerSelection(uiState: ViewerUiState, post: Post, canPlayUgoira: Boolean): ViewerSelection {
-    val mediaItems = remember(post) { postMediaItems(post) }
+internal fun rememberViewerSelection(uiState: ViewerUiState, page: ViewerPageState, canPlayUgoira: Boolean): ViewerSelection {
+    val post = page.post
+    // The page's media and its kinds follow its post, so a readiness change rebuilds neither list.
+    val mediaItems = remember(post) { page.media.map(ViewerMediaState::ref) }
     val mediaIndex = uiState.currentPage?.selectedMediaIndex?.coerceIn(0, mediaItems.lastIndex) ?: 0
-    val overviewItems = remember(post) { viewerMediaOverviewItems(post) }
+    val overviewItems = remember(post) { viewerMediaOverviewItems(page) }
     return remember(post, mediaItems, mediaIndex, canPlayUgoira, overviewItems) {
         ViewerSelection(post, mediaItems, mediaIndex, canPlayUgoira, overviewItems)
     }
@@ -187,6 +180,3 @@ internal class ViewerFrame(
     // Media pages drop the portrait top gap in landscape and in PiP, where it would frame the media in black bars.
     val mediaEdgeToEdge = isLandscape || inPictureInPicture
 }
-
-internal fun targetMediaIndex(page: ViewerPageState?) = page?.let { it.pendingMediaIndex ?: it.selectedMediaIndex } ?: 0
-

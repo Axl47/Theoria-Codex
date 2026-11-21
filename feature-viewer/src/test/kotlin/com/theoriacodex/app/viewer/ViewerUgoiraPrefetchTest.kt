@@ -14,9 +14,7 @@ import com.theoriacodex.domain.model.PIXIV_UGOIRA_MIME
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.VideoQuality
-import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.PixivAuthTokens
-import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
@@ -114,12 +112,6 @@ class ViewerUgoiraPrefetchTest {
         override suspend fun getPixivTokens() = PixivAuthTokens("access", "refresh", Long.MAX_VALUE)
         override suspend fun savePixivTokens(tokens: PixivAuthTokens) = Unit
         override suspend fun clearPixivTokens() = Unit
-        override suspend fun getGelbooruCredentials(): GelbooruCredentials? = null
-        override suspend fun saveGelbooruCredentials(credentials: GelbooruCredentials) = Unit
-        override suspend fun clearGelbooruCredentials() = Unit
-        override suspend fun getRule34XxxCredentials(): Rule34XxxCredentials? = null
-        override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) = Unit
-        override suspend fun clearRule34XxxCredentials() = Unit
     }
 
     private object NoHttp : SourceHttpClient {

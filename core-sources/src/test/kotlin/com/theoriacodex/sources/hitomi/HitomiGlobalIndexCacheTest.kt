@@ -1,7 +1,6 @@
 package com.theoriacodex.sources.hitomi
 
 import java.util.concurrent.atomic.AtomicInteger
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -95,39 +94,55 @@ class HitomiGlobalIndexCacheTest {
     }
 
     @Test
-    fun `owner cancellation reaches waiters and leaves the key retryable`() = runTest {
+    fun `a waiter keeps the shared load alive after the first caller is cancelled`() = runTest {
         val cache = HitomiGlobalIndexCache(maxBytes = 64L)
         val loadStarted = CompletableDeferred<Unit>()
+        val releaseLoad = CompletableDeferred<Unit>()
         val loadCount = AtomicInteger(0)
         val owner = async {
             cache.getOrLoad("v1", "shared") {
                 loadCount.incrementAndGet()
                 loadStarted.complete(Unit)
-                awaitCancellation()
+                releaseLoad.await()
+                intArrayOf(7)
             }
         }
         loadStarted.await()
-        val waiter = async {
-            runCatching {
-                cache.getOrLoad("v1", "shared") {
-                    loadCount.incrementAndGet()
-                    intArrayOf(9)
-                }
-            }.exceptionOrNull()
-        }
+        val waiter = async { cache.getOrLoad("v1", "shared") { error("must share the in-flight load") } }
         runCurrent()
 
         owner.cancelAndJoin()
+        releaseLoad.complete(Unit)
 
-        assertTrue(waiter.await() is CancellationException)
+        assertArrayEquals(intArrayOf(7), waiter.await())
+        assertArrayEquals(intArrayOf(7), cache.get("shared"))
+        assertEquals(1, loadCount.get())
+        assertEquals(0, cache.snapshot().inFlightLoads)
+    }
+
+    @Test
+    fun `the load stops when every caller leaves and the key stays retryable`() = runTest {
+        val cache = HitomiGlobalIndexCache(maxBytes = 64L)
+        val loadStarted = CompletableDeferred<Unit>()
+        var loadCancelled = false
+        val callers = List(2) {
+            async {
+                cache.getOrLoad("v1", "shared") {
+                    loadStarted.complete(Unit)
+                    try { awaitCancellation() } finally { loadCancelled = true }
+                }
+            }
+        }
+        loadStarted.await()
+        runCurrent()
+
+        callers.forEach { caller -> caller.cancelAndJoin() }
+        runCurrent()
+
+        assertTrue(loadCancelled)
         assertNull(cache.get("shared"))
         assertEquals(0, cache.snapshot().inFlightLoads)
-        val retried = cache.getOrLoad("v1", "shared") {
-            loadCount.incrementAndGet()
-            intArrayOf(10)
-        }
-        assertArrayEquals(intArrayOf(10), retried)
-        assertEquals(2, loadCount.get())
+        assertArrayEquals(intArrayOf(10), cache.getOrLoad("v1", "shared") { intArrayOf(10) })
     }
 
     @Test

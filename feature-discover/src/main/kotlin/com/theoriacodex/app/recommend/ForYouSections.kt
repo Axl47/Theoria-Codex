@@ -72,7 +72,7 @@ internal class ForYouSectionsLoader(
             val documents = training.documentsFor(source)
             val tags = documents.flatMap { RecommendationTagNormalization.normalizeDistinct(source, it, 40) }
                 .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.take(48).map { it.key }
-            val providerCounts = if (tags.isEmpty()) emptyMap() else counts.fetch(source, tags, emptyMap())
+            val providerCounts = if (tags.isEmpty()) emptyMap() else counts.fetch(source, tags)
             ForYouInterests.generate(source, documents, providerCounts,
                 random = if (request.shuffle) Random.Default else null,
                 maxInterests = if (request.additionalSection) 4 + request.excludedSectionIds.size else 4).map { interest ->

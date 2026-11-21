@@ -6,6 +6,10 @@ data class SourceHttpResponse(
     val headers: Map<String, List<String>> = emptyMap(),
 )
 
+/** The first value of header [name], whatever case the server or a test wrote it in. */
+fun Map<String, List<String>>.header(name: String): String? =
+    entries.firstOrNull { (key, _) -> key.equals(name, ignoreCase = true) }?.value?.firstOrNull()
+
 data class SourceByteRange(
     val startInclusive: Long,
     val endInclusive: Long,
@@ -34,6 +38,9 @@ class SourceHttpBodyTooLargeException(
  * `Mozilla/5.0` on its API and CDN, so its requests and media loads must send this instead.
  */
 const val THEORIA_SOURCE_USER_AGENT: String = "TheoriaCodex/1.0 (Android source adapter)"
+
+/** A bare browser agent, for sites that refuse library agents but not the app's lack of a real browser. */
+const val BROWSER_USER_AGENT: String = "Mozilla/5.0"
 
 const val DEFAULT_MAX_SOURCE_TEXT_BODY_BYTES: Int = 8 * 1024 * 1024
 const val DEFAULT_MAX_SOURCE_BINARY_BODY_BYTES: Int = 8 * 1024 * 1024

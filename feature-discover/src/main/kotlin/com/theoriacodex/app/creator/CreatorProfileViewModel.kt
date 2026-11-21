@@ -17,6 +17,10 @@ import com.theoriacodex.app.related.RelatedPostsLoading
 import com.theoriacodex.app.related.RelatedPostsRouteController
 import com.theoriacodex.app.related.RelatedPostsDiagnostics
 import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
+import com.theoriacodex.app.related.ViewerFeedOwner
+import com.theoriacodex.app.related.ViewerFeedSnapshot
+import com.theoriacodex.app.related.retainedLikedPostIds
+import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.app.media.replacingPostSnapshot
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.AccountFeed
@@ -33,6 +37,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.ensureActive
@@ -44,7 +50,7 @@ class CreatorProfileViewModel(
     private val savedStateHandle: SavedStateHandle,
     coroutineScope: CoroutineScope? = null,
     relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
-) : ViewModel(), RouteStateOwner<CreatorUiState, CreatorAction, CreatorEffect> {
+) : ViewModel(), RouteStateOwner<CreatorUiState, CreatorAction, CreatorEffect>, ViewerFeedOwner {
     constructor(
         coordinator: CreatorProfileCoordinator,
         savedStateHandle: SavedStateHandle,
@@ -83,6 +89,10 @@ class CreatorProfileViewModel(
 
     private val effectChannel = Channel<CreatorEffect>(capacity = Channel.BUFFERED)
     override val effects: Flow<CreatorEffect> = effectChannel.receiveAsFlow()
+    override val streamSource = ViewerStreamSource.CREATOR_PROFILE
+    override val viewerFeed: ViewerFeedSnapshot get() = mutableState.value.viewerFeed()
+    override val viewerFeedChanges: Flow<ViewerFeedSnapshot> = mutableState.map { it.viewerFeed() }.distinctUntilChanged()
+    override val related: RelatedPostsRouteController get() = relatedPosts
     init {
         relatedDiagnostics.record("owner created", mutableState.value.relatedPosts)
         addCloseable("related-posts-diagnostics", java.io.Closeable {
@@ -112,33 +122,6 @@ class CreatorProfileViewModel(
     }
 
     private fun reduceAction(action: CreatorAction) {
-        when (action) {
-            is CreatorAction.RelatedLikeCommitted -> {
-                relatedPosts.onLikeCommitted(action.post, action.outcome)
-                return
-            }
-            is CreatorAction.ShowRelatedPosts -> {
-                relatedPosts.show(action.post)
-                return
-            }
-            CreatorAction.DismissRelatedPosts -> {
-                relatedPosts.clear()
-                return
-            }
-            CreatorAction.RetryRelatedPosts -> {
-                relatedPosts.retry()
-                return
-            }
-            CreatorAction.ShowPreviousRelatedPosts -> {
-                relatedPosts.showPreviousPage()
-                return
-            }
-            CreatorAction.ShowNextRelatedPosts -> {
-                relatedPosts.showNextPage()
-                return
-            }
-            else -> Unit
-        }
         val previous = mutableState.value
         val transition = previous.reduce(action)
         val feedChanged = transition.state.selectedFeed != previous.selectedFeed
@@ -168,7 +151,9 @@ class CreatorProfileViewModel(
     suspend fun resolvePost(postId: PostId): Post? =
         engine.resolvePost(postId)?.also(::rememberResolvedPost)
 
-    fun rememberResolvedPost(post: Post) {
+    override fun loadNextPage() = onAction(CreatorAction.LoadNextPage)
+
+    override fun rememberResolvedPost(post: Post) {
         val current = mutableState.value
         mutableState.value = current.copy(results = current.results.replacingPostSnapshot(post))
     }
@@ -259,3 +244,12 @@ class CreatorProfileViewModel(
         const val KEY_UPLOADS_QUERY = "creator_uploads_query"
     }
 }
+
+private fun CreatorUiState.viewerFeed() = ViewerFeedSnapshot(
+    queryHash = queryHash,
+    results = results,
+    canLoadMore = canLoadMore,
+    loadingMore = isPaging,
+    retainedLikedPostIds = relatedPosts.retainedLikedPostIds,
+    relatedPosts = relatedPosts,
+)

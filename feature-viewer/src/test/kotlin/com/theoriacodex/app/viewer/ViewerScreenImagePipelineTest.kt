@@ -1,5 +1,7 @@
 package com.theoriacodex.app.viewer
 
+import com.theoriacodex.app.viewer.state.ViewerMediaKind
+import com.theoriacodex.app.viewer.state.toViewerPageState
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.app.media.viewerMediaDeliveryPlan
 import com.theoriacodex.app.testing.testPost
@@ -283,16 +285,16 @@ class ViewerScreenImagePipelineTest {
             full = null,
             media = listOf(staticImage, animatedImage, gif, ugoira, video),
         )
-        val items = viewerMediaOverviewItems(post)
+        val items = viewerMediaOverviewItems(post.toViewerPageState())
 
         assertEquals(listOf(0, 1, 2, 3, 4), items.map { it.mediaIndex })
         assertEquals(
             listOf(
-                ViewerMediaOverviewKind.STILL_IMAGE,
-                ViewerMediaOverviewKind.ANIMATED_IMAGE,
-                ViewerMediaOverviewKind.GIF,
-                ViewerMediaOverviewKind.UGOIRA,
-                ViewerMediaOverviewKind.VIDEO,
+                ViewerMediaKind.IMAGE,
+                ViewerMediaKind.ANIMATED_WEBP,
+                ViewerMediaKind.GIF,
+                ViewerMediaKind.UGOIRA,
+                ViewerMediaKind.VIDEO,
             ),
             items.map { it.kind },
         )
@@ -324,7 +326,7 @@ class ViewerScreenImagePipelineTest {
             ),
         )
 
-        val items = viewerMediaOverviewItems(post)
+        val items = viewerMediaOverviewItems(post.toViewerPageState())
 
         assertEquals("https://example.com/1t.jpg", items[0].thumbnailLocation)
         assertEquals("/saved/2.jpg", items[1].thumbnailLocation)
@@ -352,9 +354,9 @@ class ViewerScreenImagePipelineTest {
             media = listOf(animatedOnly),
         )
 
-        val item = viewerMediaOverviewItems(post).single()
+        val item = viewerMediaOverviewItems(post.toViewerPageState()).single()
 
-        assertEquals(ViewerMediaOverviewKind.ANIMATED_IMAGE, item.kind)
+        assertEquals(ViewerMediaKind.ANIMATED_WEBP, item.kind)
         assertEquals("https://example.com/page.webp", item.posterLocation)
         assertFalse(shouldDecodeStaticOverviewFrame(item.kind))
     }
@@ -380,7 +382,7 @@ class ViewerScreenImagePipelineTest {
 
         assertEquals(
             "https://w1.gold-usergeneratedcontent.net/current/1/hash.webp",
-            viewerMediaOverviewItems(post).single().posterLocation,
+            viewerMediaOverviewItems(post.toViewerPageState()).single().posterLocation,
         )
     }
 
@@ -406,8 +408,8 @@ class ViewerScreenImagePipelineTest {
             ),
         )
 
-        assertFalse(viewerMediaOverviewAvailable(viewerMediaOverviewItems(singleItemPost)))
-        assertTrue(viewerMediaOverviewAvailable(viewerMediaOverviewItems(seekableMultiItemPost)))
+        assertFalse(viewerMediaOverviewAvailable(viewerMediaOverviewItems(singleItemPost.toViewerPageState())))
+        assertTrue(viewerMediaOverviewAvailable(viewerMediaOverviewItems(seekableMultiItemPost.toViewerPageState())))
     }
 
     @Test
@@ -456,7 +458,7 @@ class ViewerScreenImagePipelineTest {
                 full = media,
                 media = listOf(media),
             )
-            val overviewItem = viewerMediaOverviewItems(post).single()
+            val overviewItem = viewerMediaOverviewItems(post.toViewerPageState()).single()
 
             assertEquals(
                 viewerPrefetchImageLocation(post, overviewItem.media),

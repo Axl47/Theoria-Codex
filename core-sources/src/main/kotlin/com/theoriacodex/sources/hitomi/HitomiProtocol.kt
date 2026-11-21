@@ -3,11 +3,11 @@ package com.theoriacodex.sources.hitomi
 import com.theoriacodex.domain.diagnostics.OffMainWork
 import com.theoriacodex.sources.common.asIntOrNull
 import com.theoriacodex.sources.common.asStringOrNull
-import java.net.URLEncoder
 import java.util.Locale
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import com.theoriacodex.sources.common.percentEncode
 
 data class HitomiAutocompleteEntry(
     val name: String,
@@ -19,7 +19,7 @@ class HitomiProtocolException(message: String, cause: Throwable? = null) : Illeg
 
 object HitomiProtocol {
     const val TAG_INDEX_BASE_URL: String = "https://tagindex.hitomi.la"
-    const val DATA_BASE_URL: String = "https://ltn.gold-usergeneratedcontent.net"
+    const val DATA_BASE_URL: String = "https://ltn.$HITOMI_CDN_DOMAIN"
     const val MAX_AUTOCOMPLETE_CODE_POINTS: Int = 64
     const val MAX_AUTOCOMPLETE_RESPONSE_CHARS: Int = 64 * 1024
     const val MAX_GALLERY_RESPONSE_CHARS: Int = 2 * 1024 * 1024
@@ -29,30 +29,9 @@ object HitomiProtocol {
         "Referer" to "https://hitomi.la/",
     )
 
-    val autocompleteScopes: Set<String> = setOf(
-        "global",
-        "tag",
-        "female",
-        "male",
-        "artist",
-        "character",
-        "series",
-        "group",
-        "type",
-        "language",
-    )
+    val namespaces: Set<String> = HITOMI_FACETS.namespaces
 
-    val namespaces: Set<String> = setOf(
-        "tag",
-        "female",
-        "male",
-        "artist",
-        "character",
-        "series",
-        "group",
-        "type",
-        "language",
-    )
+    val autocompleteScopes: Set<String> = setOf("global") + namespaces
 
     fun autocompleteUrl(scope: String, term: String): String {
         val normalizedScope = scope.trim().lowercase(Locale.ROOT)
@@ -134,7 +113,7 @@ object HitomiProtocol {
         " " -> "_"
         "/" -> "slash"
         "." -> "dot"
-        else -> URLEncoder.encode(character, Charsets.UTF_8.name()).replace("+", "%20")
+        else -> character.percentEncode()
     }
 
     private fun parseJson(body: String, label: String) = try {

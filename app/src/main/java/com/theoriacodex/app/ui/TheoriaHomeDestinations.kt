@@ -1,5 +1,7 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.app.media.MediaDurationStates
+import com.theoriacodex.app.ui.components.feedDurations
 import android.widget.Toast
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
@@ -35,13 +37,10 @@ import com.theoriacodex.app.ui.routes.SearchRouteCallbacks
 import com.theoriacodex.app.ui.routes.SearchRouteConfig
 import com.theoriacodex.app.settings.StatsActions
 import com.theoriacodex.app.ui.routes.SettingsDestinationStateBoundary
-import com.theoriacodex.app.viewer.ViewerRelatedBinding
-import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchKind
-import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
@@ -62,7 +61,7 @@ internal fun HomePager(shell: TheoriaShell) {
             TopLevelDestination.Codex -> CodexLibraryDestination(shell, actionCodexId = null)
             TopLevelDestination.Settings -> {
                 SettingsDestinationStateBoundary(
-                    shell.owners.settings, shell.routes.searchOwner, libraryStorageSummary(shell.transfers),
+                    shell.owners.settings, shell.routes.search.current, libraryStorageSummary(shell.transfers),
                     sites = rememberCustomSitesEntry(shell.container),
                     statsActions = remember(shell) {
                         StatsActions(shell::openStatisticsPost, shell::shareStats, shell::readStatsFile, shell::previewStatisticsPost, shell::downloadStats)
@@ -99,11 +98,9 @@ private fun SearchDestination(shell: TheoriaShell) {
                 onOpenSourceAccounts = { shell.owners.settings.onAction(SettingsAction.OpenCustomSites) },
                 onOpenViewer = { effect -> shell.openSearchViewer(effect) },
                 onShowMessage = { message -> Toast.makeText(shell.appContext, message, Toast.LENGTH_SHORT).show() },
-                onToggleLike = { post -> shell.searchLikeAction()(post) },
-                onOpenCreatorProfile = shell::launchOpenCreator,
-                onOpenLegacyCreatorProfile = shell::launchOpenCreator,
+                onToggleLike = { post -> shell.feedLikeAction(ViewerStreamSource.SEARCH)(post) },
                 onRequestSaveToCodex = { post ->
-                    shell.requestSaveToCodex(post, searchQuery = routes.searchOwner?.currentState()?.query?.applied)
+                    shell.requestSaveToCodex(post, searchQuery = routes.search.current?.state?.value?.query?.applied)
                 },
                 onSaveToDevice = shell::requestSaveToDevice,
                 onAddFavoriteTag = shell.addFavoriteTags,
@@ -128,25 +125,17 @@ private fun searchRouteConfig(shell: TheoriaShell, state: BrowsingDestinationSta
     resolveUnknownAnimatedDurations = state.settings.contentFilters.resolveUnknownAnimatedDurations,
 )
 
-/** Binds the Viewer's like action and related posts to the Search query current at this tap. */
+/** Search keeps its own saved launch context, and a launch that will not follow the feed reuses a Viewer on top. */
 private suspend fun TheoriaShell.openSearchViewer(effect: SearchEffect.OpenViewer) {
-    val likeAction = searchLikeAction()
-    val current = routes.searchOwner?.currentState()?.query
-    viewerSessions.retain(
-        viewerRouteWorkflow.prepareResumableSession(ViewerSession(
-            posts = effect.posts,
-            context = effect.context,
-            liveSearchBinding = effect.liveSearchBinding,
-            searchVisibilityFilters = effect.visibilityFilters,
-            onToggleLike = likeAction,
-            relatedBinding = ViewerRelatedBinding(ViewerStreamSource.SEARCH, current?.appliedQueryHash.orEmpty()),
-            // A typed ID was never searched, so saving it to a Codex has no search to record.
-            saveQuery = current?.applied?.takeUnless { effect.fromTypedId },
-        )),
+    val query = routes.search.current?.state?.value?.query?.applied
+    openFeedViewer(
+        ViewerStreamSource.SEARCH,
+        FeedViewerLaunch(effect.posts, effect.context, effect.liveSearchBinding, effect.visibilityFilters),
+        saveContext = false,
+        singleTop = !effect.liveSearchBinding,
+        // A typed ID was never searched, so saving it to a Codex has no search to record.
+        saveQuery = query?.takeUnless { effect.fromTypedId },
     )
-    navController.navigate(AppRoute.Viewer) {
-        launchSingleTop = !effect.liveSearchBinding
-    }
 }
 
 @Composable
@@ -176,70 +165,24 @@ private fun ForYouDestination(shell: TheoriaShell) {
                 onOpenSourceAccounts = { shell.owners.settings.onAction(SettingsAction.OpenCustomSites) },
                 onShowMessage = { message -> Toast.makeText(shell.appContext, message, Toast.LENGTH_SHORT).show() },
                 onSeedHidden = { _, _ -> shell.showActionableFeedback("Seed hidden", "Undo") },
-                onToggleLike = { post -> shell.forYouLikeAction()(post) },
+                onToggleLike = { post -> shell.feedLikeAction(ViewerStreamSource.FOR_YOU)(post) },
                 onRequestSaveToCodex = { post -> shell.requestSaveToCodex(post, fromForYou = true) },
                 onSaveToDevice = shell::requestSaveToDevice,
-                onOpenCreatorProfile = shell::launchOpenCreator,
-                onOpenLegacyCreatorProfile = shell::launchOpenCreator,
-                onAddIncludeTerm = routes.addSearchIncludeTerm,
-                onAddExcludeTerm = routes.addSearchExcludeTerm,
-                onRemoveIncludeTerm = routes.removeSearchIncludeTerm,
-                onRemoveExcludeTerm = routes.removeSearchExcludeTerm,
-                onFavoriteTagLongPress = shell.addFavoriteTag,
-                onGoToSearch = {
-                    navigation.homeTabRoute = TopLevelDestination.Search.route
-                    shell.scope.launch { navigation.showTab(TopLevelDestination.Search) }
-                },
+                onGoToSearch = { navigation.showTab(TopLevelDestination.Search) },
             ),
             onOwnerAvailable = routes::publishForYou,
         )
     }
 }
 
-/** Binds the Viewer's like action and related posts to the For You seed current at this tap. */
+/** For You saves a live launch's context for restore, and always stacks a new Viewer. */
 private suspend fun TheoriaShell.openForYouViewer(effect: ForYouEffect.OpenViewer) {
-    val likeAction = forYouLikeAction()
-    viewerSessions.retain(
-        viewerRouteWorkflow.prepareResumableSession(ViewerSession(
-            posts = effect.posts,
-            context = effect.context,
-            liveSearchBinding = effect.liveSearchBinding,
-            searchVisibilityFilters = effect.visibilityFilters,
-            onToggleLike = likeAction,
-            relatedBinding = ViewerRelatedBinding(
-                ViewerStreamSource.FOR_YOU, "for_you:${routes.forYouBinding.current?.state?.value?.seedId}",
-            ),
-        )),
+    openFeedViewer(
+        ViewerStreamSource.FOR_YOU,
+        FeedViewerLaunch(effect.posts, effect.context, effect.liveSearchBinding, effect.visibilityFilters),
+        saveContext = effect.liveSearchBinding,
+        singleTop = false,
     )
-    if (effect.liveSearchBinding) features.search.setViewerLaunchContext(effect.context)
-    navController.navigate(AppRoute.Viewer)
-}
-
-/** Opens one Recents section in the Viewer, resuming each post unless asked to start over. */
-private fun TheoriaShell.openRecentSection(
-    entries: List<RecentPostEntry>,
-    index: Int,
-    section: RecentPostSection,
-    startOver: Boolean = false,
-) {
-    val posts = entries.map { entry -> entry.post }
-    if (posts.isEmpty()) return
-    val context = ViewerLaunchContext(
-        queryHash = "recents:${section.name.lowercase()}",
-        startIndex = index.coerceIn(0, posts.lastIndex),
-        streamSource = ViewerStreamSource.RECENTS,
-        scrollOffsetHint = 0,
-        recentsSection = section,
-    )
-    scope.launch {
-        val session = viewerRouteWorkflow.prepareResumableSession(
-            ViewerSession(posts = posts, context = context),
-            startOver = startOver,
-        )
-        viewerSessions.retain(session)
-        data.uiRestoreRepository.setViewerLaunchContext(context)
-        navController.navigate(AppRoute.Viewer)
-    }
 }
 
 private fun TheoriaShell.clearRecents(target: RecentsClearTarget, state: RecentsDestinationState) {
@@ -291,30 +234,16 @@ private fun RecentsDestination(shell: TheoriaShell) {
             fypSearches = state.fypSearches,
             activity = state.activity,
             pixivUgoiraClient = shell.sources.pixivUgoiraClient,
-            durationStateForPost = durationOwner::observeState,
-            onDurationPostVisibilityChanged = durationOwner::onPostVisibilityChanged,
-            onDurationEnvironmentChanged = durationOwner::onEnvironmentChanged,
-            onAuthoritativeDurationKnown = durationOwner::publishPlayerDuration,
+            // Recents filters no lengths, so it only reports what its cards learn.
+            durations = durationOwner.feedDurations(MediaDurationStates.EMPTY, resolveInBackground = false),
             likedPostIds = state.likedPostIds,
             creatorBrowsingSources = shell.sources.registry.creatorBrowsingSources(),
-            tagVideoCountProvider = shell.features.search::tagVideoCount,
-            fetchTagVideoCounts = shell.features.search::fetchTagVideoCounts,
             onToggleLike = { post ->
                 shell.toggleLikeAndSyncCodex(post) { outcome -> relatedOwner.related.onLikeCommitted(post, outcome) }
             },
             onRequestSaveToCodex = { post -> shell.requestSaveToCodex(post) },
             onSaveToDevice = shell::requestSaveToDevice,
-            onOpenCreatorProfile = shell::launchOpenCreator,
-            onOpenLegacyCreatorProfile = shell::launchOpenCreator,
-            onAddIncludeTerm = routes.addSearchIncludeTerm,
-            onAddExcludeTerm = routes.addSearchExcludeTerm,
-            onRemoveIncludeTerm = routes.removeSearchIncludeTerm,
-            onRemoveExcludeTerm = routes.removeSearchExcludeTerm,
-            onFavoriteTagLongPress = shell.addFavoriteTag,
-            onGoToSearch = {
-                shell.navigation.homeTabRoute = TopLevelDestination.Search.route
-                shell.scope.launch { shell.navigation.pagerState.scrollToPage(TopLevelDestination.entries.indexOf(TopLevelDestination.Search)) }
-            },
+            onGoToSearch = { shell.navigation.showTab(TopLevelDestination.Search) },
             onOpenWatchedPost = { entries, index -> shell.openRecentSection(entries, index, RecentPostSection.WATCHED) },
             onOpenCodexPost = { entries, index -> shell.openRecentSection(entries, index, RecentPostSection.CODEX) },
             onStartOver = { post, section ->
@@ -356,7 +285,7 @@ internal fun CodexLibraryDestination(shell: TheoriaShell, actionCodexId: String?
             onDownloadCodex = { codexId ->
                 shell.scope.launch(start = CoroutineStart.UNDISPATCHED) { shell.downloadCodex(codexId) }
             },
-            onMakeAvailableOffline = shell.transfers.offline?.let { it::makeAvailableOffline },
+            onMakeAvailableOffline = shell.transfers.offline::makeAvailableOffline,
             onShareCodex = { codexId ->
                 shell.scope.launch(start = CoroutineStart.UNDISPATCHED) { shell.shareCodex(codexId) }
             },

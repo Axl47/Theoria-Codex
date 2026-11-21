@@ -23,12 +23,14 @@ internal fun htmlFragmentToText(html: String): String {
 
 private val WHITESPACE_RUN = Regex("\\s+")
 
-/** Epoch milliseconds of an ISO-8601 timestamp that carries an offset, or null when it does not parse. */
+/** Epoch milliseconds of an ISO-8601 timestamp that carries an offset, or null when it does not parse or fit. */
 internal fun parseOffsetDateTimeMs(value: String?): Long? {
     if (value.isNullOrBlank()) return null
     return try {
         OffsetDateTime.parse(value.trim()).toInstant().toEpochMilli()
     } catch (_: DateTimeParseException) {
+        null
+    } catch (_: ArithmeticException) {
         null
     }
 }

@@ -1,12 +1,12 @@
 package com.theoriacodex.sources.hitomi
 
-import kotlin.coroutines.cancellation.CancellationException
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
+import com.theoriacodex.domain.coroutines.SharedFlights
 
+/**
+ * Keeps complete random-sort snapshots by URL and fingerprint: a first page reuses a snapshot only while it
+ * is fresh, and a continuation reuses exactly the snapshot its token names. Concurrent loads of one URL are
+ * shared and cancelled only when every caller waiting on them has left.
+ */
 internal class HitomiRandomSnapshotCache(
     maxBytes: Long = DEFAULT_MAX_BYTES,
     private val initialReuseTtlMillis: Long = DEFAULT_INITIAL_REUSE_TTL_MILLIS,
@@ -21,8 +21,7 @@ internal class HitomiRandomSnapshotCache(
                 Long.SIZE_BYTES
         },
     )
-    private val inFlightMutex = Mutex()
-    private val inFlight = mutableMapOf<String, CompletableDeferred<HitomiNozomiSnapshot>>()
+    private val flights = SharedFlights<String, HitomiNozomiSnapshot>()
 
     init {
         require(initialReuseTtlMillis > 0L) { "Hitomi random snapshot TTL must be positive" }
@@ -34,33 +33,15 @@ internal class HitomiRandomSnapshotCache(
         loader: suspend () -> HitomiNozomiSnapshot,
     ): HitomiNozomiSnapshot {
         cached(url, expectedFingerprint)?.let { return it }
-        var ownsLoad = false
-        val flight = inFlightMutex.withLock {
-            cached(url, expectedFingerprint)?.let { return it }
-            inFlight[url] ?: CompletableDeferred<HitomiNozomiSnapshot>().also { created ->
-                inFlight[url] = created
-                ownsLoad = true
+        return flights.share(url) {
+            // A load that overlapped this caller's miss may have finished before this flight started.
+            cached(url, expectedFingerprint) ?: loader().also { loaded ->
+                entries.put(
+                    HitomiRandomSnapshotKey(url, loaded.fingerprint),
+                    CachedSnapshot(loaded, nowMillis()),
+                )
             }
-        }
-        if (!ownsLoad) return flight.await().requireFingerprint(expectedFingerprint)
-
-        var failure: Throwable? = null
-        try {
-            val loaded = loader()
-            entries.put(
-                HitomiRandomSnapshotKey(url, loaded.fingerprint),
-                CachedSnapshot(loaded, nowMillis()),
-            )
-            flight.complete(loaded)
-            return loaded.requireFingerprint(expectedFingerprint)
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Throwable) {
-            failure = error
-            throw error
-        } finally {
-            finishLoad(url, flight, failure)
-        }
+        }.requireFingerprint(expectedFingerprint)
     }
 
     fun snapshot(): HitomiRandomSnapshotCacheSnapshot {
@@ -89,20 +70,6 @@ internal class HitomiRandomSnapshotCache(
             throw HitomiRandomSnapshotMismatchException()
         }
         return this
-    }
-
-    private suspend fun finishLoad(
-        url: String,
-        flight: CompletableDeferred<HitomiNozomiSnapshot>,
-        failure: Throwable?,
-    ) = withContext(NonCancellable) {
-        inFlightMutex.withLock {
-            if (inFlight[url] === flight) inFlight.remove(url)
-        }
-        when {
-            failure != null -> flight.completeExceptionally(failure)
-            !flight.isCompleted -> flight.cancel()
-        }
     }
 
     companion object {

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.feed.FeedCursor
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.data.repository.InMemoryQueryRepository
 import com.theoriacodex.data.repository.InMemoryRecentsRepository
@@ -127,31 +128,32 @@ class SearchCoordinatorTest {
         val key = QueryHash.from(query)
         val continuation = SearchContinuation(
             executionKey = key,
-            query = query,
             sourceScope = SearchSourceScope.GlobalUnified,
             enabledSources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU),
             availableSources = listOf(SourceKey.PIXIV, SourceKey.GELBOORU),
-            weights = mapOf(SourceKey.PIXIV to 0.5, SourceKey.GELBOORU to 0.5),
-            unifiedPageTokens = mapOf(SourceKey.PIXIV to "next", SourceKey.GELBOORU to "next"),
+            cursor = FeedCursor(
+                query,
+                weights = mapOf(SourceKey.PIXIV to 0.5, SourceKey.GELBOORU to 0.5),
+                pageTokens = mapOf(SourceKey.PIXIV to "next", SourceKey.GELBOORU to "next"),
+            ),
         )
 
         val result = coordinator.executePage(continuation) as SearchPageResult.Success
 
         assertEquals(listOf("page-1"), result.posts.map { it.id.sourcePostId })
-        assertEquals(null, result.continuation.unifiedPageTokens[SourceKey.PIXIV])
-        assertEquals(null, result.continuation.unifiedPageTokens[SourceKey.GELBOORU])
+        assertEquals(null, result.continuation.cursor.pageTokens[SourceKey.PIXIV])
+        assertEquals(null, result.continuation.cursor.pageTokens[SourceKey.GELBOORU])
         assertFalse(result.continuation.canLoadMore)
     }
 
     @Test
     fun `temporary execution key binds canonical source selection`() = runTest {
-        val coordinator = coordinator(TestAdapter(SourceKey.PIXIV), TestAdapter(SourceKey.GELBOORU))
         val query = unifiedQuery("temporary")
         val scope = SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV))
 
         assertEquals(
             "${QueryHash.from(query)}|temporary-sources:GELBOORU,PIXIV",
-            coordinator.executionKeyFor(query, scope),
+            searchExecutionKey(query, scope),
         )
     }
 
@@ -164,15 +166,19 @@ class SearchCoordinatorTest {
             settingsRepository = settings,
             adapters = arrayOf(pixiv, gelbooru),
         )
-        coordinator.initializeRoute()
+        val runtime = coordinator.initializeRoute().runtime
+        val available = coordinator.availableSources.toSet()
 
+        val gelbooruScope = SearchSourceScope.Single(SourceKey.GELBOORU)
         val source = coordinator.executeInitial(
             query(SourceKey.GELBOORU, "source"),
-            SearchSourceScope.Single(SourceKey.GELBOORU),
+            gelbooruScope,
+            SearchSources.of(runtime, gelbooruScope, available),
         ) as SearchExecutionResult.Success
         val unified = coordinator.executeInitial(
             unifiedQuery("unified"),
             SearchSourceScope.GlobalUnified,
+            SearchSources.of(runtime, SearchSourceScope.GlobalUnified, available),
         ) as SearchExecutionResult.Success
 
         assertEquals(listOf("source"), gelbooru.searchedTags.first())
@@ -294,7 +300,6 @@ class SearchCoordinatorTest {
             SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV)),
             com.theoriacodex.domain.adapter.FacetedSearchScope.All,
             "blue hair",
-            emptyList(),
         )
 
         assertEquals("blue hair", pixiv.autocompletePrefixes.single())
@@ -361,7 +366,6 @@ class SearchCoordinatorTest {
                 SearchSourceScope.Single(SourceKey.PIXIV),
                 com.theoriacodex.domain.adapter.FacetedSearchScope.All,
                 "tag",
-                emptyList(),
             )
         }.exceptionOrNull()
         assertTrue(cancellation is CancellationException)
@@ -394,14 +398,12 @@ class SearchCoordinatorTest {
             SearchSourceScope.Single(SourceKey.HITOMI),
             FacetedSearchScope.All,
             "artist:naj",
-            emptyList(),
         )
         val featured = coordinator.fetchAutocomplete(
             query,
             SearchSourceScope.Single(SourceKey.HITOMI),
             artist,
             "",
-            emptyList(),
         )
 
         assertEquals(artist, autocomplete.selectedScope)
@@ -414,7 +416,6 @@ class SearchCoordinatorTest {
                 SearchSourceScope.GlobalUnified,
                 FacetedSearchScope.All,
                 "artist:naj",
-                emptyList(),
             ).validationMessage,
         )
         assertEquals(
@@ -424,7 +425,6 @@ class SearchCoordinatorTest {
                 SearchSourceScope.Single(SourceKey.HITOMI),
                 FacetedSearchScope.All,
                 "female:naj",
-                emptyList(),
             ).validationMessage,
         )
         assertAutocompleteCancellation(adapter, coordinator, query, artist)
@@ -504,7 +504,6 @@ class SearchCoordinatorTest {
                     SearchSourceScope.Single(SourceKey.HITOMI),
                     artist,
                     "naja",
-                    emptyList(),
                 )
             }.exceptionOrNull() is CancellationException,
         )

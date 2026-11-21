@@ -9,37 +9,6 @@ import org.junit.Test
 
 class MediaDurationStateTest {
     @Test
-    fun `planner uses known and persisted decisions before acquisition work`() {
-        assertEquals(
-            DurationAcquisitionPlan.AlreadyKnown(4_200L),
-            planDurationAcquisition(
-                facts(
-                    knownDurationMs = 4_200L,
-                    persistedState = MediaDurationState.Unsupported(
-                        MediaDurationUnsupportedReason.PROVIDER_UNSUPPORTED,
-                    ),
-                    hasAuthoritativeFullVideo = true,
-                    hasProviderDurationResolver = true,
-                ),
-            ),
-        )
-        val persisted = MediaDurationState.Known(
-            durationMs = 8_400L,
-            provenance = MediaDurationProvenance.CONTAINER_PROBE,
-        )
-        assertEquals(
-            DurationAcquisitionPlan.UsePersisted(persisted),
-            planDurationAcquisition(
-                facts(
-                    persistedState = persisted,
-                    hasAuthoritativeFullVideo = true,
-                    hasProviderDurationResolver = true,
-                ),
-            ),
-        )
-    }
-
-    @Test
     fun `planner probes existing full video before asking an optional provider`() {
         assertEquals(
             DurationAcquisitionPlan.ProbeAuthoritativeMedia,
@@ -63,19 +32,6 @@ class MediaDurationStateTest {
                 MediaDurationUnsupportedReason.NO_AUTHORITATIVE_MEDIA,
             ),
             planDurationAcquisition(facts()),
-        )
-    }
-
-    @Test
-    fun `pending process state never blocks authoritative acquisition`() {
-        assertEquals(
-            DurationAcquisitionPlan.ProbeAuthoritativeMedia,
-            planDurationAcquisition(
-                facts(
-                    persistedState = MediaDurationState.Pending,
-                    hasAuthoritativeFullVideo = true,
-                ),
-            ),
         )
     }
 
@@ -105,14 +61,10 @@ class MediaDurationStateTest {
     }
 
     private fun facts(
-        knownDurationMs: Long? = null,
-        persistedState: MediaDurationState? = null,
         hasAuthoritativeFullVideo: Boolean = false,
         hasProviderDurationResolver: Boolean = false,
     ): DurationAcquisitionFacts {
         return DurationAcquisitionFacts(
-            knownDurationMs = knownDurationMs,
-            persistedState = persistedState,
             hasAuthoritativeFullVideo = hasAuthoritativeFullVideo,
             hasProviderDurationResolver = hasProviderDurationResolver,
         )

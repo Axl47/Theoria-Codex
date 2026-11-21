@@ -10,9 +10,6 @@ import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.media.mimeFromFileExt
 import java.io.IOException
-import java.net.URI
-import java.net.URLEncoder
-import java.util.Locale
 import kotlinx.coroutines.CancellationException
 
 /** Maps parsed gallery metadata to sparse or resolved posts and recovers provider media URLs. */
@@ -131,7 +128,7 @@ internal class HitomiPostMapper(
             )
         }
         if (candidates.isEmpty()) {
-            throw sourceParseFailure("Hitomi media URL resolver returned no candidates")
+            throw hitomiParseFailure("Hitomi media URL resolver returned no candidates")
         }
         return candidates
     }
@@ -168,7 +165,7 @@ internal class HitomiPostMapper(
         }.distinct()
         // Thumbnail locations carry no gg.js version, so the first full-size location identifies the media.
         val parsedLocations = locations.mapNotNull { location ->
-            location.toHitomiCandidateIdentityOrNull()
+            HitomiMediaLocation.parse(location)
         }
         val failed = parsedLocations.firstOrNull() ?: return null
         val originalExtension = parsedLocations
@@ -179,44 +176,8 @@ internal class HitomiPostMapper(
             hash = failed.hash,
             originalExtension = originalExtension,
             hasAvif = parsedLocations.any { candidate -> candidate.format == HitomiMediaFormat.AVIF },
-            configurationVersion = failed.configurationVersion,
+            configurationVersion = failed.version,
             failedFormat = failed.format,
-        )
-    }
-
-    private fun String.toHitomiCandidateIdentityOrNull(): HitomiCandidateIdentity? {
-        val parsed = runCatching { URI(this) }.getOrNull() ?: return null
-        val host = parsed.host?.lowercase(Locale.ROOT) ?: return null
-        val format = when {
-            HITOMI_AVIF_HOST.matches(host) -> HitomiMediaFormat.AVIF
-            HITOMI_WEBP_HOST.matches(host) -> HitomiMediaFormat.WEBP
-            HITOMI_ORIGINAL_HOST.matches(host) -> HitomiMediaFormat.ORIGINAL
-            else -> return null
-        }
-        val segments = parsed.path
-            ?.split('/')
-            ?.filter(String::isNotBlank)
-            .orEmpty()
-        val baseStart = if (format == HitomiMediaFormat.ORIGINAL) {
-            if (segments.firstOrNull() != "images") return null
-            1
-        } else {
-            0
-        }
-        if (segments.size - baseStart < 3) return null
-        val fileName = segments.last()
-        val hash = fileName.substringBeforeLast('.', missingDelimiterValue = "").lowercase(Locale.ROOT)
-        val extension = fileName.substringAfterLast('.', missingDelimiterValue = "").lowercase(Locale.ROOT)
-        if (!HITOMI_MEDIA_HASH.matches(hash) || !HITOMI_MEDIA_EXTENSION.matches(extension)) return null
-        val pathNumberIndex = segments.lastIndex - 1
-        if (segments[pathNumberIndex].toIntOrNull() == null) return null
-        val baseSegments = segments.subList(baseStart, pathNumberIndex)
-        if (baseSegments.isEmpty()) return null
-        return HitomiCandidateIdentity(
-            hash = hash,
-            extension = extension,
-            configurationVersion = baseSegments.joinToString("/"),
-            format = format,
         )
     }
 
@@ -247,7 +208,7 @@ internal class HitomiPostMapper(
             val refCandidates = refreshedCandidates.preferFormat(refIdentity.failedFormat)
             if (refCandidates.isEmpty()) return ref
             replaced = true
-            val thumbnails = (listOfNotNull(ref.url) + ref.fallbackUrls).filter { HITOMI_THUMBNAIL_URL.containsMatchIn(it) }
+            val thumbnails = (listOfNotNull(ref.url) + ref.fallbackUrls).filter(::isHitomiThumbnailUrl)
             return ref.copy(
                 url = refCandidates.first().url,
                 mime = refCandidates.first().mime,
@@ -263,13 +224,6 @@ internal class HitomiPostMapper(
         return recovered.takeIf { replaced }
     }
 
-    private data class HitomiCandidateIdentity(
-        val hash: String,
-        val extension: String,
-        val configurationVersion: String,
-        val format: HitomiMediaFormat,
-    )
-
     private data class HitomiMediaRecoveryIdentity(
         val hash: String,
         val originalExtension: String,
@@ -278,22 +232,7 @@ internal class HitomiPostMapper(
         val failedFormat: HitomiMediaFormat,
     )
 
-    private fun sourceParseFailure(message: String): SourceAdapterException = SourceAdapterException(
-        reason = SourceFailureReason.PARSE,
-        message = message,
-    )
-
     private companion object {
-        private val HITOMI_AVIF_HOST = Regex("""a[12]\.gold-usergeneratedcontent\.net""")
-        private val HITOMI_WEBP_HOST = Regex("""w[12]\.gold-usergeneratedcontent\.net""")
-        private val HITOMI_ORIGINAL_HOST = Regex("""[12]\.gold-usergeneratedcontent\.net""")
-        private val HITOMI_THUMBNAIL_URL = Regex("""^https://[ab]tn\.gold-usergeneratedcontent\.net/""")
-        private val HITOMI_MEDIA_HASH = Regex("""[0-9a-f]{64}""")
-        private val HITOMI_MEDIA_EXTENSION = Regex("""[a-z0-9]{1,10}""")
         private val EMPTY_IMAGE_REF = ImageRef(url = null, localPath = null, mime = null)
-        private fun hitomiVideoUrl(filename: String): String {
-            val encoded = URLEncoder.encode(filename, Charsets.UTF_8.name()).replace("+", "%20")
-            return "https://streaming.gold-usergeneratedcontent.net/videos/$encoded"
-        }
     }
 }

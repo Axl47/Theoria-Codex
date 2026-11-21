@@ -74,22 +74,6 @@ class HitomiNozomiTest {
     }
 
     @Test
-    fun `allocation model removes boxed decode and full permutation copy costs`() {
-        val model = HitomiIdAllocationModel.forIdCount(HitomiNozomi.MAX_GALLERY_IDS)
-
-        assertEquals(8_000_016L, model.primitiveIdBytes)
-        assertEquals(48_000_032L, model.legacyBoxedDecodePeakBytes)
-        assertEquals(40_000_016L, model.nozomiPeakBytesSaved)
-        assertEquals(8_000_016L, model.commonInlineSourceBytes)
-        assertEquals(16_000_032L, model.legacyInlineExtraBytes)
-        assertEquals(8_000_032L, model.newInlineExtraBytes)
-        assertEquals(16L, model.statelessPermutationBytes)
-        assertEquals(8_000_000L, model.inlinePeakBytesSaved)
-        assertEquals(8_000_016L, model.legacyPerSeedRetainedShuffleBytes)
-        assertEquals(0L, model.newPerSeedRetainedShuffleBytes)
-    }
-
-    @Test
     fun `rejects truncated oversized and invalid ID payloads`() {
         assertProtocolFailure { HitomiNozomi.decodeGalleryIds(byteArrayOf(0, 0, 1)) }
         assertProtocolFailure {

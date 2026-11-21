@@ -66,7 +66,7 @@ class SearchComposerUiTest {
             includeTermGroups = include,
             excludeTerms = listOf(sketch),
         )
-        val state = base.copy(query = base.query.copy(draft = draft, supportedScopes = scopes), suggestions = suggestions)
+        val state = base.copy(query = base.query.copy(draft = draft, scopesBySource = mapOf(source to scopes)), suggestions = suggestions)
         compose.setContent {
             MaterialTheme {
                 SearchComposer(

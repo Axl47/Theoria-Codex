@@ -22,7 +22,6 @@ internal class FixtureSiteTransport(vararg sites: String) {
     val requested = mutableListOf<String>()
 
     suspend fun execute(spec: HttpRequestSpec): SourceByteResponse {
-        check(!spec.followRedirects) { "Custom-site requests must not follow redirects" }
         requested += spec.url
         val uri = URI(spec.url)
         val query = uri.rawQuery.orEmpty().split('&').filter(String::isNotEmpty).associate { pair ->

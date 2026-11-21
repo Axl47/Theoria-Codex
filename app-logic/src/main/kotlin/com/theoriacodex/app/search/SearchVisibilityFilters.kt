@@ -21,19 +21,6 @@ data class SearchVisibilityFilters(
     val dateRange: DateRange? = null,
 )
 
-enum class UnknownAnimatedDurationPolicy {
-    HIDE_UNKNOWNS,
-    RESOLVE_IN_BACKGROUND,
-}
-
-fun unknownAnimatedDurationPolicy(resolveInBackground: Boolean): UnknownAnimatedDurationPolicy {
-    return if (resolveInBackground) {
-        UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
-    } else {
-        UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS
-    }
-}
-
 /** One source's saved tags and "or" groups, in the order they were saved. */
 data class FavoriteTagSection(
     val source: SourceKey,
@@ -71,19 +58,13 @@ fun filterSearchResults(
     likedPostIds: Set<PostId>,
     savedPostIds: Set<PostId>,
     watchedPostIds: Set<PostId> = emptySet(),
-    unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy = UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS,
     knownDurationMsByPostId: Map<PostId, Long> = emptyMap(),
     retainedLikedPostIds: Set<PostId> = emptySet(),
 ): List<Post> {
     return results.filter { post ->
         (!filters.animatedOnly || matchesAnimatedFilter(post)) &&
             (filters.dateRange == null || post.createdAtEpochMs in filters.dateRange) &&
-            matchesAnimatedDurationFilter(
-                post,
-                filters,
-                unknownAnimatedDurationPolicy,
-                knownDurationMsByPostId[post.id],
-            ) &&
+            matchesAnimatedDurationFilter(post, filters, knownDurationMsByPostId[post.id]) &&
             (!filters.hideLiked || post.id !in likedPostIds || post.id in retainedLikedPostIds) &&
             (!filters.hideSaved || post.id !in savedPostIds || post.id in retainedLikedPostIds) &&
             (!filters.hideWatched || post.id !in watchedPostIds || post.id in retainedLikedPostIds)
@@ -103,21 +84,12 @@ private fun matchesAnimatedFilter(post: Post): Boolean =
 /** Compares case-insensitively in place, so a filter pass copies and lowercases no tags. */
 private fun isAnimatedTag(tag: String): Boolean = GELBOORU_ANIMATED_SEARCH_TAGS.any { it.equals(tag, ignoreCase = true) }
 
-private fun matchesAnimatedDurationFilter(
-    post: Post,
-    filters: SearchVisibilityFilters,
-    unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy,
-    acquiredDurationMs: Long?,
-): Boolean {
+/** A length filter shows only animated posts whose length is known and in range; an unknown length stays hidden. */
+private fun matchesAnimatedDurationFilter(post: Post, filters: SearchVisibilityFilters, acquiredDurationMs: Long?): Boolean {
     val range = filters.animatedDurationRange
     if (range.isFullRange) return true
     if (!isAnimatedPost(post)) return false
-    val durationMs = animatedDurationMs(post) ?: acquiredDurationMs?.takeIf { it > 0L }
-        ?: return when (unknownAnimatedDurationPolicy) {
-        UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS,
-        UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND,
-        -> false
-    }
+    val durationMs = animatedDurationMs(post) ?: acquiredDurationMs?.takeIf { it > 0L } ?: return false
     return range.contains(durationMs)
 }
 

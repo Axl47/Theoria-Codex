@@ -1,6 +1,5 @@
 package com.theoriacodex.data.repository
 
-import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
@@ -23,10 +22,8 @@ interface CodexRepository {
     fun observeCodex(codexId: String): Flow<Codex?>
     suspend fun ensureCodex(codexId: String, name: String): Codex
     suspend fun createCodex(name: String): Codex
-    suspend fun reorderCodex(codexId: String, targetIndex: Int)
     suspend fun renameCodex(codexId: String, name: String)
     suspend fun setAutomaticTag(codexId: String, tag: CodexAutomaticTag, enabled: Boolean)
-    suspend fun deleteCodex(codexId: String)
     /** Deletes atomically and returns what Undo needs, or null when the Codex is already gone. */
     suspend fun deleteCodexForUndo(codexId: String): DeletedCodexSnapshot?
     suspend fun restoreDeletedCodex(snapshot: DeletedCodexSnapshot)
@@ -48,7 +45,6 @@ interface CodexRepository {
     fun observeCodexSummaries(codexIds: Set<String>, coverLimit: Int = 8): Flow<List<CodexSummary>>
     fun observeSavedPostIds(codexIds: Set<String>): Flow<Set<PostId>>
     suspend fun updatePost(post: Post)
-    suspend fun removeItem(codexId: String, sourceKey: SourceKey, sourcePostId: String)
     suspend fun removeItems(codexId: String, postIds: Set<PostId>)
     suspend fun restoreItems(items: List<CodexItem>, posts: List<Post>)
 }
@@ -168,7 +164,6 @@ interface RecentsRepository {
         posts.filter { it.section == RecentPostSection.WATCHED }.mapTo(linkedSetOf()) { it.post.id }
     }.distinctUntilChanged()
     fun observeSearches(): Flow<List<RecentSearchEntry>>
-    fun observeActivity(): Flow<List<RecentActivityEntry>>
     suspend fun recordWatchedPost(
         post: Post,
         origin: ViewerStreamSource,
@@ -194,9 +189,7 @@ interface RecentsRepository {
         watchedPosts: List<RecentPostEntry> = emptyList(),
         searches: List<RecentSearchEntry> = emptyList(),
     )
-    suspend fun clearWatchedPosts()
     suspend fun clearWatchedPosts(section: RecentPostSection)
-    suspend fun clearSearches(queryHashPrefix: String? = null)
     /** Remove only this section and capture the exact Undo payload in the same transaction. */
     suspend fun clearSearches(section: RecentSearchSection): List<RecentSearchEntry>
     suspend fun clearAll()
@@ -206,10 +199,6 @@ enum class RecentSearchSection {
     SEARCHES, FYP;
 
     fun contains(entry: RecentSearchEntry): Boolean = (entry.kind == RecentSearchKind.FYP) == (this == FYP)
-}
-
-interface ExploreRepository {
-    suspend fun trendingTags(limit: Int): List<TagSuggestion>
 }
 
 data class StatisticsTagKey(
@@ -547,7 +536,6 @@ interface SettingsRepository {
     fun observeSettings(): Flow<AppSettings>
     suspend fun updateSettings(transform: (AppSettings) -> AppSettings)
     suspend fun setEnabledSources(enabledSources: Set<SourceKey>)
-    suspend fun setSourceWeights(sourceWeights: Map<SourceKey, Double>)
     suspend fun setCacheFullImageOnSave(enabled: Boolean)
     suspend fun setResolveUnknownAnimatedDurations(enabled: Boolean)
     suspend fun setInvertMultiImageScrollDirection(enabled: Boolean)
@@ -567,7 +555,6 @@ interface SettingsRepository {
     suspend fun removeFavoriteTag(profileId: String, source: SourceKey, tags: List<String>): Boolean
     /** Names the saved group holding exactly [tags]; a blank [name] clears it. False when nothing changed. */
     suspend fun renameFavoriteTag(profileId: String, source: SourceKey, tags: List<String>, name: String?): Boolean
-    suspend fun setProviderHealthSnapshots(snapshots: List<ProviderHealthSnapshot>)
 }
 
 data class CacheSnapshot(

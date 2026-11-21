@@ -2,10 +2,8 @@ package com.theoriacodex.sources.health
 
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.RelatedPostsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapter
-import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.Post
@@ -19,8 +17,6 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.hitomi.HitomiNozomi
 import com.theoriacodex.sources.hitomi.HitomiNozomiRequest
 import com.theoriacodex.sources.hitomi.HitomiProtocol
-import kotlinx.coroutines.CancellationException
-import kotlin.system.measureTimeMillis
 
 enum class ProviderHealthStatus {
     OK,
@@ -258,71 +254,6 @@ object ProviderProbeCases {
     )
 }
 
-class ProviderHealthChecker(
-    private val registry: SourceAdapterRegistry,
-    private val nowProvider: () -> Long = System::currentTimeMillis,
-) {
-    suspend fun checkAll(sources: Collection<SourceKey> = registry.availableSources()): List<ProviderHealthCheckResult> {
-        return sources.sortedBy { it.id }.map { source ->
-            val adapter = registry.adapterFor(source)
-            if (adapter == null) {
-                ProviderHealthCheckResult(
-                    source = source,
-                    checkName = CHECK_NAME,
-                    status = ProviderHealthStatus.SKIPPED,
-                    latencyMs = 0L,
-                    message = "Source is not exposed by this registry",
-                    checkedAtEpochMs = nowProvider(),
-                )
-            } else {
-                check(adapter)
-            }
-        }
-    }
-
-    private suspend fun check(adapter: SourceAdapter): ProviderHealthCheckResult {
-        var failure: Throwable? = null
-        var itemCount = 0
-        val latency = measureTimeMillis {
-            try {
-                val query = adapter.quickQuery(QuickQueryKind.NEWEST)
-                val page = adapter.search(query, pageToken = null)
-                itemCount = page.items.size
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Throwable) {
-                failure = error
-            }
-        }
-        val checkedAt = nowProvider()
-        val caught = failure
-        if (caught != null) {
-            val typed = caught as? SourceAdapterException
-            return ProviderHealthCheckResult(
-                source = adapter.sourceKey,
-                checkName = CHECK_NAME,
-                status = ProviderHealthStatus.FAILED,
-                latencyMs = latency,
-                failureReason = typed?.reason,
-                message = caught.message ?: caught::class.simpleName,
-                checkedAtEpochMs = checkedAt,
-            )
-        }
-        return ProviderHealthCheckResult(
-            source = adapter.sourceKey,
-            checkName = CHECK_NAME,
-            status = if (itemCount > 0) ProviderHealthStatus.OK else ProviderHealthStatus.DEGRADED,
-            latencyMs = latency,
-            message = if (itemCount > 0) "Returned $itemCount posts" else "Reachable but returned no posts",
-            checkedAtEpochMs = checkedAt,
-        )
-    }
-
-    private companion object {
-        const val CHECK_NAME = "newest-search"
-    }
-}
-
 class ProviderProbeRunner(
     private val registry: SourceAdapterRegistry,
     private val nowProvider: () -> Long = System::currentTimeMillis,
@@ -338,8 +269,8 @@ class ProviderProbeRunner(
     private suspend fun runCase(probeCase: ProviderProbeCase): List<ProviderProbeStepResult> {
         val adapter = registry.adapterFor(probeCase.source)
             ?: return listOf(
-                skipped(
-                    probeCase = probeCase,
+                probeCase.steps().result(
+                    status = ProviderHealthStatus.SKIPPED,
                     checkName = "source-exposure",
                     message = "Source is not exposed by this registry",
                 )
@@ -347,8 +278,8 @@ class ProviderProbeRunner(
 
         if (probeCase.requiresCredentials && probeCase.source !in credentialedSources) {
             return listOf(
-                skipped(
-                    probeCase = probeCase,
+                probeCase.steps().result(
+                    status = ProviderHealthStatus.SKIPPED,
                     checkName = "credentials",
                     message = "Source requires credentials and none were provided",
                 )
@@ -358,7 +289,7 @@ class ProviderProbeRunner(
         val results = mutableListOf<ProviderProbeStepResult>()
         results += runNewestSearch(probeCase, adapter)
         var seededSample: Post? = null
-        results += runStep(probeCase = probeCase, checkName = "seeded-search") {
+        results += probeCase.steps().run(checkName = "seeded-search") {
             val query = Query(
                 mode = QueryMode.Source(probeCase.source),
                 includeTerms = probeCase.configuredIncludeTerms(),
@@ -383,8 +314,8 @@ class ProviderProbeRunner(
         probeCase: ProviderProbeCase,
         adapter: SourceAdapter,
     ): ProviderProbeStepResult {
-        return runStep(probeCase = probeCase, checkName = "newest-search") {
-            val query = adapter.quickQuery(QuickQueryKind.NEWEST)
+        return probeCase.steps().run(checkName = "newest-search") {
+            val query = Query.newest(adapter.sourceKey)
             val page = adapter.search(query, pageToken = null)
             val sample = page.items.firstOrNull()
             okOrDegraded(
@@ -409,31 +340,31 @@ class ProviderProbeRunner(
             "${term.sourceNamespace?.let { "$it:" }.orEmpty()}${term.value}"
         }
         return when {
-            posts.isEmpty() -> degraded(
-                probeCase = probeCase,
+            posts.isEmpty() -> probeCase.steps().result(
+                status = ProviderHealthStatus.DEGRADED,
                 checkName = "seeded-search",
                 itemCount = 0,
                 message = "Reachable but returned no posts for $termsLabel",
             )
-            !tagEchoMatches -> degraded(
-                probeCase = probeCase,
+            !tagEchoMatches -> probeCase.steps().result(
+                status = ProviderHealthStatus.DEGRADED,
                 checkName = "seeded-search",
                 itemCount = posts.size,
-                samplePost = posts.firstOrNull(),
+                samplePostId = posts.firstOrNull()?.id?.sourcePostId,
                 message = "Returned posts, but none echoed required terms $termsLabel",
             )
-            !groupedEchoMatches -> degraded(
-                probeCase = probeCase,
+            !groupedEchoMatches -> probeCase.steps().result(
+                status = ProviderHealthStatus.DEGRADED,
                 checkName = "seeded-search",
                 itemCount = posts.size,
-                samplePost = posts.firstOrNull(),
+                samplePostId = posts.firstOrNull()?.id?.sourcePostId,
                 message = "$groupedEchoMatchCount/${posts.size} posts satisfied required OR groups",
             )
-            else -> ok(
-                probeCase = probeCase,
+            else -> probeCase.steps().result(
+                status = ProviderHealthStatus.OK,
                 checkName = "seeded-search",
                 itemCount = posts.size,
-                samplePost = posts.firstOrNull(),
+                samplePostId = posts.firstOrNull()?.id?.sourcePostId,
                 message = if (probeCase.requiredAnyTagGroups.isEmpty()) {
                     "Returned ${posts.size} seeded posts"
                 } else {
@@ -447,7 +378,7 @@ class ProviderProbeRunner(
         probeCase: ProviderProbeCase,
         adapter: SourceAdapter,
     ): ProviderProbeStepResult {
-        return runStep(probeCase = probeCase, checkName = "trending-tags") {
+        return probeCase.steps().run(checkName = "trending-tags") {
             val tags = adapter.trendingTags(limit = 5)
             okOrDegraded(
                 probeCase = probeCase,
@@ -465,31 +396,30 @@ class ProviderProbeRunner(
         sample: Post?,
     ): ProviderProbeStepResult {
         return if (sample == null) {
-            skipped(
-                probeCase = probeCase,
+            probeCase.steps().result(
+                status = ProviderHealthStatus.SKIPPED,
                 checkName = "resolve-post",
                 message = "No seeded search sample post to resolve",
             )
         } else {
-            runStep(
-                probeCase = probeCase,
+            probeCase.steps().run(
                 checkName = "resolve-post",
-                requestUrl = resolveRequestUrl(sample),
+                requestUrl = { resolveRequestUrl(sample) },
             ) {
                 val resolved = adapter.resolvePost(sample.id)
                 if (resolved == null) {
-                    degraded(
-                        probeCase = probeCase,
+                    probeCase.steps().result(
+                        status = ProviderHealthStatus.DEGRADED,
                         checkName = "resolve-post",
-                        samplePost = sample,
+                        samplePostId = sample.id.sourcePostId,
                         requestUrl = resolveRequestUrl(sample),
                         message = "Resolve returned null for ${sample.id.sourcePostId}",
                     )
                 } else {
-                    ok(
-                        probeCase = probeCase,
+                    probeCase.steps().result(
+                        status = ProviderHealthStatus.OK,
                         checkName = "resolve-post",
-                        samplePost = resolved,
+                        samplePostId = resolved.id.sourcePostId,
                         requestUrl = resolveRequestUrl(resolved),
                         message = "Resolved ${resolved.id.sourcePostId}",
                     )
@@ -500,27 +430,27 @@ class ProviderProbeRunner(
 
     private fun mediaMetadataResult(probeCase: ProviderProbeCase, sample: Post?): ProviderProbeStepResult {
         return if (sample == null) {
-            skipped(
-                probeCase = probeCase,
+            probeCase.steps().result(
+                status = ProviderHealthStatus.SKIPPED,
                 checkName = "media-metadata",
                 message = "No seeded search sample post for media metadata check",
             )
         } else {
             val mediaUrls = mediaUrls(sample)
             if (mediaUrls.isEmpty()) {
-                degraded(
-                    probeCase = probeCase,
+                probeCase.steps().result(
+                    status = ProviderHealthStatus.DEGRADED,
                     checkName = "media-metadata",
-                    samplePost = sample,
+                    samplePostId = sample.id.sourcePostId,
                     requestUrl = resolveRequestUrl(sample),
                     message = "Sample post has no media URLs",
                 )
             } else {
-                ok(
-                    probeCase = probeCase,
+                probeCase.steps().result(
+                    status = ProviderHealthStatus.OK,
                     checkName = "media-metadata",
                     itemCount = mediaUrls.size,
-                    samplePost = sample,
+                    samplePostId = sample.id.sourcePostId,
                     requestUrl = mediaUrls.first(),
                     message = "Sample post exposes ${mediaUrls.size} media URLs",
                 )
@@ -544,16 +474,15 @@ class ProviderProbeRunner(
     ): ProviderProbeStepResult? {
         val seedId = probeCase.relatedSeedPostId ?: return null
         if (adapter !is RelatedPostsSourceAdapter) {
-            return degraded(
-                probeCase = probeCase,
+            return probeCase.steps().result(
+                status = ProviderHealthStatus.DEGRADED,
                 checkName = "related-posts",
                 message = "Source does not expose related-post discovery",
             )
         }
-        return runStep(
-            probeCase = probeCase,
+        return probeCase.steps().run(
             checkName = "related-posts",
-            requestUrl = relatedRequestUrl(probeCase.source, seedId),
+            requestUrl = { relatedRequestUrl(probeCase.source, seedId) },
         ) {
             val seed = PostId(probeCase.source, seedId)
             val posts = adapter.relatedPosts(seed, limit = 6)
@@ -562,20 +491,20 @@ class ProviderProbeRunner(
                 posts.none { post -> post.id == seed || post.id.source != probeCase.source } &&
                 posts.all { post -> mediaUrls(post).isNotEmpty() }
             if (valid) {
-                ok(
-                    probeCase = probeCase,
+                probeCase.steps().result(
+                    status = ProviderHealthStatus.OK,
                     checkName = "related-posts",
                     itemCount = posts.size,
-                    samplePost = posts.first(),
+                    samplePostId = posts.first().id.sourcePostId,
                     requestUrl = relatedRequestUrl(probeCase.source, seedId),
                     message = "Returned ${posts.size} unique usable related posts",
                 )
             } else {
-                degraded(
-                    probeCase = probeCase,
+                probeCase.steps().result(
+                    status = ProviderHealthStatus.DEGRADED,
                     checkName = "related-posts",
                     itemCount = posts.size,
-                    samplePost = posts.firstOrNull(),
+                    samplePostId = posts.firstOrNull()?.id?.sourcePostId,
                     requestUrl = relatedRequestUrl(probeCase.source, seedId),
                     message = "Related posts were empty, duplicated, cross-source, seeded, or lacked media",
                 )
@@ -597,8 +526,8 @@ class ProviderProbeRunner(
         }
         if (configured.isEmpty()) {
             return listOf(
-                skipped(
-                    probeCase = probeCase,
+                probeCase.steps().result(
+                    status = ProviderHealthStatus.SKIPPED,
                     checkName = "autocomplete-tags",
                     message = "No autocomplete prefix configured",
                 ),
@@ -620,8 +549,7 @@ class ProviderProbeRunner(
     ): ProviderProbeStepResult {
         val prefix = autocompleteProbe.prefix.trim()
         val checkName = autocompleteProbe.checkName
-        return runStep(
-            probeCase = probeCase,
+        return probeCase.steps().run(
             checkName = checkName,
             autocompletePrefix = prefix,
         ) {
@@ -651,22 +579,22 @@ class ProviderProbeRunner(
                         )
             }
             when {
-                suggestions.isEmpty() -> degraded(
-                    probeCase = probeCase,
+                suggestions.isEmpty() -> probeCase.steps().result(
+                    status = ProviderHealthStatus.DEGRADED,
                     checkName = checkName,
                     autocompletePrefix = prefix,
                     itemCount = 0,
                     message = "Reachable but returned no autocomplete suggestions",
                 )
-                matchingSuggestion == null -> degraded(
-                    probeCase = probeCase,
+                matchingSuggestion == null -> probeCase.steps().result(
+                    status = ProviderHealthStatus.DEGRADED,
                     checkName = checkName,
                     autocompletePrefix = prefix,
                     itemCount = suggestions.size,
                     message = "Returned suggestions, but none matched the configured prefix and taxonomy",
                 )
-                else -> ok(
-                    probeCase = probeCase,
+                else -> probeCase.steps().result(
+                    status = ProviderHealthStatus.OK,
                     checkName = checkName,
                     autocompletePrefix = prefix,
                     itemCount = suggestions.size,
@@ -676,140 +604,29 @@ class ProviderProbeRunner(
         }
     }
 
-    private suspend fun runStep(
-        probeCase: ProviderProbeCase,
-        checkName: String,
-        autocompletePrefix: String? = probeCase.autocompletePrefix,
-        requestUrl: String? = probeCase.diagnosticUrls[checkName],
-        block: suspend () -> ProviderProbeStepResult,
-    ): ProviderProbeStepResult = observingChallenges(challengesSeen) {
-        var result: ProviderProbeStepResult? = null
-        var failure: Throwable? = null
-        val latency = measureTimeMillis {
-            try {
-                result = block()
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Throwable) {
-                failure = error
-            }
-        }
-        val caught = failure
-        if (caught != null) {
-            val typed = caught as? SourceAdapterException
-            return@observingChallenges ProviderProbeStepResult(
-                source = probeCase.source,
-                checkName = checkName,
-                status = ProviderHealthStatus.FAILED,
-                latencyMs = latency,
-                failureReason = typed?.reason,
-                message = caught.message ?: caught::class.simpleName,
-                checkedAtEpochMs = nowProvider(),
-                includeTags = probeCase.configuredIncludeTerms().map(SearchTerm::value),
-                includeTerms = probeCase.configuredIncludeTerms(),
-                autocompletePrefix = autocompletePrefix,
-                requestUrl = requestUrl,
-            )
-        }
-        requireNotNull(result).copy(latencyMs = latency)
-    }
+    private fun ProviderProbeCase.steps() = ProbeSteps(
+        source = source,
+        nowProvider = nowProvider,
+        challengesSeen = challengesSeen,
+        includeTerms = configuredIncludeTerms(),
+        autocompletePrefix = autocompletePrefix,
+        diagnosticUrls = diagnosticUrls,
+    )
 
     private fun okOrDegraded(
         probeCase: ProviderProbeCase,
         checkName: String,
         itemCount: Int,
         samplePost: Post? = null,
-        requestUrl: String? = null,
         okMessage: String,
         emptyMessage: String,
-    ): ProviderProbeStepResult {
-        return if (itemCount > 0) {
-            ok(probeCase, checkName, itemCount, samplePost, requestUrl = requestUrl, message = okMessage)
-        } else {
-            degraded(probeCase, checkName, itemCount, samplePost, requestUrl = requestUrl, message = emptyMessage)
-        }
-    }
-
-    private fun ok(
-        probeCase: ProviderProbeCase,
-        checkName: String,
-        itemCount: Int? = null,
-        samplePost: Post? = null,
-        autocompletePrefix: String? = probeCase.autocompletePrefix,
-        requestUrl: String? = null,
-        message: String,
-    ): ProviderProbeStepResult {
-        return result(
-            probeCase = probeCase,
-            checkName = checkName,
-            status = ProviderHealthStatus.OK,
-            itemCount = itemCount,
-            samplePost = samplePost,
-            autocompletePrefix = autocompletePrefix,
-            requestUrl = requestUrl,
-            message = message,
-        )
-    }
-
-    private fun degraded(
-        probeCase: ProviderProbeCase,
-        checkName: String,
-        itemCount: Int? = null,
-        samplePost: Post? = null,
-        autocompletePrefix: String? = probeCase.autocompletePrefix,
-        requestUrl: String? = null,
-        message: String,
-    ): ProviderProbeStepResult {
-        return result(
-            probeCase = probeCase,
-            checkName = checkName,
-            status = ProviderHealthStatus.DEGRADED,
-            itemCount = itemCount,
-            samplePost = samplePost,
-            autocompletePrefix = autocompletePrefix,
-            requestUrl = requestUrl,
-            message = message,
-        )
-    }
-
-    private fun skipped(
-        probeCase: ProviderProbeCase,
-        checkName: String,
-        message: String,
-    ): ProviderProbeStepResult {
-        return result(
-            probeCase = probeCase,
-            checkName = checkName,
-            status = ProviderHealthStatus.SKIPPED,
-            message = message,
-        )
-    }
-
-    private fun result(
-        probeCase: ProviderProbeCase,
-        checkName: String,
-        status: ProviderHealthStatus,
-        itemCount: Int? = null,
-        samplePost: Post? = null,
-        autocompletePrefix: String? = probeCase.autocompletePrefix,
-        requestUrl: String? = null,
-        message: String,
-    ): ProviderProbeStepResult {
-        return ProviderProbeStepResult(
-            source = probeCase.source,
-            checkName = checkName,
-            status = status,
-            latencyMs = 0L,
-            message = message,
-            checkedAtEpochMs = nowProvider(),
-            includeTags = probeCase.configuredIncludeTerms().map(SearchTerm::value),
-            includeTerms = probeCase.configuredIncludeTerms(),
-            autocompletePrefix = autocompletePrefix,
-            itemCount = itemCount,
-            samplePostId = samplePost?.id?.sourcePostId,
-            requestUrl = requestUrl ?: probeCase.diagnosticUrls[checkName],
-        )
-    }
+    ): ProviderProbeStepResult = probeCase.steps().result(
+        checkName = checkName,
+        status = if (itemCount > 0) ProviderHealthStatus.OK else ProviderHealthStatus.DEGRADED,
+        message = if (itemCount > 0) okMessage else emptyMessage,
+        itemCount = itemCount,
+        samplePostId = samplePost?.id?.sourcePostId,
+    )
 
     private fun mediaUrls(post: Post): List<String> {
         return buildList {

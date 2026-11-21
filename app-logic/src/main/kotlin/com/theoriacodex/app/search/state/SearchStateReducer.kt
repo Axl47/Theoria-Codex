@@ -1,12 +1,11 @@
 package com.theoriacodex.app.search.state
 
+import com.theoriacodex.app.feed.mergeFeedStatuses
 import com.theoriacodex.app.search.SearchContinuation
 import com.theoriacodex.app.search.SearchExecutionResult
 import com.theoriacodex.app.search.SearchInitialization
 import com.theoriacodex.app.search.SearchPageResult
 import com.theoriacodex.app.search.showsPartialResults
-import com.theoriacodex.domain.adapter.FacetedSearchScope
-import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
@@ -84,47 +83,24 @@ sealed interface SearchStateChange {
 }
 
 object SearchStateReducer {
-    /** Builds restored state while preserving the authoritative applied query and source identity. */
-    fun restore(
-        initialization: SearchInitialization,
-        appliedHash: String,
-        supportedScopes: (QueryMode) -> List<FacetedSearchScope>,
-    ): SearchUiState {
-        val base = SearchUiState(
-            query = SearchQueryUiState(
-                draft = initialization.query,
-                applied = initialization.query,
-                draftSourceScope = initialization.sourceScope,
-                appliedSourceScope = initialization.sourceScope,
-                appliedQueryHash = appliedHash,
-                availableSources = initialization.availableSources,
-                modeOptions = listOf(QueryMode.Unified) + initialization.availableSources.map(QueryMode::Source),
-                enabledSourceCount = initialization.availableSources.size,
-                supportedScopes = supportedScopes(initialization.query.mode),
-                validationMessage = initialization.validationMessage,
-            ),
-            content = SearchContentUiState(
-                hasExecutedSearch = initialization.hasExecutedSearch,
-            ),
-            restoration = SearchRestorationUiState.Restoring,
-        )
-        val draft = SearchDraftReducer.restoreDraft(
-            base,
-            initialization.query,
-            initialization.availableSources.toSet(),
-            supportedScopes,
-        ).state
-        return draft.copy(
-            query = draft.query.copy(
-                applied = initialization.query,
-                appliedSourceScope = initialization.sourceScope,
-                appliedQueryHash = appliedHash,
-                appliedByMode = initialization.appliedByMode,
-            ),
-            content = base.content,
-            restoration = base.restoration,
-        )
-    }
+    /** Builds restored state: the stored search is both the draft and the applied search. */
+    fun restore(initialization: SearchInitialization, appliedHash: String): SearchUiState = SearchUiState(
+        query = SearchQueryUiState(
+            draft = initialization.query,
+            applied = initialization.query,
+            draftSourceScope = initialization.sourceScope,
+            appliedSourceScope = initialization.sourceScope,
+            appliedQueryHash = appliedHash,
+            availableSources = initialization.availableSources,
+            unifiedSources = initialization.runtime.enabledSources.intersect(initialization.availableSources.toSet()),
+            scopesBySource = initialization.scopesBySource,
+            exactTagSources = initialization.exactTagSources,
+            validationMessage = initialization.validationMessage,
+            appliedByMode = initialization.appliedByMode,
+        ),
+        content = SearchContentUiState(hasExecutedSearch = initialization.hasExecutedSearch),
+        restoration = SearchRestorationUiState.Restoring,
+    )
 
     fun reduce(state: SearchUiState, change: SearchStateChange): SearchReduction {
         return when (change) {
@@ -373,7 +349,7 @@ object SearchStateReducer {
                 state.copy(
                     content = state.content.copy(
                         results = (state.content.results + result.posts).distinctByFile(),
-                        statuses = mergeStatusesBySource(state.content.statuses, result.statuses),
+                        statuses = mergeFeedStatuses(state.content.statuses, result.statuses),
                         canLoadMore = result.continuation.canLoadMore,
                         error = null,
                         displayVersion = state.content.displayVersion + 1,
@@ -415,7 +391,7 @@ object SearchStateReducer {
             content = content.copy(
                 results = if (queryState.appliedQueryHash != query.appliedQueryHash) emptyList() else content.results,
                 statuses = if (request.isPage && statuses.isNotEmpty()) {
-                    mergeStatusesBySource(content.statuses, statuses)
+                    mergeFeedStatuses(content.statuses, statuses)
                 } else {
                     statuses.ifEmpty { content.statuses }
                 },
@@ -426,14 +402,6 @@ object SearchStateReducer {
             execution = execution.copy(request = null, continuation = continuation),
         )
     }
-
-    private fun mergeStatusesBySource(
-        current: List<SourceRunStatus>,
-        updates: List<SourceRunStatus>,
-    ): List<SourceRunStatus> = (current + updates)
-        .associateBy(SourceRunStatus::source)
-        .values
-        .sortedBy { status -> status.source.id }
 
     private fun cancelRequest(state: SearchUiState, requestId: Long): SearchReduction {
         if (state.activeRequest(requestId) == null) return SearchReduction(state)

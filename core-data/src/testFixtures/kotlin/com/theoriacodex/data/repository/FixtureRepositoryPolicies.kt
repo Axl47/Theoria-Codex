@@ -25,10 +25,6 @@ internal object FixtureRepositoryPolicies {
         }
     }
 
-    fun removeCodexItem(items: List<CodexItem>, postId: PostId): List<CodexItem> {
-        return items.filterNot { item -> item.postId == postId }
-    }
-
     fun sortCodexPairs(
         pairs: List<Pair<CodexItem, Post>>,
         sort: CodexSortMode,

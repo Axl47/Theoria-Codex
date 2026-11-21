@@ -18,7 +18,6 @@ import com.theoriacodex.domain.source.SiteProfile
 import com.theoriacodex.sources.testing.ScriptedHttpClient
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Adapters built from stored profiles under their custom identities. */
@@ -53,7 +52,6 @@ class FamilyAdapterTest {
         val failure = runCatching { adapter.search(query(), null) }.exceptionOrNull()
 
         assertEquals(SourceFailureReason.AUTH_REQUIRED, (failure as SourceAdapterException).reason)
-        assertTrue(adapter.capabilities.requiresCredentials)
         http.assertExhausted()
     }
 

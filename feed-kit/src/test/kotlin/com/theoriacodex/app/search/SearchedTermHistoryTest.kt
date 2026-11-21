@@ -34,7 +34,7 @@ class SearchedTermHistoryTest {
 
         assertEquals(setOf(SearchTerm("nature"), artist), statistics.observeStatistics().first().searchesByTag.keys.mapTo(mutableSetOf()) { it.term })
         suspend fun searched(query: Query, sourceScope: SearchSourceScope, scope: FacetedSearchScope) =
-            coordinator.fetchAutocomplete(query, sourceScope, scope, "na", emptyList()).searchedTags
+            coordinator.fetchAutocomplete(query, sourceScope, scope, "na").searchedTags
         // Counts reach the coordinator through a flow collected off the test dispatcher.
         withContext(Dispatchers.Default) {
             withTimeout(5_000) { while (searched(query, hitomi, FacetedSearchScope.All).size < 2) delay(10) }

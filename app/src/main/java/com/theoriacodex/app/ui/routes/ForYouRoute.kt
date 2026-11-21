@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.ui.components.feedDurations
 import com.theoriacodex.app.ui.LocalNetworkOnline
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -22,13 +23,9 @@ import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.FeedFabRestoreState
-import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
-import java.io.Closeable
-import kotlinx.coroutines.flow.StateFlow
 
 /** App-level inputs rendered by For You or used to reconcile recommendation inputs. */
 internal data class ForYouRouteConfig(
@@ -50,46 +47,8 @@ internal data class ForYouRouteCallbacks(
     val onToggleLike: (Post) -> Unit,
     val onRequestSaveToCodex: (Post) -> Unit,
     val onSaveToDevice: (Post) -> Unit,
-    val onOpenCreatorProfile: (CreatorProfile) -> Unit,
-    val onOpenLegacyCreatorProfile: (Post) -> Unit,
-    val onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
-    val onAddExcludeTerm: (Post, SearchTerm) -> Boolean,
-    val onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
-    val onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
-    val onFavoriteTagLongPress: (SourceKey, String) -> Unit,
     val onGoToSearch: () -> Unit,
 )
-
-/** Non-owning access used by Viewer and other destinations while Home owns the ViewModel. */
-internal class ForYouRouteOwnerHandle(
-    owner: ForYouViewModel,
-) : ObservableRouteOwnerHandle {
-    private val ownerLease = owner.createRouteOwnerLease()
-
-    /** Read-only state while the navigation-owned ViewModel remains alive. */
-    val state: StateFlow<ForYouUiState>?
-        get() = ownerLease.withOwner { activeOwner -> activeOwner.state }
-
-    override fun invokeOnOwnerCleared(listener: () -> Unit): Closeable {
-        return ownerLease.invokeOnClose(listener)
-    }
-
-    fun dispatch(action: ForYouAction): Boolean {
-        return ownerLease.withOwner { activeOwner ->
-            activeOwner.onAction(action)
-            true
-        } ?: false
-    }
-
-    fun rememberResolvedPost(post: Post): Boolean {
-        return ownerLease.withOwner { activeOwner ->
-            activeOwner.rememberResolvedPost(post)
-            true
-        } ?: false
-    }
-
-    fun currentState(): ForYouUiState? = ownerLease.withOwner { activeOwner -> activeOwner.state.value }
-}
 
 /** Navigation-scoped For You owner plus its immutable rendering boundary. */
 @Composable
@@ -102,7 +61,7 @@ internal fun ForYouRoute(
     fabRestoreState: FeedFabRestoreState,
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
     callbacks: ForYouRouteCallbacks,
-    onOwnerAvailable: (ForYouRouteOwnerHandle) -> Unit = {},
+    onOwnerAvailable: (ForYouViewModel) -> Unit = {},
 ) {
     val owner = viewModel<ForYouViewModel>(
         key = FOR_YOU_ROUTE_OWNER_KEY,
@@ -129,10 +88,9 @@ internal fun ForYouRoute(
         posts = durationPosts,
         resolveInBackground = config.resolveUnknownAnimatedDurations,
     )
-    val ownerHandle = remember(owner) { ForYouRouteOwnerHandle(owner) }
     val currentOnOwnerAvailable by rememberUpdatedState(onOwnerAvailable)
 
-    SideEffect { currentOnOwnerAvailable(ownerHandle) }
+    SideEffect { currentOnOwnerAvailable(owner) }
 
     LaunchedEffect(owner, config.settings, config.activeProfileLikesCount) {
         owner.synchronizeEnvironment(
@@ -162,31 +120,22 @@ private fun ForYouRouteContent(
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
     callbacks: ForYouRouteCallbacks,
 ) {
+    val related = rememberFeedRelatedShelf(state.relatedPosts, owner.related) { posts, index ->
+        owner.onAction(ForYouAction.OpenRelatedResult(index, posts))
+    }
     ForYouScreen(
         state = state,
+        related = related,
         likedPostIds = config.likedPostIds,
         pixivUgoiraClient = pixivUgoiraClient,
-        resolveUnknownAnimatedDurations = config.resolveUnknownAnimatedDurations,
-        durationStates = duration.states,
-        durationStateForPost = duration.stateForPost,
-        onDurationFilterChanged = duration.owner::onFilterChanged,
-        onDurationPostVisibilityChanged = duration.owner::onPostVisibilityChanged,
-        onDurationEnvironmentChanged = duration.owner::onEnvironmentChanged,
-        onAuthoritativeDurationKnown = duration.owner::publishPlayerDuration,
+        durations = duration.owner.feedDurations(duration.states, config.resolveUnknownAnimatedDurations),
         resolvePostById = owner::resolvePost,
         onToggleLike = callbacks.onToggleLike,
         onAction = owner::onAction,
         creatorBrowsingSources = config.creatorBrowsingSources,
         onRequestSaveToCodex = callbacks.onRequestSaveToCodex,
         onSaveToDevice = callbacks.onSaveToDevice,
-        onOpenCreatorProfile = callbacks.onOpenCreatorProfile,
-        onOpenLegacyCreatorProfile = callbacks.onOpenLegacyCreatorProfile,
         onOpenSourceAccounts = callbacks.onOpenSourceAccounts,
-        onAddIncludeTerm = callbacks.onAddIncludeTerm,
-        onAddExcludeTerm = callbacks.onAddExcludeTerm,
-        onRemoveIncludeTerm = callbacks.onRemoveIncludeTerm,
-        onRemoveExcludeTerm = callbacks.onRemoveExcludeTerm,
-        onFavoriteTagLongPress = callbacks.onFavoriteTagLongPress,
         onGoToSearch = callbacks.onGoToSearch,
         fabRestoreState = fabRestoreState,
         onFabRestoreStateChange = onFabRestoreStateChange,

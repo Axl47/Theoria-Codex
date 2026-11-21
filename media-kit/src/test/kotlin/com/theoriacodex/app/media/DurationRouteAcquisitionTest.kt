@@ -60,9 +60,8 @@ class DurationRouteAcquisitionTest {
         advanceTimeBy(2_000)
         runCurrent()
         assertEquals(4, transport.calls)
-        assertEquals(3, route.states.value.size)
-        assertTrue(route.states.value.values.all {
-            it == MediaDurationState.Known(2_000L, MediaDurationProvenance.CONTAINER_PROBE)
+        assertTrue(posts.all {
+            route.states.value[it] == MediaDurationState.Known(2_000L, MediaDurationProvenance.CONTAINER_PROBE)
         })
         assertEquals(DEFAULT_DURATION_PROBE_INITIAL_BYTES * 3L, transport.returnedBytes)
         assertSame(originalFirst, posts.first())

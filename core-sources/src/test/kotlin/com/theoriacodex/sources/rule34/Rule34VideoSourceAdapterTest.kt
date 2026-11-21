@@ -20,7 +20,7 @@ class Rule34VideoSourceAdapterTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(statusCode = 200, body = SAMPLE_RULE34VIDEO_SEARCH_HTML)
         }
-        val adapter = Rule34VideoSourceAdapter(httpClient = httpClient)
+        val adapter = KvsVideoSourceAdapter(KvsVideoSite.RULE34VIDEO, httpClient = httpClient)
 
         val page = adapter.search(sampleQuery(), pageToken = null)
 
@@ -38,7 +38,7 @@ class Rule34VideoSourceAdapterTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(statusCode = 200, body = SAMPLE_RULE34VIDEO_POST_HTML)
         }
-        val adapter = Rule34VideoSourceAdapter(httpClient = httpClient)
+        val adapter = KvsVideoSourceAdapter(KvsVideoSite.RULE34VIDEO, httpClient = httpClient)
 
         val post = adapter.resolvePost(PostId(source = SourceKey.RULE34VIDEO, sourcePostId = "3089604"))
 
@@ -57,7 +57,7 @@ class Rule34VideoSourceAdapterTest {
             SourceHttpResponse(statusCode = 200, body = """{"total_count":0,"items":"","pagination":{"more":0}}"""),
             SourceHttpResponse(statusCode = 200, body = SAMPLE_RULE34VIDEO_TAGS_JSON),
         )
-        val adapter = Rule34VideoSourceAdapter(httpClient = httpClient)
+        val adapter = KvsVideoSourceAdapter(KvsVideoSite.RULE34VIDEO, httpClient = httpClient)
 
         val tags = adapter.trendingTags(limit = 2)
 
@@ -75,7 +75,8 @@ class Rule34VideoSourceAdapterTest {
     @Test
     fun `trending cancellation is not degraded to an empty list`() = runTest {
         val expected = CancellationException("source changed")
-        val adapter = Rule34VideoSourceAdapter(
+        val adapter = KvsVideoSourceAdapter(
+            KvsVideoSite.RULE34VIDEO,
             httpClient = CancellationHttpClient(expected),
         )
 
@@ -92,7 +93,8 @@ class Rule34VideoSourceAdapterTest {
     @Test
     fun `fallback trending cancellation is not degraded to an empty list`() = runTest {
         val expected = CancellationException("source changed")
-        val adapter = Rule34VideoSourceAdapter(
+        val adapter = KvsVideoSourceAdapter(
+            KvsVideoSite.RULE34VIDEO,
             httpClient = CancellationHttpClient(
                 cancellation = expected,
                 successfulResponsesBeforeCancellation = 1,
@@ -112,7 +114,8 @@ class Rule34VideoSourceAdapterTest {
     @Test
     fun `autocomplete cancellation is not degraded to an empty list`() = runTest {
         val expected = CancellationException("source changed")
-        val adapter = Rule34VideoSourceAdapter(
+        val adapter = KvsVideoSourceAdapter(
+            KvsVideoSite.RULE34VIDEO,
             httpClient = CancellationHttpClient(expected),
         )
 

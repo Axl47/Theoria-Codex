@@ -7,8 +7,8 @@ import com.theoriacodex.domain.model.PostId
 internal data class MediaDurationPostSnapshot(
     val postsById: Map<PostId, Post>,
     val keysByPostId: Map<PostId, MediaDurationKey>,
+    /** Animated posts whose feed carries no duration, so a lookup must decide one. */
     val candidatesByKey: Map<MediaDurationKey, Post>,
-    val knownDurationsByKey: Map<MediaDurationKey, Long>,
 ) {
     val observedKeys: Set<MediaDurationKey> = keysByPostId.values.toSet()
 
@@ -17,7 +17,6 @@ internal data class MediaDurationPostSnapshot(
             postsById = emptyMap(),
             keysByPostId = emptyMap(),
             candidatesByKey = emptyMap(),
-            knownDurationsByKey = emptyMap(),
         )
     }
 }
@@ -32,7 +31,6 @@ internal fun mediaDurationPostSnapshot(
     val postsById = LinkedHashMap(appendSeed?.snapshot?.postsById.orEmpty())
     val keysByPostId = LinkedHashMap(appendSeed?.snapshot?.keysByPostId.orEmpty())
     val candidatesByKey = LinkedHashMap(appendSeed?.snapshot?.candidatesByKey.orEmpty())
-    val knownDurationsByKey = LinkedHashMap(appendSeed?.snapshot?.knownDurationsByKey.orEmpty())
     val newPosts = posts.subList(appendSeed?.newPostsStart ?: 0, posts.size)
     newPosts.forEach { post ->
         if (postsById.putIfAbsent(post.id, post) != null || !isAnimatedPost(post)) {
@@ -40,18 +38,12 @@ internal fun mediaDurationPostSnapshot(
         }
         val key = keyFactory(post)
         keysByPostId[post.id] = key
-        val durationMs = animatedDurationMs(post)
-        if (durationMs != null) {
-            knownDurationsByKey[key] = durationMs
-        } else {
-            candidatesByKey[key] = post
-        }
+        if (animatedDurationMs(post) == null) candidatesByKey[key] = post
     }
     return MediaDurationPostSnapshot(
         postsById = postsById,
         keysByPostId = keysByPostId,
         candidatesByKey = candidatesByKey,
-        knownDurationsByKey = knownDurationsByKey,
     )
 }
 
@@ -77,9 +69,7 @@ data class DurationFilterMetadata(
     fun isVisibilityResolved(post: Post?, resolveInBackground: Boolean, canonicalIndex: Int? = null): Boolean {
         if (!isPrepared) return false
         if (post == null || !resolveInBackground || !isAnimatedPost(post) || animatedDurationMs(post) != null) return true
-        val state = stateByPostId[post.id]
-        return state != null && state != MediaDurationState.Pending &&
-            (canonicalIndex == null || canonicalIndex < revealFrontier)
+        return !stateByPostId[post.id].isUndecided && (canonicalIndex == null || canonicalIndex < revealFrontier)
     }
 
     /** New posts appended to this frame are being prepared, while its shown posts stay put. */
@@ -98,17 +88,54 @@ data class DurationFilterMetadata(
     }
 }
 
+/**
+ * A route's duration decisions by post. Each decision belongs to the post version the route synchronized, so a post
+ * with the same id but other media (a related shelf's copy, say) gets none: its own media was never looked up.
+ */
+class MediaDurationStates internal constructor(
+    private val byPostId: Map<PostId, MediaDurationState>,
+    private val decidedPosts: Map<PostId, Post>,
+    private val decidedKeys: Map<PostId, MediaDurationKey>,
+) {
+    /** The decision for [post]'s media, or null while none was made for it. Only another post version is hashed. */
+    operator fun get(post: Post): MediaDurationState? {
+        val state = byPostId[post.id] ?: return null
+        return state.takeIf { decidedPosts[post.id] === post || decidedKeys[post.id] == mediaDurationKey(post) }
+    }
+
+    companion object {
+        val EMPTY = MediaDurationStates(emptyMap(), emptyMap(), emptyMap())
+    }
+}
+
+/** [decisions] by post for a route that synchronized [postsById] and keyed its animated posts as [keysByPostId]. */
+internal fun routeDurationStates(
+    postsById: Map<PostId, Post>,
+    keysByPostId: Map<PostId, MediaDurationKey>,
+    decisions: Map<MediaDurationKey, MediaDurationState>,
+): MediaDurationStates {
+    val byPostId = buildMap { keysByPostId.forEach { (id, key) -> decisions[key]?.let { state -> put(id, state) } } }
+    return MediaDurationStates(byPostId, postsById, keysByPostId)
+}
+
+/**
+ * [states] for [posts], hashing each animated post's media once. Routes publish their own; this serves screens that read
+ * the coordinator directly, such as the benchmark fixture.
+ */
+fun mediaDurationStates(posts: List<Post>, states: Map<MediaDurationKey, MediaDurationState>): MediaDurationStates {
+    val snapshot = mediaDurationPostSnapshot(posts)
+    return routeDurationStates(snapshot.postsById, snapshot.keysByPostId, states)
+}
+
 internal fun durationFilterMetadata(
     posts: List<Post>,
-    states: Map<MediaDurationKey, MediaDurationState>,
+    states: MediaDurationStates,
     active: Boolean,
-    keysByPostId: Map<PostId, MediaDurationKey>? = null,
 ): DurationFilterMetadata {
     if (!active) return DurationFilterMetadata.EMPTY
-    val keys = keysByPostId ?: mediaDurationKeysByPostId(posts)
-    val byId = durationStatesByPostId(posts, states, keys)
+    val byId = buildMap { posts.forEach { post -> states[post]?.let { state -> put(post.id, state) } } }
     return DurationFilterMetadata(
-        knownDurationMsByPostId = knownMediaDurations(posts, states, keys),
+        knownDurationMsByPostId = knownMediaDurations(posts, states),
         stateByPostId = byId,
         readiness = durationFilterReadiness(posts, active, byId),
     )
@@ -145,34 +172,15 @@ fun mediaDurationKey(post: Post): MediaDurationKey {
     )
 }
 
+/** Each post's length: the feed's own, else a decided lookup's. */
 fun knownMediaDurations(
     posts: List<Post>,
-    states: Map<MediaDurationKey, MediaDurationState>,
-    keysByPostId: Map<PostId, MediaDurationKey> = mediaDurationKeysByPostId(posts),
+    states: MediaDurationStates,
 ): Map<PostId, Long> = buildMap {
     posts.forEach { post ->
-        val duration = animatedDurationMs(post)
-            ?: keysByPostId[post.id]
-                ?.let(states::get)
-                ?.let { state -> (state as? MediaDurationState.Known)?.durationMs }
+        val duration = animatedDurationMs(post) ?: (states[post] as? MediaDurationState.Known)?.durationMs
         if (duration != null) put(post.id, duration)
     }
-}
-
-internal fun durationStatesByPostId(
-    posts: List<Post>,
-    states: Map<MediaDurationKey, MediaDurationState>,
-    keysByPostId: Map<PostId, MediaDurationKey> = mediaDurationKeysByPostId(posts),
-): Map<PostId, MediaDurationState> = buildMap {
-    posts.forEach { post ->
-        keysByPostId[post.id]?.let(states::get)?.let { state -> put(post.id, state) }
-    }
-}
-
-fun mediaDurationKeysByPostId(posts: List<Post>): Map<PostId, MediaDurationKey> {
-    return posts.asSequence()
-        .filter(::isAnimatedPost)
-        .associate { post -> post.id to mediaDurationKey(post) }
 }
 
 fun isAuthoritativeDurationMedia(post: Post, ref: ImageRef): Boolean {

@@ -1,10 +1,11 @@
 package com.theoriacodex.app.ui.components
 
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.runtime.Composable
+import com.theoriacodex.app.feed.FeedPageDemandInput
 import com.theoriacodex.app.viewer.retainPostsUntilViewerCloses
 import androidx.compose.runtime.remember
-import com.theoriacodex.app.media.MediaDurationKey
-import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.media.rememberDurationFilterMetadata
 import com.theoriacodex.app.related.RelatedFeedProjection
 import com.theoriacodex.app.related.RelatedPostsUiState
@@ -12,7 +13,6 @@ import com.theoriacodex.app.related.buildRelatedFeedProjection
 import com.theoriacodex.app.related.loadedPosts
 import com.theoriacodex.app.related.retainedLikedPostIds
 import com.theoriacodex.app.search.SearchVisibilityFilters
-import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.search.markInputs
 import com.theoriacodex.domain.model.Post
@@ -39,8 +39,7 @@ fun rememberRelatedFeedPresentation(
     likedPostIds: Set<PostId>,
     savedPostIds: Set<PostId>,
     watchedPostIds: Set<PostId>,
-    unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy,
-    durationStates: Map<MediaDurationKey, MediaDurationState>,
+    durationStates: MediaDurationStates,
     durationFilterActive: Boolean,
     pendingLikePostIds: Set<PostId> = emptySet(),
 ): RelatedFeedPresentation {
@@ -55,7 +54,6 @@ fun rememberRelatedFeedPresentation(
         relatedPosts,
         visibilityFilters,
         marks,
-        unknownAnimatedDurationPolicy,
         durationMetadata.knownDurationMsByPostId,
     ) {
         filterSearchResults(
@@ -65,7 +63,6 @@ fun rememberRelatedFeedPresentation(
             retainedLikedPostIds = marks.retained,
             savedPostIds = marks.saved,
             watchedPostIds = marks.watched,
-            unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
             knownDurationMsByPostId = durationMetadata.knownDurationMsByPostId,
         )
     }
@@ -78,3 +75,23 @@ fun rememberRelatedFeedPresentation(
         projection = projection,
     )
 }
+
+/**
+ * Page demand for a feed shown through [projection]: grid positions map back to the feed's own posts, and the grid
+ * ends where the projection does, so a related shelf inserted among the posts does not end the feed one item early.
+ */
+@Composable
+fun rememberFeedPageDemand(
+    input: FeedPageDemandInput,
+    filters: SearchVisibilityFilters,
+    gridState: LazyStaggeredGridState,
+    projection: RelatedFeedProjection,
+    onLoadNextPage: () -> Unit,
+): FeedPageDemandControl = rememberFeedPageDemand(
+    input = input,
+    filters = filters,
+    gridState = gridState,
+    presentedItemCount = projection.entries.size,
+    canonicalIndexForVisibleItems = projection::greatestVisibleCanonicalIndex,
+    onLoadNextPage = onLoadNextPage,
+)

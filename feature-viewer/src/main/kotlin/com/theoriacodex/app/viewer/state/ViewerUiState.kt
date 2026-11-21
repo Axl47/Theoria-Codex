@@ -4,13 +4,18 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
-enum class ViewerMediaKind {
+enum class ViewerMediaKind(
+    /** Plays on a timeline the user can seek: double-tap jumps and hold-scrub. */
+    val seekable: Boolean = false,
+    /** Plays over time, so its timeline reserves the bottom of the page. */
+    val animated: Boolean = seekable,
+) {
     IMAGE,
-    VIDEO,
-    ANIMATED_WEBP,
-    GIF,
-    ANIMATED_IMAGE,
-    UGOIRA,
+    VIDEO(seekable = true),
+    ANIMATED_WEBP(animated = true),
+    GIF(seekable = true),
+    ANIMATED_IMAGE(animated = true),
+    UGOIRA(seekable = true),
     UNKNOWN,
 }
 
@@ -57,6 +62,10 @@ data class ViewerPageState(
 ) {
     val selectedMedia: ViewerMediaState?
         get() = media.getOrNull(selectedMediaIndex)
+
+    /** The media this page shows, or the one it will show once a pending gallery index loads. */
+    val targetMediaIndex: Int
+        get() = pendingMediaIndex ?: selectedMediaIndex
 }
 
 data class ViewerPlaybackControlsState(
@@ -74,12 +83,20 @@ data class ViewerPlaybackControlsState(
 
 internal typealias ViewerPlaybackMode = com.theoriacodex.domain.model.ViewerPlaybackMode
 
+/** A transient surface over the media. At most one is open; opening one closes the other. */
+enum class ViewerPanel(
+    /** A menu in the chrome, which closes with the chrome and when the media changes. */
+    val inChrome: Boolean,
+) {
+    ACTIONS_MENU(inChrome = true),
+    PLAYBACK_SETTINGS(inChrome = true),
+    INFO(inChrome = false),
+}
+
 data class ViewerControlsState(
     val playbackMode: ViewerPlaybackMode = ViewerPlaybackMode.LOOP,
     val chromeVisible: Boolean = true,
-    val actionsMenuVisible: Boolean = false,
-    val playbackSettingsVisible: Boolean = false,
-    val metadataVisible: Boolean = false,
+    val panel: ViewerPanel? = null,
     val playback: ViewerPlaybackControlsState = ViewerPlaybackControlsState(),
     /** A slideshow is moving through the queue; session-only, never saved. */
     val slideshow: Boolean = false,
@@ -88,16 +105,6 @@ data class ViewerControlsState(
 data class ViewerOverviewState(
     val visible: Boolean = false,
     val available: Boolean = false,
-)
-
-/** [decoded] is the subset of [warmed] images that were decoded into memory rather than only downloaded. */
-data class ViewerPrefetchState(
-    val queued: Set<ViewerMediaKey> = emptySet(),
-    val inFlight: Set<ViewerMediaKey> = emptySet(),
-    val warmed: Map<ViewerMediaKey, Long> = emptyMap(),
-    val decoded: Set<ViewerMediaKey> = emptySet(),
-    val skipped: Set<ViewerMediaKey> = emptySet(),
-    val failed: Set<ViewerMediaKey> = emptySet(),
 )
 
 sealed interface ViewerMediaError {
@@ -118,9 +125,11 @@ sealed interface ViewerMediaError {
 
 data class ViewerRelatedNavigation(val anchor: PostId, val postIds: List<PostId>)
 
-data class ViewerRelatedUiState(
-    val state: com.theoriacodex.app.related.RelatedPostsUiState = com.theoriacodex.app.related.RelatedPostsUiState.Idle,
-    val posts: List<Post> = emptyList(),
+/**
+ * The recommendation branch entered from the related shelf: where it leaves the original feed, and which of the
+ * pages are recommendations rather than the feed's own posts.
+ */
+data class ViewerRelatedBranch(
     val navigation: ViewerRelatedNavigation? = null,
     val extraPostIds: Set<PostId> = emptySet(),
 )
@@ -131,9 +140,8 @@ data class ViewerUiState(
     val currentPageIndex: Int = 0,
     val controls: ViewerControlsState = ViewerControlsState(),
     val overview: ViewerOverviewState = ViewerOverviewState(),
-    val prefetch: ViewerPrefetchState = ViewerPrefetchState(),
     val mediaError: ViewerMediaError? = null,
-    val related: ViewerRelatedUiState = ViewerRelatedUiState(),
+    val related: ViewerRelatedBranch = ViewerRelatedBranch(),
 ) {
     val currentPage: ViewerPageState?
         get() = pages.getOrNull(currentPageIndex)

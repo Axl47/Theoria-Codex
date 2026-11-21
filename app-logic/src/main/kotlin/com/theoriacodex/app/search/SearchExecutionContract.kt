@@ -1,38 +1,59 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.feed.FeedCursor
+import com.theoriacodex.app.search.state.SearchSourceScope
+import com.theoriacodex.app.search.state.queryMode
+import com.theoriacodex.app.search.state.sources
+import com.theoriacodex.data.repository.SourceRuntimeSettings
+import com.theoriacodex.data.repository.SourceWeightSettings
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.normalizedForMode
+import com.theoriacodex.domain.query.QueryHash
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.domain.orchestration.SourceRunState
+import com.theoriacodex.domain.orchestration.UnifiedSearchResult
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
-import com.theoriacodex.domain.query.SearchTermLimit
+
+/**
+ * The identity of [query] run in [sourceScope], after dropping what the scope's mode cannot run. Results, cached
+ * first pages and saved scroll positions are kept per key; a temporary source pick is its own search.
+ */
+fun searchExecutionKey(query: Query, sourceScope: SearchSourceScope): String {
+    val queryHash = QueryHash.from(query.normalizedForMode(sourceScope.queryMode()).query)
+    val temporary = sourceScope as? SearchSourceScope.Temporary ?: return queryHash
+    return "$queryHash|temporary-sources:${temporary.sources.joinToString(",") { it.id }}"
+}
 
 interface SearchExecutionService {
-    fun executionKeyFor(
-        query: Query,
-        sourceScope: com.theoriacodex.app.search.state.SearchSourceScope,
-    ): String
-
+    /** Runs [query]'s first page; [onPartial], when given, receives usable results before every source has answered. */
     suspend fun executeInitial(
         query: Query,
-        sourceScope: com.theoriacodex.app.search.state.SearchSourceScope,
+        sourceScope: SearchSourceScope,
+        sources: SearchSources,
+        onPartial: (suspend (SearchExecutionResult.Success) -> Unit)? = null,
     ): SearchExecutionResult
-
-    /** Like [executeInitial], handing [onPartial] usable results before every source has answered. */
-    suspend fun executeInitialProgressively(
-        query: Query,
-        sourceScope: com.theoriacodex.app.search.state.SearchSourceScope,
-        onPartial: suspend (SearchExecutionResult.Success) -> Unit,
-    ): SearchExecutionResult = executeInitial(query, sourceScope)
 
     suspend fun executePage(continuation: SearchContinuation): SearchPageResult
 
-    /** The first page last remembered for [executionKey], shown while it refreshes; empty when there is none. */
-    suspend fun cachedFirstPage(executionKey: String, sourceScope: com.theoriacodex.app.search.state.SearchSourceScope): List<Post> = emptyList()
+    /** Retries only the failed [source] at its exact page in [previous], keeping every other source's place. */
+    suspend fun retrySource(
+        query: Query,
+        sourceScope: SearchSourceScope,
+        sources: SearchSources,
+        previous: SearchContinuation?,
+        source: SourceKey,
+    ): SearchPageResult
+
+    /**
+     * The first page last remembered for [executionKey], shown while it refreshes; empty when there is none.
+     * The key doesn't cover the enabled sources, so posts from outside [sources] are dropped.
+     */
+    suspend fun cachedFirstPage(executionKey: String, sources: Set<SourceKey>): List<Post> = emptyList()
 
     suspend fun rememberFirstPage(executionKey: String, posts: List<Post>) = Unit
 
@@ -40,19 +61,42 @@ interface SearchExecutionService {
 
     suspend fun persistAppliedSearch(
         query: Query,
-        sourceScope: com.theoriacodex.app.search.state.SearchSourceScope,
+        sourceScope: SearchSourceScope,
         executionKey: String,
     )
 }
 
 data class SearchInitialization(
     val query: Query,
-    val sourceScope: com.theoriacodex.app.search.state.SearchSourceScope,
+    val sourceScope: SearchSourceScope,
     val appliedByMode: Map<String, Query>,
     val availableSources: List<SourceKey>,
     val hasExecutedSearch: Boolean,
     val validationMessage: String? = null,
+    /** The source settings stored when Search restored, used until the route hears newer ones. */
+    val runtime: SourceRuntimeSettings = SourceRuntimeSettings(),
+    /** The faceted search scopes each available source offers, for those that offer any. */
+    val scopesBySource: Map<SourceKey, List<FacetedSearchScope>> = emptyMap(),
+    /** The available sources that match only exactly spelled tags, each with its name for the input error. */
+    val exactTagSources: Map<SourceKey, String> = emptyMap(),
 )
+
+/**
+ * What one search runs on, resolved by its caller from settings: the enabled sources and their
+ * Unified weights. The engine keeps no settings of its own, so every caller can share it.
+ */
+data class SearchSources(
+    val enabled: Set<SourceKey>,
+    val weights: Map<SourceKey, Double>,
+) {
+    companion object {
+        /** [scope]'s sources among [available], weighted as [runtime] weights exactly that set. */
+        fun of(runtime: SourceRuntimeSettings, scope: SearchSourceScope, available: Set<SourceKey>): SearchSources {
+            val enabled = scope.sources(runtime.enabledSources, available)
+            return SearchSources(enabled, SourceWeightSettings.weightsFor(runtime, enabled))
+        }
+    }
+}
 
 data class SearchAutocompleteResult(
     val input: String,
@@ -64,41 +108,39 @@ data class SearchAutocompleteResult(
     val searchedTags: List<SearchTerm> = emptyList(),
 )
 
-data class SearchEnvironmentChange(
-    val settingsChanged: Boolean,
-    val sourcesChanged: Boolean,
-    val availableSources: List<SourceKey>,
-    val sourceTermLimits: Map<SourceKey, SearchTermLimit> = emptyMap(),
-)
-
-/** Immutable provider continuation owned by the Search route owner. */
+/** Immutable provider continuation owned by the Search route owner. A single-source search keeps its token in [cursor] too. */
 data class SearchContinuation(
     val executionKey: String,
-    val query: Query,
-    val sourceScope: com.theoriacodex.app.search.state.SearchSourceScope,
+    val sourceScope: SearchSourceScope,
     val enabledSources: Set<SourceKey>,
     val availableSources: List<SourceKey>,
-    val weights: Map<SourceKey, Double>,
-    val unifiedPageTokens: Map<SourceKey, String?> = emptyMap(),
-    val unifiedQueryOverrides: Map<SourceKey, Query> = emptyMap(),
-    val sourcePageToken: String? = null,
+    val cursor: FeedCursor,
     val failedSources: Set<SourceKey> = emptySet(),
 ) {
+    val query: Query
+        get() = cursor.query
+
     val canLoadMore: Boolean
-        get() = sourcePageToken?.isNotBlank() == true ||
-            unifiedPageTokens.any { (source, token) -> source !in failedSources && !token.isNullOrBlank() }
+        get() = cursor.pageTokens.any { (source, token) -> source !in failedSources && !token.isNullOrBlank() }
+
+    /** Folds in a page fetched from [attempted]; sources that failed join [failedSources] and the rest leave it. */
+    fun accept(page: UnifiedSearchResult, attempted: Set<SourceKey>): SearchContinuation = copy(
+        cursor = cursor.accept(page, attempted),
+        failedSources = failedSources - attempted +
+            page.statuses.filter { it.state == SourceRunState.FAILED }.map { it.source },
+    )
 }
 
 sealed interface SearchExecutionResult {
     val executionKey: String
     val query: Query
-    val sourceScope: com.theoriacodex.app.search.state.SearchSourceScope
+    val sourceScope: SearchSourceScope
     val statuses: List<SourceRunStatus>
 
     data class Success(
         override val executionKey: String,
         override val query: Query,
-        override val sourceScope: com.theoriacodex.app.search.state.SearchSourceScope,
+        override val sourceScope: SearchSourceScope,
         val posts: List<Post>,
         override val statuses: List<SourceRunStatus>,
         val continuation: SearchContinuation,
@@ -107,7 +149,7 @@ sealed interface SearchExecutionResult {
     data class Failure(
         override val executionKey: String,
         override val query: Query,
-        override val sourceScope: com.theoriacodex.app.search.state.SearchSourceScope,
+        override val sourceScope: SearchSourceScope,
         override val statuses: List<SourceRunStatus>,
         val message: String,
         val continuation: SearchContinuation? = null,

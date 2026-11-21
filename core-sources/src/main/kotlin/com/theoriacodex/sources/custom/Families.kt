@@ -4,8 +4,6 @@ import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
-import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.query.SearchTermLimit
 import com.theoriacodex.domain.source.ProbeFailure
@@ -32,7 +30,7 @@ object DanbooruFamily : SiteFamily {
     private const val DEFAULT_TERM_LIMIT = 2
 
     override suspend fun probe(address: SiteAddress, context: SiteRequestContext): FamilyProbe = probing {
-        val counts = context.get(address, "/counts/posts.json", context.danbooruAuth())
+        val counts = context.get(address, "/counts/posts.json", DanbooruSite.authQuery(context.credentials?.asUserApiKey()))
         when {
             counts.isDanbooruCounts() ->
                 verifyWithAdapter(address, context, FamilyProbe.Match(suggestedLabel = null, searchTermLimit = measureTermLimit(address, context)))
@@ -44,7 +42,7 @@ object DanbooruFamily : SiteFamily {
     /** Optional: a failed profile request falls back to the default instead of failing the probe. */
     private suspend fun measureTermLimit(address: SiteAddress, context: SiteRequestContext): Int {
         val measured = try {
-            context.get(address, "/profile.json", context.danbooruAuth()).danbooruTagQueryLimit()
+            context.get(address, "/profile.json", DanbooruSite.authQuery(context.credentials?.asUserApiKey())).danbooruTagQueryLimit()
         } catch (_: IOException) {
             null
         }
@@ -65,9 +63,6 @@ object DanbooruFamily : SiteFamily {
             httpClient = context.http,
             credentials = { context.credentials?.asUserApiKey() },
         )
-
-    private fun SiteRequestContext.danbooruAuth(): Map<String, String> =
-        credentials?.let { mapOf("login" to it.user, "api_key" to it.apiKey) }.orEmpty()
 }
 
 /**
@@ -81,7 +76,7 @@ object GelbooruFamily : SiteFamily {
     private val POST_LIST = mapOf("page" to "dapi", "s" to "post", "q" to "index")
 
     override suspend fun probe(address: SiteAddress, context: SiteRequestContext): FamilyProbe = probing {
-        val auth = context.gelbooruAuth()
+        val auth = GelbooruSite.authQuery(context.credentials?.asUserApiKey())
         val envelope = context.get(address, "/index.php", POST_LIST + ("limit" to "1") + auth)
         when {
             envelope.isGelbooruPostsEnvelope() ->
@@ -109,9 +104,6 @@ object GelbooruFamily : SiteFamily {
             httpClient = context.http,
             credentials = { context.credentials?.asUserApiKey() },
         )
-
-    private fun SiteRequestContext.gelbooruAuth(): Map<String, String> =
-        credentials?.let { mapOf("user_id" to it.user, "api_key" to it.apiKey) }.orEmpty()
 }
 
 /** Moebooru (`/post.json`), e.g. Sakugabooru and Konachan. Detected so the UI can name it. */
@@ -145,14 +137,7 @@ private suspend fun SiteFamily.verifyWithAdapter(
         addedAtEpochMs = 0,
     )
     val source = SourceKey.of(profile)
-    val newest = Query(
-        mode = QueryMode.Source(source),
-        includeTags = emptyList(),
-        excludeTags = emptyList(),
-        sort = SortMode.NEWEST,
-        dateRange = null,
-        minScore = null,
-    )
+    val newest = Query.newest(source)
     return try {
         createAdapter(profile, source, context).search(newest, pageToken = null)
         match

@@ -52,12 +52,12 @@ class ViewerGalleryLoadingSwipeTest {
         compose.setContent {
             MaterialTheme {
                 ViewerScreen(
-                    uiState = state.value, creatorBrowsingSources = emptySet(),
-                    onAction = { state.value = reduceViewerState(state.value, it).state },
-                    onRemoveIncludeTerm = { _, _ -> },
-                    onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
-                    onVisiblePostChanged = { post, number -> if (post.id == watched.id) recorded += number },
-                    onVisibleMediaChanged = { post, number -> if (post.id == watched.id) recorded += number },
+                    uiState = state.value,
+                    host = ViewerScreenHost(
+                        onAction = { state.value = reduceViewerState(state.value, it).state },
+                        onVisiblePostChanged = { post, number -> if (post.id == watched.id) recorded += number },
+                        onVisibleMediaChanged = { post, number -> if (post.id == watched.id) recorded += number },
+                    ),
                 )
             }
         }
@@ -92,10 +92,8 @@ class ViewerGalleryLoadingSwipeTest {
         compose.setContent {
             MaterialTheme {
                 ViewerScreen(
-                    uiState = state.value, creatorBrowsingSources = emptySet(),
-                    onAction = { state.value = reduceViewerState(state.value, it).state },
-                    onRemoveIncludeTerm = { _, _ -> },
-                    onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
+                    uiState = state.value,
+                    host = ViewerScreenHost(onAction = { state.value = reduceViewerState(state.value, it).state }),
                 )
             }
         }

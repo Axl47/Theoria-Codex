@@ -1,6 +1,5 @@
 package com.theoriacodex.stubs
 
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
@@ -44,21 +43,6 @@ class JsonStubSourceAdapterTest {
         }
 
         assertTrue(failure.isFailure)
-    }
-
-    @Test
-    fun `quick query maps to expected sort mode`() = runTest {
-        val runtime = StubRuntime(StubScenarioPreset.NORMAL)
-        val adapter = JsonStubSourceAdapter(
-            sourceKey = SourceKey.AIBOORU,
-            fixtureLoader = StubFixtureLoader(),
-            runtime = runtime,
-        )
-
-        val query = adapter.quickQuery(QuickQueryKind.RANDOM)
-
-        assertEquals(SortMode.RANDOM, query.sort)
-        assertEquals(QueryMode.Source(SourceKey.AIBOORU), query.mode)
     }
 
     @Test

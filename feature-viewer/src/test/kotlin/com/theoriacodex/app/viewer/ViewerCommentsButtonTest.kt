@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.performClick
 import com.theoriacodex.app.comments.CommentCount
 import com.theoriacodex.app.viewer.state.ViewerAction
+import com.theoriacodex.app.viewer.state.ViewerPanel
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -59,7 +60,7 @@ class ViewerCommentsButtonTest {
         assertEquals(InfoSheetTarget.Top, controls.infoSheetTarget)
         controls.openInfoSheetAtComments()
         assertEquals(InfoSheetTarget.Comments, controls.infoSheetTarget)
-        assertEquals(listOf<ViewerAction>(ViewerAction.ShowMetadata), actions)
+        assertEquals(listOf<ViewerAction>(ViewerAction.ShowPanel(ViewerPanel.INFO)), actions)
         controls.resetInfoSheetTarget()
         assertEquals(InfoSheetTarget.Top, controls.infoSheetTarget)
     }

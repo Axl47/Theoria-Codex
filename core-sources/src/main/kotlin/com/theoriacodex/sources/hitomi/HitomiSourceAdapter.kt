@@ -6,13 +6,13 @@ import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.MediaRecoverySourceAdapter
 import com.theoriacodex.domain.adapter.Page
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
+import com.theoriacodex.domain.coroutines.mapConcurrent
 import com.theoriacodex.sources.common.asIntOrNull
 import com.theoriacodex.sources.common.autocompleteTagCounts
 import com.theoriacodex.domain.model.CreatorProfile
@@ -26,21 +26,14 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.canonicalHitomiArtistIdentity
-import com.theoriacodex.domain.query.QueryHash
 import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.sourceCall
+import com.theoriacodex.sources.http.SourceHttpBodyTooLargeException
 import com.theoriacodex.sources.http.SourceHttpClient
 import java.io.IOException
-import java.security.MessageDigest
 import java.util.Locale
 import kotlin.coroutines.CoroutineContext
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.supervisorScope
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 
 /**
  * Hitomi's search pages are metadata shells. This adapter reads the provider's binary Nozomi
@@ -76,44 +69,34 @@ class HitomiSourceAdapter(
         supportsSortTop = true,
         supportsSortRandom = true,
         supportsExcludeTagsServerSide = true,
-        supportsDateRangeServerSide = false,
-        supportsMinScoreServerSide = false,
-        requiresCredentials = false,
     )
 
-    override val supportedSearchScopes: Set<FacetedSearchScope> = linkedSetOf(
-        FacetedSearchScope.All,
-        FacetedSearchScope(SearchFacet.TAG, HITOMI_TAG_NAMESPACE),
-        FacetedSearchScope(SearchFacet.TAG, HITOMI_FEMALE_NAMESPACE),
-        FacetedSearchScope(SearchFacet.TAG, HITOMI_MALE_NAMESPACE),
-        FacetedSearchScope(SearchFacet.ARTIST, HITOMI_ARTIST_NAMESPACE),
-        FacetedSearchScope(SearchFacet.CHARACTER, HITOMI_CHARACTER_NAMESPACE),
-        FacetedSearchScope(SearchFacet.SERIES, HITOMI_SERIES_NAMESPACE),
-        FacetedSearchScope(SearchFacet.GROUP, HITOMI_GROUP_NAMESPACE),
-        FacetedSearchScope(SearchFacet.TYPE, HITOMI_TYPE_NAMESPACE),
-        FacetedSearchScope(SearchFacet.LANGUAGE, HITOMI_LANGUAGE_NAMESPACE),
-    )
+    override val supportedSearchScopes: Set<FacetedSearchScope> = HITOMI_FACETS.searchScopes
 
     private val postMapper = HitomiPostMapper(mediaUrlResolver, mediaCandidates)
 
     override suspend fun recoverPostMedia(post: Post, failedMedia: ImageRef): Post? = sourceCall(callContext) {
-        postMapper.recoverPostMedia(post, failedMedia)
+        hitomiCall("media recovery") { postMapper.recoverPostMedia(post, failedMedia) }
     }
 
-    private val pageTokenCodec = HitomiPageTokenCodec()
     private val suggestionCounts = HitomiByteBudgetCache<String, Int>(
         maxBytes = suggestionCountCacheMaxBytes,
         weigh = { key, _ -> key.hitomiUtf8ByteWeight() + Int.SIZE_BYTES },
     )
     private val globalIndexCache = HitomiGlobalIndexCache(globalIndexCacheMaxBytes)
     private val queryCompiler = HitomiQueryCompiler(httpClient, globalIndexCache)
-    private val nozomiReader = HitomiNozomiReader(
-        httpClient, globalIndexCache, knownSizeCacheMaxBytes, membershipCacheMaxBytes,
-    )
+    private val nozomiReader = HitomiNozomiReader(httpClient, knownSizeCacheMaxBytes, membershipCacheMaxBytes)
     private val randomSnapshotCache = HitomiRandomSnapshotCache(
         maxBytes = randomSnapshotCacheMaxBytes,
         initialReuseTtlMillis = randomSnapshotReuseTtlMillis,
         nowMillis = randomSnapshotNowMillis,
+    )
+    private val searchPager = HitomiSearchPager(
+        queryCompiler = queryCompiler,
+        nozomiReader = nozomiReader,
+        randomSnapshotCache = randomSnapshotCache,
+        suggestionCounts = suggestionCounts,
+        pageSize = pageSize,
     )
     private val galleryManifests = HitomiGalleryManifestStore(
         maxBytes = galleryManifestCacheMaxBytes,
@@ -131,217 +114,12 @@ class HitomiSourceAdapter(
     }
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> = sourceCall(callContext) {
-        try {
-            searchInternal(query, pageToken)
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: SourceAdapterException) {
-            throw error
-        } catch (error: HitomiProtocolException) {
-            throw SourceAdapterException(
-                reason = SourceFailureReason.PARSE,
-                message = "Hitomi search protocol failed: ${error.message}",
-                cause = error,
-            )
-        }
+        hitomiCall("search") { searchInternal(query, pageToken) }
     }
 
     private suspend fun searchInternal(query: Query, pageToken: String?): Page<Post> {
-        val compiled = queryCompiler.compile(query)
-        if (compiled.isUnsatisfiable) return Page(items = emptyList(), nextPageToken = null)
-
-        val queryHash = QueryHash.from(query)
-        val decodedToken = pageToken?.let(::decodePageToken)
-        validatePageToken(decodedToken, queryHash, compiled.globalIndexVersion, query.sort)
-
-        val primaryOptions = compiled.primaryOptions(query.sort)
-        val primary = if (decodedToken == null) {
-            choosePrimary(primaryOptions)
-        } else {
-            primaryOptions.firstOrNull { option -> option.key == decodedToken.primaryKey }
-                ?: throw sourceParseFailure("Hitomi page token references an invalid primary index")
-        }
-        val seed = decodedToken?.randomSeed ?: deterministicSeed(queryHash)
-        val primaryOffset = decodedToken?.primaryOffset ?: 0L
-        if (primaryOffset < 0L) {
-            throw sourceParseFailure("Hitomi page token contained a negative primary offset")
-        }
-
-        val secondaryIncludes = compiled.secondaryIncludes(primary.key)
-            .map { index -> nozomiReader.membershipFor(index) }
-        if (secondaryIncludes.any(IntArray::isEmpty)) {
-            return Page(items = emptyList(), nextPageToken = null)
-        }
-        val exclusions = compiled.exclusions
-            .map { index -> nozomiReader.membershipFor(index) }
-
-        if (query.sort == SortMode.RANDOM) {
-            return randomPage(
-                queryHash = queryHash,
-                primary = primary,
-                seed = seed,
-                initialOffset = primaryOffset,
-                expectedSnapshotFingerprint = decodedToken?.randomSnapshotFingerprint,
-                secondaryIncludes = secondaryIncludes,
-                exclusions = exclusions,
-                globalIndexVersion = compiled.globalIndexVersion,
-            )
-        }
-
-        return orderedPage(
-            queryHash = queryHash,
-            primary = primary,
-            seed = seed,
-            initialOffset = primaryOffset,
-            secondaryIncludes = secondaryIncludes,
-            exclusions = exclusions,
-            globalIndexVersion = compiled.globalIndexVersion,
-        )
-    }
-
-    private suspend fun orderedPage(
-        queryHash: String,
-        primary: CompiledIndex,
-        seed: Long,
-        initialOffset: Long,
-        secondaryIncludes: List<IntArray>,
-        exclusions: List<IntArray>,
-        globalIndexVersion: String?,
-    ): Page<Post> {
-        val scanned = nozomiReader.scanMatchingIds(primary, initialOffset, pageSize, secondaryIncludes, exclusions)
-        val posts = hydrateGalleries(scanned.ids)
-        val nextToken = if (!scanned.exhausted && scanned.scannedIds > 0) {
-            encodePageToken(
-                HitomiPageToken(
-                    version = HITOMI_PAGE_TOKEN_VERSION,
-                    queryHash = queryHash,
-                    primaryKey = primary.key,
-                    primaryOffset = scanned.nextOffset,
-                    randomSeed = seed,
-                    randomSnapshotFingerprint = null,
-                    globalIndexVersion = globalIndexVersion,
-                ),
-            )
-        } else {
-            null
-        }
-        return Page(items = posts, nextPageToken = nextToken)
-    }
-
-    private fun validatePageToken(
-        decodedToken: DecodedHitomiPageToken?,
-        queryHash: String,
-        globalIndexVersion: String?,
-        sort: SortMode,
-    ) {
-        if (decodedToken != null && decodedToken.queryHash != queryHash) {
-            throw sourceParseFailure("Hitomi page token does not match the active query")
-        }
-        if (decodedToken != null && decodedToken.globalIndexVersion != globalIndexVersion) {
-            throw sourceParseFailure("Hitomi page token does not match the active global index version")
-        }
-        if (
-            decodedToken != null &&
-            sort == SortMode.RANDOM &&
-            decodedToken.randomSnapshotFingerprint == null
-        ) {
-            throw sourceParseFailure("Hitomi random page token omitted its source snapshot")
-        }
-        if (
-            decodedToken != null &&
-            sort == SortMode.RANDOM &&
-            decodedToken.randomPermutationVersion != HitomiDeterministicPermutation.ALGORITHM_VERSION
-        ) {
-            throw sourceParseFailure("Hitomi random page token used an unsupported permutation")
-        }
-        if (
-            decodedToken != null &&
-            sort != SortMode.RANDOM &&
-            (decodedToken.randomSnapshotFingerprint != null || decodedToken.randomPermutationVersion != null)
-        ) {
-            throw sourceParseFailure("Hitomi non-random page token contained a random snapshot")
-        }
-    }
-
-    private suspend fun randomPage(
-        queryHash: String,
-        primary: CompiledIndex,
-        seed: Long,
-        initialOffset: Long,
-        expectedSnapshotFingerprint: String?,
-        secondaryIncludes: List<IntArray>,
-        exclusions: List<IntArray>,
-        globalIndexVersion: String?,
-    ): Page<Post> {
-        val snapshot = randomSnapshotFor(
-            compiledIndex = primary,
-            expectedSnapshotFingerprint = expectedSnapshotFingerprint,
-        )
-        val randomIds = snapshot.ids
-        if (initialOffset > randomIds.size.toLong()) {
-            throw sourceParseFailure("Hitomi page token offset exceeded the random candidate list")
-        }
-        val permutation = randomIds.takeIf(IntArray::isNotEmpty)?.let { ids ->
-            HitomiDeterministicPermutation(ids.size, seed)
-        }
-        var offset = initialOffset
-        var scanned = 0
-        val survivingIds = HitomiIntArrayBuilder(pageSize)
-        while (
-            offset < randomIds.size.toLong() &&
-            survivingIds.size < pageSize &&
-            scanned < MAX_PRIMARY_SCAN_IDS_PER_PAGE
-        ) {
-            val galleryId = randomIds[requireNotNull(permutation).sourceIndex(offset)]
-            offset += 1L
-            scanned += 1
-            if (matchesHitomiMemberships(galleryId, secondaryIncludes, exclusions)) survivingIds.add(galleryId)
-        }
-
-        val posts = hydrateGalleries(survivingIds.toIntArray())
-        val nextToken = if (offset < randomIds.size.toLong()) {
-            encodePageToken(
-                HitomiPageToken(
-                    version = HITOMI_PAGE_TOKEN_VERSION,
-                    queryHash = queryHash,
-                    primaryKey = primary.key,
-                    primaryOffset = offset,
-                    randomSeed = seed,
-                    randomSnapshotFingerprint = snapshot.fingerprint,
-                    randomPermutationVersion = HitomiDeterministicPermutation.ALGORITHM_VERSION,
-                    globalIndexVersion = globalIndexVersion,
-                ),
-            )
-        } else {
-            null
-        }
-        return Page(items = posts, nextPageToken = nextToken)
-    }
-
-    private suspend fun randomSnapshotFor(
-        compiledIndex: CompiledIndex,
-        expectedSnapshotFingerprint: String?,
-    ): HitomiNozomiSnapshot {
-        val url = compiledIndex.url
-        val snapshot = try {
-            randomSnapshotCache.getOrLoad(url, expectedSnapshotFingerprint) {
-                nozomiReader.readCompleteNozomi(compiledIndex, MAX_RANDOM_GALLERY_IDS)
-            }
-        } catch (error: HitomiRandomSnapshotMismatchException) {
-            throw sourceParseFailure(
-                "Hitomi random source changed before the next page could be resumed",
-                error,
-            )
-        }
-        if (
-            expectedSnapshotFingerprint != null &&
-            snapshot.fingerprint != expectedSnapshotFingerprint
-        ) {
-            throw sourceParseFailure(
-                "Hitomi random source changed before the next page could be resumed",
-            )
-        }
-        return snapshot
+        val page = searchPager.page(query, pageToken)
+        return Page(items = hydrateGalleries(page.ids), nextPageToken = page.nextToken)
     }
 
     internal suspend fun cacheSnapshot(): HitomiSourceCacheSnapshot {
@@ -381,19 +159,7 @@ class HitomiSourceAdapter(
         scope: FacetedSearchScope,
         limit: Int,
     ): List<FacetedTagSuggestion> = sourceCall(callContext) {
-        try {
-            autocompleteFacetedInternal(prefix, scope, limit)
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: SourceAdapterException) {
-            throw error
-        } catch (error: HitomiProtocolException) {
-            throw SourceAdapterException(
-                reason = SourceFailureReason.PARSE,
-                message = "Hitomi autocomplete protocol failed: ${error.message}",
-                cause = error,
-            )
-        }
+        hitomiCall("autocomplete") { autocompleteFacetedInternal(prefix, scope, limit) }
     }
 
     override suspend fun featuredFacetedSuggestions(
@@ -435,7 +201,7 @@ class HitomiSourceAdapter(
         val url = HitomiProtocol.autocompleteUrl(providerScope, normalizedPrefix)
         val response = requestText(url)
         if (response.statusCode !in 200..299) {
-            throw sourceHttpFailure("autocomplete", response.statusCode)
+            throw hitomiHttpFailure("autocomplete", response.statusCode)
         }
         return HitomiProtocol.parseAutocomplete(
             body = response.body,
@@ -450,36 +216,11 @@ class HitomiSourceAdapter(
             }
     }
 
-    override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceCall(callContext) {
-        val sort = when (kind) {
-            QuickQueryKind.POPULAR_TODAY -> SortMode.POPULAR
-            QuickQueryKind.TOP_7D, QuickQueryKind.TOP_30D -> SortMode.TOP
-            QuickQueryKind.NEWEST -> SortMode.NEWEST
-            QuickQueryKind.RANDOM -> SortMode.RANDOM
-        }
-        Query(
-            mode = QueryMode.Source(SourceKey.HITOMI),
-            includeTags = emptyList(),
-            excludeTags = emptyList(),
-            sort = sort,
-            dateRange = null,
-            minScore = null,
-        )
-    }
-
     override suspend fun resolvePost(id: PostId): Post? = sourceCall(callContext) {
         if (id.source != SourceKey.HITOMI) return@sourceCall null
         val galleryId = id.sourcePostId.trim().toIntOrNull()?.takeIf { value -> value > 0 }
             ?: return@sourceCall null
-        try {
-            fetchGallery(galleryId, sparse = false)
-        } catch (error: HitomiGalleryException) {
-            throw SourceAdapterException(
-                reason = error.reason,
-                message = error.message,
-                cause = error.cause ?: error,
-            )
-        }
+        hitomiCall("post") { fetchGallery(galleryId, sparse = false) }
     }
 
     override suspend fun searchCreatorPosts(
@@ -507,46 +248,18 @@ class HitomiSourceAdapter(
         )
     }
 
-    private suspend fun choosePrimary(options: List<CompiledIndex>): CompiledIndex {
-        require(options.isNotEmpty()) { "Hitomi search requires a primary index" }
-        if (options.size == 1) return options.single()
-        val estimates = options.associateWith { option ->
-            option.inlineIds?.size?.toLong()
-                ?: option.term
-                ?.termCacheKey()
-                ?.let(suggestionCounts::get)
-                ?.toLong()
-                ?: nozomiReader.nozomiSize(option.url)
-        }
-        return options.minWithOrNull(
-            compareBy<CompiledIndex> { option -> estimates.getValue(option) }
-                .thenBy(CompiledIndex::key),
-        ) ?: options.first()
-    }
-
-    private suspend fun hydrateGalleries(ids: IntArray): List<Post> = supervisorScope {
-        val semaphore = Semaphore(hydrationConcurrency)
-        ids.map { galleryId ->
-            async {
-                semaphore.withPermit {
-                    try {
-                        fetchGallery(galleryId, sparse = true)
-                    } catch (error: CancellationException) {
-                        throw error
-                    } catch (_: HitomiGalleryException) {
-                        null
-                    }
-                }
+    private suspend fun hydrateGalleries(ids: IntArray): List<Post> =
+        ids.asList().mapConcurrent(hydrationConcurrency) { galleryId ->
+            try {
+                fetchGallery(galleryId, sparse = true)
+            } catch (_: HitomiGalleryException) {
+                null
             }
-        }.awaitAll()
-            .filterNotNull()
-            .distinctBy(Post::id)
-    }
+        }.filterNotNull().distinctBy(Post::id)
 
     private suspend fun fetchGallery(galleryId: Int, sparse: Boolean): Post? {
         val gallery = galleryManifests.getOrLoad(galleryId) { loadGalleryManifest(galleryId) }
             ?: return null
-        if (gallery["blocked"].asIntOrNull() == 1) return null
         return postMapper.toPost(parseHitomiGallery(gallery, galleryId), sparse)
     }
 
@@ -586,38 +299,13 @@ class HitomiSourceAdapter(
 
     private suspend fun requestText(url: String) = try {
         httpClient.get(url = url, headers = HitomiProtocol.requestHeaders)
+    } catch (error: SourceHttpBodyTooLargeException) {
+        throw hitomiParseFailure("Hitomi response exceeded its bounded size ($url)", error)
     } catch (error: IOException) {
         throw SourceAdapterException(
             reason = SourceFailureReason.NETWORK,
             message = "Hitomi request failed ($url)",
             cause = error,
-        )
-    }
-
-    private fun encodePageToken(token: HitomiPageToken): String {
-        return pageTokenCodec.encode(token)
-    }
-
-    private fun decodePageToken(raw: String): DecodedHitomiPageToken {
-        return try {
-            pageTokenCodec.decode(raw)
-        } catch (error: HitomiPageTokenException) {
-            throw sourceParseFailure(error.message ?: "Hitomi page token was invalid", error)
-        }
-    }
-
-    private fun sourceHttpFailure(step: String, statusCode: Int): SourceAdapterException {
-        return SourceAdapterException(
-            reason = classifyHttpFailure(statusCode),
-            message = "Hitomi $step request failed ($statusCode)",
-        )
-    }
-
-    private fun sourceParseFailure(message: String, cause: Throwable? = null): SourceAdapterException {
-        return SourceAdapterException(
-            reason = SourceFailureReason.PARSE,
-            message = message,
-            cause = cause,
         )
     }
 
@@ -629,9 +317,7 @@ class HitomiSourceAdapter(
         private const val DEFAULT_HYDRATION_CONCURRENCY = DEFAULT_PAGE_SIZE
         private const val MAX_HYDRATION_CONCURRENCY = MAX_PAGE_SIZE
         private const val HITOMI_AUTOCOMPLETE_LIMIT = 10
-        private const val MAX_PRIMARY_SCAN_IDS_PER_PAGE = 10_000
         internal const val DEFAULT_MEMBERSHIP_CACHE_BYTES = 8L * 1024L * 1024L
-        private const val MAX_RANDOM_GALLERY_IDS = HitomiNozomi.MAX_GALLERY_IDS
         internal const val DEFAULT_KNOWN_SIZE_CACHE_BYTES = 256L * 1024L
         internal const val DEFAULT_SUGGESTION_COUNT_CACHE_BYTES = 256L * 1024L
         internal const val DEFAULT_GALLERY_MANIFEST_CACHE_BYTES = 8L * 1024L * 1024L
@@ -656,24 +342,9 @@ class HitomiSourceAdapter(
             "russian",
         )
 
-        private fun deterministicSeed(queryHash: String): Long {
-            val digest = MessageDigest.getInstance("SHA-256").digest(queryHash.toByteArray(Charsets.UTF_8))
-            return digest.take(Long.SIZE_BYTES).fold(0L) { result, byte ->
-                (result shl Byte.SIZE_BITS) or (byte.toLong() and 0xffL)
-            }
-        }
-
         private fun HitomiAutocompleteEntry.toFacetedSuggestion(): FacetedTagSuggestion {
-            val facet = when (namespace) {
-                HITOMI_TAG_NAMESPACE, HITOMI_FEMALE_NAMESPACE, HITOMI_MALE_NAMESPACE -> SearchFacet.TAG
-                HITOMI_ARTIST_NAMESPACE -> SearchFacet.ARTIST
-                HITOMI_CHARACTER_NAMESPACE -> SearchFacet.CHARACTER
-                HITOMI_SERIES_NAMESPACE -> SearchFacet.SERIES
-                HITOMI_GROUP_NAMESPACE -> SearchFacet.GROUP
-                HITOMI_TYPE_NAMESPACE -> SearchFacet.TYPE
-                HITOMI_LANGUAGE_NAMESPACE -> SearchFacet.LANGUAGE
-                else -> throw HitomiProtocolException("Unsupported Hitomi namespace: $namespace")
-            }
+            val facet = HITOMI_FACETS.facetOf(namespace)
+                ?: throw HitomiProtocolException("Unsupported Hitomi namespace: $namespace")
             return FacetedTagSuggestion(
                 text = name,
                 facet = facet,
@@ -683,17 +354,8 @@ class HitomiSourceAdapter(
         }
 
         private fun FacetedSearchScope.toHitomiAutocompleteScope(): String {
-            if (isAll) return "global"
-            return sourceNamespace?.lowercase(Locale.ROOT) ?: when (facet) {
-                SearchFacet.TAG -> HITOMI_TAG_NAMESPACE
-                SearchFacet.ARTIST -> HITOMI_ARTIST_NAMESPACE
-                SearchFacet.CHARACTER -> HITOMI_CHARACTER_NAMESPACE
-                SearchFacet.SERIES -> HITOMI_SERIES_NAMESPACE
-                SearchFacet.GROUP -> HITOMI_GROUP_NAMESPACE
-                SearchFacet.TYPE -> HITOMI_TYPE_NAMESPACE
-                SearchFacet.LANGUAGE -> HITOMI_LANGUAGE_NAMESPACE
-                null -> "global"
-            }
+            val facet = facet ?: return "global"
+            return sourceNamespace?.lowercase(Locale.ROOT) ?: HITOMI_FACETS.defaultNamespace(facet)
         }
 
         private fun FacetedTagSuggestion.termCacheKey(): String {

@@ -99,7 +99,7 @@ object RoomUpgradeScenario {
 
                 // Subsequent writes still honor membership isolation and actual foreign-key cascades.
                 assertFalse(collections.toggleLikeAndSyncSystemCodex("a", "likes-a", "Likes A", shared, emptyList()).nowLiked)
-                collections.deleteCodex("saved")
+                collections.deleteCodexForUndo("saved")
             }
 
             withDatabase(context, name) { database ->

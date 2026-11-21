@@ -2,7 +2,6 @@ package com.theoriacodex.sources.nhentai
 
 import com.google.gson.Gson
 import com.google.gson.JsonArray
-import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.theoriacodex.domain.adapter.CommentsSourceAdapter
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
@@ -10,7 +9,6 @@ import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.Page
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.RelatedPostsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
@@ -22,7 +20,6 @@ import com.theoriacodex.domain.coroutines.mapConcurrent
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.CommentPage
 import com.theoriacodex.domain.model.CreatorProfile
-import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.PostId
@@ -37,25 +34,22 @@ import com.theoriacodex.sources.common.asIntOrNull
 import com.theoriacodex.sources.common.asStringOrNull
 import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.classifyHttpFailure
-import com.theoriacodex.sources.common.elementsOrEmpty
 import com.theoriacodex.sources.common.isSuccessful
 import com.theoriacodex.sources.common.matchesChallenge
 import com.theoriacodex.sources.common.optionalJsonArray
 import com.theoriacodex.sources.common.parseJsonArray as parseSourceJsonArray
 import com.theoriacodex.sources.common.parseJsonObject as parseSourceJsonObject
+import com.theoriacodex.sources.common.requestWithChallengeFallback
 import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.common.sourceNetworkFailure
+import com.theoriacodex.sources.http.RequestPacer
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.http.THEORIA_SOURCE_USER_AGENT
-import com.theoriacodex.sources.media.mimeFromFileExt
 import java.io.IOException
-import java.net.URLEncoder
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import com.theoriacodex.sources.common.objects
 
 class NhentaiSourceAdapter(
     private val httpClient: SourceHttpClient,
@@ -73,25 +67,13 @@ class NhentaiSourceAdapter(
         supportsSortTop = true,
         supportsSortRandom = true,
         supportsExcludeTagsServerSide = true,
-        supportsDateRangeServerSide = false,
-        supportsMinScoreServerSide = false,
-        requiresCredentials = false,
     )
 
-    override val supportedSearchScopes: Set<FacetedSearchScope> = linkedSetOf(
-        FacetedSearchScope.All,
-        FacetedSearchScope(SearchFacet.TAG, NHENTAI_TAG_NAMESPACE),
-        FacetedSearchScope(SearchFacet.ARTIST, NHENTAI_ARTIST_NAMESPACE),
-        FacetedSearchScope(SearchFacet.CHARACTER, NHENTAI_CHARACTER_NAMESPACE),
-        FacetedSearchScope(SearchFacet.SERIES, NHENTAI_SERIES_NAMESPACE),
-        FacetedSearchScope(SearchFacet.GROUP, NHENTAI_GROUP_NAMESPACE),
-        FacetedSearchScope(SearchFacet.TYPE, NHENTAI_TYPE_NAMESPACE),
-        FacetedSearchScope(SearchFacet.LANGUAGE, NHENTAI_LANGUAGE_NAMESPACE),
-    )
+    override val supportedSearchScopes: Set<FacetedSearchScope> = NHENTAI_FACETS.searchScopes
 
-    private val throttleMutex = Mutex()
-    private var lastRequestAtEpochMs: Long = 0L
+    private val pacer = RequestPacer(minRequestIntervalMs)
     private val tagInfoByKey = BoundedLruCache<String, List<NhentaiTagInfo>>(TAG_CACHE_MAX_KEYS)
+    private val mirror = NhentaiMirror(httpClient, pacer)
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> = sourceCall(callContext) {
         val directGalleryId = query.directNhentaiGalleryIdCandidate()
@@ -111,35 +93,21 @@ class NhentaiSourceAdapter(
         val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(1) ?: 1
         val compiledQuery = compileNhentaiQuery(query)
         val params = linkedMapOf("page" to pageIndex.toString())
-        val exactTag = if (query.sort != SortMode.RANDOM) {
-            query.singleIncludeTagCandidate()?.let { tag ->
-                runCatchingPreservingCancellation { resolveNhentaiTag(tag) }.getOrNull()
-            }
-        } else {
-            null
-        }
+        val exactTag = exactTagFor(query)
         val useAllEndpoint = compiledQuery.isBlank() &&
             (query.sort == SortMode.NEWEST || query.sort == SortMode.RANDOM)
 
         val url = searchUrl(query.sort, exactTag, useAllEndpoint, compiledQuery, params)
 
-        val root = requestJsonObjectOrMirrorSearch(
-            url = url,
-            query = params,
-            compiledQuery = compiledQuery,
-            sort = query.sort,
-            pageIndex = pageIndex,
-            useAllEndpoint = useAllEndpoint,
-        )
-        val galleries = root.optionalJsonArray("result").elementsOrEmpty()
-        val posts = galleries.mapNotNull { element ->
-            element.takeIf(JsonElement::isJsonObject)
-                ?.asJsonObject
-                ?.let(::parseNhentaiGallery)
+        val response = requestDirect(url = url, query = params, mirrorOnChallenge = true)
+        val page = if (shouldUseMirrorFallback(response)) {
+            mirror.search(compiledQuery, query.sort, pageIndex, useAllEndpoint)
+        } else {
+            apiSearchPage(response)
         }
-        val normalizedPosts = if (query.sort == SortMode.RANDOM) posts.shuffled() else posts
+        val normalizedPosts = if (query.sort == SortMode.RANDOM) page.posts.shuffled() else page.posts
 
-        val totalPages = root.get("num_pages").asIntOrNull()
+        val totalPages = page.totalPages
         val nextPageToken = if (totalPages != null && pageIndex < totalPages) {
             (pageIndex + 1).toString()
         } else {
@@ -149,6 +117,21 @@ class NhentaiSourceAdapter(
         canonicalPostPage(
             items = normalizedPosts,
             nextPageToken = nextPageToken,
+        )
+    }
+
+    /** A single include tag nhentai knows, for its tag endpoint; random sort and failed lookups use plain search. */
+    private suspend fun exactTagFor(query: Query): NhentaiTagInfo? {
+        if (query.sort == SortMode.RANDOM) return null
+        val tag = query.singleIncludeTagCandidate() ?: return null
+        return runCatchingPreservingCancellation { resolveNhentaiTag(tag) }.getOrNull()
+    }
+
+    private fun apiSearchPage(response: SourceHttpResponse): NhentaiSearchPage {
+        val root = parseJsonObject(response.ensureNhentaiOk())
+        return NhentaiSearchPage(
+            posts = root.optionalJsonArray("result").galleryPosts(),
+            totalPages = root.get("num_pages").asIntOrNull(),
         )
     }
 
@@ -182,7 +165,7 @@ class NhentaiSourceAdapter(
             }
             NHENTAI_GALLERIES_TAGGED_URL
         } else if (useAllEndpoint) {
-            NHENTAI_GALLERIES_ALL_URL
+            NHENTAI_GALLERIES_URL
         } else {
             params["query"] = compiledQuery.ifBlank { NHENTAI_V2_SEARCH_ALL_QUERY }
             mapSortParam(sort)?.let { sort ->
@@ -194,29 +177,20 @@ class NhentaiSourceAdapter(
 
     override suspend fun trendingTags(limit: Int): List<TagSuggestion> = sourceCall(callContext) {
         if (limit <= 0) return@sourceCall emptyList()
-        val root = requireNotNull(requestJsonObject(
-            url = NHENTAI_GALLERIES_ALL_URL,
+        val root = requestJsonObject(
+            url = NHENTAI_GALLERIES_URL,
             query = mapOf("page" to "1"),
-        ))
-        val galleryIds = root.optionalJsonArray("result")
-            .elementsOrEmpty()
+        )
+        val galleryIds = root.objects("result")
             .asSequence()
-            .mapNotNull { element ->
-                element
-                    .takeIf(JsonElement::isJsonObject)
-                    ?.asJsonObject
-                    ?.get("id")
-                    .asIntOrNull()
-            }
+            .mapNotNull { gallery -> gallery.get("id").asIntOrNull() }
             .distinct()
             .take(NHENTAI_TRENDING_GALLERY_SAMPLE_SIZE)
             .toList()
         val detailedGalleries = galleryIds.mapConcurrent { galleryId ->
-            requestJsonObject(
-                url = "$NHENTAI_GALLERY_URL_PREFIX/$galleryId",
-                query = emptyMap(),
-                allowNotFound = true,
-            )
+            // A gallery removed since the listing loaded is skipped.
+            val response = requestDirect(url = "$NHENTAI_GALLERIES_URL/$galleryId", query = emptyMap())
+            if (response.statusCode == 404) null else parseJsonObject(response.ensureNhentaiOk())
         }
         collectNhentaiTagSuggestions(
             galleries = detailedGalleries.filterNotNull(),
@@ -273,60 +247,33 @@ class NhentaiSourceAdapter(
             }
     }
 
-    override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceCall(callContext) {
-        val sort = when (kind) {
-            QuickQueryKind.POPULAR_TODAY -> SortMode.POPULAR
-            QuickQueryKind.TOP_7D -> SortMode.TOP
-            QuickQueryKind.TOP_30D -> SortMode.TOP
-            QuickQueryKind.NEWEST -> SortMode.NEWEST
-            QuickQueryKind.RANDOM -> SortMode.RANDOM
-        }
-        Query(
-            mode = QueryMode.Source(SourceKey.NHENTAI),
-            includeTags = emptyList(),
-            excludeTags = emptyList(),
-            sort = sort,
-            dateRange = null,
-            minScore = null,
-        )
-    }
-
     override suspend fun resolvePost(id: PostId): Post? = sourceCall(callContext) {
         if (id.source != SourceKey.NHENTAI) return@sourceCall null
         val galleryId = id.sourcePostId.trim().takeIf(String::isDigitsOnly) ?: return@sourceCall null
 
         val response = requestDirect(
-            url = "$NHENTAI_GALLERY_URL_PREFIX/$galleryId",
+            url = "$NHENTAI_GALLERIES_URL/$galleryId",
             query = emptyMap(),
+            mirrorOnChallenge = true,
         )
         if (response.statusCode == 404) return@sourceCall null
         if (shouldUseMirrorFallback(response)) {
-            return@sourceCall resolvePostFromMirrorPage(galleryId)
+            return@sourceCall mirror.resolvePost(galleryId)
         }
-        if (!response.isSuccessful()) {
-            throw SourceAdapterException(
-                reason = mapHttpFailure(response.statusCode),
-                message = "NHentai request failed (${response.statusCode})",
-            )
-        }
-
-        val root = parseJsonObject(response.body)
-        parseNhentaiGallery(root)
+        parseNhentaiGallery(parseJsonObject(response.ensureNhentaiOk()))
     }
 
     /** Uses the site's More like this recommendations without substituting a tag search. */
     override suspend fun relatedPosts(seed: PostId, limit: Int): List<Post> = sourceCall(callContext) {
         if (seed.source != SourceKey.NHENTAI || limit <= 0) return@sourceCall emptyList()
         val galleryId = seed.sourcePostId.trim().takeIf(String::isDigitsOnly) ?: return@sourceCall emptyList()
-        val root = requireNotNull(requestJsonObject(url = "$NHENTAI_GALLERY_URL_PREFIX/$galleryId/related"))
+        val root = requestJsonObject(url = "$NHENTAI_GALLERIES_URL/$galleryId/related")
         val galleries = root.optionalJsonArray("result") ?: throw SourceAdapterException(
             reason = SourceFailureReason.PARSE,
             message = "NHentai related galleries were not found in the response",
         )
-        galleries.asSequence()
-            .mapNotNull { element ->
-                element.takeIf(JsonElement::isJsonObject)?.asJsonObject?.let(::parseNhentaiGallery)
-            }
+        galleries.galleryPosts()
+            .asSequence()
             .filterNot { post -> post.id.sourcePostId == galleryId }
             .distinctBy(Post::id)
             .take(limit.coerceAtMost(NHENTAI_MAX_RELATED_POSTS))
@@ -341,87 +288,34 @@ class NhentaiSourceAdapter(
         val galleryId = post.id.sourcePostId.trim().takeIf { post.id.source == sourceKey && it.isDigitsOnly() }
             ?: return@sourceCall CommentPage(emptyList(), total = 0, nextPageToken = null)
         val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(1) ?: 1
-        val root = requireNotNull(
-            requestJsonObject(
-                url = "$NHENTAI_GALLERY_URL_PREFIX/$galleryId/comments",
-                query = mapOf("page" to pageIndex.toString(), "per_page" to NHENTAI_COMMENTS_PER_PAGE.toString()),
-            ),
+        val root = requestJsonObject(
+            url = "$NHENTAI_GALLERIES_URL/$galleryId/comments",
+            query = mapOf("page" to pageIndex.toString(), "per_page" to NHENTAI_COMMENTS_PER_PAGE.toString()),
         )
         parseNhentaiCommentPage(root, pageIndex)
-    }
-
-    private suspend fun requestJsonObjectOrMirrorSearch(
-        url: String,
-        query: Map<String, String>,
-        compiledQuery: String,
-        sort: SortMode,
-        pageIndex: Int,
-        useAllEndpoint: Boolean,
-    ): JsonObject {
-        val response = requestDirect(url = url, query = query)
-        if (shouldUseMirrorFallback(response)) {
-            return requestMirrorSearch(
-                compiledQuery = compiledQuery,
-                sort = sort,
-                pageIndex = pageIndex,
-                useAllEndpoint = useAllEndpoint,
-            )
-        }
-        if (!response.isSuccessful()) {
-            throw SourceAdapterException(
-                reason = mapHttpFailure(response.statusCode),
-                message = "NHentai request failed (${response.statusCode})",
-            )
-        }
-        return parseJsonObject(response.body)
     }
 
     private suspend fun requestJsonObject(
         url: String,
         query: Map<String, String> = emptyMap(),
-        allowNotFound: Boolean = false,
-    ): JsonObject? {
-        val response = requestDirect(url = url, query = query)
-
-        if (allowNotFound && response.statusCode == 404) {
-            return null
-        }
-
-        if (!response.isSuccessful()) {
-            throw SourceAdapterException(
-                reason = mapHttpFailure(response.statusCode),
-                message = "NHentai request failed (${response.statusCode})",
-            )
-        }
-
-        return parseJsonObject(response.body)
-    }
+    ): JsonObject = parseJsonObject(requestDirect(url = url, query = query).ensureNhentaiOk())
 
     private suspend fun requestJsonArrayPost(
         url: String,
         body: String,
-    ): JsonArray {
-        val response = requestJsonPost(url = url, body = body)
-        if (!response.isSuccessful()) {
-            throw SourceAdapterException(
-                reason = mapHttpFailure(response.statusCode),
-                message = "NHentai request failed (${response.statusCode})",
-            )
-        }
-        return parseJsonArray(response.body)
-    }
+    ): JsonArray = parseSourceJsonArray(jsonBody(requestJsonPost(url = url, body = body).ensureNhentaiOk()), gson, "NHentai")
 
+    /** With [mirrorOnChallenge], a challenge the HTTP client turned into an outage answers like one, for the mirror. */
     private suspend fun requestDirect(
         url: String,
         query: Map<String, String>,
+        mirrorOnChallenge: Boolean = false,
     ): SourceHttpResponse {
-        throttle()
+        pacer.awaitTurn()
+        suspend fun get() = httpClient.get(url = url, query = query, headers = NHENTAI_DEFAULT_HEADERS)
+        if (mirrorOnChallenge) return requestWithChallengeFallback("NHentai") { get() }
         return try {
-            httpClient.get(
-                url = url,
-                query = query,
-                headers = NHENTAI_DEFAULT_HEADERS,
-            )
+            get()
         } catch (error: IOException) {
             sourceNetworkFailure("NHentai", error)
         }
@@ -431,7 +325,7 @@ class NhentaiSourceAdapter(
         url: String,
         body: String,
     ): SourceHttpResponse {
-        throttle()
+        pacer.awaitTurn()
         return try {
             httpClient.postJson(
                 url = url,
@@ -455,11 +349,7 @@ class NhentaiSourceAdapter(
         return requestJsonArrayPost(
             url = NHENTAI_TAGS_SEARCH_URL,
             body = body,
-        ).mapNotNull { element ->
-            element.takeIf(JsonElement::isJsonObject)
-                ?.asJsonObject
-                ?.let(::parseTagInfo)
-        }.also { tags ->
+        ).objects().mapNotNull(::parseTagInfo).also { tags ->
             tags.forEach(::cacheTagInfo)
         }
     }
@@ -480,165 +370,19 @@ class NhentaiSourceAdapter(
             }
     }
 
-    private suspend fun requestMirrorSearch(
-        compiledQuery: String,
-        sort: SortMode,
-        pageIndex: Int,
-        useAllEndpoint: Boolean,
-    ): JsonObject {
-        val pathAndQuery = if (useAllEndpoint) {
-            "/?page=$pageIndex"
-        } else {
-            val params = linkedMapOf(
-                "q" to compiledQuery,
-                "page" to pageIndex.toString(),
-            )
-            mapMirrorSortParam(sort)?.let { params["sort"] = it }
-            "/search/?" + params.entries.joinToString("&") { (key, value) ->
-                "${key.urlEncode()}=${value.urlEncode()}"
-            }
-        }
-        val body = requestMirror(pathAndQuery)
-        return NhentaiMirrorParser.parseSearchPage(body)
-    }
+    private fun parseJsonObject(response: SourceHttpResponse): JsonObject =
+        parseSourceJsonObject(jsonBody(response), gson, "NHentai")
 
-    private suspend fun resolvePostFromMirrorPage(galleryId: String): Post? {
-        val body = requestMirror("/g/$galleryId/1/")
-        val mediaId = NHENTAI_MIRROR_PAGE_IMAGE_REGEX.find(body)?.groupValues?.getOrNull(1)
-            ?: return null
-        val firstPageExt = NHENTAI_MIRROR_PAGE_IMAGE_REGEX.find(body)?.groupValues?.getOrNull(2)
-            ?.lowercase()
-            ?: "webp"
-        val pageCount = NHENTAI_MIRROR_PAGE_COUNT_REGEX.find(body)
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.toIntOrNull()
-            ?.coerceAtLeast(1)
-            ?: 1
-        val title = NhentaiMirrorParser.parseTitle(body)
-            ?.removeSuffix(" - Page 1")
-            ?.removeSuffix(" » nhentai")
-            ?.trim()
-            ?.takeIf(String::isNotBlank)
-        val galleryBase = "$NHENTAI_IMAGES_BASE/galleries/$mediaId"
-        val mediaRefs = (1..pageCount).map { page ->
-            val primaryUrl = "$galleryBase/$page.$firstPageExt"
-            ImageRef(
-                url = primaryUrl,
-                localPath = null,
-                mime = mimeFromFileExt(firstPageExt),
-                fallbackUrls = imageUrlCandidates(galleryBase, page, firstPageExt),
-                thumbnailUrl = "$NHENTAI_THUMBS_BASE/galleries/$mediaId/${page}t.$firstPageExt",
-            )
-        }
-        val preview = ImageRef(
-            url = "$NHENTAI_THUMBS_BASE/galleries/$mediaId/thumb.$firstPageExt",
-            localPath = null,
-            mime = mimeFromFileExt(firstPageExt),
-        )
-        val post = Post(
-            id = PostId(SourceKey.NHENTAI, galleryId),
-            preview = preview,
-            full = mediaRefs.firstOrNull(),
-            media = mediaRefs,
-            pageUrl = "https://nhentai.net/g/$galleryId/",
-            width = null,
-            height = null,
-            canonicalTags = emptyList(),
-            rawTags = emptyList(),
-            authorName = null,
-            createdAtEpochMs = null,
-            title = cleanNhentaiTitle(title),
-            mediaCount = pageCount,
-        )
-        val metadata = fetchMirrorGalleryMetadata(galleryId) ?: return post
-        val creators = metadata.taxonomy.nhentaiCreatorProfiles()
-        return post.copy(
-            creatorProfile = creators.firstOrNull(),
-            creatorProfiles = creators,
-            canonicalTags = metadata.canonicalTags,
-            rawTags = metadata.canonicalTags,
-            authorName = metadata.authorName,
-            taxonomy = metadata.taxonomy,
-        )
-    }
-
-    private suspend fun fetchMirrorGalleryMetadata(galleryId: String): NhentaiMirrorMetadata? {
-        NHENTAI_METADATA_MIRROR_BASES.forEach { baseUrl ->
-            val response = requestMetadataMirror("$baseUrl/g/$galleryId/")
-            if (response != null && response.statusCode in 200..299) {
-                NhentaiMirrorParser.parseGalleryMetadata(response.body)?.let { metadata ->
-                    if (metadata.taxonomy.isNotEmpty()) return metadata
-                }
-            }
-        }
-        return null
-    }
-
-    private suspend fun requestMetadataMirror(url: String): SourceHttpResponse? {
-        throttle()
-        return runCatchingPreservingCancellation {
-            httpClient.get(
-                url = url,
-                query = emptyMap(),
-                headers = NHENTAI_METADATA_MIRROR_HEADERS,
-            )
-        }.getOrNull()
-    }
-
-    private suspend fun requestMirror(pathAndQuery: String): String {
-        val mirrorUrl = JINA_MIRROR_BASE + NHENTAI_WEB_BASE + pathAndQuery.removePrefix("/")
-        val response = try {
-            httpClient.get(
-                url = mirrorUrl,
-                query = emptyMap(),
-                headers = JINA_REQUEST_HEADERS,
-            )
-        } catch (error: IOException) {
-            sourceNetworkFailure("NHentai mirror", error)
-        }
-        if (!response.isSuccessful()) {
-            throw SourceAdapterException(
-                reason = mapHttpFailure(response.statusCode),
-                message = "NHentai mirror request failed (${response.statusCode})",
-            )
-        }
-        return response.body
-    }
-
-    private suspend fun throttle() {
-        throttleMutex.withLock {
-            val now = System.currentTimeMillis()
-            val waitMs = minRequestIntervalMs - (now - lastRequestAtEpochMs)
-            if (waitMs > 0L) {
-                delay(waitMs)
-            }
-            lastRequestAtEpochMs = System.currentTimeMillis()
-        }
-    }
-
-    private fun parseJsonObject(body: String): JsonObject {
-        val trimmed = body.trimStart()
+    /** The trimmed body, refusing an HTML page: nhentai answers a blocked request with one. */
+    private fun jsonBody(response: SourceHttpResponse): String {
+        val trimmed = response.body.trimStart()
         if (trimmed.startsWith("<")) {
             throw SourceAdapterException(
                 reason = SourceFailureReason.NETWORK,
                 message = "NHentai returned non-JSON response (possibly blocked)",
             )
         }
-
-        return parseSourceJsonObject(trimmed, gson, "NHentai")
-    }
-
-    private fun parseJsonArray(body: String): JsonArray {
-        val trimmed = body.trimStart()
-        if (trimmed.startsWith("<")) {
-            throw SourceAdapterException(
-                reason = SourceFailureReason.NETWORK,
-                message = "NHentai returned non-JSON response (possibly blocked)",
-            )
-        }
-
-        return parseSourceJsonArray(trimmed, gson, "NHentai")
+        return trimmed
     }
 
     private fun parseTagInfo(raw: JsonObject): NhentaiTagInfo? {
@@ -714,25 +458,13 @@ private fun NhentaiTagInfo.toFacetedSuggestion(): FacetedTagSuggestion {
 }
 
 internal fun nhentaiTaxonomy(type: String?): Pair<SearchFacet, String> {
-    return when (type?.trim()?.lowercase()) {
-        NHENTAI_ARTIST_NAMESPACE -> SearchFacet.ARTIST to NHENTAI_ARTIST_NAMESPACE
-        NHENTAI_CHARACTER_NAMESPACE -> SearchFacet.CHARACTER to NHENTAI_CHARACTER_NAMESPACE
-        NHENTAI_SERIES_NAMESPACE -> SearchFacet.SERIES to NHENTAI_SERIES_NAMESPACE
-        NHENTAI_GROUP_NAMESPACE -> SearchFacet.GROUP to NHENTAI_GROUP_NAMESPACE
-        NHENTAI_TYPE_NAMESPACE -> SearchFacet.TYPE to NHENTAI_TYPE_NAMESPACE
-        NHENTAI_LANGUAGE_NAMESPACE -> SearchFacet.LANGUAGE to NHENTAI_LANGUAGE_NAMESPACE
-        else -> SearchFacet.TAG to NHENTAI_TAG_NAMESPACE
-    }
+    val namespace = type?.trim()?.lowercase()
+    val facet = namespace?.let(NHENTAI_FACETS::facetOf) ?: return SearchFacet.TAG to NHENTAI_TAG_NAMESPACE
+    return facet to namespace
 }
 
 internal fun String.isNhentaiTaxonomyPath(): Boolean {
-    return startsWith("/tag/") ||
-        startsWith("/artist/") ||
-        startsWith("/character/") ||
-        startsWith("/parody/") ||
-        startsWith("/group/") ||
-        startsWith("/language/") ||
-        startsWith("/category/")
+    return NHENTAI_FACETS.namespaces.any { namespace -> startsWith("/$namespace/") }
 }
 
 internal fun String.nhentaiTaxonomyNamespace(): String? {
@@ -742,13 +474,21 @@ internal fun String.nhentaiTaxonomyNamespace(): String? {
         .takeIf(String::isNotBlank)
 }
 
-private fun mapHttpFailure(statusCode: Int): SourceFailureReason {
-    return classifyHttpFailure(
-        statusCode = statusCode,
-        unauthorizedReason = SourceFailureReason.UNKNOWN,
-        forbiddenReason = SourceFailureReason.UNKNOWN,
+/** This response, or the failure nhentai's status means: 401 and 403 are not credential problems here. */
+internal fun SourceHttpResponse.ensureNhentaiOk(label: String = "NHentai"): SourceHttpResponse {
+    if (isSuccessful()) return this
+    throw SourceAdapterException(
+        reason = classifyHttpFailure(
+            statusCode = statusCode,
+            unauthorizedReason = SourceFailureReason.UNKNOWN,
+            forbiddenReason = SourceFailureReason.UNKNOWN,
+        ),
+        message = "$label request failed ($statusCode)",
     )
 }
+
+/** API gallery records in [this] array, skipping entries that are not galleries. */
+private fun JsonArray?.galleryPosts(): List<Post> = objects().mapNotNull(::parseNhentaiGallery)
 
 internal fun imageExtension(type: String?): String {
     return when (type?.trim()?.lowercase()) {
@@ -758,12 +498,6 @@ internal fun imageExtension(type: String?): String {
         "jpeg" -> "jpg"
         else -> "jpg"
     }
-}
-
-private fun imageUrlCandidates(baseUrl: String, page: Int, primaryExt: String): List<String> {
-    return (listOf(primaryExt) + NHENTAI_IMAGE_FALLBACK_EXTENSIONS)
-        .distinct()
-        .map { ext -> "$baseUrl/$page.$ext" }
 }
 
 private fun String.isDigitsOnly(): Boolean {
@@ -780,25 +514,14 @@ private fun tagCacheKey(value: String): String {
     return normalizeNhentaiTag(value).lowercase()
 }
 
-private fun String.urlEncode(): String {
-    return URLEncoder.encode(this, Charsets.UTF_8.name()).replace("+", "%20")
-}
-
-private const val NHENTAI_WEB_BASE = "nhentai.net/"
-private const val NHENTAI_GALLERIES_ALL_URL = "https://nhentai.net/api/v2/galleries"
+private const val NHENTAI_GALLERIES_URL = "https://nhentai.net/api/v2/galleries"
 private const val NHENTAI_GALLERIES_TAGGED_URL = "https://nhentai.net/api/v2/galleries/tagged"
 private const val NHENTAI_GALLERIES_SEARCH_URL = "https://nhentai.net/api/v2/search"
-private const val NHENTAI_GALLERY_URL_PREFIX = "https://nhentai.net/api/v2/galleries"
 private const val NHENTAI_TAGS_SEARCH_URL = "https://nhentai.net/api/v2/tags/search"
 internal const val NHENTAI_IMAGES_BASE = "https://i.nhentai.net"
 internal const val NHENTAI_THUMBS_BASE = "https://t.nhentai.net"
 private const val NHENTAI_TRENDING_GALLERY_SAMPLE_SIZE = 6
 private const val NHENTAI_MAX_RELATED_POSTS = 6
-private const val JINA_MIRROR_BASE = "https://r.jina.ai/http://"
-private val NHENTAI_METADATA_MIRROR_BASES = listOf(
-    "https://nhentai.to",
-    "https://nhentai.website",
-)
 internal const val NHENTAI_SEARCH_PAGE_SIZE = 25
 private const val NHENTAI_V2_SEARCH_ALL_QUERY = "*"
 private val NHENTAI_DEFAULT_HEADERS = mapOf(
@@ -809,21 +532,3 @@ private val NHENTAI_DEFAULT_HEADERS = mapOf(
 private val NHENTAI_JSON_POST_HEADERS = NHENTAI_DEFAULT_HEADERS + (
     "Content-Type" to "application/json"
 )
-private val JINA_REQUEST_HEADERS = mapOf(
-    "User-Agent" to "Mozilla/5.0",
-    "Accept" to "text/plain, */*",
-)
-private val NHENTAI_METADATA_MIRROR_HEADERS = mapOf(
-    "User-Agent" to "Mozilla/5.0",
-    "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-)
-private val NHENTAI_IMAGE_FALLBACK_EXTENSIONS = listOf("webp", "jpg", "png", "gif")
-private val NHENTAI_DIRECT_LOOKUP_FILTER_TAGS = NHENTAI_LANGUAGE_FILTER_TAGS + NHENTAI_FULL_COLOR_TAG
-internal val NHENTAI_MIRROR_THUMB_REGEX =
-    Regex("""(https://t\d*\.nhentai\.net/galleries/(\d+)/thumb[^\)]*)""")
-internal val NHENTAI_MIRROR_GALLERY_LINK_REGEX = Regex("""https?://nhentai\.net/g/(\d+)/""")
-internal val NHENTAI_MIRROR_PAGE_LINK_REGEX = Regex("""[?&]page=(\d+)""")
-internal val NHENTAI_MIRROR_RESULT_COUNT_REGEX = Regex("""(?m)^#+\s*([\d,]+)\s+results\b""")
-private val NHENTAI_MIRROR_PAGE_IMAGE_REGEX =
-    Regex("""https://i\d*\.nhentai\.net/galleries/(\d+)/1\.(webp|jpg|jpeg|png|gif)""")
-private val NHENTAI_MIRROR_PAGE_COUNT_REGEX = Regex("""\b1\s+of\s+(\d+)\b""")

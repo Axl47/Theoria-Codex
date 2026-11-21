@@ -10,7 +10,13 @@ import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.data.repository.UiRestoreRepository
+import com.theoriacodex.app.search.state.SearchSourceScope
+import com.theoriacodex.data.repository.SourceRuntimeSettings
+import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
+import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.SourceKey
 
 fun testSearchCoordinator(
     registry: SourceAdapterRegistry,
@@ -42,3 +48,41 @@ fun testSearchCoordinator(
         postResolutions = postResolutions,
     )
 }
+
+/** What [scope] searches under default settings, which enable every built-in source. */
+fun SearchCoordinator.defaultSources(scope: SearchSourceScope): SearchSources =
+    SearchSources.of(SourceRuntimeSettings(), scope, availableSources.toSet())
+
+suspend fun SearchCoordinator.executeInitial(query: Query, sourceScope: SearchSourceScope): SearchExecutionResult =
+    executeInitial(query, sourceScope, defaultSources(sourceScope))
+
+suspend fun SearchCoordinator.retrySource(
+    query: Query,
+    sourceScope: SearchSourceScope,
+    previous: SearchContinuation?,
+    source: SourceKey,
+): SearchPageResult = retrySource(query, sourceScope, defaultSources(sourceScope), previous, source)
+
+suspend fun SearchCoordinator.fetchAutocomplete(
+    query: Query,
+    sourceScope: SearchSourceScope,
+    selectedScope: FacetedSearchScope,
+    input: String,
+    onUpdate: suspend (SearchAutocompleteResult) -> Unit = {},
+): SearchAutocompleteResult = suggestions.fetchAutocomplete(query, defaultSources(sourceScope).enabled, selectedScope, input, onUpdate)
+
+fun SearchCoordinator.cachedAutocomplete(
+    query: Query,
+    sourceScope: SearchSourceScope,
+    selectedScope: FacetedSearchScope,
+    input: String,
+): SearchAutocompleteResult = suggestions.cachedAutocomplete(query, defaultSources(sourceScope).enabled, selectedScope, input)
+
+suspend fun SearchCoordinator.fetchTrending(
+    query: Query,
+    sourceScope: SearchSourceScope,
+    forceRefresh: Boolean = false,
+): List<TagSuggestion> = suggestions.fetchTrending(query, defaultSources(sourceScope).enabled, forceRefresh)
+
+fun SearchCoordinator.cachedTrending(query: Query, sourceScope: SearchSourceScope): List<TagSuggestion> =
+    suggestions.cachedTrending(query, defaultSources(sourceScope).enabled)

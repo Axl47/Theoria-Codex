@@ -6,9 +6,11 @@ import com.theoriacodex.app.search.SearchContinuation
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.search.SearchExecutionResult
 import com.theoriacodex.app.search.SearchPageResult
+import com.theoriacodex.app.search.SearchSources
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.SavedSearchEntry
+import com.theoriacodex.data.repository.SourceRuntimeSettings
 import com.theoriacodex.domain.coroutines.mapConcurrent
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
@@ -52,7 +54,15 @@ class SavedSearchFeedLoader(
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private var availableSources = coordinator.availableSources.toSet()
-    fun updateAvailableSources(sources: Set<SourceKey>) { availableSources = sources }
+    private var runtime = SourceRuntimeSettings()
+
+    /** Saved searches run on [sources] with [runtime]'s Unified sources and weights. */
+    fun updateEnvironment(sources: Set<SourceKey>, runtime: SourceRuntimeSettings) {
+        availableSources = sources
+        this.runtime = runtime
+    }
+
+    private fun sourcesFor(scope: SearchSourceScope) = SearchSources.of(runtime, scope, availableSources)
 
     suspend fun load(branch: SavedSearchBranch, retry: Boolean): SavedSearchBranch = withContext(dispatcher) {
         try {
@@ -90,7 +100,7 @@ class SavedSearchFeedLoader(
     private suspend fun advance(part: SavedSearchQueryBranch): SavedSearchQueryBranch {
         if (!availableSources.containsAll(part.scope.explicitSources)) return part.copy(requestError = "Saved search sources are unavailable")
         return if (!part.started) {
-            when (val result = coordinator.executeInitial(part.query, part.scope)) {
+            when (val result = coordinator.executeInitial(part.query, part.scope, sourcesFor(part.scope))) {
                 is SearchExecutionResult.Success -> part.copy(
                     posts = result.posts.distinctByFile(), continuation = result.continuation,
                     started = true, failures = failures(emptyMap(), result.statuses), requestError = null,
@@ -108,7 +118,7 @@ class SavedSearchFeedLoader(
         val failed = part.failures.keys + part.continuation.failedSources
         if (failed.isEmpty()) return advance(part)
         val attempts = failed.toList().mapConcurrent(concurrency = 2) { source ->
-            source to coordinator.retrySource(part.query, part.scope, part.continuation, source)
+            source to coordinator.retrySource(part.query, part.scope, sourcesFor(part.scope), part.continuation, source)
         }
         return attempts.fold(part.copy(requestError = null)) { current, (source, result) -> current.accept(result, source) }
     }
@@ -124,11 +134,13 @@ class SavedSearchFeedLoader(
             is SearchPageResult.Success -> {
                 val next = if (retriedSource == null || scope is SearchSourceScope.Single) result.continuation else {
                     val before = checkNotNull(continuation)
+                    val retried = result.continuation.cursor
                     before.copy(
-                        unifiedPageTokens = before.unifiedPageTokens +
-                            (retriedSource to result.continuation.unifiedPageTokens[retriedSource]),
-                        unifiedQueryOverrides = before.unifiedQueryOverrides +
-                            result.continuation.unifiedQueryOverrides.filterKeys { it == retriedSource },
+                        cursor = before.cursor.copy(
+                            pageTokens = before.cursor.pageTokens + (retriedSource to retried.pageTokens[retriedSource]),
+                            queriesBySource = before.cursor.queriesBySource +
+                                retried.queriesBySource.filterKeys { it == retriedSource },
+                        ),
                         failedSources = before.failedSources - retriedSource,
                     )
                 }

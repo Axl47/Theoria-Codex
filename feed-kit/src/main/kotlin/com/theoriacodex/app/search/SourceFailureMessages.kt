@@ -45,6 +45,10 @@ fun buildSourceFailureMessage(statuses: List<SourceRunStatus>): String? {
     return details.joinToString(separator = "\n") + suffix
 }
 
+/** Why a request failed: the sources' errors, else the account sources need, else [fallback]. */
+fun sourceFailureMessage(statuses: List<SourceRunStatus>, fallback: String): String =
+    buildSourceFailureMessage(statuses) ?: buildSourceAuthErrorMessage(statuses) ?: fallback
+
 private fun sourceFailureDetail(reason: SourceFailureReason?, rawMessage: String): String {
     return when (reason) {
         SourceFailureReason.RATE_LIMITED -> "Rate limited. Wait a bit, then retry."

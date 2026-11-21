@@ -28,6 +28,11 @@ extensions.configure<LibraryExtension> {
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
+
+    // A test Viewer owner that :app tests reuse.
+    testFixtures {
+        enable = true
+    }
 }
 
 dependencies {
@@ -60,6 +65,16 @@ dependencies {
     implementation(libs.androidx.media3.effect)
     implementation(libs.androidx.media3.session)
     implementation(libs.kotlinx.coroutines.core)
+
+    testFixturesImplementation(project(":app-logic"))
+    testFixturesImplementation(project(":core-domain"))
+    testFixturesImplementation(project(":media-kit"))
+    testFixturesImplementation(project(":feed-kit"))
+    testFixturesImplementation(libs.androidx.lifecycle.viewmodel.savedstate)
+    testFixturesImplementation(libs.kotlinx.coroutines.core)
+    // The Compose compiler plugin needs the runtime on the fixtures classpath.
+    testFixturesImplementation(platform(libs.androidx.compose.bom))
+    testFixturesImplementation(libs.androidx.compose.ui)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

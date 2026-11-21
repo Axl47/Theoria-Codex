@@ -8,7 +8,6 @@ import com.theoriacodex.app.media.postPlaybackMediaCandidate
 import com.theoriacodex.app.source.exposedRealSources
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.search.state.SearchSourceScope
-import com.theoriacodex.app.viewer.ViewerMediaOverviewKind
 import com.theoriacodex.app.viewer.viewerMediaOverviewItems
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.model.PostId
@@ -19,9 +18,8 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.RealAdapterRegistry
-import com.theoriacodex.sources.credentials.GelbooruCredentials
+import com.theoriacodex.sources.credentials.UserApiKey
 import com.theoriacodex.sources.credentials.PixivAuthTokens
-import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.health.ProviderAutocompleteProbe
 import com.theoriacodex.sources.health.ProviderProbeCase
@@ -247,25 +245,16 @@ internal abstract class LiveSearchCoordinatorRouteTestFixture {
 
         override suspend fun clearPixivTokens() = Unit
 
-        override suspend fun getGelbooruCredentials(): GelbooruCredentials? {
-            val userId = System.getenv("THEORIA_GELBOORU_USER_ID")?.takeIf(String::isNotBlank) ?: return null
-            val apiKey = System.getenv("THEORIA_GELBOORU_API_KEY")?.takeIf(String::isNotBlank) ?: return null
-            return GelbooruCredentials(userId = userId, apiKey = apiKey)
+        override suspend fun userApiKey(source: SourceKey): UserApiKey? {
+            val prefix = when (source) {
+                SourceKey.GELBOORU -> "THEORIA_GELBOORU"
+                SourceKey.RULE34XXX -> "THEORIA_RULE34XXX"
+                else -> return null
+            }
+            val userId = System.getenv("${prefix}_USER_ID")?.takeIf(String::isNotBlank) ?: return null
+            val apiKey = System.getenv("${prefix}_API_KEY")?.takeIf(String::isNotBlank) ?: return null
+            return UserApiKey(userId = userId, apiKey = apiKey)
         }
-
-        override suspend fun saveGelbooruCredentials(credentials: GelbooruCredentials) = Unit
-
-        override suspend fun clearGelbooruCredentials() = Unit
-
-        override suspend fun getRule34XxxCredentials(): Rule34XxxCredentials? {
-            val userId = System.getenv("THEORIA_RULE34XXX_USER_ID")?.takeIf(String::isNotBlank) ?: return null
-            val apiKey = System.getenv("THEORIA_RULE34XXX_API_KEY")?.takeIf(String::isNotBlank) ?: return null
-            return Rule34XxxCredentials(userId = userId, apiKey = apiKey)
-        }
-
-        override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) = Unit
-
-        override suspend fun clearRule34XxxCredentials() = Unit
     }
 }
 

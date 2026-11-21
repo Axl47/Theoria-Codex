@@ -4,6 +4,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
+import com.theoriacodex.sources.common.FacetNamespaces
 
 internal fun compileNhentaiQuery(query: Query): String {
     val include = query.includeTerms.mapNotNull(SearchTerm::compileNhentaiTerm)
@@ -22,15 +23,7 @@ internal fun SearchTerm.compileNhentaiTerm(): String? {
 }
 
 private fun SearchTerm.resolvedNhentaiNamespace(): String? {
-    val expected = when (facet) {
-        SearchFacet.TAG -> NHENTAI_TAG_NAMESPACE
-        SearchFacet.ARTIST -> NHENTAI_ARTIST_NAMESPACE
-        SearchFacet.CHARACTER -> NHENTAI_CHARACTER_NAMESPACE
-        SearchFacet.SERIES -> NHENTAI_SERIES_NAMESPACE
-        SearchFacet.GROUP -> NHENTAI_GROUP_NAMESPACE
-        SearchFacet.TYPE -> NHENTAI_TYPE_NAMESPACE
-        SearchFacet.LANGUAGE -> NHENTAI_LANGUAGE_NAMESPACE
-    }
+    val expected = NHENTAI_FACETS.defaultNamespace(facet)
     val explicit = sourceNamespace?.trim()?.lowercase()
     return when {
         explicit == null && facet == SearchFacet.TAG -> null
@@ -116,6 +109,17 @@ internal const val NHENTAI_SERIES_NAMESPACE = "parody"
 internal const val NHENTAI_GROUP_NAMESPACE = "group"
 internal const val NHENTAI_TYPE_NAMESPACE = "category"
 internal const val NHENTAI_LANGUAGE_NAMESPACE = "language"
+
+/** nhentai's namespaces by facet; series are "parody" and types "category". */
+internal val NHENTAI_FACETS = FacetNamespaces(
+    NHENTAI_TAG_NAMESPACE to SearchFacet.TAG,
+    NHENTAI_ARTIST_NAMESPACE to SearchFacet.ARTIST,
+    NHENTAI_CHARACTER_NAMESPACE to SearchFacet.CHARACTER,
+    NHENTAI_SERIES_NAMESPACE to SearchFacet.SERIES,
+    NHENTAI_GROUP_NAMESPACE to SearchFacet.GROUP,
+    NHENTAI_TYPE_NAMESPACE to SearchFacet.TYPE,
+    NHENTAI_LANGUAGE_NAMESPACE to SearchFacet.LANGUAGE,
+)
 internal val NHENTAI_LANGUAGE_FILTER_TAGS = setOf("english", "chinese", "japanese")
 internal val NHENTAI_WHITESPACE_REGEX = Regex("\\s+")
 private const val MAX_NHENTAI_QUERY_TERMS = 40

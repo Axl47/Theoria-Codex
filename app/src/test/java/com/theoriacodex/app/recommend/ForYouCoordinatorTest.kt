@@ -19,7 +19,6 @@ import com.theoriacodex.data.repository.SourceRuntimeSettings
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.defaultRecommendationProfiles
 import com.theoriacodex.domain.adapter.Page
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.SourceCapabilities
@@ -27,7 +26,6 @@ import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
@@ -377,9 +375,6 @@ class ForYouCoordinatorTest {
             supportsSortTop = true,
             supportsSortRandom = true,
             supportsExcludeTagsServerSide = true,
-            supportsDateRangeServerSide = true,
-            supportsMinScoreServerSide = true,
-            requiresCredentials = false,
         )
         private val post = testPost(
             source = sourceKey,
@@ -431,17 +426,6 @@ class ForYouCoordinatorTest {
         }
 
         override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = emptyList()
-
-        override suspend fun quickQuery(kind: QuickQueryKind): Query {
-            return Query(
-                mode = QueryMode.Source(sourceKey),
-                includeTags = emptyList(),
-                excludeTags = emptyList(),
-                sort = SortMode.NEWEST,
-                dateRange = null,
-                minScore = null,
-            )
-        }
 
         override suspend fun resolvePost(id: PostId): Post? = post.takeIf { candidate -> candidate.id == id }
     }

@@ -1,7 +1,6 @@
 package com.theoriacodex.data.android.room
 
 import androidx.room.withTransaction
-import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchEntry
@@ -12,14 +11,12 @@ import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.storage.RecentSearchPayloadCodec
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.data.repository.mergeRecentActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 
 const val DEFAULT_RECENT_WATCHED_LIMIT = 200
@@ -33,7 +30,8 @@ class RoomRecentsRepository(
 ) : RecentsRepository {
     private val dao = database.recentsDao()
     private val contentDao = database.codexLikesDao()
-    private val sharedPostPayloads = SharedPostPayloadWriter(contentDao)
+    private val sharedPosts = SharedPosts(contentDao)
+    private val writer = RecentsWriter(dao, sharedPosts)
 
     /** Every watched collector projects the same bounded query, so one retained decode serves them all. */
     private val watchedPayloads = RetainedPostPayloads(LocalPostPayloadCodec::decode)
@@ -65,16 +63,7 @@ class RoomRecentsRepository(
     }.distinctUntilChanged().flowOn(Dispatchers.Default)
 
     override fun observeSearches(): Flow<List<RecentSearchEntry>> = dao.observeSearches()
-        .map { rows -> rows.map(::decodeSearch) }.flowOn(Dispatchers.Default)
-
-    private fun decodeSearch(row: RecentSearchEntity): RecentSearchEntry {
-        val payload = RecentSearchPayloadCodec.decodeJson(row.queryPayloadJson)
-        return RecentSearchEntry(payload.query, row.queryHash, row.searchedAtEpochMs,
-            payload.kind, payload.sources, payload.sourceTags)
-    }
-
-    override fun observeActivity(): Flow<List<RecentActivityEntry>> =
-        combine(observeWatchedPosts(), observeSearches(), ::mergeRecentActivity).flowOn(Dispatchers.Default)
+        .map { rows -> rows.map(RecentSearchEntity::toDomain) }.flowOn(Dispatchers.Default)
 
     override suspend fun recordWatchedPost(
         post: Post,
@@ -87,23 +76,16 @@ class RoomRecentsRepository(
             val recordedAt = clock()
             val previous = dao.watched(post.id.source.id, post.id.sourcePostId, section.name)
             val preserve = origin == ViewerStreamSource.RECENTS && previous != null
-            sharedPostPayloads.upsert(post)
-            dao.upsertWatched(
-                RecentWatchedEntity(
-                    post.id.source.id,
-                    post.id.sourcePostId,
-                    section.name,
-                    recordedAt,
-                    dao.nextWatchedSequence(),
-                    if (preserve) previous.origin else origin.name,
-                    if (preserve) previous.originQueryHash else originQueryHash,
-                    maxOf(
-                        previous?.maxViewedMediaNumber ?: 1,
-                        viewedMediaNumber.coerceAtLeast(1),
-                    ),
-                )
+            sharedPosts.upsert(post)
+            writer.upsertWatched(
+                post.id,
+                section.name,
+                recordedAt,
+                if (preserve) previous.origin else origin.name,
+                if (preserve) previous.originQueryHash else originQueryHash,
+                maxOf(previous?.maxViewedMediaNumber ?: 1, viewedMediaNumber.coerceAtLeast(1)),
             )
-            trimWatchedInside()
+            writer.trimWatched(watchedLimit)
         }
     }
 
@@ -123,20 +105,9 @@ class RoomRecentsRepository(
                 normalizedMediaNumber,
             )
             if (raised == 0 && dao.watched(post.id.source.id, post.id.sourcePostId, section.name) == null) {
-                sharedPostPayloads.upsert(post)
-                dao.upsertWatched(
-                    RecentWatchedEntity(
-                        post.id.source.id,
-                        post.id.sourcePostId,
-                        section.name,
-                        clock(),
-                        dao.nextWatchedSequence(),
-                        origin.name,
-                        originQueryHash,
-                        normalizedMediaNumber,
-                    )
-                )
-                trimWatchedInside()
+                sharedPosts.upsert(post)
+                writer.upsertWatched(post.id, section.name, clock(), origin.name, originQueryHash, normalizedMediaNumber)
+                writer.trimWatched(watchedLimit)
             }
         }
     }
@@ -151,15 +122,8 @@ class RoomRecentsRepository(
         val normalized = queryHash.trim()
         if (normalized.isBlank()) return
         database.withTransaction {
-            dao.upsertSearch(
-                RecentSearchEntity(
-                    normalized,
-                    RecentSearchPayloadCodec.encodeJson(query, kind, sources, sourceTags),
-                    clock(),
-                    dao.nextSearchSequence(),
-                )
-            )
-            dao.trimSearches(searchLimit)
+            writer.upsertSearch(normalized, RecentSearchPayloadCodec.encodeJson(query, kind, sources, sourceTags), clock())
+            writer.trimSearches(searchLimit)
         }
     }
 
@@ -172,18 +136,14 @@ class RoomRecentsRepository(
                 val post = entry.post
                 val existing = dao.watched(post.id.source.id, post.id.sourcePostId, entry.section.name)
                 if (existing == null || entry.viewedAtEpochMs > existing.viewedAtEpochMs) {
-                    sharedPostPayloads.upsert(post)
-                    dao.upsertWatched(
-                        RecentWatchedEntity(
-                            post.id.source.id,
-                            post.id.sourcePostId,
-                            entry.section.name,
-                            entry.viewedAtEpochMs,
-                            dao.nextWatchedSequence(),
-                            entry.origin.name,
-                            entry.originQueryHash,
-                            entry.maxViewedMediaNumber.coerceAtLeast(1),
-                        )
+                    sharedPosts.upsert(post)
+                    writer.upsertWatched(
+                        post.id,
+                        entry.section.name,
+                        entry.viewedAtEpochMs,
+                        entry.origin.name,
+                        entry.originQueryHash,
+                        entry.maxViewedMediaNumber.coerceAtLeast(1),
                     )
                 }
             }
@@ -194,26 +154,11 @@ class RoomRecentsRepository(
                     queryHash.isNotBlank() &&
                     (existing == null || entry.searchedAtEpochMs > existing.searchedAtEpochMs)
                 ) {
-                    dao.upsertSearch(
-                        RecentSearchEntity(
-                            queryHash,
-                            RecentSearchPayloadCodec.encodeJson(entry),
-                            entry.searchedAtEpochMs,
-                            dao.nextSearchSequence(),
-                        )
-                    )
+                    writer.upsertSearch(queryHash, RecentSearchPayloadCodec.encodeJson(entry), entry.searchedAtEpochMs)
                 }
             }
-            trimWatchedInside()
-            dao.trimSearches(searchLimit)
-        }
-    }
-
-    override suspend fun clearWatchedPosts() {
-        database.withTransaction {
-            val removed = dao.watched()
-            dao.deleteWatched()
-            cleanupWatchedPostsInside(removed)
+            writer.trimWatched(watchedLimit)
+            writer.trimSearches(searchLimit)
         }
     }
 
@@ -225,15 +170,9 @@ class RoomRecentsRepository(
         }
     }
 
-    override suspend fun clearSearches(queryHashPrefix: String?) {
-        database.withTransaction {
-            if (queryHashPrefix == null) dao.deleteSearches() else dao.deleteSearchesWithPrefix(queryHashPrefix)
-        }
-    }
-
     override suspend fun clearSearches(section: RecentSearchSection): List<RecentSearchEntry> =
         database.withTransaction {
-            val removed = dao.searches().map(::decodeSearch).filter(section::contains)
+            val removed = dao.searches().map(RecentSearchEntity::toDomain).filter(section::contains)
             dao.deleteSearchesByHashes(removed.map { it.queryHash })
             removed
         }
@@ -247,19 +186,7 @@ class RoomRecentsRepository(
         }
     }
 
-    private fun trimWatchedInside() {
-        val removed = dao.watchedBeyondLimit(watchedLimit)
-        if (removed.isEmpty()) return
-        dao.trimWatched(watchedLimit)
-        removed.distinctBy { it.source to it.sourcePostId }.forEach { row ->
-            contentDao.deleteOrphanPost(row.source, row.sourcePostId)
-        }
-    }
-
     private fun cleanupWatchedPostsInside(removed: List<RecentWatchedEntity>) {
-        removed.distinctBy { it.source to it.sourcePostId }.forEach { row ->
-            contentDao.deleteOrphanPost(row.source, row.sourcePostId)
-        }
+        sharedPosts.releaseIfOrphaned(removed.map { it.source to it.sourcePostId })
     }
-
 }

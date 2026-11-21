@@ -168,24 +168,6 @@ internal object DefaultAtomicFileOperations : AtomicFileOperations {
     }
 }
 
-internal suspend inline fun <State, Result> mutateAndPersistWithRollback(
-    snapshot: () -> State,
-    restore: (State) -> Unit,
-    mutate: () -> Result,
-    persist: () -> Unit,
-): Result {
-    currentCoroutineContext().ensureActive()
-    val previous = snapshot()
-    return try {
-        val result = mutate()
-        persist()
-        result
-    } catch (failure: Throwable) {
-        restore(previous)
-        throw failure
-    }
-}
-
 private fun ByteArray.strictUtf8OrNull(): String? = try {
     StandardCharsets.UTF_8.newDecoder()
         .onMalformedInput(CodingErrorAction.REPORT)

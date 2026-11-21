@@ -8,9 +8,9 @@ import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.canonicalHitomiArtistIdentity
+import com.theoriacodex.sources.common.FacetNamespaces
 import com.theoriacodex.sources.common.asStringOrNull
 import java.net.URI
-import java.net.URLEncoder
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
@@ -18,6 +18,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import com.theoriacodex.sources.common.percentEncode
 
 internal data class ParsedHitomiGallery(
     val id: Int,
@@ -80,7 +81,7 @@ private fun canonicalHitomiArtistUrl(
     providerRelativeUrl
         ?.takeIf { value -> value.isSafeHitomiArtistPathFor(artistIdentity) }
         ?.let { value -> return "https://hitomi.la$value" }
-    val encoded = URLEncoder.encode(artistIdentity, Charsets.UTF_8.name()).replace("+", "%20")
+    val encoded = artistIdentity.percentEncode()
     return "https://hitomi.la/artist/$encoded-all.html"
 }
 
@@ -185,3 +186,16 @@ internal const val HITOMI_SERIES_NAMESPACE = "series"
 internal const val HITOMI_GROUP_NAMESPACE = "group"
 internal const val HITOMI_TYPE_NAMESPACE = "type"
 internal const val HITOMI_LANGUAGE_NAMESPACE = "language"
+
+/** Hitomi's namespaces by facet; female and male are tag namespaces. */
+internal val HITOMI_FACETS = FacetNamespaces(
+    HITOMI_TAG_NAMESPACE to SearchFacet.TAG,
+    HITOMI_FEMALE_NAMESPACE to SearchFacet.TAG,
+    HITOMI_MALE_NAMESPACE to SearchFacet.TAG,
+    HITOMI_ARTIST_NAMESPACE to SearchFacet.ARTIST,
+    HITOMI_CHARACTER_NAMESPACE to SearchFacet.CHARACTER,
+    HITOMI_SERIES_NAMESPACE to SearchFacet.SERIES,
+    HITOMI_GROUP_NAMESPACE to SearchFacet.GROUP,
+    HITOMI_TYPE_NAMESPACE to SearchFacet.TYPE,
+    HITOMI_LANGUAGE_NAMESPACE to SearchFacet.LANGUAGE,
+)

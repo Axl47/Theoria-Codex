@@ -55,29 +55,29 @@ public interface CodexLikesDao {
             + "ORDER BY saved_at_epoch_ms DESC, source ASC, source_post_id ASC")
     Flow<List<CodexItemEntity>> observeCodexItems(String codexId);
 
-    @Query("SELECT posts.source, posts.source_post_id, posts.payload_json, codex_items.saved_at_epoch_ms "
+    @Query("SELECT posts.source, posts.source_post_id, posts.payload_json "
             + "FROM codex_items INNER JOIN posts "
             + "ON posts.source = codex_items.source "
             + "AND posts.source_post_id = codex_items.source_post_id "
             + "WHERE codex_items.codex_id = :codexId "
             + "ORDER BY codex_items.saved_at_epoch_ms DESC, posts.source ASC, posts.source_post_id ASC")
-    Flow<List<CodexPostRow>> observeCodexPostsNewest(String codexId);
+    Flow<List<PostEntity>> observeCodexPostsNewest(String codexId);
 
-    @Query("SELECT posts.source, posts.source_post_id, posts.payload_json, codex_items.saved_at_epoch_ms "
+    @Query("SELECT posts.source, posts.source_post_id, posts.payload_json "
             + "FROM codex_items INNER JOIN posts "
             + "ON posts.source = codex_items.source "
             + "AND posts.source_post_id = codex_items.source_post_id "
             + "WHERE codex_items.codex_id = :codexId "
             + "ORDER BY codex_items.saved_at_epoch_ms ASC, posts.source ASC, posts.source_post_id ASC")
-    Flow<List<CodexPostRow>> observeCodexPostsOldest(String codexId);
+    Flow<List<PostEntity>> observeCodexPostsOldest(String codexId);
 
-    @Query("SELECT posts.source, posts.source_post_id, posts.payload_json, codex_items.saved_at_epoch_ms "
+    @Query("SELECT posts.source, posts.source_post_id, posts.payload_json "
             + "FROM codex_items INNER JOIN posts "
             + "ON posts.source = codex_items.source "
             + "AND posts.source_post_id = codex_items.source_post_id "
             + "WHERE codex_items.codex_id = :codexId "
             + "ORDER BY posts.source ASC, codex_items.saved_at_epoch_ms DESC, posts.source_post_id ASC")
-    Flow<List<CodexPostRow>> observeCodexPostsBySource(String codexId);
+    Flow<List<PostEntity>> observeCodexPostsBySource(String codexId);
 
     @Query("SELECT DISTINCT posts.source, posts.source_post_id, posts.payload_json FROM posts "
             + "INNER JOIN codex_items ON posts.source = codex_items.source AND posts.source_post_id = codex_items.source_post_id "
@@ -119,9 +119,6 @@ public interface CodexLikesDao {
             + "AND source = :source AND source_post_id = :sourcePostId")
     int deleteCodexItem(String codexId, String source, String sourcePostId);
 
-    @Query("DELETE FROM codex_items WHERE codex_id = :codexId")
-    int deleteCodexItems(String codexId);
-
     @Query("SELECT * FROM codex_items ORDER BY codex_id ASC, source ASC, source_post_id ASC")
     List<CodexItemEntity> codexItems();
 
@@ -154,18 +151,6 @@ public interface CodexLikesDao {
             + "AND recent_watched.source_post_id = posts.source_post_id)")
     int deleteOrphanPost(String source, String sourcePostId);
 
-    @Query("DELETE FROM posts WHERE "
-            + "NOT EXISTS (SELECT 1 FROM codex_items "
-            + "WHERE codex_items.source = posts.source "
-            + "AND codex_items.source_post_id = posts.source_post_id) "
-            + "AND NOT EXISTS (SELECT 1 FROM liked_posts "
-            + "WHERE liked_posts.source = posts.source "
-            + "AND liked_posts.source_post_id = posts.source_post_id) "
-            + "AND NOT EXISTS (SELECT 1 FROM recent_watched "
-            + "WHERE recent_watched.source = posts.source "
-            + "AND recent_watched.source_post_id = posts.source_post_id)")
-    int deleteOrphanPosts();
-
     @Query("SELECT * FROM liked_posts WHERE profile_id = :profileId "
             + "ORDER BY liked_at_epoch_ms DESC, source ASC, source_post_id ASC")
     Flow<List<LikedPostEntity>> observeLikes(String profileId);
@@ -187,16 +172,6 @@ public interface CodexLikesDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     long insertLike(LikedPostEntity entity);
-
-    @Query("UPDATE liked_posts SET liked_at_epoch_ms = :likedAtEpochMs, tags_json = :tagsJson "
-            + "WHERE profile_id = :profileId AND source = :source AND source_post_id = :sourcePostId")
-    int updateLike(
-            String profileId,
-            String source,
-            String sourcePostId,
-            long likedAtEpochMs,
-            String tagsJson
-    );
 
     @Query("DELETE FROM liked_posts WHERE profile_id = :profileId "
             + "AND source = :source AND source_post_id = :sourcePostId")

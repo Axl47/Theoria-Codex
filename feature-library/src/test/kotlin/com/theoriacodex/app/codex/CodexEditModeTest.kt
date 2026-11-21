@@ -36,7 +36,7 @@ class CodexEditModeTest {
                     codexName = "Mine", posts = listOf(post), sortMode = CodexSortMode.NEWEST_SAVED,
                     availableSources = emptySet(), creatorBrowsingSources = emptySet(),
                     onOpenViewer = { _, _ -> }, onAddPostsToAnotherCodex = {}, onRemovePosts = {}, onSavePostToDevice = {},
-                    onOpenCreatorProfile = {}, onOpenLegacyCreatorProfile = {}, onBack = {}, onDeleteCodex = {}, isLikesCodex = false,
+ onBack = {}, onDeleteCodex = {}, isLikesCodex = false,
                 )
             }
         }

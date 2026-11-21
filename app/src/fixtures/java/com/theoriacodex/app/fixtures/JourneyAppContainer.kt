@@ -26,6 +26,7 @@ import com.theoriacodex.app.media.MediaDurationAcquisitionEngine
 import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.media.OfflineAwareCacheRepository
 import com.theoriacodex.app.media.OfflineMediaCoordinator
+import com.theoriacodex.app.media.downloadablePages
 import com.theoriacodex.app.media.validateOfflineMediaFile
 import com.theoriacodex.app.recommend.ForYouCoordinator
 import com.theoriacodex.app.comments.CommentsLoader
@@ -114,7 +115,7 @@ class JourneyAppContainer(
         store = OfflineMediaStore(storageDirectory.resolve("offline-media")),
         scope = ownerScope,
         resolve = { post -> checkNotNull(registry.adapterFor(post.id.source)?.resolvePost(post.id)) },
-        selectMedia = { post -> post.media.ifEmpty { listOfNotNull(post.full) } },
+        selectMedia = { post -> post.downloadablePages },
         acquire = { _, media, output ->
             withContext(Dispatchers.IO) {
                 // Journey providers supply real fixture files. Remote transport is deliberately unavailable.
@@ -190,8 +191,8 @@ class JourneyAppContainer(
         settings.awaitReady()
         restore.awaitReady()
         statistics.awaitReady()
-        workflows.profileBackup?.recoverPendingRestore()
-        workflows.profileDeletion?.recoverPendingDeletion()
+        workflows.profileBackup.recoverPendingRestore()
+        workflows.profileDeletion.recoverPendingDeletion()
         offline.store.refresh()
         settings.setEnabledSources(registry.availableSources())
         settings.setResolveUnknownAnimatedDurations(false)

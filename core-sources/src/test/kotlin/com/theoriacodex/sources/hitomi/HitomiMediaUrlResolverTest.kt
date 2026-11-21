@@ -81,7 +81,6 @@ class HitomiMediaUrlResolverTest {
             candidates[4].url,
         )
         assertTrue(candidates.all { it.configurationVersion == "1783681201" })
-        assertTrue(candidates.all { it.configurationBasePath == "1783681201/" })
     }
 
     @Test

@@ -16,6 +16,8 @@ Screenshot reference images (`app/src/test/screenshots`) are CI's Linux renders;
 
 Fresh git worktrees lack the gitignored `local.properties`, so Android Gradle tasks fail with "SDK location not found"; copy it from the main checkout or set `ANDROID_HOME` first.
 
+On a sandboxed workstation, a Gradle daemon in another sandbox can hold `~/.gradle`'s file-content cache lock where it cannot be stopped, so builds fail with "Timeout waiting to lock file content cache". Give the checkout its own `GRADLE_USER_HOME` (copying `caches/modules-2` and `wrapper/dists` avoids a full download) and copy `gradle.properties` into it, or the JDK 17 toolchain is not found.
+
 Close any T3 `agent-device` session before `am instrument`: its accessibility helper holds UiAutomation, so Compose journey tests fail with "UiAutomationService already registered" or "UiAutomation not connected".
 
 *Smallest sufficient implementation:* Prefer the simplest design that satisfies the stated requirements. Do not expand architecture or scope without a concrete requirement.

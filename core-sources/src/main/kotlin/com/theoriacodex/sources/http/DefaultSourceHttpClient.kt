@@ -3,9 +3,7 @@ package com.theoriacodex.sources.http
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
-import com.theoriacodex.domain.diagnostics.Diagnostics
 import java.net.URLEncoder
-import java.net.URL
 import java.util.TreeMap
 import java.util.concurrent.TimeUnit
 import okhttp3.Dispatcher
@@ -20,19 +18,19 @@ import okhttp3.Response
 internal const val CONNECT_TIMEOUT_MS = 3_000
 
 class DefaultSourceHttpClient(
-    private val connectTimeoutMs: Int = CONNECT_TIMEOUT_MS,
-    private val readTimeoutMs: Int = 20_000,
+    connectTimeoutMs: Int = CONNECT_TIMEOUT_MS,
+    readTimeoutMs: Int = 20_000,
     maxRetries: Int = SourceRetryPolicy.DEFAULT_MAX_RETRIES,
     retryBaseDelayMs: Long = SourceRetryPolicy.DEFAULT_RETRY_BASE_DELAY_MS,
-    shouldRetryStatus: (url: String, statusCode: Int) -> Boolean = ::defaultShouldRetryStatus,
     /** When set, known-down hosts fail at once and outage answers throw [HostUnavailableException]. */
     private val outages: HostOutageTracker? = null,
     /** The User-Agent a site's browser clearance is bound to, replacing the request's own; null keeps it. */
     private val userAgentFor: (url: String) -> String? = { null },
     /** The app passes its shared client, so these calls reuse the process's connections and carry its cookies. */
-    private val okHttpClient: OkHttpClient = defaultSourceOkHttpClient,
+    okHttpClient: OkHttpClient = defaultSourceOkHttpClient,
 ) : SourceHttpClient {
-    private val retryPolicy = SourceRetryPolicy(maxRetries, retryBaseDelayMs, shouldRetryStatus)
+    private val retryPolicy = SourceRetryPolicy(maxRetries, retryBaseDelayMs)
+    private val transport = httpTransport(okHttpClient, connectTimeoutMs, readTimeoutMs, followRedirects = true)
 
     override suspend fun get(
         url: String,
@@ -62,7 +60,7 @@ class DefaultSourceHttpClient(
         require(maxBodyBytes > 0) { "maxBodyBytes must be positive" }
         val requestUrl = buildUrl(url, query)
         val requestHeaders = headers.withByteRange(range)
-        return executeReportingFailure(requestUrl) {
+        return executeWithRetry(requestUrl, retryPolicy, outages) {
             executeRequest(
                 method = "GET",
                 url = requestUrl,
@@ -84,7 +82,7 @@ class DefaultSourceHttpClient(
         } else {
             headers + ("Content-Type" to "application/x-www-form-urlencoded")
         }
-        val response = executeReportingFailure(url) {
+        val response = executeWithRetry(url, retryPolicy, outages) {
             executeRequest(
                 method = "POST",
                 url = url,
@@ -106,7 +104,7 @@ class DefaultSourceHttpClient(
         } else {
             headers + ("Content-Type" to "application/json")
         }
-        val response = executeReportingFailure(url) {
+        val response = executeWithRetry(url, retryPolicy, outages) {
             executeRequest(
                 method = "POST",
                 url = url,
@@ -118,29 +116,13 @@ class DefaultSourceHttpClient(
         return response.toTextResponse()
     }
 
-    /** Records only the outcome after retries, so a request that recovers leaves nothing in the log. */
-    private suspend fun executeReportingFailure(
-        requestUrl: String,
-        block: suspend () -> SourceByteResponse,
-    ): SourceByteResponse {
-        val host = HostOutageTracker.hostKey(requestUrl) ?: "unknown host"
-        return try {
-            executeWithRetry(requestUrl, retryPolicy, outages, block = block).also { response ->
-                if (response.statusCode >= 400) Diagnostics.report("http", "$host: HTTP ${response.statusCode}")
-            }
-        } catch (error: IOException) {
-            Diagnostics.report("http", "$host: request failed", error)
-            throw error
-        }
-    }
-
     private suspend fun executeRequest(
         method: String,
         url: String,
         headers: Map<String, String>,
         body: ByteArray?,
         maxBodyBytes: Int,
-    ): SourceByteResponse = executeHttpRequest(
+    ): SourceByteResponse = transport(
         HttpRequestSpec(
             method = method,
             url = url,
@@ -149,11 +131,7 @@ class DefaultSourceHttpClient(
             } ?: headers,
             body = body,
             maxBodyBytes = maxBodyBytes,
-            connectTimeoutMs = connectTimeoutMs,
-            readTimeoutMs = readTimeoutMs,
-            followRedirects = true,
         ),
-        okHttpClient,
     )
 }
 
@@ -176,33 +154,34 @@ internal val defaultSourceOkHttpClient: OkHttpClient by lazy {
         .build()
 }
 
-/** One HTTP exchange as [executeHttpRequest] performs it; shared by every [SourceHttpClient]. */
+/** One HTTP exchange as an [httpTransport] performs it; shared by every [SourceHttpClient]. */
 internal class HttpRequestSpec(
     val method: String,
     val url: String,
     val headers: Map<String, String>,
     val body: ByteArray?,
     val maxBodyBytes: Int,
-    val connectTimeoutMs: Int,
-    val readTimeoutMs: Int,
-    /** False returns a 3xx as-is, so the caller can vet `Location` before following it. */
-    val followRedirects: Boolean,
 )
 
-/** Performs one cancellable request with a bounded body on [client]; no retries. */
-internal suspend fun executeHttpRequest(
-    spec: HttpRequestSpec,
-    client: OkHttpClient = defaultSourceOkHttpClient,
-): SourceByteResponse {
-    val call = client.newBuilder()
-        .connectTimeout(spec.connectTimeoutMs.toLong(), TimeUnit.MILLISECONDS)
-        .readTimeout(spec.readTimeoutMs.toLong(), TimeUnit.MILLISECONDS)
-        .followRedirects(spec.followRedirects)
+/**
+ * Sends each request on [okHttpClient], configured once with these timeouts: one cancellable exchange
+ * with a bounded body, no retries. [followRedirects] false returns a 3xx as-is, so the caller can vet
+ * `Location` before following it.
+ */
+internal fun httpTransport(
+    okHttpClient: OkHttpClient,
+    connectTimeoutMs: Int,
+    readTimeoutMs: Int,
+    followRedirects: Boolean,
+): suspend (HttpRequestSpec) -> SourceByteResponse {
+    val client = okHttpClient.newBuilder()
+        .connectTimeout(connectTimeoutMs.toLong(), TimeUnit.MILLISECONDS)
+        .readTimeout(readTimeoutMs.toLong(), TimeUnit.MILLISECONDS)
+        .followRedirects(followRedirects)
         // A redirect never crosses between HTTPS and HTTP, so query-string API keys cannot leave TLS.
         .followSslRedirects(false)
         .build()
-        .newCall(spec.toRequest())
-    return call.await { response -> response.toSourceResponse(spec.maxBodyBytes) }
+    return { spec -> client.newCall(spec.toRequest()).await { response -> response.toSourceResponse(spec.maxBodyBytes) } }
 }
 
 /** Malformed input surfaces as the transport failure adapters already handle. */
@@ -277,35 +256,4 @@ private fun String.urlEncode(): String {
     return URLEncoder.encode(this, Charsets.UTF_8.name())
         // Query-component spaces should be encoded as %20 for broader API compatibility.
         .replace("+", "%20")
-}
-
-internal fun defaultShouldRetryStatus(requestUrl: String, statusCode: Int): Boolean {
-    if (statusCode in 500..599) return true
-    if (statusCode != 429) return false
-    return !isIwaraRequestUrl(requestUrl)
-}
-
-internal fun resolveRetryDelayMs(
-    response: SourceHttpResponse,
-    attempt: Int,
-    retryBaseDelayMs: Long,
-): Long {
-    val retryAfterSeconds = response.headers.entries
-        .firstOrNull { (name, _) -> name.equals("Retry-After", ignoreCase = true) }
-        ?.value
-        ?.firstOrNull()
-        ?.trim()
-        ?.toLongOrNull()
-    if (retryAfterSeconds != null && retryAfterSeconds > 0L) {
-        return retryAfterSeconds
-            .coerceAtMost(MAX_SERVER_RETRY_DELAY_MS / 1_000L) * 1_000L
-    }
-    return retryBaseDelayMs * attempt
-}
-
-internal const val MAX_SERVER_RETRY_DELAY_MS = 30_000L
-
-private fun isIwaraRequestUrl(requestUrl: String): Boolean {
-    val host = runCatching { URL(requestUrl).host.lowercase() }.getOrNull() ?: return false
-    return host == "iwara.tv" || host.endsWith(".iwara.tv")
 }

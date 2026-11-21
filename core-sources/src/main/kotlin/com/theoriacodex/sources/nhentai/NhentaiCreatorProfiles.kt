@@ -5,7 +5,7 @@ import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
-import java.net.URLEncoder
+import com.theoriacodex.sources.common.percentEncode
 
 /** Artist identity shared by API galleries and mirrored gallery metadata. */
 internal fun List<PostTaxonomyTerm>.nhentaiCreatorProfiles(): List<CreatorProfile> {
@@ -15,7 +15,7 @@ internal fun List<PostTaxonomyTerm>.nhentaiCreatorProfiles(): List<CreatorProfil
             val artist = normalizeNhentaiTag(term.value).lowercase().takeIf(String::isNotBlank)
                 ?: return@mapNotNull null
             val slug = artist.replace(NHENTAI_WHITESPACE_REGEX, "-")
-            val encodedSlug = URLEncoder.encode(slug, Charsets.UTF_8.name()).replace("+", "%20")
+            val encodedSlug = slug.percentEncode()
             CreatorProfile(
                 source = SourceKey.NHENTAI,
                 displayName = term.value.trim(),

@@ -12,6 +12,8 @@ import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.viewer.ViewerMediaPrefetcher
 import com.theoriacodex.app.viewer.ViewerPostResolver
+import com.theoriacodex.app.viewer.ViewerScreenCallbacks
+import com.theoriacodex.app.viewer.ViewerScreenConfig
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.state.ViewerPrefetchOutcome
 import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
@@ -57,7 +59,7 @@ class ViewerSaveOriginTest {
                             ViewerMediaPrefetcher { _, _, _ -> ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED) },
                             durations, restoreSession = { null },
                         ),
-                        renderConfig = ViewerRouteRenderConfig(creatorBrowsingSources = emptySet()),
+                        config = ViewerScreenConfig(),
                         liveSourceState = ViewerRouteLiveSourceState(),
                         effectCallbacks = ViewerRouteEffectCallbacks(
                             onSavePost = { _, _ -> }, onDownloadMedia = {},
@@ -66,9 +68,8 @@ class ViewerSaveOriginTest {
                             onRecoverMedia = { _, _, _ -> null }, onLoadMore = {},
                             onDismiss = {}, onRestorationUnavailable = {},
                         ),
-                        screenCallbacks = ViewerRouteScreenCallbacks(
-                            onRemoveIncludeTerm = { _, _ -> },
-                            onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
+                        screenCallbacks = ViewerScreenCallbacks(
+                            onGoToSearch = {},
                         ),
                     )
                 }
@@ -102,7 +103,7 @@ class ViewerSaveOriginTest {
         val durations = MediaDurationCoordinator(MediaDurationAcquirer { error("Static post must not acquire duration") })
         var savedContext: ViewerLaunchContext? = null
         var savedQuery: Query? = null
-        var owner: ViewerRouteOwnerHandle? = null
+        var owner: com.theoriacodex.app.viewer.ViewerViewModel? = null
         try {
             compose.setContent {
                 MaterialTheme {
@@ -112,7 +113,7 @@ class ViewerSaveOriginTest {
                             ViewerMediaPrefetcher { _, _, _ -> ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED) },
                             durations, restoreSession = { null },
                         ),
-                        renderConfig = ViewerRouteRenderConfig(creatorBrowsingSources = emptySet()),
+                        config = ViewerScreenConfig(),
                         liveSourceState = ViewerRouteLiveSourceState(),
                         effectCallbacks = ViewerRouteEffectCallbacks(
                             onSavePost = { _, origin ->
@@ -123,11 +124,10 @@ class ViewerSaveOriginTest {
                             onApplyTag = { _, _, _ -> }, onRecoverMedia = { _, _, _ -> null },
                             onLoadMore = {}, onDismiss = {}, onRestorationUnavailable = {},
                         ),
-                        screenCallbacks = ViewerRouteScreenCallbacks(
-                            onOwnerChanged = { owner = it },
-                            onRemoveIncludeTerm = { _, _ -> },
-                            onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
+                        screenCallbacks = ViewerScreenCallbacks(
+                            onGoToSearch = {},
                         ),
+                        onOwnerChanged = { owner = it },
                     )
                 }
             }

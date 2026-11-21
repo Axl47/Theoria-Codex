@@ -10,7 +10,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.sources.credentials.Rule34XxxCredentials
+import com.theoriacodex.sources.credentials.UserApiKey
 import com.theoriacodex.sources.testing.FakeCredentialsProvider
 import com.theoriacodex.sources.testing.ScriptedHttpClient
 import com.theoriacodex.sources.testing.commentTestPost
@@ -188,8 +188,8 @@ class GelbooruCommentsTest {
 
     @Test
     fun `a keyless refusal is an authentication failure, not a missing comment section`() = runTest {
-        val credentials = FakeCredentialsProvider().apply { rule34XxxCredentials = Rule34XxxCredentials("1", "k") }
-        val adapter = GelbooruSourceAdapter(GelbooruSite.RULE34XXX, http, credentials::getRule34XxxCredentials)
+        val credentials = FakeCredentialsProvider().apply { rule34XxxCredentials = UserApiKey("1", "k") }
+        val adapter = GelbooruSourceAdapter(GelbooruSite.RULE34XXX, http, { credentials.userApiKey(SourceKey.RULE34XXX) })
         http.enqueueGet(
             url = "https://api.rule34.xxx/index.php",
             query = dapiQuery + mapOf("user_id" to "1", "api_key" to "k"),

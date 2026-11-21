@@ -83,7 +83,7 @@ class FeedPreviewPlayerPool(
     fun acquire(
         location: String,
         headers: Map<String, String>,
-    ): FeedPreviewPlayerLease {
+    ): VideoPlayerLease {
         checkMainThread()
         // A card keeps loading until the Viewer stops it, so it must not lock the rest of a clip the Viewer reads.
         val request = infrastructure.bind(location, headers, boundedLocks = true)
@@ -105,11 +105,11 @@ class FeedPreviewPlayerPool(
         publishTraceCounters()
         scheduleCooling()
         scheduleCleanup()
-        return FeedPreviewPlayerLease(slotLease)
+        return VideoPlayerLease(slotLease)
     }
 
     fun recycle(
-        lease: FeedPreviewPlayerLease,
+        lease: VideoPlayerLease,
         retainBinding: Boolean,
     ) {
         checkMainThread()
@@ -149,7 +149,7 @@ class FeedPreviewPlayerPool(
     }
 
     /** Restarts loading for a leased card that [stopForViewer] stopped; a no-op for a loaded or failed player. */
-    fun resume(lease: FeedPreviewPlayerLease) {
+    fun resume(lease: VideoPlayerLease) {
         checkMainThread()
         traceMediaSection(MediaTraceSections.PREVIEW_PLAYER_RESUME) {
             val player = lease.player
@@ -242,14 +242,19 @@ class FeedPreviewPlayerPool(
     }
 }
 
-class FeedPreviewPlayerLease internal constructor(
+/** A feed or Viewer pool's loan of one player; return it to the pool that lent it. */
+class VideoPlayerLease internal constructor(
     internal val slotLease: ReusableVideoSlotPool.Lease<ExoPlayer>,
 ) {
     val player: ExoPlayer
         get() = slotLease.resource
 }
 
-/** Pure lease/retention policy kept separate from Media3 so reuse remains directly testable. */
+/**
+ * Pure lease/retention policy kept separate from Media3 so reuse remains directly testable.
+ * Idle resources beyond [maxIdleResources] are released [FEED_PREVIEW_EXCESS_RELEASE_DELAY_MS] after cleanup is
+ * scheduled, in the feed and the Viewer alike.
+ */
 class ReusableVideoSlotPool<Resource : Any, Identity : Any>(
     private val maxIdleResources: Int,
     private val idleTimeoutMs: Long,

@@ -10,8 +10,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.app.ui.findActivity
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
@@ -65,9 +63,7 @@ internal class RetainedFlowsViewModel(private val maxFlows: Int = Int.MAX_VALUE)
     }
 }
 
-private val retainedFlowsFactory = viewModelFactory { initializer { RetainedFlowsViewModel() } }
 private const val MAX_CODEX_CONTENT_FLOWS = 12
-private val codexContentFactory = viewModelFactory { initializer { RetainedFlowsViewModel(MAX_CODEX_CONTENT_FLOWS) } }
 
 /**
  * Codex contents kept across navigation entries, about four Codices' worth. Decoding a large Codex
@@ -78,8 +74,7 @@ internal fun rememberCodexContentFlows(): RetainedFlowsViewModel = viewModel(
     viewModelStoreOwner = LocalContext.current.findActivity() as? ViewModelStoreOwner
         ?: checkNotNull(LocalViewModelStoreOwner.current),
     key = "codex-content",
-    factory = codexContentFactory,
-)
+) { RetainedFlowsViewModel(MAX_CODEX_CONTENT_FLOWS) }
 
 /**
  * The latest value of [flow], or null only until it first answers on this navigation entry. [key]
@@ -88,7 +83,7 @@ internal fun rememberCodexContentFlows(): RetainedFlowsViewModel = viewModel(
 @Composable
 internal fun <T : Any> rememberRetained(
     key: String,
-    owner: RetainedFlowsViewModel = viewModel(key = "retained-flows", factory = retainedFlowsFactory),
+    owner: RetainedFlowsViewModel = viewModel(key = "retained-flows") { RetainedFlowsViewModel() },
     flow: () -> Flow<T>,
 ): State<T?> {
     // Each key only ever holds values from the flow that key was given, so this cast is safe.

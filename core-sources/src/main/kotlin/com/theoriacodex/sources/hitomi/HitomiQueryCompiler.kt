@@ -68,7 +68,7 @@ internal class HitomiQueryCompiler(
         } catch (error: CancellationException) {
             throw error
         } catch (error: SourceHttpBodyTooLargeException) {
-            throw sourceParseFailure("Hitomi global search version exceeded its bounded response", error)
+            throw hitomiParseFailure("Hitomi global search version exceeded its bounded response", error)
         } catch (error: IOException) {
             throw SourceAdapterException(
                 reason = SourceFailureReason.NETWORK,
@@ -89,15 +89,11 @@ internal class HitomiQueryCompiler(
             key = url,
         ) {
             try {
-                val loaded = globalSearchIndex.galleryIds(normalized, version)
-                if (loaded.version != version) {
-                    throw HitomiProtocolException("global search returned an unexpected index version")
-                }
-                loaded.galleryIds
+                globalSearchIndex.galleryIds(normalized, version)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: SourceHttpBodyTooLargeException) {
-                throw sourceParseFailure("Hitomi global search exceeded its bounded response", error)
+                throw hitomiParseFailure("Hitomi global search exceeded its bounded response", error)
             } catch (error: IOException) {
                 throw SourceAdapterException(
                     reason = SourceFailureReason.NETWORK,
@@ -117,21 +113,8 @@ internal class HitomiQueryCompiler(
 
     private fun validateHitomiTerm(term: SearchTerm) {
         val namespace = term.sourceNamespace ?: return
-        val allowedNamespaces = when (term.facet) {
-            SearchFacet.TAG -> setOf(
-                HITOMI_TAG_NAMESPACE,
-                HITOMI_FEMALE_NAMESPACE,
-                HITOMI_MALE_NAMESPACE,
-            )
-            SearchFacet.ARTIST -> setOf(HITOMI_ARTIST_NAMESPACE)
-            SearchFacet.CHARACTER -> setOf(HITOMI_CHARACTER_NAMESPACE)
-            SearchFacet.SERIES -> setOf(HITOMI_SERIES_NAMESPACE)
-            SearchFacet.GROUP -> setOf(HITOMI_GROUP_NAMESPACE)
-            SearchFacet.TYPE -> setOf(HITOMI_TYPE_NAMESPACE)
-            SearchFacet.LANGUAGE -> setOf(HITOMI_LANGUAGE_NAMESPACE)
-        }
-        if (namespace !in allowedNamespaces) {
-            throw sourceParseFailure(
+        if (namespace !in HITOMI_FACETS.namespacesOf(term.facet)) {
+            throw hitomiParseFailure(
                 "Hitomi does not support ${term.facet.name.lowercase()} terms in the $namespace namespace",
             )
         }
@@ -152,12 +135,8 @@ internal class HitomiQueryCompiler(
                     ?.takeIf { value -> value == HITOMI_FEMALE_NAMESPACE || value == HITOMI_MALE_NAMESPACE }
                 HITOMI_TAG_NAMESPACE to if (prefix == null) value else "$prefix:$value"
             }
-            SearchFacet.ARTIST -> HITOMI_ARTIST_NAMESPACE to value
-            SearchFacet.CHARACTER -> HITOMI_CHARACTER_NAMESPACE to value
-            SearchFacet.SERIES -> HITOMI_SERIES_NAMESPACE to value
-            SearchFacet.GROUP -> HITOMI_GROUP_NAMESPACE to value
-            SearchFacet.TYPE -> HITOMI_TYPE_NAMESPACE to value
             SearchFacet.LANGUAGE -> "all" to "index"
+            else -> HITOMI_FACETS.defaultNamespace(facet) to value
         }
         return HitomiNozomiRequest(area = area, tag = tag, language = language, sort = sort)
     }
@@ -191,9 +170,6 @@ internal class HitomiQueryCompiler(
         val url = HitomiNozomi.urlFor(request)
         return CompiledIndex(key = term.termCacheKey(), term = term, newestUrl = url, sortedUrl = url)
     }
-
-    private fun sourceParseFailure(message: String, cause: Throwable? = null): SourceAdapterException =
-        SourceAdapterException(reason = SourceFailureReason.PARSE, message = message, cause = cause)
 }
 
 internal data class CompiledHitomiQuery(

@@ -6,6 +6,7 @@ import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.tags.isLegacyFacetType
 
 fun trainingTagsFor(post: Post): List<String> {
     return recommendationTagsFor(post)
@@ -71,10 +72,7 @@ fun Query.recommendationIncludeTags(): List<String> {
 }
 
 fun TagSuggestion.isRecommendationTagSuggestion(): Boolean {
-    return when (type?.trim()?.lowercase()) {
-        "artist", "character", "series", "parody", "group", "type", "category", "language" -> false
-        else -> true
-    }
+    return !isLegacyFacetType(type)
 }
 
 private const val MAX_TRAINING_TAGS = 20

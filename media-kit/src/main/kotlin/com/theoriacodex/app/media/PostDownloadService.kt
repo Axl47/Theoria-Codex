@@ -11,57 +11,37 @@ import java.net.URLEncoder
 import java.security.MessageDigest
 
 object PostDownloadService {
+    /**
+     * Queues one file with Android's DownloadManager: [selected] media (a Viewer page or a gallery page), or else the
+     * post's own download candidate. Null when there is nothing to download or Android refused the request.
+     */
     internal fun enqueuePostDownloadId(
         context: Context,
         post: Post,
+        selected: SelectedDownloadMedia?,
         settings: com.theoriacodex.data.repository.CacheSettings,
         marker: String? = null,
     ): Long? {
-        val candidate = postDownloadMediaCandidate(post) ?: return null
-        val media = candidate.ref.withVideoQuality(settings.downloadQuality, context.isMediaNetworkMetered())
-        val fileName = buildDownloadFileName(
-            post = post,
-            media = media,
-            fallbackUrl = media.url ?: candidate.url,
-            pageIndex = null,
-            totalPages = 1,
-        )
-        return enqueueDownload(
-            context = context,
-            url = media.url ?: candidate.url,
-            mime = media.mime,
-            headers = candidate.requestHeaders,
-            fileName = fileName,
-            description = post.pageUrl ?: DOWNLOAD_DESCRIPTION,
-            settings = settings,
-            marker = marker,
-        )
-    }
-
-    internal fun enqueueViewerDownloadId(
-        context: Context,
-        post: Post,
-        media: ImageRef,
-        pageIndex: Int,
-        totalPages: Int,
-        settings: com.theoriacodex.data.repository.CacheSettings,
-        marker: String? = null,
-    ): Long? {
-        val selected = media.withVideoQuality(settings.downloadQuality, context.isMediaNetworkMetered())
-        val url = selected.url?.takeIf(String::isNotBlank) ?: return null
-        val fileName = buildDownloadFileName(
-            post = post,
-            media = selected,
-            fallbackUrl = url,
-            pageIndex = pageIndex,
-            totalPages = totalPages,
-        )
+        val candidate = if (selected == null) postDownloadMediaCandidate(post) ?: return null else null
+        val media = (selected?.media ?: requireNotNull(candidate).ref)
+            .withVideoQuality(settings.downloadQuality, context.isMediaNetworkMetered())
+        val url = if (candidate != null) {
+            media.url ?: candidate.url
+        } else {
+            media.url?.takeIf(String::isNotBlank) ?: return null
+        }
         return enqueueDownload(
             context = context,
             url = url,
-            mime = selected.mime,
-            headers = post.id.source.requestHeaders(),
-            fileName = fileName,
+            mime = media.mime,
+            headers = candidate?.requestHeaders ?: post.id.source.requestHeaders(),
+            fileName = buildDownloadFileName(
+                post = post,
+                media = media,
+                fallbackUrl = url,
+                pageIndex = selected?.pageIndex,
+                totalPages = selected?.totalPages ?: 1,
+            ),
             description = post.pageUrl ?: DOWNLOAD_DESCRIPTION,
             settings = settings,
             marker = marker,

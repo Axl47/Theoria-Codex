@@ -105,7 +105,7 @@ class SourceMainSafetyContractTest {
     @Test
     fun `site probing runs off the calling thread`() {
         val transport = FixtureSiteTransport("aibooru")
-        val http = CustomSiteHttpClient(10_000, 10_000, 3) { spec -> record(HTTP); transport.execute(spec) }
+        val http = CustomSiteHttpClient(3) { spec -> record(HTTP); transport.execute(spec) }
         val prober = SiteProber(SiteFamilyRegistry.default(), http, builtInHosts = emptyMap())
         assertOffCaller("probe", expected = ProtocolFamily.DANBOORU) {
             (prober.probe("aibooru.online") as SiteProbeResult.Supported).family
@@ -189,8 +189,7 @@ class SourceMainSafetyContractTest {
     ) : SourceCredentialsProvider by delegate {
         override suspend fun getPixivTokens(): PixivAuthTokens? = delegate.getPixivTokens().also { record(CREDENTIALS) }
         override suspend fun getPixivSession(): PixivCredentialSession = delegate.getPixivSession().also { record(CREDENTIALS) }
-        override suspend fun getGelbooruCredentials() = delegate.getGelbooruCredentials().also { record(CREDENTIALS) }
-        override suspend fun getRule34XxxCredentials() = delegate.getRule34XxxCredentials().also { record(CREDENTIALS) }
+        override suspend fun userApiKey(source: SourceKey) = delegate.userApiKey(source).also { record(CREDENTIALS) }
     }
 
     private companion object {

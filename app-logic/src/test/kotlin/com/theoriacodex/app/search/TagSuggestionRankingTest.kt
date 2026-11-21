@@ -48,10 +48,10 @@ class TagSuggestionRankingTest {
 
         assertEquals(
             listOf("an", "animation", "animal_ears", "fan_art"),
-            rankSearchedTags(counts, sources, "an", limit = 10).map(SearchTerm::value),
+            rankSearchedTags(counts, sources, "an", limit = 10) { true }.map(SearchTerm::value),
         )
-        assertEquals(listOf(SearchTerm("Animation")), rankSearchedTags(counts, setOf(SourceKey.PIXIV), "AN", limit = 10))
-        assertEquals(emptyList<SearchTerm>(), rankSearchedTags(counts, sources, " ", limit = 10))
+        assertEquals(listOf(SearchTerm("Animation")), rankSearchedTags(counts, setOf(SourceKey.PIXIV), "AN", limit = 10) { true })
+        assertEquals(emptyList<SearchTerm>(), rankSearchedTags(counts, sources, " ", limit = 10) { true })
     }
 
     @Test

@@ -38,7 +38,7 @@ class ViewerVideoPlayerPool(
         }
     }
 
-    fun acquire(location: String, headers: Map<String, String>): ReusableVideoSlotPool.Lease<ExoPlayer> {
+    fun acquire(location: String, headers: Map<String, String>): VideoPlayerLease {
         checkMainThread()
         infrastructure.onViewerStreamAcquired()
         val request = infrastructure.bind(location, headers)
@@ -52,20 +52,20 @@ class ViewerVideoPlayerPool(
         }
         publishCounters()
         scheduleCleanup()
-        return lease
+        return VideoPlayerLease(lease)
     }
 
-    fun recycle(lease: ReusableVideoSlotPool.Lease<ExoPlayer>) {
+    fun recycle(lease: VideoPlayerLease) {
         checkMainThread()
-        if (!slots.isActive(lease)) return
+        if (!slots.isActive(lease.slotLease)) return
         traceMediaSection(MediaTraceSections.VIEWER_PLAYER_RETURN) {
             // A page can leave mid-drag, after its player's binding let go; the next lease must not start held.
-            lease.resource.setScrubbingModeEnabled(false)
-            lease.resource.pause()
-            lease.resource.stop()
-            lease.resource.clearMediaItems()
+            lease.player.setScrubbingModeEnabled(false)
+            lease.player.pause()
+            lease.player.stop()
+            lease.player.clearMediaItems()
         }
-        slots.recycle(lease, retainBinding = false)
+        slots.recycle(lease.slotLease, retainBinding = false)
         publishCounters()
         scheduleCleanup()
     }

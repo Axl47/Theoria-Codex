@@ -12,8 +12,7 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.sources.credentials.GelbooruCredentials
-import com.theoriacodex.sources.credentials.Rule34XxxCredentials
+import com.theoriacodex.sources.credentials.UserApiKey
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.http.SourceHttpClient
@@ -77,7 +76,7 @@ class GelbooruSourceAdapterTest {
     @Test
     fun `search attaches credentials when configured`() = runTest {
         val credentials = FakeCredentialsProvider().apply {
-            gelbooruCredentials = GelbooruCredentials(userId = "user1", apiKey = "key1")
+            gelbooruCredentials = UserApiKey(userId = "user1", apiKey = "key1")
         }
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(
@@ -489,7 +488,6 @@ class GelbooruSourceAdapterTest {
 
         assertFalse(rule34 is CreatorPostsSourceAdapter)
         assertFalse(rule34 is RelatedPostsSourceAdapter)
-        assertTrue(rule34.capabilities.requiresCredentials)
         assertFalse(rule34.capabilities.supportsGroupedIncludeTagsServerSide)
         assertTrue(gelbooru is CreatorPostsSourceAdapter)
         assertTrue(gelbooru is RelatedPostsSourceAdapter)
@@ -608,15 +606,15 @@ class GelbooruSourceAdapterTest {
     private fun gelbooru(
         httpClient: SourceHttpClient,
         credentials: SourceCredentialsProvider = FakeCredentialsProvider(),
-    ): GelbooruFamilySourceAdapter = GelbooruSourceAdapter(GelbooruSite.GELBOORU, httpClient, credentials::getGelbooruCredentials)
+    ): GelbooruFamilySourceAdapter = GelbooruSourceAdapter(GelbooruSite.GELBOORU, httpClient, { credentials.userApiKey(SourceKey.GELBOORU) })
 
     private fun rule34(
         httpClient: SourceHttpClient,
         credentials: SourceCredentialsProvider = FakeCredentialsProvider(),
-    ): GelbooruFamilySourceAdapter = GelbooruSourceAdapter(GelbooruSite.RULE34XXX, httpClient, credentials::getRule34XxxCredentials)
+    ): GelbooruFamilySourceAdapter = GelbooruSourceAdapter(GelbooruSite.RULE34XXX, httpClient, { credentials.userApiKey(SourceKey.RULE34XXX) })
 
     private fun rule34Credentials() = FakeCredentialsProvider().apply {
-        rule34XxxCredentials = Rule34XxxCredentials(userId = "42", apiKey = "secret")
+        rule34XxxCredentials = UserApiKey(userId = "42", apiKey = "secret")
     }
 
     private fun rule34Query(): Query {

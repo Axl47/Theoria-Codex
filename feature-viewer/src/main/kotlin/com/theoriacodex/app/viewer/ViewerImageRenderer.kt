@@ -26,7 +26,6 @@ import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.memory.MemoryCache
 import coil.request.SuccessResult
-import com.theoriacodex.app.media.isAnimatedImageMediaRef
 import com.theoriacodex.app.media.isHttpNotFound
 import com.theoriacodex.app.media.MediaDeliveryCandidate
 import com.theoriacodex.app.media.MediaDeliveryActivation
@@ -50,6 +49,8 @@ internal fun ViewerImageRenderer(
     post: Post,
     media: ImageRef,
     key: ViewerMediaKey,
+    /** True for animated stills (animated WebP), which play through [ViewerAnimatedWebPPlayer]. */
+    animated: Boolean,
     modifier: Modifier,
     mediaModifier: Modifier,
     controls: ViewerRendererControls,
@@ -78,7 +79,7 @@ internal fun ViewerImageRenderer(
     Box(modifier, contentAlignment = Alignment.Center) {
         if (!state.visible) ViewerLoadingPreview(post, media, mediaModifier)
         when {
-            post.id.source == SourceKey.HITOMI && isAnimatedImageMediaRef(media) && location != null ->
+            animated && location != null ->
                 ViewerAnimatedWebPPlayer(
                     sourceKey = post.id.source, location = location,
                     contentDescription = post.title ?: post.id.sourcePostId,

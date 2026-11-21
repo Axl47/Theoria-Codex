@@ -14,8 +14,9 @@ import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.http.SourceRetryPolicy
 import com.theoriacodex.sources.http.buildUrl
 import com.theoriacodex.sources.http.defaultSourceOkHttpClient
-import com.theoriacodex.sources.http.executeHttpRequest
 import com.theoriacodex.sources.http.executeWithRetry
+import com.theoriacodex.sources.http.header
+import com.theoriacodex.sources.http.httpTransport
 import com.theoriacodex.sources.http.toTextResponse
 import com.theoriacodex.sources.http.withByteRange
 import java.io.IOException
@@ -28,15 +29,15 @@ import okhttp3.OkHttpClient
  * go out with redirects off; a redirect is followed (at most [maxRedirects] hops) only when it stays
  * on HTTPS and on the same site, so query-string API keys never reach another host or travel in
  * cleartext. A refused redirect is never requested. GET only. When [retry] is set (adapters), each
- * hop retries transient failures the way built-in sources do; probes leave it null and see raw answers.
+ * hop retries transient failures and reports its outcome to the diagnostics log the way built-in
+ * sources do; probes leave it null, see raw answers and log nothing.
  */
 class CustomSiteHttpClient internal constructor(
-    private val connectTimeoutMs: Int,
-    private val readTimeoutMs: Int,
     private val maxRedirects: Int,
     /** Set for adapters, never for probes (which must see raw answers); see [HostOutageTracker]. */
     private val outages: HostOutageTracker? = null,
     private val retry: SourceRetryPolicy? = null,
+    /** Must leave redirects unfollowed, as [httpTransport] does with `followRedirects = false`. */
     private val transport: suspend (HttpRequestSpec) -> SourceByteResponse,
 ) : SourceHttpClient {
     /**
@@ -49,12 +50,10 @@ class CustomSiteHttpClient internal constructor(
         outages: HostOutageTracker? = null,
         okHttpClient: OkHttpClient = defaultSourceOkHttpClient,
     ) : this(
-        connectTimeoutMs,
-        readTimeoutMs,
         MAX_REDIRECTS,
         outages,
         retry = outages?.let { SourceRetryPolicy() },
-        transport = { spec -> executeHttpRequest(spec, okHttpClient) },
+        transport = httpTransport(okHttpClient, connectTimeoutMs, readTimeoutMs, followRedirects = false),
     )
 
     override suspend fun get(url: String, query: Map<String, String>, headers: Map<String, String>): SourceHttpResponse =
@@ -81,9 +80,6 @@ class CustomSiteHttpClient internal constructor(
                         headers = requestHeaders,
                         body = null,
                         maxBodyBytes = maxBodyBytes,
-                        connectTimeoutMs = connectTimeoutMs,
-                        readTimeoutMs = readTimeoutMs,
-                        followRedirects = false,
                     ),
                 )
             }
@@ -139,9 +135,7 @@ internal fun vetRedirect(from: URI, to: URI): URI {
 }
 
 private fun SourceByteResponse.redirectLocation(): String? =
-    takeIf { statusCode in REDIRECT_STATUSES }
-        ?.headers?.entries?.firstOrNull { (name, _) -> name.equals("Location", ignoreCase = true) }
-        ?.value?.firstOrNull()?.takeIf(String::isNotBlank)
+    takeIf { statusCode in REDIRECT_STATUSES }?.headers?.header("Location")?.takeIf(String::isNotBlank)
 
 private fun siteHost(uri: URI): String? = uri.host?.let(HostOutageTracker::normalizeHost)
 

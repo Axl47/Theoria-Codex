@@ -1,7 +1,6 @@
 package com.theoriacodex.domain.orchestration
 
 import com.theoriacodex.domain.adapter.Page
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SearchMetadataSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
@@ -152,13 +151,12 @@ class SearchMetadataHydrationTest {
         private val search: suspend (Query, String?) -> Page<Post>,
         private val resolve: suspend (Post) -> Post? = { error("Unexpected metadata resolution") },
     ) : SourceAdapter, SearchMetadataSourceAdapter {
-        override val capabilities = SourceCapabilities(true, true, true, false, false, false, false, false)
+        override val capabilities = SourceCapabilities(true, true, true, false, false)
         override suspend fun search(query: Query, pageToken: String?) = search.invoke(query, pageToken)
         override suspend fun resolveSearchMetadata(post: Post) = resolve(post)
         override suspend fun resolvePost(id: PostId): Post? = error("Use metadata capability")
         override suspend fun trendingTags(limit: Int): List<TagSuggestion> = emptyList()
         override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = emptyList()
-        override suspend fun quickQuery(kind: QuickQueryKind): Query = error("Unexpected quick query")
     }
 
     private fun plainQuery() = Query(

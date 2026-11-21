@@ -53,7 +53,6 @@ class MediaDurationRouteViewModel(
     private var postsById: Map<PostId, Post> = emptyMap()
     private var keysByPostId: Map<PostId, MediaDurationKey> = emptyMap()
     private var candidatesByKey: Map<MediaDurationKey, Post> = emptyMap()
-    private var knownDurationsByKey: Map<MediaDurationKey, Long> = emptyMap()
     private var observedKeys: Set<MediaDurationKey> = emptySet()
     private var retainedDecisions: Map<MediaDurationKey, MediaDurationState> = emptyMap()
     private var backgroundEnabled = false
@@ -66,8 +65,13 @@ class MediaDurationRouteViewModel(
     private var visibleDemandKeys: Set<MediaDurationKey> = emptySet()
     private var nearbyDemandKeys: Set<MediaDurationKey> = emptySet()
 
-    private val mutableStates = MutableStateFlow<Map<MediaDurationKey, MediaDurationState>>(emptyMap())
-    val states: StateFlow<Map<MediaDurationKey, MediaDurationState>> = mutableStates.asStateFlow()
+    private var publishedDecisions: Map<MediaDurationKey, MediaDurationState>? = null
+    private var publishedPosts: Map<PostId, Post>? = null
+
+    private val mutableStates = MutableStateFlow(MediaDurationStates.EMPTY)
+
+    /** Decisions for the synchronized posts while a duration filter is active; empty otherwise. */
+    val states: StateFlow<MediaDurationStates> = mutableStates.asStateFlow()
 
     init {
         ownerScope.launch {
@@ -150,18 +154,15 @@ class MediaDurationRouteViewModel(
             return
         }
         if (contentIdentity != request.identity) releaseContentDemand()
-        val previouslyPublishedDurations = knownDurationsByKey
         contentIdentity = request.identity
         postsById = snapshot.postsById
         keysByPostId = snapshot.keysByPostId
         candidatesByKey = snapshot.candidatesByKey
-        knownDurationsByKey = snapshot.knownDurationsByKey
         observedKeys = snapshot.observedKeys
         retainedDecisions = withContext(snapshotDispatcher) { retainedDecisions.filterKeys { it in observedKeys } }
         publishObservedStates(coordinator.states.value)
         visiblePostIds.retainAll(snapshot.postsById.keys)
         backgroundEnabled = request.resolveInBackground
-        publishSnapshotDurations(previouslyPublishedDurations)
         synchronizeDemand()
     }
 
@@ -170,14 +171,18 @@ class MediaDurationRouteViewModel(
         filterActive = active
         ownerScope.launch {
             demandLock.withLock {
-                if (active) publishObservedStates(coordinator.states.value) else mutableStates.value = emptyMap()
+                if (active) publishObservedStates(coordinator.states.value) else clearPublishedStates()
                 synchronizeDemand()
             }
         }
     }
 
+    /** A duration the feed supplied answers directly; only the others are looked up and kept by the coordinator. */
     fun observeState(post: Post): Flow<MediaDurationState?> {
         if (!isAnimatedPost(post)) return flowOf(null)
+        animatedDurationMs(post)?.let { durationMs ->
+            return flowOf(MediaDurationState.Known(durationMs, MediaDurationProvenance.PROVIDER))
+        }
         val key = if (requestedSnapshotIdentity == requestedContentIdentity) {
             requestedSnapshot.keysByPostId[post.id]
         } else {
@@ -218,7 +223,7 @@ class MediaDurationRouteViewModel(
     }
 
     fun publishPlayerDuration(post: Post, durationMs: Long) {
-        if (durationMs <= 0L) return
+        if (durationMs <= 0L || animatedDurationMs(post) != null) return
         val key = requestedSnapshot
             .takeIf { requestedSnapshotIdentity == requestedContentIdentity }
             ?.keysByPostId
@@ -246,14 +251,12 @@ class MediaDurationRouteViewModel(
             desired = if (backgroundEnabled) candidatesByKey.keys else emptySet(),
             lane = DemandLane.BACKGROUND,
             priority = DurationDemandPriority.BACKGROUND_IDLE,
-            reason = DurationDemandReason.APPEND,
         )
         filterDemandKeys = reconcileDemandLane(
             current = filterDemandKeys,
             desired = if (filterActive) candidatesByKey.keys else emptySet(),
             lane = DemandLane.FILTER,
             priority = DurationDemandPriority.ACTIVE_FILTER,
-            reason = DurationDemandReason.FILTER,
         )
         visibleDemandKeys = reconcileDemandLane(
             current = visibleDemandKeys,
@@ -266,7 +269,6 @@ class MediaDurationRouteViewModel(
             },
             lane = DemandLane.VISIBLE,
             priority = DurationDemandPriority.VISIBLE,
-            reason = DurationDemandReason.VIEWPORT,
         )
         nearbyDemandKeys = reconcileDemandLane(
             current = nearbyDemandKeys,
@@ -275,7 +277,6 @@ class MediaDurationRouteViewModel(
             },
             lane = DemandLane.NEARBY,
             priority = DurationDemandPriority.NEAR_VIEWPORT,
-            reason = DurationDemandReason.VIEWPORT,
         )
     }
 
@@ -284,14 +285,13 @@ class MediaDurationRouteViewModel(
         desired: Set<MediaDurationKey>,
         lane: DemandLane,
         priority: DurationDemandPriority,
-        reason: DurationDemandReason,
     ): Set<MediaDurationKey> {
         val removedIdentities = (current - desired)
             .mapTo(mutableSetOf()) { key -> demandIdentity(lane, key) }
         if (removedIdentities.isNotEmpty()) coordinator.releaseIdentities(removedIdentities)
         (desired - current).forEach { key ->
             val post = candidatesByKey[key] ?: return@forEach
-            submit(post, key, demandIdentity(lane, key), priority, reason)
+            submit(post, key, demandIdentity(lane, key), priority)
         }
         // The coordinator retains deferred demand and refills its bounded queue independently.
         return desired
@@ -317,20 +317,8 @@ class MediaDurationRouteViewModel(
             key = key,
             identity = demandIdentity(DemandLane.VISIBLE, key),
             priority = DurationDemandPriority.VISIBLE,
-            reason = DurationDemandReason.VIEWPORT,
         )
         visibleDemandKeys = visibleDemandKeys + key
-    }
-
-    private suspend fun publishSnapshotDurations(previouslyPublished: Map<MediaDurationKey, Long>) {
-        knownDurationsByKey.forEach { (key, durationMs) ->
-            if (previouslyPublished[key] == durationMs) return@forEach
-            coordinator.publishKnown(
-                key = key,
-                durationMs = durationMs,
-                provenance = MediaDurationProvenance.PROVIDER,
-            )
-        }
     }
 
     private suspend fun submit(
@@ -338,7 +326,6 @@ class MediaDurationRouteViewModel(
         key: MediaDurationKey,
         identity: String,
         priority: DurationDemandPriority,
-        reason: DurationDemandReason,
     ) {
         coordinator.submit(
             post = post,
@@ -346,7 +333,6 @@ class MediaDurationRouteViewModel(
                 identity = identity,
                 key = key,
                 priority = priority,
-                reason = reason,
             ),
         )
     }
@@ -361,7 +347,6 @@ class MediaDurationRouteViewModel(
         postsById = emptyMap()
         keysByPostId = emptyMap()
         candidatesByKey = emptyMap()
-        knownDurationsByKey = emptyMap()
     }
 
     private fun ownedDemandIdentities(): Set<String> {
@@ -388,7 +373,18 @@ class MediaDurationRouteViewModel(
         val observed = withContext(snapshotDispatcher) { reconcileDurationDecisions(previous, allStates, keys) }
         if (generation != requestGeneration) return
         retainedDecisions = observed
-        if (filterActive && mutableStates.value !== observed) mutableStates.value = observed
+        if (!filterActive || (observed === publishedDecisions && postsById === publishedPosts)) return
+        publishedDecisions = observed
+        publishedPosts = postsById
+        val posts = postsById
+        val postKeys = keysByPostId
+        mutableStates.value = withContext(snapshotDispatcher) { routeDurationStates(posts, postKeys, observed) }
+    }
+
+    private fun clearPublishedStates() {
+        publishedDecisions = null
+        publishedPosts = null
+        mutableStates.value = MediaDurationStates.EMPTY
     }
 
     private enum class DemandLane {

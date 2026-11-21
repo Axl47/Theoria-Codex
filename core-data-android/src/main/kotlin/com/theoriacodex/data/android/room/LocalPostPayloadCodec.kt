@@ -45,7 +45,9 @@ internal object LocalPostPayloadCodec {
         "fullIsAnimated",
     )
 
-    fun encode(post: Post): String = DurableJson.encodeToString(PostStorageRecord.serializer(), PostStorageCodec.encode(post))
+    fun encode(post: Post): String = encode(PostStorageCodec.encode(post))
+
+    fun encode(record: PostStorageRecord): String = DurableJson.encodeToString(PostStorageRecord.serializer(), record)
 
     fun decode(entity: PostEntity): Post {
         val root = parseRoot(entity.payloadJson)

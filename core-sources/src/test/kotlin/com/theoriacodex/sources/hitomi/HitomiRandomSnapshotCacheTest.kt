@@ -1,7 +1,6 @@
 package com.theoriacodex.sources.hitomi
 
 import java.util.concurrent.atomic.AtomicInteger
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -69,23 +68,48 @@ class HitomiRandomSnapshotCacheTest {
     }
 
     @Test
-    fun `owner cancellation reaches waiters and leaves no retained or in flight result`() = runTest {
+    fun `a waiter keeps the shared load alive after the first caller is cancelled`() = runTest {
         val cache = HitomiRandomSnapshotCache()
         val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
         val owner = async {
             cache.getOrLoad("url", null) {
                 started.complete(Unit)
-                awaitCancellation()
+                release.await()
+                snapshot(1, 2)
             }
         }
         started.await()
-        val waiter = async {
-            runCatching { cache.getOrLoad("url", null) { snapshot(9) } }.exceptionOrNull()
-        }
+        val waiter = async { cache.getOrLoad("url", null) { error("must share URL flight") } }
         runCurrent()
-        owner.cancelAndJoin()
 
-        assertTrue(waiter.await() is CancellationException)
+        owner.cancelAndJoin()
+        release.complete(Unit)
+
+        assertArrayEquals(intArrayOf(1, 2), waiter.await().ids)
+        assertArrayEquals(intArrayOf(1, 2), cache.getOrLoad("url", null) { error("fresh cache miss") }.ids)
+    }
+
+    @Test
+    fun `the load stops when every caller leaves and nothing is retained`() = runTest {
+        val cache = HitomiRandomSnapshotCache()
+        val started = CompletableDeferred<Unit>()
+        var loadCancelled = false
+        val callers = List(2) {
+            async {
+                cache.getOrLoad("url", null) {
+                    started.complete(Unit)
+                    try { awaitCancellation() } finally { loadCancelled = true }
+                }
+            }
+        }
+        started.await()
+        runCurrent()
+
+        callers.forEach { caller -> caller.cancelAndJoin() }
+        runCurrent()
+
+        assertTrue(loadCancelled)
         assertEquals(0L, cache.snapshot().cachedBytes)
         assertArrayEquals(intArrayOf(9), cache.getOrLoad("url", null) { snapshot(9) }.ids)
     }

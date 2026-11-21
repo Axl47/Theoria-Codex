@@ -3,6 +3,7 @@ package com.theoriacodex.app.codex
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import com.theoriacodex.app.ui.components.ExpandedBottomSheet
+import com.theoriacodex.app.ui.components.FeedView
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,10 +26,8 @@ import com.theoriacodex.domain.model.Post
 fun SavedSearchesCodexHeader(
     owner: SavedSearchesCodexViewModel,
     entries: List<SavedSearchEntry>,
-    visiblePosts: List<Post>,
+    feed: FeedView,
     posts: List<Post>,
-    filters: CodexCollectionFilters,
-    durationsBlockPaging: Boolean,
     gridState: LazyStaggeredGridState,
     onBack: () -> Unit,
     restoreState: FeedFabRestoreState,
@@ -38,7 +37,7 @@ fun SavedSearchesCodexHeader(
 ) {
     var showSearches by remember { mutableStateOf(false) }
     LiveCodexHeader("Searches", SAVED_SEARCHES_CODEX_ID, owner,
-        entries.associate { it.id to it.name }, visiblePosts, posts, filters, durationsBlockPaging, gridState,
+        entries.associate { it.id to it.name }, feed, posts, gridState,
         onBack, "Searches", onManage = { showSearches = true })
     if (showSearches) SavedSearchesManagementSheet(entries, restoreState, onChange, onRename, onRemove) {
         showSearches = false

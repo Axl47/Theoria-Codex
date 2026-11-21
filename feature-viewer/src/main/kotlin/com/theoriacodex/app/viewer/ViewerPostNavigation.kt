@@ -48,27 +48,11 @@ private fun branchDisplayOrder(originals: List<Post>, branch: ViewerRelatedNavig
     }.distinct()
 }
 
-/** Adding branch media never changes which posts belong to the original bottom strip. */
-fun ViewerSession.withRelatedPosts(seedId: PostId, incoming: List<Post>): ViewerSession {
-    val originals = posts.filterNot { it.id in relatedPostIds }
-    val originalIds = originals.mapTo(mutableSetOf(), Post::id)
-    val anchor = seedId.takeIf { it in originalIds } ?: relatedNavigation?.anchor ?: return this
-    val prefix = relatedNavigation?.postIds.orEmpty().let { ids ->
-        if (seedId in originalIds) emptyList() else ids.take(ids.indexOf(seedId) + 1)
-    }
-    val branchIds = (prefix + incoming.map { it.id }).filterNot { it == anchor }.distinct()
-    val extras = incoming.mapTo(mutableSetOf(), Post::id) - originalIds
-    return copy(
-        posts = mergeViewerPosts(posts, incoming), relatedPostIds = relatedPostIds + extras,
-        relatedNavigation = ViewerRelatedNavigation(anchor, branchIds),
-    )
-}
-
 /** Recommendation branches are transient: cold recovery resumes the original feed at its liked anchor. */
-internal fun ViewerUiState.forOriginalNavigation(session: ViewerSession?): ViewerUiState {
-    val extras = session?.relatedPostIds.orEmpty()
+internal fun ViewerUiState.forOriginalNavigation(): ViewerUiState {
+    val extras = related.extraPostIds
     if (extras.isEmpty()) return this
     val originalPages = pages.filterNot { it.post.id in extras }
-    val selected = currentPage?.post?.id?.takeUnless { it in extras } ?: session?.relatedNavigation?.anchor
+    val selected = currentPage?.post?.id?.takeUnless { it in extras } ?: related.navigation?.anchor
     return copy(pages = originalPages, currentPageIndex = originalPages.indexOfFirst { it.post.id == selected }.coerceAtLeast(0))
 }

@@ -45,6 +45,20 @@ import com.theoriacodex.app.related.retainedLikedPostIds
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
+/** The related shelf the route feeds the Viewer: its recommendations, and what the drawer's actions do. */
+class ViewerRelatedShelf(
+    val state: RelatedPostsUiState = RelatedPostsUiState.Idle,
+    val posts: List<Post> = emptyList(),
+    /** Enters the recommendation branch with [posts]. */
+    val onInclude: () -> Unit = {},
+    val onDismiss: () -> Unit = {},
+    val onRetry: () -> Unit = {},
+) {
+    companion object {
+        val None = ViewerRelatedShelf()
+    }
+}
+
 /** Collapsing is local and survives new recommendations; only explicit Dismiss clears the source shelf and its retained liked seeds. */
 @Composable
 internal fun ViewerRelatedStrip(
