@@ -135,9 +135,8 @@ class ViewerSwipeAnimationTest {
         compose.setContent {
             MaterialTheme {
                 ViewerScreen(
-                    uiState = state.value, creatorBrowsingSources = emptySet(),
-                    onAction = { actions += it; state.value = reduceViewerState(state.value, it).state },
-                    onRemoveIncludeTerm = { _, _ -> }, onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
+                    uiState = state.value,
+                    host = ViewerScreenHost(onAction = { actions += it; state.value = reduceViewerState(state.value, it).state }),
                 )
             }
         }
@@ -207,15 +206,13 @@ class ViewerSwipeAnimationTest {
             CompositionLocalProvider(LocalViewerReturnTransition provides transition) {
                 MaterialTheme {
                     ViewerScreen(
-                        uiState = state.value.copy(related = relatedBranch(first, posts, related)), creatorBrowsingSources = emptySet(),
-                        invertMultiImageScrollDirection = inverted,
-                        onAction = { state.value = reduceViewerState(state.value, it).state },
+                        uiState = state.value.copy(related = relatedBranch(first, posts, related)),
+                        host = ViewerScreenHost(onAction = { state.value = reduceViewerState(state.value, it).state }),
+                        config = ViewerScreenConfig(invertMultiImageScrollDirection = inverted),
                         relatedShelf = relatedShelf(first, posts, related) {
                             state.value = reduceViewerState(state.value,
                                 com.theoriacodex.app.viewer.state.ViewerAction.ReplaceSession(ViewerSessionIdentity("swipe"), posts)).state
                         },
-                        onRemoveIncludeTerm = { _, _ -> },
-                        onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
                     )
                 }
             }

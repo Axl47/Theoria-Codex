@@ -37,9 +37,8 @@ internal fun BoxScope.ViewerChromeOverlays(
     quality: MutableState<com.theoriacodex.domain.model.VideoQuality>,
     qualityHeight: MutableState<Int?>,
     pendingPostId: MutableState<PostId?>,
-    likedPostIds: Set<PostId>,
-    invertMultiImageScrollDirection: Boolean,
-    onAction: (ViewerAction) -> Unit,
+    host: ViewerScreenHost,
+    config: ViewerScreenConfig,
     loadMoreFromStrip: () -> Unit,
     relatedShelf: ViewerRelatedShelf,
     comments: ViewerComments,
@@ -50,7 +49,7 @@ internal fun BoxScope.ViewerChromeOverlays(
     // While scrubbing everything but the timeline steps back. Only its alpha changes, so the strip keeps its scroll position.
     val scrubFade by animateFloatAsState(if (screen.timelineInteractionActive) 0f else 1f, tween(TheoriaMotion.SHORT_MS), label = "Viewer scrub fade")
     val fadesWhileScrubbing = Modifier.graphicsLayer { alpha = scrubFade }
-    val mirrored = viewerMediaPagerReverseLayout(selection.mediaItems.size, invertMultiImageScrollDirection)
+    val mirrored = viewerMediaPagerReverseLayout(selection.mediaItems.size, config.invertMultiImageScrollDirection)
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_STRIPS && !frame.mediaOverviewVisible, Modifier.align(Alignment.BottomCenter)) {
         val stripIndex = navigation.originalPosts.indexOfFirst { it.id == frame.posts.getOrNull(postPagerState.currentPage)?.id }
             .takeIf { it >= 0 } ?: navigation.stripAnchorIndex
@@ -83,9 +82,9 @@ internal fun BoxScope.ViewerChromeOverlays(
                 })
         }
     }
-    ViewerFooterButtons(frame, screen, activity, onAction)
+    ViewerFooterButtons(frame, screen, activity, host.onAction)
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_TOP_BAR, Modifier.align(Alignment.TopCenter).then(fadesWhileScrubbing)) {
-        ViewerTopChrome(frame, controls, activity, quality, qualityHeight, selection.post.id in likedPostIds, comments.countOf(selection.post), onAction)
+        ViewerTopChrome(frame, controls, activity, quality, qualityHeight, selection.post.id in config.likedPostIds, comments.countOf(selection.post), host.onAction)
     }
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_STRIPS && !frame.mediaOverviewVisible, Modifier.align(Alignment.TopEnd).padding(top = 72.dp).then(fadesWhileScrubbing)) {
         ViewerRelatedStrip(

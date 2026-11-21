@@ -41,9 +41,7 @@ class ViewerLinkedPageTest {
             MaterialTheme {
                 ViewerScreen(
                     uiState = owner.state.collectAsState().value,
-                    creatorBrowsingSources = emptySet(), onAction = owner::onAction,
-                    onRemoveIncludeTerm = { _, _ -> },
-                    onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
+                    host = ViewerScreenHost(onAction = owner::onAction),
                 )
             }
         }

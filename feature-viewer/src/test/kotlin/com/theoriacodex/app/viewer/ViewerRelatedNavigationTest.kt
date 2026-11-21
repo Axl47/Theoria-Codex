@@ -87,8 +87,7 @@ class ViewerRelatedNavigationTest {
             MaterialTheme {
                 ViewerScreen(
                     uiState = state.value,
-                    creatorBrowsingSources = emptySet(),
-                    onAction = { state.value = reduceViewerState(state.value, it).state },
+                    host = ViewerScreenHost(onAction = { state.value = reduceViewerState(state.value, it).state }),
                     relatedShelf = ViewerRelatedShelf(
                         RelatedPostsUiState.Loaded(RelatedPostsRequest(originals[1], 1, 1), related), related,
                         onInclude = {
@@ -96,7 +95,6 @@ class ViewerRelatedNavigationTest {
                             state.value = reduceViewerState(state.value, include).state
                         },
                     ),
-                    onRemoveIncludeTerm = { _, _ -> }, onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
                 )
             }
         }

@@ -27,7 +27,6 @@ import com.theoriacodex.app.ui.motion.TheoriaHaptics
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerPageState
-import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -47,14 +46,9 @@ internal fun ViewerPostPagerSurface(
     flingVelocity: Float,
     quality: com.theoriacodex.domain.model.VideoQuality,
     qualityHeight: Int?,
-    playbackDiagnosticsEnabled: Boolean,
     videoPositions: ViewerVideoPositions,
-    invertMultiImageScrollDirection: Boolean,
-    pixivUgoiraClient: PixivUgoiraClient?,
-    onAction: (ViewerAction) -> Unit,
-    onVisibleMediaChanged: ((Post, Int) -> Unit)?,
-    durations: ViewerPostDurations,
-    onRequestMediaRecovery: ((Post, ImageRef) -> Unit)?,
+    host: ViewerScreenHost,
+    config: ViewerScreenConfig,
     scope: CoroutineScope,
 ) {
     val haptics = LocalHapticFeedback.current
@@ -85,14 +79,13 @@ internal fun ViewerPostPagerSurface(
                 key = { index -> encodeViewerPostId(frame.posts[index].id) },
                 userScrollEnabled = false,
                 reverseLayout = viewerMediaPagerReverseLayout(
-                    frame.uiState.currentPage?.swipeMediaCount() ?: 1, invertMultiImageScrollDirection,
+                    frame.uiState.currentPage?.swipeMediaCount() ?: 1, config.invertMultiImageScrollDirection,
                 ),
                 modifier = Modifier.fillMaxSize(),
             ) { postPage ->
                 ViewerPostPage(
                     postPage, frame, postPagerState, viewerTransform, screen, controls, swipe, dismissDrag, levelControls, readReturnProgress, quality,
-                    qualityHeight, playbackDiagnosticsEnabled, videoPositions, invertMultiImageScrollDirection, pixivUgoiraClient,
-                    onAction, onVisibleMediaChanged, durations, onRequestMediaRecovery,
+                    qualityHeight, videoPositions, host, config,
                 )
             }
         }
@@ -148,32 +141,27 @@ private fun ViewerPostPage(
     readReturnProgress: () -> Float,
     quality: com.theoriacodex.domain.model.VideoQuality,
     qualityHeight: Int?,
-    playbackDiagnosticsEnabled: Boolean,
     videoPositions: ViewerVideoPositions,
-    invertMultiImageScrollDirection: Boolean,
-    pixivUgoiraClient: PixivUgoiraClient?,
-    onAction: (ViewerAction) -> Unit,
-    onVisibleMediaChanged: ((Post, Int) -> Unit)?,
-    durations: ViewerPostDurations,
-    onRequestMediaRecovery: ((Post, ImageRef) -> Unit)?,
+    host: ViewerScreenHost,
+    config: ViewerScreenConfig,
 ) {
     val post = frame.posts[postPage]
     val pageState = frame.navigation.pages[postPage]
     val postMedia = pageState.media
-    val knownDurationMs by remember(post, durations) { durations.observe(post) }.collectAsStateWithLifecycle(null)
+    val knownDurationMs by remember(post, host.durations) { host.durations.observe(post) }.collectAsStateWithLifecycle(null)
     val initialMediaPage = pageState.selectedMediaIndex.coerceIn(0, postMedia.lastIndex)
     val mediaPagerState = rememberPagerState(initialPage = initialMediaPage, pageCount = { postMedia.size })
     DisposableEffect(post.id, mediaPagerState) {
         screen.mediaPagers[post.id] = mediaPagerState
         onDispose { if (screen.mediaPagers[post.id] === mediaPagerState) screen.mediaPagers.remove(post.id) }
     }
-    ViewerPostPageEffects(postPage, post, pageState, postMedia.size, initialMediaPage, mediaPagerState, frame, postPagerState, screen, controls, swipe, onAction, onVisibleMediaChanged)
+    ViewerPostPageEffects(postPage, post, pageState, postMedia.size, initialMediaPage, mediaPagerState, frame, postPagerState, screen, controls, swipe, host.onAction, host.onVisibleMediaChanged)
     HorizontalPager(
         state = mediaPagerState,
         userScrollEnabled = false,
         reverseLayout = viewerMediaPagerReverseLayout(
             mediaCount = pageState.swipeMediaCount(),
-            invertMultiImageScrollDirection = invertMultiImageScrollDirection,
+            invertMultiImageScrollDirection = config.invertMultiImageScrollDirection,
         ),
         modifier = Modifier.fillMaxSize(),
         contentPadding = if (frame.mediaEdgeToEdge) PaddingValues(0.dp) else PaddingValues(top = 40.dp),
@@ -195,24 +183,24 @@ private fun ViewerPostPage(
             ),
             events = viewerRendererEvents(
                 session = frame.uiState.session, key = key, generation = loadGeneration,
-                onAction = onAction,
+                onAction = host.onAction,
                 onTimelineInteractionActiveChanged = { controls.onTimelineInteractionChanged(it) },
-                onDurationKnown = { duration -> if (carriesPostDuration(post, media)) durations.onPlayerDuration(post, duration) },
+                onDurationKnown = { duration -> if (carriesPostDuration(post, media)) host.durations.onPlayerDuration(post, duration) },
             ),
             transform = viewerTransform,
             onTransformChanged = { viewerTransform.value = it },
             layout = ViewerMediaLayout(frame.isLandscape, frame.inPictureInPicture, frame.touchExplorationEnabled),
-            videoOptions = ViewerVideoOptions(quality, qualityHeight, pageState.terminalResolutionMessage(), playbackDiagnosticsEnabled),
+            videoOptions = ViewerVideoOptions(quality, qualityHeight, pageState.terminalResolutionMessage(), config.playbackDiagnosticsEnabled),
             videoPositions = videoPositions,
             levelControls = levelControls,
             mediaError = frame.uiState.mediaError.takeIf { active }?.takeIf { it.mediaKey == key },
-            pixivUgoiraClient = pixivUgoiraClient,
-            onAction = onAction,
+            pixivUgoiraClient = config.pixivUgoiraClient,
+            onAction = host.onAction,
             onInteraction = { controls.markInteraction() },
             onPassiveInteraction = { controls.markPassiveInteraction() },
             onToggleChrome = { controls.toggleChrome() },
             imageSession = screen.imageSession,
-            onRequestMediaRecovery = onRequestMediaRecovery,
+            onRequestMediaRecovery = host.onRequestMediaRecovery,
         )
     }
 }

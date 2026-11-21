@@ -18,6 +18,8 @@ import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.viewer.ViewerMediaPrefetcher
 import com.theoriacodex.app.viewer.ViewerPostResolver
+import com.theoriacodex.app.viewer.ViewerScreenCallbacks
+import com.theoriacodex.app.viewer.ViewerScreenConfig
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.state.ViewerAction
@@ -211,7 +213,7 @@ class ViewerRouteRestorationUiTest {
                             ViewerMediaPrefetcher { _, _, _ -> ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED) },
                             durations, restoreSession = { restore() }, onCodexUsageTargetChanged = onUsage,
                         ),
-                        renderConfig = ViewerRouteRenderConfig(creatorBrowsingSources = emptySet()),
+                        config = ViewerScreenConfig(),
                         liveSourceState = ViewerRouteLiveSourceState(),
                         effectCallbacks = ViewerRouteEffectCallbacks(
                             onSavePost = { _, _ -> }, onDownloadMedia = {}, onToggleLike = {},
@@ -219,11 +221,12 @@ class ViewerRouteRestorationUiTest {
                             onRecoverMedia = { _, _, _ -> onRecoverMedia() }, onLoadMore = {},
                             onDismiss = onDismiss, onRestorationUnavailable = {},
                         ),
-                        screenCallbacks = ViewerRouteScreenCallbacks(
-                            onOwnerChanged = onOwner, onRemoveIncludeTerm = { _, _ -> },
+                        screenCallbacks = ViewerScreenCallbacks(
+                            onRemoveIncludeTerm = { _, _ -> },
                             onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = onGoToSearch,
                             onRemoveFromCodex = onRemoveFromCodex,
                         ),
+                        onOwnerChanged = onOwner,
                     )
                 }
             }

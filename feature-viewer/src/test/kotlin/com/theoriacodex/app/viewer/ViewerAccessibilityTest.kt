@@ -50,10 +50,8 @@ class ViewerAccessibilityTest {
             SideEffect { viewerManager = localManager }
             MaterialTheme {
                 ViewerScreen(
-                    uiState = state.value, creatorBrowsingSources = emptySet(),
-                    onAction = { action -> actions += action; state.value = reduceViewerState(state.value, action).state },
-                    onRemoveIncludeTerm = { _, _ -> },
-                    onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
+                    uiState = state.value,
+                    host = ViewerScreenHost(onAction = { action -> actions += action; state.value = reduceViewerState(state.value, action).state }),
                 )
             }
         }

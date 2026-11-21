@@ -1,0 +1,65 @@
+package com.theoriacodex.app.viewer
+
+import androidx.compose.runtime.Immutable
+import com.theoriacodex.app.viewer.state.ViewerAction
+import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.model.CommentOrder
+import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.VideoQuality
+import com.theoriacodex.domain.model.ViewerPlaybackMode
+
+/** Settings and providers the Viewer renders with. The app builds one from its settings; a change replaces it. */
+data class ViewerScreenConfig(
+    val creatorBrowsingSources: Set<SourceKey> = emptySet(),
+    val pixivUgoiraClient: PixivUgoiraClient? = null,
+    val tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
+    val fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
+    val playbackMode: ViewerPlaybackMode = ViewerPlaybackMode.LOOP,
+    val videoQuality: VideoQuality = VideoQuality.AUTO,
+    val invertMultiImageScrollDirection: Boolean = false,
+    val instantSeek: Boolean = false,
+    val autoRotateVideos: Boolean = false,
+    val commentOrder: CommentOrder = CommentOrder.OLDEST,
+    val likedPostIds: Set<PostId> = emptySet(),
+    val playbackDiagnosticsEnabled: Boolean = false,
+)
+
+/** What the Viewer asks of the app: navigation, persistence and platform behavior. The app builds one per shell. */
+data class ViewerScreenCallbacks(
+    val onPlaybackModeSelected: (ViewerPlaybackMode) -> Unit = {},
+    val onCommentOrderSelected: (CommentOrder) -> Unit = {},
+    val onVisiblePostChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
+    val onVisibleMediaChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
+    val onOpenUrl: (String) -> Unit = {},
+    val onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
+    val onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
+    val onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
+    val onGoToSearch: () -> Unit,
+    val onDismissRelatedPosts: (ViewerStreamSource) -> Unit = {},
+    val onRetryRelatedPosts: (ViewerStreamSource) -> Unit = {},
+    val onShowRelatedPosts: (ViewerStreamSource, Post) -> Unit = { _, _ -> },
+    val onRemoveFromCodex: (codexId: String, Post) -> Unit = { _, _ -> },
+    val onOpenCreatorFallback: ((Post) -> Unit)? = null,
+)
+
+/**
+ * The host's side of one Viewer screen: the owner's [onAction] and the callbacks bound to that owner. The route
+ * remembers one per owner, so recomposing the route hands the screen the same instance.
+ */
+@Immutable
+class ViewerScreenHost(
+    val onAction: (ViewerAction) -> Unit,
+    val onRemoveIncludeTerm: (Post, SearchTerm) -> Unit = { _, _ -> },
+    val onRemoveExcludeTerm: (Post, SearchTerm) -> Unit = { _, _ -> },
+    val onGoToSearch: () -> Unit = {},
+    val onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
+    val onOpenCreatorFallback: ((Post) -> Unit)? = null,
+    val onRequestMediaRecovery: ((Post, ImageRef) -> Unit)? = null,
+    val onVisiblePostChanged: ((Post, Int) -> Unit)? = null,
+    val onVisibleMediaChanged: ((Post, Int) -> Unit)? = null,
+    val durations: ViewerPostDurations = ViewerPostDurations.None,
+)

@@ -73,7 +73,6 @@ import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 
 /** How long a comment stays tinted after a link led to it, before the tint fades. */
@@ -143,21 +142,14 @@ internal fun OpenInfoSheetForFocusedComment(comments: ViewerComments, post: Post
 internal fun ViewerInfoSheet(
     selection: ViewerSelection,
     controls: ViewerControls,
-    creatorBrowsingSources: Set<SourceKey>,
+    host: ViewerScreenHost,
+    config: ViewerScreenConfig,
     saveToCodexQuery: Query?,
-    tagVideoCountProvider: (SourceKey, String) -> Int?,
-    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?>,
-    onAction: (ViewerAction) -> Unit,
-    onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
-    onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
-    onFavoriteTagLongPress: ((SourceKey, String) -> Unit)?,
-    onGoToSearch: () -> Unit,
-    onOpenCreatorFallback: ((Post) -> Unit)?,
-    contextActions: ViewerContextActions = ViewerContextActions(),
-    liked: Boolean = false,
-    comments: ViewerComments = ViewerComments.None,
+    contextActions: ViewerContextActions,
+    comments: ViewerComments,
 ) {
     val post = selection.post
+    val onAction = host.onAction
     val searchActions = LocalPostTagSearchActions.current
     PreloadCodexSaveRelevance(post, saveToCodexQuery)
     // Both settle as the sheet opens: whatever opened it, and whether the post has comments then. Neither moves later.
@@ -173,12 +165,13 @@ internal fun ViewerInfoSheet(
         PostTagActionSection(
             header = {
                 ViewerInfoActions(
-                    selection, liked, controls, creatorBrowsingSources, onAction, onGoToSearch, onOpenCreatorFallback, contextActions,
+                    selection, post.id in config.likedPostIds, controls, config.creatorBrowsingSources, onAction, host.onGoToSearch,
+                    host.onOpenCreatorFallback, contextActions,
                 )
             },
             post = post,
-            tagVideoCountProvider = tagVideoCountProvider,
-            fetchTagVideoCounts = fetchTagVideoCounts,
+            tagVideoCountProvider = config.tagVideoCountProvider,
+            fetchTagVideoCounts = config.fetchTagVideoCounts,
             onAddIncludeTerm = { term ->
                 onAction(ViewerAction.IncludeTag(PostTaxonomyTerm(term.value, term.facet, term.sourceNamespace)))
                 true
@@ -187,13 +180,13 @@ internal fun ViewerInfoSheet(
                 onAction(ViewerAction.ExcludeTag(PostTaxonomyTerm(term.value, term.facet, term.sourceNamespace)))
                 true
             },
-            onRemoveIncludeTerm = { term -> onRemoveIncludeTerm(post, term) },
-            onRemoveExcludeTerm = { term -> onRemoveExcludeTerm(post, term) },
-            onFavoriteTagLongPress = onFavoriteTagLongPress,
+            onRemoveIncludeTerm = { term -> host.onRemoveIncludeTerm(post, term) },
+            onRemoveExcludeTerm = { term -> host.onRemoveExcludeTerm(post, term) },
+            onFavoriteTagLongPress = host.onFavoriteTagLongPress,
             onSearch = {
                 searchActions.applyDraft()
                 controls.setPlaybackEnabled(false)
-                onGoToSearch()
+                host.onGoToSearch()
                 controls.setInfoSheetVisible(false)
             },
             sheetExtras = PostTagSheetExtras(
@@ -205,7 +198,7 @@ internal fun ViewerInfoSheet(
                     commentsState?.let { state ->
                         val view = commentsView(
                             comments, commentsCollapsed, { commentsCollapsed = !commentsCollapsed }, highlightedComment,
-                            creatorBrowsingSources, controls, onAction,
+                            config.creatorBrowsingSources, controls, onAction,
                         )
                         commentsSection(post, state, commentCount, comments.actions, nowEpochMs, view)
                     }

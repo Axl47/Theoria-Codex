@@ -31,8 +31,7 @@ class ViewerOverviewTest {
         compose.setContent {
             MaterialTheme {
                 ViewerScreen(
-                    uiState = state.value, creatorBrowsingSources = emptySet(), onAction = ::reduce,
-                    onRemoveIncludeTerm = { _, _ -> }, onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
+                    uiState = state.value, host = ViewerScreenHost(onAction = ::reduce),
                 )
             }
         }
