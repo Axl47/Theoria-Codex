@@ -64,10 +64,7 @@ class ViewerControlsTest {
         controls.requestDismiss()
 
         assertEquals(
-            listOf(
-                ViewerAction.Pause, ViewerAction.HideMetadata, ViewerAction.HideActionsMenu,
-                ViewerAction.HidePlaybackSettings, ViewerAction.ToggleOverview,
-            ),
+            listOf<ViewerAction>(ViewerAction.PrepareDismiss),
             actions,
         )
         assertTrue(screen.pendingDismiss)

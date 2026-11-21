@@ -25,6 +25,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.viewer.state.ViewerMediaKind
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.PostId
 import org.junit.Assert.assertEquals
@@ -170,7 +171,7 @@ class ViewerPostStripTest {
 
     private fun stripPages(postId: PostId, pageCount: Int, currentPage: Int, onSelect: (Int) -> Unit = {}): ViewerStripPages {
         val items = List(pageCount) { index ->
-            ViewerMediaOverviewItem(index, ImageRef(null, "/missing/$index.jpg", "image/jpeg"), ViewerMediaOverviewKind.STILL_IMAGE, "/missing/$index.jpg")
+            ViewerMediaOverviewItem(index, ImageRef(null, "/missing/$index.jpg", "image/jpeg"), ViewerMediaKind.IMAGE, "/missing/$index.jpg")
         }
         return ViewerStripPages(postId, items, currentPage, reversed = false, onSelect)
     }

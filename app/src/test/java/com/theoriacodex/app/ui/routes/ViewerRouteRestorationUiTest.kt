@@ -18,10 +18,15 @@ import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.viewer.ViewerMediaPrefetcher
 import com.theoriacodex.app.viewer.ViewerPostResolver
+import com.theoriacodex.app.viewer.ViewerScreenCallbacks
+import com.theoriacodex.app.viewer.ViewerScreenConfig
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.ViewerViewModel
+import com.theoriacodex.app.viewer.state.ViewerAction
+import com.theoriacodex.app.viewer.state.ViewerMediaError
 import com.theoriacodex.app.viewer.state.ViewerPrefetchOutcome
 import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
+import com.theoriacodex.app.viewer.testViewerOwner
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.ImageRef
@@ -52,6 +57,23 @@ class ViewerRouteRestorationUiTest {
             assertExitingPresentation()
             compose.runOnIdle { dismiss.complete(Unit) }
             assertExitingPresentation()
+        }
+    }
+
+    @Test fun `Back dismisses while a media retry still waits on the provider`() {
+        val owner = testViewerOwner(SavedStateHandle())
+        val recovery = CompletableDeferred<com.theoriacodex.domain.model.Post?>()
+        var dismissed = false
+        withRoute(liveOwner = owner, onRecoverMedia = { recovery.await() }, onDismiss = { dismissed = true }) {
+            compose.runOnIdle {
+                val identity = requireNotNull(owner.state.value.session)
+                val key = requireNotNull(owner.state.value.currentMedia).key
+                owner.onAction(ViewerAction.MediaFailed(identity, ViewerMediaError.Recoverable(key, "Network")))
+                owner.onAction(ViewerAction.RetryMedia)
+            }
+            compose.onNodeWithContentDescription("Back").performClick()
+            compose.waitUntil { dismissed }
+            compose.runOnIdle { recovery.complete(null) }
         }
     }
 
@@ -147,8 +169,8 @@ class ViewerRouteRestorationUiTest {
 
     private fun coldOwner(): ViewerViewModel {
         val saved = SavedStateHandle()
-        ViewerViewModel(saved).replaceSession(session)
-        return ViewerViewModel(saved)
+        testViewerOwner(saved).replaceSession(session)
+        return testViewerOwner(saved)
     }
 
     private fun assertExitingPresentation() {
@@ -162,6 +184,8 @@ class ViewerRouteRestorationUiTest {
         launchSession: ViewerSession = session,
         onUsage: (com.theoriacodex.data.repository.CodexUsageTarget?) -> Unit = {},
         coldOwner: ViewerViewModel? = null,
+        liveOwner: ViewerViewModel? = null,
+        onRecoverMedia: suspend () -> com.theoriacodex.domain.model.Post? = { null },
         restore: suspend () -> ViewerSession? = { error("A live handoff or exit must not restore") },
         onDismiss: suspend () -> Unit = {},
         onOwner: (ViewerRouteOwnerHandle?) -> Unit = {},
@@ -175,10 +199,11 @@ class ViewerRouteRestorationUiTest {
         try {
             compose.setContent {
                 val storeOwner = requireNotNull(LocalViewModelStoreOwner.current)
-                if (coldOwner != null) remember(storeOwner) {
+                val injectedOwner = coldOwner ?: liveOwner
+                if (injectedOwner != null) remember(storeOwner) {
                     ViewModelProvider(storeOwner, object : ViewModelProvider.Factory {
                         @Suppress("UNCHECKED_CAST")
-                        override fun <T : ViewModel> create(modelClass: Class<T>): T = coldOwner as T
+                        override fun <T : ViewModel> create(modelClass: Class<T>): T = injectedOwner as T
                     })[ViewerViewModel::class.java]
                 }
                 MaterialTheme {
@@ -188,19 +213,20 @@ class ViewerRouteRestorationUiTest {
                             ViewerMediaPrefetcher { _, _, _ -> ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED) },
                             durations, restoreSession = { restore() }, onCodexUsageTargetChanged = onUsage,
                         ),
-                        renderConfig = ViewerRouteRenderConfig(creatorBrowsingSources = emptySet()),
+                        config = ViewerScreenConfig(),
                         liveSourceState = ViewerRouteLiveSourceState(),
                         effectCallbacks = ViewerRouteEffectCallbacks(
                             onSavePost = { _, _ -> }, onDownloadMedia = {}, onToggleLike = {},
                             onOpenCreatorProfile = {}, onApplyTag = { _, _, _ -> },
-                            onRecoverMedia = { _, _, _ -> null }, onLoadMore = {},
+                            onRecoverMedia = { _, _, _ -> onRecoverMedia() }, onLoadMore = {},
                             onDismiss = onDismiss, onRestorationUnavailable = {},
                         ),
-                        screenCallbacks = ViewerRouteScreenCallbacks(
-                            onOwnerChanged = onOwner, onRemoveIncludeTerm = { _, _ -> },
+                        screenCallbacks = ViewerScreenCallbacks(
+                            onRemoveIncludeTerm = { _, _ -> },
                             onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = onGoToSearch,
                             onRemoveFromCodex = onRemoveFromCodex,
                         ),
+                        onOwnerChanged = onOwner,
                     )
                 }
             }

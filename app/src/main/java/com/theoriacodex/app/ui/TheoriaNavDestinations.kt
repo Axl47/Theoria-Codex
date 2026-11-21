@@ -24,6 +24,7 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.codex.CodexDetailScreen
 import com.theoriacodex.app.codex.SAVED_CODEX_ID
 import com.theoriacodex.app.codex.likesCodexIdForProfile
@@ -52,11 +53,11 @@ import com.theoriacodex.app.ui.routes.ViewerRouteDependencies
 import com.theoriacodex.app.ui.routes.ViewerRouteEffectCallbacks
 import com.theoriacodex.app.ui.routes.ViewerRouteLiveSourceSnapshot
 import com.theoriacodex.app.ui.routes.ViewerRouteLiveSourceState
-import com.theoriacodex.app.ui.routes.ViewerRouteRenderConfig
-import com.theoriacodex.app.ui.routes.ViewerRouteScreenCallbacks
 import com.theoriacodex.app.ui.routes.virtualCodexUi
 import com.theoriacodex.app.viewer.ViewerRelatedBinding
 import com.theoriacodex.app.viewer.ViewerReturnLifetime
+import com.theoriacodex.app.viewer.ViewerScreenCallbacks
+import com.theoriacodex.app.viewer.ViewerScreenConfig
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.viewerMediaPrefetcher
 import com.theoriacodex.data.repository.CodexSortMode
@@ -291,6 +292,9 @@ private fun CreatorDestination(shell: TheoriaShell) {
 @Composable
 private fun ViewerDestination(shell: TheoriaShell) {
     val routes = shell.routes
+    // Built once per shell, so a Search, For You or Creator state change leaves the Viewer's controls as they are.
+    val effectCallbacks = remember(shell) { viewerEffectCallbacks(shell) }
+    val screenCallbacks = remember(shell) { viewerScreenCallbacks(shell) }
     ViewerDestinationStateBoundary(
         data = shell.data,
         sources = shell.sources,
@@ -313,7 +317,7 @@ private fun ViewerDestination(shell: TheoriaShell) {
                 commentsLoader = shell.features.comments,
                 restoreSession = shell.viewerRouteWorkflow::restoreSession,
             ),
-            renderConfig = ViewerRouteRenderConfig(
+            config = ViewerScreenConfig(
                 playbackMode = state.browsing.settings.viewer.playbackMode,
                 videoQuality = state.browsing.settings.viewer.videoQuality,
                 pixivUgoiraClient = shell.sources.pixivUgoiraClient,
@@ -325,10 +329,12 @@ private fun ViewerDestination(shell: TheoriaShell) {
                 commentOrder = state.browsing.settings.viewer.commentOrder,
                 likedPostIds = state.browsing.likedPostIds,
                 creatorBrowsingSources = state.browsing.creatorBrowsingSources,
+                playbackDiagnosticsEnabled = BuildConfig.BENCHMARK_FIXTURES_ENABLED,
             ),
             liveSourceState = viewerLiveSourceState(state, shell.pendingLikePostIds[state.browsing.activeProfile.profileId].orEmpty()),
-            effectCallbacks = viewerEffectCallbacks(shell),
-            screenCallbacks = viewerScreenCallbacks(shell),
+            effectCallbacks = effectCallbacks,
+            screenCallbacks = screenCallbacks,
+            onOwnerChanged = { owner -> shell.activeViewerOwner = owner },
         )
     }
 }
@@ -424,14 +430,13 @@ private fun viewerEffectCallbacks(shell: TheoriaShell) = ViewerRouteEffectCallba
     },
 )
 
-private fun viewerScreenCallbacks(shell: TheoriaShell) = ViewerRouteScreenCallbacks(
+private fun viewerScreenCallbacks(shell: TheoriaShell) = ViewerScreenCallbacks(
     onDismissRelatedPosts = shell.viewerRouteWorkflow.relatedShelves::dismiss,
     onRetryRelatedPosts = shell.viewerRouteWorkflow.relatedShelves::retry,
     onShowRelatedPosts = shell.viewerRouteWorkflow.relatedShelves::show,
     onRemoveFromCodex = shell.owners.codexCommands::removePost,
     onPlaybackModeSelected = { shell.owners.settings.onAction(SettingsAction.SetViewerPlaybackMode(it)) },
     onCommentOrderSelected = { shell.owners.settings.onAction(SettingsAction.SetCommentOrder(it)) },
-    onOwnerChanged = { owner -> shell.activeViewerOwner = owner },
     onVisiblePostChanged = { post, viewedMediaNumber, session ->
         shell.viewerRouteWorkflow.recordVisiblePost(post, viewedMediaNumber, session)
     },

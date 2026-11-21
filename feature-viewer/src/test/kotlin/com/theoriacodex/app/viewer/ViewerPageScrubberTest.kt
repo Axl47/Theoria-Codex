@@ -17,6 +17,7 @@ import androidx.compose.ui.test.percentOffset
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import coil.Coil
+import com.theoriacodex.app.viewer.state.ViewerMediaKind
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.After
@@ -176,7 +177,7 @@ class ViewerPageScrubberTest {
 
     private fun setScrubber(pageIndex: Int, instantSeek: Boolean = false, shown: () -> Boolean = { true }) {
         val items = List(12) { index ->
-            ViewerMediaOverviewItem(index, ImageRef(null, "/missing/$index.jpg", "image/jpeg"), ViewerMediaOverviewKind.STILL_IMAGE, "/missing/$index.jpg", if (index == 5) "/missing/5.jpg" else "/thumb/$index.jpg")
+            ViewerMediaOverviewItem(index, ImageRef(null, "/missing/$index.jpg", "image/jpeg"), ViewerMediaKind.IMAGE, "/missing/$index.jpg", if (index == 5) "/missing/5.jpg" else "/thumb/$index.jpg")
         }
         compose.setContent {
             MaterialTheme {

@@ -18,7 +18,7 @@ import org.junit.Test
 class ViewerVisibilityRecordingTest {
     @Test
     fun `reattached renderer cannot duplicate an admitted write or cancel it with a payload refresh`() = runTest {
-        val owner = ViewerViewModel(SavedStateHandle(), scopeOverride = this)
+        val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this)
         val visit = visit("first")
         val commit = CompletableDeferred<Unit>()
         var writes = 0
@@ -35,7 +35,7 @@ class ViewerVisibilityRecordingTest {
         assertEquals(1, writes)
         assertFalse(finished)
 
-        owner.updateSession { it.copy(posts = it.posts.map { post -> post.copy(title = "Resolved title") }) }
+        owner.applyResolvedPost(visit.posts.single().copy(title = "Resolved title"))
         owner.recordVisiblePost(visit.toViewerSessionIdentity(), visit.posts.single(), 1) { _, _, _ -> writes++ }
         commit.complete(Unit)
         runCurrent()
@@ -45,7 +45,7 @@ class ViewerVisibilityRecordingTest {
 
     @Test
     fun `a new visit to the same post counts again while stale and foreign events are rejected`() = runTest {
-        val owner = ViewerViewModel(SavedStateHandle(), scopeOverride = this)
+        val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this)
         val first = visit("first")
         val second = visit("second")
         val recorded = mutableListOf<String>()
@@ -65,7 +65,7 @@ class ViewerVisibilityRecordingTest {
 
     @Test
     fun `partial best effort persistence cannot double a completed statistic on reattachment`() = runTest {
-        val owner = ViewerViewModel(SavedStateHandle(), scopeOverride = this)
+        val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this)
         val visit = visit("partial")
         var statistics = 0
         owner.replaceSession(visit)

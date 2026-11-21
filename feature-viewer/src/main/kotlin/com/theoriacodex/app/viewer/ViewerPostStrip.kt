@@ -288,7 +288,7 @@ private fun ViewerUnfoldedPages(source: SourceKey, pages: ViewerStripPages, cell
                     model = rememberViewerThumbnailRequest(source, item),
                     description = "Go to page ${item.mediaIndex + 1} of ${pages.items.size}",
                     selected = item.mediaIndex == pages.selectedIndex,
-                    animated = item.kind.badgeLabel != null,
+                    animated = item.kind.overviewBadgeLabel != null,
                     modifier = Modifier.size(cell),
                 ) { pages.onSelect(item.mediaIndex) }
             }

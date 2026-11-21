@@ -444,6 +444,7 @@ dependencies {
     testImplementation(testFixtures(project(":feed-kit")))
     testImplementation(testFixtures(project(":feature-library")))
     testImplementation(testFixtures(project(":feature-settings")))
+    testImplementation(testFixtures(project(":feature-viewer")))
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.test.uiautomator)

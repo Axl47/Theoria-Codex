@@ -5,8 +5,8 @@ import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.testing.SteppedDispatcher
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.viewer.ViewerSession
-import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.state.ViewerAction
+import com.theoriacodex.app.viewer.testViewerOwner
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.SourceKey
@@ -35,22 +35,22 @@ class ViewerLiveSourceAppendTest {
         val owner = viewer(this)
         launch { appendLiveSourcePosts(owner, source, background) }
         runCurrent()
-        assertEquals(posts.take(2), owner.session.value?.posts)
+        assertEquals(posts.take(2), owner.state.value.pages.map { it.post })
 
         background.drain()
         runCurrent()
-        assertEquals(posts.take(3), owner.session.value?.posts)
+        assertEquals(posts.take(3), owner.state.value.pages.map { it.post })
     }
 
     @Test fun `a session that changed during the background work is merged without repeats`() = runTest {
         val owner = viewer(this)
         launch { appendLiveSourcePosts(owner, source, background) }
         runCurrent()
-        owner.updateSession { it.copy(posts = it.posts + posts[2]) }
+        owner.appendSessionPosts(owner.session.value!!, owner.state.value.pages, listOf(posts[2]))
 
         background.drain()
         runCurrent()
-        assertEquals(posts.take(3), owner.session.value?.posts)
+        assertEquals(posts.take(3), owner.state.value.pages.map { it.post })
     }
 
     @Test fun `an append builds pages for the new posts only and keeps the current post`() = runTest {
@@ -66,7 +66,6 @@ class ViewerLiveSourceAppendTest {
         assertEquals(posts.take(3).map { it.id }, after.pages.map { it.post.id })
         before.forEachIndexed { index, page -> assertSame(page, after.pages[index]) }
         assertEquals(1, after.currentPageIndex)
-        assertEquals(1, owner.session.value?.context?.startIndex)
     }
 
     @Test fun `a session replaced during the background work gets nothing appended`() = runTest {
@@ -78,11 +77,11 @@ class ViewerLiveSourceAppendTest {
 
         background.drain()
         runCurrent()
-        assertEquals(posts.take(1), owner.session.value?.posts)
+        assertEquals(posts.take(1), owner.state.value.pages.map { it.post })
         assertEquals(listOf(posts[0].id), owner.state.value.pages.map { it.post.id })
     }
 
-    private fun viewer(scope: TestScope) = ViewerViewModel(SavedStateHandle(), scopeOverride = scope.backgroundScope).apply {
+    private fun viewer(scope: TestScope) = testViewerOwner(SavedStateHandle(), scopeOverride = scope.backgroundScope).apply {
         replaceSession(
             ViewerSession(
                 posts = posts.take(2),

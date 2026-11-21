@@ -736,7 +736,7 @@ internal class TheoriaShell(
                 posts = listOf(resolved),
                 context = context,
                 liveSearchBinding = false,
-                initialMediaIndex = deepLink.initialMediaIndex,
+                initialMediaIndices = mapOf(resolved.id to deepLink.initialMediaIndex),
                 focusComment = deepLink.comment,
             ),
         )
@@ -818,7 +818,7 @@ internal class TheoriaShell(
                 posts = posts,
                 context = context,
                 liveSearchBinding = false,
-                initialMediaIndex = initialMediaIndex,
+                initialMediaIndices = posts.firstOrNull()?.let { first -> mapOf(first.id to initialMediaIndex) }.orEmpty(),
             ),
         )
         data.uiRestoreRepository.setViewerLaunchContext(context)

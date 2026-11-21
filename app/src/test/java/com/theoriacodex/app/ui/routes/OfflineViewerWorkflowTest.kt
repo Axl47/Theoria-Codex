@@ -11,9 +11,9 @@ import com.theoriacodex.app.media.mediaDurationKey
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.viewer.ViewerRestorationRequest
 import com.theoriacodex.app.viewer.ViewerSession
-import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
+import com.theoriacodex.app.viewer.testViewerOwner
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.repository.RecommendationProfile
@@ -118,8 +118,8 @@ class OfflineViewerWorkflowTest {
             assertLocalGallery(prepared[1], directory)
             assertLocalGallery(prepared[2], directory)
             assertNull(prepared[3].full?.localPath)
-            val owner = ViewerViewModel(SavedStateHandle(), postResolver = workflow, scopeOverride = kotlinx.coroutines.CoroutineScope(coroutineContext + kotlinx.coroutines.Dispatchers.Default))
-            owner.replaceSession(ViewerSession(prepared, launchContext, initialMediaIndex = 2))
+            val owner = testViewerOwner(SavedStateHandle(), postResolver = workflow, scopeOverride = kotlinx.coroutines.CoroutineScope(coroutineContext + kotlinx.coroutines.Dispatchers.Default))
+            owner.replaceSession(ViewerSession(prepared, launchContext, initialMediaIndices = mapOf(prepared[1].id to 2)))
             assertEquals(galleries[1].id, owner.state.value.currentPage?.post?.id)
             assertLocalGallery(owner.state.value.currentPage!!.post, directory)
             assertEquals(2, owner.state.value.currentPage?.selectedMediaIndex)
@@ -194,7 +194,7 @@ class OfflineViewerWorkflowTest {
         directory: File,
     ) {
         assertEquals(1, restored.context.startIndex)
-        assertEquals(2, restored.initialMediaIndex)
+        assertEquals(2, restored.initialMediaIndices[galleries[1].id])
         assertEquals(galleries.map(Post::id), restored.posts.map(Post::id))
         assertNull(restored.posts[0].full?.localPath)
         assertLocalGallery(restored.posts[1], directory)

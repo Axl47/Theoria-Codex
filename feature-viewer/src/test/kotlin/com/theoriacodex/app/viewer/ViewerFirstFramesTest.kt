@@ -86,9 +86,8 @@ class ViewerFirstFramesTest {
             MaterialTheme {
                 Box(Modifier.fillMaxSize().background(Color.Black).testTag("root")) {
                     ViewerScreen(
-                        uiState = state.value, creatorBrowsingSources = emptySet(),
-                        onAction = { state.value = reduceViewerState(state.value, it).state },
-                        onRemoveIncludeTerm = { _, _ -> }, onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
+                        uiState = state.value,
+                        host = ViewerScreenHost(onAction = { state.value = reduceViewerState(state.value, it).state }),
                     )
                 }
             }

@@ -35,44 +35,28 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.comments.ViewerComments
 import com.theoriacodex.app.media.isVideoMediaRef
+import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerUiState
-import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.SearchTerm
-import com.theoriacodex.domain.model.SourceKey
 
+/**
+ * The Viewer. [host] carries the callbacks bound to the screen's owner, and [config] the settings it renders with;
+ * pass the same [host] across recompositions so the screen's controls stay put.
+ */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ViewerScreen(
     uiState: ViewerUiState,
-    creatorBrowsingSources: Set<SourceKey>,
-    onAction: (ViewerAction) -> Unit,
+    host: ViewerScreenHost,
+    config: ViewerScreenConfig = ViewerScreenConfig(),
     saveToCodexQuery: Query? = null,
-    pixivUgoiraClient: PixivUgoiraClient? = null,
-    tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
-    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
     canLoadMoreFromSource: Boolean = false,
     loadingMoreFromSource: Boolean = false,
-    videoQuality: com.theoriacodex.domain.model.VideoQuality = com.theoriacodex.domain.model.VideoQuality.AUTO,
-    invertMultiImageScrollDirection: Boolean = false,
-    likedPostIds: Set<PostId> = emptySet(),
-    onRequestMediaRecovery: ((Post, ImageRef) -> Unit)? = null,
-    onVisiblePostChanged: ((Post, Int) -> Unit)? = null,
-    onVisibleMediaChanged: ((Post, Int) -> Unit)? = null,
-    durations: ViewerPostDurations = ViewerPostDurations.None,
-    onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
-    onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
-    onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
-    onGoToSearch: () -> Unit,
-    onOpenCreatorFallback: ((Post) -> Unit)? = null,
     contextActions: ViewerContextActions = ViewerContextActions(),
-    playbackDiagnosticsEnabled: Boolean = false,
-    onIncludeRelatedPosts: () -> Unit = {},
-    onDismissRelatedPosts: () -> Unit = {},
-    onRetryRelatedPosts: () -> Unit = {},
+    relatedShelf: ViewerRelatedShelf = ViewerRelatedShelf.None,
     comments: ViewerComments = ViewerComments.None,
 ) {
     val returnProgress = rememberViewerReturnProgress()
@@ -80,7 +64,7 @@ fun ViewerScreen(
     val opening by remember(returning, returnProgress) { derivedStateOf { !returning && returnProgress.value > 0f } }
     val dismissDrag = remember { ViewerDismissDrag() }
     val activity = LocalContext.current.viewerActivity()
-    val quality = remember(videoQuality) { mutableStateOf(videoQuality) }
+    val quality = remember(config.videoQuality) { mutableStateOf(config.videoQuality) }
     val qualityHeight = remember(uiState.currentMedia?.key) { mutableStateOf<Int?>(null) }
     val pendingPostId = remember(uiState.session) { mutableStateOf<PostId?>(null) }
     val navigation = remember(uiState.pages, uiState.currentPageIndex, uiState.related.navigation, uiState.related.extraPostIds, pendingPostId.value) {
@@ -92,14 +76,16 @@ fun ViewerScreen(
         ViewerNoPosts()
         return
     }
-    ViewerLoadedScreen(
-        uiState, navigation, posts, returnProgress, returning, opening, dismissDrag, activity, quality, qualityHeight, pendingPostId,
-        videoPositions, creatorBrowsingSources, onAction, saveToCodexQuery, pixivUgoiraClient, tagVideoCountProvider,
-        fetchTagVideoCounts, canLoadMoreFromSource, loadingMoreFromSource, invertMultiImageScrollDirection, likedPostIds,
-        onRequestMediaRecovery, onVisiblePostChanged, onVisibleMediaChanged, durations,
-        onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, onGoToSearch, onOpenCreatorFallback, contextActions,
-        playbackDiagnosticsEnabled, onIncludeRelatedPosts, onDismissRelatedPosts, onRetryRelatedPosts, comments,
-    )
+    CompositionLocalProvider(
+        LocalViewerInstantSeek provides config.instantSeek,
+        LocalViewerAutoRotateVideos provides config.autoRotateVideos,
+    ) {
+        ViewerLoadedScreen(
+            uiState, navigation, posts, returnProgress, returning, opening, dismissDrag, activity, quality, qualityHeight, pendingPostId,
+            videoPositions, host, config, saveToCodexQuery, canLoadMoreFromSource, loadingMoreFromSource, contextActions,
+            relatedShelf, comments,
+        )
+    }
 }
 
 /** The screen once there is at least one post to show. */
@@ -117,32 +103,16 @@ private fun ViewerLoadedScreen(
     qualityHeight: MutableState<Int?>,
     pendingPostId: MutableState<PostId?>,
     videoPositions: ViewerVideoPositions,
-    creatorBrowsingSources: Set<SourceKey>,
-    onAction: (ViewerAction) -> Unit,
+    host: ViewerScreenHost,
+    config: ViewerScreenConfig,
     saveToCodexQuery: Query?,
-    pixivUgoiraClient: PixivUgoiraClient?,
-    tagVideoCountProvider: (SourceKey, String) -> Int?,
-    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?>,
     canLoadMoreFromSource: Boolean,
     loadingMoreFromSource: Boolean,
-    invertMultiImageScrollDirection: Boolean,
-    likedPostIds: Set<PostId>,
-    onRequestMediaRecovery: ((Post, ImageRef) -> Unit)?,
-    onVisiblePostChanged: ((Post, Int) -> Unit)?,
-    onVisibleMediaChanged: ((Post, Int) -> Unit)?,
-    durations: ViewerPostDurations,
-    onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
-    onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
-    onFavoriteTagLongPress: ((SourceKey, String) -> Unit)?,
-    onGoToSearch: () -> Unit,
-    onOpenCreatorFallback: ((Post) -> Unit)?,
     contextActions: ViewerContextActions,
-    playbackDiagnosticsEnabled: Boolean,
-    onIncludeRelatedPosts: () -> Unit,
-    onDismissRelatedPosts: () -> Unit,
-    onRetryRelatedPosts: () -> Unit,
+    relatedShelf: ViewerRelatedShelf,
     comments: ViewerComments,
 ) {
+    val onAction = host.onAction
     val readReturnProgress = remember(returnProgress) { { returnProgress.value } }
     val inPictureInPicture = activity?.viewerPictureInPictureActive == true
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -154,7 +124,7 @@ private fun ViewerLoadedScreen(
     LaunchedEffect(posts, navigation.currentIndex, videoPositions) { videoPositions.retainAround(posts.map { it.id }, navigation.currentIndex) }
     // Starting a slideshow also returns zoomed media to fit, so the next touch reaches the gesture that stops it.
     val viewerTransform = remember(uiState.session?.value, uiState.currentMedia?.key, uiState.controls.slideshow) { mutableStateOf(ViewerTransformState()) }
-    val selection = rememberViewerSelection(uiState, posts[navigation.currentIndex], pixivUgoiraClient != null)
+    val selection = rememberViewerSelection(uiState, navigation.pages[navigation.currentIndex], config.pixivUgoiraClient != null)
     WarmViewerPageThumbnails(selection.post.id, selection.overviewItems, selection.mediaIndex)
     // Brightness holds for every media and the overview (PiP hands it back); the remembered volume returns for video only.
     val levelControls = rememberViewerLevelControls(!inPictureInPicture, restoreVolume = selection.media?.let(::isVideoMediaRef) == true && !uiState.overview.visible)
@@ -167,11 +137,11 @@ private fun ViewerLoadedScreen(
         ViewerFrame(uiState, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape)
     }
     val flingVelocity = with(LocalDensity.current) { VIEWER_FLING_VELOCITY.toPx() }
-    val swipe = rememberViewerSwipe(frame, postPagerState, invertMultiImageScrollDirection, screen, controls, flingVelocity, scope, onAction)
+    val swipe = rememberViewerSwipe(frame, postPagerState, config.invertMultiImageScrollDirection, screen, controls, flingVelocity, scope, onAction)
     val loadMoreFromStrip = rememberViewerLoadMore(navigation.originalPosts.size, canLoadMoreFromSource, loadingMoreFromSource, onAction)
     ViewerFrameEffects(
         frame, screen, controls, swipe, dismissDrag, postPagerState, pendingPostId, canLoadMoreFromSource,
-        loadingMoreFromSource, loadMoreFromStrip, onAction, onVisiblePostChanged,
+        loadingMoreFromSource, loadMoreFromStrip, onAction, host.onVisiblePostChanged,
     )
     val viewerAccent = rememberViewerAccent(selection.post, enabled = !opening && !returning)
     CompositionLocalProvider(
@@ -185,23 +155,17 @@ private fun ViewerLoadedScreen(
             } else {
                 ViewerPostPagerSurface(
                     frame, postPagerState, viewerTransform, screen, controls, swipe, dismissDrag, levelControls, readReturnProgress, flingVelocity,
-                    quality.value, qualityHeight.value, playbackDiagnosticsEnabled, videoPositions, invertMultiImageScrollDirection,
-                    pixivUgoiraClient, onAction, onVisibleMediaChanged, durations, onRequestMediaRecovery, scope,
+                    quality.value, qualityHeight.value, videoPositions, host, config, scope,
                 )
             }
             ViewerChromeOverlays(
-                frame, postPagerState, screen, controls, swipe, activity, quality, qualityHeight, pendingPostId, likedPostIds,
-                invertMultiImageScrollDirection, onAction, loadMoreFromStrip, onIncludeRelatedPosts, onDismissRelatedPosts, onRetryRelatedPosts, comments,
+                frame, postPagerState, screen, controls, swipe, activity, quality, qualityHeight, pendingPostId, host, config,
+                loadMoreFromStrip, relatedShelf, comments,
             )
         }
     }
-    if (uiState.controls.metadataVisible && !inPictureInPicture) {
-        ViewerInfoSheet(
-            selection, controls, creatorBrowsingSources, saveToCodexQuery, tagVideoCountProvider, fetchTagVideoCounts, onAction,
-            onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, onGoToSearch, onOpenCreatorFallback,
-            contextActions = contextActions,
-            liked = selection.post.id in likedPostIds, comments = comments,
-        )
+    if (uiState.controls.panel == ViewerPanel.INFO && !inPictureInPicture) {
+        ViewerInfoSheet(selection, controls, host, config, saveToCodexQuery, contextActions, comments)
     }
 }
 

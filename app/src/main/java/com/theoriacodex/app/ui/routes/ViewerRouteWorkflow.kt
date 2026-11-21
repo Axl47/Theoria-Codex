@@ -200,7 +200,6 @@ internal class ViewerRouteWorkflow(
             // A cold reconstruction is the saved ordered window, never a fresh/unrelated feed.
             liveSearchBinding = false,
             sessionId = identity.value,
-            initialMediaIndex = request.selectedMediaIndex,
             initialMediaIndices = savedMediaIndices(request.recentsSection ?: recentPostSectionForViewer(restoredContext)) +
                 (selectedId to request.selectedMediaIndex),
         )
@@ -229,7 +228,6 @@ internal class ViewerRouteWorkflow(
         }
         return session.copy(
             posts = prepared,
-            initialMediaIndex = mediaNumber - 1,
             initialMediaIndices = mediaIndices + (selected.id to mediaNumber - 1),
         )
     }

@@ -41,6 +41,8 @@ import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.mediaDurationStates
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
 import com.theoriacodex.app.viewer.ViewerScreen
+import com.theoriacodex.app.viewer.ViewerScreenConfig
+import com.theoriacodex.app.viewer.ViewerScreenHost
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.createViewerUiState
@@ -236,14 +238,12 @@ private fun BenchmarkViewerFixture(mediaUri: String) {
     ) {
         ViewerScreen(
             uiState = viewerState,
-            creatorBrowsingSources = emptySet(),
-            onAction = { action: ViewerAction ->
-                viewerState = reduceViewerState(viewerState, action).state
-            },
-            onRemoveIncludeTerm = { _, _ -> },
-            onRemoveExcludeTerm = { _, _ -> },
-            onGoToSearch = {},
-            playbackDiagnosticsEnabled = true,
+            host = ViewerScreenHost(
+                onAction = { action: ViewerAction ->
+                    viewerState = reduceViewerState(viewerState, action).state
+                },
+            ),
+            config = ViewerScreenConfig(playbackDiagnosticsEnabled = true),
         )
     }
 }
