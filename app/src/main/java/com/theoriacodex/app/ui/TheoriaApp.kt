@@ -81,7 +81,12 @@ import com.theoriacodex.app.update.StartupUpdateState
 import com.theoriacodex.app.update.toReleaseHistoryEntry
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
 import com.theoriacodex.app.viewer.ViewerReturnTransition
+import com.theoriacodex.app.recommend.LikedTagCounts
+import com.theoriacodex.app.recommend.observeLikedTagCounts
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /** Ranks Codices for "Save to Codex" from the saved library. */
@@ -89,6 +94,13 @@ import kotlinx.coroutines.launch
 private fun rememberCodexSaveRelevanceLoader(shell: TheoriaShell): CodexSaveRelevanceLoader = remember(shell) {
     val source = CodexCollectionSource(shell.data.codexRepository, shell.data.storageDirectory, shell.data.cacheRepository)
     CodexSaveRelevanceLoader(shell.data.codexRepository, shell.scope, observeLibrary = source::observeSavedLibrary)
+}
+
+/** The active profile's tag counts across its Likes, observed while a surface collects them. */
+@Composable
+private fun rememberLikedTagCounts(shell: TheoriaShell): StateFlow<LikedTagCounts> = remember(shell) {
+    observeLikedTagCounts(shell.data.settingsRepository, shell.data.likesRepository)
+        .stateIn(shell.scope, SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000), LikedTagCounts.Empty)
 }
 
 /** The active profile's single saved tags, for the star in post sheets, and how to unsave one. */
@@ -156,6 +168,7 @@ internal fun TheoriaAppContent(
         com.theoriacodex.app.search.LocalPostWatchPresentation provides watchPresentation,
         LocalCodexSaveRelevanceLoader provides saveRelevanceLoader,
         com.theoriacodex.app.codex.LocalQuickSave provides rememberQuickSave(shell, saveRelevanceLoader),
+        com.theoriacodex.app.recommend.LocalLikedTagCounts provides rememberLikedTagCounts(shell),
         LocalViewerReturnTransition provides viewerReturnTransition,
         LocalPostMenuActions provides rememberPostMenuActions(shell),
         LocalNetworkOnline provides shell.sources.networkOnline,
