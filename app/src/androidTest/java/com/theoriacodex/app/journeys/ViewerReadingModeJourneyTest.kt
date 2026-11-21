@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeUp
+import com.theoriacodex.app.library.LibrarySection
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
@@ -62,7 +63,7 @@ class ViewerReadingModeJourneyTest : AppJourneyFixture() {
     }
 
     private fun showGallery() {
-        tab("Recents")
+        library(LibrarySection.History)
         openRecentsSection("Searches")
         activate(compose.onNodeWithTag("Recent search:$RECENT_SEARCH"))
         val card = compose.onNodeWithTag(searchCardTestTag(posts.getValue(SourceKey.PIXIV)[GALLERY].id))
