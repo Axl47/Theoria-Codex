@@ -24,7 +24,6 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.theoriacodex.app.ui.components.rememberFeedScrollSignal
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -53,7 +52,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -81,6 +79,8 @@ import com.theoriacodex.app.ui.components.FeedLoadingState
 import com.theoriacodex.app.ui.components.POST_SHELF_CARD_WIDTH
 import com.theoriacodex.app.ui.components.POST_SHELF_MEDIA_ASPECT_RATIO
 import com.theoriacodex.app.ui.components.PostShelfSection
+import com.theoriacodex.app.ui.components.EmptyState
+import com.theoriacodex.app.ui.components.ShelfTitleAction
 import com.theoriacodex.app.viewer.ViewerReturnColumn
 import com.theoriacodex.app.viewer.ViewerReturnShelf
 import com.theoriacodex.app.viewer.ViewerReturnShelfId
@@ -97,6 +97,8 @@ internal fun ForYouHomeScreen(
     filterLabels: List<String>,
     onClearFilters: () -> () -> Unit,
     onOpenPreview: (String?, List<Post>, Int) -> Unit,
+    onOpenWhy: (ForYouWhyTarget) -> Unit,
+    onSelectProfile: (String) -> Unit,
 ) {
     val scroll = rememberLazyListState()
     ScrollToTopOnTabReselect(TopLevelDestination.ForYou) {
@@ -123,7 +125,7 @@ internal fun ForYouHomeScreen(
     }) { padding ->
         if (ordering.reorderMode) {
             ForYouReorderList(state, ordering, sourceMenu, { sourceMenu = it }, onAction, onReorder,
-                Modifier.padding(padding))
+                onSelectProfile, Modifier.padding(padding))
         } else {
             PullToRefreshBox(
                 isRefreshing = state.home.loading,
@@ -131,8 +133,12 @@ internal fun ForYouHomeScreen(
                 modifier = Modifier.padding(padding),
             ) {
             ForYouOverview(state, scroll, Modifier, filterPosts, onAction,
-                onSectionMenu = { sectionMenuId = it },
-                header = { ForYouHomeHeader(state, sourceMenu, { sourceMenu = it }, onAction, false, onReorder) { homeMenu = true } },
+                onSectionMenu = { sectionMenuId = it }, onOpenWhy = onOpenWhy,
+                header = {
+                    ForYouHomeHeader(state, sourceMenu, { sourceMenu = it }, onAction, false, onReorder, onSelectProfile) {
+                        homeMenu = true
+                    }
+                },
                 preview = { id, posts ->
                     ForYouPreviewPosts(id ?: "mixed", if (id == null) MIX_CARD_WIDTH else POST_SHELF_CARD_WIDTH, posts, cards,
                         onLongPress) { index ->
@@ -149,6 +155,7 @@ private fun ForYouOverview(
     state: ForYouUiState, scroll: androidx.compose.foundation.lazy.LazyListState,
     modifier: Modifier, filterPosts: (List<Post>) -> List<Post>, onAction: (ForYouAction) -> Unit,
     onSectionMenu: (String) -> Unit,
+    onOpenWhy: (ForYouWhyTarget) -> Unit,
     header: @Composable () -> Unit, preview: @Composable (String?, List<Post>) -> Unit,
 ) {
         val coroutineScope = rememberCoroutineScope()
@@ -197,7 +204,8 @@ private fun ForYouOverview(
                         { onSectionMenu(section.id) },
                         icon = section.kindIcon(),
                         countSuffix = section.kindLabel(),
-                        onMore = { onSectionMenu(section.id) }) {
+                        onMore = { onSectionMenu(section.id) },
+                        titleAction = ShelfTitleAction("Show tags", section.named) { onOpenWhy(section.whyTarget()) }) {
                         preview(section.id, posts)
                     }
                 }
@@ -213,10 +221,13 @@ private fun ForYouOverview(
 @Composable
 private fun ForYouHomeHeader(state: ForYouUiState, sourceMenu: Boolean,
     onSourceMenuChange: (Boolean) -> Unit, onAction: (ForYouAction) -> Unit,
-    reordering: Boolean, onReorder: () -> Unit, onOpenMenu: () -> Unit) {
+    reordering: Boolean, onReorder: () -> Unit, onSelectProfile: (String) -> Unit, onOpenMenu: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp).heightIn(min = 48.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        Text(if (reordering) "Reorder" else "For You", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+        Text(if (reordering) "Reorder" else "For You", style = MaterialTheme.typography.titleLarge)
+        Box(Modifier.weight(1f).padding(start = 8.dp)) {
+            if (!reordering) ForYouProfileChip(state.profiles, state.activeProfileId, onSelectProfile)
+        }
         Box {
             ForYouSourceSelector(state.selectedSource, state.availableSources,
                 !state.isRefreshing && !state.home.loading && !reordering,
@@ -303,7 +314,7 @@ private fun ForYouSectionMenu(
         ActionMenuRow(Icons.Default.Bookmark, if (section.pinned) "Remove from Saved" else "Save search", enabled) {
             act(ForYouAction.PinSection(section.id))
         }
-        ActionMenuRow(Icons.Default.BookmarkAdd, "Save and hide here", enabled) { act(ForYouAction.SaveSection(section.id)) }
+        ActionMenuRow(Icons.Default.BookmarkAdd, "Move to Saved", enabled) { act(ForYouAction.SaveSection(section.id)) }
         ActionMenuDivider()
         ActionMenuRow(Icons.Default.Close, "Dismiss", enabled, MaterialTheme.colorScheme.error) {
             act(ForYouAction.DismissSection(section.id))
@@ -315,13 +326,13 @@ private fun ForYouSectionMenu(
 private fun ForYouReorderList(
     state: ForYouUiState, ordering: ReorderListState<ForYouSection>, sourceMenu: Boolean,
     onSourceMenuChange: (Boolean) -> Unit, onAction: (ForYouAction) -> Unit, onReorder: () -> Unit,
-    modifier: Modifier,
+    onSelectProfile: (String) -> Unit, modifier: Modifier,
 ) {
     val list = rememberLazyListState()
     ReorderAutoScrollEffect(ordering, list)
     LazyColumn(state = list, modifier = modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 12.dp),
         userScrollEnabled = ordering.draggingId == null) {
-        item { ForYouHomeHeader(state, sourceMenu, onSourceMenuChange, onAction, true, onReorder) {} }
+        item { ForYouHomeHeader(state, sourceMenu, onSourceMenuChange, onAction, true, onReorder, onSelectProfile) {} }
         itemsIndexed(ordering.reorderDraft, key = { _, section -> section.id }) { index, section ->
             val dragging = ordering.draggingId == section.id
             Row(Modifier.reorderRowPlacement(this, dragging).fillMaxWidth().zIndex(if (dragging) 1f else 0f)
@@ -346,9 +357,12 @@ private fun ForYouHomeStatus(state: ForYouUiState, onAction: (ForYouAction) -> U
         state.home.loading -> FeedLoadingState()
         state.home.error != null -> FeedErrorTile(state.home.error,
             onRetry = { onAction(ForYouAction.RefreshSections) })
-        state.home.sections.isEmpty() -> Column(Modifier.padding(horizontal = 16.dp)) {
-            Text("Like posts to discover more interests. Hidden interests can be restored in Settings.")
-            TextButton(onClick = { onAction(ForYouAction.GoToSearch) }) { Text("Go to Search") }
+        state.home.sections.isEmpty() && state.activeProfileLikesCount <= 0 ->
+            Box(Modifier.padding(horizontal = 16.dp)) { ForYouNoLikes(onAction) }
+        state.home.sections.isEmpty() -> {
+            val hiddenTags = LocalHiddenTagsOpener.current
+            EmptyState("No interests yet", actionLabel = "Hidden tags".takeIf { state.blacklistEntries.isNotEmpty() },
+                onAction = hiddenTags::openHiddenTags)
         }
     }
 }
