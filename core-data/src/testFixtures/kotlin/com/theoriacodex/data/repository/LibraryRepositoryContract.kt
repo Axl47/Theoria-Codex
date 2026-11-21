@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -471,6 +472,69 @@ abstract class LibraryRepositoryContract {
             3,
             entries.single { it.section == RecentPostSection.CODEX }.maxViewedMediaNumber,
         )
+    }
+
+    @Test
+    fun `removing items drops memberships and releases posts no collection holds`() = runTest {
+        val repository = createCodexRepository()
+        val first = repository.createCodex("First")
+        val second = repository.createCodex("Second")
+        val solo = repositoryTestPost("solo")
+        val shared = repositoryTestPost("shared")
+        repository.addItems(first.codexId, listOf(solo, shared))
+        repository.addItem(second.codexId, shared)
+
+        repository.removeItems(first.codexId, emptySet())
+        repository.removeItems("missing", setOf(shared.id))
+        assertEquals(2, repository.observeCodexItems(first.codexId).first().size)
+        repository.removeItems(first.codexId, setOf(solo.id, shared.id, repositoryTestPost("absent").id))
+
+        assertTrue(repository.observeCodexItems(first.codexId).first().isEmpty())
+        assertEquals(listOf(shared.id), repository.observeCodexItems(second.codexId).first().map { it.postId })
+        assertNull(repository.getPost(solo.id))
+        assertEquals(shared, repository.getPost(shared.id))
+        assertEquals(setOf(shared.id), repository.observeSavedPostIds(setOf(first.codexId, second.codexId)).first())
+    }
+
+    @Test
+    fun `a deleted codex restores in place with its tags, items and posts, and restoring again changes nothing`() = runTest {
+        val repository = createCodexRepository()
+        val first = repository.createCodex("First")
+        val middle = repository.createCodex("Middle")
+        val last = repository.createCodex("Last")
+        repository.setAutomaticTag(middle.codexId, CodexAutomaticTag(SourceKey.PIXIV, "landscape"), enabled = true)
+        val post = repositoryTestPost("kept")
+        repository.addItem(middle.codexId, post)
+
+        val snapshot = checkNotNull(repository.deleteCodexForUndo(middle.codexId))
+        assertEquals(listOf(first.codexId, last.codexId), repository.observeCodices().first().map { it.codexId })
+        assertNull(repository.getPost(post.id))
+        assertNull(repository.deleteCodexForUndo(middle.codexId))
+
+        repository.restoreDeletedCodex(snapshot)
+        repository.restoreDeletedCodex(snapshot)
+
+        assertEquals(
+            listOf(first.codexId, middle.codexId, last.codexId),
+            repository.observeCodices().first().map { it.codexId },
+        )
+        assertEquals(snapshot.codex, repository.observeCodex(middle.codexId).first())
+        assertEquals(snapshot.items, repository.observeCodexItems(middle.codexId).first())
+        assertEquals(listOf(post), repository.observeCodexPosts(middle.codexId, CodexSortMode.NEWEST_SAVED).first())
+    }
+
+    @Test
+    fun `a deleted codex restores under a free name when another took its name meanwhile`() = runTest {
+        val repository = createCodexRepository()
+        val original = repository.createCodex("Trips")
+        val snapshot = checkNotNull(repository.deleteCodexForUndo(original.codexId))
+        val replacement = repository.createCodex("Trips")
+
+        repository.restoreDeletedCodex(snapshot)
+
+        val names = repository.observeCodices().first().associate { codex -> codex.codexId to codex.name }
+        assertEquals("Trips", names[replacement.codexId])
+        assertEquals("Trips 2", names[original.codexId])
     }
 
     private fun sampleQuery(includeTags: List<String> = listOf("landscape")): Query {
