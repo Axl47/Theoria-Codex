@@ -47,8 +47,8 @@ class TriageCardSupport(
 
 /**
  * The triage deck: one full-width feed card at a time under a bar with a close control, the position ("14 / 60")
- * and Undo. Drag the card right to like, left to skip (or remove, on a Codex), up to save, down to hide; [query] is
- * the origin feed's search, which ranks Codices and keeps its own tags out of what the deck offers to hide.
+ * and Undo. Drag the card right to like, left to skip (on a Codex: right keeps, left removes), up to save, down to hide;
+ * [query] is the origin feed's search, which ranks Codices and keeps its own tags out of what the deck offers to hide.
  */
 @Composable
 fun TriageDeckScreen(

@@ -71,7 +71,8 @@ interface TriageActions {
 }
 
 /**
- * Takes posts out of the Codex a deck was opened on. A deck given one removes on a left swipe instead of skipping.
+ * Takes posts out of the Codex a deck was opened on. A deck given one removes on a left swipe instead of skipping, and
+ * keeps on a right swipe instead of liking.
  */
 fun interface TriageRemoval {
     /** Removes [post]; returns how to put it back exactly, or null when it was not there. Throws when it fails. */
@@ -82,6 +83,9 @@ fun interface TriageRemoval {
 sealed interface TriageChoice {
     data object Like : TriageChoice
     data object Skip : TriageChoice
+
+    /** Leaves the post in the deck's Codex; like [Skip] it writes nothing, but the card says so. */
+    data object Keep : TriageChoice
     data object Remove : TriageChoice
     data class Save(val codexId: String, val codexName: String) : TriageChoice
     data class Hide(val tag: String) : TriageChoice
@@ -93,6 +97,7 @@ sealed interface TriageDecision {
 
     data class Liked(override val post: Post) : TriageDecision
     data class Skipped(override val post: Post) : TriageDecision
+    data class Kept(override val post: Post) : TriageDecision
     data class Removed(override val post: Post) : TriageDecision
     data class Saved(override val post: Post, val codexName: String) : TriageDecision
     data class Hid(override val post: Post, val tag: String) : TriageDecision
@@ -143,7 +148,7 @@ data class TriageDeckState(
 
 /**
  * What a committed swipe in [direction] asks for, given the Codex it would save to, the tag it would hide, and
- * whether left [removes] from the deck's Codex rather than skipping.
+ * whether the deck [removes] from its Codex: then left removes rather than skipping and right keeps rather than liking.
  * Null when it asks for a save and there is no Codex to save to (none suggested, as when the post is already in
  * every Codex), which the screen answers by opening the picker.
  * A downward swipe on a post with nothing to hide is a skip.
@@ -154,7 +159,7 @@ internal fun choiceFor(
     hideTag: String?,
     removes: Boolean = false,
 ): TriageChoice? = when (direction) {
-    SwipeDirection.Right -> TriageChoice.Like
+    SwipeDirection.Right -> if (removes) TriageChoice.Keep else TriageChoice.Like
     SwipeDirection.Left -> if (removes) TriageChoice.Remove else TriageChoice.Skip
     SwipeDirection.Up -> saveTarget?.let { TriageChoice.Save(it.codexId, it.name) }
     SwipeDirection.Down -> hideTag?.let(TriageChoice::Hide) ?: TriageChoice.Skip

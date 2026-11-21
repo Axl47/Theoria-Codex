@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.CollectionsBookmark
@@ -225,13 +226,14 @@ private fun TriagePeek(post: Post, aspectRatio: Float) {
     )
 }
 
-/** Lets TalkBack users decide without dragging; [removes] names the left swipe Remove instead of Skip. */
+/** Lets TalkBack users decide without dragging; when the deck [removes], right is Keep and left Remove. */
 private fun triageActions(
     targets: TriageTargets,
     removes: Boolean,
     onDecide: (TriageChoice) -> Unit,
 ): List<CustomAccessibilityAction> = listOfNotNull(
-    CustomAccessibilityAction("Like") { onDecide(TriageChoice.Like); true },
+    if (removes) CustomAccessibilityAction("Keep") { onDecide(TriageChoice.Keep); true }
+    else CustomAccessibilityAction("Like") { onDecide(TriageChoice.Like); true },
     if (removes) CustomAccessibilityAction("Remove") { onDecide(TriageChoice.Remove); true }
     else CustomAccessibilityAction("Skip") { onDecide(TriageChoice.Skip); true },
     targets.save.firstOrNull()?.payload?.let { target ->
@@ -243,8 +245,8 @@ private fun triageActions(
 )
 
 /**
- * Edge targets for a vertical pull, and the like and skip (or, when the deck [removes], remove) cues for a horizontal
- * one; none of it takes touches.
+ * Edge targets for a vertical pull, and the like and skip (or, when the deck [removes], keep and remove) cues for a
+ * horizontal one; none of it takes touches.
  */
 @Composable
 private fun TriageDragOverlays(
@@ -263,6 +265,7 @@ private fun TriageDragOverlays(
         when {
             !vertical -> TriageEdgeCue(
                 when {
+                    offset.x > 0f && removes -> Icons.Filled.Check
                     offset.x > 0f -> Icons.Filled.Favorite
                     removes -> Icons.Outlined.RemoveCircleOutline
                     else -> Icons.Filled.Close
