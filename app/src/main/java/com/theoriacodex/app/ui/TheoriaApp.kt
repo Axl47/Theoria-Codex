@@ -155,6 +155,7 @@ internal fun TheoriaAppContent(
         LocalCodexPostIds provides rememberCodexPostIds(shell),
         com.theoriacodex.app.search.LocalPostWatchPresentation provides watchPresentation,
         LocalCodexSaveRelevanceLoader provides saveRelevanceLoader,
+        com.theoriacodex.app.codex.LocalQuickSave provides rememberQuickSave(shell, saveRelevanceLoader),
         LocalViewerReturnTransition provides viewerReturnTransition,
         LocalPostMenuActions provides rememberPostMenuActions(shell),
         LocalNetworkOnline provides shell.sources.networkOnline,

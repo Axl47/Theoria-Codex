@@ -6,19 +6,18 @@ import com.theoriacodex.app.codex.transfer.CodexSaveResult
 import com.theoriacodex.app.codex.transfer.CodexTransferService
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.StatisticsRepository
-import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 
 /** Activity-owned save jobs survive sheet dismissal and configuration changes. */
 class CodexSaveViewModel(
-    private val transfer: CodexTransferService,
-    private val codices: CodexRepository,
-    private val statistics: StatisticsRepository,
+    transfer: CodexTransferService,
+    codices: CodexRepository,
+    statistics: StatisticsRepository,
 ) : ViewModel() {
+    private val saver = CodexSaver(transfer, codices, statistics)
     private val messages = Channel<String>(Channel.BUFFERED)
     val effects = messages.receiveAsFlow()
 
@@ -30,16 +29,9 @@ class CodexSaveViewModel(
         newCollectionName: String? = null,
     ) {
         viewModelScope.launch {
-            val result = runCatchingPreservingCancellation {
-                if (newCollectionName != null) codices.ensureCodex(codexId, newCollectionName)
-                transfer.save(codexId, posts, cacheFullImage)
-            }.getOrElse { CodexSaveResult.Failure("Could not save posts. Please try again.") }
-            if (result is CodexSaveResult.Success && fromForYou) {
-                runCatchingPreservingCancellation { statistics.recordForYouSave() }
-            }
+            val result = saver.save(codexId, posts, cacheFullImage, fromForYou, newCollectionName)
             val codexName = if (result is CodexSaveResult.Success) {
-                runCatchingPreservingCancellation { codices.observeCodex(codexId).first()?.name }
-                    .getOrNull() ?: newCollectionName ?: "Codex"
+                saver.codexName(codexId) ?: newCollectionName ?: "Codex"
             } else "Codex"
             messages.send(
                 when (result) {
