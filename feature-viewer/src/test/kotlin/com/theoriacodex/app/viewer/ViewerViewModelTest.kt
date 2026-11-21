@@ -144,6 +144,26 @@ class ViewerViewModelTest {
     }
 
     @Test
+    fun `a failing current page resolves once and retries only when the user returns to it`() = runTest {
+        val attempts = AtomicInteger()
+        val posts = listOf(post("sparse", SourceKey.HITOMI, emptyList()), post("next"))
+        val owner = ViewerViewModel(SavedStateHandle(), postResolver = ViewerPostResolver { _, _ ->
+            attempts.incrementAndGet()
+            error("Provider unavailable")
+        }, scopeOverride = this)
+        owner.replaceSession(session("failing", posts))
+        advanceUntilIdle()
+        assertEquals(1, attempts.get())
+        assertEquals(ViewerResolutionStatus.FAILED, owner.state.value.currentPage?.resolution?.status)
+
+        owner.onAction(ViewerAction.SelectPage(1))
+        owner.onAction(ViewerAction.SelectPage(0))
+        advanceUntilIdle()
+        assertEquals(2, attempts.get())
+        owner.clearSession()
+    }
+
+    @Test
     fun `jump cancels obsolete resolution without showing a timeout error`() = runTest {
         val cancelled = mutableListOf<PostId>()
         val posts = (0..3).map { post("$it", SourceKey.HITOMI, emptyList()) }

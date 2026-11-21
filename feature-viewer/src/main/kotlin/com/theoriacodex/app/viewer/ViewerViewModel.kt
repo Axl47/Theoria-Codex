@@ -19,6 +19,7 @@ import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerMediaState
 import com.theoriacodex.app.viewer.state.ViewerPrefetchOutcome
 import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
+import com.theoriacodex.app.viewer.state.ViewerResolutionStatus
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.app.viewer.state.ViewerControlsState
@@ -80,6 +81,8 @@ class ViewerViewModel(
     private var desiredPrefetchKeys = emptySet<ViewerMediaKey>()
     /** Whether this session has shown its first media; speculative loads wait for it (see [awaitFirstMediaShown]). */
     private val firstMediaShown = MutableStateFlow(false)
+    /** The page the last lookahead saw as current; a different one means the user arrived on a page. */
+    private var lastCurrentPostId: PostId? = null
     private var restoredPageIndex = savedStateHandle[ViewerSavedStateKeys.PAGE_INDEX] ?: 0
     private var restoredMediaIndex = savedStateHandle[ViewerSavedStateKeys.MEDIA_INDEX] ?: 0
 
@@ -158,6 +161,7 @@ class ViewerViewModel(
         if (action.session != mutableState.value.session) {
             recordedVisiblePosts.clear()
             firstMediaShown.value = false
+            lastCurrentPostId = null
             comments.reset()
         }
         cancelSessionJobs()
@@ -276,6 +280,7 @@ class ViewerViewModel(
             cancelSessionJobs()
             recordedVisiblePosts.clear()
             firstMediaShown.value = false
+            lastCurrentPostId = null
             comments.reset()
             mutableSession.value = null
             mutableState.value = if (retainPresentation) ViewerUiState(
@@ -336,9 +341,38 @@ class ViewerViewModel(
             sessionJobs.remove(key)?.cancel()
             onAction(ViewerAction.ResolutionCancelled(session, key.postId))
         }
+        requestCurrentPageResolution(current)
         neighbours
-            .filter { it.resolution.status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.IDLE }
+            .filter { it.resolution.status == ViewerResolutionStatus.IDLE }
             .forEach { onAction(ViewerAction.RequestPageResolution(it.post.id)) }
+    }
+
+    /**
+     * Resolves the current page once: at once when it has nothing to show, otherwise after the session's first media
+     * is up (see [awaitFirstMediaShown]), so known media mounts before its refresh. A recoverable failure retries only
+     * when the user returns to the page, or through Retry; nothing retries it on its own.
+     */
+    private fun requestCurrentPageResolution(current: ViewerUiState) {
+        val page = current.currentPage ?: return
+        val postId = page.post.id
+        val returning = postId != lastCurrentPostId
+        lastCurrentPostId = postId
+        val status = page.resolution.status
+        val wanted = status == ViewerResolutionStatus.IDLE ||
+            (returning && status == ViewerResolutionStatus.FAILED && page.resolution.recoverable)
+        if (!wanted) return
+        if (page.media.isEmpty() || firstMediaShown.value) {
+            onAction(ViewerAction.RequestPageResolution(postId))
+            return
+        }
+        // Shares the page's resolution key, so leaving the page cancels the wait and a request replaces it.
+        launchSessionJob(ViewerWorkKey.Resolution(postId)) {
+            awaitFirstMediaShown()
+            val now = state.value.currentPage
+            if (now?.post?.id == postId && now.resolution.status == status) {
+                onAction(ViewerAction.RequestPageResolution(postId))
+            }
+        }
     }
 
     private fun launchResolution(effect: ViewerEffect.ResolvePost, resolver: ViewerPostResolver) {

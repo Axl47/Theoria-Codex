@@ -127,7 +127,6 @@ private fun ViewerSelectionEffects(
     onAction: (ViewerAction) -> Unit,
 ) {
     val uiState = frame.uiState
-    val post = frame.selection.post
     LaunchedEffect(uiState.session) {
         screen.pendingDismiss = false
     }
@@ -140,22 +139,6 @@ private fun ViewerSelectionEffects(
     }
     LaunchedEffect(frame.selection.overviewAvailable) {
         if (!frame.selection.overviewAvailable) controls.setOverviewVisible(false)
-    }
-    LaunchedEffect(
-        post.id.source,
-        post.id.sourcePostId,
-        post.full?.url,
-        post.full?.localPath,
-        uiState.currentPage?.resolution?.status,
-    ) {
-        val status = uiState.currentPage?.resolution?.status
-        if (
-            status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.IDLE ||
-            status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.FAILED &&
-            uiState.currentPage?.resolution?.recoverable == true
-        ) {
-            onAction(ViewerAction.RequestCurrentPageResolution)
-        }
     }
     LaunchedEffect(screen.pendingDismiss, swipeInProgress, frame.opening) {
         if (!screen.pendingDismiss || swipeInProgress || frame.opening) return@LaunchedEffect
