@@ -24,7 +24,7 @@ internal fun SettingsScreenDestination(shell: TheoriaShell) {
     val entryPage = rememberSaveable { owner.state.value.page }
     LaunchedEffect(owner) { owner.onAction(SettingsAction.SettingsEntered) }
     SettingsDestinationStateBoundary(
-        owner, shell.routes.search.current, libraryStorageSummary(shell.transfers),
+        owner, libraryStorageSummary(shell.transfers),
         sites = rememberCustomSitesEntry(shell.container, shell.scope),
         backup = rememberSettingsBackupEntry(shell.transfers),
         statsActions = remember(shell) {

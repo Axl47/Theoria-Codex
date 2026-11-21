@@ -101,6 +101,7 @@ fun SearchScreen(
     onSaveSearch: (String, RecentSearchEntry) -> Unit = { _, _ -> },
     onManageSavedSearches: () -> Unit = {},
     omnibox: List<OmniboxEntry> = emptyList(),
+    sourceMix: SearchSourceMix? = null,
 ) {
     val chrome = rememberSearchChromeState(composerOpen)
     val actionPost = remember { SearchActionPostState() }
@@ -117,7 +118,7 @@ fun SearchScreen(
     SearchScrollDismissEffect(gridState, chrome, inputFocus)
     val applyDraft = { chrome.applyDraft(inputFocus, onAction) }
     val filterActions = SearchFilterActions(state, fabRestoreState, rememberUpdatedState(serverFilters), onAction, onFabRestoreStateChange)
-    val sourcePicker: @Composable () -> Unit = { SearchScreenSourcePicker(state, chrome, inputFocus, onAction) }
+    val sourcePicker: @Composable () -> Unit = { SearchScreenSourcePicker(state, chrome, inputFocus, sourceMix != null, onAction) }
     Scaffold(
         modifier = Modifier.nestedScroll(filterScroll.connection),
         contentWindowInsets = WindowInsets(0),
@@ -146,8 +147,9 @@ fun SearchScreen(
     if (chrome.composerOpen) {
         val saved = composerSavedSearches(state, savedSearches, onSaveSearch, onManageSavedSearches) { chrome.closeComposer(onAction); onOpenSavedSearch(it) }
         SearchComposerDialog(state, feed, chrome, gridState, sourcePicker, applyDraft, onAction, onOpenSourceAccounts, saved,
-            favoriteTags, onAddFavoriteTag, onRemoveFavoriteTag, onRenameFavoriteTag, omnibox)
+            favoriteTags, onAddFavoriteTag, onRemoveFavoriteTag, onRenameFavoriteTag, omnibox + sourceMixCommands(state, chrome, sourceMix, onAction))
     }
+    SearchSourceMixSheet(state, chrome, sourceMix)
     if (chrome.showFavoriteTagSheet) {
         SearchFavoriteTags(state, favoriteTags, onAction, onRemoveFavoriteTag, onRenameFavoriteTag) { chrome.showFavoriteTagSheet = false }
     }
@@ -237,7 +239,7 @@ private fun SearchChromeLayout(
 }
 
 @Composable
-private fun rememberSearchChromeState(composerOpen: MutableState<Boolean>): SearchChromeState {
+internal fun rememberSearchChromeState(composerOpen: MutableState<Boolean>): SearchChromeState {
     val barDismissed = rememberSaveable { mutableStateOf(false) }
     return remember(composerOpen, barDismissed) { SearchChromeState(composerOpen, barDismissed) }
 }
@@ -247,11 +249,12 @@ private fun rememberSearchChromeState(composerOpen: MutableState<Boolean>): Sear
  * Viewer round trip, so returning does not push the results down; the sheets do not.
  */
 @Stable
-private class SearchChromeState(composerOpen: MutableState<Boolean>, searchBarDismissedByScroll: MutableState<Boolean>) {
+internal class SearchChromeState(composerOpen: MutableState<Boolean>, searchBarDismissedByScroll: MutableState<Boolean>) {
     var composerOpen by composerOpen
     var searchBarDismissedByScroll by searchBarDismissedByScroll
     var showFilterSheet by mutableStateOf(false)
     var showFavoriteTagSheet by mutableStateOf(false)
+    var showSourceMix by mutableStateOf(false)
 
     /** Closing the composer settles the search it left on screen. */
     fun closeComposer(onAction: (SearchAction) -> Unit) {
@@ -323,6 +326,7 @@ private fun SearchScreenSourcePicker(
     state: SearchUiState,
     chrome: SearchChromeState,
     inputFocus: SearchInputFocus,
+    mixable: Boolean,
     onAction: (SearchAction) -> Unit,
 ) {
     SearchSourcePicker(
@@ -330,6 +334,7 @@ private fun SearchScreenSourcePicker(
         sources = state.query.availableSources,
         unifiedSources = state.query.unifiedSources,
         onOpen = { inputFocus.clear() },
+        onOpenSourceMix = { chrome.showSourceMix = true }.takeIf { mixable && state.searchesUnified },
         onModeSelected = { mode ->
             chrome.searchBarDismissedByScroll = false
             onAction(SearchAction.SelectMode(mode))

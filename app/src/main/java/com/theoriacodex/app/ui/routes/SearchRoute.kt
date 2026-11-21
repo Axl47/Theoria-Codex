@@ -39,6 +39,7 @@ import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.app.search.SearchSourceMix
 
 /** App-level inputs rendered by Search or used to reconcile its long-lived engine. */
 internal data class SearchRouteConfig(
@@ -61,6 +62,8 @@ internal data class SearchRouteCallbacks(
     val onRequestSaveToCodex: (Post) -> Unit,
     val onSaveToDevice: (Post) -> Unit,
     val onOpenSourceAccounts: () -> Unit = {},
+    /** Writes the Unified source mix the source picker edits; see [SearchSourceMix]. */
+    val onSetSourceWeights: (Set<SourceKey>, Map<SourceKey, Double>) -> Unit = { _, _ -> },
     val onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
     val onSaveSearch: (String, RecentSearchEntry) -> Unit = { _, _ -> },
     val onManageSavedSearches: () -> Unit = {},
@@ -229,6 +232,7 @@ private fun SearchRouteContent(
         onRenameFavoriteTag = callbacks.onRenameFavoriteTag,
         fabRestoreState = fabRestoreState,
         onFabRestoreStateChange = onFabRestoreStateChange,
+        sourceMix = SearchSourceMix(config.settings.runtime, callbacks.onSetSourceWeights),
     )
 }
 

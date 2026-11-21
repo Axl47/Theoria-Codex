@@ -44,7 +44,6 @@ import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.di.SourceDependencies
 import com.theoriacodex.app.related.ViewerFeedOwner
 import com.theoriacodex.app.related.ViewerFeedSnapshot
-import com.theoriacodex.app.search.SearchViewModel
 import com.theoriacodex.app.settings.SettingsPage
 import com.theoriacodex.app.settings.SettingsScreen
 import com.theoriacodex.app.settings.SettingsDiagnosticsEntry
@@ -69,7 +68,6 @@ import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 internal data class BrowsingDestinationState(
@@ -407,7 +405,6 @@ internal fun SaveToCodexDestinationStateBoundary(
 @Composable
 internal fun SettingsDestinationStateBoundary(
     owner: SettingsViewModel,
-    searchOwner: SearchViewModel?,
     storageSummary: String? = null,
     sites: SettingsSitesEntry? = null,
     backup: SettingsBackupEntry? = null,
@@ -418,15 +415,11 @@ internal fun SettingsDestinationStateBoundary(
     closesFrom: SettingsPage = SettingsPage.HOME,
 ) {
     val state = owner.state.collectAsStateWithLifecycle()
-    val emptySearch = remember { MutableStateFlow(com.theoriacodex.app.search.state.SearchUiState()) }
-    val searchState = (searchOwner?.state ?: emptySearch).collectAsStateWithLifecycle()
-    val selectedSources = if (searchOwner == null) emptySet() else searchState.value.query.draftSources
     // Subscribing here keeps statistics collection scoped to a visible Settings destination.
     val statistics = owner.statistics.collectAsStateWithLifecycle()
     DestinationStateBoundary(state) {
         SettingsScreen(
             state = it, onAction = owner::onAction, statistics = statistics.value,
-            searchSources = selectedSources.intersect(it.availableSources.toSet()),
             storageSummary = storageSummary, sites = sites, backup = backup, statsActions = statsActions, diagnostics = diagnostics,
             storageTools = storageTools, onClose = onClose, closesFrom = closesFrom,
         )
