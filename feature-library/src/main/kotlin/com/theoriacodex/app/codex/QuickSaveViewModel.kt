@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 
 /**
  * Activity-owned one-tap saves and their silent undo, behind [QuickSave]. Saves run in this owner's scope so
@@ -36,12 +35,6 @@ class QuickSaveViewModel(
                 .also { last.value = it }
         }
     }.await()
-
-    /** Removes the post the last quick save added; a save that added nothing has nothing to undo. */
-    fun undoLastQuickSave() {
-        val record = last.value ?: return
-        viewModelScope.launch { undoQuickSave(record) }
-    }
 
     /**
      * Removes the membership [record] added while it is still that one, so a later save of the post to the same Codex

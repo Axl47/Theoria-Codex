@@ -56,9 +56,9 @@ class QuickSaveViewModelTest {
         val kept = testPost(sourcePostId = "kept")
         codices.addItem("target", kept)
         val owner = owner()
-        owner.quickSave(post, "target", fromForYou = false)
+        val record = requireNotNull(owner.quickSave(post, "target", fromForYou = false))
 
-        owner.undoLastQuickSave()
+        owner.undoQuickSave(record)
         advanceUntilIdle()
 
         assertNull(owner.lastQuickSave.value)
@@ -98,7 +98,7 @@ class QuickSaveViewModelTest {
         val owner = owner()
 
         val record = requireNotNull(owner.quickSave(post, "target", fromForYou = false))
-        owner.undoLastQuickSave()
+        owner.undoQuickSave(record)
         advanceUntilIdle()
 
         assertEquals(0, record.inserted)

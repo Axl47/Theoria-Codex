@@ -285,7 +285,6 @@ class TriageDeckViewModelTest {
             saved += Triple(post.id, codexId, query)
             return QuickSaveRecord(post, codexId, "Skies", inserted = 1, savedAtEpochMs = 0L).also { records += it }
         }
-        override fun undoLastQuickSave() = error("The deck undoes its own record")
         override suspend fun undoQuickSave(record: QuickSaveRecord) {
             undoHold?.await()
             undone += record
