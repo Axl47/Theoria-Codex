@@ -74,29 +74,6 @@ data class VideoPlaybackIdentity(
     val cacheKey: String,
 )
 
-/**
- * Binds request-specific identity to one shared process resource without retaining request headers
- * in the shared resource. The generic shape keeps the identity/isolation contract JVM-testable.
- */
-internal class SharedVideoResourcePool<T>(
-    private val sharedResource: T,
-) {
-    fun bind(
-        location: String,
-        headers: Map<String, String>,
-    ): BoundVideoResource<T> {
-        return BoundVideoResource(
-            sharedResource = sharedResource,
-            identity = videoPlaybackIdentity(location, headers),
-        )
-    }
-}
-
-internal data class BoundVideoResource<T>(
-    val sharedResource: T,
-    val identity: VideoPlaybackIdentity,
-)
-
 /** Immutable shared policy; each player receives a fresh state-owning LoadControl instance. */
 internal object VideoLoadControlFactory {
     fun create(profile: VideoPlaybackProfile): LoadControl {
@@ -183,7 +160,6 @@ class VideoPlaybackInfrastructure(
             StandaloneDatabaseProvider(appContext),
         ),
     )
-    private val resourcePool = SharedVideoResourcePool(sharedFactories)
     private val localMediaSourceFactory = DefaultMediaSourceFactory(sharedFactories.local)
 
     /** A Viewer stream is starting: the feed previews hidden behind it stop loading. */
@@ -200,20 +176,20 @@ class VideoPlaybackInfrastructure(
         headers: Map<String, String>,
         boundedLocks: Boolean = false,
     ): BoundVideoPlaybackRequest {
-        val bound = resourcePool.bind(location, headers)
+        val identity = videoPlaybackIdentity(location, headers)
         val mediaSourceFactory = if (isHttpVideoLocation(location)) {
             DefaultMediaSourceFactory(
-                cacheDataSourceFactory(bound, headers, lockChunkBytes = VIDEO_CACHE_CHUNK_BYTES.takeIf { boundedLocks }),
+                cacheDataSourceFactory(headers, lockChunkBytes = VIDEO_CACHE_CHUNK_BYTES.takeIf { boundedLocks }),
             )
         } else {
             localMediaSourceFactory
         }
         val mediaItemBuilder = MediaItem.Builder().setUri(videoLocationToUri(location))
         if (isHttpVideoLocation(location)) {
-            mediaItemBuilder.setCustomCacheKey(bound.identity.cacheKey)
+            mediaItemBuilder.setCustomCacheKey(identity.cacheKey)
         }
         return BoundVideoPlaybackRequest(
-            identity = bound.identity,
+            identity = identity,
             mediaSourceFactory = mediaSourceFactory,
             mediaItem = mediaItemBuilder.build(),
         )
@@ -237,8 +213,7 @@ class VideoPlaybackInfrastructure(
             return ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED)
         }
         return withContext(Dispatchers.IO) {
-            val bound = resourcePool.bind(location, headers)
-            val cacheKey = bound.identity.cacheKey
+            val cacheKey = videoPlaybackIdentity(location, headers).cacheKey
             val dataSpec = DataSpec.Builder()
                 .setUri(videoLocationToUri(location))
                 .setKey(cacheKey)
@@ -247,12 +222,12 @@ class VideoPlaybackInfrastructure(
                 .build()
             // The swiped-to player reads what a still-running prefetch has committed, a chunk at a time.
             val dataSource = cacheDataSourceFactory(
-                bound, headers, blockOnCache = true, lockChunkBytes = VIDEO_CACHE_CHUNK_BYTES,
+                headers, blockOnCache = true, lockChunkBytes = VIDEO_CACHE_CHUNK_BYTES,
             ).createDataSource()
             val writer = CacheWriter(dataSource, dataSpec, null, null)
             writer.cacheCancellable()
             currentCoroutineContext().ensureActive()
-            val cachedBytes = bound.sharedResource.cache.getCachedBytes(
+            val cachedBytes = sharedFactories.cache.getCachedBytes(
                 cacheKey,
                 0L,
                 maxBytes,
@@ -299,17 +274,17 @@ class VideoPlaybackInfrastructure(
         sharedFactories.cache.cacheSpace
     }
 
+    /** The shared HTTP and cache factories with [headers] added to each request; the shared factories never keep them. */
     private fun cacheDataSourceFactory(
-        bound: BoundVideoResource<SharedVideoFactories>,
         headers: Map<String, String>,
         blockOnCache: Boolean = false,
         lockChunkBytes: Long? = null,
     ): CacheDataSource.Factory {
         val immutableHeaders = headers.toMap()
-        val requestScopedUpstream = ResolvingDataSource.Factory(bound.sharedResource.http) { dataSpec ->
+        val requestScopedUpstream = ResolvingDataSource.Factory(sharedFactories.http) { dataSpec ->
             dataSpec.withAdditionalHeaders(immutableHeaders)
         }
-        return videoCacheDataSourceFactory(bound.sharedResource.cache, requestScopedUpstream, blockOnCache, lockChunkBytes)
+        return videoCacheDataSourceFactory(sharedFactories.cache, requestScopedUpstream, blockOnCache, lockChunkBytes)
     }
 }
 

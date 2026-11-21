@@ -188,7 +188,7 @@ private fun ViewerVideoBinding(
     DisposableEffect(state, location, source) {
         val pool = context.videoPlaybackInfrastructure().viewerVideoPlayerPool
         val lease = pool.acquire(location, source.requestHeaders())
-        val player = lease.resource
+        val player = lease.player
         // Read after the previous binding's disposal has saved its final position.
         resumePosition().takeIf { it > 0L }?.let(player::seekTo)
         player.playbackParameters = PlaybackParameters(controls.playbackRate.coerceAtLeast(MIN_VIEWER_PLAYBACK_RATE))

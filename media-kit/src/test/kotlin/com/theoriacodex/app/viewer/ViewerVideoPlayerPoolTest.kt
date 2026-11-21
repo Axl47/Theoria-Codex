@@ -26,27 +26,27 @@ class ViewerVideoPlayerPoolTest {
         val infrastructure = VideoPlaybackInfrastructure(RuntimeEnvironment.getApplication())
         val pool = infrastructure.viewerVideoPlayerPool
         val first = pool.acquire("/first.mp4", emptyMap())
-        first.resource.play()
+        first.player.play()
 
         pool.recycle(first)
 
-        assertFalse(first.resource.isReleased)
-        assertFalse(first.resource.playWhenReady)
-        assertEquals(Player.STATE_IDLE, first.resource.playbackState)
-        assertEquals(0, first.resource.mediaItemCount)
+        assertFalse(first.player.isReleased)
+        assertFalse(first.player.playWhenReady)
+        assertEquals(Player.STATE_IDLE, first.player.playbackState)
+        assertEquals(0, first.player.mediaItemCount)
         assertFalse(infrastructure.hasActiveViewerPlayer)
         val second = pool.acquire("/second.mp4", emptyMap())
-        assertSame(first.resource, second.resource)
-        assertEquals("file:///second.mp4", second.resource.currentMediaItem?.localConfiguration?.uri.toString())
-        assertEquals(0L, second.resource.currentPosition)
-        second.resource.play()
+        assertSame(first.player, second.player)
+        assertEquals("file:///second.mp4", second.player.currentMediaItem?.localConfiguration?.uri.toString())
+        assertEquals(0L, second.player.currentPosition)
+        second.player.play()
         pool.recycle(first)
-        assertTrue(second.resource.playWhenReady)
+        assertTrue(second.player.playWhenReady)
         assertEquals(1, pool.activePlayerCount())
 
         pool.recycle(second)
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(VIEWER_PLAYER_IDLE_TIMEOUT_MS + 1))
-        assertTrue(second.resource.isReleased)
+        assertTrue(second.player.isReleased)
     }
 
     @Test
@@ -55,16 +55,16 @@ class ViewerVideoPlayerPoolTest {
         val pool = infrastructure.viewerVideoPlayerPool
         val first = pool.acquire("/first.mp4", emptyMap())
         val second = pool.acquire("/second.mp4", emptyMap())
-        assertNotSame(first.resource, second.resource)
+        assertNotSame(first.player, second.player)
         assertEquals(2, pool.activePlayerCount())
         pool.recycle(first)
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(VIEWER_PLAYER_IDLE_TIMEOUT_MS + 1))
-        assertFalse(first.resource.isReleased)
-        assertFalse(second.resource.isReleased)
+        assertFalse(first.player.isReleased)
+        assertFalse(second.player.isReleased)
         pool.recycle(second)
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(VIEWER_PLAYER_IDLE_TIMEOUT_MS + 1))
-        assertTrue(first.resource.isReleased)
-        assertTrue(second.resource.isReleased)
+        assertTrue(first.player.isReleased)
+        assertTrue(second.player.isReleased)
     }
 
     @Test
@@ -81,10 +81,10 @@ class ViewerVideoPlayerPoolTest {
         val visible = feed.acquire("/feed.mp4", emptyMap())
         assertSame(preview.player, visible.player)
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(VIEWER_PLAYER_IDLE_TIMEOUT_MS + 1))
-        assertFalse(fullscreen.resource.isReleased)
+        assertFalse(fullscreen.player.isReleased)
         feed.recycle(visible, retainBinding = true)
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(FEED_PREVIEW_IDLE_TIMEOUT_MS + 2_000))
-        assertTrue(fullscreen.resource.isReleased)
+        assertTrue(fullscreen.player.isReleased)
         assertTrue(visible.player.isReleased)
     }
 }

@@ -41,7 +41,7 @@ import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.FirstFrameTraceGate
 import com.theoriacodex.app.viewer.MediaTraceSections
-import com.theoriacodex.app.viewer.FeedPreviewPlayerLease
+import com.theoriacodex.app.viewer.VideoPlayerLease
 import com.theoriacodex.app.viewer.FeedPreviewPlayerPool
 import com.theoriacodex.app.viewer.PreviewPresentationTrace
 import com.theoriacodex.app.viewer.createTexturePlayerView
@@ -258,7 +258,7 @@ private fun publishReadyFeedDuration(
 
 private fun recycleFeedPreviewPlayer(
     state: FeedPreviewPlayerState,
-    lease: FeedPreviewPlayerLease,
+    lease: VideoPlayerLease,
     listener: Player.Listener,
     pool: FeedPreviewPlayerPool,
 ) {
@@ -339,7 +339,7 @@ private fun PreparedSearchVideoPreview(
 }
 
 private class FeedPreviewPlayerState {
-    var lease: FeedPreviewPlayerLease? = null
+    var lease: VideoPlayerLease? = null
     var player by mutableStateOf<ExoPlayer?>(null)
     var playerView: PlayerView? = null
     var didNotifyError = false
