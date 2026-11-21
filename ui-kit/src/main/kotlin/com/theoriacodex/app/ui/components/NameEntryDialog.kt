@@ -13,8 +13,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 
 /**
  * Asks for one trimmed name; shared by everything the user can name. A name is required unless
@@ -29,9 +31,10 @@ fun NameEntryDialog(
     optional: Boolean = false,
     hint: String? = null,
 ) {
-    var value by remember(initialName) { mutableStateOf(initialName) }
+    // An existing name opens selected, so typing replaces it.
+    var value by remember(initialName) { mutableStateOf(TextFieldValue(initialName, TextRange(0, initialName.length))) }
     fun saveIfValid() {
-        val trimmed = value.trim()
+        val trimmed = value.text.trim()
         if (optional || trimmed.isNotBlank()) onSave(trimmed)
     }
 
@@ -42,7 +45,7 @@ fun NameEntryDialog(
             OutlinedTextField(
                 modifier = Modifier.fillMaxWidth().focusOnOpen(),
                 value = value,
-                onValueChange = { value = it.replace("\n", " ") },
+                onValueChange = { value = it.copy(text = it.text.replace("\n", " ")) },
                 label = { Text(if (optional) "Name (optional)" else "Name") },
                 supportingText = hint?.let { { Text(it) } },
                 singleLine = true,

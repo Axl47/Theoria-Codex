@@ -11,8 +11,11 @@ private const val SUBSTRING_MIN_LENGTH = 2
 /** Rows each kind may add to the tag suggestions. */
 const val OMNIBOX_CAP_PER_KIND = 3
 
-/** Tag rows shown before the one-box matches, when there are any; the rest of the tags follow the matches. */
-const val TAG_ROWS_BEFORE_OMNIBOX = 3
+/**
+ * Tag rows shown before the one-box matches, when there are any; the rest of the tags follow the matches.
+ * Two, because about three rows fit above the keyboard and the first match must be one of them.
+ */
+const val TAG_ROWS_BEFORE_OMNIBOX = 2
 
 /** The composer's suggestion rows in order: the leading tags, then the one-box [matches], then the trailing tags. */
 data class TagsAroundOmnibox<T>(val leading: List<T>, val matches: List<OmniboxEntry>, val trailing: List<T>)
