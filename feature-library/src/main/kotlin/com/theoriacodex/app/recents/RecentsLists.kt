@@ -10,19 +10,18 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.layout.width
 import com.theoriacodex.app.ui.components.AdaptivePostGrid
+import com.theoriacodex.app.ui.components.EmptyState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
 import com.theoriacodex.app.ui.TopLevelDestination
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -32,7 +31,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.viewer.ViewerReturnColumn
@@ -49,6 +47,18 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.app.search.rememberPostWatchEntry
 import com.theoriacodex.app.search.relativeTimeLabel
+import com.theoriacodex.app.ui.undo.UndoRow
+
+/**
+ * What History's rows can do to their own entry: save a search in place ([saving]), or be swiped away
+ * ([onRemoveSearch], [onRemovePost]). [removedSearch] keeps its row in place to show the Undo offer.
+ */
+internal class RecentsRowActions(
+    val saving: RecentSearchSaving?,
+    val removedSearch: RecentSearchEntry?,
+    val onRemoveSearch: ((RecentSearchEntry) -> Unit)?,
+    val onRemovePost: ((RecentPostEntry) -> Unit)?,
+)
 
 /** The body under the header, for whichever section is selected. */
 @Composable
@@ -66,16 +76,16 @@ internal fun RecentsTab(
     openCodexPost: (Int) -> Unit,
     onOpenSearch: (RecentSearchEntry) -> Unit,
     onOpenFypSearch: (RecentSearchEntry) -> Unit,
-    onPinSearch: ((RecentSearchEntry) -> Unit)?,
+    rows: RecentsRowActions,
 ) {
     when (filter) {
         RecentsFilter.WATCHED -> RecentPostsGrid(
-            visible.watchedPosts, now, cards, related, openWatchedPost, RecentPostSection.WATCHED, onLongPress,
+            visible.watchedPosts, now, cards, related, openWatchedPost, RecentPostSection.WATCHED, onLongPress, rows.onRemovePost,
             showMediaProgress = true,
             emptyMessage = sourceEmptyMessage ?: "Posts appear here after you open them in Viewer.",
         )
         RecentsFilter.CODEX -> RecentPostsGrid(
-            visible.codexPosts, now, cards, related, openCodexPost, RecentPostSection.CODEX, onLongPress,
+            visible.codexPosts, now, cards, related, openCodexPost, RecentPostSection.CODEX, onLongPress, rows.onRemovePost,
             showMediaProgress = false,
             emptyMessage = sourceEmptyMessage ?: "Posts appear here after you open them from Codex.",
         )
@@ -90,7 +100,7 @@ internal fun RecentsTab(
             emptyMessage = sourceEmptyMessage ?: "Searches appear here after you search or For You generates them.",
             now = now,
             onOpenSearch = { entry -> if (entry.kind == RecentSearchKind.FYP) onOpenFypSearch(entry) else onOpenSearch(entry) },
-            onPinSearch = onPinSearch,
+            rows = rows,
         )
         RecentsFilter.ALL -> ActivityList(
             visible.activity, cards, onLongPress, related,
@@ -102,7 +112,7 @@ internal fun RecentsTab(
             onOpenCodexPost = openCodexPost,
             onOpenSearch = onOpenSearch,
             onOpenFypSearch = onOpenFypSearch,
-            onPinSearch = onPinSearch,
+            saving = rows.saving,
         )
     }
 }
@@ -116,6 +126,7 @@ private fun RecentPostsGrid(
     onOpen: (Int) -> Unit,
     section: RecentPostSection,
     onLongPress: (Post, RecentPostSection) -> Unit,
+    onRemove: ((RecentPostEntry) -> Unit)?,
     showMediaProgress: Boolean,
     emptyMessage: String,
 ) {
@@ -126,6 +137,7 @@ private fun RecentPostsGrid(
         related = related,
         onOpenWatchedPost = onOpen,
         onLongPress = { onLongPress(it, section) },
+        onRemove = onRemove,
         showMediaProgress = showMediaProgress,
         emptyMessage = emptyMessage,
     )
@@ -139,8 +151,9 @@ private fun WatchedGrid(
     related: RecentsRelatedSlot?,
     onOpenWatchedPost: (Int) -> Unit,
     onLongPress: (Post) -> Unit,
-    emptyMessage: String = "Posts appear here after you open them in Viewer.",
-    showMediaProgress: Boolean = false,
+    onRemove: ((RecentPostEntry) -> Unit)?,
+    emptyMessage: String,
+    showMediaProgress: Boolean,
 ) {
     if (watchedPosts.isEmpty()) {
         EmptyRecentState(emptyMessage)
@@ -168,12 +181,14 @@ private fun WatchedGrid(
                 is RecentsGridRow.Post -> {
                     val post = row.entry.post
                     item(key = "${post.id.source.id}:${post.id.sourcePostId}") {
-                        RecentPostCard(
-                            row.entry, now, cards,
-                            viewedMediaNumber = row.entry.maxViewedMediaNumber.takeIf { showMediaProgress },
-                            onClick = { onOpenWatchedPost(row.index) },
-                            onLongPress = { onLongPress(post) },
-                        )
+                        RemovableEntry(onRemove?.let { remove -> { remove(row.entry) } }) {
+                            RecentPostCard(
+                                row.entry, now, cards,
+                                viewedMediaNumber = row.entry.maxViewedMediaNumber.takeIf { showMediaProgress },
+                                onClick = { onOpenWatchedPost(row.index) },
+                                onLongPress = { onLongPress(post) },
+                            )
+                        }
                     }
                 }
             }
@@ -228,7 +243,7 @@ private fun SearchHistoryList(
     onFilterSelected: (RecentSearchFilter) -> Unit,
     now: Long,
     onOpenSearch: (RecentSearchEntry) -> Unit,
-    onPinSearch: ((RecentSearchEntry) -> Unit)?,
+    rows: RecentsRowActions,
     emptyMessage: String,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -241,11 +256,13 @@ private fun SearchHistoryList(
                 )
             }
         }
-        if (searches.isEmpty()) {
+        val removed = rows.removedSearch
+        val shown = remember(searches, removed) { searches.withRemovedInPlace(removed) }
+        if (shown.isEmpty()) {
             EmptyRecentState(emptyMessage)
             return@Column
         }
-        val days = remember(searches, now) { searches.groupBy { recentsDay(it.searchedAtEpochMs) } }
+        val days = remember(shown, now) { shown.groupBy { recentsDay(it.searchedAtEpochMs) } }
         val list = rememberLazyListState()
         ScrollToTopOnTabReselect(TopLevelDestination.Library) { list.animateScrollToItem(0) }
         LazyColumn(Modifier.fillMaxSize(), state = list) {
@@ -254,7 +271,13 @@ private fun SearchHistoryList(
                 itemsIndexed(entries, key = { _, entry -> "${entry.kind}:${entry.queryHash}" }) { index, entry ->
                     // Dividers start under the text, past the source mark.
                     if (index > 0) HorizontalDivider(Modifier.padding(start = 48.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                    RecentSearchRow(entry, now, onClick = { onOpenSearch(entry) }, onPin = onPinSearch?.let { pin -> { pin(entry) } })
+                    if (entry == removed) {
+                        UndoRow(recentSearchRemovalAnchor(entry), Modifier.padding(vertical = 4.dp))
+                    } else {
+                        RemovableEntry(rows.onRemoveSearch?.let { remove -> { remove(entry) } }) {
+                            RecentSearchRow(entry, now, onClick = { onOpenSearch(entry) }, saving = rows.saving)
+                        }
+                    }
                 }
             }
         }
@@ -274,7 +297,7 @@ private fun ActivityList(
     onOpenCodexPost: (Int) -> Unit,
     onOpenSearch: (RecentSearchEntry) -> Unit,
     onOpenFypSearch: (RecentSearchEntry) -> Unit,
-    onPinSearch: ((RecentSearchEntry) -> Unit)?,
+    saving: RecentSearchSaving?,
     emptyMessage: String,
 ) {
     if (activity.isEmpty()) {
@@ -306,7 +329,7 @@ private fun ActivityList(
                             entry = entry,
                             now = now,
                             onClick = { if (entry.kind == RecentSearchKind.FYP) onOpenFypSearch(entry) else onOpenSearch(entry) },
-                            onPin = onPinSearch?.let { pin -> { pin(entry) } },
+                            saving = saving,
                         )
                     }
                 }
@@ -387,23 +410,20 @@ private fun openRecentPost(
     }
 }
 
+/** Swipe-left removal for one History entry, or just [content] when it cannot be removed here. */
+@Composable
+private fun RemovableEntry(onRemove: (() -> Unit)?, content: @Composable () -> Unit) {
+    if (onRemove == null) content() else SwipeToRemove("Remove from History", onRemove, content = content)
+}
+
+/** [removed] back in its time order while its row shows the Undo offer, unless it is already restored. */
+internal fun List<RecentSearchEntry>.withRemovedInPlace(removed: RecentSearchEntry?): List<RecentSearchEntry> =
+    if (removed == null || any { it.queryHash == removed.queryHash }) this
+    else (this + removed).sortedByDescending { it.searchedAtEpochMs }
+
 @Composable
 private fun EmptyRecentState(message: String) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Text(
-                text = message,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
+    EmptyState(message, Modifier.fillMaxSize())
 }
 
 internal enum class RecentSearchFilter(val label: String) {

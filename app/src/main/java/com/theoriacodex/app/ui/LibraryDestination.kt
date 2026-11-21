@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -20,6 +21,8 @@ import com.theoriacodex.app.library.LibrarySectionHeader
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.recents.RecentsClearTarget
+import com.theoriacodex.app.recents.RecentsEntryRemoval
+import com.theoriacodex.app.recents.RecentsLoading
 import com.theoriacodex.app.recents.RecentsRelatedViewModel
 import com.theoriacodex.app.recents.RecentsScreen
 import com.theoriacodex.app.recents.RecentsUndoAnchor
@@ -119,7 +122,9 @@ private fun rememberRecentsDurationOwner(shell: TheoriaShell, state: RecentsDest
 @Composable
 private fun RecentsDestination(shell: TheoriaShell, header: LibrarySectionHeader) {
     val undo = LocalUndoSlot.current
-    RecentsDestinationStateBoundary(shell.data) { state ->
+    val removal = remember(shell, undo) { RecentsEntryRemoval(shell.data.recentsRepository, undo, shell.scope) }
+    val removedSearch by removal.removedSearch.collectAsStateWithLifecycle()
+    RecentsDestinationStateBoundary(shell.data, loading = { RecentsLoading(header) }) { state ->
         val durationOwner = rememberRecentsDurationOwner(shell, state)
         val relatedOwner = viewModel<RecentsRelatedViewModel>(
             key = "recents-related-owner",
@@ -128,7 +133,10 @@ private fun RecentsDestination(shell: TheoriaShell, header: LibrarySectionHeader
         RecentsScreen(
             related = rememberRelatedShelfBinding(shell, relatedOwner.state, relatedOwner.related),
             onShownPostsChanged = relatedOwner::showing,
-            onSaveSearch = shell.owners.savedSearches::save,
+            onSaveSearch = shell.owners.savedSearches::saveInPlace,
+            onRemoveSearch = removal::removeSearch,
+            onRemovePost = removal::removePost,
+            removedSearch = removedSearch,
             watchedPosts = state.watchedPosts,
             codexPosts = state.codexPosts,
             searches = state.searches,

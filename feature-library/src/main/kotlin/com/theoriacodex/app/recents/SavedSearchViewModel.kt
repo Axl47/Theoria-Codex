@@ -22,6 +22,14 @@ class SavedSearchViewModel(private val repository: SavedSearchRepository) : View
         repository.save(name, entry)
     }
 
+    /**
+     * Saves (or renames, since saving the same search again replaces its name) for a surface that confirms
+     * in place, so only failures send a message.
+     */
+    fun saveInPlace(name: String, entry: RecentSearchEntry) = mutate(successMessage = null) {
+        repository.save(name, entry)
+    }
+
     fun rename(id: String, name: String) = mutate("Saved search renamed.") {
         repository.rename(id, name)
     }
@@ -30,16 +38,16 @@ class SavedSearchViewModel(private val repository: SavedSearchRepository) : View
         repository.remove(id)
     }
 
-    private fun mutate(successMessage: String, operation: suspend () -> Unit) {
+    private fun mutate(successMessage: String?, operation: suspend () -> Unit) {
         viewModelScope.launch {
             val outcome = runCatchingPreservingCancellation { operation() }
-            messages.send(outcome.fold(
+            outcome.fold(
                 onSuccess = { successMessage },
                 onFailure = { failure ->
                     (failure as? IllegalArgumentException)?.message
                         ?: "Could not update saved searches. Please try again."
                 },
-            ))
+            )?.let { messages.send(it) }
         }
     }
 }
