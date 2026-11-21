@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.related.testRelatedShelf
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
@@ -29,7 +30,7 @@ class SearchFilterApplyTest {
         compose.setContent {
             MaterialTheme {
                 SearchScreen(
-                    state = state.value, creatorBrowsingSources = emptySet(),
+                    state = state.value, related = testRelatedShelf(), creatorBrowsingSources = emptySet(),
                     onAction = { action ->
                         actions += action
                         if (action is SearchAction.SelectSort) {

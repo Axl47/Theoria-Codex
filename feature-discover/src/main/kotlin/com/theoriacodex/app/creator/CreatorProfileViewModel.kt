@@ -122,29 +122,6 @@ class CreatorProfileViewModel(
     }
 
     private fun reduceAction(action: CreatorAction) {
-        when (action) {
-            is CreatorAction.ShowRelatedPosts -> {
-                relatedPosts.show(action.post)
-                return
-            }
-            CreatorAction.DismissRelatedPosts -> {
-                relatedPosts.clear()
-                return
-            }
-            CreatorAction.RetryRelatedPosts -> {
-                relatedPosts.retry()
-                return
-            }
-            CreatorAction.ShowPreviousRelatedPosts -> {
-                relatedPosts.showPreviousPage()
-                return
-            }
-            CreatorAction.ShowNextRelatedPosts -> {
-                relatedPosts.showNextPage()
-                return
-            }
-            else -> Unit
-        }
         val previous = mutableState.value
         val transition = previous.reduce(action)
         val feedChanged = transition.state.selectedFeed != previous.selectedFeed

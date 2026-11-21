@@ -103,12 +103,7 @@ sealed interface CreatorAction {
         val visibleResults: List<Post>? = null,
         val visibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
     ) : CreatorAction
-    /** "More like this" from a post's action menu: opens the related shelf without a like. */
-    data class ShowRelatedPosts(val post: Post) : CreatorAction
-    data object DismissRelatedPosts : CreatorAction
-    data object RetryRelatedPosts : CreatorAction
-    data object ShowPreviousRelatedPosts : CreatorAction
-    data object ShowNextRelatedPosts : CreatorAction
+    /** Opens a related-shelf post in a Viewer session that stays bound to this feed. */
     data class OpenRelatedResult(val index: Int, val visibleResults: List<Post>) : CreatorAction
     data object Back : CreatorAction
     data class PageLoaded(val request: CreatorRequestIdentity, val page: Page<Post>) : CreatorAction
@@ -165,11 +160,6 @@ fun CreatorUiState.reduce(action: CreatorAction): CreatorTransition = when (acti
     )
     is CreatorAction.OpenResult -> openResult(action)
     is CreatorAction.OpenRelatedResult -> openRelatedResult(action)
-    is CreatorAction.ShowRelatedPosts,
-    CreatorAction.DismissRelatedPosts,
-    CreatorAction.RetryRelatedPosts,
-    CreatorAction.ShowPreviousRelatedPosts,
-    CreatorAction.ShowNextRelatedPosts -> unchanged()
     CreatorAction.Back -> CreatorTransition(this, CreatorEffect.NavigateBack)
     is CreatorAction.PageLoaded -> pageLoaded(action)
     is CreatorAction.RequestFailed -> {

@@ -202,16 +202,6 @@ class SearchViewModel(
                 )
             }
 
-            is SearchAction.ShowRelatedPosts -> relatedPosts.show(action.post)
-
-            SearchAction.RetryRelatedPosts -> relatedPosts.retry()
-
-            SearchAction.DismissRelatedPosts -> relatedPosts.clear()
-
-            SearchAction.ShowPreviousRelatedPosts -> relatedPosts.showPreviousPage()
-
-            SearchAction.ShowNextRelatedPosts -> relatedPosts.showNextPage()
-
             is SearchAction.OpenRelatedResult -> openRelatedResult(action)
 
             is SearchAction.ScrollChanged -> persistScroll(action)

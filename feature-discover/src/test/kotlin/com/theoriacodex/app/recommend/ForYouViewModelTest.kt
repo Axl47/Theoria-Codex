@@ -260,9 +260,9 @@ class ForYouViewModelTest {
         advanceUntilIdle()
         owner.related.onLikeCommitted(promoted, LikeToggleOutcome.LIKED)
         advanceUntilIdle()
-        owner.onAction(ForYouAction.ShowPreviousRelatedPosts)
+        owner.related.showPreviousPage()
         assertEquals(listOf(sibling), owner.state.value.relatedPosts.loadedPosts)
-        owner.onAction(ForYouAction.ShowNextRelatedPosts)
+        owner.related.showNextPage()
         assertEquals(listOf(next), owner.state.value.relatedPosts.loadedPosts)
         val effect = async { owner.effects.first() }
         owner.onAction(ForYouAction.OpenRelatedResult(0, listOf(next)))

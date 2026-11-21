@@ -120,8 +120,12 @@ private fun ForYouRouteContent(
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
     callbacks: ForYouRouteCallbacks,
 ) {
+    val related = rememberFeedRelatedShelf(state.relatedPosts, owner.related) { posts, index ->
+        owner.onAction(ForYouAction.OpenRelatedResult(index, posts))
+    }
     ForYouScreen(
         state = state,
+        related = related,
         likedPostIds = config.likedPostIds,
         pixivUgoiraClient = pixivUgoiraClient,
         durations = duration.owner.feedDurations(duration.states, config.resolveUnknownAnimatedDurations),

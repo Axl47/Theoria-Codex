@@ -130,12 +130,7 @@ sealed interface ForYouAction {
         val visibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
     ) : ForYouAction
     data object GoToSearch : ForYouAction
-    /** "More like this" from a post's action menu: opens the related shelf without a like. */
-    data class ShowRelatedPosts(val post: Post) : ForYouAction
-    data object RetryRelatedPosts : ForYouAction
-    data object DismissRelatedPosts : ForYouAction
-    data object ShowPreviousRelatedPosts : ForYouAction
-    data object ShowNextRelatedPosts : ForYouAction
+    /** Opens a related-shelf post in a Viewer session that stays bound to this feed. */
     data class OpenRelatedResult(
         val index: Int,
         val visibleResults: List<Post>,
@@ -274,11 +269,6 @@ fun ForYouUiState.reduce(action: ForYouAction): ForYouTransition {
         ForYouAction.RefreshSections,
         is ForYouAction.PinSection,
         is ForYouAction.DismissSection,
-        is ForYouAction.ShowRelatedPosts,
-        ForYouAction.RetryRelatedPosts,
-        ForYouAction.DismissRelatedPosts,
-        ForYouAction.ShowPreviousRelatedPosts,
-        ForYouAction.ShowNextRelatedPosts,
         -> unchanged()
         is ForYouAction.RefreshCompleted -> refreshCompleted(action)
 

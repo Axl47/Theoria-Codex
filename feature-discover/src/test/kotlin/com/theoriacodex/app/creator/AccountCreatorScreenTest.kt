@@ -1,5 +1,6 @@
 package com.theoriacodex.app.creator
 
+import com.theoriacodex.app.related.testRelatedShelf
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
@@ -34,6 +35,7 @@ class AccountCreatorScreenTest {
             MaterialTheme {
                 CreatorProfileScreen(
                     state = state,
+                    related = testRelatedShelf(),
                     likedPostIds = emptySet(),
                     savedPostIds = emptySet(),
                     onToggleLike = {},

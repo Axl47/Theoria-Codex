@@ -301,7 +301,7 @@ class SearchFeedFramesTest {
                     return@CompositionLocalProvider
                 }
                 val feed = rememberSearchFeed(
-                    state, fab, FeedMarks(liked = liked), durations = FeedDurations(durationStates, resolveInBackground = true),
+                    state, state.relatedPosts, fab, FeedMarks(liked = liked), durations = FeedDurations(durationStates, resolveInBackground = true),
                 )
                 val entries = feed.related.projection.entries
                 SideEffect { shown = entries.map { (it as RelatedFeedEntry.PostEntry).post.id.sourcePostId } }

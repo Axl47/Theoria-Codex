@@ -198,8 +198,12 @@ private fun SearchRouteContent(
     val resolvePostById: suspend (PostId) -> Post? = remember(coordinator, appliedQueryHash) {
         { id -> coordinator.resolvePostForSearch(id, appliedQueryHash) }
     }
+    val related = rememberFeedRelatedShelf(state.relatedPosts, owner.related) { posts, index ->
+        owner.onAction(SearchAction.OpenRelatedResult(index, posts))
+    }
     SearchScreen(
         state = state,
+        related = related,
         composerOpen = composerOpen,
         oldSearchBar = config.settings.oldSearchBar,
         savedSearches = config.savedSearches,

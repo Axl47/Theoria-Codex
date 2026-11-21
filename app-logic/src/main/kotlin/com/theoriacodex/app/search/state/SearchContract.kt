@@ -330,12 +330,7 @@ sealed interface SearchAction {
     data class SetNhentaiLanguage(val filter: NhentaiLanguageFilter) : DraftEdit
     data class SetNhentaiFullColor(val enabled: Boolean) : DraftEdit
     data class RememberResolvedPost(val post: Post) : SearchAction
-    /** "More like this" from a post's action menu: opens the related shelf without a like. */
-    data class ShowRelatedPosts(val post: Post) : SearchAction
-    data object RetryRelatedPosts : SearchAction
-    data object DismissRelatedPosts : SearchAction
-    data object ShowPreviousRelatedPosts : SearchAction
-    data object ShowNextRelatedPosts : SearchAction
+    /** Opens a related-shelf post in a Viewer session that stays bound to this feed. */
     data class OpenRelatedResult(
         val index: Int,
         val visibleResults: List<Post>,
