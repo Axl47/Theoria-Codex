@@ -341,6 +341,23 @@ internal class ScrollPersistenceSearchViewModelTest : SearchViewModelTestFixture
             assertEquals(listOf(SearchScrollState(22, 17)), uiRestore.writeSnapshot().map { it.second })
         }
 
+    @Test
+    fun `route reentry keeps an open startup restore instead of downgrading it to keep-live`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val saved = SavedStateHandle(mapOf(
+                SearchSavedStateKeys.SCROLL_INDEX to 22,
+                SearchSavedStateKeys.SCROLL_OFFSET to 17,
+            ))
+            val owner = viewModel(ViewModelSearchAdapter(), savedState = saved)
+            restore(owner)
+            val startup = owner.state.value.restoration
+            assertEquals(SearchScrollState(22, 17), (startup as SearchRestorationUiState.Restored).scrollState)
+
+            owner.onAction(SearchAction.Resume)
+
+            assertEquals(startup, owner.state.value.restoration)
+        }
+
     private fun SearchViewModel.acknowledgeScroll() {
         val request = state.value.restoration as SearchRestorationUiState.Restored
         onAction(SearchAction.ScrollRestorationApplied(request.scrollRequestId))

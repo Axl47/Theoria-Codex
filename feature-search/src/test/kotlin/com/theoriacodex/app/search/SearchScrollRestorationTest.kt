@@ -51,6 +51,7 @@ class SearchScrollRestorationTest {
     private var hideAnchor = false
     private val hiddenIndices = mutableStateOf(emptySet<Int>())
     private val visibilityReady = mutableStateOf(true)
+    private val gridShown = mutableStateOf(true)
 
     @Test fun `filter changes save the new post even when grid coordinates stay unchanged`() {
         state.value = state.value.copy(restoration = SearchRestorationUiState.Restored(false))
@@ -216,6 +217,81 @@ class SearchScrollRestorationTest {
         }
     }
 
+    // Returning from the Viewer recomposes the grid around its retained state, which must still count as
+    // showing posts so the keep-live request leaves it alone.
+    @Test fun `keep-live request opened while a retained grid is out of composition leaves it in place`() {
+        state.value = state.value.copy(
+            content = state.value.content.copy(results = posts.take(40)),
+            restoration = SearchRestorationUiState.Restored(false),
+        )
+        render()
+        compose.onNodeWithTag("restore-grid").performScrollToIndex(25)
+        val before = compose.runOnIdle {
+            gridShown.value = false
+            grid.firstVisibleItemIndex to grid.firstVisibleItemScrollOffset
+        }
+        compose.runOnIdle {
+            state.value = state.value.copy(restoration = SearchRestorationUiState.Restored(
+                false, SearchScrollState(3, 0), 2L, keepLiveGrid = true,
+            ))
+        }
+        compose.runOnIdle { gridShown.value = true }
+        compose.runOnIdle {
+            assertEquals(listOf(2L), acknowledgements)
+            assertEquals(before, grid.firstVisibleItemIndex to grid.firstVisibleItemScrollOffset)
+        }
+    }
+
+    @Test fun `keep-live request on a cold grid restores the anchor once`() {
+        state.value = state.value.copy(
+            content = state.value.content.copy(results = posts.take(40)),
+            restoration = SearchRestorationUiState.Restored(false, SearchScrollState(22, 17), 1L, keepLiveGrid = true),
+        )
+        gridShown.value = false
+        render()
+        compose.runOnIdle { gridShown.value = true }
+        compose.runOnIdle {
+            assertEquals(listOf(1L), acknowledgements)
+            assertEquals(22, grid.firstVisibleItemIndex)
+            assertEquals(17, grid.firstVisibleItemScrollOffset)
+        }
+    }
+
+    @Test fun `keep-live request that stopped short on a cold grid retries when the next page arrives`() {
+        state.value = state.value.copy(
+            restoration = SearchRestorationUiState.Restored(false, SearchScrollState(18, 17), 1L, keepLiveGrid = true),
+        )
+        gridShown.value = false
+        render()
+        compose.runOnIdle { gridShown.value = true }
+        compose.runOnIdle {
+            assertTrue(acknowledgements.isEmpty())
+            state.value = state.value.copy(content = state.value.content.copy(results = posts.take(40)))
+        }
+        compose.runOnIdle {
+            assertEquals(listOf(1L), acknowledgements)
+            assertEquals(18, grid.firstVisibleItemIndex)
+            assertEquals(17, grid.firstVisibleItemScrollOffset)
+        }
+    }
+
+    @Test fun `keep-live request opened before any posts restores the anchor when they arrive`() {
+        state.value = state.value.copy(
+            content = state.value.content.copy(results = emptyList()),
+            restoration = SearchRestorationUiState.Restored(false, SearchScrollState(22, 17), 1L, keepLiveGrid = true),
+        )
+        render()
+        compose.runOnIdle {
+            assertTrue(acknowledgements.isEmpty())
+            state.value = state.value.copy(content = state.value.content.copy(results = posts.take(40)))
+        }
+        compose.runOnIdle {
+            assertEquals(listOf(1L), acknowledgements)
+            assertEquals(22, grid.firstVisibleItemIndex)
+            assertEquals(17, grid.firstVisibleItemScrollOffset)
+        }
+    }
+
     @Test fun `explicit reset to top does not wait for duration lookups`() {
         state.value = state.value.copy(restoration = SearchRestorationUiState.Restored(
             false, SearchScrollState(0, 0), 1L, resetToTop = true,
@@ -236,10 +312,13 @@ class SearchScrollRestorationTest {
             }
             val projection = buildRelatedFeedProjection(current.content.results, visible, RelatedPostsUiState.Idle)
             grid = rememberLazyStaggeredGridState()
-            LazyVerticalStaggeredGrid(columns = StaggeredGridCells.Fixed(1), state = grid,
-                modifier = Modifier.height(300.dp).testTag("restore-grid")) {
-                items(visible.size, key = { visible[it].id.sourcePostId }) {
-                    BasicText("Post $it", Modifier.height(100.dp))
+            // A hidden grid keeps its state but has no layout, as before its first frame.
+            if (gridShown.value) {
+                LazyVerticalStaggeredGrid(columns = StaggeredGridCells.Fixed(1), state = grid,
+                    modifier = Modifier.height(300.dp).testTag("restore-grid")) {
+                    items(visible.size, key = { visible[it].id.sourcePostId }) {
+                        BasicText("Post $it", Modifier.height(100.dp))
+                    }
                 }
             }
             val dispatch: (SearchAction) -> Unit = { action ->
