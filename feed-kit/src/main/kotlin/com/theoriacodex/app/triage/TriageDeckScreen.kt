@@ -5,12 +5,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Close
@@ -61,12 +58,8 @@ fun TriageDeckScreen(
     callbacks: TriageDeckCallbacks,
 ) {
     val deck by viewModel.state.collectAsStateWithLifecycle()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .windowInsetsPadding(WindowInsets.safeDrawing),
-    ) {
+    // The shell's scaffold already insets its content for the system bars.
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TriageTopBar(deck, callbacks.onClose, viewModel::undo)
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
