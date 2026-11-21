@@ -27,7 +27,7 @@ import com.theoriacodex.data.repository.ProfileBackupPreview
 @Composable
 fun BackupControls(state: BackupUiState, onIncludeRecents: (Boolean) -> Unit, onExport: () -> Unit, onImport: () -> Unit) {
     SwitchRow(
-        title = "Include Recents and statistics",
+        title = "Include History and statistics",
         checked = state.includeRecents,
         enabled = !state.busy,
         contentPadding = PaddingValues(0.dp),
