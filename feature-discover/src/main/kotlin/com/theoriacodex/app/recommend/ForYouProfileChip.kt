@@ -16,6 +16,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.data.repository.RecommendationProfile
@@ -38,7 +40,7 @@ internal fun ForYouProfileChip(
             onClick = { expanded = true },
             label = { Text(active.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
             trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) },
-            modifier = Modifier.widthIn(max = 160.dp),
+            modifier = Modifier.widthIn(max = 160.dp).semantics { onClick(label = "Switch profile", action = null) },
         )
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             profiles.forEach { profile ->

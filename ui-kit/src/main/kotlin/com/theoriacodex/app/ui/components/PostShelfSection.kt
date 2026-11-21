@@ -4,10 +4,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,6 +21,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.domain.model.Post
 
@@ -42,22 +41,21 @@ fun PostShelfSection(
     onMore: (() -> Unit)? = null,
     showSeeAll: Boolean = onMore != null,
     highlight: String? = null,
-    titleAction: ShelfTitleAction? = null,
+    headerAction: ShelfHeaderAction? = null,
     content: @Composable () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
-                // A title with its own action leaves this row's merged text, so the row names the shelf it opens.
                 .combinedClickable(onClick = onOpen, onLongClick = onLongPress, role = Role.Button,
-                    onClickLabel = titleAction?.let { "Open $title" }, onLongClickLabel = "Actions for $title")
+                    onLongClickLabel = "Actions for $title")
                 .heightIn(min = 48.dp)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (showSeeAll) {
-                ManagedShelfHeading(title, listOfNotNull(count?.toString(), countSuffix).joinToString(" "), icon, highlight, onMore, titleAction)
+                ManagedShelfHeading(title, listOfNotNull(count?.toString(), countSuffix).joinToString(" "), icon, highlight, onMore, headerAction)
             } else {
                 Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -78,10 +76,10 @@ fun PostShelfSection(
 }
 
 /**
- * Makes a managed shelf's title its own control, apart from the heading that opens the shelf: For You's title
- * opens why the shelf was picked. [disclosure] adds a chevron where the title alone does not suggest more.
+ * A managed shelf's own control at the end of its header, apart from the heading that opens the shelf, such as
+ * For You's Why: a 48dp text button reading [text], announced as [contentDescription].
  */
-data class ShelfTitleAction(val label: String, val disclosure: Boolean = false, val onClick: () -> Unit)
+data class ShelfHeaderAction(val text: String, val contentDescription: String, val onClick: () -> Unit)
 
 /**
  * A shelf heading that identifies its collection and shows where See all and its actions are; a
@@ -94,20 +92,19 @@ private fun RowScope.ManagedShelfHeading(
     icon: ImageVector?,
     highlight: String?,
     onMore: (() -> Unit)?,
-    titleAction: ShelfTitleAction?,
+    action: ShelfHeaderAction?,
 ) {
     icon?.let { Icon(it, null, Modifier.padding(end = 8.dp), tint = MaterialTheme.colorScheme.primary) }
-    Row(
-        titleAction?.let { Modifier.clickable(onClickLabel = it.label, role = Role.Button, onClick = it.onClick) } ?: Modifier,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(title, style = MaterialTheme.typography.titleMedium)
-        if (titleAction?.disclosure == true) Icon(Icons.Default.ArrowDropDown, null, Modifier.size(20.dp))
-    }
+    Text(title, style = MaterialTheme.typography.titleMedium)
     Row(Modifier.padding(start = 8.dp).weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(count, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         highlight?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, maxLines = 1) }
     }
     Text("See all", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+    action?.let {
+        TextButton(it.onClick, Modifier.heightIn(min = 48.dp).semantics { contentDescription = it.contentDescription }) {
+            Text(it.text)
+        }
+    }
     onMore?.let { IconButton(onClick = it) { Icon(Icons.Default.MoreVert, "Actions for $title") } }
 }
