@@ -10,11 +10,9 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import com.theoriacodex.app.media.isGifMediaRef
-import com.theoriacodex.app.media.isPixivUgoiraMedia
-import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.media.postMediaItems
 import com.theoriacodex.app.viewer.state.ViewerAction
+import com.theoriacodex.app.viewer.state.ViewerMediaKind
 import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.domain.model.ImageRef
@@ -148,13 +146,10 @@ internal class ViewerSelection(
     val overviewItems: List<ViewerMediaOverviewItem>,
 ) {
     val media: ImageRef? = mediaItems.getOrNull(mediaIndex)
-    val isSeekable = media?.let { media ->
-        isVideoMediaRef(media) || isGifMediaRef(media) || (isPixivUgoiraMedia(post, media) && canPlayUgoira)
-    } == true
-    val canDownload = media?.let { media ->
-        (isPixivUgoiraMedia(post, media) && canPlayUgoira) || !media.url.isNullOrBlank()
-    } == true
-    val isAnimated = media?.let { viewerMediaIsAnimated(post, it, canPlayUgoira) } == true
+    private val kind = media?.let { viewerRendererMediaKind(post, it, canPlayUgoira) }
+    val isSeekable = kind?.seekable == true
+    val canDownload = kind == ViewerMediaKind.UGOIRA || !media?.url.isNullOrBlank()
+    val isAnimated = kind?.animated == true
     val overviewAvailable = viewerMediaOverviewAvailable(overviewItems)
 }
 

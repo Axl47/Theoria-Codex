@@ -45,10 +45,6 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import com.theoriacodex.app.media.isAnimatedImageMediaRef
-import com.theoriacodex.app.media.isGifMediaRef
-import com.theoriacodex.app.media.isPixivUgoiraMedia
-import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.viewer.state.ViewerAction
@@ -56,7 +52,6 @@ import com.theoriacodex.app.viewer.state.ViewerMediaError
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
-import com.theoriacodex.domain.model.SourceKey
 
 internal data class ViewerMediaLayout(
     val landscape: Boolean,
@@ -97,10 +92,8 @@ internal fun ViewerMediaPage(
     onPassiveInteraction: () -> Unit = {},
 ) {
     val key = ViewerMediaKey(post.id, mediaIndex)
-    val isVideo = isVideoMediaRef(media)
-    val isGif = isGifMediaRef(media)
-    val isUgoira = isPixivUgoiraMedia(post, media) && pixivUgoiraClient != null
-    val animated = viewerMediaIsAnimated(post, media, pixivUgoiraClient != null)
+    val kind = remember(post, media, pixivUgoiraClient != null) { viewerRendererMediaKind(post, media, pixivUgoiraClient != null) }
+    val animated = kind.animated
     val interactions = remember(key) { ViewerMediaInteractions() }
     val holdScrub = LocalViewerHoldScrub.current?.takeIf { controls.isActive }
     // A page that goes inactive or leaves mid-hold (NEXT mode advancing) never sees the release.
@@ -129,7 +122,7 @@ internal fun ViewerMediaPage(
         ) {
             CompositionLocalProvider(LocalViewerMediaAspectRatio provides viewerAspectRatio(post), LocalViewerHoldScrub provides holdScrub) {
                 ViewerMediaContent(
-                    post, media, key,
+                    post, media, key, kind,
                     controls.copy(
                         seekJumpSerial = interactions.seekSerial,
                         seekJumpDeltaMs = interactions.seekDelta,
@@ -140,7 +133,7 @@ internal fun ViewerMediaPage(
             }
             FittedSeekJumpFeedbackOverlay(interactions.feedback, viewerAspectRatio(post), interactions::clearFeedback, Modifier.matchParentSize())
         }
-        ViewerMediaGestureLayer(key, isVideo || isGif || isUgoira, animated, interactions, holdScrub, controls,
+        ViewerMediaGestureLayer(key, kind.seekable, animated, interactions, holdScrub, controls,
             transform, transformBounds, onTransformChanged, layout, onAction, onInteraction, onToggleChrome, onPassiveInteraction)
         if (controls.isActive && !layout.pictureInPicture && levelControls != null) {
             ViewerLevelFeedbackOverlay(levelControls, Modifier.matchParentSize())
@@ -181,11 +174,6 @@ private fun ViewerHoldSpeedLabel(visible: Boolean, modifier: Modifier) {
         )
     }
 }
-
-/** Animated media carries a timeline, which reserves the bottom of the page for its own drags. */
-internal fun viewerMediaIsAnimated(post: Post, media: ImageRef, hasUgoiraClient: Boolean): Boolean =
-    isVideoMediaRef(media) || isGifMediaRef(media) || (isPixivUgoiraMedia(post, media) && hasUgoiraClient) ||
-        (post.id.source == SourceKey.HITOMI && isAnimatedImageMediaRef(media))
 
 @Composable
 private fun ViewerMediaGestureLayer(

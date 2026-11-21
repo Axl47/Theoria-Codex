@@ -6,6 +6,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
+import com.theoriacodex.app.viewer.state.ViewerMediaKind
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.PIXIV_UGOIRA_MIME
 import com.theoriacodex.domain.model.VideoQuality
@@ -41,7 +42,7 @@ class ViewerUgoiraReadyTest {
         )
         compose.setContent {
             ViewerMediaContent(
-                post, media, ViewerMediaKey(post.id, 0),
+                post, media, ViewerMediaKey(post.id, 0), ViewerMediaKind.UGOIRA,
                 ViewerRendererControls(
                     isActive = true, isPlaying = true, showControls = true, loopPlayback = true,
                     playbackRate = 1f, restartRequest = 0L, loadGeneration = 0L,
