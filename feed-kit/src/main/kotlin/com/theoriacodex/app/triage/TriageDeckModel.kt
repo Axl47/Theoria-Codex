@@ -1,6 +1,8 @@
 package com.theoriacodex.app.triage
 
 import com.theoriacodex.app.codex.SaveSuggestion
+import com.theoriacodex.app.ui.components.FeedView
+import com.theoriacodex.app.ui.navigation.TriageSeed
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.normalizeMatchToken
@@ -26,6 +28,9 @@ interface TriageFeed {
         }
     }
 }
+
+/** What Triage, tapped now, takes over from this grid: what it shows and how it filters. */
+fun FeedView.triageSeed(): TriageSeed = TriageSeed(visiblePosts, filters, durationFilterActive, postFilter::filter)
 
 /** A single-tag entry of the active profile's For You hide list. */
 data class HiddenTag(val source: SourceKey, val tag: String)

@@ -1,32 +1,32 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.app.media.MediaDurationKey
+import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.media.animatedDurationMs
+import com.theoriacodex.app.media.isAnimatedPost
+import com.theoriacodex.app.media.mediaDurationKey
 import com.theoriacodex.app.recommend.trainingTagsFor
 import com.theoriacodex.app.related.ViewerFeedOwner
 import com.theoriacodex.app.related.ViewerFeedSnapshot
-import com.theoriacodex.app.search.SearchVisibilityFilters
-import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.triage.HiddenTag
 import com.theoriacodex.app.triage.TriageActions
 import com.theoriacodex.app.triage.TriageFeed
 import com.theoriacodex.app.triage.TriageFeedSnapshot
 import com.theoriacodex.app.triage.TriageReversal
-import com.theoriacodex.app.triage.gridVisibilityFilters
-import com.theoriacodex.app.ui.components.FOR_YOU_FEED_FAB_CONTEXT
-import com.theoriacodex.app.ui.components.SEARCH_FEED_FAB_CONTEXT
-import com.theoriacodex.app.ui.components.creatorFeedFabContext
 import com.theoriacodex.app.ui.navigation.TriageRequest
-import com.theoriacodex.app.ui.routes.BrowsingMetadata
-import com.theoriacodex.data.repository.CodexSortMode
+import com.theoriacodex.app.ui.navigation.TriageSeed
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.transformWhile
@@ -35,28 +35,30 @@ import kotlinx.coroutines.withContext
 private const val CODEX_FEED_PREFIX = "codex:"
 
 /**
- * The feed [request] names: a live feed owner bound to the query the deck opened over, with the grid's visibility
- * filters applied against [marks], or a Codex's posts. Null when the owner no longer shows that query, such as
- * after the process was restored and the owner is gone.
+ * A deck's feed, plus [candidates]: the live owner's posts the deck picks from, whose lengths the deck resolves while
+ * its grid filters by length, as the grid would.
  */
-internal fun TheoriaShell.triageFeed(request: TriageRequest, marks: Flow<BrowsingMetadata?>): TriageFeed? = when (request.source) {
-    ViewerStreamSource.SEARCH, ViewerStreamSource.FOR_YOU, ViewerStreamSource.CREATOR_PROFILE -> {
-        val filters = gridVisibilityFilters(request.source)
-        // The Viewer leaves liked, saved and watched posts in For You, whatever the grid's toggles say.
-        val appliesMarks = request.source != ViewerStreamSource.FOR_YOU
-        routes.feed(request.source)?.takeIf { it.viewerFeed.queryHash == request.feedKey }?.boundTriageFeed(request.feedKey) { feed ->
-            val known = marks.filterNotNull().first()
-            filterSearchResults(
-                results = feed.results,
-                filters = filters,
-                likedPostIds = if (appliesMarks) known.likedPostIds else emptySet(),
-                savedPostIds = if (appliesMarks) known.savedPostIds else emptySet(),
-                watchedPostIds = if (appliesMarks) known.watchedPostIds else emptySet(),
-                retainedLikedPostIds = feed.retainedLikedPostIds,
-            )
-        }
+internal class SeededTriageFeed(
+    override val snapshots: Flow<TriageFeedSnapshot>,
+    val candidates: Flow<List<Post>>,
+    private val nextPage: () -> Unit,
+) : TriageFeed {
+    override fun loadNextPage() = nextPage()
+}
+
+/**
+ * The feed [request] names, seeded with what its grid handed over ([seed]). A live feed gives the grid's posts in its
+ * order, then whatever else of the owner's posts the grid's filter keeps with the lengths known so far, while the owner
+ * still shows the deck's query; a Codex or Likes gives exactly the posts its grid showed. Null when the owner no
+ * longer shows that query.
+ */
+internal fun TheoriaShell.triageFeed(request: TriageRequest, seed: TriageSeed): SeededTriageFeed? = when (request.source) {
+    ViewerStreamSource.SEARCH, ViewerStreamSource.FOR_YOU, ViewerStreamSource.CREATOR_PROFILE ->
+        routes.feed(request.source)?.takeIf { it.viewerFeed.queryHash == request.feedKey }
+            ?.seededTriageFeed(request.feedKey, seed, features.mediaDurationCoordinator.states)
+    ViewerStreamSource.CODEX -> request.codexId()?.let {
+        SeededTriageFeed(flowOf(TriageFeedSnapshot(seed.posts, canLoadMore = false)), flowOf(emptyList())) {}
     }
-    ViewerStreamSource.CODEX -> request.codexId()?.let(::codexTriageFeed)
     ViewerStreamSource.RELATED, ViewerStreamSource.RECENTS, ViewerStreamSource.TRAIL -> null
 }
 
@@ -75,48 +77,40 @@ internal suspend fun TheoriaShell.settledTriageRequest(request: TriageRequest): 
     return request.copy(feedKey = settled.query.appliedQueryHash.ifBlank { request.feedKey })
 }
 
-/** The visibility filters the grid behind [source] applies now, from its saved filter sheet. */
-internal fun TheoriaShell.gridVisibilityFilters(source: ViewerStreamSource): SearchVisibilityFilters {
-    val context = when (source) {
-        ViewerStreamSource.SEARCH -> SEARCH_FEED_FAB_CONTEXT
-        ViewerStreamSource.FOR_YOU -> FOR_YOU_FEED_FAB_CONTEXT
-        ViewerStreamSource.CREATOR_PROFILE -> routes.creator.current?.state?.value?.creator?.let { creator ->
-            creatorFeedFabContext(creator.source.id, creator.profileId ?: creator.uploadsQuery ?: creator.displayName)
-        }
-        else -> null
-    }
-    val fab = context?.let(feedFabRestoreRegistry::state) ?: return SearchVisibilityFilters()
-    return gridVisibilityFilters(source, fab, routes.search.current?.state?.value?.query?.applied)
-}
-
 /**
- * This owner's feed while it shows [queryHash]: the deck's posts and paging follow that one query, and once the
- * owner moves to another query the deck takes nothing more from it and stops asking for pages.
+ * This owner's feed while it shows [queryHash], filtered as [seed]'s grid filters it: the deck's posts and paging
+ * follow that one query, and once the owner moves to another query the deck takes nothing more from it and stops
+ * asking for pages. [lengths] are the app's decided lengths, which the filter reads while it filters by length.
  */
-private fun ViewerFeedOwner.boundTriageFeed(queryHash: String, visible: suspend (ViewerFeedSnapshot) -> List<Post>): TriageFeed {
+private fun ViewerFeedOwner.seededTriageFeed(
+    queryHash: String,
+    seed: TriageSeed,
+    lengths: Flow<Map<MediaDurationKey, MediaDurationState>>,
+): SeededTriageFeed {
     val owner = this
-    return object : TriageFeed {
-        override val snapshots = owner.viewerFeedChanges.onStart { emit(owner.viewerFeed) }.transformWhile { feed ->
-            val same = feed.queryHash == queryHash
-            emit(if (same) TriageFeedSnapshot(visible(feed), feed.canLoadMore) else TriageFeedSnapshot(emptyList(), canLoadMore = false))
-            same
-        }
-
-        override fun loadNextPage() {
-            if (owner.viewerFeed.queryHash == queryHash) owner.loadNextPage()
-        }
+    val feed: Flow<ViewerFeedSnapshot?> = owner.viewerFeedChanges.onStart { emit(owner.viewerFeed) }.transformWhile { feed ->
+        val same = feed.queryHash == queryHash
+        emit(feed.takeIf { same })
+        same
+    }
+    val snapshots = combine(feed, if (seed.lengthFilterActive) lengths else flowOf(emptyMap())) { current, decided ->
+        if (current == null) return@combine TriageFeedSnapshot(emptyList(), canLoadMore = false)
+        val shown = seed.filter(current.results, decidedLengths(current.results, decided))
+        TriageFeedSnapshot(seed.posts + shown, current.canLoadMore)
+    }.distinctUntilChanged().flowOn(Dispatchers.Default)
+    return SeededTriageFeed(snapshots, feed.map { current -> current?.results.orEmpty() }) {
+        if (owner.viewerFeed.queryHash == queryHash) owner.loadNextPage()
     }
 }
 
-/** The Codex's posts as they are when the deck opens; saves and hides made in the deck do not reshuffle them. */
-private fun TheoriaShell.codexTriageFeed(codexId: String): TriageFeed = object : TriageFeed {
-    override val snapshots: Flow<TriageFeedSnapshot> = flow {
-        val posts = data.codexRepository.observeCodexPosts(codexId, CodexSortMode.NEWEST_SAVED).first()
-        emit(TriageFeedSnapshot(posts, canLoadMore = false))
+/** The lengths decided for [posts] whose media does not state its own, by post. */
+private fun decidedLengths(posts: List<Post>, decided: Map<MediaDurationKey, MediaDurationState>): Map<PostId, Long> =
+    if (decided.isEmpty()) emptyMap() else buildMap {
+        posts.forEach { post ->
+            if (!isAnimatedPost(post) || animatedDurationMs(post) != null) return@forEach
+            (decided[mediaDurationKey(post)] as? MediaDurationState.Known)?.let { known -> put(post.id, known.durationMs) }
+        }
     }
-
-    override fun loadNextPage() = Unit
-}
 
 /**
  * The deck's likes and hides. Likes go straight through the likes workflow, not the queued toggle feed cards use, so
