@@ -23,7 +23,7 @@ class ViewerSaveButtonModelTest {
 
         val saved = viewerSaveButtonState(art.id, suggestions("a", "b"), record(), nowEpochMs = 2_000L)
         assertEquals(ViewerSaveButtonState.Saved(record()), saved)
-        assertEquals(ViewerSaveCommand.Undo, saved.tapCommand())
+        assertEquals(ViewerSaveCommand.Undo(record()), saved.tapCommand())
 
         val later = viewerSaveButtonState(art.id, suggestions("b", inAny = true), record(), nowEpochMs = 1_000L + VIEWER_SAVED_UNDO_MS)
         assertEquals(ViewerSaveButtonState.Suggest(suggestion("b"), inAnyCodex = true), later)

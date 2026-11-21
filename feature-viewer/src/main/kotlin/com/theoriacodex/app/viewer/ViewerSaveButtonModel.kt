@@ -32,7 +32,9 @@ internal sealed interface ViewerSaveButtonState {
 /** What a tap on the Save button, or a release of its fan, does. */
 internal sealed interface ViewerSaveCommand {
     data class QuickSave(val codexId: String) : ViewerSaveCommand
-    data object Undo : ViewerSaveCommand
+
+    /** Undoes [record], the save the button shows, not whichever save landed last. */
+    data class Undo(val record: QuickSaveRecord) : ViewerSaveCommand
 
     /** The full Save-to-Codex picker. */
     data object OpenPicker : ViewerSaveCommand
@@ -72,7 +74,7 @@ internal fun viewerSaveButtonState(
 /** What tapping the button does in this state. */
 internal fun ViewerSaveButtonState.tapCommand(): ViewerSaveCommand = when (this) {
     is ViewerSaveButtonState.Suggest -> if (ready) ViewerSaveCommand.QuickSave(target.codexId) else ViewerSaveCommand.OpenPicker
-    is ViewerSaveButtonState.Saved -> if (record.undoable) ViewerSaveCommand.Undo else ViewerSaveCommand.OpenPicker
+    is ViewerSaveButtonState.Saved -> if (record.undoable) ViewerSaveCommand.Undo(record) else ViewerSaveCommand.OpenPicker
     ViewerSaveButtonState.Loading -> ViewerSaveCommand.OpenPicker
     // Suggestions never include Likes, so with none and the post in no Codex, the profile has no Codex yet.
     is ViewerSaveButtonState.NoTarget -> if (inAnyCodex) ViewerSaveCommand.OpenPicker else ViewerSaveCommand.NewCodex

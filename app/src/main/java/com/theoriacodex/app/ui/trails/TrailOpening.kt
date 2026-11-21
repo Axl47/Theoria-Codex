@@ -6,7 +6,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavBackStackEntry
 import com.theoriacodex.app.codex.SavedSearchFeedLoader
+import com.theoriacodex.app.ui.AppRoute
 import com.theoriacodex.app.ui.TheoriaShell
 import com.theoriacodex.app.ui.findActivity
 import com.theoriacodex.app.ui.launchViewer
@@ -77,7 +79,7 @@ private suspend fun TheoriaShell.openTrail(request: TrailRequest, handoff: Trail
             ),
         )
         if (session != null) {
-            if (navController.currentBackStackEntry !== origin) throw CancellationException("The screen this trail was opened from is gone")
+            if (!stillOver(origin, request.from)) throw CancellationException("The screen or post this trail was opened from is gone")
             handoff.hand(session.sessionId, TrailLevel(spec.label, request.trailKey(), feed))
             // A fork saves no launch context: the Viewer it covers keeps its own for restoration.
             launchViewer(session, saveContext = false, singleTop = false)
@@ -88,6 +90,16 @@ private suspend fun TheoriaShell.openTrail(request: TrailRequest, handoff: Trail
         if (!opened) feed.close()
     }
     return opened
+}
+
+/**
+ * Whether [origin] is still the screen on top and, when it is a Viewer, still shows [from]. Paging cancels a fork from an
+ * effect that can run only after the fork finished, so the Viewer's own selection is read here, right before navigating.
+ */
+private fun TheoriaShell.stillOver(origin: NavBackStackEntry?, from: Post): Boolean {
+    if (navController.currentBackStackEntry !== origin) return false
+    if (origin?.destination?.route != AppRoute.Viewer) return true
+    return routes.viewer.current?.state?.value?.currentPage?.post?.id == from.id
 }
 
 /** Each trail kind bound to the shell's loaders, read with the current sources and settings. */
