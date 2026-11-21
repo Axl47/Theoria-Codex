@@ -23,6 +23,8 @@ name: Claude Design Review
 #   (Settings > Secrets and variables > Actions > New repository secret).
 # - The action signs in to GitHub as the Claude GitHub App. If a run fails on GitHub authentication,
 #   install the app on this repository: https://github.com/apps/claude
+# - The action refuses to run unless this file matches the copy on main, so a pull request that edits
+#   it gets no review (the run passes with a notice). Changes to the reviewer prompt are not affected.
 on:
   pull_request:
     types: [opened, ready_for_review]
@@ -173,6 +175,12 @@ jobs:
           PR: ${{ needs.decide.outputs.pr }}
         run: |
           if [[ ! -s .claude-review/review.md ]]; then
+            # The action only runs when this workflow file matches main's, so a pull request that edits
+            # it is skipped by design rather than broken.
+            if jq -e '.files[] | select(.path == ".github/workflows/claude-review.yml")' .claude-review/files.json > /dev/null; then
+              echo "::notice::This pull request changes the review workflow, which the action refuses to run until it is on main."
+              exit 0
+            fi
             echo "::error::Claude finished without writing .claude-review/review.md; see the step above."
             exit 1
           fi
