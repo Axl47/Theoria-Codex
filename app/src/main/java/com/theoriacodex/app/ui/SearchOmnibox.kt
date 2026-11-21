@@ -94,7 +94,7 @@ internal fun rememberSearchOmniboxEntries(shell: TheoriaShell, state: BrowsingDe
 private fun destinationCommands(shell: TheoriaShell): List<OmniboxEntry> {
     val pages = SettingsPageCommand.entries.filter { it != SettingsPageCommand.DIAGNOSTICS || shell.diagnosticsEntry != null }
     return pages.map { command ->
-        OmniboxEntry.Action(OmniboxKind.COMMAND, command.title, keywords = command.keywords) { shell.openSettingsPage(command.page) }
+        OmniboxEntry.Action(OmniboxKind.COMMAND, command.title, keywords = command.keywords) { shell.openSettings(command.page) }
     } + OmniboxEntry.Action(OmniboxKind.COMMAND, "What's new", keywords = listOf("changelog", "release notes", "version")) {
         shell.owners.settings.onAction(SettingsAction.OpenChangelog)
     }
@@ -103,10 +103,4 @@ private fun destinationCommands(shell: TheoriaShell): List<OmniboxEntry> {
 /** Runs a saved or recent search where it belongs: For You searches in For You, the rest in Search. */
 internal fun TheoriaShell.openSearchEntry(entry: RecentSearchEntry) {
     if (entry.kind == RecentSearchKind.FYP) openHistoricalForYouSearch(entry) else openHistoricalSearch(entry)
-}
-
-/** Shows [page] of Settings. */
-internal fun TheoriaShell.openSettingsPage(page: SettingsPage) {
-    owners.settings.onAction(SettingsAction.OpenPage(page))
-    navigation.goToTab(TopLevelDestination.Settings)
 }
