@@ -298,7 +298,7 @@ private fun CreatorAppBar(
         subtitle = creator.source.displayName().takeUnless { account },
         onBack = onBack,
     ) {
-        if (!account) CreatorFollowButton(followed = followed, onClick = onToggleFollow, enabled = followEnabled)
+        if (!account) CreatorFollowButton(creator, followed, followEnabled, onToggleFollow)
         CreatorLinkActions(creator, onOpenUrl)
     }
 }
@@ -324,7 +324,7 @@ private fun CompactAccountBar(
         onBack = onBack,
     ) {
         AccountFeedSegments(state.tabs, state.selectedFeed) { onAction(CreatorAction.SelectFeed(it)) }
-        if (creator.canFollow) CreatorFollowButton(followed = followed, onClick = onToggleFollow, enabled = followEnabled)
+        CreatorFollowButton(creator, followed, followEnabled, onToggleFollow)
         if (bio != null) {
             IconToggleButton(checked = bioShown, onCheckedChange = { bioShown = it }) {
                 Icon(Icons.Outlined.Info, contentDescription = "Bio")

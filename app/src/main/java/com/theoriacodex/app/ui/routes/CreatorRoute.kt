@@ -20,6 +20,8 @@ import com.theoriacodex.app.creator.state.CreatorEffect
 import com.theoriacodex.app.creator.state.CreatorUiState
 import com.theoriacodex.app.ui.LocalNetworkOnline
 import com.theoriacodex.app.ui.components.FeedMarks
+import com.theoriacodex.app.ui.undo.LocalUndoSlot
+import com.theoriacodex.app.ui.undo.UndoSlot
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
@@ -42,7 +44,8 @@ internal data class CreatorRouteCallbacks(
     val onToggleLike: (Post) -> Unit,
     val onRequestSaveToCodex: (Post) -> Unit,
     val onSaveToDevice: (Post) -> Unit,
-    val onToggleFollow: (CreatorProfile, List<Post>) -> Unit = { _, _ -> },
+    /** Follows or unfollows; an unfollow offers Undo through the [UndoSlot]. */
+    val onToggleFollow: (CreatorProfile, List<Post>, UndoSlot) -> Unit = { _, _, _ -> },
     val onOpenUrl: (String) -> Unit,
 )
 
@@ -115,10 +118,11 @@ private fun CreatorRouteContent(
     val related = rememberFeedRelatedShelf(state.relatedPosts, owner.related) { posts, index ->
         owner.onAction(CreatorAction.OpenRelatedResult(index, posts))
     }
+    val undo = LocalUndoSlot.current
     CreatorProfileScreen(
         related = related,
         followed = config.followed,
-        onToggleFollow = { state.creator?.let { callbacks.onToggleFollow(it, state.uploads) } },
+        onToggleFollow = { state.creator?.let { callbacks.onToggleFollow(it, state.uploads, undo) } },
         state = state,
         marks = config.marks,
         pixivUgoiraClient = pixivUgoiraClient,

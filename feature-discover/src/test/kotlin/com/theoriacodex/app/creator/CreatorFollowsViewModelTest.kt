@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModelStore
 import com.theoriacodex.app.search.TestAdapter
 import com.theoriacodex.app.search.TestRegistry
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.ui.undo.UndoSlot
 import com.theoriacodex.data.repository.CreatorFollowsRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
@@ -54,12 +55,40 @@ class CreatorFollowsViewModelTest {
             assertFalse(owner.refreshing.value)
             assertEquals(1, owner.errors.value.size)
             assertEquals(1, repository.observe().first().first().newPostCount)
-            owner.unfollow(available)
+            owner.unfollow(available, UndoSlot())
             advanceUntilIdle()
             assertEquals(1, owner.follows.value.size)
-            owner.toggle(available, emptyList())
+            owner.toggle(available, emptyList(), UndoSlot())
             advanceUntilIdle()
             assertEquals(2, owner.follows.value.size)
+        } finally { store.clear(); Dispatchers.resetMain() }
+    }
+
+    @Test fun `undoing an unfollow restores the same record in its place`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            val settings = InMemorySettingsRepository()
+            val repository = CreatorFollowsRepository(settings)
+            val first = CreatorProfile(SourceKey.PIXIV, "One", "1", uploadsQuery = "user:1")
+            val second = CreatorProfile(SourceKey.PIXIV, "Two", "2", uploadsQuery = "user:2")
+            repository.follow(first, listOf(testPost(SourceKey.PIXIV, "seen")))
+            repository.follow(second, emptyList())
+            val before = repository.observe().first()
+            val owner = CreatorFollowsViewModel(settings, TestRegistry(emptyList()))
+            store.put("follows", owner)
+            val undo = UndoSlot()
+            owner.toggle(first, listOf(testPost(SourceKey.PIXIV, "visible")), undo)
+            runCurrent() // advancing time would expire the offer
+            val offer = requireNotNull(undo.offer.value)
+            assertEquals(CreatorFollowAnchors.page(first), offer.anchor)
+            assertEquals(first, owner.unfollowed.value?.follow?.creator)
+            assertEquals(listOf(second), repository.observe().first().map { it.creator })
+
+            undo.act(offer)
+            advanceUntilIdle()
+            assertEquals(before, repository.observe().first())
+            assertEquals(null, owner.unfollowed.value)
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 

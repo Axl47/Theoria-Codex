@@ -42,6 +42,27 @@ class CreatorFollowsRepositoryTest {
         assertTrue(repository.observe().first().isEmpty())
     }
 
+    @Test fun `restore puts the removed record back in place unless the creator was followed again`() = runTest {
+        val repository = CreatorFollowsRepository(InMemorySettingsRepository())
+        val other = creator.copy(profileId = "7", uploadsQuery = "user:7")
+        repository.follow(creator, emptyList())
+        repository.follow(other, emptyList())
+        val before = repository.observe().first()
+        val removed = requireNotNull(repository.unfollow(creator))
+        assertEquals(0, removed.index)
+        assertEquals(null, repository.unfollow(creator))
+        assertEquals(null, repository.seenPostIds(creator))
+        repository.restore(removed)
+        assertEquals(before, repository.observe().first())
+        assertEquals(emptySet<String>(), repository.seenPostIds(creator))
+
+        repository.unfollow(creator)
+        repository.follow(creator, emptyList())
+        val refollowed = repository.observe().first().last()
+        repository.restore(removed)
+        assertEquals(listOf(before[1], refollowed), repository.observe().first())
+    }
+
     @Test fun `follow records round trip and old settings decode empty`() {
         val follow = FollowedCreator(creator, "membership", listOf("seen"), listOf("seen", "new"), 42L)
         val record = SettingsStoreRecord.fromDomain(AppSettings(followedCreators = listOf(follow)))

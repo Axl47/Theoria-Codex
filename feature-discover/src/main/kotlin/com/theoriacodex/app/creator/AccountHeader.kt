@@ -79,9 +79,6 @@ internal val AccountFeed.label: String
         AccountFeed.FAVORITES -> "Favorites"
     }
 
-/** Follow tracks the creator's uploads search, so an account without one cannot be followed. */
-internal val CreatorProfile.canFollow: Boolean get() = !uploadsQuery.isNullOrBlank()
-
 /** The account's bio, or null when it has none worth showing. */
 internal val AccountDetails?.shownBio: String? get() = this?.bio?.trim()?.takeIf(String::isNotEmpty)
 
@@ -116,9 +113,7 @@ internal fun AccountHeader(
                     )
                 }
             }
-            if (creator.canFollow) {
-                CreatorFollowButton(followed = followed, onClick = onToggleFollow, enabled = followEnabled)
-            }
+            CreatorFollowButton(creator, followed, followEnabled, onToggleFollow)
         }
         details.shownBio?.let { bio -> AccountBio(bio) }
     }
