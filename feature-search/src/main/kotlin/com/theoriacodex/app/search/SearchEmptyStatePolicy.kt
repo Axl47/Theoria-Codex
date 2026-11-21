@@ -40,17 +40,16 @@ internal fun searchFooterMessage(state: SearchUiState, resolvingDurations: Boole
 
 private fun visibilityFilterMessage(filters: SearchVisibilityFilters): String? {
     if (filters.dateRange != null) return "No posts with a known date in this range."
-    if (!filters.hideLiked && !filters.hideSaved && !filters.hideWatched) {
-        return if (filters.animatedOnly) "No animated media found for the current results." else null
+    val hidden = listOfNotNull(
+        "liked".takeIf { filters.hideLiked },
+        "saved".takeIf { filters.hideSaved },
+        "watched".takeIf { filters.hideWatched },
+    )
+    if (hidden.isEmpty()) return if (filters.animatedOnly) "No animated media found for the current results." else null
+    val kinds = when (hidden.size) {
+        1 -> hidden.single()
+        2 -> hidden.joinToString(" and ")
+        else -> hidden.dropLast(1).joinToString(", ") + ", and " + hidden.last()
     }
-    return when {
-        filters.hideLiked && filters.hideSaved && filters.hideWatched ->
-            "No results remain after hiding liked, saved, and watched posts."
-        filters.hideLiked && filters.hideSaved -> "No results remain after hiding liked and saved posts."
-        filters.hideWatched && !filters.hideLiked && !filters.hideSaved ->
-            "No results remain after hiding watched posts."
-        filters.hideLiked -> "No results remain after hiding liked posts."
-        filters.hideSaved -> "No results remain after hiding saved posts."
-        else -> "No results remain after applying the current visibility filters."
-    }
+    return "No results remain after hiding $kinds posts."
 }
