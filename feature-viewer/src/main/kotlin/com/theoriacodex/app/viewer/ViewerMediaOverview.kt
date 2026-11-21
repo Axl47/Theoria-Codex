@@ -232,13 +232,7 @@ internal fun viewerMediaOverviewAvailable(items: List<ViewerMediaOverviewItem>):
 
 private fun viewerMediaOverviewPosterLocation(post: Post, media: ImageRef, kind: ViewerMediaKind): String? {
     val mediaPoster = when (kind) {
-        ViewerMediaKind.IMAGE -> {
-            if (post.id.source == SourceKey.HITOMI) {
-                overviewWebPImageLocation(media) ?: viewerPrefetchImageLocation(post, media)
-            } else {
-                viewerPrefetchImageLocation(post, media)
-            }
-        }
+        ViewerMediaKind.IMAGE -> overviewStillImageLocation(post, media)
         ViewerMediaKind.ANIMATED_IMAGE, ViewerMediaKind.ANIMATED_WEBP -> staticOverviewImageLocation(media)
         ViewerMediaKind.GIF,
         ViewerMediaKind.UGOIRA,
@@ -264,6 +258,19 @@ private fun staticOverviewImageLocation(ref: ImageRef): String? {
         ?: locations.firstOrNull(::isStaticOverviewImageLocation)
 }
 
+/**
+ * The page's own image, except that a remote AVIF gives way to an equivalent WebP copy when the page lists one: WebP
+ * decodes faster, and the overview decodes many tiles together.
+ */
+private fun overviewStillImageLocation(post: Post, media: ImageRef): String? {
+    val primary = viewerPrefetchImageLocation(post, media)
+    if (primary == null || primary == media.localPath || !isAvifLocation(media, primary)) return primary
+    return overviewWebPImageLocation(media) ?: primary
+}
+
+private fun isAvifLocation(ref: ImageRef, location: String): Boolean =
+    locationExtension(location) == "avif" || (location == ref.url && ref.normalizedMime() == "image/avif")
+
 private fun overviewWebPImageLocation(ref: ImageRef): String? {
     val locations = buildList {
         ref.localPath?.takeIf(String::isNotBlank)?.let(::add)
@@ -275,24 +282,20 @@ private fun overviewWebPImageLocation(ref: ImageRef): String? {
 }
 
 private fun isOverviewWebPImageLocation(ref: ImageRef, location: String): Boolean {
-    val extension = location
-        .substringBefore('?')
-        .substringBefore('#')
-        .substringAfterLast('.', missingDelimiterValue = "")
-        .lowercase()
-    if (extension == "webp") return true
-    val normalizedMime = ref.mime?.substringBefore(';')?.trim()?.lowercase()
-    return normalizedMime == "image/webp" && (location == ref.localPath || location == ref.url)
+    if (locationExtension(location) == "webp") return true
+    return ref.normalizedMime() == "image/webp" && (location == ref.localPath || location == ref.url)
 }
 
-private fun isStaticOverviewImageLocation(location: String): Boolean {
-    val extension = location
-        .substringBefore('?')
-        .substringBefore('#')
-        .substringAfterLast('.', missingDelimiterValue = "")
-        .lowercase()
-    return extension in STATIC_OVERVIEW_IMAGE_EXTENSIONS
-}
+private fun isStaticOverviewImageLocation(location: String): Boolean =
+    locationExtension(location) in STATIC_OVERVIEW_IMAGE_EXTENSIONS
+
+private fun locationExtension(location: String): String = location
+    .substringBefore('?')
+    .substringBefore('#')
+    .substringAfterLast('.', missingDelimiterValue = "")
+    .lowercase()
+
+private fun ImageRef.normalizedMime(): String? = mime?.substringBefore(';')?.trim()?.lowercase()
 
 private val STATIC_OVERVIEW_IMAGE_EXTENSIONS = setOf(
     "avif",

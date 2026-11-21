@@ -6,7 +6,6 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.app.viewer.state.ViewerResolutionStatus
-import com.theoriacodex.domain.model.SourceKey
 import kotlin.math.abs
 
 /** A sparse cover is not the gallery's last page, even when its page count is still unknown. */
@@ -14,9 +13,7 @@ internal fun ViewerPageState.hasPendingGalleryMedia(): Boolean {
     if (resolution.status == ViewerResolutionStatus.RESOLVED ||
         resolution.status == ViewerResolutionStatus.NOT_REQUIRED
     ) return false
-    return (post.mediaCount ?: 0) > media.size ||
-        ((post.id.source == SourceKey.NHENTAI || post.id.source == SourceKey.HITOMI) &&
-            post.media.isEmpty() && post.full == null)
+    return post.galleryLengthUnknown || (post.mediaCount ?: 0) > media.size
 }
 
 internal fun ViewerPageState.swipeMediaCount(): Int {
