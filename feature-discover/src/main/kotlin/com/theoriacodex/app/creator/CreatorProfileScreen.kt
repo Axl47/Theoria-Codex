@@ -393,7 +393,7 @@ private fun CreatorFeedBody(
 ) {
     state.errorMessage?.takeIf { state.canLoadMore }?.let { message ->
         DismissibleFailure(message) { dismiss ->
-            FeedFailureTile(message, onRetry = { onAction(CreatorAction.RetryPage) }, retriesOnReconnect = false, onDismiss = dismiss)
+            FeedFailureTile(message, onRetry = { onAction(CreatorAction.RetryPage) }, onDismiss = dismiss)
         }
     }
     FeedContinueLoading(pageDemand)
@@ -401,8 +401,7 @@ private fun CreatorFeedBody(
         state.isRefreshing && feed.visiblePosts.isEmpty() -> FeedLoadingState()
 
         state.errorMessage != null && !state.canLoadMore && feed.visiblePosts.isEmpty() -> {
-            // Creator pages do not retry by themselves on reconnect, so the failure keeps its own message.
-            FeedFailureTile(state.errorMessage.orEmpty(), onRetry = { onAction(CreatorAction.Refresh) }, retriesOnReconnect = false)
+            FeedFailureTile(state.errorMessage.orEmpty(), onRetry = { onAction(CreatorAction.Refresh) })
         }
 
         feed.visiblePosts.isEmpty() && related.state == RelatedPostsUiState.Idle -> {

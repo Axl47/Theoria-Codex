@@ -23,6 +23,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -171,6 +172,28 @@ class CreatorProfileViewModelTest {
         assertEquals(1, engine.visits.size)
         assertNull(viewModel.state.value.errorMessage)
         assertFalse(viewModel.state.value.canLoadMore)
+    }
+
+    @Test
+    fun `reconnecting retries a first page that failed while offline`() = runTest {
+        val first = testPost(sourcePostId = "first")
+        val engine = FakeCreatorRouteEngine().apply { openError = "no connection" }
+        val returned = CompletableDeferred<Unit>()
+        val viewModel = CreatorProfileViewModel(
+            engine, SavedStateHandle(), coroutineScope = this,
+            reconnections = flow { returned.await(); emit(Unit) },
+        )
+        viewModel.onAction(CreatorAction.OpenCreator(creator(SourceKey.PIXIV, "creator")))
+        advanceUntilIdle()
+        assertEquals("no connection", viewModel.state.value.errorMessage)
+
+        engine.openError = null
+        engine.openResults = listOf(first)
+        returned.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull(viewModel.state.value.errorMessage)
+        assertEquals(listOf(first), viewModel.state.value.results)
     }
 
     @Test
@@ -332,6 +355,7 @@ private class FakeCreatorRouteEngine : CreatorRouteEngine {
     val visits = mutableListOf<CreatorProfile>()
     var openResults: List<Post> = emptyList()
     var openCanLoadMore = false
+    var openError: String? = null
     var pageResults: List<Post> = emptyList()
     var pageError: String? = null
     var capabilityAvailable = true
@@ -348,6 +372,7 @@ private class FakeCreatorRouteEngine : CreatorRouteEngine {
             return Page(pageResults, null)
         }
         openedCreators += creator
+        openError?.let { error(it) }
         val started = firstOpenStarted
         val release = firstOpenRelease
         if (openedCreators.size == 1 && started != null && release != null) {

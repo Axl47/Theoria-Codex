@@ -13,6 +13,7 @@
 
 ### Fixed
 
+- A creator page that failed to load while you were offline stayed on its error after the connection came back. It now retries by itself, as Search and For You do.
 - Past about 1,000 posts Gelbooru refuses to return more results, which Search reported as "Gelbooru returned malformed JSON". It now says "Gelbooru won't load results past this point".
 - Coming back to Search while its results were still loading could leave the list at the top, or slightly above where you left it, instead of at your saved place. Search now returns to the exact place once the posts it needs have loaded.
 - If the system closed the app in the background and you switched away and back while Search was reloading, your saved place in the results was lost. It is now kept.

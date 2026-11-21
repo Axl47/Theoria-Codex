@@ -18,6 +18,7 @@ import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.creator.state.CreatorAction
 import com.theoriacodex.app.creator.state.CreatorEffect
 import com.theoriacodex.app.creator.state.CreatorUiState
+import com.theoriacodex.app.ui.LocalNetworkOnline
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
@@ -61,7 +62,7 @@ internal fun CreatorRoute(
     onOwnerAvailable: (CreatorProfileViewModel) -> Unit = {},
 ) {
     val owner = viewModel<CreatorProfileViewModel>(
-        factory = CreatorProfileViewModel.factory(coordinator, relatedPostsLoader),
+        factory = CreatorProfileViewModel.factory(coordinator, relatedPostsLoader, LocalNetworkOnline.current),
     )
     val state by owner.state.collectAsStateWithLifecycle()
     val durationPosts = remember(state.results, state.relatedPosts) {

@@ -47,8 +47,7 @@ class CreatorFeedFailureTest {
             }
         }
         compose.onNodeWithText("You're offline").assertIsDisplayed()
-        // Creator pages do not retry on reconnect, so the tile keeps the failure rather than promise one.
-        compose.onNodeWithText("Pixiv could not be reached.").assertIsDisplayed()
+        compose.onNodeWithText("This feed will retry when you reconnect.").assertIsDisplayed()
         compose.onNodeWithText("Retry").assertIsDisplayed()
     }
 }
