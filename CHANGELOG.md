@@ -13,6 +13,7 @@
 
 ### Fixed
 
+- Pixiv animations in the Viewer started over from the first frame when you swiped away and back. They now continue where they left off, as GIFs do.
 - In a Hitomi gallery saved for offline, the Viewer's page overview loaded each page from the site instead of the saved copy, so its tiles stayed blank offline. They now show the saved pages.
 - Past about 1,000 posts Gelbooru refuses to return more results, which Search reported as "Gelbooru returned malformed JSON". It now says "Gelbooru won't load results past this point".
 - Coming back to Search while its results were still loading could leave the list at the top, or slightly above where you left it, instead of at your saved place. Search now returns to the exact place once the posts it needs have loaded.
