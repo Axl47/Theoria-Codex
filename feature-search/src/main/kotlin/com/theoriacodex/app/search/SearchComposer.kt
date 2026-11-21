@@ -612,7 +612,7 @@ private fun ComposerSavedSection(
     val showSearches = savedSearches.entries.isNotEmpty() || savedSearches.canSaveCurrent
     if (showSearches) {
         var naming by remember { mutableStateOf(false) }
-        SavedPartHeader("Saved searches", "Tap to run") {
+        SavedPartHeader("Saved searches") {
             savedSearches.onSaveCurrent?.let {
                 TextButton(onClick = { naming = true }) {
                     Icon(Icons.Default.BookmarkAdd, null, Modifier.size(18.dp))
@@ -626,11 +626,7 @@ private fun ComposerSavedSection(
                 ) { Text("Manage") }
             }
         }
-        if (savedSearches.entries.isNotEmpty()) {
-            SavedSearchChips(savedSearches)
-        } else {
-            SavedPartHint("Save this search to run it again in one tap.")
-        }
+        if (savedSearches.entries.isNotEmpty()) SavedSearchChips(savedSearches)
         if (naming) {
             SavedSearchNameDialog(
                 initialName = savedSearches.suggestedName,
@@ -656,21 +652,18 @@ private fun ComposerSavedSection(
     SavedTagChips(savedTags, draft, targetIndex, onAction)
 }
 
-/** A part's title with what tapping its chips does, and its buttons at the end. */
+/** A part's title, what tapping its chips does when that is not obvious, and its buttons at the end. */
 @Composable
-private fun SavedPartHeader(title: String, tapHint: String, actions: @Composable () -> Unit) {
+private fun SavedPartHeader(title: String, tapHint: String? = null, actions: @Composable () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             ComposerSectionTitle(title)
-            Text(tapHint, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            tapHint?.let {
+                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         actions()
     }
-}
-
-@Composable
-private fun SavedPartHint(text: String) {
-    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 /** One tap reruns a saved search, replacing the current draft. */
