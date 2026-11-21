@@ -186,7 +186,11 @@ class ViewerProviderWorkTest {
             val registry = object : SourceAdapterRegistry by graph.sources.registry {
                 override fun adapterFor(sourceKey: SourceKey) = adapter.takeIf { sourceKey == SourceKey.GELBOORU }
             }
-            val sources = graph.sources.copy(registry = registry)
+            val viewerAsked = CompletableDeferred<Unit>()
+            val viewerRegistry = object : SourceAdapterRegistry by registry {
+                override fun adapterFor(sourceKey: SourceKey) = registry.adapterFor(sourceKey).also { viewerAsked.complete(Unit) }
+            }
+            val sources = graph.sources.copy(registry = viewerRegistry)
             val feed = testSearchCoordinator(registry, postResolutions = sources.postResolutions)
             val workflow = ViewerRouteWorkflow(
                 graph.data, this, sources, { null }, graph.features.offlineMedia,
@@ -195,6 +199,9 @@ class ViewerProviderWorkTest {
 
             val fromFeed = async { feed.resolvePostForSearch(post.id, "query") }
             val fromViewer = async { workflow.resolvePost(post.id, ViewerStreamSource.RELATED) }
+            // The Viewer first looks in the offline store on a real IO thread; wait until it is back and asking the
+            // provider, or it would miss the feed's request and send its own.
+            while (!viewerAsked.isCompleted) { runCurrent(); Thread.yield() }
             runCurrent()
             assertEquals(1, requests)
             // A media recovery needs fresh URLs, so it never joins the request already in flight.
