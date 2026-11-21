@@ -104,15 +104,21 @@ private fun SitesListPage(
         if (state.sites.isEmpty()) {
             EmptyState("No added sites", actionLabel = "Add site", onAction = { onAction(CustomSitesAction.StartAdd) })
         } else {
-            SettingsGroup("Added", action = testAll.takeIf { state.builtInSites.isEmpty() }) {
-                state.sites.forEachIndexed { index, site ->
-                    if (index > 0) SettingsRowDivider()
-                    if (site.sourceId in state.removingSiteIds) {
-                        UndoRow(UndoAnchor(SITES_UNDO_SCOPE, site.sourceId))
-                    } else {
-                        SiteRow(site, state.retests[site.sourceId], site.sourceId in state.workingSiteIds, onAction)
-                    }
-                }
+            AddedSitesGroup(state, testAll.takeIf { state.builtInSites.isEmpty() }, onAction)
+        }
+    }
+}
+
+/** The added sites; a removed one leaves its Undo in its row until the offer expires. */
+@Composable
+private fun AddedSitesGroup(state: CustomSitesUiState, testAll: (@Composable () -> Unit)?, onAction: (CustomSitesAction) -> Unit) {
+    SettingsGroup("Added", action = testAll) {
+        state.sites.forEachIndexed { index, site ->
+            if (index > 0) SettingsRowDivider()
+            if (site.sourceId in state.removingSiteIds) {
+                UndoRow(UndoAnchor(SITES_UNDO_SCOPE, site.sourceId))
+            } else {
+                SiteRow(site, state.retests[site.sourceId], site.sourceId in state.workingSiteIds, onAction)
             }
         }
     }
