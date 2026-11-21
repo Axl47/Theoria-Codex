@@ -33,7 +33,6 @@ import com.theoriacodex.app.media.OfflineStorageSummary
 import com.theoriacodex.app.media.DownloadRemovals
 import com.theoriacodex.app.media.StorageSheet
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.lifecycle.viewModelScope
 import com.theoriacodex.app.media.totalBytes
 import com.theoriacodex.app.media.PostDownloadItem
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -88,8 +87,11 @@ internal fun rememberLibraryTransferTools(
         MediaCacheMaintenance(context, container.data.cacheRepository, container.sources.pixivUgoiraClient)
     }
     val offline = viewModel<OfflineStorageViewModel>(key = "offline-storage",
-        factory = OfflineStorageViewModel.factory(container.data.codexRepository, container.features.offlineMedia, maintenance),
+        factory = OfflineStorageViewModel.factory(
+            container.data.codexRepository, container.features.offlineMedia, maintenance, container.applicationScope,
+        ),
     )
+    val downloadRemovals = viewModel(key = "download-removals") { DownloadRemovals(downloads::removeNow, container.applicationScope) }
     val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         backup.export(uri?.toString())
     }
@@ -101,8 +103,8 @@ internal fun rememberLibraryTransferTools(
     val currentMessage by rememberUpdatedState(onMessage)
     LaunchedEffect(backup) { backup.effects.collect { currentMessage(it) } }
     AutoBackupFailureEffect(autoBackup) { currentMessage(it) }
-    return remember(downloads, backup, offline, export, import, autoBackup, autoBackupFolder) {
-        LibraryTransferTools(downloads, DownloadRemovals(downloads::remove, downloads.viewModelScope), backup, offline, autoBackup,
+    return remember(downloads, downloadRemovals, backup, offline, export, import, autoBackup, autoBackupFolder) {
+        LibraryTransferTools(downloads, downloadRemovals, backup, offline, autoBackup,
             chooseBackupDestination = { export.launch("theoria-backup.json") },
             chooseBackup = { import.launch(arrayOf("application/json", "application/octet-stream")) },
             chooseAutoBackupFolder = { autoBackupFolder.launch(null) },

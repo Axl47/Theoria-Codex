@@ -1,5 +1,6 @@
 package com.theoriacodex.app.settings.sites
 
+import com.theoriacodex.app.ui.undo.PendingRemoval
 import com.theoriacodex.app.customsites.BuiltInSiteSummary
 import com.theoriacodex.app.customsites.CustomSiteSummary
 import com.theoriacodex.domain.model.SourceKey
@@ -21,19 +22,16 @@ data class CustomSitesUiState(
     val testProgress: SitesTestProgress? = null,
     /** The last finished Test all run's result line. */
     val testSummary: String? = null,
-    /** Sites removed but still offered for Undo; hidden from the list until the offer expires. */
-    val removingSiteIds: Set<String> = emptySet(),
+    /** Sites removed but held back for Undo (or Retry), by source id; each row draws its Undo instead. */
+    val removals: Map<String, PendingRemoval> = emptyMap(),
     /** A short failure message shown above the list until the next action. */
     val notice: String? = null,
     /** The in-app browser check that is open, if any. */
     val verification: SiteVerification? = null,
 ) {
     /** The added sites as the list shows them, without those waiting to be removed. */
-    val shownSites: List<CustomSiteSummary> get() = sites.filterNot { it.sourceId in removingSiteIds }
+    val shownSites: List<CustomSiteSummary> get() = sites.filterNot { it.sourceId in removals }
 }
-
-/** The undo scope of Settings → Sites; a removed site's offer is anchored at its row. */
-internal const val SITES_UNDO_SCOPE = "sites"
 
 /** Test all is on the [position]th of [total] sites, named [label]. */
 data class SitesTestProgress(val label: String, val position: Int, val total: Int)
@@ -142,8 +140,14 @@ sealed interface CustomSitesAction {
 
     data class Retest(val sourceId: String) : CustomSitesAction
     data object TestAll : CustomSitesAction
-    /** Removes a site with Undo in its row; see [SITES_UNDO_SCOPE]. */
+    /** Removes a site with Undo in its row; the removal commits after the Undo times out or Sites is left. */
     data class Remove(val sourceId: String) : CustomSitesAction
+
+    /** A removed site row's Undo, or its Retry after the removal failed. */
+    data class ActOnRemoval(val sourceId: String) : CustomSitesAction
+
+    /** Commits every removal still held for Undo; sent when Sites is left. */
+    data object CommitRemovals : CustomSitesAction
     data object DismissNotice : CustomSitesAction
 
     /**

@@ -85,15 +85,17 @@ class LibraryTransfersSheetTest {
                 offlineActions = OfflineRowActions(
                     retry = { offlineCalls += "retry:$it" }, cancel = { offlineCalls += "cancel:$it" },
                     remove = { offlineCalls += "remove:$it" }, removeAll = { offlineCalls += "removeAll" },
+                    actOnRemoval = { offlineCalls += "act:$it" },
                 ),
                 batches = if (downloads.isEmpty()) emptyList() else listOf(PostDownloadBatch(1, "Batch", downloads)),
-                hiddenDownloads = emptySet(),
+                downloadRemovals = DownloadRemovalRows(emptyMap()) {},
                 downloadActions = DownloadTileActions(
                     open = { onOpen(it.id) }, cancel = {}, retryFailed = {},
                     remove = { ids, files, anchor -> removals += Triple(ids, files, anchor) }, localFile = { null },
                 ),
                 markedCodexId = null,
                 onDismiss = {},
+                onLeave = {},
             )
         } }
     }

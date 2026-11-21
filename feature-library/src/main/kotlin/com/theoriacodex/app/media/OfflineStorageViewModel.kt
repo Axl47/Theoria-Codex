@@ -10,9 +10,9 @@ import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.OfflineMediaSnapshot
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Codex
-import com.theoriacodex.app.ui.undo.UndoAnchor
-import com.theoriacodex.app.ui.undo.UndoOffer
-import com.theoriacodex.app.ui.undo.UndoSlot
+import com.theoriacodex.app.ui.undo.DeferredRemovals
+import com.theoriacodex.app.ui.undo.PendingRemoval
+import com.theoriacodex.app.ui.undo.UndoLifetime
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -44,14 +44,10 @@ data class OfflineStorageOwner(
     val message: String? = null,
 )
 
-private sealed interface OfflineRemovalTarget {
-    data class Owner(val id: String) : OfflineRemovalTarget
-    data object All : OfflineRemovalTarget
-}
-
 /**
  * Offline copies and cache. [isOpen] is the Storage sheet (Settings); [owners] are the offline rows the
- * Library's sheet lists, without rows hidden while their removal can still be undone ([hiddenOwners]).
+ * Library's sheet lists, without rows hidden while a removal holds them ([hiddenOwners]). [pendingRemovals] are
+ * those removals by owner id, or [OFFLINE_ALL_REMOVAL] for Remove all, each drawn as its Undo row.
  * [message] is about something that has no row, such as a Codex that could not be loaded.
  */
 data class OfflineStorageUiState(
@@ -65,6 +61,7 @@ data class OfflineStorageUiState(
     val message: String? = null,
     val preparingOwners: Set<String> = emptySet(),
     val hiddenOwners: Set<String> = emptySet(),
+    val pendingRemovals: Map<String, PendingRemoval> = emptyMap(),
     val ownerMessages: Map<String, String> = emptyMap(),
 ) {
     val controlsEnabled: Boolean get() = !working && !refreshing
@@ -72,19 +69,25 @@ data class OfflineStorageUiState(
 
 /** Where the Library's offline sheet draws its offers; rows use their owner id as the key. */
 const val LIBRARY_TRANSFERS_UNDO_SCOPE = "library-transfers"
-internal val OfflineAllUndoAnchor = UndoAnchor(LIBRARY_TRANSFERS_UNDO_SCOPE, "offline")
-internal fun offlineOwnerUndoAnchor(owner: String) = UndoAnchor(LIBRARY_TRANSFERS_UNDO_SCOPE, owner)
 
-/** Activity-owned presentation and collection preparation; the coordinator owns acquisition and bytes. */
+/** The [OfflineStorageUiState.pendingRemovals] key of Remove all, which hides every row. */
+const val OFFLINE_ALL_REMOVAL = "*"
+
+/**
+ * Activity-owned presentation and collection preparation; the coordinator owns acquisition and bytes. Removals
+ * commit in [removalScope], which must be application-lived: clearing this owner commits what is still pending.
+ */
 class OfflineStorageViewModel(
     private val codices: CodexRepository,
     private val offline: OfflineMediaCoordinator,
     private val readDisposableUsage: suspend () -> DisposableMediaCacheSnapshot,
     private val clearDisposable: suspend () -> Boolean,
+    removalScope: CoroutineScope,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
     scopeOverride: CoroutineScope? = null,
 ) : ViewModel() {
     private val scope = scopeOverride ?: viewModelScope
+    private val removals = DeferredRemovals<String>(removalScope, ::commitRemoval)
     private val controls = MutableStateFlow(OfflineStorageUiState())
     private val preparationLock = Any()
     private val preparations = mutableMapOf<String, Job>()
@@ -98,7 +101,10 @@ class OfflineStorageViewModel(
     }.distinctUntilChanged().flatMapLatest { ids ->
         codices.observeCodexSummaries(ids, coverLimit = 0).map { summaries -> summaries.associate { it.codexId to it.itemCount } }
     }.flowOn(dispatcher).catch { emit(emptyMap()) }
-    val state = combine(controls, offline.store.snapshot, offline.jobs, names, postCounts) { ui, snapshot, jobs, collections, counts ->
+    private val presented = combine(controls, removals.pending) { ui, pending ->
+        ui.copy(pendingRemovals = pending, hiddenOwners = pending.keys)
+    }
+    val state = combine(presented, offline.store.snapshot, offline.jobs, names, postCounts) { ui, snapshot, jobs, collections, counts ->
         val owners = offlineStorageOwners(snapshot, jobs, collections, ui)
         ui.copy(offline = snapshot, owners = owners, codexStates = codexOfflineStates(owners, counts))
     }.stateIn(scope, SharingStarted.Eagerly, OfflineStorageUiState())
@@ -164,50 +170,44 @@ class OfflineStorageViewModel(
     }
 
     /**
-     * Removes [owner]'s offline copies as deferred destruction: the row hides at once with Undo in its place,
-     * and the files go only when the offer expires (copies another owner retains stay).
+     * Removes [owner]'s offline copies as deferred destruction: the row hides at once with Undo in its place, and
+     * the files go only when [lifetime] ends (copies another owner retains stay). Timed by default; until the
+     * surface is left for a surface that calls [commitRemovals] when left.
      */
-    fun remove(owner: String, undo: UndoSlot) {
+    fun removeDeferred(owner: String, lifetime: UndoLifetime = UndoLifetime.Timed()) {
         val row = state.value.owners.firstOrNull { it.id == owner } ?: return
-        removeDeferred(undo, setOf(owner), OfflineRemovalTarget.Owner(owner), offlineOwnerUndoAnchor(owner), "Removed ${row.name}")
+        removals.remove(owner, "Removed ${row.name}", lifetime)
     }
 
-    /** Removes every offline copy as deferred destruction, like [remove]. */
-    fun removeAll(undo: UndoSlot) {
-        val owners = state.value.owners.mapTo(mutableSetOf()) { it.id }
-        if (owners.isEmpty() && state.value.offline.bytes == 0L) return
-        removeDeferred(undo, owners, OfflineRemovalTarget.All, OfflineAllUndoAnchor, "Removed all offline copies")
+    /** Removes every offline copy as deferred destruction, like [removeDeferred]. */
+    fun removeAll() {
+        if (state.value.owners.isEmpty() && state.value.offline.bytes == 0L) return
+        removals.remove(OFFLINE_ALL_REMOVAL, "Removed all offline copies")
     }
 
-    private fun removeDeferred(undo: UndoSlot, owners: Set<String>, target: OfflineRemovalTarget, anchor: UndoAnchor, label: String) {
-        controls.update { it.copy(hiddenOwners = it.hiddenOwners + owners) }
-        val reveal = { controls.update { it.copy(hiddenOwners = it.hiddenOwners - owners) } }
-        undo.offer(scope, UndoOffer(label, anchor, onExpire = { commitRemoval(target); reveal() }) { reveal() })
-    }
+    /** Undo, or Retry after a failure, for the pending removal under [key] (see [OfflineStorageUiState.pendingRemovals]). */
+    fun actOnRemoval(key: String) = removals.act(key)
 
-    private suspend fun commitRemoval(target: OfflineRemovalTarget) {
+    /** Commits every pending removal now; called when the surface that shows them is left. */
+    fun commitRemovals() = removals.commitAll()
+
+    override fun onCleared() = removals.commitAll()
+
+    /** Removes [key]'s copies (see [OFFLINE_ALL_REMOVAL]) after stopping its preparation; false when it failed. */
+    private suspend fun commitRemoval(key: String): Boolean {
         controls.update { it.copy(working = true) }
         try {
-            val result = runCatchingPreservingCancellation {
-                when (target) {
-                    is OfflineRemovalTarget.Owner -> {
-                        synchronized(preparationLock) { preparations[target.id] }?.cancelAndJoin()
-                        offline.remove(target.id)
-                    }
-                    OfflineRemovalTarget.All -> {
-                        val loading = synchronized(preparationLock) { preparations.values.toList() }
-                        loading.forEach { it.cancel() }
-                        loading.forEach { it.join() }
-                        offline.clear()
-                    }
+            return runCatchingPreservingCancellation {
+                if (key == OFFLINE_ALL_REMOVAL) {
+                    val loading = synchronized(preparationLock) { preparations.values.toList() }
+                    loading.forEach { it.cancel() }
+                    loading.forEach { it.join() }
+                    offline.clear()
+                } else {
+                    synchronized(preparationLock) { preparations[key] }?.cancelAndJoin()
+                    offline.remove(key)
                 }
-            }
-            if (result.isFailure) controls.update { ui ->
-                when (target) {
-                    is OfflineRemovalTarget.Owner -> ui.copy(ownerMessages = ui.ownerMessages + (target.id to REMOVAL_FAILED))
-                    OfflineRemovalTarget.All -> ui.copy(message = REMOVAL_FAILED)
-                }
-            }
+            }.isSuccess
         } finally {
             controls.update { it.copy(working = false) }
         }
@@ -236,8 +236,13 @@ class OfflineStorageViewModel(
     }
 
     companion object {
-        fun factory(codices: CodexRepository, offline: OfflineMediaCoordinator, cache: MediaCacheMaintenance): ViewModelProvider.Factory =
-            viewModelFactory { initializer { OfflineStorageViewModel(codices, offline, cache::snapshot, cache::clear) } }
+        fun factory(
+            codices: CodexRepository,
+            offline: OfflineMediaCoordinator,
+            cache: MediaCacheMaintenance,
+            removalScope: CoroutineScope,
+        ): ViewModelProvider.Factory =
+            viewModelFactory { initializer { OfflineStorageViewModel(codices, offline, cache::snapshot, cache::clear, removalScope) } }
     }
 }
 
@@ -248,6 +253,7 @@ private fun offlineStorageOwners(
     ui: OfflineStorageUiState,
 ): List<OfflineStorageOwner> {
     val names = codices.associate { codexOfflineOwner(it.codexId) to it.name }
+    if (OFFLINE_ALL_REMOVAL in ui.hiddenOwners) return emptyList()
     return (snapshot.postsByOwner.keys + jobs.keys + ui.preparingOwners - ui.hiddenOwners).map { owner ->
         OfflineStorageOwner(
             id = owner,
@@ -260,4 +266,3 @@ private fun offlineStorageOwners(
     }.sortedWith(compareBy<OfflineStorageOwner> { it.name.lowercase() }.thenBy { it.id })
 }
 
-private const val REMOVAL_FAILED = "Offline copies could not be removed. Try again."

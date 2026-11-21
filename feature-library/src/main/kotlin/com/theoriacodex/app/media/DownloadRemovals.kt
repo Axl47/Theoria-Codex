@@ -1,39 +1,41 @@
 package com.theoriacodex.app.media
 
+import androidx.lifecycle.ViewModel
+import com.theoriacodex.app.ui.undo.DeferredRemovals
+import com.theoriacodex.app.ui.undo.PendingRemoval
 import com.theoriacodex.app.ui.undo.UndoAnchor
-import com.theoriacodex.app.ui.undo.UndoOffer
-import com.theoriacodex.app.ui.undo.UndoSlot
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+
+/** One download removal: the items it hides, whether it deletes their files, and where the sheet draws its row. */
+data class DownloadRemoval(val ids: Set<Long>, val deleteFiles: Boolean, val anchor: UndoAnchor)
 
 /**
- * Removes downloads as deferred destruction: they hide at once with Undo at the anchor, and their records
- * (and files, for Delete) go only when the offer expires, through [commit]. Undo just shows them again,
- * so a process death inside the window deletes nothing. Offers run in [scope], which outlives the sheet.
+ * Removes downloads as deferred destruction ([DeferredRemovals]): they hide at once with Undo at the anchor, and
+ * their records (and files, for Delete) go only when the Undo times out, through [commit], which reports whether
+ * every item went. Activity-retained, so a rotation keeps pending removals; clearing it commits them in [scope],
+ * which must be application-lived.
  */
 class DownloadRemovals(
-    private val commit: (ids: Set<Long>, deleteFiles: Boolean) -> Unit,
-    private val scope: CoroutineScope,
-) {
-    private val hiddenIds = MutableStateFlow<Set<Long>>(emptySet())
+    commit: suspend (ids: Set<Long>, deleteFiles: Boolean) -> Boolean,
+    scope: CoroutineScope,
+) : ViewModel() {
+    private val removals = DeferredRemovals<DownloadRemoval>(scope) { commit(it.ids, it.deleteFiles) }
 
-    /** Downloads hidden while their removal can still be undone, or while it commits. */
-    val hidden: StateFlow<Set<Long>> = hiddenIds.asStateFlow()
+    /** Removals waiting on Undo, committing, or offering Retry. */
+    val pending: StateFlow<Map<DownloadRemoval, PendingRemoval>> = removals.pending
 
-    fun remove(undo: UndoSlot, ids: Set<Long>, deleteFiles: Boolean, anchor: UndoAnchor) {
-        if (ids.isEmpty()) return
-        hiddenIds.update { it + ids }
-        undo.offer(scope, UndoOffer(removalLabel(ids.size, deleteFiles), anchor, onExpire = {
-            commit(ids, deleteFiles)
-            // Removed items have left the queue by now; any that could not be removed show again.
-            delay(REVEAL_AFTER_COMMIT_MS)
-            hiddenIds.update { it - ids }
-        }) { hiddenIds.update { it - ids } })
+    fun remove(ids: Set<Long>, deleteFiles: Boolean, anchor: UndoAnchor) {
+        if (ids.isNotEmpty()) removals.remove(DownloadRemoval(ids, deleteFiles, anchor), removalLabel(ids.size, deleteFiles))
     }
+
+    /** Undo, or Retry after a failure, for [removal]'s row. */
+    fun act(removal: DownloadRemoval) = removals.act(removal)
+
+    /** Commits every waiting removal; the sheet calls it when closed. */
+    fun commitAll() = removals.commitAll()
+
+    override fun onCleared() = removals.commitAll()
 }
 
 internal fun removalLabel(count: Int, deleteFiles: Boolean): String = when {
@@ -42,5 +44,3 @@ internal fun removalLabel(count: Int, deleteFiles: Boolean): String = when {
     count == 1 -> "Removed"
     else -> "Removed $count downloads"
 }
-
-private const val REVEAL_AFTER_COMMIT_MS = 2_000L

@@ -7,8 +7,7 @@ import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.customsites.CustomSiteEdit
 import com.theoriacodex.app.customsites.CustomSiteMutation
 import com.theoriacodex.app.ui.undo.DEFAULT_UNDO_DURATION
-import com.theoriacodex.app.ui.undo.UndoAnchor
-import com.theoriacodex.app.ui.undo.UndoSlot
+import com.theoriacodex.app.ui.undo.PendingRemoval
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.ProbeFailure
 import com.theoriacodex.domain.source.ProtocolFamily
@@ -31,9 +30,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class CustomSitesViewModelTest {
     private val controller = FakeCustomSitesController()
-    private val undo = UndoSlot()
-
-    private fun TestScope.owner() = CustomSitesViewModel(controller, backgroundScope, undo).also { runCurrent() }
+    private fun TestScope.owner() = CustomSitesViewModel(controller, backgroundScope).also { runCurrent() }
 
     private fun TestScope.probeAddress(owner: CustomSitesViewModel, input: String = "safebooru.org") {
         owner.onAction(CustomSitesAction.StartAdd)
@@ -316,18 +313,17 @@ class CustomSitesViewModelTest {
         controller.sites.value = listOf(site(), site("custom_other_example", "Other", "other.example"))
         val owner = owner()
         owner.onAction(CustomSitesAction.Remove("custom_safebooru_org"))
+        runCurrent()
         assertEquals(listOf("Other"), owner.state.value.shownSites.map { it.label })
-        val offer = checkNotNull(undo.offer.value)
-        assertEquals("Removed Safebooru", offer.label)
-        assertEquals(UndoAnchor(SITES_UNDO_SCOPE, "custom_safebooru_org"), offer.anchor)
+        assertEquals("Removed Safebooru", owner.state.value.removals["custom_safebooru_org"]?.label)
 
-        undo.act(offer)
+        owner.onAction(CustomSitesAction.ActOnRemoval("custom_safebooru_org"))
         runCurrent()
         assertEquals(listOf("Safebooru", "Other"), owner.state.value.shownSites.map { it.label })
         assertEquals(emptyList<String>(), controller.removals)
     }
 
-    @Test fun `a removal happens when its offer expires, and a failure brings the site back with a notice`() = runTest {
+    @Test fun `a removal happens when its Undo times out, and a failure shows a notice with Retry`() = runTest {
         controller.sites.value = listOf(site(), site("custom_other_example", "Other", "other.example"))
         val owner = owner()
         owner.onAction(CustomSitesAction.Remove("custom_safebooru_org"))
@@ -337,10 +333,10 @@ class CustomSitesViewModelTest {
 
         controller.onRemove = { CustomSiteMutation.NotFound }
         owner.onAction(CustomSitesAction.Remove("custom_other_example"))
-        undo.expire(SITES_UNDO_SCOPE)
+        owner.onAction(CustomSitesAction.CommitRemovals)
         runCurrent()
         assertEquals("This site is no longer in your list.", owner.state.value.notice)
-        assertEquals(listOf("Other"), owner.state.value.shownSites.map { it.label })
+        assertEquals(PendingRemoval.Status.Failed, owner.state.value.removals["custom_other_example"]?.status)
     }
 
     @Test fun `a pasted key snippet in either field fills both`() = runTest {

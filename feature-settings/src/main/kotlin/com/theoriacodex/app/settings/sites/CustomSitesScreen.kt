@@ -35,9 +35,8 @@ import com.theoriacodex.app.settings.SettingsPageColumn
 import com.theoriacodex.app.settings.SettingsRow
 import com.theoriacodex.app.settings.SettingsRowDivider
 import com.theoriacodex.app.ui.components.EmptyState
-import com.theoriacodex.app.ui.undo.UndoAnchor
-import com.theoriacodex.app.ui.undo.UndoLeaveEffect
-import com.theoriacodex.app.ui.undo.UndoRow
+import com.theoriacodex.app.ui.undo.DeferredRemovalRow
+import com.theoriacodex.app.ui.undo.SurfaceLeaveEffect
 
 /** The pages above anything opened from the Sites list. */
 internal val SITES_PATH = SETTINGS_PATH + SettingDestinations.Sites.title
@@ -51,7 +50,7 @@ fun CustomSitesScreen(
     onBack: () -> Unit,
 ) {
     // Leaving Sites completes a removal still offered for Undo.
-    UndoLeaveEffect(SITES_UNDO_SCOPE)
+    SurfaceLeaveEffect { onAction(CustomSitesAction.CommitRemovals) }
     BackHandler(enabled = state.form != null) { onAction(CustomSitesAction.CloseForm) }
     BackHandler(enabled = state.form == null && state.openBuiltIn != null) { onAction(CustomSitesAction.CloseBuiltIn) }
     state.verification?.let { verification ->
@@ -109,14 +108,15 @@ private fun SitesListPage(
     }
 }
 
-/** The added sites; a removed one leaves its Undo in its row until the offer expires. */
+/** The added sites; a removed one leaves its Undo in its row until the removal commits. */
 @Composable
 private fun AddedSitesGroup(state: CustomSitesUiState, testAll: (@Composable () -> Unit)?, onAction: (CustomSitesAction) -> Unit) {
     SettingsGroup("Added", action = testAll) {
         state.sites.forEachIndexed { index, site ->
             if (index > 0) SettingsRowDivider()
-            if (site.sourceId in state.removingSiteIds) {
-                UndoRow(UndoAnchor(SITES_UNDO_SCOPE, site.sourceId))
+            val removal = state.removals[site.sourceId]
+            if (removal != null) {
+                DeferredRemovalRow(removal, onAct = { onAction(CustomSitesAction.ActOnRemoval(site.sourceId)) })
             } else {
                 SiteRow(site, state.retests[site.sourceId], site.sourceId in state.workingSiteIds, onAction)
             }

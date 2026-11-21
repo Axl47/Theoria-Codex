@@ -20,7 +20,7 @@ import com.theoriacodex.app.media.PostDownloadItem
 import com.theoriacodex.app.media.libraryTransfersStatus
 import com.theoriacodex.app.media.openDownloadedPostFile
 import com.theoriacodex.app.media.openPostDownload
-import com.theoriacodex.app.ui.undo.LocalUndoSlot
+import com.theoriacodex.app.media.DownloadRemovalRows
 import kotlinx.coroutines.launch
 
 /**
@@ -45,26 +45,30 @@ internal fun LibraryTransfersHeaderButton(tools: LibraryTransferTools) {
 /** The open offline and downloads sheet, wired to the Activity-owned offline and download owners. */
 @Composable
 internal fun LibraryTransfersSheetHost(tools: LibraryTransferTools, onOpenPost: suspend (PostDownloadItem) -> Unit) {
-    val undo = LocalUndoSlot.current
     val offline by tools.offline.state.collectAsStateWithLifecycle()
     val batches by tools.downloads.batches.collectAsStateWithLifecycle()
-    val hidden by tools.downloadRemovals.hidden.collectAsStateWithLifecycle()
-    val offlineActions = remember(tools, undo) {
+    val pendingDownloads by tools.downloadRemovals.pending.collectAsStateWithLifecycle()
+    val offlineActions = remember(tools) {
         OfflineRowActions(
             retry = tools.offline::retry,
             cancel = tools.offline::cancel,
-            remove = { owner -> tools.offline.remove(owner, undo) },
-            removeAll = { tools.offline.removeAll(undo) },
+            remove = { owner -> tools.offline.removeDeferred(owner) },
+            removeAll = tools.offline::removeAll,
+            actOnRemoval = tools.offline::actOnRemoval,
         )
     }
     LibraryTransfersSheet(
         offline = offline,
         offlineActions = offlineActions,
         batches = batches,
-        hiddenDownloads = hidden,
+        downloadRemovals = DownloadRemovalRows(pendingDownloads, tools.downloadRemovals::act),
         downloadActions = rememberDownloadTileActions(tools, onOpenPost),
         markedCodexId = tools.markedCodexId,
         onDismiss = { tools.showDownloads = false },
+        onLeave = {
+            tools.downloadRemovals.commitAll()
+            tools.offline.commitRemovals()
+        },
     )
 }
 
@@ -72,7 +76,6 @@ internal fun LibraryTransfersSheetHost(tools: LibraryTransferTools, onOpenPost: 
 private fun rememberDownloadTileActions(tools: LibraryTransferTools, onOpenPost: suspend (PostDownloadItem) -> Unit): DownloadTileActions {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val undo = LocalUndoSlot.current
     var opening by remember { mutableStateOf(false) }
     val downloads = tools.downloads
     return DownloadTileActions(
@@ -94,7 +97,7 @@ private fun rememberDownloadTileActions(tools: LibraryTransferTools, onOpenPost:
         },
         cancel = downloads::cancel,
         retryFailed = downloads::retryFailed,
-        remove = { ids, deleteFiles, anchor -> tools.downloadRemovals.remove(undo, ids, deleteFiles, anchor) },
+        remove = tools.downloadRemovals::remove,
         localFile = downloads::localFile,
     )
 }
