@@ -91,9 +91,11 @@ internal fun DownloadItemCard(item: PostDownloadItem, batch: PostDownloadBatch?,
         DownloadItemPreview(item, actions.localFile)
         Row(verticalAlignment = Alignment.Top) {
             Column(modifier = Modifier.weight(1f).padding(start = 10.dp, top = 10.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(item.request.post.title?.takeIf(String::isNotBlank) ?: "Post ${item.request.post.id.sourcePostId}",
-                    style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${item.request.post.id.source.displayName()} · ${item.request.originLabel}",
+                // Without a title the source's name leads, rather than a raw post id.
+                val source = item.request.post.id.source.displayName()
+                val title = item.request.post.title?.takeIf(String::isNotBlank)
+                Text(title ?: source, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(listOfNotNull(source.takeIf { title != null }, item.request.originLabel).joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 item.request.selectedMedia?.takeIf { it.totalPages > 1 }?.let {
                     Text("Page ${it.pageIndex + 1} of ${it.totalPages}", style = MaterialTheme.typography.labelSmall)
