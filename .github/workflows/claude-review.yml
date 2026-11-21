@@ -171,6 +171,7 @@ jobs:
           fi
 
       - name: Review the design
+        id: claude
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -183,6 +184,18 @@ jobs:
             --max-turns 40
             --allowedTools "Read,Grep,Glob,Write"
             --disallowedTools "Bash,Edit,MultiEdit,NotebookEdit,WebFetch,WebSearch"
+
+      - name: Show why the review failed
+        # The action hides Claude's output, so an API error (a bad key, an empty credit balance, an
+        # unknown model) only shows as "is_error:true". Print the final result line, which carries it.
+        if: failure() && steps.claude.outputs.execution_file != ''
+        env:
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          reason=$(jq -rs 'flatten | map(select(.type? == "result")) | last | .result // empty' "$EXECUTION_FILE" | head -c 2000)
+          reason=${reason:-Claude reported no reason.}
+          printf 'Claude stopped with: %s\n' "$reason"
+          printf '### Claude design review failed\n\n```\n%s\n```\n' "$reason" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Post the review
         env:
