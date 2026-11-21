@@ -26,6 +26,17 @@ class OmniboxMatcherTest {
         assertEquals(emptyList<OmniboxEntry>(), matchOmnibox(entries, "  "))
     }
 
+    @Test fun `when anything else matches, only the top three tags come before it`() {
+        val tags = (1..5).map { "tag $it" }
+        val codex = matchOmnibox(listOf(action(OmniboxKind.CODEX, "Tagged")), "tag")
+
+        val placed = placeOmniboxMatches(tags, codex)
+        assertEquals(listOf("tag 1", "tag 2", "tag 3"), placed.leading)
+        assertEquals(listOf("Tagged"), titles(placed.matches))
+        assertEquals(listOf("tag 4", "tag 5"), placed.trailing)
+        assertEquals(TagsAroundOmnibox(tags, emptyList(), emptyList()), placeOmniboxMatches(tags, emptyList()))
+    }
+
     @Test fun `each kind keeps its best few and equal matches follow the kinds' order`() {
         val entries = listOf(
             action(OmniboxKind.COMMAND, "Blue mode"),

@@ -2,6 +2,7 @@ package com.theoriacodex.app.search
 
 import com.theoriacodex.app.search.omnibox.OmniboxEntry
 import com.theoriacodex.app.search.omnibox.matchOmnibox
+import com.theoriacodex.app.search.omnibox.placeOmniboxMatches
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -99,7 +100,7 @@ private val SAVED_TAG_MAX_WIDTH = 240.dp
  * edited where they sit, and new tags are typed just above the keyboard. Every committed edit runs
  * live, so the results above follow the query. The keyboard's action adds what was typed and keeps
  * the sheet open for the next tag; on an empty field it runs the draft at once and closes the sheet
- * ([onApply]). Below the tag suggestions, typed text also
+ * ([onApply]). After the top tag suggestions, typed text also
  * reaches the app's [omnibox] entries: Codices, creators, searches and commands.
  */
 @Composable
@@ -508,37 +509,9 @@ private fun ComposerSuggestionList(
     onDismiss: () -> Unit,
     modifier: Modifier,
 ) {
+    val placed = placeOmniboxMatches(suggestions.rows, suggestions.omnibox)
     LazyColumn(modifier) {
-        items(suggestions.rows) { suggestion ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        onAction(suggestion.add)
-                        onAction(SearchAction.ClearAutocomplete)
-                    }
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                if (suggestion.saved) {
-                    Icon(Icons.Default.Star, "Saved tag", Modifier.size(18.dp), MaterialTheme.colorScheme.primary)
-                } else if (suggestion.searched) {
-                    Icon(Icons.Default.History, "Searched before", Modifier.size(18.dp), MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Column(Modifier.weight(1f)) {
-                    Text(suggestion.text, style = MaterialTheme.typography.bodyLarge)
-                    if (suggestion.meta.isNotBlank()) {
-                        Text(
-                            suggestion.meta,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                Icon(Icons.Default.Add, "Add ${suggestion.text}", tint = MaterialTheme.colorScheme.primary)
-            }
-        }
+        items(placed.leading) { suggestion -> ComposerSuggestionRow(suggestion, onAction) }
         if (suggestions.hiddenCount > 0 && target is ComposerAddTarget.Alternative) {
             item {
                 Text(
@@ -549,7 +522,41 @@ private fun ComposerSuggestionList(
                 )
             }
         }
-        omniboxRows(suggestions.omnibox, afterTags = suggestions.rows.isNotEmpty(), onLeave = onDismiss)
+        omniboxRows(placed.matches, afterTags = placed.leading.isNotEmpty(), onLeave = onDismiss)
+        if (placed.trailing.isNotEmpty()) item { HorizontalDivider() }
+        items(placed.trailing) { suggestion -> ComposerSuggestionRow(suggestion, onAction) }
+    }
+}
+
+@Composable
+private fun ComposerSuggestionRow(suggestion: ComposerSuggestion, onAction: (SearchAction) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                onAction(suggestion.add)
+                onAction(SearchAction.ClearAutocomplete)
+            }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (suggestion.saved) {
+            Icon(Icons.Default.Star, "Saved tag", Modifier.size(18.dp), MaterialTheme.colorScheme.primary)
+        } else if (suggestion.searched) {
+            Icon(Icons.Default.History, "Searched before", Modifier.size(18.dp), MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Column(Modifier.weight(1f)) {
+            Text(suggestion.text, style = MaterialTheme.typography.bodyLarge)
+            if (suggestion.meta.isNotBlank()) {
+                Text(
+                    suggestion.meta,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Icon(Icons.Default.Add, "Add ${suggestion.text}", tint = MaterialTheme.colorScheme.primary)
     }
 }
 
