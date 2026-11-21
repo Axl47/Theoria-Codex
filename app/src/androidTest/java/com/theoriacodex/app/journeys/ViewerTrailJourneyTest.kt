@@ -29,7 +29,8 @@ class ViewerTrailJourneyTest : AppJourneyFixture() {
         compose.waitUntil(10_000) { io { container.content.observeCodexItems(codex.codexId).first() }.any { it.postId == original.id } }
         compose.waitUntil(5_000) { save.description()?.startsWith("Saved to Trail collection") == true }
 
-        activate(compose.onNodeWithTag("viewer-trail-chip-tag:landscape"))
+        // Every fixture post carries "landscape", so it is universal and offers no chip; half carry "green", post 3 among them.
+        activate(compose.onNodeWithTag("viewer-trail-chip-tag:green"))
         val forkCrumb = compose.onNodeWithTag("viewer-trail-crumb-1")
         compose.waitUntil(15_000) { forkCrumb.isDisplayed() }
         val forkStart = selectedPost()
