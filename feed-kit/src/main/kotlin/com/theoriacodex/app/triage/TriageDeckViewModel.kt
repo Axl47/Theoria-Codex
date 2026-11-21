@@ -8,6 +8,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.tags.normalizeMatchToken
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,8 +22,9 @@ import kotlinx.coroutines.launch
  * [state], calls [decide] when a card commits and [undo] for the one level of undo. Rotation keeps it; a feed
  * that grows is appended to, never reordered, so the position stays valid.
  *
- * A decision moves the card on at once. Its write, and any reversal Undo asks for, run in this owner's scope one at a
- * time, in the order they were asked for, so a reversal always follows its write and a later write follows both.
+ * A decision moves the card on at once. Its write, and any reversal Undo asks for, run one at a time in [writeScope], in
+ * the order they were asked for, so a reversal always follows its write and a later write follows both. [writeScope]
+ * outlives the deck, so writes and reversals already asked for still run, in order, after the deck closes.
  * [TriageDeckState.notice] confirms a decision only once its write commits; a failed write brings its card back.
  * [query] and [fromForYou] describe the origin feed for save ranking. With a [removal], left takes the post out of the
  * deck's Codex instead of skipping it, through the same ordered writes.
@@ -33,6 +35,7 @@ class TriageDeckViewModel(
     private val quickSave: QuickSave,
     private val query: Query?,
     private val fromForYou: Boolean,
+    writeScope: CoroutineScope,
     private val removal: TriageRemoval? = null,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(TriageDeckState())
@@ -53,14 +56,18 @@ class TriageDeckViewModel(
     /** Every write and reversal, run one at a time in the order they were asked for. */
     private val writes = Channel<suspend () -> Unit>(Channel.UNLIMITED)
     private var latest: Work? = null
-    private var pagedAtSize = -1
+    /** [TriageFeedSnapshot.loaded] of the latest snapshot, and what it was when the deck last asked for a page. */
+    private var loaded = 0
+    private var pagedAtLoaded = -1
 
     init {
-        viewModelScope.launch {
+        // Ends once the deck has closed and the queue has drained, so it holds the deck no longer than its writes.
+        writeScope.launch {
             for (write in writes) runCatchingPreservingCancellation { write() }
         }
         viewModelScope.launch {
             feed.snapshots.collect { snapshot ->
+                loaded = snapshot.loaded
                 mutableState.update { deck ->
                     val known = deck.posts.mapTo(HashSet(), { post -> post.id })
                     val grown = deck.copy(
@@ -143,10 +150,14 @@ class TriageDeckViewModel(
         }
     }
 
+    override fun onCleared() {
+        writes.close()
+    }
+
     private fun pageIfNearEnd() {
         val deck = mutableState.value
-        if (!deck.canLoadMore || deck.posts.size == pagedAtSize || deck.posts.size - deck.index > PAGE_AHEAD) return
-        pagedAtSize = deck.posts.size
+        if (!deck.canLoadMore || loaded == pagedAtLoaded || deck.posts.size - deck.index > PAGE_AHEAD) return
+        pagedAtLoaded = loaded
         feed.loadNextPage()
     }
 

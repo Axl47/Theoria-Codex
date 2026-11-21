@@ -6,6 +6,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
@@ -44,19 +45,23 @@ sealed interface TriageMode {
 
 /**
  * What a feed's grid shows at the moment Triage is tapped, handed to the deck as a grid hands its posts to the Viewer:
- * its visible [posts] in order, and how it picks the posts it shows from a list. [filter] keeps those posts given the
- * lengths known so far; it reads lengths only while [lengthFilterActive]. [filters] is the grid's media and mark
- * filters, which a Viewer opened from the deck applies.
+ * its visible [posts] in order, and how it picks the posts it shows from a list. [filters] is the grid's media, mark
+ * and date filters, which a Viewer opened from the deck applies; [filterInRange] keeps the posts the grid would show
+ * under a given date range, so a copy with another [filters] date range filters by that one.
  */
 data class TriageSeed(
     val posts: List<Post>,
     val filters: SearchVisibilityFilters,
     val lengthFilterActive: Boolean,
-    val filter: (posts: List<Post>, knownDurationMsByPostId: Map<PostId, Long>) -> List<Post>,
+    private val filterInRange: (posts: List<Post>, dateRange: DateRange?, knownDurationMsByPostId: Map<PostId, Long>) -> List<Post>,
 ) {
+    /** Keeps the posts the grid would show given the lengths known so far, which it reads only while [lengthFilterActive]. */
+    fun filter(posts: List<Post>, knownDurationMsByPostId: Map<PostId, Long>): List<Post> =
+        filterInRange(posts, filters.dateRange, knownDurationMsByPostId)
+
     companion object {
         /** The seed for a deck opened from no grid, whose feed finds its own posts, as cleaning's Review does. */
-        val Unfiltered = TriageSeed(emptyList(), SearchVisibilityFilters(), lengthFilterActive = false) { posts, _ -> posts }
+        val Unfiltered = TriageSeed(emptyList(), SearchVisibilityFilters(), lengthFilterActive = false) { posts, _, _ -> posts }
     }
 }
 

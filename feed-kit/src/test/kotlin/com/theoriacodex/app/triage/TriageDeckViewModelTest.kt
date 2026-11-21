@@ -1,5 +1,9 @@
 package com.theoriacodex.app.triage
 
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.app.codex.QuickSave
 import com.theoriacodex.app.codex.QuickSaveRecord
 import com.theoriacodex.app.codex.SaveSuggestions
@@ -9,6 +13,9 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -36,9 +43,20 @@ class TriageDeckViewModelTest {
 
     @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
 
-    @After fun tearDown() = Dispatchers.resetMain()
+    /** Outlives every deck, as the activity's scope does. */
+    private val writeScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    private fun deck(source: TriageFeed = feed) = TriageDeckViewModel(source, actions, quickSave, query = null, fromForYou = false)
+    @After fun tearDown() {
+        writeScope.cancel()
+        Dispatchers.resetMain()
+    }
+
+    private fun deck(source: TriageFeed = feed) =
+        TriageDeckViewModel(source, actions, quickSave, query = null, fromForYou = false, writeScope = writeScope)
+
+    /** A deck on a Codex, where left removes through [removal]. */
+    private fun removingDeck(removal: TriageRemoval) =
+        TriageDeckViewModel(feed, actions, quickSave, query = null, fromForYou = false, writeScope = writeScope, removal = removal)
 
     @Test fun `like moves on, likes the post once and confirms once committed`() = runTest {
         val deck = deck()
@@ -78,7 +96,7 @@ class TriageDeckViewModelTest {
 
     @Test fun `save goes to the chosen Codex with the feed's query and undo removes exactly that save`() = runTest {
         val query = Query.newest(SourceKey.PIXIV)
-        val deck = TriageDeckViewModel(feed, actions, quickSave, query, fromForYou = true)
+        val deck = TriageDeckViewModel(feed, actions, quickSave, query, fromForYou = true, writeScope = writeScope)
         deck.decideCurrent(TriageChoice.Save("codex-1", "Skies"))
         assertEquals(listOf(Triple(posts[0].id, "codex-1", query)), quickSave.saved)
         assertTrue(quickSave.fromForYou)
@@ -163,7 +181,7 @@ class TriageDeckViewModelTest {
 
     @Test fun `on a Codex, remove takes the post out, confirms once committed, and undo puts it back`() = runTest {
         val removal = FakeRemoval()
-        val deck = TriageDeckViewModel(feed, actions, quickSave, query = null, fromForYou = false, removal = removal)
+        val deck = removingDeck(removal)
         assertTrue(deck.removes)
         deck.decideCurrent(TriageChoice.Remove)
         assertEquals(1, deck.state.value.index)
@@ -175,7 +193,7 @@ class TriageDeckViewModelTest {
     }
 
     @Test fun `a failed removal brings its card back and says so`() = runTest {
-        val deck = TriageDeckViewModel(feed, actions, quickSave, query = null, fromForYou = false, removal = FakeRemoval(fail = true))
+        val deck = removingDeck(FakeRemoval(fail = true))
         deck.decideCurrent(TriageChoice.Remove)
         assertEquals(0, deck.state.value.index)
         assertEquals(TriageNotice(TriageDecision.Removed(posts[0]), failed = true), deck.state.value.notice)
@@ -183,7 +201,7 @@ class TriageDeckViewModelTest {
 
     @Test fun `remove, undo and remove again run in order, so the post ends removed`() = runTest {
         val removal = FakeRemoval(restoreHold = CompletableDeferred())
-        val deck = TriageDeckViewModel(feed, actions, quickSave, query = null, fromForYou = false, removal = removal)
+        val deck = removingDeck(removal)
         deck.decideCurrent(TriageChoice.Remove)
         deck.undo()
         deck.decideCurrent(TriageChoice.Remove)
@@ -199,7 +217,7 @@ class TriageDeckViewModelTest {
         assertEquals(TriageChoice.Like, choiceFor(SwipeDirection.Right, saveTarget = null, hideTag = null, removes = true))
     }
 
-    @Test fun `the deck asks a live feed for its next page near the end, once per size`() = runTest {
+    @Test fun `the deck asks a live feed for its next page near the end, once per page loaded`() = runTest {
         val live = FakeFeed(posts.take(7), canLoadMore = true)
         val deck = deck(live)
         assertEquals(0, live.pagesRequested)
@@ -211,6 +229,20 @@ class TriageDeckViewModelTest {
         live.emit(posts, canLoadMore = false)
         assertEquals(8, deck.state.value.posts.size)
         assertEquals(3, deck.state.value.index)
+    }
+
+    @Test fun `a page with no post the grid shows still lets the deck ask for the next one`() = runTest {
+        val live = FakeFeed(posts.take(1), canLoadMore = true)
+        val deck = deck(live)
+        deck.decideCurrent(TriageChoice.Skip)
+        assertEquals(1, live.pagesRequested)
+        live.emit(posts.take(1), canLoadMore = true, loaded = 20)
+        assertEquals(2, live.pagesRequested)
+        live.emit(posts.take(1), canLoadMore = true, loaded = 20)
+        assertEquals(2, live.pagesRequested)
+        live.emit(posts.take(1), canLoadMore = false, loaded = 40)
+        assertEquals(2, live.pagesRequested)
+        assertTrue(deck.state.value.finished)
     }
 
     @Test fun `a repeated snapshot never duplicates posts and the deck ends when the feed has no more`() = runTest {
@@ -269,6 +301,30 @@ class TriageDeckViewModelTest {
         assertEquals(listOf(quickSave.records.first()), quickSave.undone)
     }
 
+    @Test fun `closing the deck still runs a pending save and then the undo asked for it`() = runTest {
+        quickSave.hold = CompletableDeferred()
+        val store = ViewModelStore()
+        val deck = ViewModelProvider.create(store, viewModelFactory { initializer { deck() } })[TriageDeckViewModel::class]
+        deck.decideCurrent(TriageChoice.Save("codex-1", "Skies"))
+        deck.undo()
+        store.clear()
+        quickSave.hold!!.complete(Unit)
+        assertEquals(1, quickSave.records.size)
+        assertEquals(quickSave.records, quickSave.undone)
+    }
+
+    @Test fun `closing a Codex deck still runs a pending removal and then the undo asked for it`() = runTest {
+        val removal = FakeRemoval(removeHold = CompletableDeferred())
+        val store = ViewModelStore()
+        val deck = ViewModelProvider.create(store, viewModelFactory { initializer { removingDeck(removal) } })[TriageDeckViewModel::class]
+        deck.decideCurrent(TriageChoice.Remove)
+        deck.undo()
+        store.clear()
+        removal.removeHold!!.complete(Unit)
+        assertEquals(listOf(posts[0].id), removal.removed)
+        assertEquals(listOf(posts[0].id), removal.restored)
+    }
+
     /** Decides for whichever card is current, as a swipe that finishes on its own card does. */
     private fun TriageDeckViewModel.decideCurrent(choice: TriageChoice) = decide(choice, checkNotNull(state.value.current).id)
 
@@ -277,13 +333,20 @@ class TriageDeckViewModelTest {
         var pagesRequested = 0
         override val snapshots: Flow<TriageFeedSnapshot> = flow
         override fun loadNextPage() { pagesRequested++ }
-        fun emit(posts: List<Post>, canLoadMore: Boolean) { flow.value = TriageFeedSnapshot(posts, canLoadMore) }
+        fun emit(posts: List<Post>, canLoadMore: Boolean, loaded: Int = posts.size) {
+            flow.value = TriageFeedSnapshot(posts, canLoadMore, loaded)
+        }
     }
 
-    private class FakeRemoval(private val fail: Boolean = false, val restoreHold: CompletableDeferred<Unit>? = null) : TriageRemoval {
+    private class FakeRemoval(
+        private val fail: Boolean = false,
+        val removeHold: CompletableDeferred<Unit>? = null,
+        val restoreHold: CompletableDeferred<Unit>? = null,
+    ) : TriageRemoval {
         val removed = mutableListOf<PostId>()
         val restored = mutableListOf<PostId>()
         override suspend fun remove(post: Post): TriageReversal? {
+            removeHold?.await()
             check(!fail)
             removed += post.id
             return {

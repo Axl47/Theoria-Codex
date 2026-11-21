@@ -156,6 +156,9 @@ internal fun SearchRoute(
             owner.onAction(SearchAction.Resume)
         }
         lifecycleOwner.lifecycle.addObserver(observer)
+        // Effects run before SideEffect: publish first, so actions queued before Search had an owner, such as
+        // Viewer tag edits staged from Library, reach it before the resume that runs them.
+        currentOnOwnerAvailable(owner)
         observer.synchronize(lifecycleOwner.lifecycle.currentState)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }

@@ -16,6 +16,7 @@ import com.theoriacodex.app.triage.TriageFeed
 import com.theoriacodex.app.triage.TriageFeedSnapshot
 import com.theoriacodex.app.triage.TriageRemoval
 import com.theoriacodex.app.triage.TriageReversal
+import com.theoriacodex.app.triage.settled
 import com.theoriacodex.app.ui.navigation.TriageMode
 import com.theoriacodex.app.ui.navigation.TriageRequest
 import com.theoriacodex.app.ui.navigation.TriageSeed
@@ -77,15 +78,16 @@ internal fun TheoriaShell.triageRemoval(request: TriageRequest): TriageRemoval? 
 }
 
 /**
- * [request] once Search's filters have applied: a filter change still waiting to run starts now, and its results
- * arrive before the deck opens, so the deck works through the query the grid is about to show. Other feeds apply
- * their filters on the spot.
+ * [request] and [seed] once Search's filters have applied: a filter change still waiting to run starts now, and its
+ * results arrive before the deck opens, so the deck works through the query the grid is about to show, filtered by
+ * that query's date range (see [settled]). Other feeds apply their filters on the spot.
  */
-internal suspend fun TheoriaShell.settledTriageRequest(request: TriageRequest): TriageRequest {
-    val search = routes.search.current?.takeIf { request.source == ViewerStreamSource.SEARCH } ?: return request
+internal suspend fun TheoriaShell.settledTriage(request: TriageRequest, seed: TriageSeed): Pair<TriageRequest, TriageSeed> {
+    val search = routes.search.current?.takeIf { request.source == ViewerStreamSource.SEARCH } ?: return request to seed
     routes.dispatchOrQueue(SearchAction.SettleSearch)
-    val settled = search.state.first { state -> !state.loading }
-    return request.copy(feedKey = settled.query.appliedQueryHash.ifBlank { request.feedKey })
+    val query = search.state.first { state -> !state.loading }.query
+    val settled = request.copy(feedKey = query.appliedQueryHash.ifBlank { request.feedKey })
+    return settled to seed.settled(sameQuery = settled == request, query.applied.dateRange)
 }
 
 /**
@@ -107,7 +109,7 @@ private fun ViewerFeedOwner.seededTriageFeed(
     val snapshots = combine(feed, if (seed.lengthFilterActive) lengths else flowOf(emptyMap())) { current, decided ->
         if (current == null) return@combine TriageFeedSnapshot(emptyList(), canLoadMore = false)
         val shown = seed.filter(current.results, decidedLengths(current.results, decided))
-        TriageFeedSnapshot(seed.posts + shown, current.canLoadMore)
+        TriageFeedSnapshot(seed.posts + shown, current.canLoadMore, loaded = current.results.size)
     }.distinctUntilChanged().flowOn(Dispatchers.Default)
     return SeededTriageFeed(snapshots, feed.map { current -> current?.results.orEmpty() }) {
         if (owner.viewerFeed.queryHash == queryHash) owner.loadNextPage()

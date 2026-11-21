@@ -1,7 +1,12 @@
 package com.theoriacodex.app.triage
 
 import com.theoriacodex.app.codex.SaveSuggestion
+import com.theoriacodex.app.search.SearchVisibilityFilters
+import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.ui.navigation.TriageSeed
+import com.theoriacodex.domain.model.DateRange
+import com.theoriacodex.domain.model.Post
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -23,6 +28,22 @@ class TriageDeckPresentationTest {
 
     @Test fun `down with nothing to hide is a skip`() {
         assertEquals(TriageChoice.Skip, choiceFor(SwipeDirection.Down, skies, null))
+    }
+
+    @Test fun `a seed settled to a wider date range keeps the posts the old range dropped`() {
+        val old = testPost(sourcePostId = "old", createdAtEpochMs = 10L)
+        val recent = testPost(sourcePostId = "recent", createdAtEpochMs = 100L)
+        val lastWeek = DateRange(fromEpochMs = 50L, toEpochMs = null)
+        val seed = TriageSeed(listOf(recent), SearchVisibilityFilters(dateRange = lastWeek), lengthFilterActive = false) { posts, range, _ ->
+            filterSearchResults(posts, SearchVisibilityFilters(dateRange = range), emptySet(), emptySet())
+        }
+        assertEquals(listOf(recent), seed.filter(listOf(old, recent), emptyMap()))
+
+        val cleared = seed.settled(sameQuery = false, dateRange = null)
+        assertEquals(listOf(old, recent), cleared.filter(listOf(old, recent), emptyMap()))
+        assertNull(cleared.filters.dateRange)
+        assertEquals(emptyList<Post>(), cleared.posts)
+        assertEquals(listOf(recent), seed.settled(sameQuery = true, dateRange = lastWeek).posts)
     }
 
     @Test fun `progress counts the card on screen over the posts so far and marks a feed with more`() {
