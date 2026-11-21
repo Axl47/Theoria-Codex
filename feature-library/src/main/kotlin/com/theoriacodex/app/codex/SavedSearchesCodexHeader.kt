@@ -38,7 +38,7 @@ fun SavedSearchesCodexHeader(
     var showSearches by remember { mutableStateOf(false) }
     LiveCodexHeader("Searches", SAVED_SEARCHES_CODEX_ID, owner,
         entries.associate { it.id to it.name }, feed, posts, gridState,
-        onBack, "Searches", onManage = { showSearches = true })
+        onBack, branches = "Searches", manageLabel = "Edit", onManage = { showSearches = true })
     if (showSearches) SavedSearchesManagementSheet(entries, restoreState, onChange, onRename, onRemove,
         onDismiss = { showSearches = false })
 }

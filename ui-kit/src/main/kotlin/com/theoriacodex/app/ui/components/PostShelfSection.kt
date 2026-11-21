@@ -67,7 +67,7 @@ fun PostShelfSection(
         when {
             posts.isNotEmpty() -> content()
             loading -> Text("Loading posts…", Modifier.padding(horizontal = 16.dp))
-            !failed -> Text("No posts in this view yet", Modifier.padding(horizontal = 16.dp))
+            !failed -> Text("No posts", Modifier.padding(horizontal = 16.dp))
         }
         if (failed) TextButton(onClick = onRetry, modifier = Modifier.padding(horizontal = 8.dp)) {
             Text("Could not load some posts. Retry")

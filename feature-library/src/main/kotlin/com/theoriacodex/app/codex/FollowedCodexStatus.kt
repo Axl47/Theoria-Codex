@@ -19,5 +19,5 @@ fun FollowedCodexHeader(
 ) {
     LiveCodexHeader("Followed", FOLLOWED_CODEX_ID, owner,
         follows.associate { it.membershipId to "${it.creator.displayName} · ${it.creator.source.displayName()}" },
-        feed, posts, gridState, onBack, "Authors", onManage)
+        feed, posts, gridState, onBack, branches = "Authors", manageLabel = "Authors", onManage = onManage)
 }
