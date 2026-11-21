@@ -235,11 +235,8 @@ class SearchCoordinator(
                 executionKey = key,
                 query = sanitized,
                 sourceScope = sourceScope,
-                statuses = (sanitized.mode as? QueryMode.Source)?.let { mode ->
-                    listOf(SourceRunStatus(mode.source, SourceRunState.FAILED,
-                        failureReason = (error as? SourceAdapterException)?.reason ?: SourceFailureReason.UNKNOWN,
-                        errorMessage = error.message))
-                }.orEmpty(),
+                statuses = (sanitized.mode as? QueryMode.Source)
+                    ?.let { mode -> listOf(sourceFailureStatus(mode.source, error)) }.orEmpty(),
                 message = if (isPixivUnknownError(error, sanitized)) {
                     PIXIV_UNKNOWN_RETRY_MESSAGE
                 } else error.message ?: "Unknown error",

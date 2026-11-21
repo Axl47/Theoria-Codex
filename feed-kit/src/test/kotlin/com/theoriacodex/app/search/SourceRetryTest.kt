@@ -10,6 +10,7 @@ import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.domain.adapter.Page
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
@@ -44,6 +45,23 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SourceRetryTest {
+    @Test
+    fun `a single-source first page failure reaches Diagnostics`() = runTest {
+        val pixiv = TestAdapter(SourceKey.PIXIV).apply {
+            failure = SourceAdapterException(SourceFailureReason.AUTH_REQUIRED, "credentials required")
+        }
+        val reports = mutableListOf<String>()
+        Diagnostics.install { area, message, _ -> reports += "$area: $message" }
+        try {
+            val owner = testSearchCoordinator(TestRegistry(listOf(pixiv)))
+            owner.executeInitial(query(SourceKey.PIXIV, "tag"), SearchSourceScope.Single(SourceKey.PIXIV))
+        } finally {
+            Diagnostics.install { _, _, _ -> }
+        }
+
+        assertEquals(listOf("source: ${SourceKey.PIXIV.id} failed: AUTH_REQUIRED"), reports)
+    }
+
     @Test
     fun `retry source preserves other continuation and retries exact failed page`() = runTest {
         val pixiv = TestAdapter(SourceKey.PIXIV)
