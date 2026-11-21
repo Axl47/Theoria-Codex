@@ -11,20 +11,24 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LibraryTransfersStateTest {
-    @Test fun `only Codices kept offline get a ring, filled by retained posts over their post count`() {
+    @Test fun `only Codices kept offline get a ring, filled by their current posts that are settled`() {
+        val (a, b, c, d) = listOf("a", "b", "c", "d").map { testPost(sourcePostId = it).id }
         val owners = listOf(
-            OfflineStorageOwner("codex:full", "Full", 4),
-            OfflineStorageOwner("codex:half", "Half", 2, job = OfflineMediaJob(totalPosts = 4, completedPosts = 2)),
-            OfflineStorageOwner("codex:failed", "Failed", 1, job = OfflineMediaJob(4, 1, isRunning = false, failureReason = "x")),
+            OfflineStorageOwner("codex:full", "Full", 2),
+            OfflineStorageOwner("codex:half", "Half", 1, job = OfflineMediaJob(totalPosts = 2, completedPosts = 1)),
+            OfflineStorageOwner("codex:failed", "Failed", 1, job = OfflineMediaJob(2, 1, failedPosts = setOf(c), isRunning = false)),
+            OfflineStorageOwner("codex:shrunk", "Shrunk", 1),
             OfflineStorageOwner("codex:unknown", "Unknown", 1),
             OfflineStorageOwner(AUTOMATIC_OFFLINE_OWNER, "Saved posts", 9),
         )
-        val states = codexOfflineStates(owners, mapOf("full" to 4, "half" to 4, "failed" to 4))
+        val members = mapOf("full" to setOf(a, b), "half" to setOf(a, d), "failed" to setOf(a, c), "shrunk" to setOf(d))
+        val states = codexOfflineStates(owners, members, available = setOf(a, b))
         assertEquals(
             mapOf(
                 "full" to CodexOfflineState(1f),
                 "half" to CodexOfflineState(0.5f, running = true),
-                "failed" to CodexOfflineState(0.25f, failed = true),
+                "failed" to CodexOfflineState(1f, failed = true),
+                "shrunk" to CodexOfflineState(0f),
             ),
             states,
         )

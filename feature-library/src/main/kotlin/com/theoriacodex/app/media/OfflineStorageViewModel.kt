@@ -10,6 +10,7 @@ import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.OfflineMediaSnapshot
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Codex
+import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.app.ui.undo.UndoAnchor
 import com.theoriacodex.app.ui.undo.UndoOffer
 import com.theoriacodex.app.ui.undo.UndoSlot
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
@@ -92,15 +94,19 @@ class OfflineStorageViewModel(
         controls.update { it.copy(message = "Codex names could not be loaded.") }
         emit(emptyList())
     }
+    /** The current posts of every Codex kept offline, by Codex id, for the ring's share of settled posts. */
     @OptIn(ExperimentalCoroutinesApi::class)
-    private val postCounts = combine(offline.store.snapshot, offline.jobs) { snapshot, jobs ->
+    private val members = combine(offline.store.snapshot, offline.jobs) { snapshot, jobs ->
         (snapshot.postsByOwner.keys + jobs.keys).mapNotNullTo(mutableSetOf(), ::codexIdOfOfflineOwner)
     }.distinctUntilChanged().flatMapLatest { ids ->
-        codices.observeCodexSummaries(ids, coverLimit = 0).map { summaries -> summaries.associate { it.codexId to it.itemCount } }
+        if (ids.isEmpty()) return@flatMapLatest flowOf(emptyMap())
+        combine(ids.map { id -> codices.observeCodexItems(id).map { items -> id to items.mapTo(mutableSetOf(), CodexItem::postId) } }) {
+            it.toMap()
+        }
     }.flowOn(dispatcher).catch { emit(emptyMap()) }
-    val state = combine(controls, offline.store.snapshot, offline.jobs, names, postCounts) { ui, snapshot, jobs, collections, counts ->
+    val state = combine(controls, offline.store.snapshot, offline.jobs, names, members) { ui, snapshot, jobs, collections, posts ->
         val owners = offlineStorageOwners(snapshot, jobs, collections, ui)
-        ui.copy(offline = snapshot, owners = owners, codexStates = codexOfflineStates(owners, counts))
+        ui.copy(offline = snapshot, owners = owners, codexStates = codexOfflineStates(owners, posts, snapshot.availablePostIds))
     }.stateIn(scope, SharingStarted.Eagerly, OfflineStorageUiState())
 
     fun open() {
