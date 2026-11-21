@@ -217,6 +217,21 @@ class DataStoreUiRestoreRepository(
         return dataStore.data.first().toMemoryState().lastTab
     }
 
+    override suspend fun setLibrarySection(section: String) {
+        mutateState { current -> current.copy(librarySection = section) }
+    }
+
+    override suspend fun getLibrarySection(): String? {
+        return dataStore.data.first().toMemoryState().librarySection
+    }
+
+    override fun observeSavedSearchNewPosts(): Flow<SavedSearchNewPosts> =
+        dataStore.data.map { it.toMemoryState().savedSearchNewPosts }.distinctUntilChanged()
+
+    override suspend fun updateSavedSearchNewPosts(transform: (SavedSearchNewPosts) -> SavedSearchNewPosts) {
+        mutateState { current -> current.copy(savedSearchNewPosts = transform(current.savedSearchNewPosts)) }
+    }
+
     override suspend fun setSearchScrollState(queryHash: String, state: SearchScrollState) {
         val normalizedHash = queryHash.trim()
         if (normalizedHash.isBlank()) return

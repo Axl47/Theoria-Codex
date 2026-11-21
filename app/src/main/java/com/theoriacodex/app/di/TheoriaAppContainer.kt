@@ -101,6 +101,7 @@ import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.pixiv.PixivAuthApi
 import com.theoriacodex.sources.pixiv.PixivTokenCoordinator
 import com.theoriacodex.sources.pixiv.PixivUgoiraMetadataCache
+import com.theoriacodex.app.library.LibrarySectionStore
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -131,6 +132,7 @@ data class DataDependencies(
     val savedSearches: SavedSearchRepository = InMemorySavedSearchRepository(),
     /** This session's copies of one file across sites; feeds teach it what they list. */
     val fileMirrors: FileMirrorIndex = FileMirrorIndex(),
+    val librarySections: LibrarySectionStore = LibrarySectionStore(uiRestoreRepository),
 )
 
 data class SourceDependencies(

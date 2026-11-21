@@ -104,8 +104,7 @@ class ViewerRouteRestorationUiTest {
     @Test fun `Search exit keeps presentation without restoration UI`() {
         var wentToSearch = false
         withRoute(onGoToSearch = { wentToSearch = true }) {
-            compose.onNodeWithContentDescription("More actions").performClick()
-            compose.onNodeWithText("Info").performClick()
+            compose.onNodeWithContentDescription("Info", substring = true).performClick()
             compose.onNodeWithContentDescription("More post actions").performClick()
             compose.onNodeWithText("Remove from Codex").assertDoesNotExist()
             compose.onNodeWithText("Go to Search").performClick()
@@ -120,8 +119,7 @@ class ViewerRouteRestorationUiTest {
             launchSession = session.copy(context = session.context.copy(queryHash = "codex:collection", streamSource = ViewerStreamSource.CODEX)),
             onRemoveFromCodex = { codexId, removedPost -> removed = codexId to removedPost.id.sourcePostId },
         ) {
-            compose.onNodeWithContentDescription("More actions").performClick()
-            compose.onNodeWithText("Info").performClick()
+            compose.onNodeWithContentDescription("Info", substring = true).performClick()
             compose.onNodeWithContentDescription("More post actions").performClick()
             compose.onNodeWithText("Remove from Codex").performClick()
             compose.runOnIdle { assertEquals("collection" to post.id.sourcePostId, removed) }

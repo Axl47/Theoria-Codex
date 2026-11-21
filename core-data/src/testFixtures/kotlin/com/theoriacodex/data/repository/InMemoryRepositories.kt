@@ -434,6 +434,21 @@ class InMemoryUiRestoreRepository : UiRestoreRepository {
     private val scrollStates = MutableStateFlow<Map<String, SearchScrollState>>(emptyMap())
     private val feedFabRestoreStates = MutableStateFlow<Map<String, FeedFabRestoreState>>(emptyMap())
     private val viewerLaunchContext = MutableStateFlow<ViewerLaunchContext?>(null)
+    private val librarySection = MutableStateFlow<String?>(null)
+
+    override suspend fun setLibrarySection(section: String) {
+        librarySection.value = section
+    }
+
+    override suspend fun getLibrarySection(): String? = librarySection.value
+
+    private val savedSearchNewPosts = MutableStateFlow(SavedSearchNewPosts())
+
+    override fun observeSavedSearchNewPosts(): Flow<SavedSearchNewPosts> = savedSearchNewPosts
+
+    override suspend fun updateSavedSearchNewPosts(transform: (SavedSearchNewPosts) -> SavedSearchNewPosts) {
+        mutex.withLock { savedSearchNewPosts.value = transform(savedSearchNewPosts.value) }
+    }
 
     override suspend fun setLastTab(route: String) {
         mutex.withLock {

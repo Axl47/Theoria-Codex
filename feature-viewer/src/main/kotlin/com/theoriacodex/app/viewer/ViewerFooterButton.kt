@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer
 
+import androidx.compose.runtime.getValue
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -10,7 +11,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -22,7 +22,7 @@ import com.theoriacodex.app.ui.motion.TheoriaMotion
 
 /**
  * A round button in a lower corner of the Viewer ([alignment] picks the side), floating [VIEWER_FOOTER_BUTTON_GAP] above
- * the footer the current media shows. As the chrome hides and shows, the footer fades out of and into place, so the button
+ * the footer the current media shows (dock, timeline or page scrubber, post strip). As the chrome hides and shows, the footer fades out of and into place, so the button
  * glides between the footer's edge and the screen's edge over the same span instead of jumping. Shared by rotation and
  * the slideshow.
  */
@@ -37,8 +37,8 @@ internal fun BoxScope.ViewerFooterButton(
     testTag: String,
     onClick: () -> Unit,
 ) {
-    // The post strip's inset already follows the chrome; the timeline and page scrubber hide with it too.
-    val footer = LocalViewerPostStripInset.current + if (chromeVisible) viewerFooterBarHeight(selection) else 0.dp
+    // The dock's inset already follows the chrome; the timeline or page scrubber and the strip above it hide with it too.
+    val footer = LocalViewerTimelineInset.current + if (chromeVisible) viewerFooterBarHeight(selection) + VIEWER_POST_STRIP_HEIGHT else 0.dp
     val lift by animateDpAsState(footer, tween(TheoriaMotion.SHORT_MS), label = "Viewer footer button lift")
     ViewerChromeVisibility(
         visible,
@@ -53,7 +53,7 @@ internal fun BoxScope.ViewerFooterButton(
     }
 }
 
-/** The bar the current media shows above the post strip: its timeline, or the page scrubber's track on multi-page posts. */
+/** The bar the current media shows between the dock and the post strip: its timeline, or the page scrubber's track on multi-page posts. */
 @Composable
 private fun viewerFooterBarHeight(selection: ViewerSelection) = when {
     selection.isAnimated -> viewerTimelineFooterHeight()

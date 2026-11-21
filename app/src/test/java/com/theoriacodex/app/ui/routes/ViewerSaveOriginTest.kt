@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
@@ -132,9 +133,8 @@ class ViewerSaveOriginTest {
                 }
             }
             compose.runOnIdle { assertNull(retention.session.value) }
-            compose.onNodeWithContentDescription("More actions").performClick()
-            compose.onNodeWithText("Info").performClick()
-            compose.onNodeWithContentDescription("Save to Codex").performClick()
+            // With no Codex to suggest, the dock's Save opens the picker, as the info sheet's Save to Codex does.
+            compose.onNodeWithTag("viewer-dock-save").performClick()
             compose.runOnIdle {
                 assertEquals(context, savedContext)
                 assertEquals(query, savedQuery)

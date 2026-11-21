@@ -10,9 +10,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -22,6 +22,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
@@ -59,6 +62,7 @@ internal fun TheoriaBottomNavigation(
     iconSize: Dp,
     windowInsets: WindowInsets,
     onDestinationSelected: (TopLevelDestination) -> Unit,
+    marked: Set<TopLevelDestination> = emptySet(),
 ) {
     NavigationBar(
         modifier = Modifier.height(height),
@@ -68,13 +72,7 @@ internal fun TheoriaBottomNavigation(
             NavigationBarItem(
                 selected = selectedIndex == index,
                 onClick = { onDestinationSelected(destination) },
-                icon = {
-                    Icon(
-                        imageVector = destination.icon(),
-                        contentDescription = destination.label,
-                        modifier = Modifier.size(iconSize),
-                    )
-                },
+                icon = { destination.TabIcon(destination in marked, iconSize) },
                 label = null,
                 alwaysShowLabel = false,
             )
@@ -82,11 +80,20 @@ internal fun TheoriaBottomNavigation(
     }
 }
 
+/** A tab's icon, with a dot while something new waits behind it. */
+@Composable
+internal fun TopLevelDestination.TabIcon(marked: Boolean, size: Dp) {
+    BadgedBox(
+        badge = { if (marked) Badge(Modifier.testTag(NEW_TAB_DOT_TAG)) },
+        modifier = Modifier.semantics { if (marked) stateDescription = "New" },
+    ) { Icon(icon(), label, Modifier.size(size)) }
+}
+
+internal const val NEW_TAB_DOT_TAG = "tab-new-dot"
+
 internal fun TopLevelDestination.icon() = when (this) {
     TopLevelDestination.Search -> Icons.Default.Search
-    TopLevelDestination.Recents -> Icons.Default.History
-    // The mark For You searches carry in Recents; a heart read as Likes.
+    // The mark For You searches carry in History; a heart read as Likes.
     TopLevelDestination.ForYou -> Icons.Default.AutoAwesome
-    TopLevelDestination.Codex -> Icons.Default.Collections
-    TopLevelDestination.Settings -> Icons.Default.Settings
+    TopLevelDestination.Library -> Icons.Default.Collections
 }

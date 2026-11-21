@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import android.net.Uri
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
@@ -14,7 +15,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.unit.IntOffset
 import androidx.navigation.NavBackStackEntry
+import com.theoriacodex.app.library.LibrarySection
 import com.theoriacodex.app.ui.motion.TheoriaMotion
+import com.theoriacodex.app.ui.navigation.TriageRequest
 import com.theoriacodex.app.statistics.StatisticsUsageCategory
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -24,10 +27,16 @@ internal object AppRoute {
     const val CreatorProfile = "creator-profile"
     const val Viewer = "viewer"
     const val CodexDetail = "codex/detail/{codexId}"
+    const val Settings = "settings-screen"
+
+    /** The triage deck over one feed, named by a [TriageRequest]. */
+    const val Triage = "triage/{source}?feedKey={feedKey}"
 
     fun codexDetail(codexId: String): String {
         return "codex/detail/$codexId"
     }
+
+    fun triage(request: TriageRequest): String = "triage/${request.source.name}?feedKey=${Uri.encode(request.feedKey)}"
 }
 
 /** Slow tab swipes commit as readily as Viewer swipes; the library default needs half the screen. */
@@ -62,19 +71,24 @@ internal fun RecordCodexEntryEffect(entry: NavBackStackEntry, codexId: String, s
     }
 }
 
+/**
+ * What time on a screen counts as. Library keeps the meaning of the tabs it replaced: History browses
+ * like Recents did, Codices and Saved (once a Codex screen) count as Codex. Settings counts as nothing.
+ */
 internal fun statisticsUsageCategory(
     currentRoute: String?,
     homeTabRoute: String,
+    librarySection: LibrarySection,
 ): StatisticsUsageCategory? = when (currentRoute) {
     AppRoute.Viewer -> StatisticsUsageCategory.WATCHING
     AppRoute.CreatorProfile -> StatisticsUsageCategory.BROWSING
     AppRoute.CodexDetail -> StatisticsUsageCategory.CODEX
     AppRoute.Home -> when (homeTabRoute) {
         TopLevelDestination.Search.route,
-        TopLevelDestination.Recents.route,
         TopLevelDestination.ForYou.route,
         -> StatisticsUsageCategory.BROWSING
-        TopLevelDestination.Codex.route -> StatisticsUsageCategory.CODEX
+        TopLevelDestination.Library.route ->
+            if (librarySection == LibrarySection.History) StatisticsUsageCategory.BROWSING else StatisticsUsageCategory.CODEX
         else -> null
     }
     else -> null

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.journeys
 
+import com.theoriacodex.app.library.LibrarySection
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
@@ -37,7 +38,7 @@ class ForYouPostActionsJourneyTest : AppJourneyFixture() {
             container.content.ensureCodex(profileScopedCodexId("profile-main", "actions"), "FYP saved")
         }
         launch()
-        tab("Recents")
+        library(LibrarySection.History)
         openRecentsSection("Searches")
         compose.onNodeWithTag("Recent search:for_you:actions").performClick()
         val card = searchCardTestTag(first.id)

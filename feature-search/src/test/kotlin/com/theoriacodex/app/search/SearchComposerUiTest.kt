@@ -15,6 +15,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextInput
+import com.theoriacodex.app.search.omnibox.OmniboxEntry
+import com.theoriacodex.app.search.omnibox.OmniboxKind
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchSuggestionsUiState
 import com.theoriacodex.app.search.state.SearchUiState
@@ -30,6 +32,7 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -37,8 +40,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
+// The composer is a sheet over the results; a tall window gives its saved rows room without scrolling.
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class)
+@Config(application = Application::class, qualifiers = "w400dp-h900dp")
 class SearchComposerUiTest {
     @get:Rule val compose = createComposeRule()
     private val actions = mutableListOf<SearchAction>()
@@ -60,6 +64,8 @@ class SearchComposerUiTest {
         onManageSavedTags: () -> Unit = {},
         savedTags: ComposerSavedTags = ComposerSavedTags(emptyList()),
         include: List<SearchTermGroup> = groups,
+        omnibox: List<OmniboxEntry> = emptyList(),
+        onDismiss: () -> Unit = {},
     ) {
         val base = SearchUiState()
         val draft = emptySearchQuery(QueryMode.Source(source)).copy(
@@ -71,8 +77,8 @@ class SearchComposerUiTest {
             MaterialTheme {
                 SearchComposer(
                     state = state, onAction = { actions += it }, sourcePicker = {}, onApply = {}, onReset = {},
-                    onUndo = {}, onManageSavedTags = onManageSavedTags, onOpenSourceAccounts = {}, onDismiss = {},
-                    savedSearches = ComposerSavedSearches(saved, onOpen = onOpenSaved), savedTags = savedTags,
+                    onUndo = {}, onManageSavedTags = onManageSavedTags, onOpenSourceAccounts = {}, onDismiss = onDismiss,
+                    savedSearches = ComposerSavedSearches(saved, onOpen = onOpenSaved), savedTags = savedTags, omnibox = omnibox,
                 )
             }
         }
@@ -87,7 +93,6 @@ class SearchComposerUiTest {
         var opened: SavedSearchEntry? = null
         open(SourceKey.GELBOORU, emptyList(), listOf(entry), onOpenSaved = { opened = it })
         compose.onNodeWithText("Saved searches").assertExists()
-        compose.onNodeWithText("Tap to run").assertExists()
         compose.onNodeWithText("My landscapes").performClick()
         compose.runOnIdle { assertEquals(entry, opened) }
     }
@@ -128,6 +133,8 @@ class SearchComposerUiTest {
         compose.runOnIdle { assertEquals(SearchAction.AddSavedTagGroup(group.terms), actions.last()) }
     }
 
+    // The default window: on the tall one, Robolectric never idles once the name dialog takes text.
+    @Config(qualifiers = "w320dp-h470dp")
     @Test fun `saving an or group asks for an optional name and the chip shows it`() {
         var saved: Triple<SourceKey, List<String>, String?>? = null
         val sea = SearchTermGroup(listOf(SearchTerm("sea"), SearchTerm("sky")))
@@ -164,6 +171,35 @@ class SearchComposerUiTest {
         val saved = compose.onNodeWithText("riverside").getUnclippedBoundsInRoot().top
         val provider = compose.onNodeWithText("rivers").getUnclippedBoundsInRoot().top
         assertTrue(saved < provider)
+    }
+
+    @Test fun `typed text also reaches codices and commands, below the tags`() {
+        var opened = false
+        var dismissed = false
+        var instantSeek = false
+        open(
+            SourceKey.GELBOORU, emptyList(),
+            suggestions = SearchUiState().suggestions.copy(
+                input = "ins",
+                autocomplete = listOf(TagSuggestion("insect", type = null, count = null)),
+            ),
+            omnibox = listOf(
+                OmniboxEntry.Action(OmniboxKind.CODEX, "Insects") { opened = true },
+                OmniboxEntry.Toggle("Instant Seek", checked = false) { instantSeek = it },
+                OmniboxEntry.Action(OmniboxKind.CODEX, "Landscapes") {},
+            ),
+            onDismiss = { dismissed = true },
+        )
+        compose.onNodeWithText("Landscapes").assertDoesNotExist()
+        val tag = compose.onNodeWithText("insect").getUnclippedBoundsInRoot().top
+        assertTrue(tag < compose.onNodeWithText("Insects").getUnclippedBoundsInRoot().top)
+
+        compose.onNodeWithText("Instant Seek").performClick()
+        assertTrue(instantSeek)
+        assertFalse(dismissed)
+        compose.onNodeWithText("Insects").performClick()
+        assertTrue(opened)
+        assertTrue(dismissed)
     }
 
     @Test fun `the query keeps draft order with type labels and a visible group`() {

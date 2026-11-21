@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.search.omnibox.OmniboxEntry
 import com.theoriacodex.app.post.PostTagSelection
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.source.presentation
@@ -37,8 +38,13 @@ internal sealed interface ComposerAddTarget {
 }
 
 /** Autocomplete rows for the target, and how many matches its group's tag type ruled out. */
-internal data class ComposerSuggestions(val rows: List<ComposerSuggestion>, val hiddenCount: Int) {
-    val isVisible: Boolean get() = rows.isNotEmpty() || hiddenCount > 0
+internal data class ComposerSuggestions(
+    val rows: List<ComposerSuggestion>,
+    val hiddenCount: Int,
+    /** Codices, creators, searches and commands the typed text also reaches, shown below the tags. */
+    val omnibox: List<OmniboxEntry> = emptyList(),
+) {
+    val isVisible: Boolean get() = rows.isNotEmpty() || hiddenCount > 0 || omnibox.isNotEmpty()
 }
 
 /** One autocomplete row, carrying the term it stands for and the action that adds it to the current target. */
@@ -268,13 +274,20 @@ internal fun composerHiddenSuggestionsNote(hiddenCount: Int, group: SearchTermGr
 
 /** Applies the add target to typed text, or returns null when the input cannot be committed. */
 internal fun composerTypedAction(target: ComposerAddTarget, input: String): SearchAction? {
-    val typed = input.trim().takeIf(String::isNotBlank) ?: return null
+    val typed = trimTagSeparators(input).takeIf(String::isNotBlank) ?: return null
     return when (target) {
         is ComposerAddTarget.Alternative ->
             SearchAction.AddIncludeAlternative(target.index, target.group.terms.first().copy(value = typed))
-        ComposerAddTarget.Excluded -> if (typed.startsWith("-")) SearchAction.CommitTagInput(input) else SearchAction.CommitTagInput("-$typed")
-        ComposerAddTarget.Required -> SearchAction.CommitTagInput(input)
+        ComposerAddTarget.Excluded -> SearchAction.CommitTagInput(if (typed.startsWith("-")) typed else "-$typed")
+        ComposerAddTarget.Required -> SearchAction.CommitTagInput(typed)
     }
+}
+
+/** Commas and semicolons around typed text come from a paste or a habit and are never part of the tag. */
+internal fun trimTagSeparators(input: String): String {
+    fun String.stripped() = trim { it.isWhitespace() || it == ',' || it == ';' }
+    val trimmed = input.stripped()
+    return if (trimmed.startsWith('-')) "-" + trimmed.drop(1).stripped() else trimmed
 }
 
 /** The part of the draft the composer edits, and the source scope those tags belong to. */

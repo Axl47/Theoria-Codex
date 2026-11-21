@@ -1,7 +1,6 @@
 package com.theoriacodex.app.search
 
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +26,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -83,7 +83,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
-@OptIn(ExperimentalFoundationApi::class)
 fun SearchResultCard(
     post: Post,
     pixivUgoiraClient: PixivUgoiraClient?,
@@ -123,22 +122,23 @@ fun SearchResultCard(
     val cardShape = CardDefaults.elevatedShape
     val layoutDirection = LocalLayoutDirection.current
     val cardDensity = LocalDensity.current
+    val liftModifier = rememberCardLiftModifier(
+        post, mediaGeometry::boundsInWindow, liked, onToggleLike, onLongPress,
+    )
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
             .testTag(searchCardTestTag(post.id))
-            .combinedClickable(
-                onClick = {
-                    viewerReturn?.openedFrom(
-                        viewerReturnGrid,
-                        mediaGeometry.coordinates?.takeIf { it.isAttached }?.boundsInWindow(clipBounds = false),
-                        shelfId = viewerReturnShelf,
-                        corners = mediaGeometry.corners(cardShape, layoutDirection, cardDensity),
-                    )
-                    onClick()
-                },
-                onLongClick = onLongPress,
-            ),
+            .clickable {
+                viewerReturn?.openedFrom(
+                    viewerReturnGrid,
+                    mediaGeometry.boundsInWindow(),
+                    shelfId = viewerReturnShelf,
+                    corners = mediaGeometry.corners(cardShape, layoutDirection, cardDensity),
+                )
+                onClick()
+            }
+            .then(liftModifier),
     ) {
         SearchCardContent(
             post, resolution, pixivUgoiraClient, playbackActive, acquiredDurationMs, showSourceBadge, metadataLabel,
@@ -172,6 +172,8 @@ private class SearchCardMediaGeometry {
     private var cornersSize = IntSize.Zero
     private var cornersTitleBelowMedia = false
     private var cachedCorners: ViewerReturnCorners? = null
+
+    fun boundsInWindow(): Rect? = coordinates?.takeIf { it.isAttached }?.boundsInWindow(clipBounds = false)
 
     fun corners(shape: Shape, layoutDirection: LayoutDirection, density: Density): ViewerReturnCorners {
         val size = coordinates?.size ?: IntSize.Zero

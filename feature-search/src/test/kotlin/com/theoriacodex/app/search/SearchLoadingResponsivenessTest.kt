@@ -178,13 +178,16 @@ internal class SearchLoadingResponsivenessTest : SearchViewModelTestFixture() {
         owner.onAction(SearchAction.ApplyDraft)
         advanceUntilIdle()
         hold = true
-        owner.onAction(SearchAction.ApplyDraft)
+        owner.onAction(SearchAction.Retry)
         runCurrent()
-        assertTrue(owner.state.value.retainsResultsWhileRefreshing)
+        assertTrue(owner.state.value.refreshingAppliedSearch)
         owner.onAction(SearchAction.AddIncludeTerm(SearchTerm("different")))
         owner.onAction(SearchAction.ApplyDraft)
         runCurrent()
-        assertFalse(owner.state.value.retainsResultsWhileRefreshing)
+        // A newer search keeps the results on screen too, but it is not a refresh of them.
+        assertTrue(owner.state.value.retainsResultsWhileRefreshing)
+        assertFalse(owner.state.value.refreshingAppliedSearch)
+        assertTrue(owner.state.value.replacingResults)
         held.complete(Unit)
         advanceUntilIdle()
     }

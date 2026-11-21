@@ -1,5 +1,6 @@
 package com.theoriacodex.app.journeys
 
+import com.theoriacodex.app.library.LibrarySection
 import android.graphics.Color
 import android.graphics.BitmapFactory
 import android.view.View
@@ -46,7 +47,7 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
                 .also { container.content.addItems(it.codexId, snapshots) }
         }
         launch()
-        tab("Codex")
+        library(LibrarySection.Codices)
         longPress(compose.onNodeWithText("Offline collection"))
         activate(compose.onNodeWithText("Make available offline"))
         val offline = requireNotNull(container.features.offlineMedia)
@@ -82,7 +83,7 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
         assertTrue(localPaths.all { File(it).isFile })
         // Closing the Activity is the cold-start boundary, including an open storage sheet.
         coldGraphRelaunch()
-        tab("Codex")
+        library(LibrarySection.Codices)
         activate(compose.onNodeWithText("Offline collection"))
         val ordered = io { container.content.observeCodexPosts(collection.codexId, CodexSortMode.NEWEST_SAVED).first() }
         container.registry.resolveRequests.clear()

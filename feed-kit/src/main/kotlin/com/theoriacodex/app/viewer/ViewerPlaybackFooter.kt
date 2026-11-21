@@ -11,7 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-/** The tallest timeline footer (portrait's two lines): gestures on an animated page leave this much to scrubbing, plus the strip below it. */
+/** The tallest timeline footer (portrait's two lines): gestures on an animated page leave this much to scrubbing, plus the dock below it. */
 val VIEWER_TIMELINE_HEIGHT = 72.dp
 
 @Composable
@@ -21,7 +21,7 @@ fun ViewerPlaybackFooter(
 ) {
     CompositionLocalProvider(LocalContentColor provides Color.White) {
         Box(
-            modifier = modifier.fillMaxWidth().padding(bottom = LocalViewerPostStripInset.current).padding(horizontal = 8.dp),
+            modifier = modifier.fillMaxWidth().padding(bottom = LocalViewerTimelineInset.current).padding(horizontal = 8.dp),
             contentAlignment = Alignment.Center,
         ) {
             content()

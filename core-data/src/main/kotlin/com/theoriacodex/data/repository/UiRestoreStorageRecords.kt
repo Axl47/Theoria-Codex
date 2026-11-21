@@ -3,7 +3,10 @@ package com.theoriacodex.data.repository
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-/** The `state` object of `ui_restore_store_v2.json`: last tab, Search scroll positions, feed filters, and Viewer launch. */
+/**
+ * The `state` object of `ui_restore_store_v2.json`: last tab, Library section, Search scroll
+ * positions, feed filters, Viewer launch, and saved searches' new-post marks.
+ */
 @Serializable
 internal data class UiRestoreStoreRecord(
     @SerialName("lastTab")
@@ -14,6 +17,10 @@ internal data class UiRestoreStoreRecord(
     val feedFabRestoreStates: Map<String, FeedFabRestoreState> = emptyMap(),
     @SerialName("viewerLaunchContext")
     val viewerLaunchContext: ViewerLaunchContextRecord? = null,
+    @SerialName("librarySection")
+    val librarySection: String? = null,
+    @SerialName("savedSearchNewPosts")
+    val savedSearchNewPosts: SavedSearchNewPosts = SavedSearchNewPosts(),
 ) {
     fun toMemoryState(): PersistedUiRestoreState {
         return PersistedUiRestoreState(
@@ -25,6 +32,8 @@ internal data class UiRestoreStoreRecord(
             }.toMap(),
             feedFabRestoreStates = feedFabRestoreStates,
             viewerLaunchContext = viewerLaunchContext?.toDomain(),
+            librarySection = librarySection,
+            savedSearchNewPosts = savedSearchNewPosts,
         )
     }
 
@@ -37,6 +46,8 @@ internal data class UiRestoreStoreRecord(
                 },
                 feedFabRestoreStates = state.feedFabRestoreStates,
                 viewerLaunchContext = state.viewerLaunchContext?.let(ViewerLaunchContextRecord::fromDomain),
+                librarySection = state.librarySection,
+                savedSearchNewPosts = state.savedSearchNewPosts,
             )
         }
     }
@@ -47,6 +58,8 @@ internal data class PersistedUiRestoreState(
     val scrollStates: Map<String, SearchScrollState>,
     val feedFabRestoreStates: Map<String, FeedFabRestoreState>,
     val viewerLaunchContext: ViewerLaunchContext?,
+    val librarySection: String? = null,
+    val savedSearchNewPosts: SavedSearchNewPosts = SavedSearchNewPosts(),
 )
 
 @Serializable

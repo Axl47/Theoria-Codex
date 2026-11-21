@@ -24,6 +24,7 @@ import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavType
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.navArgument
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.codex.CodexDetailScreen
@@ -35,7 +36,10 @@ import com.theoriacodex.app.related.RelatedPostsRouteController
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.related.RelatedShelfBinding
 import com.theoriacodex.app.related.requestOrNull
+import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.settings.SettingsAction
+import com.theoriacodex.app.tags.LocalPostTagSearchActions
+import com.theoriacodex.app.tags.PostTagSearchActions
 import com.theoriacodex.app.ui.components.codexFeedFabContext
 import com.theoriacodex.app.ui.components.creatorFeedFabContext
 import com.theoriacodex.app.ui.routes.BrowsingDestinationStateBoundary
@@ -45,6 +49,7 @@ import com.theoriacodex.app.ui.routes.CreatorProfileStateSaver
 import com.theoriacodex.app.ui.routes.CreatorRoute
 import com.theoriacodex.app.ui.routes.CreatorRouteCallbacks
 import com.theoriacodex.app.ui.routes.CreatorRouteConfig
+import com.theoriacodex.app.ui.routes.SavedBackHeader
 import com.theoriacodex.app.ui.routes.SavedCodexRoute
 import com.theoriacodex.app.ui.routes.ViewerDestinationState
 import com.theoriacodex.app.ui.routes.ViewerDestinationStateBoundary
@@ -53,7 +58,14 @@ import com.theoriacodex.app.ui.routes.ViewerRouteDependencies
 import com.theoriacodex.app.ui.routes.ViewerRouteEffectCallbacks
 import com.theoriacodex.app.ui.routes.ViewerRouteLiveSourceState
 import com.theoriacodex.app.ui.routes.virtualCodexUi
+import com.theoriacodex.app.ui.trails.forLevel
+import com.theoriacodex.app.ui.trails.isTrailLevel
+import com.theoriacodex.app.ui.trails.rememberViewerLevel
+import com.theoriacodex.app.ui.trails.viewerForkFadeIn
+import com.theoriacodex.app.ui.trails.viewerForkFadeOut
+import com.theoriacodex.app.viewer.ViewerCoveredLifecycle
 import com.theoriacodex.app.viewer.ViewerReturnLifetime
+import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.ViewerScreenCallbacks
 import com.theoriacodex.app.viewer.ViewerScreenConfig
 import com.theoriacodex.app.viewer.viewerMediaPrefetcher
@@ -81,13 +93,25 @@ internal fun NavGraphBuilder.theoriaDestinations(shell: TheoriaShell, sharedScop
     composable(AppRoute.CreatorProfile) { CreatorDestination(shell) }
     composable(
         AppRoute.Viewer,
-        // Media owns the expansion/shrink; navigation retains both destinations.
-        enterTransition = { EnterTransition.None },
-        popExitTransition = { ExitTransition.None },
-    ) {
-        ViewerReturnLifetime(this)
-        ViewerDestination(shell)
+        // Media owns the expansion/shrink; navigation retains both destinations. A trail fork fades over the Viewer it covers,
+        // and any trail level, also one opened from a grid, fades out as it closes.
+        enterTransition = { if (initialState.destination.route == AppRoute.Viewer) viewerForkFadeIn() else EnterTransition.None },
+        exitTransition = { if (targetState.destination.route == AppRoute.Viewer) viewerForkFadeOut() else null },
+        popEnterTransition = { if (initialState.destination.route == AppRoute.Viewer) viewerForkFadeIn() else null },
+        popExitTransition = {
+            if (targetState.destination.route == AppRoute.Viewer || initialState.isTrailLevel()) viewerForkFadeOut() else ExitTransition.None
+        },
+    ) { entry ->
+        // Viewer to Viewer (a fork opening, or closing to its parent) and a trail level's close hold no card return, and
+        // the level going under stops at once, so two levels never play side by side.
+        val top by shell.navController.currentBackStackEntryAsState()
+        ViewerReturnLifetime(this) { shell.navController.currentDestination?.route != AppRoute.Viewer && !entry.isTrailLevel() }
+        ViewerCoveredLifecycle(covered = top.let { it != null && it.id != entry.id && it.destination.route == AppRoute.Viewer }) {
+            ViewerDestination(shell, entry)
+        }
     }
+    composable(AppRoute.Settings) { SettingsScreenDestination(shell) }
+    composable(AppRoute.Triage, arguments = triageArguments) { entry -> TriageDestination(shell, entry.triageRequest()) }
 }
 
 @Composable
@@ -110,7 +134,7 @@ private fun CodexDetailEntry(
                 sources = shell.sources,
                 features = shell.features,
                 restoreRegistry = shell.feedFabRestoreRegistry,
-                onBack = { shell.navController.popBackStack() },
+                header = { SavedBackHeader { shell.navController.popBackStack() } },
                 onOpenCodex = { shell.navController.navigate(AppRoute.codexDetail(it)) },
                 onOpenViewer = shell::openCodexViewer,
                 onOpenCodexActions = shell.overlays::openCollectionActions,
@@ -178,7 +202,7 @@ private fun CodexDetailContent(
         codexId = codexId,
         codexName = state.codex?.name,
         onTitleLongPress = { shell.overlays.codexActionTargetId = codexId },
-        customHeader = virtualUi?.header,
+        customHeader = markingNewPostsSeen(shell, codexId, state.loading, virtualUi?.header),
         likedPostIds = state.likedPostIds,
         onToggleLike = liveOwner?.let { owner ->
             { post -> shell.toggleLikeAndSyncCodex(post) { outcome -> owner.related.onLikeCommitted(post, outcome) } }
@@ -258,48 +282,59 @@ private fun CreatorDestination(shell: TheoriaShell) {
 }
 
 @Composable
-private fun ViewerDestination(shell: TheoriaShell) {
+private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
     val routes = shell.routes
-    // Built once per shell, so a Search, For You or Creator state change leaves the Viewer's controls as they are.
-    val effectCallbacks = remember(shell) { viewerEffectCallbacks(shell) }
+    val level = rememberViewerLevel(shell.navController, entry, shell.viewerSessions.session.value?.sessionId)
+    // Built once per shell and trail level, so a Search, For You or Creator state change leaves the Viewer's controls as they are.
+    val tagActions = remember(shell) { viewerTagSearchActions(shell) }
+    val effectCallbacks = remember(shell, level.isFork, level.feed) { viewerEffectCallbacks(shell, tagActions).forLevel(level) { shell.navController.popBackStack() } }
     val screenCallbacks = remember(shell) { viewerScreenCallbacks(shell) }
+    // Viewer entries stack in a trail: each withdraws only its own owner, never the one now on top of or under it.
+    val onOwnerChanged = remember<(ViewerViewModel?) -> Unit>(routes.viewer) {
+        var published: ViewerViewModel? = null
+        { owner -> if (owner != null) routes.viewer.publish(owner.also { published = it }) else published?.let(routes.viewer::withdraw) }
+    }
     ViewerDestinationStateBoundary(
         data = shell.data,
         sources = shell.sources,
-        feedOwners = routes.feeds,
+        feedOwners = routes.feeds + listOfNotNull(level.feed),
     ) { state ->
-        ViewerRoute(
-            dependencies = ViewerRouteDependencies(
-                onCodexUsageTargetChanged = { target ->
-                    if (shell.navController.currentDestination?.route == AppRoute.Viewer) {
-                        shell.features.appUsageTracker.onCodexTargetChanged(target)
-                    }
-                },
-                sessionRetentionOwner = shell.viewerSessions,
-                canonicalizePost = shell.features.offlineMedia::withoutOfflineLocations,
-                postResolver = shell.viewerRouteWorkflow,
-                mediaPrefetcher = viewerMediaPrefetcher(shell.appContext, shell.sources.pixivUgoiraClient) { state.browsing.settings.viewer.videoQuality },
-                mediaDurationCoordinator = shell.features.mediaDurationCoordinator,
-                commentsLoader = shell.features.comments,
-                restoreSession = shell.viewerRouteWorkflow::restoreSession,
-            ),
-            config = ViewerScreenConfig(
-                playbackMode = state.browsing.settings.viewer.playbackMode,
-                videoQuality = state.browsing.settings.viewer.videoQuality,
-                pixivUgoiraClient = shell.sources.pixivUgoiraClient,
-                invertMultiImageScrollDirection = state.browsing.settings.viewer.invertMultiImageScrollDirection,
-                instantSeek = state.browsing.settings.viewer.instantSeek,
-                autoRotateVideos = state.browsing.settings.viewer.autoRotateVideos,
-                commentOrder = state.browsing.settings.viewer.commentOrder,
-                likedPostIds = state.browsing.likedPostIds,
-                creatorBrowsingSources = state.browsing.creatorBrowsingSources,
-                playbackDiagnosticsEnabled = BuildConfig.BENCHMARK_FIXTURES_ENABLED,
-            ),
-            liveSourceState = viewerLiveSourceState(state, shell.pendingLikePostIds[state.browsing.activeProfile.profileId].orEmpty()),
-            effectCallbacks = effectCallbacks,
-            screenCallbacks = screenCallbacks,
-            onOwnerChanged = { owner -> if (owner == null) routes.viewer.clear() else routes.viewer.publish(owner) },
-        )
+        // Every tag sheet in the Viewer stages its edits, not only the Viewer's own include and exclude.
+        CompositionLocalProvider(LocalPostTagSearchActions provides tagActions) {
+            ViewerRoute(
+                dependencies = ViewerRouteDependencies(
+                    onCodexUsageTargetChanged = { target ->
+                        if (shell.navController.currentDestination?.route == AppRoute.Viewer) {
+                            shell.features.appUsageTracker.onCodexTargetChanged(target)
+                        }
+                    },
+                    sessionRetentionOwner = shell.viewerSessions,
+                    canonicalizePost = shell.features.offlineMedia::withoutOfflineLocations,
+                    postResolver = shell.viewerRouteWorkflow,
+                    mediaPrefetcher = viewerMediaPrefetcher(shell.appContext, shell.sources.pixivUgoiraClient) { state.browsing.settings.viewer.videoQuality },
+                    mediaDurationCoordinator = shell.features.mediaDurationCoordinator,
+                    commentsLoader = shell.features.comments,
+                    restoreSession = shell.viewerRouteWorkflow::restoreSession,
+                ),
+                config = ViewerScreenConfig(
+                    playbackMode = state.browsing.settings.viewer.playbackMode,
+                    videoQuality = state.browsing.settings.viewer.videoQuality,
+                    pixivUgoiraClient = shell.sources.pixivUgoiraClient,
+                    invertMultiImageScrollDirection = state.browsing.settings.viewer.invertMultiImageScrollDirection,
+                    instantSeek = state.browsing.settings.viewer.instantSeek,
+                    autoRotateVideos = state.browsing.settings.viewer.autoRotateVideos,
+                    commentOrder = state.browsing.settings.viewer.commentOrder,
+                    likedPostIds = state.browsing.likedPostIds,
+                    creatorBrowsingSources = state.browsing.creatorBrowsingSources,
+                    playbackDiagnosticsEnabled = BuildConfig.BENCHMARK_FIXTURES_ENABLED,
+                ),
+                liveSourceState = viewerLiveSourceState(state, shell.pendingLikePostIds[state.browsing.activeProfile.profileId].orEmpty()),
+                effectCallbacks = effectCallbacks,
+                screenCallbacks = screenCallbacks,
+                onOwnerChanged = onOwnerChanged,
+                level = level,
+            )
+        }
     }
 }
 
@@ -318,7 +353,7 @@ private fun viewerLiveSourceState(
 private suspend fun TheoriaShell.viewerDownloadOrigin(): String {
     val launch = routes.viewer.current?.session?.value?.context
     return when (launch?.streamSource) {
-        ViewerStreamSource.SEARCH -> "Search"
+        ViewerStreamSource.SEARCH, ViewerStreamSource.TRAIL -> "Search"
         ViewerStreamSource.FOR_YOU -> "FYP"
         ViewerStreamSource.CODEX -> {
             val id = launch.queryHash.removePrefix("codex:")
@@ -332,7 +367,23 @@ private suspend fun TheoriaShell.viewerDownloadOrigin(): String {
     }
 }
 
-private fun viewerEffectCallbacks(shell: TheoriaShell) = ViewerRouteEffectCallbacks(
+/**
+ * The Viewer's tag edits: staged in the Search draft, so Search does not rerun behind the Viewer and replace the card it
+ * returns to. Running the draft ([PostTagSearchActions.applyDraft]) still runs it.
+ */
+private fun viewerTagSearchActions(shell: TheoriaShell): PostTagSearchActions {
+    fun stage(edit: SearchAction.DraftEdit) = shell.routes.dispatchOrQueue(SearchAction.StageDraftEdit(edit))
+    return PostTagSearchActions(
+        addInclude = { post, term -> stage(SearchAction.AddPostIncludeTerm(post, term)) },
+        addExclude = { post, term -> stage(SearchAction.AddPostExcludeTerm(post, term)) },
+        removeInclude = { _, term -> stage(SearchAction.RemoveIncludeTerm(term)) },
+        removeExclude = { _, term -> stage(SearchAction.RemoveExcludeTerm(term)) },
+        addAlternative = { post, groupIndex, term -> stage(SearchAction.AddPostIncludeAlternative(post, groupIndex, term)) },
+        applyDraft = shell.routes.postTagSearchActions.applyDraft,
+    )
+}
+
+private fun viewerEffectCallbacks(shell: TheoriaShell, tagActions: PostTagSearchActions) = ViewerRouteEffectCallbacks(
     onSavePost = { post, context ->
         shell.requestSaveToCodex(
             post = post,
@@ -353,11 +404,7 @@ private fun viewerEffectCallbacks(shell: TheoriaShell) = ViewerRouteEffectCallba
     onToggleLike = { post -> shell.toggleLikeAndSyncCodex(post) },
     onOpenCreatorProfile = { creator -> shell.openCreatorProfile(creator) },
     onApplyTag = { post, term, excluded ->
-        if (excluded) {
-            shell.routes.postTagSearchActions.addExclude(post, term.toSearchTerm())
-        } else {
-            shell.routes.postTagSearchActions.addInclude(post, term.toSearchTerm())
-        }
+        if (excluded) tagActions.addExclude(post, term.toSearchTerm()) else tagActions.addInclude(post, term.toSearchTerm())
     },
     onRecoverMedia = shell.viewerRouteWorkflow::recoverMedia,
     onLoadMore = shell.viewerRouteWorkflow::loadMore,
@@ -380,6 +427,7 @@ private fun viewerScreenCallbacks(shell: TheoriaShell) = ViewerScreenCallbacks(
     onPlaybackModeSelected = { shell.owners.settings.onAction(SettingsAction.SetViewerPlaybackMode(it)) },
     onCommentOrderSelected = { shell.owners.settings.onAction(SettingsAction.SetCommentOrder(it)) },
     onVisiblePostChanged = { post, viewedMediaNumber, session ->
+        shell.data.markViewedNewPost(post, session)
         shell.viewerRouteWorkflow.recordVisiblePost(post, viewedMediaNumber, session)
     },
     onVisibleMediaChanged = { post, viewedMediaNumber, session ->

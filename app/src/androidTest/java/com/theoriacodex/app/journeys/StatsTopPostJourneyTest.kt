@@ -28,7 +28,7 @@ class StatsTopPostJourneyTest : AppJourneyFixture() {
             container.data.statisticsRepository.recordCodexPostOpen(codex.codexId, statisticsPostKey(noLongerSaved.id), "Gelbooru journey-4")
         }
         launch()
-        tab("Settings")
+        openSettings()
         activate(compose.onNodeWithText("Your stats"))
         activate(compose.onNodeWithText("Codices"))
         activate(compose.onNodeWithText("Journey collection"))
@@ -46,7 +46,7 @@ class StatsTopPostJourneyTest : AppJourneyFixture() {
             container.data.statisticsRepository.recordCodexPostOpen(codex.codexId, statisticsPostKey(post.id), "Gelbooru journey-5")
         }
         launch()
-        tab("Settings")
+        openSettings()
         activate(compose.onNodeWithText("Share my stats"))
         compose.waitUntil(10_000) { compose.onNodeWithText("1 opens", substring = true).isDisplayed() }
         compose.onNodeWithText("Share file").assertIsEnabled()

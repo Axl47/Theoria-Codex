@@ -44,7 +44,11 @@ internal fun virtualCodexUi(
             },
             filters = { SavedSearchesCodexFilters(state.savedSearches, restore, onChange, onRenameSearch, onRemoveSearch) },
             filtersActive = state.savedSearches.any { it.id in restore.excludedSavedSearches },
-            emptyMessage = "Save a search from Recents or include a search in this feed",
+            emptyMessage = when {
+                state.savedSearches.isEmpty() -> "No saved searches"
+                state.savedSearches.any { it.id in restore.excludedSavedSearches } -> "Include a search in this feed"
+                else -> "No posts"
+            },
         )
     }
     return null

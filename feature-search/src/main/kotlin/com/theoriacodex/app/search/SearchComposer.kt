@@ -1,5 +1,8 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.search.omnibox.OmniboxEntry
+import com.theoriacodex.app.search.omnibox.matchOmnibox
+import com.theoriacodex.app.search.omnibox.placeOmniboxMatches
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,10 +13,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -36,7 +37,6 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -51,7 +51,6 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -75,8 +74,6 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.SearchUiState
@@ -99,9 +96,12 @@ private const val COMPACT_QUERY_MAX_FRACTION = 0.4f
 private val SAVED_TAG_MAX_WIDTH = 240.dp
 
 /**
- * Full-screen search editor: the query reads as one expression at the top, tags are edited where
- * they sit, and new tags are typed just above the keyboard. It edits the same draft as before, so
- * results only change when [onApply] runs.
+ * Search editor in a sheet over the results: the query reads as one expression at the top, tags are
+ * edited where they sit, and new tags are typed just above the keyboard. Every committed edit runs
+ * live, so the results above follow the query. The keyboard's action adds what was typed and keeps
+ * the sheet open for the next tag; on an empty field it runs the draft at once and closes the sheet
+ * ([onApply]). After the top tag suggestions, typed text also
+ * reaches the app's [omnibox] entries: Codices, creators, searches and commands.
  */
 @Composable
 internal fun SearchComposer(
@@ -116,18 +116,14 @@ internal fun SearchComposer(
     onDismiss: () -> Unit,
     savedSearches: ComposerSavedSearches = ComposerSavedSearches(),
     savedTags: ComposerSavedTags = ComposerSavedTags(emptyList()),
+    omnibox: List<OmniboxEntry> = emptyList(),
 ) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
-    ) {
-        Surface(Modifier.fillMaxSize().testTag("Search composer")) {
-            SearchComposerContent(
-                state, onAction, sourcePicker, onApply, onReset, onUndo,
-                onManageSavedTags, onOpenSourceAccounts, onDismiss,
-                savedSearches, savedTags,
-            )
-        }
+    SearchComposerSheet(replacing = state.replacingResults, onDismiss = onDismiss) {
+        SearchComposerContent(
+            state, onAction, sourcePicker, onApply, onReset, onUndo,
+            onManageSavedTags, onOpenSourceAccounts, onDismiss,
+            savedSearches, savedTags, omnibox,
+        )
     }
 }
 
@@ -144,6 +140,7 @@ private fun SearchComposerContent(
     onDismiss: () -> Unit,
     savedSearches: ComposerSavedSearches,
     savedTags: ComposerSavedTags,
+    omnibox: List<OmniboxEntry>,
 ) {
     val input = state.suggestions.input
     val draft = state.query.draft
@@ -162,7 +159,10 @@ private fun SearchComposerContent(
         excludeNext -> ComposerAddTarget.Excluded
         else -> ComposerAddTarget.Required
     }
+    val omniboxMatches = remember(omnibox, input) { matchOmnibox(omnibox, input) }
+    // Adding an alternative to a group only takes tags.
     val suggestions = composerSuggestions(target, state, savedTags.all)
+        .copy(omnibox = omniboxMatches.takeUnless { target is ComposerAddTarget.Alternative }.orEmpty())
     val liveSelection = selection?.takeIf { selected ->
         if (selected.excluded) selected.term in terms.excluded else terms.groups.any { selected.term in it.terms }
     }
@@ -176,6 +176,8 @@ private fun SearchComposerContent(
     fun commitTyped() = commitComposerInput(
         target, input, state.suggestions.canCommitInput, focus::clear, onAction,
     )
+    // A typed tag is only added, so a gallery ID that opens instead never applies the draft behind it.
+    fun submitTyped() = if (composerTypedAction(target, input) == null) onApply() else commitTyped()
     fun addAlternativeTo(term: SearchTerm) {
         excludeNext = false
         targetTerm = term
@@ -202,8 +204,9 @@ private fun SearchComposerContent(
     ComposerEditorBody(
         state, target, targetIndex, terms, suggestions, liveSelection, inputRequester, snackbars,
         sourcePicker, savedSearches, savedTags, queryActions, onAction, onOpenSourceAccounts,
-        onUndo, onReset, onManageSavedTags, onApply, onDismiss,
+        onUndo, onReset, onManageSavedTags, onDismiss,
         onCommit = ::commitTyped,
+        onSubmit = ::submitTyped,
         onToggleTarget = {
             if (target is ComposerAddTarget.Alternative) targetTerm = null else excludeNext = !excludeNext
             inputRequester.requestFocus()
@@ -271,9 +274,9 @@ private fun ComposerEditorBody(
     onUndo: () -> Unit,
     onReset: () -> Unit,
     onManageSavedTags: () -> Unit,
-    onApply: () -> Unit,
     onDismiss: () -> Unit,
     onCommit: () -> Unit,
+    onSubmit: () -> Unit,
     onToggleTarget: () -> Unit,
     onFieldFocused: (Boolean) -> Unit,
 ) {
@@ -284,10 +287,8 @@ private fun ComposerEditorBody(
         state, terms, targetIndex, liveSelection, compact, queryScroll, savedSearches, savedTags,
         onManageSavedTags, queryActions, onOpenSourceAccounts, onAction, modifier,
     )
-    Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
-        ComposerTopBar(
-            state.canUndoSearch, state.canResetDraft, sourcePicker, onDismiss, onUndo, onReset, onApply,
-        )
+    Column(Modifier.fillMaxSize()) {
+        ComposerTopBar(state.canUndoSearch, state.canResetDraft, sourcePicker, onDismiss, onUndo, onReset)
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val compactMaxHeight = minOf(COMPACT_QUERY_MAX_HEIGHT, maxHeight * COMPACT_QUERY_MAX_FRACTION)
             Column(Modifier.fillMaxSize()) {
@@ -295,7 +296,7 @@ private fun ComposerEditorBody(
                     // The query stays on screen while suggestions take the room it gives up.
                     query(compact = true, Modifier.fillMaxWidth().heightIn(max = compactMaxHeight))
                     HorizontalDivider()
-                    ComposerSuggestionList(suggestions, target, onAction, Modifier.weight(1f).fillMaxWidth())
+                    ComposerSuggestionList(suggestions, target, onAction, onDismiss, Modifier.weight(1f).fillMaxWidth())
                 } else {
                     query(compact = false, Modifier.weight(1f).fillMaxWidth())
                 }
@@ -320,11 +321,12 @@ private fun ComposerEditorBody(
             onFocusChanged = onFieldFocused,
             onValueChange = { value -> onAction(SearchAction.AutocompleteChanged(value)) },
             onCommit = onCommit,
+            onSubmit = onSubmit,
         )
     }
 }
 
-/** Search stays reachable above the keyboard; less frequent actions wait in the overflow menu. */
+/** Close and the source sit at the top; less frequent actions wait in the overflow menu. */
 @Composable
 private fun ComposerTopBar(
     canUndo: Boolean,
@@ -333,7 +335,6 @@ private fun ComposerTopBar(
     onDismiss: () -> Unit,
     onUndo: () -> Unit,
     onReset: () -> Unit,
-    onApply: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     Row(
@@ -359,7 +360,6 @@ private fun ComposerTopBar(
                 item("Reset", canReset, onReset)
             }
         }
-        Button(onClick = onApply, modifier = Modifier.testTag("Search composer apply")) { Text("Search") }
     }
 }
 
@@ -375,6 +375,7 @@ private fun ComposerField(
     onFocusChanged: (Boolean) -> Unit,
     onValueChange: (String) -> Unit,
     onCommit: () -> Unit,
+    onSubmit: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
@@ -392,7 +393,7 @@ private fun ComposerField(
             onValueChange = onValueChange,
             shape = RoundedCornerShape(28.dp),
             singleLine = true,
-            // A source's tag cap shows here while tags are added, before Search can be pressed.
+            // A source's tag cap shows here as tags are added.
             isError = validationMessage != null || limitNotices.any(SearchTermLimitNotice::blocksSearch),
             supportingText = (validationMessage ?: limitNotices.takeIf { it.isNotEmpty() }
                 ?.joinToString(" ") { it.message() })?.let { message -> { Text(message) } },
@@ -412,7 +413,7 @@ private fun ComposerField(
                 keyboardType = KeyboardType.Text,
                 capitalization = KeyboardCapitalization.None,
             ),
-            keyboardActions = KeyboardActions(onDone = { onCommit() }),
+            keyboardActions = KeyboardActions(onDone = { onSubmit() }),
             trailingIcon = if (input.isNotBlank()) {
                 { TextButton(onClick = onCommit, enabled = canCommit) { Text("Add") } }
             } else {
@@ -505,39 +506,12 @@ private fun ComposerSuggestionList(
     suggestions: ComposerSuggestions,
     target: ComposerAddTarget,
     onAction: (SearchAction) -> Unit,
+    onDismiss: () -> Unit,
     modifier: Modifier,
 ) {
+    val placed = placeOmniboxMatches(suggestions.rows, suggestions.omnibox)
     LazyColumn(modifier) {
-        items(suggestions.rows) { suggestion ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        onAction(suggestion.add)
-                        onAction(SearchAction.ClearAutocomplete)
-                    }
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                if (suggestion.saved) {
-                    Icon(Icons.Default.Star, "Saved tag", Modifier.size(18.dp), MaterialTheme.colorScheme.primary)
-                } else if (suggestion.searched) {
-                    Icon(Icons.Default.History, "Searched before", Modifier.size(18.dp), MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Column(Modifier.weight(1f)) {
-                    Text(suggestion.text, style = MaterialTheme.typography.bodyLarge)
-                    if (suggestion.meta.isNotBlank()) {
-                        Text(
-                            suggestion.meta,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                Icon(Icons.Default.Add, "Add ${suggestion.text}", tint = MaterialTheme.colorScheme.primary)
-            }
-        }
+        items(placed.leading) { suggestion -> ComposerSuggestionRow(suggestion, onAction) }
         if (suggestions.hiddenCount > 0 && target is ComposerAddTarget.Alternative) {
             item {
                 Text(
@@ -548,6 +522,41 @@ private fun ComposerSuggestionList(
                 )
             }
         }
+        omniboxRows(placed.matches, afterTags = placed.leading.isNotEmpty(), onLeave = onDismiss)
+        if (placed.trailing.isNotEmpty()) item { HorizontalDivider() }
+        items(placed.trailing) { suggestion -> ComposerSuggestionRow(suggestion, onAction) }
+    }
+}
+
+@Composable
+private fun ComposerSuggestionRow(suggestion: ComposerSuggestion, onAction: (SearchAction) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                onAction(suggestion.add)
+                onAction(SearchAction.ClearAutocomplete)
+            }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (suggestion.saved) {
+            Icon(Icons.Default.Star, "Saved tag", Modifier.size(18.dp), MaterialTheme.colorScheme.primary)
+        } else if (suggestion.searched) {
+            Icon(Icons.Default.History, "Searched before", Modifier.size(18.dp), MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Column(Modifier.weight(1f)) {
+            Text(suggestion.text, style = MaterialTheme.typography.bodyLarge)
+            if (suggestion.meta.isNotBlank()) {
+                Text(
+                    suggestion.meta,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Icon(Icons.Default.Add, "Add ${suggestion.text}", tint = MaterialTheme.colorScheme.primary)
     }
 }
 
@@ -610,7 +619,7 @@ private fun ComposerSavedSection(
     val showSearches = savedSearches.entries.isNotEmpty() || savedSearches.canSaveCurrent
     if (showSearches) {
         var naming by remember { mutableStateOf(false) }
-        SavedPartHeader("Saved searches", "Tap to run") {
+        SavedPartHeader("Saved searches") {
             savedSearches.onSaveCurrent?.let {
                 TextButton(onClick = { naming = true }) {
                     Icon(Icons.Default.BookmarkAdd, null, Modifier.size(18.dp))
@@ -624,11 +633,7 @@ private fun ComposerSavedSection(
                 ) { Text("Manage") }
             }
         }
-        if (savedSearches.entries.isNotEmpty()) {
-            SavedSearchChips(savedSearches)
-        } else {
-            SavedPartHint("Save this search to run it again in one tap.")
-        }
+        if (savedSearches.entries.isNotEmpty()) SavedSearchChips(savedSearches)
         if (naming) {
             SavedSearchNameDialog(
                 initialName = savedSearches.suggestedName,
@@ -654,21 +659,18 @@ private fun ComposerSavedSection(
     SavedTagChips(savedTags, draft, targetIndex, onAction)
 }
 
-/** A part's title with what tapping its chips does, and its buttons at the end. */
+/** A part's title, what tapping its chips does when that is not obvious, and its buttons at the end. */
 @Composable
-private fun SavedPartHeader(title: String, tapHint: String, actions: @Composable () -> Unit) {
+private fun SavedPartHeader(title: String, tapHint: String? = null, actions: @Composable () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             ComposerSectionTitle(title)
-            Text(tapHint, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            tapHint?.let {
+                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         actions()
     }
-}
-
-@Composable
-private fun SavedPartHint(text: String) {
-    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 /** One tap reruns a saved search, replacing the current draft. */

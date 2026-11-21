@@ -55,7 +55,7 @@ class PostActionSheetPreloadTest {
         compose.runOnIdle {
             assertEquals(1, lookups)
             assertEquals(0, saves)
-            assertEquals(mapOf("target" to 1.0), loader.observe(listOf(post), query).value)
+            assertEquals(mapOf("target" to 1.0), loader.latest(listOf(post), query))
         }
         compose.onNodeWithText("Save to Codex").performClick()
         compose.runOnIdle { assertEquals(1, saves) }

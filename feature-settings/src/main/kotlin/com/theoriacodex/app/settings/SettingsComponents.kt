@@ -32,8 +32,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
-import com.theoriacodex.app.ui.TopLevelDestination
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -102,7 +100,6 @@ internal fun ExpandableSection(label: String, initiallyExpanded: Boolean, conten
 @Composable
 fun SettingsPageColumn(content: @Composable ColumnScope.() -> Unit) {
     val scroll = rememberScrollState()
-    ScrollToTopOnTabReselect(TopLevelDestination.Settings) { scroll.animateScrollTo(0) }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
             modifier = Modifier

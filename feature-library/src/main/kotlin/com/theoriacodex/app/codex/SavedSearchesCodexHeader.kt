@@ -39,9 +39,8 @@ fun SavedSearchesCodexHeader(
     LiveCodexHeader("Searches", SAVED_SEARCHES_CODEX_ID, owner,
         entries.associate { it.id to it.name }, feed, posts, gridState,
         onBack, "Searches", onManage = { showSearches = true })
-    if (showSearches) SavedSearchesManagementSheet(entries, restoreState, onChange, onRename, onRemove) {
-        showSearches = false
-    }
+    if (showSearches) SavedSearchesManagementSheet(entries, restoreState, onChange, onRename, onRemove,
+        onDismiss = { showSearches = false })
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -53,11 +52,12 @@ fun SavedSearchesManagementSheet(
     onRename: (String, String) -> Unit,
     onRemove: (String) -> Unit,
     onDismiss: () -> Unit,
+    newCounts: Map<String, Int> = emptyMap(),
 ) {
     ExpandedBottomSheet(onDismiss) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            SavedSearchesCodexFilters(entries, restoreState, onChange, onRename, onRemove)
+            SavedSearchesCodexFilters(entries, restoreState, onChange, onRename, onRemove, newCounts)
         }
     }
 }

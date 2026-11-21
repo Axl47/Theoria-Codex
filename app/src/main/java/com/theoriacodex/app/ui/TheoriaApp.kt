@@ -17,27 +17,25 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.State
-import com.theoriacodex.domain.model.PostId
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.combine
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
-import androidx.compose.runtime.setValue
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.http.HostOutageKind
+import com.theoriacodex.app.library.LibrarySection
 import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.app.source.startSourceHealthCheck
 import com.theoriacodex.app.source.startupCheckSources
 import com.theoriacodex.app.source.sourceIssues
 import com.theoriacodex.app.source.clearSource
 import com.theoriacodex.app.source.SourceHealth
-import com.theoriacodex.app.source.LocalSourceHealth
 import com.theoriacodex.app.ui.routes.activeRecommendationProfile
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -53,7 +51,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.theoriacodex.uikit.R
-import com.theoriacodex.app.ui.components.LocalPostMenuActions
 import com.theoriacodex.app.ui.components.PostMenuActions
 import com.theoriacodex.app.ui.components.sharePostLink
 import com.theoriacodex.app.media.copyPostTagsToClipboard
@@ -62,10 +59,6 @@ import com.theoriacodex.app.appshell.AppShellUiState
 import com.theoriacodex.app.appshell.AppShellViewModel
 import com.theoriacodex.app.appshell.StartupUpdateChoice
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
-import com.theoriacodex.app.codex.CodexCollectionSource
-import com.theoriacodex.app.codex.CodexSaveRelevanceLoader
-import com.theoriacodex.app.codex.LocalCodexPostIds
-import com.theoriacodex.app.codex.LocalCodexSaveRelevanceLoader
 import com.theoriacodex.app.codex.SaveToCodexSheet
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.di.TheoriaAppContainer
@@ -73,23 +66,13 @@ import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.tags.PostTagContextProvider
 import com.theoriacodex.app.ui.routes.ActiveProfileCoordinationEffect
-import com.theoriacodex.app.ui.routes.browsingMetadataOwner
 import com.theoriacodex.app.ui.routes.CredentialRecoveryOverlay
 import com.theoriacodex.app.ui.routes.SaveToCodexDestinationStateBoundary
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
 import com.theoriacodex.app.update.StartupUpdateState
 import com.theoriacodex.app.update.toReleaseHistoryEntry
-import com.theoriacodex.app.viewer.LocalViewerReturnTransition
-import com.theoriacodex.app.viewer.ViewerReturnTransition
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
-
-/** Ranks Codices for "Save to Codex" from the saved library. */
-@Composable
-private fun rememberCodexSaveRelevanceLoader(shell: TheoriaShell): CodexSaveRelevanceLoader = remember(shell) {
-    val source = CodexCollectionSource(shell.data.codexRepository, shell.data.storageDirectory, shell.data.cacheRepository)
-    CodexSaveRelevanceLoader(shell.data.codexRepository, shell.scope, observeLibrary = source::observeSavedLibrary)
-}
 
 /** The active profile's single saved tags, for the star in post sheets, and how to unsave one. */
 @Composable
@@ -105,14 +88,6 @@ private fun rememberPostTagSavedTags(shell: TheoriaShell): PostTagSavedTags = re
 }
 
 /** Renderable app-shell boundary with dependencies supplied by the application owner. */
-/** The app-wide in-a-Codex set behind [LocalCodexPostIds], read from the shared browsing metadata. */
-@Composable
-private fun rememberCodexPostIds(shell: TheoriaShell): State<Set<PostId>> {
-    val metadata = browsingMetadataOwner(shell.data)
-    return remember(metadata) { metadata.state.map { it?.codexPostIds.orEmpty() }.distinctUntilChanged() }
-        .collectAsStateWithLifecycle(emptySet())
-}
-
 @Composable
 internal fun TheoriaAppContent(
     appContainer: TheoriaAppContainer,
@@ -143,24 +118,8 @@ internal fun TheoriaAppContent(
         settingsRepository = shell.data.settingsRepository,
         onProfileChanged = { profile -> shell.workflows.likesCodexSync.ensureProfileCodex(profile) },
     )
-    val saveRelevanceLoader = rememberCodexSaveRelevanceLoader(shell)
-    val watchPresentation = com.theoriacodex.app.search.rememberPostWatchPresentation(
-        shell.data.readingPositions, shell.data.recentsRepository,
-    )
-    val viewerReturnTransition = remember { ViewerReturnTransition() }
-    val relatedPostsSupport = remember(shell) { shell.features.relatedPosts::supports }
-    val sourceHealth = rememberSourceHealth(shell)
     val savedTags = rememberPostTagSavedTags(shell)
-    CompositionLocalProvider(
-        LocalCodexPostIds provides rememberCodexPostIds(shell),
-        com.theoriacodex.app.search.LocalPostWatchPresentation provides watchPresentation,
-        LocalCodexSaveRelevanceLoader provides saveRelevanceLoader,
-        LocalViewerReturnTransition provides viewerReturnTransition,
-        LocalPostMenuActions provides rememberPostMenuActions(shell),
-        LocalNetworkOnline provides shell.sources.networkOnline,
-        LocalSourceHealth provides sourceHealth,
-        com.theoriacodex.app.related.LocalRelatedPostsSupport provides relatedPostsSupport,
-    ) {
+    ShellCompositionLocals(shell) {
         com.theoriacodex.app.codex.SavedCodexSession {
             PostTagContextProvider(
                 shell.routes.search.current?.state,
@@ -175,6 +134,7 @@ internal fun TheoriaAppContent(
                     } else {
                         StartupSurface(shell, appShellState)
                     }
+                    ShellLiftOverlay(shell)
                     ShellDialogs(shell, appShellState)
                 }
             }
@@ -187,11 +147,14 @@ private fun ShellOverlaySheets(shell: TheoriaShell) {
     val overlays = shell.overlays
     if (overlays.showSavedSearchManagement) {
         val context = com.theoriacodex.app.ui.components.codexFeedFabContext(com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID)
+        val news by remember { shell.data.uiRestoreRepository.observeSavedSearchNewPosts() }
+            .collectAsStateWithLifecycle(com.theoriacodex.data.repository.SavedSearchNewPosts())
         shell.feedFabRestoreRegistry.state(context)?.let { restore ->
             com.theoriacodex.app.codex.SavedSearchesManagementSheet(
                 shell.savedSearches, restore, { shell.feedFabRestoreRegistry.update(context, it) },
                 shell.owners.savedSearches::rename, shell.owners.savedSearches::remove,
                 onDismiss = { overlays.showSavedSearchManagement = false },
+                newCounts = news.marks.mapValues { it.value.newPostCount },
             )
         }
     }
@@ -264,6 +227,8 @@ private fun TheoriaNavigationSurface(shell: TheoriaShell, currentRoute: String?)
         calculateBottomNavigationSizing(windowHeightDp = windowHeightDp, bottomSystemInsetDp = bottomSystemInsetDp)
     }
     val tabReselects = remember { MutableSharedFlow<TopLevelDestination>(extraBufferCapacity = 1) }
+    NewPostsCheckEffect(shell)
+    val libraryHasNew = rememberSavedNewPosts(shell.data).isNotEmpty()
     TheoriaAdaptiveScaffold(
         navigationVisible = currentRoute == AppRoute.Home,
         selectedIndex = pagerState.currentPage.coerceIn(0, TopLevelDestination.entries.lastIndex),
@@ -271,12 +236,17 @@ private fun TheoriaNavigationSurface(shell: TheoriaShell, currentRoute: String?)
         bottomBarIconSize = bottomNavigationSizing.iconSizeDp.dp,
         bottomBarWindowInsets = bottomBarWindowInsets,
         snackbarHostState = shell.snackbarHostState,
+        marked = if (libraryHasNew) setOf(TopLevelDestination.Library) else emptySet(),
         // The status bar's inset shows this color, and the Viewer's letterboxing is black.
         containerColor = if (currentRoute == AppRoute.Viewer) Color.Black else MaterialTheme.colorScheme.background,
         onDestinationSelected = { destination ->
             val alreadyShowing = navigation.currentRoute == AppRoute.Home &&
                 TopLevelDestination.entries[pagerState.currentPage] == destination
             navigation.homeTabRoute = destination.route
+            // New posts wait in Saved, so a lit Library tab opens there; without the dot the remembered section stays.
+            if (destination == TopLevelDestination.Library && !alreadyShowing && libraryHasNew) {
+                shell.data.librarySections.select(LibrarySection.Saved)
+            }
             if (alreadyShowing) tabReselects.tryEmit(destination)
             else shell.scope.launch { navigateTopLevelDestination(navigation.navController, pagerState, destination) }
         },
@@ -354,7 +324,7 @@ private fun ShellDialogs(shell: TheoriaShell, appShellState: AppShellUiState) {
 
 /** The shell's post actions that work the same everywhere, shared by the Viewer and every feed post menu. */
 @Composable
-private fun rememberPostMenuActions(shell: TheoriaShell): PostMenuActions = remember(shell) {
+internal fun rememberPostMenuActions(shell: TheoriaShell): PostMenuActions = remember(shell) {
     PostMenuActions(
         shell::openOriginalPost, { url -> openInBrowser(shell.appContext, url) }, shell::findOnOtherSites,
         share = { url -> sharePostLink(shell.appContext, url) },
@@ -417,7 +387,7 @@ private fun SaveToCodexOverlay(shell: TheoriaShell) {
  * clear. Starts the background startup check once the app is showing (it never blocks startup).
  */
 @Composable
-private fun rememberSourceHealth(shell: TheoriaShell): SourceHealth {
+internal fun rememberSourceHealth(shell: TheoriaShell): SourceHealth {
     val outages = shell.sources.outages
     LaunchedEffect(shell.navReady) {
         if (shell.navReady) {
