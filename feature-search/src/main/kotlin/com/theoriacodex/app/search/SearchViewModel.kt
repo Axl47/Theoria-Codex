@@ -15,6 +15,7 @@ import com.theoriacodex.app.search.state.SearchRequestKind
 import com.theoriacodex.app.search.state.SearchRestorationUiState
 import com.theoriacodex.app.search.state.SearchStateChange
 import com.theoriacodex.app.search.state.SearchStateReducer
+import com.theoriacodex.app.search.state.SearchSuggestionsUiState
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.search.state.allowsScrollPersistence
 import com.theoriacodex.app.search.state.withResolvedPosts
@@ -169,8 +170,6 @@ class SearchViewModel(
             SearchAction.CancelActiveRequest -> cancelActiveRequest()
 
 
-            SearchAction.DismissValidation -> dismissValidation()
-
             SearchAction.Restore -> restore()
 
             SearchAction.Resume -> {
@@ -217,12 +216,6 @@ class SearchViewModel(
             mutableState.value = reduction.state
             suggestionRefresh.refreshAutocomplete(mutableState.value.suggestions.input)
         }
-    }
-
-    private fun dismissValidation() {
-        mutableState.value = mutableState.value.copy(
-            query = mutableState.value.query.copy(validationMessage = null),
-        )
     }
 
     private fun applyDraftAction(action: SearchAction.DraftEdit) {
@@ -801,15 +794,7 @@ class SearchViewModel(
     private fun clearSuggestionState() {
         suggestionRefresh.cancelAutocomplete()
         val current = mutableState.value
-        mutableState.value = current.copy(
-            suggestions = current.suggestions.copy(
-                input = "",
-                autocomplete = emptyList(),
-                facetedAutocomplete = emptyList(),
-                searchedTags = emptyList(),
-                canCommitInput = false,
-            ),
-        )
+        mutableState.value = current.copy(suggestions = SearchSuggestionsUiState(trending = current.suggestions.trending))
     }
 
     private fun reduce(change: SearchStateChange) {

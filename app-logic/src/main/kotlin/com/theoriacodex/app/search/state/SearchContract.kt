@@ -53,6 +53,10 @@ data class SearchUiState(
         get() = query.draft != query.applied ||
             query.draftSourceScope != query.appliedSourceScope
 
+    /** What the search field shows: an error in the typed input, else a notice about the draft. */
+    val validationMessage: String?
+        get() = suggestions.inputError ?: query.validationMessage
+
     /** Reset clears the current draft, including restored searches and uncommitted input. */
     val canResetDraft: Boolean
         get() = query.draft != emptySearchQuery(query.draft.mode) || suggestions.input.isNotEmpty()
@@ -122,6 +126,7 @@ data class SearchQueryUiState(
     val unifiedSources: Set<SourceKey> = emptySet(),
     val supportedScopes: List<FacetedSearchScope> = emptyList(),
     val selectedScope: FacetedSearchScope = FacetedSearchScope.All,
+    /** A notice about the draft itself, such as terms a source change removed; typing leaves it. */
     val validationMessage: String? = null,
     val nhentaiLanguageFilter: NhentaiLanguageFilter = NhentaiLanguageFilter.ANY,
     val nhentaiFullColorFilter: Boolean = false,
@@ -155,6 +160,8 @@ data class SearchSuggestionsUiState(
     /** Terms the user searched before that match [input] and its scope, shown ahead of [autocomplete]. */
     val searchedTags: List<SearchTerm> = emptyList(),
     val canCommitInput: Boolean = false,
+    /** Why [input] cannot be searched as typed; replaced with each new answer for the input. */
+    val inputError: String? = null,
 )
 
 data class SearchExecutionUiState(
@@ -288,7 +295,6 @@ sealed interface SearchAction {
     data object Retry : SearchAction
     data object LoadNextPage : SearchAction
     data object CancelActiveRequest : SearchAction
-    data object DismissValidation : SearchAction
     data object Restore : SearchAction
     data object Resume : SearchAction
     data class CommitTagInput(val input: String) : SearchAction

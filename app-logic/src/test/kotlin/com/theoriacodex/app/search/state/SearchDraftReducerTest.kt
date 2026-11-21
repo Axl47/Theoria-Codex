@@ -261,7 +261,7 @@ class SearchDraftReducerTest {
         val excluded = SearchDraftReducer.commitInput(gelbooru, "-blue hair")
 
         assertFalse(rejected.accepted)
-        assertTrue(rejected.state.query.validationMessage.orEmpty().contains("Gelbooru", true))
+        assertTrue(rejected.state.validationMessage.orEmpty().contains("Gelbooru", true))
         assertEquals(listOf("blue_hair"), accepted.state.query.draft.includeTags)
         assertEquals(listOf("blue_hair"), excluded.state.query.draft.excludeTags)
     }
@@ -379,7 +379,7 @@ class SearchDraftReducerTest {
         val restored = SearchDraftReducer.restoreDraft(state(), historical, available, ::noScopes)
 
         assertFalse(scoped.accepted)
-        assertTrue(scoped.state.query.validationMessage.orEmpty().contains("specific source"))
+        assertTrue(scoped.state.validationMessage.orEmpty().contains("specific source"))
         assertEquals(listOf(SearchTerm("portable")), restored.state.query.draft.includeTerms)
         assertTrue(restored.state.query.draft.excludeTerms.isEmpty())
         assertTrue(restored.state.query.validationMessage.orEmpty().contains("removed"))

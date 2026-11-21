@@ -312,16 +312,13 @@ private fun ComposerEditorBody(
         ComposerField(
             input = input,
             target = target,
-            validationMessage = state.query.validationMessage,
+            validationMessage = state.validationMessage,
             limitNotices = state.query.termLimitNotices,
             canCommit = state.suggestions.canCommitInput,
             inputRequester = inputRequester,
             onToggleTarget = onToggleTarget,
             onFocusChanged = onFieldFocused,
-            onValueChange = { value ->
-                onAction(SearchAction.DismissValidation)
-                onAction(SearchAction.AutocompleteChanged(value))
-            },
+            onValueChange = { value -> onAction(SearchAction.AutocompleteChanged(value)) },
             onCommit = onCommit,
         )
     }

@@ -63,13 +63,7 @@ object SearchDraftReducer {
                     nhentaiLanguageFilter = sanitized.query.nhentaiLanguageFilter(),
                     nhentaiFullColorFilter = sanitized.query.nhentaiFullColorFilter(),
                 ),
-                suggestions = state.suggestions.copy(
-                    input = "",
-                    autocomplete = emptyList(),
-                    facetedAutocomplete = emptyList(),
-                    searchedTags = emptyList(),
-                    canCommitInput = false,
-                ),
+                suggestions = SearchSuggestionsUiState(trending = state.suggestions.trending),
             ),
         )
     }
@@ -197,7 +191,7 @@ object SearchDraftReducer {
         ) {
             return SearchDraftReduction(
                 state.copy(
-                    query = state.query.copy(validationMessage = GELBOORU_SUGGESTION_REQUIRED_MESSAGE),
+                    suggestions = state.suggestions.copy(inputError = GELBOORU_SUGGESTION_REQUIRED_MESSAGE),
                 ),
                 changed = false,
                 accepted = false,
@@ -324,13 +318,7 @@ object SearchDraftReducer {
                         selectedScope = FacetedSearchScope.All,
                         validationMessage = null,
                     ),
-                    suggestions = state.suggestions.copy(
-                        input = "",
-                        autocomplete = emptyList(),
-                        facetedAutocomplete = emptyList(),
-                        searchedTags = emptyList(),
-                        canCommitInput = false,
-                    ),
+                    suggestions = SearchSuggestionsUiState(trending = state.suggestions.trending),
                 )
             }
         }
@@ -389,8 +377,9 @@ object SearchDraftReducer {
         }
         return SearchDraftReduction(
             state.copy(
-                query = state.query.copy(selectedScope = scope, validationMessage = null),
+                query = state.query.copy(selectedScope = scope),
                 suggestions = state.suggestions.copy(
+                    inputError = null,
                     autocomplete = emptyList(),
                     facetedAutocomplete = emptyList(),
                     searchedTags = emptyList(),
@@ -423,13 +412,7 @@ object SearchDraftReducer {
                     nhentaiLanguageFilter = sanitized.query.nhentaiLanguageFilter(),
                     nhentaiFullColorFilter = sanitized.query.nhentaiFullColorFilter(),
                 ),
-                suggestions = state.suggestions.copy(
-                    input = "",
-                    autocomplete = emptyList(),
-                    facetedAutocomplete = emptyList(),
-                    searchedTags = emptyList(),
-                    canCommitInput = false,
-                ),
+                suggestions = SearchSuggestionsUiState(trending = state.suggestions.trending),
             ),
         )
     }
@@ -529,10 +512,10 @@ object SearchDraftReducer {
                 parsed.explicitScope != null -> UNSUPPORTED_SEARCH_SCOPE_MESSAGE
                 state.query.draft.mode == QueryMode.Source(SourceKey.GELBOORU) ->
                     GELBOORU_SUGGESTION_REQUIRED_MESSAGE
-                else -> state.query.validationMessage
+                else -> state.suggestions.inputError
             }
             return SearchDraftReduction(
-                state.copy(query = state.query.copy(validationMessage = message)),
+                state.copy(suggestions = state.suggestions.copy(inputError = message)),
                 accepted = false,
             )
         }

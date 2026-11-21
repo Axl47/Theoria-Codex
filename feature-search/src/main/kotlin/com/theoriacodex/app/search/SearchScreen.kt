@@ -366,7 +366,7 @@ private fun SearchChromeInput(
 ) {
     SearchSummaryBar(
         summary = collapsedSearchContextSummary(state.query.draft, activeSearchFilterCount(state, feed, fabRestoreState)),
-        validationMessage = state.query.validationMessage,
+        validationMessage = state.validationMessage,
         showSearchAction = state.hasPendingChanges && !chrome.composerOpen,
         onOpen = { chrome.composerOpen = true },
         onSearch = applyDraft,

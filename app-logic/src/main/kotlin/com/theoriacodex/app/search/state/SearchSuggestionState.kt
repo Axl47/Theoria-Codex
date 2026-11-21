@@ -5,11 +5,9 @@ import com.theoriacodex.domain.adapter.TagSuggestion
 
 /** Pure state transitions for the two-stage local/remote suggestion pipeline. */
 fun SearchUiState.withAutocompleteResult(result: SearchAutocompleteResult): SearchUiState = copy(
-    query = query.copy(
-        selectedScope = result.selectedScope,
-        validationMessage = result.validationMessage,
-    ),
+    query = query.copy(selectedScope = result.selectedScope),
     suggestions = suggestions.copy(
+        inputError = result.validationMessage,
         input = result.input,
         autocomplete = result.autocomplete,
         facetedAutocomplete = result.facetedAutocomplete,
