@@ -15,11 +15,17 @@ import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.components.ActionMenuSheet
 import com.theoriacodex.app.ui.components.EmptyState
 import com.theoriacodex.app.ui.components.SheetHeader
+import com.theoriacodex.app.ui.undo.UndoAnchor
+import com.theoriacodex.app.ui.undo.UndoRow
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 
+/** Where the hidden tags sheet draws Undo after an entry is removed. */
+val HiddenTagsUndoAnchor = UndoAnchor("hidden-tags")
+
 /**
- * The tags For You hides for the active profile, each with Remove. The shell hosts it once and opens it
- * through [com.theoriacodex.app.ui.navigation.LocalHiddenTagsOpener].
+ * The tags For You hides for the active profile, each with Remove; the host removes at once and offers Undo
+ * at [HiddenTagsUndoAnchor]. The shell hosts it once and opens it through
+ * [com.theoriacodex.app.ui.navigation.LocalHiddenTagsOpener].
  */
 @Composable
 fun HiddenTagsSheet(
@@ -43,5 +49,6 @@ fun HiddenTagsSheet(
                 TextButton(onClick = { onRemove(entry) }) { Text("Remove") }
             }
         }
+        UndoRow(HiddenTagsUndoAnchor, Modifier.padding(top = 8.dp))
     }
 }
