@@ -25,8 +25,9 @@ import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.Query
 
 /**
- * One Viewer entry's place in a trail. A fork ([isFork]) sits on another Viewer entry: dismissing it pops just that
- * level and leaves the card return and Search's launch context to the root. [feed] is the fork's live feed, null for
+ * One Viewer entry's place in a trail. A fork ([isFork]) is a level the trail opener opened, usually on another Viewer
+ * entry and, through the lift's Similar, on a grid: dismissing it pops just that level, with no card to return to, and
+ * leaves Search's launch context to the root. [feed] is the fork's live feed, null for
  * a root or a fork restored after process death (which shows its saved window without paging).
  */
 internal class ViewerLevel(
@@ -57,6 +58,9 @@ internal class ViewerTrailEntryViewModel(val claimed: TrailLevel?) : ViewModel()
         claimed?.feed?.close()
     }
 }
+
+/** Whether this Viewer entry was opened by the trail opener; its close is a plain fade, never a card return. */
+internal fun NavBackStackEntry.isTrailLevel(): Boolean = savedStateHandle.get<String>(TRAIL_KEY) != null
 
 /** A root level's crumb: the search it shows, or where it was opened from. */
 internal fun viewerRootLabel(context: ViewerLaunchContext, query: Query?): String =
@@ -91,7 +95,7 @@ internal fun rememberViewerLevel(navController: NavHostController, entry: NavBac
     return remember(entry, owner, label) {
         val ancestors = saved.get<ArrayList<String>>(TRAIL_ANCESTOR_LABELS_KEY).orEmpty()
         ViewerLevel(
-            isFork = ancestors.isNotEmpty(),
+            isFork = ancestors.isNotEmpty() || entry.isTrailLevel(),
             crumbs = ancestors.map(::ViewerCrumb) + ViewerCrumb(label ?: UNNAMED_LEVEL, saved.get<String>(TRAIL_KEY)),
             feed = owner.claimed?.feed,
             coveredByFork = { navController.currentBackStackEntry?.savedStateHandle?.get<ArrayList<String>>(TRAIL_ANCESTOR_IDS_KEY)?.contains(entry.id) == true },
