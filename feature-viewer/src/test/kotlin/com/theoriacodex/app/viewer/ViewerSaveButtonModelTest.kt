@@ -10,7 +10,8 @@ import org.junit.Test
 class ViewerSaveButtonModelTest {
     private val art = post("art")
     private fun suggestion(id: String) = SaveSuggestion(id, "Codex $id", emptyList())
-    private fun suggestions(vararg ids: String, inAny: Boolean = false) = SaveSuggestions(ids.map(::suggestion), inAny)
+    private fun suggestions(vararg ids: String, inAny: Boolean = false, postId: String = "art") =
+        ViewerPostSuggestions(post(postId).id, SaveSuggestions(ids.map(::suggestion), inAny))
     private fun record(inserted: Int = 1, at: Long = 1_000L, postId: String = "art") =
         QuickSaveRecord(post(postId), "a", "Codex a", inserted, at)
 
@@ -46,24 +47,35 @@ class ViewerSaveButtonModelTest {
 
     @Test
     fun `with no Codex at all a tap names a new one, and with none to suggest or none loaded it opens the picker`() {
-        val noCodices = viewerSaveButtonState(art.id, SaveSuggestions.Empty, null, 0L)
+        val noCodices = viewerSaveButtonState(art.id, ViewerPostSuggestions(art.id, SaveSuggestions.Empty), null, 0L)
         assertEquals(ViewerSaveButtonState.NoTarget(inAnyCodex = false), noCodices)
         assertEquals(ViewerSaveCommand.NewCodex, noCodices.tapCommand())
-        val inEveryCodex = viewerSaveButtonState(art.id, SaveSuggestions(emptyList(), inAnyCodex = true), null, 0L)
+        val inEveryCodex = viewerSaveButtonState(art.id, ViewerPostSuggestions(art.id, SaveSuggestions(emptyList(), inAnyCodex = true)), null, 0L)
         assertEquals(ViewerSaveCommand.OpenPicker, inEveryCodex.tapCommand())
         assertEquals(ViewerSaveCommand.OpenPicker, viewerSaveButtonState(art.id, null, null, 0L).tapCommand())
     }
 
     @Test
     fun `the fan holds the next three suggestions then New, and releasing on New names a new Codex`() {
-        val fan = viewerSaveFanTargets(suggestions("a", "b", "c", "d", "e"))
+        val fan = viewerSaveFanTargets(art.id, suggestions("a", "b", "c", "d", "e"))
         assertEquals(
             listOf("b", "c", "d").map { ViewerSaveFanTarget.Codex(suggestion(it)) } + ViewerSaveFanTarget.New,
             fan,
         )
-        assertEquals(listOf(ViewerSaveFanTarget.New), viewerSaveFanTargets(null))
+        assertEquals(listOf(ViewerSaveFanTarget.New), viewerSaveFanTargets(art.id, null))
         assertEquals(ViewerSaveCommand.QuickSave("b"), viewerSaveFanRelease(fan.first()))
         assertEquals(ViewerSaveCommand.NewCodex, viewerSaveFanRelease(ViewerSaveFanTarget.New))
         assertEquals(ViewerSaveCommand.OpenPicker, viewerSaveFanRelease(null))
+    }
+
+    @Test
+    fun `the previous post's suggestions stay on show but neither save nor fan out`() {
+        val stale = viewerSaveButtonState(art.id, suggestions("a", "b", inAny = true, postId = "before"), null, 0L)
+
+        assertEquals(ViewerSaveButtonState.Suggest(suggestion("a"), inAnyCodex = false, ready = false), stale)
+        assertEquals(ViewerSaveCommand.OpenPicker, stale.tapCommand())
+        assertEquals(listOf(ViewerSaveFanTarget.New), viewerSaveFanTargets(art.id, suggestions("a", "b", postId = "before")))
+        val staleEveryCodex = ViewerPostSuggestions(post("before").id, SaveSuggestions(emptyList(), inAnyCodex = true))
+        assertEquals(ViewerSaveButtonState.Loading, viewerSaveButtonState(art.id, staleEveryCodex, null, 0L))
     }
 }

@@ -12,6 +12,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
@@ -62,14 +64,16 @@ internal class TrailFeed(
 
     fun close() = scope.cancel()
 
-    /** One page; a failure keeps what was loaded, so the Viewer can ask again later. */
+    /**
+     * One page; a failure keeps what was loaded, so the Viewer can ask again later. A cancellation that is not this
+     * feed's own (the pager's timeout) is a failed page too.
+     */
     private suspend fun step(): Boolean = try {
         val page = pager.next()
         snapshot.update { it.copy(results = page.posts, canLoadMore = page.canLoadMore, loadingMore = false) }
         true
-    } catch (error: CancellationException) {
-        throw error
-    } catch (_: Exception) {
+    } catch (error: Exception) {
+        if (error is CancellationException) currentCoroutineContext().ensureActive()
         snapshot.update { it.copy(loadingMore = false) }
         false
     }

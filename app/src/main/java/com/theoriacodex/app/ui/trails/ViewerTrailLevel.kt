@@ -25,8 +25,9 @@ import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.Query
 
 /**
- * One Viewer entry's place in a trail. A fork ([isFork]) sits on another Viewer entry: dismissing it pops just that
- * level and leaves the card return and Search's launch context to the root. [feed] is the fork's live feed, null for
+ * One Viewer entry's place in a trail. A fork ([isFork]) is a level the trail opener opened, usually on another Viewer
+ * entry and, through the lift's Similar, on a grid: dismissing it pops just that level, with no card to return to, and
+ * leaves Search's launch context to the root. [feed] is the fork's live feed, null for
  * a root or a fork restored after process death (which shows its saved window without paging).
  */
 internal class ViewerLevel(
@@ -58,6 +59,9 @@ internal class ViewerTrailEntryViewModel(val claimed: TrailLevel?) : ViewModel()
     }
 }
 
+/** Whether this Viewer entry was opened by the trail opener; its close is a plain fade, never a card return. */
+internal fun NavBackStackEntry.isTrailLevel(): Boolean = savedStateHandle.get<String>(TRAIL_KEY) != null
+
 /** A root level's crumb: the search it shows, or where it was opened from. */
 internal fun viewerRootLabel(context: ViewerLaunchContext, query: Query?): String =
     query?.includeTags?.joinToString(" ") { it.replace('_', ' ') }?.takeIf { it.isNotBlank() } ?: when (context.streamSource) {
@@ -65,7 +69,7 @@ internal fun viewerRootLabel(context: ViewerLaunchContext, query: Query?): Strin
         ViewerStreamSource.FOR_YOU -> "For You"
         ViewerStreamSource.CODEX -> "Codex"
         ViewerStreamSource.CREATOR_PROFILE -> "Creator"
-        ViewerStreamSource.RECENTS -> "Recents"
+        ViewerStreamSource.RECENTS -> "History"
         ViewerStreamSource.RELATED -> "Related"
         ViewerStreamSource.TRAIL -> "Trail"
     }
@@ -82,14 +86,17 @@ internal fun rememberViewerLevel(navController: NavHostController, entry: NavBac
         factory = viewModelFactory { initializer { ViewerTrailEntryViewModel(handoff.claim(pendingSessionId)) } },
     )
     val saved = entry.savedStateHandle
-    owner.claimed?.let { if (saved.get<String>(TRAIL_LABEL_KEY) == null) saved[TRAIL_LABEL_KEY] = it.label }
+    owner.claimed?.let { claimed ->
+        if (saved.get<String>(TRAIL_LABEL_KEY) == null) saved[TRAIL_LABEL_KEY] = claimed.label
+        if (saved.get<String>(TRAIL_KEY) == null) saved[TRAIL_KEY] = claimed.trailKey
+    }
     if (saved.get<ArrayList<String>>(TRAIL_ANCESTOR_IDS_KEY) == null) saved.recordAncestors(navController.previousBackStackEntry)
     val label by saved.getStateFlow<String?>(TRAIL_LABEL_KEY, null).collectAsStateWithLifecycle()
     return remember(entry, owner, label) {
         val ancestors = saved.get<ArrayList<String>>(TRAIL_ANCESTOR_LABELS_KEY).orEmpty()
         ViewerLevel(
-            isFork = ancestors.isNotEmpty(),
-            crumbs = (ancestors + (label ?: UNNAMED_LEVEL)).map(::ViewerCrumb),
+            isFork = ancestors.isNotEmpty() || entry.isTrailLevel(),
+            crumbs = ancestors.map(::ViewerCrumb) + ViewerCrumb(label ?: UNNAMED_LEVEL, saved.get<String>(TRAIL_KEY)),
             feed = owner.claimed?.feed,
             coveredByFork = { navController.currentBackStackEntry?.savedStateHandle?.get<ArrayList<String>>(TRAIL_ANCESTOR_IDS_KEY)?.contains(entry.id) == true },
             popTo = { crumb -> repeat((ancestors.size - crumb).coerceAtLeast(0)) { navController.popBackStack() } },
@@ -117,6 +124,7 @@ private fun SavedStateHandle.recordAncestors(previous: NavBackStackEntry?) {
 }
 
 private const val TRAIL_LABEL_KEY = "viewer-trail-label"
+private const val TRAIL_KEY = "viewer-trail-key"
 private const val TRAIL_ANCESTOR_LABELS_KEY = "viewer-trail-ancestor-labels"
 private const val TRAIL_ANCESTOR_IDS_KEY = "viewer-trail-ancestor-ids"
 private const val UNNAMED_LEVEL = "Viewer"

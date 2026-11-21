@@ -1,6 +1,5 @@
 package com.theoriacodex.app.viewer
 
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -24,19 +23,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -49,34 +43,39 @@ import com.theoriacodex.app.recommend.postTagSignals
 import com.theoriacodex.app.related.LocalRelatedPostsSupport
 import com.theoriacodex.app.ui.navigation.LocalTrailOpener
 import com.theoriacodex.app.ui.navigation.TrailOpener
-import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 /**
  * The row under the Viewer's top bar: the trail's crumbs (when this level is a fork), then chips that fork a new trail
  * from [post]: its creator, Similar, and its most characteristic tags. A fork opens only once its first page is in; until
- * then its chip spins, and an empty or failed fork says so on the chip.
+ * then its chip spins, and an empty or failed fork says so on the chip. [forks] are the level's, so a fork started from
+ * the info sheet spins here too, on a chip of its own when it is not one of these.
  */
 @Composable
-internal fun ViewerTrailRow(post: Post, trail: ViewerTrail, creatorBrowsingSources: Set<SourceKey>, modifier: Modifier = Modifier) {
+internal fun ViewerTrailRow(
+    post: Post,
+    trail: ViewerTrail,
+    creatorBrowsingSources: Set<SourceKey>,
+    forks: ViewerTrailForks,
+    onInteraction: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val opener = LocalTrailOpener.current
     val similarSupported = LocalRelatedPostsSupport.current(post.id.source)
     val liked by LocalLikedTagCounts.current.collectAsStateWithLifecycle()
-    val chips = remember(post, liked, trail.levelQuery, similarSupported, creatorBrowsingSources, opener) {
+    val chips = remember(post, liked, trail, similarSupported, creatorBrowsingSources, opener) {
         if (opener == TrailOpener.None) emptyList() else viewerTrailChips(
             creatorProfileActions(post, creatorBrowsingSources).firstNotNullOfOrNull { it.profile },
             similarSupported, postTagSignals(post, liked), trail.levelQuery,
-        )
+        ).filterNot { it.request(post, trail.levelQuery).trailKey() == trail.levelTrailKey }
     }
-    val forks = remember(post.id) { ViewerTrailForks() }
-    val scope = rememberCoroutineScope()
+    val active = forks.busy ?: forks.failed
+    val shown = if (active == null || chips.any { it.key == active.key }) chips else listOf(active) + chips
     val crumbs = trail.crumbs.takeIf { it.size > 1 }.orEmpty()
-    if (crumbs.isEmpty() && chips.isEmpty()) return
+    if (crumbs.isEmpty() && shown.isEmpty()) return
     LazyRow(
         modifier.fillMaxWidth().testTag("viewer-trail-row"),
         contentPadding = PaddingValues(horizontal = 12.dp),
@@ -86,35 +85,12 @@ internal fun ViewerTrailRow(post: Post, trail: ViewerTrail, creatorBrowsingSourc
         itemsIndexed(crumbs) { index, crumb ->
             ViewerCrumbChip(crumb, index, current = index == crumbs.lastIndex) { trail.onCrumb(index) }
         }
-        items(chips, key = { it.key }) { chip ->
-            ViewerForkChip(chip, busy = forks.busy == chip.key, failed = forks.failed == chip.key) {
-                scope.launch { forks.open(chip.key) { opener.openTrail(chip.request(post, trail.levelQuery)) } }
+        items(shown, key = { it.key }) { chip ->
+            ViewerForkChip(chip, busy = forks.busy?.key == chip.key, failed = forks.failed?.key == chip.key) {
+                onInteraction()
+                forks.open(chip, post.id) { opener.openTrail(chip.request(post, trail.levelQuery)) }
             }
         }
-    }
-}
-
-/** Which fork is loading, and which just came back empty, for one post's chips. */
-@Stable
-private class ViewerTrailForks {
-    var busy by mutableStateOf<String?>(null)
-        private set
-    var failed by mutableStateOf<String?>(null)
-        private set
-
-    suspend fun open(key: String, start: suspend () -> Boolean) {
-        if (busy != null) return
-        busy = key
-        failed = null
-        val opened = try {
-            start()
-        } finally {
-            busy = null
-        }
-        if (opened) return
-        failed = key
-        delay(FAILED_FORK_MS)
-        if (failed == key) failed = null
     }
 }
 
@@ -176,31 +152,20 @@ private fun ViewerTrailChip.icon(): ImageVector? = when (this) {
     is ViewerTrailChip.Tag -> null
 }
 
-private const val FAILED_FORK_MS = 2_500L
-
 /**
- * Forks a trail from a tag tapped in [post]'s info sheet, searched like [levelQuery], and calls [onOpened] once the fork
- * is showing. The sheet has no chip to spin, so an empty fork says so in a toast. Null where no trail can open.
+ * Forks a trail from a tag tapped in [post]'s info sheet, searched like [levelQuery], through the level's [forks]. A
+ * started fork calls [onStarted], which closes the sheet so the fork's chip in the trail row shows its progress; while
+ * another fork loads the tap does nothing. Null where no trail can open.
  */
 @Composable
-internal fun rememberViewerTagFork(post: Post, levelQuery: Query?, onOpened: () -> Unit): ((SearchTerm) -> Unit)? {
+internal fun rememberViewerTagFork(forks: ViewerTrailForks, post: Post, levelQuery: Query?, onStarted: () -> Unit): ((SearchTerm) -> Unit)? {
     val opener = LocalTrailOpener.current
-    val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-    val latestOnOpened by rememberUpdatedState(onOpened)
-    return remember(opener, post, levelQuery) {
+    val latestOnStarted by rememberUpdatedState(onStarted)
+    return remember(forks, opener, post, levelQuery) {
         if (opener == TrailOpener.None) return@remember null
-        var opening = false
         { term ->
-            if (!opening) scope.launch {
-                opening = true
-                val opened = try {
-                    opener.openTrail(TrailRequest.Tag(term.value, post.id.source, levelQuery, post))
-                } finally {
-                    opening = false
-                }
-                if (opened) latestOnOpened() else Toast.makeText(context, "No posts for ${term.value.replace('_', ' ')}", Toast.LENGTH_SHORT).show()
-            }
+            val chip = ViewerTrailChip.Tag(term.value)
+            if (forks.open(chip, post.id) { opener.openTrail(chip.request(post, levelQuery)) }) latestOnStarted()
         }
     }
 }

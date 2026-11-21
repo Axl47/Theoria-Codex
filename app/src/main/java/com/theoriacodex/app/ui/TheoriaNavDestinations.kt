@@ -24,6 +24,7 @@ import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavType
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.navArgument
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.codex.CodexDetailScreen
@@ -56,9 +57,11 @@ import com.theoriacodex.app.ui.routes.ViewerRouteEffectCallbacks
 import com.theoriacodex.app.ui.routes.ViewerRouteLiveSourceState
 import com.theoriacodex.app.ui.routes.virtualCodexUi
 import com.theoriacodex.app.ui.trails.forLevel
+import com.theoriacodex.app.ui.trails.isTrailLevel
 import com.theoriacodex.app.ui.trails.rememberViewerLevel
 import com.theoriacodex.app.ui.trails.viewerForkFadeIn
 import com.theoriacodex.app.ui.trails.viewerForkFadeOut
+import com.theoriacodex.app.viewer.ViewerCoveredLifecycle
 import com.theoriacodex.app.viewer.ViewerReturnLifetime
 import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.ViewerScreenCallbacks
@@ -88,14 +91,22 @@ internal fun NavGraphBuilder.theoriaDestinations(shell: TheoriaShell, sharedScop
     composable(AppRoute.CreatorProfile) { CreatorDestination(shell) }
     composable(
         AppRoute.Viewer,
-        // Media owns the expansion/shrink; navigation retains both destinations. A trail fork fades over the Viewer it covers.
+        // Media owns the expansion/shrink; navigation retains both destinations. A trail fork fades over the Viewer it covers,
+        // and any trail level, also one opened from a grid, fades out as it closes.
         enterTransition = { if (initialState.destination.route == AppRoute.Viewer) viewerForkFadeIn() else EnterTransition.None },
         exitTransition = { if (targetState.destination.route == AppRoute.Viewer) viewerForkFadeOut() else null },
         popEnterTransition = { if (initialState.destination.route == AppRoute.Viewer) viewerForkFadeIn() else null },
-        popExitTransition = { if (targetState.destination.route == AppRoute.Viewer) viewerForkFadeOut() else ExitTransition.None },
+        popExitTransition = {
+            if (targetState.destination.route == AppRoute.Viewer || initialState.isTrailLevel()) viewerForkFadeOut() else ExitTransition.None
+        },
     ) { entry ->
-        ViewerReturnLifetime(this)
-        ViewerDestination(shell, entry)
+        // Viewer to Viewer (a fork opening, or closing to its parent) and a trail level's close hold no card return, and
+        // the level going under stops at once, so two levels never play side by side.
+        val top by shell.navController.currentBackStackEntryAsState()
+        ViewerReturnLifetime(this) { shell.navController.currentDestination?.route != AppRoute.Viewer && !entry.isTrailLevel() }
+        ViewerCoveredLifecycle(covered = top.let { it != null && it.id != entry.id && it.destination.route == AppRoute.Viewer }) {
+            ViewerDestination(shell, entry)
+        }
     }
     composable(AppRoute.Settings) { SettingsScreenDestination(shell) }
     composable(AppRoute.Triage, arguments = triageArguments) { entry -> TriageDestination(shell, entry.triageRequest()) }

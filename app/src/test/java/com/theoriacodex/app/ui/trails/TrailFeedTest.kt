@@ -4,9 +4,11 @@ import com.theoriacodex.app.ui.trails.TrailTestData.post
 import com.theoriacodex.app.ui.trails.TrailTestData.related
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -52,6 +54,30 @@ class TrailFeedTest {
         feed.loadNextPage()
         advanceUntilIdle()
         assertEquals(3, pager.calls)
+    }
+
+    @Test
+    fun `a page that outlasts the pager's own timeout fails like any other, and paging goes on`() = runTest {
+        var calls = 0
+        val pager = TrailPager {
+            calls++
+            when (calls) {
+                1 -> page("a", more = true)
+                2 -> withTimeout(10) { awaitCancellation() }
+                else -> page("a", "b", more = false)
+            }
+        }
+        val feed = feed(pager, this)
+        feed.start()
+
+        feed.loadNextPage()
+        advanceUntilIdle()
+        assertFalse(feed.viewerFeed.loadingMore)
+        assertTrue(feed.viewerFeed.canLoadMore)
+
+        feed.loadNextPage()
+        advanceUntilIdle()
+        assertEquals(listOf("a", "b"), feed.ids())
     }
 
     @Test

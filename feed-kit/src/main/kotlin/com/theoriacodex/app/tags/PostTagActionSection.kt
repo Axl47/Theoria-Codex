@@ -611,7 +611,8 @@ private fun LazyListScope.postTagSections(
     } else {
         if (filter.available && filter.open) item(key = "tag-filter") { PostTagFilterField(filter) }
         postTagList(groups, expandedGroups, onExpandGroup, filter, chip)
-        if (groups.isNotEmpty()) postTagHint()
+        // Where a tap forks a trail, the hint about tapping to edit the query would mislead.
+        if (groups.isNotEmpty() && sheetExtras?.onFork == null) postTagHint()
     }
     sheetExtras?.afterTags?.invoke(this)
 }

@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
@@ -121,6 +122,7 @@ private fun ViewerLoadedScreen(
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val scope = rememberCoroutineScope()
     val screen = remember { ViewerScreenState() }
+    DisposableEffect(screen) { onDispose { screen.trailForks.close() } }
     val postPagerState = key(uiState.session, navigation.branchAnchor) {
         rememberPagerState(initialPage = navigation.currentIndex, pageCount = { posts.size })
     }

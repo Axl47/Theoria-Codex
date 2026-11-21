@@ -189,7 +189,10 @@ internal fun ViewerInfoSheet(
                 scrollToAfterTags = openedAtComments,
                 scrollToKey = highlightedComment,
                 filterBehindIcon = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE,
-                onFork = rememberViewerTagFork(post, saveToCodexQuery) { controls.setInfoSheetVisible(false) },
+                onFork = rememberViewerTagFork(controls.trailForks, post, saveToCodexQuery) {
+                    controls.setInfoSheetVisible(false)
+                    controls.markInteraction()
+                },
                 afterTags = {
                     commentsState?.let { state ->
                         val view = commentsView(
