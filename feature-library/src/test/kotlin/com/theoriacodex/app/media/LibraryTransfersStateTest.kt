@@ -1,7 +1,7 @@
 package com.theoriacodex.app.media
 
 import com.theoriacodex.app.testing.testPost
-import com.theoriacodex.app.ui.undo.UndoSlot
+import com.theoriacodex.app.ui.undo.DEFAULT_UNDO_DURATION
 import com.theoriacodex.domain.model.ImageRef
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.time.Duration.Companion.milliseconds
 
 class LibraryTransfersStateTest {
     @Test fun `only Codices kept offline get a ring, filled by their current posts that are settled`() {
@@ -45,26 +46,20 @@ class LibraryTransfersStateTest {
         assertEquals(LibraryTransfersStatus(active = false, remaining = 0, hasContent = false), libraryTransfersStatus(OfflineStorageUiState(), emptyList()))
     }
 
-    @Test fun `removed downloads hide at once, undo shows them, and expiry commits the removal`() = runTest {
+    @Test fun `a download removal waits under its label, then commits its items and file choice`() = runTest {
         val commits = mutableListOf<Pair<Set<Long>, Boolean>>()
-        val undo = UndoSlot()
-        val removals = DownloadRemovals({ ids, files -> commits += ids to files }, backgroundScope)
+        val removals = DownloadRemovals({ ids, files -> commits += ids to files; true }, backgroundScope)
 
-        removals.remove(undo, setOf(1L), deleteFiles = true, downloadUndoAnchor(1))
-        assertEquals(setOf(1L), removals.hidden.value)
-        assertEquals("Deleted file", undo.offer.value?.label)
-        undo.act(checkNotNull(undo.offer.value))
+        removals.remove(setOf(1L), deleteFiles = true, downloadUndoAnchor(1))
+        removals.remove(setOf(2L, 3L), deleteFiles = false, DownloadsUndoAnchor)
+        assertEquals(
+            listOf("Deleted file", "Removed 2 downloads"),
+            removals.pending.value.values.map { it.label },
+        )
+        advanceTimeBy(DEFAULT_UNDO_DURATION + 1.milliseconds)
         runCurrent()
-        assertEquals(emptySet<Long>(), removals.hidden.value)
-        assertTrue(commits.isEmpty())
-
-        removals.remove(undo, setOf(1L, 2L), deleteFiles = false, DownloadsUndoAnchor)
-        advanceTimeBy(6_000)
-        runCurrent()
-        assertEquals(listOf(setOf(1L, 2L) to false), commits)
-        advanceTimeBy(3_000)
-        runCurrent()
-        assertEquals(emptySet<Long>(), removals.hidden.value)
+        assertEquals(listOf(setOf(1L) to true, setOf(2L, 3L) to false), commits)
+        assertTrue(removals.pending.value.isEmpty())
     }
 
     private fun download(id: Long, status: PostDownloadStatus) = PostDownloadItem(

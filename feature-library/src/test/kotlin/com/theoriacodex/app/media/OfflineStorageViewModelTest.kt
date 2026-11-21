@@ -1,7 +1,8 @@
 package com.theoriacodex.app.media
 
 import com.theoriacodex.app.testing.testPost
-import com.theoriacodex.app.ui.undo.UndoSlot
+import com.theoriacodex.app.ui.undo.PendingRemoval
+import com.theoriacodex.app.ui.undo.UndoLifetime
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.InMemoryCodexRepository
@@ -47,22 +48,21 @@ class OfflineStorageViewModelTest {
             assertEquals(1, initial.offline.postCount)
             assertEquals(1, initial.offline.mediaCount)
 
-            val undo = UndoSlot()
-            owner.remove("codex:a", undo)
-            owner.state.first { it.owners.map(OfflineStorageOwner::id) == listOf("codex:b") }
-            assertEquals(offlineOwnerUndoAnchor("codex:a"), undo.offer.value?.anchor)
-            undo.act(checkNotNull(undo.offer.value))
+            owner.removeDeferred("codex:a")
+            val hidden = owner.state.first { it.owners.map(OfflineStorageOwner::id) == listOf("codex:b") }
+            assertEquals("Removed First", hidden.pendingRemovals["codex:a"]?.label)
+            owner.actOnRemoval("codex:a")
             owner.state.first { it.owners.size == 2 }
             assertEquals(setOf("codex:a", "codex:b"), coordinator.store.snapshot.value.postsByOwner.keys)
 
-            owner.remove("codex:a", undo)
-            undo.expire(LIBRARY_TRANSFERS_UNDO_SCOPE)
+            owner.removeDeferred("codex:a", UndoLifetime.UntilLeft)
+            owner.commitRemovals()
             owner.state.first { it.hiddenOwners.isEmpty() && it.owners.map(OfflineStorageOwner::id) == listOf("codex:b") }
             assertEquals(setOf("codex:b"), coordinator.store.snapshot.value.postsByOwner.keys)
             assertNotNull(coordinator.find(post.id))
 
-            owner.removeAll(undo)
-            undo.expire(LIBRARY_TRANSFERS_UNDO_SCOPE)
+            owner.removeAll()
+            owner.commitRemovals()
             owner.state.first { !it.working && it.hiddenOwners.isEmpty() && it.offline.postCount == 0 }
             assertNull(coordinator.find(post.id))
         }
@@ -77,7 +77,7 @@ class OfflineStorageViewModelTest {
             val owner = OfflineStorageViewModel(
                 codices, coordinator, readDisposableUsage = { usage },
                 clearDisposable = { usage = DisposableMediaCacheSnapshot(animationBytes = 20); false },
-                scopeOverride = scope,
+                removalScope = scope, scopeOverride = scope,
             )
             owner.open()
             val opened = owner.state.first { it.isOpen && !it.refreshing && it.disposable != null }
@@ -137,6 +137,31 @@ class OfflineStorageViewModelTest {
         }
     }
 
+    @Test fun `removing a Codex's copy until left hides its ring and holds its Undo by Codex id until committed`() = runBlocking {
+        withTimeout(10_000) {
+            codices.ensureCodex("a", "First")
+            val kept = post()
+            codices.addItems("a", listOf(kept))
+            val coordinator = coordinator()
+            coordinator.store.save(kept, kept.media, "codex:a") { _, file -> file.writeText("media") }
+            val owner = owner(coordinator)
+            owner.state.first { it.codexStates["a"] == CodexOfflineState(1f) }
+
+            owner.removeDeferred(codexOfflineOwner("a"), UndoLifetime.UntilLeft)
+            val pending = owner.state.first { "a" !in it.codexStates }
+            assertEquals(PendingRemoval.Status.Waiting, pending.codexRemovals["a"]?.status)
+            owner.actOnRemoval(codexOfflineOwner("a"))
+            owner.state.first { it.codexStates["a"] == CodexOfflineState(1f) && it.codexRemovals.isEmpty() }
+
+            owner.removeDeferred(codexOfflineOwner("a"), UndoLifetime.UntilLeft)
+            owner.state.first { "a" in it.codexRemovals }
+            assertEquals(setOf("codex:a"), coordinator.store.snapshot.value.postsByOwner.keys)
+            owner.commitRemovals()
+            val committed = owner.state.first { it.codexRemovals.isEmpty() && it.offline.postCount == 0 }
+            assertNull(committed.codexStates["a"])
+        }
+    }
+
     @Test fun `making an empty Codex available offline reports why it could not start`() = runBlocking {
         withTimeout(10_000) {
             codices.ensureCodex("a", "First")
@@ -167,9 +192,8 @@ class OfflineStorageViewModelTest {
             owner.makeAvailableOffline("a")
             started.await()
             owner.state.first { it.owners.any(OfflineStorageOwner::preparing) }
-            val undo = UndoSlot()
-            owner.removeAll(undo)
-            undo.expire(LIBRARY_TRANSFERS_UNDO_SCOPE)
+            owner.removeAll()
+            owner.commitRemovals()
             cancelled.await()
             owner.state.first { !it.working && it.hiddenOwners.isEmpty() }
             release.complete(Unit)
@@ -185,7 +209,7 @@ class OfflineStorageViewModelTest {
 
     private fun owner(coordinator: OfflineMediaCoordinator, repository: CodexRepository = codices) = OfflineStorageViewModel(
         repository, coordinator, readDisposableUsage = { DisposableMediaCacheSnapshot() },
-        clearDisposable = { true }, scopeOverride = scope,
+        clearDisposable = { true }, removalScope = scope, scopeOverride = scope,
     )
 
     private fun post(id: String = "offline"): Post {

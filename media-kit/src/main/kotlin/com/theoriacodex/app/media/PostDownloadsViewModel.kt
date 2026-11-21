@@ -15,6 +15,7 @@ import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -56,14 +57,14 @@ class PostDownloadsViewModel(
 
     suspend fun localFile(item: PostDownloadItem): DownloadedPostFile? = backend.localFile(item)
 
-    fun remove(itemIds: Set<Long>, deleteFiles: Boolean) {
-        command {
-            queue.removeItems(itemIds, deleteFiles)
-            if (queue.batches.value.any { batch -> batch.items.any { it.id in itemIds } }) {
-                feedback.add("Some downloads could not be removed. Check file access and try again.")
-            }
-        }
-    }
+    /**
+     * Removes the downloads (and their files, for [deleteFiles]) on the queue's thread and returns whether every one
+     * went; the caller offers Retry otherwise. A deferred removal commits through this after its Undo.
+     */
+    suspend fun removeNow(itemIds: Set<Long>, deleteFiles: Boolean): Boolean = queueScope.async {
+        queue.removeItems(itemIds, deleteFiles)
+        queue.batches.value.none { batch -> batch.items.any { it.id in itemIds } }
+    }.await()
 
     fun cancel(batchId: Long) {
         command { queue.cancel(batchId) }

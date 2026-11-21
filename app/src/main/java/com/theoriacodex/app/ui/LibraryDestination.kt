@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Alignment
@@ -12,12 +13,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.theoriacodex.app.codex.CodexListDeletes
 import com.theoriacodex.app.codex.CodexListScreen
 import com.theoriacodex.app.codex.likesCodexIdForProfile
 import com.theoriacodex.app.library.BareSectionHeader
 import com.theoriacodex.app.library.LibraryHeader
 import com.theoriacodex.app.library.LibrarySection
 import com.theoriacodex.app.library.LibrarySectionHeader
+import com.theoriacodex.app.media.CodexOfflineRemovalUndo
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.recents.RecentSearchSaves
@@ -72,7 +75,11 @@ internal fun LibraryDestination(shell: TheoriaShell) {
             LibrarySection.Saved -> null
             LibrarySection.History -> RecentsUndoAnchor
         }
-        undoAnchor?.let { UndoPill(it, Modifier.align(Alignment.BottomCenter)) }
+        Column(Modifier.align(Alignment.BottomCenter), horizontalAlignment = Alignment.CenterHorizontally) {
+            // Offline copies removed from a Codex's menu opened here; leaving the Library commits them.
+            CodexOfflineRemovalUndo()
+            undoAnchor?.let { UndoPill(it) }
+        }
     }
 }
 
@@ -94,7 +101,7 @@ private fun SavedLibraryDestination(shell: TheoriaShell, header: LibrarySectionH
 }
 
 private fun TheoriaShell.clearRecents(target: RecentsClearTarget, state: RecentsDestinationState, undo: UndoSlot) {
-    scope.launch {
+    undo.scope.launch {
         recentsClearWorkflow.clear(
             target = target,
             watchedPosts = state.watchedPosts,
@@ -126,7 +133,7 @@ private fun rememberRecentsDurationOwner(shell: TheoriaShell, state: RecentsDest
 @Composable
 private fun RecentsDestination(shell: TheoriaShell, header: LibrarySectionHeader) {
     val undo = LocalUndoSlot.current
-    val removal = remember(shell, undo) { RecentsEntryRemoval(shell.data.recentsRepository, undo, shell.scope) }
+    val removal = remember(shell, undo) { RecentsEntryRemoval(shell.data.recentsRepository, undo, undo.scope) }
     val removedSearch by removal.removedSearch.collectAsStateWithLifecycle()
     val savedSearchOwner = shell.owners.savedSearches
     val savedSearches by savedSearchOwner.savedSearches.collectAsStateWithLifecycle()
@@ -188,6 +195,10 @@ internal fun CodexLibraryDestination(
     val commands = shell.owners.codexCommands
     // The keyed overlay floats over whatever screen opened it, so its offers use the shell's own pill.
     val undoAnchor = if (actionCodexId == null) CodexUndoAnchors.Library else UndoAnchor.App
+    val pendingDeletes by commands.pendingDeletes.collectAsStateWithLifecycle()
+    // Codex detail renames in its title, so its menu leaves Rename out.
+    val fromDetail = actionCodexId != null &&
+        shell.navController.currentBackStackEntry?.arguments?.getString("codexId") == actionCodexId
     CodexDestinationStateBoundary(
         data = shell.data,
         sources = shell.sources,
@@ -220,7 +231,10 @@ internal fun CodexLibraryDestination(
             onCreateCodex = { name -> commands.create(state.activeProfile.profileId, name, undoAnchor) },
             onRenameCodex = { id, name -> commands.rename(id, name, undoAnchor) },
             onSetAutomaticTag = { id, tag, enabled -> commands.automaticTag(id, tag, enabled, undoAnchor) },
-            onDeleteCodex = { id -> commands.delete(id, state.activeProfile.profileId, undoAnchor) },
+            onDeleteCodex = { id ->
+                val name = state.visibleCodices.firstOrNull { it.codexId == id }?.name
+                commands.delete(id, state.activeProfile.profileId, undoAnchor, name)
+            },
             initialActionCodexId = actionCodexId,
             onActionsDismissed = { shell.overlays.codexActionTargetId = null },
             likesCodexId = likesCodexIdForProfile(state.activeProfile.profileId),
@@ -231,6 +245,9 @@ internal fun CodexLibraryDestination(
                 shell.scope.launch { shell.data.settingsRepository.updateSettings { it.copy(codexLibrarySort = sort) } }
             },
             header = header,
+            deletes = CodexListDeletes(pendingDeletes, commands::actOnDelete, commands::commitDeletes),
+            reorderFailures = commands.reorderFailures,
+            renameInPlace = fromDetail,
         )
     }
 }

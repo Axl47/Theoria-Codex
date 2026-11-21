@@ -191,6 +191,9 @@ interface TheoriaAppContainer {
 
     /** Settings → Sites: user-added booru sites. */
     val customSites: CustomSitesController
+
+    /** Lives as long as the process: work that must finish after the screen or Activity that started it. */
+    val applicationScope: CoroutineScope
 }
 
 interface TheoriaAppContainerOwner {
@@ -211,6 +214,7 @@ internal class DefaultTheoriaAppContainer(
     private val appContext = context.applicationContext
     private val storageDirectory = File(appContext.filesDir, "theoria_codex")
     private val durableStoreScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    override val applicationScope: CoroutineScope get() = durableStoreScope
     private val offlineStore = OfflineMediaStore(File(storageDirectory, "offline_media"))
     private val fileStoreRecoveryRegistry = FileStoreRecoveryRegistry()
     // Opened before anything starts background work: a pins file from a newer build fails construction, and a retry

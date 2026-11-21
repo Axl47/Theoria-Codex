@@ -90,6 +90,7 @@ class JourneyAppContainer(
     private val appContext = context.applicationContext
     private val ownerJob = SupervisorJob(scope.coroutineContext[Job])
     private val ownerScope = CoroutineScope(scope.coroutineContext + ownerJob + Dispatchers.IO)
+    override val applicationScope: CoroutineScope get() = ownerScope
     val registry = JourneySourceRegistry(
         postsBySource, pageSize,
         providerShapedSources.associateWith { ProviderShapedSource(postsBySource.getValue(it), httpClient) },

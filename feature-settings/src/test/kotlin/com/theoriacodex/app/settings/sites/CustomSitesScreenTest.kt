@@ -21,8 +21,6 @@ import com.theoriacodex.app.customsites.BuiltInSiteSummary
 import com.theoriacodex.app.customsites.BuiltInTestResult
 import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.settings.BuiltInAccounts
-import com.theoriacodex.app.ui.undo.ProvideUndoSlot
-import com.theoriacodex.app.ui.undo.UndoSlot
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.ProbeFailure
 import com.theoriacodex.domain.source.ProtocolFamily
@@ -40,12 +38,11 @@ class CustomSitesScreenTest {
     @get:Rule val compose = createComposeRule()
 
     private fun show(controller: FakeCustomSitesController, accountControls: @Composable (SourceKey) -> Unit = {}) {
-        val undo = UndoSlot()
-        val owner = CustomSitesViewModel(controller, undo = undo)
+        val owner = CustomSitesViewModel(controller)
         val accounts = BuiltInAccounts(summary = { null }, controls = accountControls)
         compose.setContent {
             val state by owner.state.collectAsStateWithLifecycle()
-            ProvideUndoSlot(undo) { MaterialTheme { CustomSitesScreen(state, accounts, owner::onAction, onBack = {}) } }
+            MaterialTheme { CustomSitesScreen(state, accounts, owner::onAction, onBack = {}) }
         }
     }
 

@@ -32,25 +32,28 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.ui.components.EmptyState
-import com.theoriacodex.app.ui.undo.LocalUndoSlot
-import com.theoriacodex.app.ui.undo.UndoAnchor
-import com.theoriacodex.app.ui.undo.UndoLeaveEffect
-import com.theoriacodex.app.ui.undo.UndoRow
+import com.theoriacodex.app.ui.undo.DeferredRemovalRow
+import com.theoriacodex.app.ui.undo.PendingRemoval
+import com.theoriacodex.app.ui.undo.SurfaceLeaveEffect
 
-/** What the offline rows can do; [remove] and [removeAll] are deferred destruction with Undo in the sheet. */
+/**
+ * What the offline rows can do; [remove] and [removeAll] are deferred destruction with Undo in the sheet, and
+ * [actOnRemoval] is a pending removal's Undo or Retry (see [OfflineStorageUiState.pendingRemovals]).
+ */
 class OfflineRowActions(
     val retry: (owner: String) -> Unit,
     val cancel: (owner: String) -> Unit,
     val remove: (owner: String) -> Unit,
     val removeAll: () -> Unit,
+    val actOnRemoval: (key: String) -> Unit,
 )
 
 /**
  * The Library's one sheet for offline Codices (with progress, Cancel, Retry, Remove) above exported
- * downloads. Opened for a Codex ([markedCodexId]), it scrolls to and marks that Codex's row. Leaving the
- * sheet commits any removal still waiting on Undo.
+ * downloads. Opened for a Codex ([markedCodexId]), it scrolls to and marks that Codex's row. Each pending removal
+ * draws its Undo where the item was ([downloadRemovals], [OfflineStorageUiState.pendingRemovals]); leaving the
+ * sheet calls [onLeave], which commits them.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,16 +61,15 @@ fun LibraryTransfersSheet(
     offline: OfflineStorageUiState,
     offlineActions: OfflineRowActions,
     batches: List<PostDownloadBatch>,
-    hiddenDownloads: Set<Long>,
+    downloadRemovals: DownloadRemovalRows,
     downloadActions: DownloadTileActions,
     markedCodexId: String?,
     onDismiss: () -> Unit,
+    onLeave: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        UndoLeaveEffect(LIBRARY_TRANSFERS_UNDO_SCOPE)
-        val liveAnchor = LocalUndoSlot.current.offer.collectAsStateWithLifecycle().value?.anchor
-            ?.takeIf { it.scope == LIBRARY_TRANSFERS_UNDO_SCOPE }
-        val content = TransfersSheetContent(offline, batches, hiddenDownloads, liveAnchor)
+        SurfaceLeaveEffect(onLeave = onLeave)
+        val content = TransfersSheetContent(offline, batches, downloadRemovals.pending)
         val marked = markedCodexId?.let(::codexOfflineOwner)
         val grid = rememberLazyGridState()
         // Owners may still be loading when the sheet opens, so scroll once the marked row exists.
@@ -83,45 +85,54 @@ fun LibraryTransfersSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (!content.showOffline && !content.showDownloads) fullLine("empty") { EmptyState("Nothing offline or downloaded") }
-            if (content.showOffline) offlineSection(offline, offlineActions, content.offlineUndo, marked)
-            if (content.showDownloads) downloadsSection(content, batches, hiddenDownloads, downloadActions)
+            if (content.showOffline) offlineSection(offline, offlineActions, marked)
+            if (content.showDownloads) downloadsSection(content, batches, downloadRemovals, downloadActions)
         }
     }
 }
 
+/** The pending download removals and the action of each one's row (Undo, or Retry after a failure). */
+class DownloadRemovalRows(val pending: Map<DownloadRemoval, PendingRemoval>, val act: (DownloadRemoval) -> Unit)
+
 /**
- * What the sheet lists given the live Undo offer ([liveAnchor]): a hidden download keeps its slot, drawn as
- * Undo, while its own offer lives; section-wide offers draw under their section's header.
+ * What the sheet lists given the pending removals: a download removed from its tile keeps that slot, drawn as
+ * Undo; section-wide removals draw under their section's header.
  */
 private class TransfersSheetContent(
     offline: OfflineStorageUiState,
     batches: List<PostDownloadBatch>,
-    hiddenDownloads: Set<Long>,
-    liveAnchor: UndoAnchor?,
+    downloadRemovals: Map<DownloadRemoval, PendingRemoval>,
 ) {
     private val items = batches.asReversed().flatMap { it.items }
-    val visibleItems = items.filter { it.id !in hiddenDownloads }
-    val shownItems = items.filter { it.id !in hiddenDownloads || liveAnchor == downloadUndoAnchor(it.id) }
-    val offlineUndo = liveAnchor?.takeIf { it.key == OfflineAllUndoAnchor.key || it.key in offline.hiddenOwners }
-    val downloadsUndo = liveAnchor?.takeIf { it == DownloadsUndoAnchor }
-    val showOffline = offline.owners.isNotEmpty() || offlineUndo != null || offline.message != null
-    val showDownloads = shownItems.isNotEmpty() || downloadsUndo != null
+    private val hidden = downloadRemovals.keys.flatMapTo(mutableSetOf()) { it.ids }
 
-    /** The grid index of the first offline owner row: after the header, any message and any Undo row. */
-    val offlineRowsStart = 1 + listOfNotNull(offline.message, offlineUndo).size
+    /** Each download removed from its own tile, by id: its row takes that tile's place. */
+    val tileRemovals = downloadRemovals.keys.filter { it.anchor != DownloadsUndoAnchor }
+        .flatMap { removal -> removal.ids.map { it to removal } }.toMap()
+    val visibleItems = items.filter { it.id !in hidden }
+    val shownItems = items.filter { it.id !in hidden || it.id in tileRemovals }
+    val bulkRemovals = downloadRemovals.keys.filter { it.anchor == DownloadsUndoAnchor }
+    val showOffline = offline.owners.isNotEmpty() || offline.pendingRemovals.isNotEmpty() || offline.message != null
+    val showDownloads = shownItems.isNotEmpty() || bulkRemovals.isNotEmpty()
+
+    /** The grid index of the first offline owner row: after the header, any message and any Undo rows. */
+    val offlineRowsStart = 1 + listOfNotNull(offline.message).size + offline.pendingRemovals.size
 }
 
 private fun LazyGridScope.downloadsSection(
     content: TransfersSheetContent,
     batches: List<PostDownloadBatch>,
-    hidden: Set<Long>,
+    removals: DownloadRemovalRows,
     actions: DownloadTileActions,
 ) {
     fullLine("downloads-header") { DownloadsHeader(batches, content.visibleItems, actions) }
-    content.downloadsUndo?.let { anchor -> fullLine("downloads-undo") { UndoRow(anchor) } }
+    content.bulkRemovals.forEach { removal ->
+        fullLine("downloads-undo:${removal.ids.sorted()}") { removals.RemovalRow(removal) }
+    }
     items(content.shownItems, key = { "download:${it.id}" }) { item ->
-        if (item.id in hidden) {
-            UndoRow(downloadUndoAnchor(item.id))
+        val removal = content.tileRemovals[item.id]
+        if (removal != null) {
+            removals.RemovalRow(removal)
         } else {
             DownloadItemCard(item, batches.firstOrNull { batch -> batch.items.any { it.id == item.id } }, actions)
         }
@@ -131,17 +142,23 @@ private fun LazyGridScope.downloadsSection(
 private fun LazyGridScope.offlineSection(
     offline: OfflineStorageUiState,
     actions: OfflineRowActions,
-    undo: UndoAnchor?,
     marked: String?,
 ) {
     fullLine("offline-header") { OfflineHeader(enabled = offline.owners.isNotEmpty(), onRemoveAll = actions.removeAll) }
     offline.message?.let { message ->
         fullLine("offline-message") { Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
     }
-    undo?.let { anchor -> fullLine("offline-undo") { UndoRow(anchor) } }
+    offline.pendingRemovals.forEach { (key, removal) ->
+        fullLine("offline-undo:$key") { DeferredRemovalRow(removal, onAct = { actions.actOnRemoval(key) }) }
+    }
     items(offline.owners, key = { "offline:${it.id}" }, span = { GridItemSpan(maxLineSpan) }) { owner ->
         OfflineOwnerRow(owner, offline.controlsEnabled, marked = owner.id == marked, actions)
     }
+}
+
+@Composable
+private fun DownloadRemovalRows.RemovalRow(removal: DownloadRemoval) {
+    pending[removal]?.let { DeferredRemovalRow(it, onAct = { act(removal) }) }
 }
 
 private fun LazyGridScope.fullLine(key: String, content: @Composable () -> Unit) {

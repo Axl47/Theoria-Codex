@@ -4,7 +4,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.recommend.HiddenTagsSheet
@@ -38,7 +37,8 @@ internal fun ShellHiddenTagsSheet(shell: TheoriaShell) {
     val settings by repository.observeSettings().collectAsStateWithLifecycle(null)
     val profileId = settings?.activeProfileId
     val undo = LocalUndoSlot.current
-    val scope = rememberCoroutineScope()
+    // Not the sheet's scope: closing the sheet, or a rotation, must not drop the Undo.
+    val scope = undo.scope
     HiddenTagsSheet(
         entries = settings?.activeHiddenTags().orEmpty(),
         onUnhide = { entry ->

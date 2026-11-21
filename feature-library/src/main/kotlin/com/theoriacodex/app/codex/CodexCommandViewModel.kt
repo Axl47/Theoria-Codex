@@ -3,10 +3,11 @@ package com.theoriacodex.app.codex
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theoriacodex.data.repository.ClearedLikesSnapshot
-import com.theoriacodex.data.repository.DeletedCodexSnapshot
 import com.theoriacodex.data.repository.CodexCleaningRequest
 import com.theoriacodex.data.repository.CodexCleaningSnapshot
 import com.theoriacodex.data.repository.CodexRepository
+import com.theoriacodex.app.ui.undo.DeferredRemovals
+import com.theoriacodex.app.ui.undo.PendingRemoval
 import com.theoriacodex.app.ui.undo.UndoAction
 import com.theoriacodex.app.ui.undo.UndoAnchor
 import com.theoriacodex.app.ui.undo.UndoLifetime
@@ -18,7 +19,11 @@ import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
@@ -32,8 +37,6 @@ sealed interface CodexCommand {
     data class Create(val id: String, val name: String) : CodexCommand
     data class Rename(val id: String, val name: String) : CodexCommand
     data class AutomaticTag(val id: String, val tag: CodexAutomaticTag, val enabled: Boolean) : CodexCommand
-    data class Delete(val id: String) : CodexCommand
-    data class RestoreDeleted(val snapshot: DeletedCodexSnapshot) : CodexCommand
     data class ClearLikes(val profileId: String) : CodexCommand
     data class RestoreLikes(val snapshot: ClearedLikesSnapshot) : CodexCommand
     /** [restoring] marks the Undo of a reorder, which offers no Undo of its own. */
@@ -42,16 +45,12 @@ sealed interface CodexCommand {
     data class Restore(val items: List<CodexItem>, val posts: List<Post>) : CodexCommand
 }
 
-/**
- * Where Codex offers are drawn: one Codex's detail screen, the Library's Codices section, or the Library tile
- * cell a deleted Codex vacated.
- */
+/** Where Codex offers are drawn: one Codex's detail screen, or the Library's Codices section. */
 object CodexUndoAnchors {
     const val DETAIL_SCOPE = "codex-detail"
     const val LIBRARY_SCOPE = "library-codices"
     val Library = UndoAnchor(LIBRARY_SCOPE)
     fun detail(codexId: String) = UndoAnchor(DETAIL_SCOPE, codexId)
-    fun tile(codexId: String) = UndoAnchor(LIBRARY_SCOPE, codexId)
 }
 
 /** The outcome of one command; [anchor] is where the command was given and where its Undo or Retry is offered. */
@@ -64,14 +63,6 @@ data class CodexCommandFeedback(
     val anchor: UndoAnchor = CodexUndoAnchors.Library,
 ) {
     val action: CodexCommand? get() = if (succeeded) undo else command
-    private val deleted: Boolean get() = succeeded && command is CodexCommand.Delete
-
-    /**
-     * A deleted Codex's Undo takes the Library tile cell it vacated and stays until the Library is left: its
-     * restore snapshot lives only in memory, and a mistap can cost hundreds of posts.
-     */
-    val offerAnchor: UndoAnchor get() = if (command is CodexCommand.Delete && deleted) CodexUndoAnchors.tile(command.id) else anchor
-    val lifetime: UndoLifetime get() = if (deleted) UndoLifetime.UntilLeft else UndoLifetime.Timed()
 
     /** A rename or a restored order shows in the Library itself, so its success needs no notice. */
     val quiet: Boolean get() = succeeded && (command is CodexCommand.Rename || command is CodexCommand.Reorder)
@@ -86,9 +77,6 @@ data class CodexCommandFeedback(
         is CodexCommand.Create -> if (succeeded) "Codex created" else "Could not create Codex"
         is CodexCommand.Rename -> if (succeeded) "Codex renamed" else "Could not rename Codex"
         is CodexCommand.AutomaticTag -> if (succeeded) "Automatic tag updated" else "Could not update automatic tag"
-        is CodexCommand.Delete -> (undo as? CodexCommand.RestoreDeleted)?.let { "Deleted ${it.snapshot.codex.name}" }
-            ?: if (succeeded) "Codex deleted" else "Could not delete Codex"
-        is CodexCommand.RestoreDeleted -> if (succeeded) "Codex restored" else "Could not restore Codex"
         is CodexCommand.ClearLikes -> if (succeeded) "Likes cleared" else "Could not clear Likes"
         is CodexCommand.RestoreLikes -> if (succeeded) "Likes restored" else "Could not restore Likes"
         is CodexCommand.Reorder -> when {
@@ -104,6 +92,10 @@ data class CodexCommandFeedback(
  * Serial retained mutations with acknowledged feedback; cancelling a UI collector loses no Retry or Undo.
  * Notices without an action are shown as snackbars; Undo and Retry move into the app's [UndoSlot] through
  * [offer], anchored where each command was given.
+ *
+ * Deleting a Codex is deferred destruction ([pendingDeletes]): it hides at once and is deleted when the Library is
+ * left ([commitDeletes]) or this owner is cleared, in [removalScope], which must be application-lived. The commit
+ * also stops and drops the Codex's offline copy through [releaseOffline].
  */
 class CodexCommandViewModel(
     private val repository: CodexRepository,
@@ -112,12 +104,22 @@ class CodexCommandViewModel(
     private val commitReorder: suspend (List<String>) -> Unit,
     private val cleaning: CodexCleaningService,
     scopeOverride: CoroutineScope? = null,
+    removalScope: CoroutineScope? = null,
+    private val releaseOffline: suspend (codexId: String) -> Unit = {},
 ) : ViewModel() {
     private val scope = scopeOverride ?: viewModelScope
     private val mutex = Mutex()
     private var nextId = 0L
     private val mutableFeedback = MutableStateFlow<List<CodexCommandFeedback>>(emptyList())
     val feedback = mutableFeedback.asStateFlow()
+    private val deletions = DeferredRemovals<String>(removalScope ?: scope, ::commitDelete)
+    private val mutableReorderFailures = MutableSharedFlow<List<String>>(extraBufferCapacity = 8)
+
+    /** Codices deleted but not yet gone, by id: hidden from the Library and save targets, each tile showing Undo. */
+    val pendingDeletes: StateFlow<Map<String, PendingRemoval>> = deletions.pending
+
+    /** Each order whose write failed, so the grid can drop that optimistic order (its Retry is in the slot). */
+    val reorderFailures: SharedFlow<List<String>> = mutableReorderFailures.asSharedFlow()
 
     // Each command takes the anchor of the surface it was given on; Library is where the Codex menus live.
     fun clean(profileId: String, targetId: String, comparisonIds: Set<String>, anchor: UndoAnchor = CodexUndoAnchors.Library) =
@@ -130,11 +132,27 @@ class CodexCommandViewModel(
         submit(CodexCommand.AutomaticTag(id, tag, enabled), anchor)
     fun reorder(ids: List<String>, anchor: UndoAnchor = CodexUndoAnchors.Library) = submit(CodexCommand.Reorder(ids.toList()), anchor)
 
-    /** Deleting from Codex detail navigates to the Library, so its Undo is offered there by default. */
-    fun delete(id: String, profileId: String, anchor: UndoAnchor = CodexUndoAnchors.Library) = submit(
-        if (id == likesCodexIdForProfile(profileId)) CodexCommand.ClearLikes(profileId) else CodexCommand.Delete(id),
-        anchor,
-    )
+    /**
+     * Deletes Codex [id] (named [name]) until the Library is left, with Undo in its tile; deleting from Codex detail
+     * navigates there. Likes is cleared instead, through the slot at [anchor].
+     */
+    fun delete(id: String, profileId: String, anchor: UndoAnchor = CodexUndoAnchors.Library, name: String? = null) {
+        if (id == likesCodexIdForProfile(profileId)) return submit(CodexCommand.ClearLikes(profileId), anchor)
+        deletions.remove(id, name?.let { "Deleted $it" } ?: "Deleted Codex", UndoLifetime.UntilLeft)
+    }
+
+    /** A deleted Codex tile's Undo, or its Retry after the deletion failed. */
+    fun actOnDelete(id: String) = deletions.act(id)
+
+    /** Deletes every Codex still waiting on Undo; the Library calls it when left. */
+    fun commitDeletes() = deletions.commitAll()
+
+    override fun onCleared() = deletions.commitAll()
+
+    private suspend fun commitDelete(id: String): Boolean = runCatchingPreservingCancellation {
+        mutex.withLock { repository.deleteCodexForUndo(id) }
+        releaseOffline(id)
+    }.isSuccess
 
     fun remove(id: String, items: List<CodexItem>, posts: List<Post>, anchor: UndoAnchor = CodexUndoAnchors.detail(id)) {
         val postIds = posts.mapTo(mutableSetOf(), Post::id)
@@ -160,9 +178,9 @@ class CodexCommandViewModel(
         return { mutex.withLock { execute(restore) } }
     }
 
-    fun acknowledge(id: Long, performAction: Boolean) {
-        val item = take(id) ?: return
-        if (performAction) item.action?.let { submit(it, item.anchor) }
+    /** Dismisses feedback [id] without acting on it. */
+    fun acknowledge(id: Long) {
+        take(id)
     }
 
     /** Moves actionable feedback [id] into [undo]; its Undo or Retry then runs here, in this owner's scope. */
@@ -170,7 +188,7 @@ class CodexCommandViewModel(
         val item = take(id) ?: return
         val action = item.action ?: return
         val label = item.undoAction ?: return
-        undo.offer(scope, UndoOffer(item.message, item.offerAnchor, label, item.lifetime) { submit(action, item.anchor) })
+        undo.offer(scope, UndoOffer(item.message, item.anchor, label) { submit(action, item.anchor) })
     }
 
     private fun take(id: Long): CodexCommandFeedback? {
@@ -188,6 +206,7 @@ class CodexCommandViewModel(
                     ++nextId, command, result.isSuccess, outcome?.undo, outcome?.removedCount ?: 0, anchor,
                 )
                 mutableFeedback.update { it + feedback }
+                if (command is CodexCommand.Reorder && result.isFailure) mutableReorderFailures.tryEmit(command.visibleIds)
             }
         }
     }
@@ -216,8 +235,6 @@ class CodexCommandViewModel(
             is CodexCommand.Create -> repository.ensureCodex(command.id, command.name)
             is CodexCommand.Rename -> repository.renameCodex(command.id, command.name)
             is CodexCommand.AutomaticTag -> repository.setAutomaticTag(command.id, command.tag, command.enabled)
-            is CodexCommand.Delete -> return Outcome(repository.deleteCodexForUndo(command.id)?.let(CodexCommand::RestoreDeleted))
-            is CodexCommand.RestoreDeleted -> repository.restoreDeletedCodex(command.snapshot)
             is CodexCommand.ClearLikes -> return Outcome(clearLikes(command.profileId)?.let(CodexCommand::RestoreLikes))
             is CodexCommand.RestoreLikes -> restoreLikes(command.snapshot)
             is CodexCommand.Reorder -> return Outcome(reorder(command))

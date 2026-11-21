@@ -8,7 +8,9 @@ import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.app.ui.undo.PendingRemoval
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 
 internal class CodexListUiState {
@@ -38,6 +40,12 @@ internal data class CodexListPresentation(
     val libraryUsage: Map<String, CodexUsage>? = null,
     /** For a cleaning target and its comparisons, the target's posts each comparison also holds. */
     val observeCleaningMatches: (String, List<String>) -> Flow<Map<String, Set<PostId>>> = { _, _ -> flowOf(emptyMap()) },
+    /** Codices waiting to be deleted, by id; each keeps its tile's cell, drawn as its Undo. */
+    val pendingDeletes: Map<String, PendingRemoval> = emptyMap(),
+    /** Orders whose write failed; the grid drops the matching optimistic order. */
+    val reorderFailures: Flow<List<String>> = emptyFlow(),
+    /** The menu was opened from a screen whose title renames in place, so it shows no Rename row. */
+    val renameInPlace: Boolean = false,
 ) {
     /** What the grid shows: Likes lives in Library's Saved section instead. */
     val libraryCodices: List<Codex> get() = codices.filterNot { it.codexId == likesCodexId }
@@ -64,4 +72,8 @@ internal data class CodexListActions(
     val cleanCodex: (String, Set<String>) -> Unit,
     val makeAvailableOffline: ((String) -> Unit)? = null,
     val setLibrarySort: (CodexLibrarySort) -> Unit = {},
+    /** A deleted Codex tile's Undo, or its Retry after the deletion failed. */
+    val actOnDelete: (String) -> Unit = {},
+    /** The Library was left: commits the Codices waiting to be deleted. */
+    val leaveLibrary: () -> Unit = {},
 )

@@ -65,6 +65,7 @@ import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.ui.undo.ProvideUndoSlot
 import com.theoriacodex.app.ui.undo.UndoSlot
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.app.settings.SettingsAction
@@ -107,9 +108,9 @@ internal fun TheoriaAppContent(
     }
 }
 
-/** Holds the app's one [UndoSlot] in the Activity's ViewModel store. */
+/** Holds the app's one [UndoSlot] in the Activity's ViewModel store; its scope outlives a recreation. */
 private class UndoSlotOwner : ViewModel() {
-    val slot = UndoSlot()
+    val slot = UndoSlot(viewModelScope)
 }
 
 @Composable
@@ -366,11 +367,13 @@ internal fun rememberPostMenuActions(shell: TheoriaShell): PostMenuActions = rem
 private fun SaveToCodexOverlay(shell: TheoriaShell) {
     val pendingSave = shell.pendingSave
     val posts = pendingSave.posts
+    // A Codex waiting to be deleted is no save target.
+    val deleting by shell.owners.codexCommands.pendingDeletes.collectAsStateWithLifecycle()
     SaveToCodexDestinationStateBoundary(shell.data, posts, pendingSave.query) { state ->
         SaveToCodexSheet(
             profiles = state.settings.recommendationProfiles,
             initialProfileId = state.activeProfile.profileId,
-            codicesByProfile = state.codicesByProfile,
+            codicesByProfile = state.codicesByProfile.mapValues { (_, codices) -> codices.filterNot { it.codexId in deleting } },
             codexItemCounts = state.itemCounts,
             codexCoverCandidates = state.coverCandidates,
             relevanceScores = remember(state.relevanceScores, pendingSave.query) {

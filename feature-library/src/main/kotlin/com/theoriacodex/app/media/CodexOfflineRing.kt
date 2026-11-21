@@ -24,7 +24,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.ui.undo.UndoAnchor
 import kotlin.math.roundToInt
 
 /**
@@ -46,13 +45,24 @@ interface CodexOfflineControls {
     /** Opens the Library's offline sheet, scrolled to and marking [codexId]'s row when one is given. */
     fun openSheet(codexId: String?)
 
-    /** Removes [codexId]'s offline copy as deferred destruction, with its Undo drawn at [anchor]. */
-    fun remove(codexId: String, anchor: UndoAnchor)
+    /**
+     * Removes [codexId]'s offline copy as deferred destruction until the surface showing its Undo is left: the ring
+     * hides at once and [LocalCodexOfflineRemovals] holds the removal for [CodexOfflineRemovalUndo].
+     */
+    fun remove(codexId: String)
+
+    /** Undo, or Retry after a failure, for [codexId]'s pending removal. */
+    fun actOnRemoval(codexId: String)
+
+    /** Commits every pending offline removal; the surface showing their Undo calls it when left. */
+    fun commitRemovals()
 
     companion object {
         val None = object : CodexOfflineControls {
             override fun openSheet(codexId: String?) = Unit
-            override fun remove(codexId: String, anchor: UndoAnchor) = Unit
+            override fun remove(codexId: String) = Unit
+            override fun actOnRemoval(codexId: String) = Unit
+            override fun commitRemovals() = Unit
         }
     }
 }

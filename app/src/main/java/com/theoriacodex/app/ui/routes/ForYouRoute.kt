@@ -7,7 +7,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -24,6 +23,7 @@ import com.theoriacodex.app.recommend.state.ForYouEffect
 import com.theoriacodex.app.recommend.state.ForYouUiState
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.app.ui.undo.LocalUndoSlot
 import com.theoriacodex.app.ui.undo.UndoAnchor
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.Post
@@ -108,7 +108,8 @@ internal fun ForYouRoute(
         owner.onSourceAvailabilityChanged()
     }
 
-    val undoScope = rememberCoroutineScope()
+    // The slot's Activity-retained scope: a rotation must not drop a hidden tag's Undo.
+    val undoScope = LocalUndoSlot.current.scope
     CollectRouteEffects(owner.effects) { effect ->
         handleForYouRouteEffect(effect, callbacks, owner, undoScope)
     }

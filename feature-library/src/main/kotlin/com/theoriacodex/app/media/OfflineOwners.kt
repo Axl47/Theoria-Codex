@@ -28,7 +28,7 @@ internal fun codexOfflineStates(
         codexId to CodexOfflineState(
             fraction = if (posts.isEmpty()) 1f else settled.toFloat() / posts.size,
             running = owner.preparing || job?.isRunning == true,
-            failed = owner.message != null || job?.let { !it.isRunning && it.failureMessage != null } == true,
+            failed = job?.let { !it.isRunning && it.failureMessage != null } == true,
         )
     }.toMap()
 

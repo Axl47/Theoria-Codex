@@ -2,7 +2,6 @@ package com.theoriacodex.app.codex
 
 import com.theoriacodex.app.media.CodexOfflineControls
 import com.theoriacodex.app.media.CodexOfflineState
-import com.theoriacodex.app.ui.undo.UndoAnchor
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -10,7 +9,9 @@ class CodexOfflineRingTapTest {
     private val calls = mutableListOf<String>()
     private val controls = object : CodexOfflineControls {
         override fun openSheet(codexId: String?) { calls += "sheet:$codexId" }
-        override fun remove(codexId: String, anchor: UndoAnchor) { calls += "remove:$codexId@$anchor" }
+        override fun remove(codexId: String) { calls += "remove:$codexId" }
+        override fun actOnRemoval(codexId: String) = Unit
+        override fun commitRemovals() = Unit
     }
     private val topUp = { calls += "topUp"; Unit }
 
@@ -26,7 +27,7 @@ class CodexOfflineRingTapTest {
             assertEquals(label, tap.label)
             tap.run()
         }
-        assertEquals(listOf("remove:a@${CodexUndoAnchors.detail("a")}", "sheet:a", "topUp", "topUp"), calls)
+        assertEquals(listOf("remove:a", "sheet:a", "topUp", "topUp"), calls)
     }
 
     @Test fun `without a top-up an incomplete ring opens the sheet`() {

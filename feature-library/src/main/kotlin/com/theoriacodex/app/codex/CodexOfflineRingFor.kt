@@ -11,7 +11,6 @@ import com.theoriacodex.app.media.CodexOfflineState
 import com.theoriacodex.app.media.LocalCodexOfflineControls
 import com.theoriacodex.app.media.LocalCodexOfflineStates
 import com.theoriacodex.app.ui.components.ActionMenuRow
-import com.theoriacodex.app.ui.undo.UndoAnchor
 
 /**
  * Codex [codexId]'s offline ring on its detail screen, drawn only while the Codex is kept offline. A tap toggles
@@ -34,13 +33,14 @@ internal fun CodexOfflineStatusFor(codexId: String, modifier: Modifier = Modifie
 
 /**
  * The Codex menu's offline row: "Make available offline" through [makeOffline] when the Codex is not kept offline,
- * "Remove offline copy" (deferred, with Undo on the app's pill) when it is. [close] dismisses the menu first.
+ * "Remove offline copy" (deferred, with Undo where the menu was opened: Codex detail or the Library) when it is.
+ * [close] dismisses the menu first.
  */
 @Composable
 internal fun CodexOfflineMenuRow(codexId: String, close: () -> Unit, makeOffline: (String) -> Unit) {
     if (codexId in LocalCodexOfflineStates.current) {
         val controls = LocalCodexOfflineControls.current
-        ActionMenuRow(Icons.Default.CloudOff, "Remove offline copy") { close(); controls.remove(codexId, UndoAnchor.App) }
+        ActionMenuRow(Icons.Default.CloudOff, "Remove offline copy") { close(); controls.remove(codexId) }
     } else {
         ActionMenuRow(Icons.Default.OfflinePin, "Make available offline") { close(); makeOffline(codexId) }
     }
@@ -55,7 +55,7 @@ internal fun codexOfflineRingTap(
     controls: CodexOfflineControls,
     onTopUp: (() -> Unit)?,
 ): CodexOfflineRingTap = when {
-    state.complete -> CodexOfflineRingTap("Remove offline copy") { controls.remove(codexId, CodexUndoAnchors.detail(codexId)) }
+    state.complete -> CodexOfflineRingTap("Remove offline copy") { controls.remove(codexId) }
     state.running || onTopUp == null -> CodexOfflineRingTap("Show progress") { controls.openSheet(codexId) }
     state.failed -> CodexOfflineRingTap("Retry", onTopUp)
     else -> CodexOfflineRingTap("Download the rest", onTopUp)

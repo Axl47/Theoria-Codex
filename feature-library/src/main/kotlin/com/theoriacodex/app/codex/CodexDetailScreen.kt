@@ -11,6 +11,7 @@ import com.theoriacodex.app.ui.components.FeedPostFilter
 import com.theoriacodex.app.ui.components.FeedView
 import com.theoriacodex.app.ui.components.FeedDurations
 import androidx.activity.compose.BackHandler
+import com.theoriacodex.app.media.CodexOfflineRemovalUndo
 import com.theoriacodex.app.media.isAnimatedPost
 import androidx.compose.runtime.MutableState
 import androidx.compose.foundation.background
@@ -155,7 +156,7 @@ fun CodexDetailScreen(
     Scaffold(
         modifier = Modifier.nestedScroll(filterScroll.connection),
         contentWindowInsets = WindowInsets(0),
-        snackbarHost = { UndoPill(CodexUndoAnchors.detail(codexId)) },
+        snackbarHost = { CodexDetailUndo(codexId) },
         floatingActionButton = {
             CodexDetailFilterFab(
                 filters, customFiltersActive, fabRestoreState, filterScroll, resetFilters, onFabRestoreStateChange,
@@ -185,6 +186,15 @@ fun CodexDetailScreen(
             onShowRelated = related?.let { shelf -> { shelf.controller.show(post) } },
             liked = post.id in likedPostIds, onToggleLike = onToggleLike,
         )
+    }
+}
+
+/** Codex detail's Undo: a pending removal of this Codex's offline copy, above the slot's offers anchored here. */
+@Composable
+private fun CodexDetailUndo(codexId: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        CodexOfflineRemovalUndo(codexId = codexId)
+        UndoPill(CodexUndoAnchors.detail(codexId))
     }
 }
 

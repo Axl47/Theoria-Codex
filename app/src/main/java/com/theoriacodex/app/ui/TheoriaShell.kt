@@ -283,8 +283,8 @@ private fun rememberShellOwners(container: TheoriaAppContainer, appContext: Cont
     val codexCommands = viewModel(key = "codex-command-owner") {
         CodexCommandViewModel(
             data.codexRepository, workflows.likesCodexSync::clearProfile, workflows.likesCodexSync::restoreClearedLikes,
-            workflows.codexTransfer::reorderVisibleCodices, workflows.codexCleaning,
-        )
+            workflows.codexTransfer::reorderVisibleCodices, workflows.codexCleaning, removalScope = container.applicationScope,
+        ) { codexId -> container.features.offlineMedia.remove(com.theoriacodex.app.media.codexOfflineOwner(codexId)) }
     }
     val postMutations = viewModel(key = "post-mutations") {
         PostMutationViewModel(data.settingsRepository, workflows.likesCodexSync::toggle)

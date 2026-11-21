@@ -4,12 +4,14 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -32,28 +34,25 @@ enum class UndoAction(val label: String) { Undo("Undo"), Retry("Retry") }
 sealed interface UndoLifetime {
     data class Timed(val duration: Duration = DEFAULT_UNDO_DURATION) : UndoLifetime
 
-    /** Until the anchor's surface is left, which calls [UndoSlot.expire] (see [UndoLeaveEffect]). For big losses. */
+    /** Until the anchor's surface is left: [UndoSlot.expire] through [UndoLeaveEffect], or [DeferredRemovals.commitAll]. */
     data object UntilLeft : UndoLifetime
 }
 
 val DEFAULT_UNDO_DURATION = 5.seconds
 
+/** Stretches timed lifetimes to what the accessibility services recommend; [ProvideUndoSlot] sets [stretch]. */
+object UndoTimeouts {
+    @Volatile
+    var stretch: (Duration) -> Duration = { it }
+}
+
 /**
- * One action the user can take back (or retry) where it happened. [act] runs when the button is pressed;
- * [onExpire] runs when the offer times out, is replaced, or its surface is left. Both run in the scope the
+ * One small in-memory reversal (or a Retry) the user can take where it happened. [act] runs when the button is
+ * pressed; [onExpire] runs when the offer times out, is replaced, or its surface is left. Both run in the scope the
  * owner passed to [UndoSlot.offer], never in composition.
  *
- * Deferred destruction is an offer whose [onExpire] does the real work. The owner hides the thing at once
- * and deletes it only on expiry, so Undo is a plain un-hide and a process death inside the window deletes
- * nothing:
- * ```
- * hidden += file.id
- * undo.offer(viewModelScope, UndoOffer(
- *     label = "Deleted ${file.name}",
- *     anchor = UndoAnchor("downloads", file.id),
- *     onExpire = { repository.delete(file) },
- * ) { hidden -= file.id })
- * ```
+ * A newer offer replaces this one at any time, so [onExpire] must not do real work. Deletions that wait for their
+ * Undo to pass belong in [DeferredRemovals], which keeps each one until its own lifetime ends.
  */
 class UndoOffer(
     val label: String,
@@ -68,8 +67,11 @@ class UndoOffer(
  * Holds at most one [UndoOffer] for the whole app (one per Activity, read through [LocalUndoSlot]). Nothing
  * queues: a newer offer expires the one it replaces. Owners keep their own restore logic and emit here;
  * surfaces draw the offer anchored to them with [UndoPill] or [UndoRow].
+ *
+ * [scope] is for owners without a longer-lived scope of their own (composables): the app passes its
+ * Activity-retained owner's, so an offer survives a configuration change.
  */
-class UndoSlot {
+class UndoSlot(val scope: CoroutineScope = CoroutineScope(SupervisorJob())) {
     private class Live(val offer: UndoOffer, val scope: CoroutineScope) {
         lateinit var timer: Job
     }
@@ -81,14 +83,16 @@ class UndoSlot {
     /** The live offer, or null. */
     val offer: StateFlow<UndoOffer?> = current.asStateFlow()
 
-    /** Stretches a timed lifetime, so accessibility services get their recommended time. Set by [ProvideUndoSlot]. */
-    var timeout: (Duration) -> Duration = { it }
+    /** Stretches a timed lifetime, so accessibility services get their recommended time; see [UndoTimeouts]. */
+    var timeout: (Duration) -> Duration = { UndoTimeouts.stretch(it) }
 
     /**
      * Shows [offer], first expiring any live one. Its timer, [UndoOffer.act] and [UndoOffer.onExpire] run in
-     * [scope]; if [scope] is cancelled while the offer is live, the offer disappears and neither runs.
+     * [scope]; if [scope] is cancelled while the offer is live, the offer disappears and neither runs. An offer from
+     * a scope already cancelled is dropped and leaves the live offer alone.
      */
     fun offer(scope: CoroutineScope, offer: UndoOffer) {
+        if (!scope.isActive) return
         val entry = Live(offer, scope)
         entry.timer = scope.launch(start = CoroutineStart.LAZY) {
             when (val lifetime = offer.lifetime) {

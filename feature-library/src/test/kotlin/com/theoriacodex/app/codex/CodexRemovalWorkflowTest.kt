@@ -1,6 +1,7 @@
 package com.theoriacodex.app.codex
 
 import com.theoriacodex.app.ui.undo.UndoAction
+import com.theoriacodex.app.ui.undo.UndoSlot
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.InMemoryCodexLikesTransactions
@@ -31,7 +32,7 @@ class CodexRemovalWorkflowTest {
         runCurrent()
         assertEquals(listOf(listOf("b", "a")), orders)
         assertEquals("Codices reordered", owner.feedback.value.single().message)
-        owner.acknowledge(owner.feedback.value.single().id, false)
+        owner.acknowledge(owner.feedback.value.single().id)
         runCurrent()
         assertTrue(owner.feedback.value.isEmpty())
         assertEquals(1, orders.size)
@@ -47,7 +48,7 @@ class CodexRemovalWorkflowTest {
         runCurrent()
         val reordered = owner.feedback.value.single()
         assertEquals(UndoAction.Undo, reordered.undoAction)
-        owner.acknowledge(reordered.id, performAction = true)
+        owner.press(reordered.id)
         runCurrent()
         assertEquals(listOf(listOf(second, first), listOf(first, second)), orders)
         val restored = owner.feedback.value.single()
@@ -81,17 +82,17 @@ class CodexRemovalWorkflowTest {
         assertEquals(original, stored.observeCodexItems(codex.codexId).first())
         val failure = owner.feedback.value.single()
         assertEquals(UndoAction.Retry, failure.undoAction)
-        owner.acknowledge(failure.id, true)
+        owner.press(failure.id)
         runCurrent()
         val removed = owner.feedback.value.single()
         assertEquals(UndoAction.Undo, removed.undoAction)
         assertEquals(listOf(original.last()), stored.observeCodexItems(codex.codexId).first())
-        owner.acknowledge(removed.id, true)
+        owner.press(removed.id)
         runCurrent()
         val restoreFailure = owner.feedback.value.single()
         assertEquals("Could not restore posts", restoreFailure.message)
         assertEquals(listOf(original.last()), stored.observeCodexItems(codex.codexId).first())
-        owner.acknowledge(restoreFailure.id, true)
+        owner.press(restoreFailure.id)
         runCurrent()
         assertEquals(original, stored.observeCodexItems(codex.codexId).first().sortedBy { it.savedAtEpochMs })
         assertEquals(2, removes)
@@ -109,7 +110,7 @@ class CodexRemovalWorkflowTest {
         owner.removePost(codex.codexId, removed)
         runCurrent()
         assertEquals(listOf(original.last()), stored.observeCodexItems(codex.codexId).first())
-        owner.acknowledge(owner.feedback.value.single().id, true)
+        owner.press(owner.feedback.value.single().id)
         runCurrent()
         assertEquals(original, stored.observeCodexItems(codex.codexId).first().sortedBy { it.savedAtEpochMs })
     }
@@ -152,7 +153,7 @@ class CodexRemovalWorkflowTest {
         val completion = owner.feedback.value.single()
         assertTrue(completion.succeeded)
         assertEquals(completion, owner.feedback.first().single())
-        owner.acknowledge(completion.id, false)
+        owner.acknowledge(completion.id)
         assertTrue(owner.feedback.value.isEmpty())
     }
 
@@ -178,7 +179,7 @@ class CodexRemovalWorkflowTest {
         runCurrent()
         assertEquals(2, owner.feedback.value.size)
         assertTrue(owner.feedback.value.all { !it.succeeded })
-        owner.feedback.value.toList().forEach { owner.acknowledge(it.id, true) }
+        owner.feedback.value.toList().forEach { owner.press(it.id) }
         runCurrent()
         assertEquals(requestedIds[0], requestedIds[1])
         assertTrue(codexBelongsToProfile(requestedIds.singleOrNull() ?: requestedIds.first(), "original-profile"))
@@ -187,25 +188,46 @@ class CodexRemovalWorkflowTest {
     }
 
     @Test
-    fun `undoing a deleted Codex brings it back in place with its posts`() = runTest {
+    fun `a deleted Codex hides until the Library is left, and Undo leaves it untouched`() = runTest {
         val repository = InMemoryCodexRepository()
         val first = repository.createCodex("First")
         val second = repository.createCodex("Second")
         val post = testPost(sourcePostId = "kept")
         repository.addItem(first.codexId, post)
-        val owner = CodexCommandViewModel(repository, { null }, {}, {}, CodexCleaningService(InMemoryCodexLikesTransactions(repository)), this)
+        val released = mutableListOf<String>()
+        val owner = CodexCommandViewModel(
+            repository, { null }, {}, {}, CodexCleaningService(InMemoryCodexLikesTransactions(repository)), this,
+        ) { released += it }
 
-        owner.delete(first.codexId, "profile-main")
+        owner.delete(first.codexId, "profile-main", name = "First")
+        assertEquals("Deleted First", owner.pendingDeletes.value[first.codexId]?.label)
+        owner.actOnDelete(first.codexId)
+        owner.commitDeletes()
+        runCurrent()
+        assertTrue(owner.pendingDeletes.value.isEmpty())
+        assertEquals(listOf(post.id), repository.observeCodexItems(first.codexId).first().map { it.postId })
+
+        owner.delete(first.codexId, "profile-main", name = "First")
+        owner.rename(second.codexId, "Renamed")
+        runCurrent()
+        assertEquals("a newer command does not delete it", 2, repository.observeCodices().first().size)
+        owner.commitDeletes()
         runCurrent()
         assertEquals(listOf(second.codexId), repository.observeCodices().first().map { it.codexId })
-        val deleted = owner.feedback.value.single()
-        assertEquals(UndoAction.Undo, deleted.undoAction)
+        assertEquals(listOf(first.codexId), released)
+        assertTrue(owner.pendingDeletes.value.isEmpty())
+    }
 
-        owner.acknowledge(deleted.id, performAction = true)
+    @Test fun `a failed reorder reports its order so the grid can drop it`() = runTest {
+        val owner = CodexCommandViewModel(
+            InMemoryCodexRepository(), { null }, {}, { error("disk full") }, CodexCleaningService(InMemoryCodexLikesTransactions()), this,
+        )
+        val failures = mutableListOf<List<String>>()
+        backgroundScope.launch { owner.reorderFailures.collect { failures += it } }
         runCurrent()
-
-        assertEquals(listOf(first.codexId, second.codexId), repository.observeCodices().first().map { it.codexId })
-        assertEquals(listOf(post.id), repository.observeCodexItems(first.codexId).first().map { it.postId })
+        owner.reorder(listOf("b", "a"))
+        runCurrent()
+        assertEquals(listOf(listOf("b", "a")), failures)
     }
 
     @Test
@@ -222,7 +244,7 @@ class CodexRemovalWorkflowTest {
         owner.delete(likesCodexIdForProfile("profile-main"), "profile-main")
         runCurrent()
         assertEquals(null, owner.feedback.value.single().undoAction)
-        owner.acknowledge(owner.feedback.value.single().id, performAction = false)
+        owner.acknowledge(owner.feedback.value.single().id)
 
         val post = testPost(sourcePostId = "liked")
         service.toggle(profile, post, listOf("tag"))
@@ -230,9 +252,16 @@ class CodexRemovalWorkflowTest {
         runCurrent()
         assertTrue(likes.observeLikedPostIds("profile-main").first().isEmpty())
 
-        owner.acknowledge(owner.feedback.value.single().id, performAction = true)
+        owner.press(owner.feedback.value.single().id)
         runCurrent()
         assertEquals(setOf(post.id), likes.observeLikedPostIds("profile-main").first())
         assertEquals(listOf(post.id), repository.observeCodexItems(likesCodexIdForProfile("profile-main")).first().map { it.postId })
     }
+}
+
+/** Presses feedback [id]'s Undo or Retry the way the app does: offered into the undo slot, then acted on there. */
+internal fun CodexCommandViewModel.press(id: Long) {
+    val slot = UndoSlot()
+    offer(id, slot)
+    slot.act(checkNotNull(slot.offer.value))
 }

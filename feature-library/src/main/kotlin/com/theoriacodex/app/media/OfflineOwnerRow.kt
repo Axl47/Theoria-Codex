@@ -45,7 +45,7 @@ internal fun OfflineOwnerRow(owner: OfflineStorageOwner, enabled: Boolean, marke
             Text(owner.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(offlineOwnerStatus(owner), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OfflineOwnerProgress(owner)
-            (owner.message ?: owner.job?.failureMessage)?.let {
+            owner.job?.failureMessage?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             }
         }
