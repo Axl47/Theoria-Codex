@@ -5,6 +5,7 @@ import com.theoriacodex.app.related.RelatedPostsLoading
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchEffect
+import com.theoriacodex.app.search.state.SearchRestorationUiState
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -17,6 +18,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -55,6 +58,33 @@ internal class RelatedPostsSearchViewModelTest : SearchViewModelTestFixture() {
             viewModel.onAction(SearchAction.RelatedLikeCommitted(seed, LikeToggleOutcome.UNLIKED))
             assertEquals(RelatedPostsUiState.Idle, viewModel.state.value.relatedPosts)
         }
+
+    @Test
+    fun `opening a related post closes an open restore so the grid keeps its place on return`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val seed = testPost(source = SourceKey.PIXIV, sourcePostId = "seed")
+            val related = testPost(source = SourceKey.PIXIV, sourcePostId = "related")
+            val adapter = ViewModelSearchAdapter().apply { resultFactory = { listOf(seed) } }
+            val viewModel = viewModel(adapter, relatedPostsLoader = FakeRelatedPostsLoader(listOf(related)))
+            restore(viewModel)
+            viewModel.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
+            viewModel.onAction(SearchAction.AddIncludeTerm(com.theoriacodex.domain.model.SearchTerm("seed")))
+            viewModel.onAction(SearchAction.ApplyDraft)
+            advanceUntilIdle()
+            viewModel.onAction(SearchAction.RelatedLikeCommitted(seed, LikeToggleOutcome.LIKED))
+            advanceUntilIdle()
+            // Applying the search left its move to the top open, waiting for the grid to acknowledge it.
+            assertNotNull(viewModel.openScrollState())
+
+            val effect = async { viewModel.effects.first() }
+            viewModel.onAction(SearchAction.OpenRelatedResult(0, listOf(related)))
+            effect.await() as SearchEffect.OpenViewer
+
+            assertNull(viewModel.openScrollState())
+        }
+
+    private fun SearchViewModel.openScrollState() =
+        (state.value.restoration as SearchRestorationUiState.Restored).scrollState
 }
 
 private class FakeRelatedPostsLoader(
