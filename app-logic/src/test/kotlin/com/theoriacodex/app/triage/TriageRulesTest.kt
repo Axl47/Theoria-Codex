@@ -1,6 +1,6 @@
 package com.theoriacodex.app.triage
 
-import com.theoriacodex.app.recommend.LikedTagCounts
+import com.theoriacodex.app.recommend.TagAffinityInputs
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -40,7 +40,9 @@ class TriageRulesTest {
         assertEquals(SwipeDirection.Right, swipe(x = 230f, y = -150f))
     }
 
-    private val counts = LikedTagCounts(mapOf("cat" to 6, "sky" to 3), likes = 20)
+    private val counts = TagAffinityInputs(
+        likedCounts = mapOf("cat" to 6, "sky" to 3), likes = 20, interest = mapOf("cat" to 6.0, "sky" to 3.0),
+    )
 
     @Test fun `hide candidates start with the tags the Likes carry least, in the post's order among equals`() {
         assertEquals(listOf("tree", "dog", "sky"), hideCandidates(post("cat", "sky", "tree", "dog"), counts, emptyList()))
@@ -61,6 +63,14 @@ class TriageRulesTest {
     @Test fun `hide candidates skip query tags and hidden tags in any spelling`() {
         val candidates = hideCandidates(post("cat", "Blue_Sky", "tree", "dog"), counts, listOf("blue sky", "DOG"))
         assertEquals(listOf("tree", "cat"), candidates)
+    }
+
+    @Test fun `a universal tag is never offered, however little it is liked`() {
+        val watched = counts.copy(
+            watchedBySource = mapOf(SourceKey.GELBOORU to 40L),
+            watchedByTag = mapOf(SourceKey.GELBOORU to mapOf("image" to 38L, "tree" to 2L)),
+        )
+        assertEquals(listOf("tree", "sky"), hideCandidates(post("image", "sky", "tree"), watched, emptyList()))
     }
 
     @Test fun `a post with nothing left to hide has no candidates`() {

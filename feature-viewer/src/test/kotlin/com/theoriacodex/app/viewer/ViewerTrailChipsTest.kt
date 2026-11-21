@@ -1,6 +1,6 @@
 package com.theoriacodex.app.viewer
 
-import com.theoriacodex.app.recommend.PostTagSignal
+import com.theoriacodex.app.recommend.TagAffinity
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.post
 import com.theoriacodex.domain.model.CreatorProfile
@@ -14,7 +14,7 @@ import org.junit.Test
 
 class ViewerTrailChipsTest {
     private val creator = CreatorProfile(SourceKey.PIXIV, "Mika")
-    private fun signals(vararg tags: String) = tags.map { PostTagSignal(it, likedCount = 1) }
+    private fun signals(vararg tags: String) = tags.map { TagAffinity(it, interest = 1.0, score = 1.0, universal = false) }
     private fun query(vararg tags: String) = Query(QueryMode.Source(SourceKey.PIXIV), tags.toList(), emptyList(), SortMode.NEWEST, null, null)
 
     @Test

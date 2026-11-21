@@ -1,6 +1,7 @@
 package com.theoriacodex.app.triage
 
-import com.theoriacodex.app.recommend.LikedTagCounts
+import com.theoriacodex.app.recommend.TagAffinityInputs
+import com.theoriacodex.app.recommend.tagAffinities
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
@@ -42,25 +43,26 @@ fun swipeDirection(
 }
 
 /**
- * The tags the deck offers to hide for [post], at most [limit]: the ones the profile's Likes carry least first.
- * Among equals, which on an unfamiliar post is every tag, a content tag comes before one the post's taxonomy marks
+ * The tags the deck offers to hide for [post], at most [limit]: the ones the profile shows least interest in first,
+ * never a universal tag (see [tagAffinities]), since hiding one would hide nearly everything. Among equals, which on an unfamiliar post is every tag, a content tag comes before one the post's taxonomy marks
  * as an artist, character, series, group, type, language, meta or rating tag, and then the post's own order holds.
  * [excluded] holds tags that must not be offered (the deck's own query and tags already hidden), in any spelling.
  */
 fun hideCandidates(
     post: Post,
-    likedTagCounts: LikedTagCounts,
+    affinity: TagAffinityInputs,
     excluded: Collection<String>,
     limit: Int = HIDE_CANDIDATE_LIMIT,
 ): List<String> {
     val skipped = excluded.mapTo(mutableSetOf(), ::normalizeMatchToken)
     val nonContent = post.taxonomy.filterNot(PostTaxonomyTerm::isContentTag).mapTo(mutableSetOf()) { normalizeMatchToken(it.value) }
-    return post.canonicalTags.ifEmpty { post.rawTags }
-        .filter(String::isNotBlank)
-        .distinctBy(::normalizeMatchToken)
-        .filter { tag -> normalizeMatchToken(tag) !in skipped }
-        .sortedWith(compareBy({ likedTagCounts.counts[normalizeMatchToken(it)] ?: 0 }, { normalizeMatchToken(it) in nonContent }))
+    val order = post.canonicalTags.ifEmpty { post.rawTags }.map(::normalizeMatchToken).distinct()
+        .withIndex().associate { it.value to it.index }
+    return tagAffinities(post, affinity)
+        .filterNot { it.universal || normalizeMatchToken(it.tag) in skipped }
+        .sortedWith(compareBy({ it.interest }, { normalizeMatchToken(it.tag) in nonContent }, { order[normalizeMatchToken(it.tag)] }))
         .take(limit)
+        .map { it.tag }
 }
 
 /** A general tag about what the post shows, rather than who made it, what it is from, or how it is filed. */
