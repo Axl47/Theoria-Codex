@@ -60,5 +60,9 @@ fun hideCandidates(
 
 const val HIDE_CANDIDATE_LIMIT = 3
 
+/** Whether [this] post carries one of [tokens], which are spelled as [normalizeMatchToken] spells them. */
+fun Post.carriesAnyTag(tokens: Set<String>): Boolean =
+    tokens.isNotEmpty() && (canonicalTags + rawTags).any { tag -> normalizeMatchToken(tag) in tokens }
+
 /** A drag's speed counts as this much extra travel per px/s when picking its axis. */
 private const val VELOCITY_REACH_SECONDS = 0.1f

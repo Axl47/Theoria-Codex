@@ -70,7 +70,7 @@ internal fun TriageDestination(shell: TheoriaShell, request: TriageRequest) {
     val query = shell.triageQuery(request)
     val quickSave = LocalQuickSave.current
     val owner = viewModel<TriageDeckViewModel> {
-        TriageDeckViewModel(feed, ShellTriageActions(shell, request.source), quickSave, query, request.source == ViewerStreamSource.FOR_YOU)
+        TriageDeckViewModel(feed, ShellTriageActions(shell), quickSave, query, request.source == ViewerStreamSource.FOR_YOU)
     }
     val deck by owner.state.collectAsStateWithLifecycle()
     BrowsingDestinationStateBoundary(shell.data, shell.sources) { state ->

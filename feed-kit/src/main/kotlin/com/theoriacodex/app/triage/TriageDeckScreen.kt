@@ -67,7 +67,7 @@ fun TriageDeckScreen(
                 deck.finished -> TriageEnd(callbacks.onClose)
                 else -> CircularProgressIndicator(Modifier.align(Alignment.Center))
             }
-            TriageConfirmation(deck.last)
+            TriageConfirmation(deck.notice)
         }
     }
 }
@@ -82,7 +82,7 @@ private fun TriageTopBar(deck: TriageDeckState, onClose: () -> Unit, onUndo: () 
             textAlign = TextAlign.Center,
             modifier = Modifier.weight(1f).testTag(TRIAGE_PROGRESS_TAG),
         )
-        IconButton(onUndo, Modifier.testTag(TRIAGE_UNDO_TAG), enabled = deck.last?.undoable == true) {
+        IconButton(onUndo, Modifier.testTag(TRIAGE_UNDO_TAG), enabled = deck.last != null) {
             Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo")
         }
     }

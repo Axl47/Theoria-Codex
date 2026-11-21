@@ -138,7 +138,7 @@ private fun rememberTriageTargets(post: Post, query: Query?, viewModel: TriageDe
             save = suggestions.targets.map { target ->
                 CollectTarget(target.codexId, target.name, CollectTargetVisual.Cover(target.cover, Icons.Outlined.CollectionsBookmark), target)
             },
-            hide = candidates.map { tag -> CollectTarget(tag, tag, CollectTargetVisual.Icon(Icons.Outlined.VisibilityOff), tag) },
+            hide = candidates.map { tag -> CollectTarget(tag, tagLabel(tag), CollectTargetVisual.Icon(Icons.Outlined.VisibilityOff), tag) },
         )
     }
 }
@@ -228,7 +228,7 @@ private fun triageActions(targets: TriageTargets, onDecide: (TriageChoice) -> Un
         CustomAccessibilityAction("Save to ${target.name}") { onDecide(TriageChoice.Save(target.codexId, target.name)); true }
     },
     targets.hide.firstOrNull()?.payload?.let { tag ->
-        CustomAccessibilityAction("Hide $tag") { onDecide(TriageChoice.Hide(tag)); true }
+        CustomAccessibilityAction("Hide ${tagLabel(tag)}") { onDecide(TriageChoice.Hide(tag)); true }
     },
 )
 
