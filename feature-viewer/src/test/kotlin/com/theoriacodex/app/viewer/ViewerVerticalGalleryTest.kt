@@ -15,6 +15,7 @@ import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeUp
 import com.theoriacodex.app.viewer.state.ViewerAction
+import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.createViewerUiState
 import com.theoriacodex.app.viewer.state.reduceViewerState
@@ -84,6 +85,38 @@ class ViewerVerticalGalleryTest {
         compose.onRoot().performTouchInput { swipeDown(startY = centerY - height / 4f, endY = centerY + height / 4f) }
         compose.waitForIdle()
         assertTrue(actions.any { it is ViewerAction.PrepareDismiss })
+    }
+
+    @Test fun `a page that fails to load in a vertical gallery is reported to the Viewer`() {
+        show()
+        compose.runOnIdle { assertEquals(ViewerMediaKey(gallery.id, 0), state.value.mediaError?.mediaKey) }
+    }
+
+    @Test fun `a vertical gallery resumes its saved page once its pages resolve`() {
+        val session = ViewerSessionIdentity("resume")
+        val sparse = gallery.copy(media = listOf(page), mediaCount = gallery.media.size)
+        val recorded = mutableListOf<Int>()
+        state.value = createViewerUiState(
+            session, listOf(sparse, next), requiresResolution = { it.id == gallery.id }, initialMediaIndices = mapOf(gallery.id to 4),
+        )
+        compose.setContent {
+            MaterialTheme {
+                ViewerScreen(
+                    uiState = state.value,
+                    host = ViewerScreenHost(
+                        onAction = { state.value = reduceViewerState(state.value, it).state },
+                        onVisibleMediaChanged = { post, number -> if (post.id == gallery.id) recorded += number },
+                    ),
+                    config = ViewerScreenConfig(galleryReadingModes = mapOf(gallery.id to GalleryReadingMode.VERTICAL)),
+                )
+            }
+        }
+        compose.runOnIdle { state.value = reduceViewerState(state.value, ViewerAction.ResolutionCompleted(session, gallery)).state }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(4, state.value.currentPage?.selectedMediaIndex)
+            assertTrue("recorded $recorded", recorded.isNotEmpty() && recorded.all { it == 5 })
+        }
     }
 
     @Test fun `the overview switches a gallery's reading mode`() {

@@ -135,9 +135,9 @@ internal fun ViewerVerticalGallery(
     VerticalGalleryEffects(post, pageState, gallery, isCurrentPost, screen, host)
     val scope = rememberCoroutineScope()
     val session = frame.uiState.session
-    val reportReady = { key: ViewerMediaKey, generation: Long ->
-        session?.let { host.onAction(ViewerAction.MediaReady(it, key, generation)) }
-        Unit
+    // The selected page reports readiness and failure to the Viewer, as a horizontal page does (slideshow holds wait on it).
+    val selectedEvents = { key: ViewerMediaKey, generation: Long ->
+        viewerRendererEvents(session, key, generation, host.onAction, onTimelineInteractionActiveChanged = {}, onDurationKnown = {})
     }
     val quickReturn = rememberQuickReturn { reveal -> if (isCurrentPost && reveal != frame.chromeVisible) controls.toggleChrome() }
     LazyColumn(
@@ -154,7 +154,7 @@ internal fun ViewerVerticalGallery(
             VerticalGalleryPage(
                 post, pageState, index, shape, gallery, screen.imageSession,
                 active = isCurrentPost && index == frame.selection.mediaIndex,
-                reportReady = reportReady,
+                selectedEvents = selectedEvents,
                 onPainted = { width, height ->
                     if (width > 0f && height > 0f) {
                         shapes[index] = width / height
@@ -185,17 +185,29 @@ private fun VerticalGalleryEffects(
     val focusedPage by remember(list, pageCount) { derivedStateOf { list.focusedPage(pageCount) } }
     val selected = pageState.selectedMediaIndex
     val resuming = pageState.pendingMediaIndex != null
-    LaunchedEffect(focusedPage, isCurrentPost, resuming) {
-        if (!isCurrentPost || resuming || pageCount == 0) return@LaunchedEffect
+    // The list's position counts as the reader's choice only once it shows the selection; until then (a resume
+    // still resolving, or a restored page not yet scrolled to) publishing it would overwrite the saved page.
+    var aligned by remember(list) { mutableStateOf(false) }
+    LaunchedEffect(focusedPage, isCurrentPost, aligned) {
+        if (!isCurrentPost || !aligned || pageCount == 0) return@LaunchedEffect
         if (focusedPage != selected) host.onAction(ViewerAction.SelectMedia(focusedPage))
         host.onVisibleMediaChanged?.invoke(post, focusedPage + 1)
     }
-    // A page bar, overview or strip pick, or a resumed page, moves the selection without scrolling.
+    // A page bar, overview or strip pick, or a resumed page, moves the list to the selection.
     LaunchedEffect(selected, pageCount, resuming) {
-        if (!resuming && !list.isScrollInProgress && selected in 0 until pageCount && list.focusedPage(pageCount) != selected) {
-            list.scrollToItem(selected)
+        if (resuming || selected !in 0 until pageCount) {
+            aligned = false
+            return@LaunchedEffect
         }
+        if (!list.isScrollInProgress && list.focusedPage(pageCount) != selected) list.scrollToItem(selected)
+        aligned = true
     }
+    VerticalGalleryPendingJump(post, list, pageCount, resuming, screen)
+}
+
+/** A swipe that lands on this gallery at a chosen page (going back lands on its last page) scrolls there once. */
+@Composable
+private fun VerticalGalleryPendingJump(post: Post, list: LazyListState, pageCount: Int, resuming: Boolean, screen: ViewerScreenState) {
     val pendingJump = screen.pendingMediaJumpByPost[post.id]
     LaunchedEffect(pendingJump, pageCount, resuming) {
         if (pendingJump == null || resuming || pageCount == 0) return@LaunchedEffect
@@ -225,7 +237,7 @@ private fun VerticalGalleryPage(
     gallery: ViewerVerticalGalleryState,
     imageSession: ViewerImageSession,
     active: Boolean,
-    reportReady: (ViewerMediaKey, Long) -> Unit,
+    selectedEvents: (ViewerMediaKey, Long) -> ViewerRendererEvents,
     onPainted: (Float, Float) -> Unit,
     onRequestMediaRecovery: ((Post, com.theoriacodex.domain.model.ImageRef) -> Unit)?,
 ) {
@@ -235,11 +247,15 @@ private fun VerticalGalleryPage(
     var painted by remember(key, generation) { mutableStateOf(false) }
     var failed by remember(key, generation) { mutableStateOf<String?>(null) }
     var attempt by remember(key, generation) { mutableIntStateOf(0) }
-    // Readiness is reported for the selected page only, and again when an already painted page becomes selected.
+    // Readiness and failure are reported for the selected page only, and again when a settled page becomes selected.
     val events = viewerRendererEvents(
         session = null, key = key, generation = generation, onAction = {}, onTimelineInteractionActiveChanged = {}, onDurationKnown = {},
     ).copy(onReady = { painted = true; failed = null }, onError = { failed = it })
-    LaunchedEffect(active, painted, generation) { if (active && painted) reportReady(key, generation) }
+    LaunchedEffect(active, painted, failed, generation) {
+        if (!active) return@LaunchedEffect
+        val selected = selectedEvents(key, generation)
+        if (painted) selected.onReady() else failed?.let(selected.onError)
+    }
     Box(
         Modifier.fillMaxWidth()
             .layout { measurable, constraints ->
