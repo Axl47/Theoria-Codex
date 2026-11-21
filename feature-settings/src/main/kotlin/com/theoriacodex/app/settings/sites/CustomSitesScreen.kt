@@ -1,5 +1,6 @@
 package com.theoriacodex.app.settings.sites
 
+import com.theoriacodex.data.repository.SettingDestinations
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,7 +37,7 @@ import com.theoriacodex.app.settings.SettingsRow
 import com.theoriacodex.app.settings.SettingsRowDivider
 
 /** The pages above anything opened from the Sites list. */
-internal val SITES_PATH = SETTINGS_PATH + "Sites"
+internal val SITES_PATH = SETTINGS_PATH + SettingDestinations.Sites.title
 
 /** Settings → Sites: built-in and user-added sites, or the page or add/edit form while one is open. */
 @Composable
@@ -78,7 +79,7 @@ private fun SitesListPage(
     onBack: () -> Unit,
 ) {
     SettingsPageColumn {
-        SettingsHeader("Sites", onBack, SETTINGS_PATH) {
+        SettingsHeader(SettingDestinations.Sites.title, onBack, SETTINGS_PATH) {
             IconButton(onClick = { onAction(CustomSitesAction.StartAdd) }) { Icon(Icons.Default.Add, "Add site") }
         }
         state.notice?.let { AnnouncedText(it, Modifier.padding(horizontal = 4.dp), error = true) }

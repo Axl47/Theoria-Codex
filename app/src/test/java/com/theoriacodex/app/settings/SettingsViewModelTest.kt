@@ -1,5 +1,8 @@
 package com.theoriacodex.app.settings
 
+import com.theoriacodex.data.repository.SettingChoices
+import com.theoriacodex.data.repository.SettingToggles
+import com.theoriacodex.domain.model.VideoQuality
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.sourceauth.CredentialStoreRecoveryState
 import com.theoriacodex.data.repository.CodexRepository
@@ -62,13 +65,15 @@ class SettingsViewModelTest {
         val owner = settingsOwner(settingsRepository = settingsRepository)
         runCurrent()
 
-        owner.onAction(SettingsAction.SetCacheFullImageOnSave(true))
-        owner.onAction(SettingsAction.SetResolveUnknownAnimatedDurations(false))
+        owner.onAction(SettingsAction.SetToggle(SettingToggles.KeepMediaOffline, true))
+        owner.onAction(SettingsAction.SetToggle(SettingToggles.FindAnimationDurations, false))
+        owner.onAction(SettingsAction.SetChoice(SettingChoices.DownloadQuality, VideoQuality.DATA_SAVER))
         owner.onAction(SettingsAction.SetEnabledSources(setOf(SourceKey.PIXIV, SourceKey.IWARA)))
         runCurrent()
 
         assertTrue(owner.state.value.settings.cache.cacheFullImageOnSave)
         assertFalse(owner.state.value.settings.contentFilters.resolveUnknownAnimatedDurations)
+        assertEquals(VideoQuality.DATA_SAVER, owner.state.value.settings.cache.downloadQuality)
         assertEquals(setOf(SourceKey.PIXIV), owner.state.value.settings.runtime.enabledSources)
     }
 

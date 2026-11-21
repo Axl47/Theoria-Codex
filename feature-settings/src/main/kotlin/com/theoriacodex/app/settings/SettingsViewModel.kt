@@ -271,41 +271,17 @@ class SettingsViewModel(
                     ))
                 }
             }
-            is SettingsAction.SetInvertScrollDirection -> launchMutation {
-                dependencies.settingsRepository.setInvertMultiImageScrollDirection(action.enabled)
+            is SettingsAction.SetToggle -> launchMutation {
+                dependencies.settingsRepository.updateSettings { action.toggle.write(it, action.enabled) }
             }
-            is SettingsAction.SetOldSearchBar -> launchMutation {
-                dependencies.settingsRepository.updateSettings { it.copy(oldSearchBar = action.enabled) }
-            }
-            is SettingsAction.SetInstantSeek -> launchMutation {
-                dependencies.settingsRepository.updateSettings { it.copy(viewer = it.viewer.copy(instantSeek = action.enabled)) }
-            }
-            is SettingsAction.SetAutoRotateVideos -> launchMutation {
-                dependencies.settingsRepository.updateSettings { it.copy(viewer = it.viewer.copy(autoRotateVideos = action.enabled)) }
+            is SettingsAction.SetChoice<*> -> launchMutation {
+                dependencies.settingsRepository.updateSettings(action::applyTo)
             }
             is SettingsAction.SetCommentOrder -> launchMutation {
                 dependencies.settingsRepository.updateSettings { it.copy(viewer = it.viewer.copy(commentOrder = action.order)) }
             }
             is SettingsAction.SetViewerPlaybackMode -> launchMutation {
                 dependencies.settingsRepository.updateSettings { it.copy(viewer = it.viewer.copy(playbackMode = action.mode)) }
-            }
-            is SettingsAction.SetVideoQuality -> launchMutation {
-                dependencies.settingsRepository.updateSettings { it.copy(viewer = it.viewer.copy(videoQuality = action.quality)) }
-            }
-            is SettingsAction.SetDownloadQuality -> launchMutation {
-                dependencies.settingsRepository.updateSettings { it.copy(cache = it.cache.copy(downloadQuality = action.quality)) }
-            }
-            is SettingsAction.SetDownloadsOverMetered -> launchMutation {
-                dependencies.settingsRepository.updateSettings { it.copy(cache = it.cache.copy(downloadsOverMetered = action.enabled)) }
-            }
-            is SettingsAction.SetDownloadsOverRoaming -> launchMutation {
-                dependencies.settingsRepository.updateSettings { it.copy(cache = it.cache.copy(downloadsOverRoaming = action.enabled)) }
-            }
-            is SettingsAction.SetCacheFullImageOnSave -> launchMutation {
-                dependencies.settingsRepository.setCacheFullImageOnSave(action.enabled)
-            }
-            is SettingsAction.SetResolveUnknownAnimatedDurations -> launchMutation {
-                dependencies.settingsRepository.setResolveUnknownAnimatedDurations(action.enabled)
             }
             is SettingsAction.SetScenarioPreset -> launchMutation {
                 dependencies.settingsRepository.setScenarioPreset(action.preset)

@@ -1,49 +1,43 @@
 package com.theoriacodex.app.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.videoQualityLabel
+import com.theoriacodex.app.ui.components.SwitchRow
+import com.theoriacodex.data.repository.SettingChoice
+import com.theoriacodex.data.repository.SettingChoices
+import com.theoriacodex.data.repository.SettingDestinations
+import com.theoriacodex.data.repository.SettingToggles
 import com.theoriacodex.domain.model.VideoQuality
 
 @Composable
 fun MediaPreferencesSection(state: SettingsUiState, onAction: (SettingsAction) -> Unit) {
-    Text("Playback & downloads", style = MaterialTheme.typography.titleMedium)
-        QualityChoices("Default video quality", state.settings.viewer.videoQuality) {
-            onAction(SettingsAction.SetVideoQuality(it))
-        }
-        QualityChoices("Download quality", state.settings.cache.downloadQuality) {
-            onAction(SettingsAction.SetDownloadQuality(it))
-        }
-        NetworkChoice("Download over metered networks", state.settings.cache.downloadsOverMetered) {
-            onAction(SettingsAction.SetDownloadsOverMetered(it))
-        }
-        NetworkChoice("Download while roaming", state.settings.cache.downloadsOverRoaming) {
-            onAction(SettingsAction.SetDownloadsOverRoaming(it))
-        }
-}
-
-@Composable
-private fun QualityChoices(label: String, selected: VideoQuality, onSelect: (VideoQuality) -> Unit) {
-    Text(label)
-    Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth()) {
-        VideoQuality.entries.forEach { quality ->
-            FilterChip(selected = selected == quality, onClick = { onSelect(quality) },
-                label = { Text(videoQualityLabel(quality)) })
+    Text(SettingDestinations.Playback.title, style = MaterialTheme.typography.titleMedium)
+    listOf(SettingChoices.DefaultVideoQuality, SettingChoices.DownloadQuality).forEach { choice ->
+        QualityChoices(choice, choice.read(state.settings)) { onAction(SettingsAction.SetChoice(choice, it)) }
+    }
+    listOf(SettingToggles.DownloadsOverMetered, SettingToggles.DownloadsOverRoaming).forEach { toggle ->
+        SwitchRow(toggle, state.settings, contentPadding = PaddingValues(vertical = 4.dp)) {
+            onAction(SettingsAction.SetToggle(toggle, it))
         }
     }
 }
 
 @Composable
-private fun NetworkChoice(label: String, enabled: Boolean, onChange: (Boolean) -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, modifier = Modifier.weight(1f))
-        Switch(checked = enabled, onCheckedChange = onChange)
+private fun QualityChoices(choice: SettingChoice<VideoQuality>, selected: VideoQuality, onSelect: (VideoQuality) -> Unit) {
+    Text(choice.title)
+    Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth()) {
+        choice.options.forEach { quality ->
+            FilterChip(selected = selected == quality, onClick = { onSelect(quality) },
+                label = { Text(videoQualityLabel(quality)) })
+        }
     }
 }

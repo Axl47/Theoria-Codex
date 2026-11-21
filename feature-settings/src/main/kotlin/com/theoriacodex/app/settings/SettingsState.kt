@@ -8,6 +8,8 @@ import com.theoriacodex.data.repository.CacheSnapshot
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.ScenarioPreset
+import com.theoriacodex.data.repository.SettingChoice
+import com.theoriacodex.data.repository.SettingToggle
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -94,18 +96,15 @@ sealed interface SettingsAction {
     data class RemoveBlacklistEntry(val source: SourceKey, val tags: List<String>) : SettingsAction
     data class SetEnabledSources(val sources: Set<SourceKey>) : SettingsAction
     data class SetSourceWeights(val sources: Set<SourceKey>, val weights: Map<SourceKey, Double>) : SettingsAction
-    data class SetInvertScrollDirection(val enabled: Boolean) : SettingsAction
-    data class SetOldSearchBar(val enabled: Boolean) : SettingsAction
-    data class SetInstantSeek(val enabled: Boolean) : SettingsAction
-    data class SetAutoRotateVideos(val enabled: Boolean) : SettingsAction
+    /** Writes one of [com.theoriacodex.data.repository.SettingToggles]; every switch in Settings and the search box sends this. */
+    data class SetToggle(val toggle: SettingToggle, val enabled: Boolean) : SettingsAction
+
+    /** Writes one of [com.theoriacodex.data.repository.SettingChoices]. */
+    data class SetChoice<T>(val choice: SettingChoice<T>, val value: T) : SettingsAction {
+        fun applyTo(settings: AppSettings): AppSettings = choice.write(settings, value)
+    }
     data class SetCommentOrder(val order: com.theoriacodex.domain.model.CommentOrder) : SettingsAction
     data class SetViewerPlaybackMode(val mode: com.theoriacodex.domain.model.ViewerPlaybackMode) : SettingsAction
-    data class SetVideoQuality(val quality: com.theoriacodex.domain.model.VideoQuality) : SettingsAction
-    data class SetDownloadQuality(val quality: com.theoriacodex.domain.model.VideoQuality) : SettingsAction
-    data class SetDownloadsOverMetered(val enabled: Boolean) : SettingsAction
-    data class SetDownloadsOverRoaming(val enabled: Boolean) : SettingsAction
-    data class SetCacheFullImageOnSave(val enabled: Boolean) : SettingsAction
-    data class SetResolveUnknownAnimatedDurations(val enabled: Boolean) : SettingsAction
     data class SetScenarioPreset(val preset: ScenarioPreset) : SettingsAction
     data object ToggleClearCacheOptions : SettingsAction
     data object ClearThumbnailCache : SettingsAction

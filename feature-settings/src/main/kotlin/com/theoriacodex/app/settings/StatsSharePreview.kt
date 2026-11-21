@@ -1,5 +1,6 @@
 package com.theoriacodex.app.settings
 
+import com.theoriacodex.data.repository.SettingDestinations
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -98,7 +99,7 @@ fun StatsSharePreview(
     val totals = remember(file) { compareStats(file, StatsShareFile()).yours }
     val selected = profiles.firstOrNull { it.profileId == selectedProfileId } ?: profiles.firstOrNull()
     SettingsPageColumn {
-        SettingsHeader("Share my stats", onBack, SETTINGS_PATH)
+        SettingsHeader(SettingDestinations.ShareStats.title, onBack, SETTINGS_PATH)
         StatsCaption(
             "The file holds your overall time and counts, Codex names, time, open counts and your top posts. " +
                 "Uncheck anything you'd rather keep private.",
@@ -294,7 +295,7 @@ private fun ShareCodexPosts(
         codex.posts.keys.filter(excludedPosts::contains)
     val totalOpens = codex.posts.values.sumOf { it.opens }.coerceAtLeast(1L)
     SettingsPageColumn {
-        SettingsHeader(codex.name, onBack, SETTINGS_PATH + "Share my stats")
+        SettingsHeader(codex.name, onBack, SETTINGS_PATH + SettingDestinations.ShareStats.title)
         StatsCaption("Tap a post to look at it. Uncheck it to leave it out.")
         StatsCard {
             if (rows.isEmpty()) StatsCaption("No posts recorded here.")

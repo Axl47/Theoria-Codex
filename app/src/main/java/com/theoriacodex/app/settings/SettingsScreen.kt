@@ -33,7 +33,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -56,12 +55,17 @@ import com.theoriacodex.app.ui.components.NameEntryDialog
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.app.ui.components.ActionMenuSheet
 import com.theoriacodex.data.repository.ScenarioPreset
+import com.theoriacodex.data.repository.SettingDestinations
+import com.theoriacodex.data.repository.SettingToggles
+import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.data.repository.SourceWeightSettings
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.launch
 
 private enum class SettingsSheet { PROFILE, SOURCE_MIX, PLAYBACK, CONTROLS }
+
+private val STORAGE_TOGGLES = listOf(SettingToggles.KeepMediaOffline, SettingToggles.FindAnimationDurations)
 
 /**
  * Settings hub: each row shows its current value; short choices use sheets, larger tasks use pages.
@@ -143,15 +147,15 @@ private fun SettingsHome(
         SettingsHeader("Settings", onBack = onClose)
         ProfileCard(state, onAction, onAdd = { showAddProfile = true }, onMenu = { sheet = SettingsSheet.PROFILE })
         SettingsGroup("Stats") {
-            SettingsRow("Your stats", statsSummary(statistics), Icons.Default.BarChart, onClick = {
+            SettingsRow(SettingDestinations.Stats.title, statsSummary(statistics), Icons.Default.BarChart, onClick = {
                 open(SettingsPage.STATS)
             })
             SettingsRowDivider()
-            SettingsRow("Share my stats", "Choose what to include and send it as a file", Icons.Default.Share, onClick = {
+            SettingsRow(SettingDestinations.ShareStats.title, "Choose what to include and send it as a file", Icons.Default.Share, onClick = {
                 open(SettingsPage.STATS_SHARE)
             })
             SettingsRowDivider()
-            SettingsRow("Compare with a friend", "Open a stats file someone sent you", Icons.AutoMirrored.Filled.CompareArrows, onClick = onCompareStats)
+            SettingsRow(SettingDestinations.CompareStats.title, "Open a stats file someone sent you", Icons.AutoMirrored.Filled.CompareArrows, onClick = onCompareStats)
         }
         SettingsHomeGroups(state, onAction, searchSources, storageSummary, sites, showDiagnostics, { sheet = it }, open)
         if (state.showDeveloperScenarios) DeveloperScenarios(state, onAction)
@@ -195,14 +199,14 @@ private fun SettingsHomeGroups(
     open: (SettingsPage) -> Unit,
 ) {
     SettingsGroup("Recommendations") {
-        SettingsRow("Source mix", sourceMixSummary(state, searchSources), Icons.Default.Tune, onClick = {
+        SettingsRow(SettingDestinations.SourceMix.title, sourceMixSummary(state, searchSources), Icons.Default.Tune, onClick = {
             onSheet(SettingsSheet.SOURCE_MIX)
         })
     }
     SettingsGroup("Sources") {
         if (sites != null) {
             SettingsRow(
-                "Sites", "${sites.summary} · ${sourceAccountsSummary(state.accounts)}", Icons.Default.Public,
+                SettingDestinations.Sites.title, "${sites.summary} · ${sourceAccountsSummary(state.accounts)}", Icons.Default.Public,
                 onClick = { open(SettingsPage.SITES) },
             )
             SettingsRowDivider()
@@ -210,17 +214,17 @@ private fun SettingsHomeGroups(
         OpenLinksRow()
     }
     SettingsGroup("Viewing") {
-        SettingsRow("Playback & downloads", playbackSummary(state), Icons.Default.PlayCircle, onClick = {
+        SettingsRow(SettingDestinations.Playback.title, playbackSummary(state), Icons.Default.PlayCircle, onClick = {
             onSheet(SettingsSheet.PLAYBACK)
         })
         SettingsRowDivider()
-        SettingsRow("Controls", "Search bar, seeking, swipes, rotation", Icons.Default.TouchApp, onClick = {
+        SettingsRow(SettingDestinations.Controls.title, "Search bar, seeking, swipes, rotation", Icons.Default.TouchApp, onClick = {
             onSheet(SettingsSheet.CONTROLS)
         })
     }
     SettingsGroup("Storage & app") {
         SettingsRow(
-            "Storage & caching",
+            SettingDestinations.Storage.title,
             storageSummary ?: cacheSummary(state.cacheSnapshot.thumbnailCount, state.cacheSnapshot.fullImageCount),
             Icons.Default.Storage,
             onClick = { open(SettingsPage.STORAGE) },
@@ -229,7 +233,7 @@ private fun SettingsHomeGroups(
         AppLockRow()
         SettingsRowDivider()
         SettingsRow(
-            "What's new",
+            SettingDestinations.WhatsNew.title,
             if (state.changelogLoading) "Loading release history..." else "Changelog for available pre-releases",
             Icons.Default.NewReleases,
             enabled = !state.changelogLoading,
@@ -238,7 +242,7 @@ private fun SettingsHomeGroups(
         if (showDiagnostics) {
             SettingsRowDivider()
             SettingsRow(
-                "Diagnostics report",
+                SettingDestinations.Diagnostics.title,
                 "Share recent errors to help fix a problem",
                 Icons.Default.BugReport,
                 onClick = { open(SettingsPage.DIAGNOSTICS) },
@@ -332,19 +336,12 @@ private fun StoragePage(
     onBack: () -> Unit,
 ) {
     SettingsPageColumn {
-        SettingsHeader("Storage & caching", onBack, SETTINGS_PATH)
+        SettingsHeader(SettingDestinations.Storage.title, onBack, SETTINGS_PATH)
         SettingsGroup(null) {
-            SettingsRow("Keep media offline when saving", trailing = {
-                Switch(state.settings.cache.cacheFullImageOnSave, onCheckedChange = {
-                    onAction(SettingsAction.SetCacheFullImageOnSave(it))
-                })
-            })
-            SettingsRowDivider()
-            SettingsRow("Find animation durations in background", trailing = {
-                Switch(state.settings.contentFilters.resolveUnknownAnimatedDurations, onCheckedChange = {
-                    onAction(SettingsAction.SetResolveUnknownAnimatedDurations(it))
-                })
-            })
+            STORAGE_TOGGLES.forEachIndexed { index, toggle ->
+                if (index > 0) SettingsRowDivider()
+                SwitchRow(toggle, state.settings) { onAction(SettingsAction.SetToggle(toggle, it)) }
+            }
         }
         SettingsGroup(null) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

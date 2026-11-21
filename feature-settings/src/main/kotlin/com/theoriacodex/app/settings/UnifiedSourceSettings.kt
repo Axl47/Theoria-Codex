@@ -1,5 +1,6 @@
 package com.theoriacodex.app.settings
 
+import com.theoriacodex.data.repository.SettingDestinations
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -25,7 +26,7 @@ fun UnifiedSourceSettings(
 ) {
     // Keep the entire slider group responsive while repository writes complete asynchronously.
     var weights by remember(sources) { mutableStateOf(SourceWeightSettings.weightsFor(runtime, sources)) }
-    Text("Source mix", style = MaterialTheme.typography.titleMedium)
+    Text(SettingDestinations.SourceMix.title, style = MaterialTheme.typography.titleMedium)
     Text(
         "Share of results in Unified mode. Hold sources in Search to choose them.",
         style = MaterialTheme.typography.bodySmall,

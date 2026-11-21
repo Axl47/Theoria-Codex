@@ -1,5 +1,6 @@
 package com.theoriacodex.app.settings
 
+import com.theoriacodex.data.repository.SettingDestinations
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
@@ -57,7 +58,7 @@ fun DiagnosticsPage(entry: SettingsDiagnosticsEntry, onBack: () -> Unit) {
     // A rebuild keeps showing its previous value, so only text built for the current choices may be used.
     val report = built?.takeIf { it.sections == sections && it.generation == generation }?.text
     SettingsPageColumn {
-        SettingsHeader("Diagnostics report", onBack, SETTINGS_PATH)
+        SettingsHeader(SettingDestinations.Diagnostics.title, onBack, SETTINGS_PATH)
         StatsCaption(
             "Send this to help track down a problem. Web addresses, keys and account details are removed first, " +
                 "and the report only leaves your phone if you share it.",

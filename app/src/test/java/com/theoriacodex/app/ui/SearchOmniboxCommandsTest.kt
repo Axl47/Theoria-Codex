@@ -1,7 +1,10 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.app.search.omnibox.OmniboxEntry
+import com.theoriacodex.app.search.omnibox.matchOmnibox
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.data.repository.SettingToggles
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -16,28 +19,17 @@ class SearchOmniboxCommandsTest {
         val written = mutableListOf<SettingsAction>()
         val toggles = searchToggleEntries(settings, written::add)
 
-        assertEquals(
-            mapOf(
-                "Instant Seek" to true,
-                "Auto-Rotate Videos" to false,
-                "Invert Scroll Direction" to true,
-                "Old Search Bar" to true,
-                "Download over metered networks" to false,
-                "Download while roaming" to true,
-            ),
-            toggles.associate { it.title to it.checked },
-        )
+        assertEquals(SettingToggles.all.map { it.title }, toggles.map { it.title })
+        assertEquals(SettingToggles.all.map { it.read(settings) }, toggles.map { it.checked })
         toggles.forEach { it.set(!it.checked) }
-        assertEquals(
-            listOf(
-                SettingsAction.SetInstantSeek(false),
-                SettingsAction.SetAutoRotateVideos(true),
-                SettingsAction.SetInvertScrollDirection(false),
-                SettingsAction.SetOldSearchBar(false),
-                SettingsAction.SetDownloadsOverMetered(true),
-                SettingsAction.SetDownloadsOverRoaming(false),
-            ),
-            written,
-        )
+        assertEquals(SettingToggles.all.map { SettingsAction.SetToggle(it, !it.read(settings)) }, written)
+    }
+
+    @Test fun `the search box finds a toggle by its title and by a keyword`() {
+        val toggles = searchToggleEntries(AppSettings()) {}
+
+        assertEquals("Instant Seek", (matchOmnibox(toggles, "instant").first() as OmniboxEntry.Toggle).title)
+        assertEquals("Download while roaming", (matchOmnibox(toggles, "roaming").first() as OmniboxEntry.Toggle).title)
+        assertEquals("Auto-Rotate Videos", (matchOmnibox(toggles, "orientation").single() as OmniboxEntry.Toggle).title)
     }
 }
