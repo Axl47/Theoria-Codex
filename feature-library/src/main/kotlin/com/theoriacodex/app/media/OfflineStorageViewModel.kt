@@ -153,7 +153,7 @@ class OfflineStorageViewModel(
         val owner = codexOfflineOwner(codexId)
         if (controls.value.working || owner in controls.value.preparingOwners || offline.jobs.value[owner]?.isRunning == true) return
         controls.update { it.copy(preparingOwners = it.preparingOwners + owner, message = null) }
-        val preparation = offline.prepare(owner) {
+        val preparation = offline.prepare(owner) { start ->
             val result = runCatchingPreservingCancellation {
                 withContext(dispatcher) { codices.observeCodexPosts(codexId, CodexSortMode.NEWEST_SAVED).first() }
             }
@@ -161,7 +161,7 @@ class OfflineStorageViewModel(
             when {
                 posts == null -> preparationFailed("The Codex could not be loaded. Try again.")
                 posts.isEmpty() -> preparationFailed("This Codex has no posts to keep offline.")
-                else -> offline.makeAvailableOffline(owner, posts)
+                else -> start(posts)
             }
         }
         preparation.invokeOnCompletion { controls.update { it.copy(preparingOwners = it.preparingOwners - owner) } }

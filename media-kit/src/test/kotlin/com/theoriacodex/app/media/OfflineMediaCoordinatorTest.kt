@@ -11,9 +11,13 @@ import com.theoriacodex.domain.model.VideoVariant
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -223,6 +227,48 @@ class OfflineMediaCoordinatorTest {
 
         assertEquals(listOf("a"), acquisitions)
         assertEquals(setOf(post("a").id), coordinator.jobs.value.getValue("codex:a").failedPosts)
+    }
+
+    @Test
+    fun `a replaced preparation that already loaded cannot start a job after the removal`() = runTest {
+        val (coordinator, store) = gatedCoordinator()
+        val proceed = loadedPreparation(coordinator)
+        coordinator.prepare("codex:a") { awaitCancellation() }
+        coordinator.remove("codex:a")
+        proceed.complete(Unit)
+        runCurrent()
+        assertTrue(coordinator.jobs.value.isEmpty())
+        assertEquals(0, store.snapshot.value.postCount)
+    }
+
+    @Test
+    fun `a cancelled preparation that already loaded cannot start a job`() = runTest {
+        val (coordinator, _) = gatedCoordinator()
+        val proceed = loadedPreparation(coordinator)
+        coordinator.cancel("codex:a")
+        proceed.complete(Unit)
+        runCurrent()
+        assertTrue(coordinator.jobs.value.isEmpty())
+    }
+
+    private fun TestScope.gatedCoordinator(): Pair<OfflineMediaCoordinator, OfflineMediaStore> {
+        val store = OfflineMediaStore(temporary.newFolder(), ioDispatcher = StandardTestDispatcher(testScheduler))
+        return OfflineMediaCoordinator(store, backgroundScope, { it }, { it.media }, { _, _, file -> file.writeText("bytes") }) to store
+    }
+
+    /** Starts a preparation that has loaded its posts and is past its last cancellable point; completing the result lets it start. */
+    private suspend fun loadedPreparation(coordinator: OfflineMediaCoordinator): CompletableDeferred<Unit> {
+        val loaded = CompletableDeferred<Unit>()
+        val proceed = CompletableDeferred<Unit>()
+        coordinator.prepare("codex:a") { start ->
+            withContext(NonCancellable) {
+                loaded.complete(Unit)
+                proceed.await()
+            }
+            start(listOf(post("a")))
+        }
+        loaded.await()
+        return proceed
     }
 
     private fun post(id: String): Post {
