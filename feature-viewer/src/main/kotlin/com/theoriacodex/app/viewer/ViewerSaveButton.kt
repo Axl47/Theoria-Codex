@@ -287,7 +287,7 @@ private fun ViewerSaveButtonState.label(): String = when (this) {
 private fun ViewerSaveButtonState.description(): String = when (this) {
     is ViewerSaveButtonState.Suggest -> "Save to ${target.name}" + if (inAnyCodex) ", already in a Codex" else ""
     is ViewerSaveButtonState.Saved -> "Saved to ${record.codexName}" + if (record.undoable) ", undo" else ""
-    is ViewerSaveButtonState.NoTarget -> if (inAnyCodex) "In every Codex, save to Codex" else "Save to Codex"
+    is ViewerSaveButtonState.NoTarget -> if (inAnyCodex) "Saved in every Codex. Choose Codex" else "Save to Codex"
     ViewerSaveButtonState.Loading -> "Save to Codex"
 }
 

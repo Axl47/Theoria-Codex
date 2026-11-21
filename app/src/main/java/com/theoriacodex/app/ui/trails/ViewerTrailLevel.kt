@@ -65,7 +65,7 @@ internal fun viewerRootLabel(context: ViewerLaunchContext, query: Query?): Strin
         ViewerStreamSource.FOR_YOU -> "For You"
         ViewerStreamSource.CODEX -> "Codex"
         ViewerStreamSource.CREATOR_PROFILE -> "Creator"
-        ViewerStreamSource.RECENTS -> "Recents"
+        ViewerStreamSource.RECENTS -> "History"
         ViewerStreamSource.RELATED -> "Related"
         ViewerStreamSource.TRAIL -> "Trail"
     }
