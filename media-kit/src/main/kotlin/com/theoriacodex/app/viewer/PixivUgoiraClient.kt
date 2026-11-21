@@ -227,24 +227,27 @@ class PixivUgoiraClient constructor(
 
     private suspend fun archiveFor(postId: String): UgoiraArchive {
         synchronized(cacheLock) {
-            archiveCache[postId]?.takeIf { it.file.isFile }?.let { return it }
+            memoryArchive(postId)?.let { return it }
             archiveWaiters[postId] = (archiveWaiters[postId] ?: 0) + 1
         }
         try {
-            val archive = archiveFlights.share(postId) {
-                withContext(Dispatchers.IO) {
+            return archiveFlights.share(postId) {
+                // A caller arriving just as the previous flight completed finds that flight's archive here.
+                synchronized(cacheLock) { memoryArchive(postId) }?.let { return@share it }
+                val archive = withContext(Dispatchers.IO) {
                     withTimeoutOrNull(operationTimeoutMs) {
                         archiveSlots.withPermit { loadArchiveOrThrow(postId) }
                     } ?: throw IOException("Pixiv animation download timed out")
                 }
-            }
-            synchronized(cacheLock) {
-                archiveCache[postId] = archive
-                while (archiveCache.size > UGOIRA_ARCHIVE_MEMORY_ENTRY_LIMIT) {
-                    archiveCache.remove(archiveCache.entries.first().key)
+                // Cached before the flight completes, so no later caller misses both the flight and the cache.
+                synchronized(cacheLock) {
+                    archiveCache[postId] = archive
+                    while (archiveCache.size > UGOIRA_ARCHIVE_MEMORY_ENTRY_LIMIT) {
+                        archiveCache.remove(archiveCache.entries.first().key)
+                    }
                 }
+                archive
             }
-            return archive
         } finally {
             synchronized(cacheLock) {
                 val remaining = (archiveWaiters[postId] ?: 1) - 1
@@ -252,6 +255,9 @@ class PixivUgoiraClient constructor(
             }
         }
     }
+
+    /** The validated archive held in memory, while its file still exists. Call under [cacheLock]. */
+    private fun memoryArchive(postId: String): UgoiraArchive? = archiveCache[postId]?.takeIf { it.file.isFile }
 
     private suspend fun loadArchiveOrThrow(postId: String): UgoiraArchive {
         offlineArchiveLookup(postId)?.let { offline ->
