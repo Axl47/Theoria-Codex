@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 /**
  * The trail forks of one Viewer level, shared by its trail chips and its info sheet's tags: at most one loads at a time.
  * A fork runs in [scope], which lives as long as the level ([close]), so the chrome hiding or the sheet closing leaves
- * it running; paging to another post ([follow]) cancels it.
+ * it running; paging to another post cancels it, as soon as the swipe heads there ([leave]) and once it lands ([follow]).
  */
 @Stable
 internal class ViewerTrailForks(
@@ -64,6 +64,11 @@ internal class ViewerTrailForks(
     fun follow(post: PostId) {
         if (post == from) return
         from = post
+        leave()
+    }
+
+    /** Cancels the fork, and clears its failure: a swipe is heading to another post, where it must not open. */
+    fun leave() {
         job?.cancel()
         job = null
         busy = null

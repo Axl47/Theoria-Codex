@@ -48,6 +48,9 @@ internal fun BoxScope.ViewerChromeOverlays(
     val navigation = frame.navigation
     OpenInfoSheetForFocusedComment(comments, selection.post, frame.uiState.controls.panel == ViewerPanel.INFO, controls)
     LaunchedEffect(selection.post.id) { screen.trailForks.follow(selection.post.id) }
+    // The selection changes only once a swipe lands; a fork that came back during the slide would open over the post being left.
+    val swipingToAnotherPost = swipe.loadTarget?.let { it.postIndex != navigation.currentIndex } == true
+    LaunchedEffect(swipingToAnotherPost) { if (swipingToAnotherPost) screen.trailForks.leave() }
     // While scrubbing everything but the timeline steps back. Only its alpha changes, so the strip keeps its scroll position.
     val scrubFade by animateFloatAsState(if (screen.timelineInteractionActive) 0f else 1f, tween(TheoriaMotion.SHORT_MS), label = "Viewer scrub fade")
     val fadesWhileScrubbing = Modifier.graphicsLayer { alpha = scrubFade }

@@ -20,8 +20,11 @@ import com.theoriacodex.app.codex.SavedSearchNewPostsChecker
 import com.theoriacodex.app.codex.markSavedSearchPostsSeen
 import com.theoriacodex.app.codex.savedNewPosts
 import com.theoriacodex.app.di.DataDependencies
+import com.theoriacodex.app.statistics.statisticsCodexId
 import com.theoriacodex.app.ui.components.FeedView
+import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.data.repository.CreatorFollowsRepository
+import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.markKey
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.awaitCancellation
@@ -103,14 +106,15 @@ private suspend fun DataDependencies.markNewPostsSeen(codexId: String, shown: Se
 }
 
 /**
- * Opens the Viewer on a Saved shelf's posts. Only the tapped post opens, so only it is seen; the
- * rest of the shelf stays new until the Viewer or the full collection shows it.
+ * Marks [post] seen once the Viewer shows it from the Followed or Searches collection, whether opened from a Saved
+ * shelf or the full collection; posts the Viewer never reached stay new. Other sessions have no new posts.
  */
-internal fun TheoriaShell.openSavedShelfViewer(codexId: String, posts: List<Post>, index: Int) {
-    val opened = posts.getOrNull(index)
-    if (opened != null && codexId in newPostCodexIds) scope.launch { data.markNewPostsSeen(codexId, setOf(opened.id.markKey())) }
-    openCodexViewer(codexId, posts, index)
+internal suspend fun DataDependencies.markViewedNewPost(post: Post, session: ViewerSession?) {
+    markNewPostsSeen(newPostsCollection(session?.context) ?: return, setOf(post.id.markKey()))
 }
+
+/** The Followed or Searches collection a Viewer opened with [context] shows; null for any other session. */
+internal fun newPostsCollection(context: ViewerLaunchContext?): String? = statisticsCodexId(context)?.takeIf { it in newPostCodexIds }
 
 /** [savedNewPosts] as it changes, counting only searches that are still saved; empty while nothing is new. */
 @Composable

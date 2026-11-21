@@ -91,7 +91,7 @@ private fun SavedLibraryDestination(shell: TheoriaShell, header: LibrarySectionH
         features = shell.features,
         restoreRegistry = shell.feedFabRestoreRegistry,
         onOpenCodex = { shell.navController.navigate(AppRoute.codexDetail(it)) },
-        onOpenViewer = shell::openSavedShelfViewer,
+        onOpenViewer = shell::openCodexViewer,
         onOpenCodexActions = shell.overlays::openCollectionActions,
         resolvePost = { shell.viewerRouteWorkflow.resolvePost(it, ViewerStreamSource.CODEX) },
         onToggleLike = { shell.toggleLikeAndSyncCodex(it) },
