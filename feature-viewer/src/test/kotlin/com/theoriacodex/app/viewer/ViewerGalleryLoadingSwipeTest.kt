@@ -147,7 +147,7 @@ class ViewerGalleryLoadingSwipeTest {
     private fun gallery() = Post(
         id = PostId(SourceKey.NHENTAI, "gallery"), preview = image(0), full = null,
         pageUrl = null, width = 800, height = 1_000, canonicalTags = emptyList(), rawTags = emptyList(),
-        authorName = null, createdAtEpochMs = null,
+        authorName = null, createdAtEpochMs = null, galleryLengthUnknown = true,
     )
 
     private fun image(page: Int) = ImageRef(url = null, localPath = "/missing/gallery-$page.jpg", mime = "image/jpeg")

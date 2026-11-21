@@ -127,6 +127,7 @@ internal object NhentaiMirrorParser {
             authorName = null,
             createdAtEpochMs = null,
             title = cleanNhentaiTitle(parseSearchTitle(line, previewUrl)),
+            galleryLengthUnknown = true,
         )
     }
 
