@@ -33,6 +33,11 @@ fun BackupControls(state: BackupUiState, onIncludeRecents: (Boolean) -> Unit, on
         contentPadding = PaddingValues(0.dp),
         onCheckedChange = onIncludeRecents,
     )
+    Text(
+        "Logins and downloaded media are not included.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = onExport, enabled = !state.busy, modifier = Modifier.weight(1f)) {
             Text("Back up profiles")
