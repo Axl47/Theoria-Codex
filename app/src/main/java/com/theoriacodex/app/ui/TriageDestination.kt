@@ -91,16 +91,15 @@ internal fun rememberTriageOpener(shell: TheoriaShell): TriageOpener {
 }
 
 /**
- * Pushes the deck over [request] once Search's pending filters have applied (see [settledTriageRequest]), but only
- * over the screen and tab Triage was tapped on: when the user has moved on meanwhile it opens nothing. When applying
- * them changed the query, the deck takes none of the old grid's posts, only how it filters.
+ * Pushes the deck over [request] once Search's pending filters have applied (see [settledTriage]), but only over the
+ * screen and tab Triage was tapped on: when the user has moved on meanwhile it opens nothing.
  */
 private suspend fun TheoriaShell.openTriage(request: TriageRequest, seed: TriageSeed, handOff: TriageHandOffViewModel) {
     val origin = navController.currentBackStackEntry
     val tab = navigation.homeTabRoute
-    val settled = settledTriageRequest(request)
+    val (settled, settledSeed) = settledTriage(request, seed)
     if (navController.currentBackStackEntry !== origin || navigation.homeTabRoute != tab) return
-    handOff.hand(settled, if (settled == request) seed else seed.copy(posts = emptyList()))
+    handOff.hand(settled, settledSeed)
     navController.navigate(AppRoute.triage(settled))
 }
 
