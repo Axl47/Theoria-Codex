@@ -24,7 +24,7 @@ import org.robolectric.annotation.Config
 class SearchFilterApplyTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun `changing filters searches once when the sheet closes`() {
+    @Test fun `filters apply live and closing the sheet settles the search once`() {
         val state = mutableStateOf(SearchUiState())
         val actions = mutableListOf<SearchAction>()
         compose.setContent {
@@ -47,8 +47,11 @@ class SearchFilterApplyTest {
         compose.onNodeWithContentDescription("Filter and sort").performClick()
         compose.onNodeWithText("Popular").performClick()
         compose.onNodeWithText("Top").performClick()
-        compose.runOnIdle { assertEquals(0, actions.count { it == SearchAction.ApplyDraft }) }
+        compose.runOnIdle { assertEquals(0, actions.count { it == SearchAction.SettleSearch }) }
         compose.onNodeWithContentDescription("Close sheet").performSemanticsAction(SemanticsActions.OnClick)
-        compose.runOnIdle { assertEquals(1, actions.count { it == SearchAction.ApplyDraft }) }
+        compose.runOnIdle {
+            assertEquals(1, actions.count { it == SearchAction.SettleSearch })
+            assertEquals(0, actions.count { it == SearchAction.ApplyDraft })
+        }
     }
 }

@@ -63,6 +63,9 @@ import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
+import com.theoriacodex.app.triage.triageSeed
+import com.theoriacodex.app.ui.navigation.rememberTriageAction
+import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.app.ui.components.FeedScrollSignal
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.FeedPostActionSheet
@@ -163,6 +166,8 @@ fun CodexDetailScreen(
             { updatedSort -> onFabRestoreStateChange(fabRestoreState.copy(sortMode = updatedSort.name)) },
             resetFilters, { showFilterSheet = false },
             customFilters?.let { content -> ({ content { showFilterSheet = false } }) }, posts.any(::isAnimatedPost),
+            // Followed and Saved searches pass a custom header; the deck only knows Codices, which Likes is one of.
+            onTriage = rememberTriageAction(ViewerStreamSource.CODEX, "codex:$codexId".takeIf { customHeader == null }, feed.triageSeed()),
         )
     }
     selectedActionPost?.let { post ->
@@ -554,7 +559,12 @@ private fun CodexDetailEmptyState(collectionIsEmpty: Boolean, loading: Boolean, 
         }
     } else {
         FeedEmptyTile(
-            title = if (collectionIsEmpty) "This codex is empty" else "No matching posts",
+            // A live feed (Followed, saved searches) is not a Codex, so it states only what to do.
+            title = when {
+                emptyMessage != null -> null
+                collectionIsEmpty -> "This codex is empty"
+                else -> "No matching posts"
+            },
             message = emptyMessage ?: when {
                 collectionIsEmpty -> "Browse and save posts"
                 resolvingDurations -> "Resolving durations…"
@@ -633,8 +643,9 @@ internal fun CodexFilterSheet(
     onDismiss: () -> Unit,
     followedFilters: (@Composable () -> Unit)? = null,
     hasAnimatedPosts: Boolean = true,
+    onTriage: (() -> Unit)? = null,
 ) {
-    FeedFilterSheet(onDismiss = onDismiss, onReset = onReset, modifier = Modifier.testTag("codex-filter-scroll")) {
+    FeedFilterSheet(onDismiss = onDismiss, onReset = onReset, modifier = Modifier.testTag("codex-filter-scroll"), onTriage = onTriage) {
         FilterSection("Sort") {
             // Length sorts mean nothing without animations, unless one is already chosen.
             CodexSortMode.entries.filter { hasAnimatedPosts || !it.usesDuration || it == sortMode }.forEach { mode ->
@@ -698,7 +709,8 @@ internal fun codexItemSummary(
     selectedCount: Int? = null,
 ): String {
     if (selectedCount != null) return "$selectedCount/$totalCount"
-    return if (filtersActive) "$visibleCount of $totalCount items" else "$totalCount items"
+    val items = countNoun(totalCount, "item")
+    return if (filtersActive) "$visibleCount of $totalCount $items" else "$totalCount $items"
 }
 
 internal fun codexSelectedPostActionDescription(

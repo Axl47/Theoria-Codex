@@ -52,6 +52,8 @@ import com.theoriacodex.app.viewer.ViewerScreenHost
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.ViewerRestorationRequest
 import com.theoriacodex.app.viewer.ViewerReturnTransition
+import com.theoriacodex.app.viewer.ViewerTrail
+import com.theoriacodex.app.ui.trails.ViewerLevel
 import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.newViewerPosts
 import com.theoriacodex.app.viewer.state.ViewerAction
@@ -166,10 +168,12 @@ internal fun ViewerRoute(
     effectCallbacks: ViewerRouteEffectCallbacks,
     screenCallbacks: ViewerScreenCallbacks,
     onOwnerChanged: (ViewerViewModel?) -> Unit = {},
+    level: ViewerLevel = ViewerLevel.Root,
 ) {
     val viewerReturn = LocalViewerReturnTransition.current
+    val latestLevel = rememberUpdatedState(level)
     DisposableEffect(viewerReturn) {
-        onDispose { viewerReturn?.clear() }
+        onDispose { if (latestLevel.value.clearsReturnOnDispose()) viewerReturn?.clear() }
     }
     val latestDependencies = rememberUpdatedState(dependencies)
     val latestEffectCallbacks = rememberUpdatedState(effectCallbacks)
@@ -185,7 +189,8 @@ internal fun ViewerRoute(
     val viewerState by viewerOwner.state.collectAsStateWithLifecycle()
     val session by viewerOwner.session.collectAsStateWithLifecycle()
     val retainedPostIds = remember(viewerState.pages) { viewerState.pages.mapTo(mutableSetOf()) { it.post.id } }
-    SideEffect { viewerReturn?.retainPosts(retainedPostIds) }
+    // A fork's posts are not in the grid underneath; the root's stay retained there.
+    SideEffect { if (!level.isFork) viewerReturn?.retainPosts(retainedPostIds) }
     val restoration = rememberViewerSessionRestoration(viewerOwner, latestDependencies)
     DisposableEffect(viewerOwner) {
         latestOnOwnerChanged.value(viewerOwner)
@@ -194,7 +199,7 @@ internal fun ViewerRoute(
     LaunchedEffect(viewerOwner, restoration.claimedSessionId, restoration.attempt) { restoration.run() }
     ViewerLiveSourceMergeEffect(viewerOwner, session, liveSourceState)
     CollectRouteEffects(viewerOwner.effects) { effect ->
-        handleViewerEffect(effect, viewerOwner, latestEffectCallbacks.value, latestDependencies, viewerReturn, routeScope, mediaRetries)
+        handleViewerEffect(effect, viewerOwner, latestEffectCallbacks.value, latestDependencies, viewerReturn.takeUnless { latestLevel.value.isFork }, routeScope, mediaRetries)
     }
     ViewerUsageTargetEffect(session?.context, viewerState, dependencies.onCodexUsageTargetChanged)
 
@@ -217,12 +222,21 @@ internal fun ViewerRoute(
         host = rememberViewerScreenHost(viewerOwner, durationOwner, screenCallbacks, latestDependencies, latestEffectCallbacks, routeScope),
         config = config,
         saveToCodexQuery = activeSession?.saveQuery,
+        saveFromForYou = activeSession?.context?.streamSource == ViewerStreamSource.FOR_YOU,
         canLoadMoreFromSource = activeSession?.liveSearchBinding == true && sourceState?.canLoadMore == true,
         loadingMoreFromSource = sourceState?.loadingMore == true,
         contextActions = rememberViewerContextActions(related.source, activeSession?.context, latestScreenCallbacks),
         relatedShelf = rememberViewerRelatedShelf(related, viewerOwner, latestScreenCallbacks),
         comments = rememberViewerComments(viewerOwner, config.commentOrder, screenCallbacks.onCommentOrderSelected, screenCallbacks.onOpenUrl),
+        trail = rememberViewerTrail(level, activeSession),
     )
+}
+
+/** The trail row's crumbs and query for [level], naming a root level after what [session] was opened from. */
+@Composable
+private fun rememberViewerTrail(level: ViewerLevel, session: ViewerSession?): ViewerTrail {
+    LaunchedEffect(session?.sessionId) { session?.let { level.nameRoot(it.context, it.saveQuery) } }
+    return remember(level, session?.saveQuery) { ViewerTrail(level.crumbs, session?.saveQuery, level.popTo) }
 }
 
 /** The navigation-scoped owner. Its factory reads the latest dependencies and settings, not the first ones. */

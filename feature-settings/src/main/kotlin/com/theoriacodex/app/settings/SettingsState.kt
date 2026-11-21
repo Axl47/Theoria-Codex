@@ -13,7 +13,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 
-/** Pages inside the Settings tab; held by the owner so other screens can open Sites directly. */
+/** Pages inside Settings; held by the owner so other screens can open Settings at a page. */
 enum class SettingsPage { HOME, SITES, HIDDEN_TAGS, STORAGE, STATS, STATS_SHARE, STATS_COMPARE, DIAGNOSTICS }
 
 /**

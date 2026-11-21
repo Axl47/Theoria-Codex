@@ -13,11 +13,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
@@ -28,10 +33,12 @@ import kotlinx.coroutines.flow.stateIn
 val LocalCodexSaveRelevanceLoader = staticCompositionLocalOf<CodexSaveRelevanceLoader?> { null }
 
 /**
- * Shares one lookup across the hold menu and save picker, retaining it through their transition.
+ * Codex relevance for save surfaces, shared by every surface asking about the same posts and search.
  *
- * The saved library is observed once and shared across posts: opening another post rescores the retained
- * snapshot instead of decoding the library again. It stops 5 s after the last action surface closes.
+ * Requests are keyed by posts and search, so the hold menu, info sheet and one-tap save surfaces can observe
+ * different posts at once. The saved library is observed once and shared: each request only rescores the
+ * retained snapshot when the library changes. A request stays warm for 5 s after its last collector leaves,
+ * which carries the scores from the hold menu into the picker; the library stops 5 s after the last request.
  */
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class CodexSaveRelevanceLoader(
@@ -44,27 +51,65 @@ class CodexSaveRelevanceLoader(
         .map { codices -> codices.mapTo(linkedSetOf(), Codex::codexId) }
         .distinctUntilChanged()
         .flatMapLatest(observeLibrary)
-        .shareIn(scope, SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000), replay = 1)
-    private var request: Pair<List<Post>, Query?>? = null
-    private var lookupScope: CoroutineScope? = null
-    private var scores: StateFlow<Map<String, Double>>? = null
+        .shareIn(scope, SharingStarted.WhileSubscribed(stopTimeoutMillis = RETAIN_MS), replay = 1)
+    private val requests = HashMap<Request, Lookup>()
 
-    fun observe(posts: List<Post>, query: Query?): StateFlow<Map<String, Double>> {
-        val next = posts.distinctBy(Post::id) to query
-        if (request == next) return requireNotNull(scores)
-        lookupScope?.cancel()
-        val childScope = CoroutineScope(scope.coroutineContext + Job(scope.coroutineContext[Job]))
-        lookupScope = childScope
-        request = next
-        val relevance = CodexSaveRelevance(next.first, next.second)
+    /** Scores by Codex id for [posts] saved from [query]; collect it for as long as the surface shows. */
+    fun observe(posts: List<Post>, query: Query?): Flow<Map<String, Double>> {
+        val request = Request(posts.distinctBy(Post::id), query)
+        return flow {
+            val lookup = acquire(request)
+            try {
+                emitAll(lookup.scores.filterNotNull())
+            } finally {
+                release(request, lookup)
+            }
+        }
+    }
+
+    /** The scores a live or recently closed request already has, so a surface can open on them. */
+    fun latest(posts: List<Post>, query: Query?): Map<String, Double> = synchronized(requests) {
+        requests[Request(posts.distinctBy(Post::id), query)]?.scores?.value.orEmpty()
+    }
+
+    private fun acquire(request: Request): Lookup = synchronized(requests) {
+        requests.getOrPut(request) { start(request) }.apply {
+            collectors++
+            expiry?.cancel()
+            expiry = null
+        }
+    }
+
+    private fun release(request: Request, lookup: Lookup) = synchronized(requests) {
+        if (--lookup.collectors > 0) return@synchronized
+        lookup.expiry = scope.launch {
+            delay(RETAIN_MS)
+            synchronized(requests) {
+                if (lookup.collectors == 0 && requests[request] === lookup) {
+                    requests.remove(request)
+                    lookup.scope.cancel()
+                }
+            }
+        }
+    }
+
+    private fun start(request: Request): Lookup {
+        val lookupScope = CoroutineScope(scope.coroutineContext + Job(scope.coroutineContext[Job]))
+        val relevance = CodexSaveRelevance(request.posts, request.query)
         val scored = if (relevance.hasSignals) {
             library.map(relevance::scoreEach).flowOn(scoringDispatcher)
         } else {
             flowOf(emptyMap())
         }
-        return scored
-            .stateIn(childScope, SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000), emptyMap())
-            .also { scores = it }
+        return Lookup(lookupScope, scored.stateIn(lookupScope, SharingStarted.Eagerly, null))
+    }
+
+    private data class Request(val posts: List<Post>, val query: Query?)
+
+    /** [scores] is null until the first scoring, so collectors never see a placeholder. */
+    private class Lookup(val scope: CoroutineScope, val scores: StateFlow<Map<String, Double>?>) {
+        var collectors = 0
+        var expiry: Job? = null
     }
 }
 
@@ -73,5 +118,7 @@ class CodexSaveRelevanceLoader(
 fun PreloadCodexSaveRelevance(post: Post, query: Query? = null) {
     val loader = LocalCodexSaveRelevanceLoader.current ?: return
     remember(loader, post, query) { loader.observe(listOf(post), query) }
-        .collectAsStateWithLifecycle()
+        .collectAsStateWithLifecycle(emptyMap())
 }
+
+private const val RETAIN_MS = 5_000L

@@ -1,5 +1,8 @@
 package com.theoriacodex.app.screenshots
 
+import com.theoriacodex.app.library.LIBRARY_SETTINGS_TAG
+import com.theoriacodex.app.library.LibrarySection
+import com.theoriacodex.app.library.librarySectionTag
 import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
@@ -91,7 +94,7 @@ class AppScreenshotTest {
         compose.setContent {
             if (showApp.value) TheoriaAppContent(graph, viewModel<ViewerSessionRetentionViewModel>(), viewModel<AppShellViewModel>())
         }
-        waitFor { compose.onAllNodesWithContentDescription("Recents").fetchSemanticsNodes().isNotEmpty() }
+        waitFor { compose.onAllNodesWithContentDescription("Library").fetchSemanticsNodes().isNotEmpty() }
     }
 
     @After fun close() {
@@ -109,7 +112,7 @@ class AppScreenshotTest {
     }
 
     @Test fun `codex detail`() {
-        compose.onNodeWithContentDescription("Codex").performClick()
+        openLibrary(LibrarySection.Codices)
         waitFor { compose.onAllNodesWithText("Fixture Codex").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Fixture Codex").performClick()
         waitFor { compose.onAllNodesWithTag(searchCardTestTag(posts[0].id)).fetchSemanticsNodes().isNotEmpty() }
@@ -120,20 +123,30 @@ class AppScreenshotTest {
         openSearchResults()
         compose.onNodeWithTag(searchCardTestTag(posts[0].id)).performClick()
         waitFor { compose.onNodeWithContentDescription("More actions").isDisplayed() }
+        // The Save button learns after the Viewer opens that the post is already in the only Codex.
+        waitFor { compose.onAllNodesWithContentDescription("Saved in every Codex. Choose Codex").fetchSemanticsNodes().isNotEmpty() }
         capture("viewer")
     }
 
     @Test fun `settings`() {
-        compose.onNodeWithContentDescription("Settings").performClick()
+        compose.onNodeWithContentDescription("Library").performClick()
+        waitFor { compose.onAllNodesWithTag(LIBRARY_SETTINGS_TAG).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(LIBRARY_SETTINGS_TAG).performClick()
         // Stats load after the screen; the Codex's posts count as saved.
         waitFor { compose.onAllNodesWithText("${posts.size} saved", substring = true).fetchSemanticsNodes().isNotEmpty() }
         capture("settings")
     }
 
+    private fun openLibrary(section: LibrarySection) {
+        compose.onNodeWithContentDescription("Library").performClick()
+        waitFor { compose.onAllNodesWithTag(librarySectionTag(section)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(librarySectionTag(section)).performClick()
+    }
+
     private fun openSearchResults() {
-        compose.onNodeWithContentDescription("Recents").performClick()
-        waitFor { compose.onNodeWithContentDescription("Filter Recents by section").isDisplayed() }
-        compose.onNodeWithContentDescription("Filter Recents by section").performClick()
+        openLibrary(LibrarySection.History)
+        waitFor { compose.onNodeWithContentDescription("Filter History by section").isDisplayed() }
+        compose.onNodeWithContentDescription("Filter History by section").performClick()
         compose.onNodeWithText("Searches").performClick()
         waitFor { compose.onAllNodesWithTag("Recent search:$SEARCH_ID").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("Recent search:$SEARCH_ID").performClick()

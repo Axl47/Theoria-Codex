@@ -109,6 +109,15 @@ class ViewerRoutePolicyTest {
     }
 
     @Test
+    fun `History stores a post watched in a trail as a search`() {
+        val trail = ViewerLaunchContext("trail", 0, ViewerStreamSource.TRAIL, 0)
+
+        assertEquals(ViewerStreamSource.SEARCH, historyOrigin(trail))
+        assertEquals(ViewerStreamSource.CODEX, historyOrigin(trail.copy(streamSource = ViewerStreamSource.CODEX)))
+        assertEquals(ViewerStreamSource.SEARCH, historyOrigin(null))
+    }
+
+    @Test
     fun `live source requires exact query identity and reapplies search visibility`() {
         val liked = post("liked")
         val saved = post("saved")

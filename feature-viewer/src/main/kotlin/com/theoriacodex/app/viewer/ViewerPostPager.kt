@@ -56,7 +56,7 @@ internal fun ViewerPostPagerSurface(
     // Pinches write the transform every pointer event; only crossing the zoomed boundary changes the pager.
     val zoomed by remember(viewerTransform) { derivedStateOf { viewerTransform.value.isZoomed } }
     val reservedBottom = if (frame.chromeVisible && selection.isAnimated) {
-        with(LocalDensity.current) { (VIEWER_TIMELINE_HEIGHT + LocalViewerPostStripInset.current).toPx() }
+        with(LocalDensity.current) { (VIEWER_TIMELINE_HEIGHT + LocalViewerTimelineInset.current).toPx() }
     } else 0f
     Box(
         Modifier.fillMaxSize()

@@ -84,6 +84,9 @@ data class ForYouUiState(
 
     val canLoadMore: Boolean get() = pageableSources.isNotEmpty()
 
+    /** Names this feed for the Viewer and the triage deck, which find the feed again by it. */
+    val queryHash: String get() = "for_you:$seedId"
+
     val canRefresh: Boolean
         get() = (activeProfileLikesCount > 0 || seedSummaryBySource.isNotEmpty()) && !isRefreshing && !isPaging
 
@@ -377,7 +380,7 @@ private fun ForYouUiState.openResult(action: ForYouAction.OpenResult): ForYouTra
             effect = ForYouEffect.OpenViewer(
                 posts = viewerResults.toList(),
                 context = ViewerLaunchContext(
-                    queryHash = "for_you:$seedId",
+                    queryHash = queryHash,
                     startIndex = action.index,
                     streamSource = ViewerStreamSource.FOR_YOU,
                     scrollOffsetHint = action.scrollOffsetHint,

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.ui.components.focusOnOpen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -171,8 +172,12 @@ private fun SaveToCodexSheetContent(
     val rootCodices = remember(pickableCodices, librarySort, codexItemCounts, libraryUsage) {
         sortCodicesForLibrary(pickableCodices, librarySort, codexItemCounts, likesCodexId = null, libraryUsage)
     }
-    val matchingCodices = remember(rootCodices, searchText, sortByRelevance, relevanceScores, containingCodexIds) {
-        matchingSaveCodices(rootCodices, searchText, sortByRelevance, relevanceScores, containingCodexIds)
+    val profileId = selectedProfile?.profileId.orEmpty()
+    val matchingCodices = remember(rootCodices, profileId, searchText, sortByRelevance, relevanceScores, containingCodexIds) {
+        val scores = if (sortByRelevance) relevanceScores else emptyMap()
+        val query = searchText.trim()
+        rankSaveTargets(rootCodices, profileId, containingCodexIds, scores).ordered
+            .filter { codex -> codex.name.contains(query, ignoreCase = true) }
     }
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val controls: @Composable () -> Unit = {
@@ -238,21 +243,6 @@ private fun SaveToCodexSheetLayout(
             }
         }
     }
-}
-
-/** Codices matching [searchText], with those already holding the post first and the chosen order within each group. */
-private fun matchingSaveCodices(
-    codices: List<Codex>,
-    searchText: String,
-    sortByRelevance: Boolean,
-    relevanceScores: Map<String, Double>,
-    containingCodexIds: Set<String>,
-): List<Codex> {
-    val query = searchText.trim()
-    val matches = codices.filter { codex -> codex.name.contains(query, ignoreCase = true) }
-    val ordered = if (sortByRelevance) matches.sortedByDescending { codex -> relevanceScores[codex.codexId] ?: 0.0 }
-        else matches
-    return ordered.sortedByDescending { codex -> codex.codexId in containingCodexIds }
 }
 
 @Composable
@@ -380,7 +370,7 @@ private fun CodexPickerRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "$itemCount items",
+                    text = "$itemCount ${countNoun(itemCount, "item")}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -457,7 +447,7 @@ private fun SheetActionRow(
 }
 
 @Composable
-private fun CreateCodexDialog(
+fun CreateCodexDialog(
     profileName: String?,
     onDismiss: () -> Unit,
     onCreate: (String) -> Unit,
@@ -483,7 +473,7 @@ private fun CreateCodexDialog(
                     )
                 }
                 OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().focusOnOpen(),
                     value = value,
                     onValueChange = { input -> value = input.replace("\n", " ") },
                     label = { Text("Codex name") },

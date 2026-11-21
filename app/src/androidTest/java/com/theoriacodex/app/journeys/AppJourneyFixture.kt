@@ -1,5 +1,8 @@
 package com.theoriacodex.app.journeys
 
+import com.theoriacodex.app.library.LIBRARY_SETTINGS_TAG
+import com.theoriacodex.app.library.LibrarySection
+import com.theoriacodex.app.library.librarySectionTag
 import android.graphics.Bitmap
 import android.graphics.Color
 import androidx.compose.ui.geometry.Offset
@@ -22,6 +25,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performTouchInput
@@ -35,6 +39,9 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 import java.util.UUID
@@ -129,10 +136,41 @@ abstract class AppJourneyFixture {
         compose.waitForIdle()
     }
 
+    /** Shows Library at [section]. */
+    protected fun library(section: LibrarySection) {
+        tab("Library")
+        activate(compose.onNodeWithTag(librarySectionTag(section)))
+        compose.waitForIdle()
+    }
+
+    /** Opens Settings from Library's gear. */
+    protected fun openSettings() {
+        tab("Library")
+        activate(compose.onNodeWithTag(LIBRARY_SETTINGS_TAG))
+        compose.waitForIdle()
+    }
+
     protected fun openRecentsSection(label: String) {
-        activate(compose.onNodeWithContentDescription("Filter Recents by section"))
+        activate(compose.onNodeWithContentDescription("Filter History by section"))
         activate(compose.onNodeWithText(label))
         compose.waitForIdle()
+    }
+
+    /** Opens PIXIV's fixture post at [index] in the Viewer, from a Recents search recorded as [recentSearch]. */
+    protected fun openSearchPost(index: Int, recentSearch: String) {
+        io {
+            container.data.recentsRepository.recordSearch(
+                Query(QueryMode.Source(SourceKey.PIXIV), listOf("multi"), emptyList(), SortMode.POPULAR, null, null),
+                recentSearch,
+            )
+        }
+        launch()
+        library(LibrarySection.History)
+        openRecentsSection("Searches")
+        activate(compose.onNodeWithTag("Recent search:$recentSearch"))
+        val card = compose.onNodeWithTag(searchCardTestTag(posts.getValue(SourceKey.PIXIV)[index].id))
+        compose.waitUntil(10_000) { card.isDisplayed() }
+        activate(card)
     }
 
     /** Exercise the visible control's action without racing its animated touch coordinates. */
@@ -148,6 +186,13 @@ abstract class AppJourneyFixture {
     }
 
     /** Types [value] into the open Search composer and adds it as a tag. */
+    /** Runs the composer's query now and closes it, through the keyboard's Search action. */
+    protected fun submitSearch() {
+        val input = compose.onNodeWithTag("Search query input")
+        compose.waitUntil(10_000) { input.isDisplayed() }
+        input.performImeAction()
+    }
+
     protected fun addSearchTag(value: String) {
         val input = compose.onNodeWithTag("Search query input")
         compose.waitUntil(10_000) {

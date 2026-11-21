@@ -16,19 +16,20 @@ internal data class FollowedCreatorRecord(
     @SerialName("seenPostIds") val seenPostIds: List<String>? = null,
     @SerialName("latestPostIds") val latestPostIds: List<String>? = null,
     @SerialName("checkedAtEpochMs") val checkedAtEpochMs: Long? = null,
+    @SerialName("attemptedAtEpochMs") val attemptedAtEpochMs: Long? = null,
 ) {
     fun toDomain(): FollowedCreator? {
         val sourceKey = source?.let(SourceKey::parse) ?: return null
         val query = uploadsQuery?.takeIf(String::isNotBlank) ?: return null
         val membership = membershipId?.takeIf(String::isNotBlank) ?: return null
         return FollowedCreator(CreatorProfile(sourceKey, name.orEmpty(), profileId, profileUrl, query),
-            membership, seenPostIds.orEmpty().distinct().take(200), latestPostIds.orEmpty().distinct().take(200), checkedAtEpochMs)
+            membership, seenPostIds.orEmpty().distinct().take(200), latestPostIds.orEmpty().distinct().take(200), checkedAtEpochMs, attemptedAtEpochMs)
     }
 
     companion object {
         fun fromDomain(follow: FollowedCreator) = with(follow) {
             FollowedCreatorRecord(creator.source.id, creator.displayName, creator.profileId,
-                creator.profileUrl, creator.uploadsQuery, membershipId, seenPostIds, latestPostIds, checkedAtEpochMs)
+                creator.profileUrl, creator.uploadsQuery, membershipId, seenPostIds, latestPostIds, checkedAtEpochMs, attemptedAtEpochMs)
         }
     }
 }

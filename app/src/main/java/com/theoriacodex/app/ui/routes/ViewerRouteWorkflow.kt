@@ -232,7 +232,7 @@ internal class ViewerRouteWorkflow(
         viewedMediaNumber: Int,
         session: ViewerSession?,
     ) {
-        val origin = session?.context?.streamSource ?: ViewerStreamSource.SEARCH
+        val origin = historyOrigin(session?.context)
         recordReadingPosition(post, viewedMediaNumber, session)
         runCatchingPreservingCancellation { data.statisticsRepository.recordPostAvailable(post) }
         val codexOpen = statisticsCodexId(session?.context)?.let { codexId ->
@@ -262,7 +262,7 @@ internal class ViewerRouteWorkflow(
         viewedMediaNumber: Int,
         session: ViewerSession?,
     ) {
-        val origin = session?.context?.streamSource ?: ViewerStreamSource.SEARCH
+        val origin = historyOrigin(session?.context)
         recordReadingPosition(post, viewedMediaNumber, session)
         runCatchingPreservingCancellation {
             data.recentsRepository.recordWatchedMediaProgress(
@@ -284,6 +284,13 @@ internal class ViewerRouteWorkflow(
         }
     }
 }
+
+/**
+ * The origin History stores for a post watched from [context]. A trail is stored as a search: History and profile backups
+ * keep the origin by name, and a build from before trails cannot read a name it does not know.
+ */
+internal fun historyOrigin(context: ViewerLaunchContext?): ViewerStreamSource =
+    context?.streamSource?.takeUnless { it == ViewerStreamSource.TRAIL } ?: ViewerStreamSource.SEARCH
 
 internal fun recentPostSectionForViewer(context: ViewerLaunchContext?): RecentPostSection {
     val origin = context?.streamSource ?: ViewerStreamSource.SEARCH

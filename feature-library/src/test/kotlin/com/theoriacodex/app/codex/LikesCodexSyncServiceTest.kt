@@ -8,6 +8,7 @@ import com.theoriacodex.app.related.LikeToggleOutcome
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.testing.InMemoryCodexLikesTransactions
 import com.theoriacodex.data.repository.CodexSortMode
+import com.theoriacodex.data.repository.InMemoryLikesRepository
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.SourceKey
@@ -135,5 +136,33 @@ class LikesCodexSyncServiceTest {
 
         assertEquals(LikeToggleOutcome.LIKED, service.toggle(profile, mirror, emptyList()))
         assertEquals(setOf(unrelated.id, mirror.id), transactions.likes.observeLikedPostIds(profile.profileId).first())
+    }
+
+    @Test
+    fun `like if absent leaves another site's liked copy alone and its removal takes back only its own Like`() = runTest {
+        var now = 0L
+        val transactions = InMemoryCodexLikesTransactions(likes = InMemoryLikesRepository(clock = { ++now }))
+        val mirrors = FileMirrorIndex()
+        val service = LikesCodexSyncService(transactions, transactions.codices, transactions.likes, mirrors)
+        val profile = RecommendationProfile("profile-main", "Main")
+        val danbooru = filePost(SourceKey.DANBOORU, "1", HASH)
+        val mirror = filePost(SourceKey.RULE34XXX, "5", HASH)
+        val fresh = filePost(SourceKey.DANBOORU, "2", OTHER)
+        service.toggle(profile, danbooru, emptyList())
+        mirrors.learn(listOf(danbooru, mirror, fresh))
+        val liked = { transactions.likes.observeLikedPostIds(profile.profileId) }
+
+        assertNull(service.likeIfAbsent(profile, mirror, emptyList()))
+        assertEquals(setOf(danbooru.id), liked().first())
+
+        val like = requireNotNull(service.likeIfAbsent(profile, fresh, emptyList()))
+        service.toggle(profile, fresh, emptyList())
+        service.toggle(profile, fresh, emptyList())
+        service.removeLike(profile, fresh, like)
+        assertEquals(setOf(danbooru.id, fresh.id), liked().first())
+
+        val again = requireNotNull(transactions.likes.observeLikes(profile.profileId).first().find { it.postId == fresh.id })
+        service.removeLike(profile, fresh, again)
+        assertEquals(setOf(danbooru.id), liked().first())
     }
 }

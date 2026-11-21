@@ -91,6 +91,8 @@ class PostTagSheetExtras(
     val scrollToKey: Any? = null,
     val filterBehindIcon: Boolean = false,
     val afterTags: LazyListScope.() -> Unit = {},
+    /** When set, tapping a general tag forks a trail from it and holding it offers the Search moves instead. */
+    val onFork: ((SearchTerm) -> Unit)? = null,
 )
 
 /**
@@ -143,6 +145,7 @@ fun PostTagActionSection(
         onRemoveExclude = onRemoveExcludeTerm,
         onAddAlternative = { groupIndex, term -> searchActions.addAlternative(post, groupIndex, term) },
         onConfirmSwitch = { pendingSwitch = it },
+        onFork = sheetExtras?.onFork,
     )
 
     Column(Modifier.fillMaxWidth()) {
@@ -254,6 +257,7 @@ private class PostTagEditor(
     val onRemoveExclude: (SearchTerm) -> Unit,
     val onAddAlternative: (Int, SearchTerm) -> Boolean,
     val onConfirmSwitch: (PendingSourceSwitch) -> Unit,
+    val onFork: ((SearchTerm) -> Unit)?,
 ) {
     fun commit(term: SearchTerm, excluded: Boolean): Boolean =
         if (excluded) onAddExclude(term) else onAddInclude(term)
@@ -322,9 +326,19 @@ private fun PostTagChip(
             if (saved) onRemoveSaved(editor.post.id.source, term.value) else save(editor.post.id.source, term.value)
         }
     }
+    val savedLabel = favorite?.let { if (saved) "Remove $name from saved tags" else "Save $name" }
+    val shownCount = count?.takeUnless { compact }?.let(::compactTagCount)
+    val icon = if (saved) Icons.Default.Star else null
+    val fork = editor.onFork?.takeIf { term.isGeneralTag }
+    if (fork != null) {
+        val moves = listOfNotNull(TagChipAction(tagTapLabel(name, state)) { editor.tap(term) }.takeIf { editor.canTap(term) }) +
+            editor.alternateActions(term) + listOfNotNull(toggleSaved?.let { TagChipAction(savedLabel.orEmpty(), it) })
+        TagForkChip(name, postTagChipLabel(term.value, translation), shownCount, compact, state, icon, "saved".takeIf { saved }, moves) { fork(term) }
+        return
+    }
     TagPickerChip(
         label = postTagChipLabel(term.value, translation),
-        count = count?.takeUnless { compact }?.let(::compactTagCount),
+        count = shownCount,
         compact = compact,
         state = state,
         enabled = editor.canTap(term),
@@ -332,9 +346,9 @@ private fun PostTagChip(
         onTap = { editor.tap(term) },
         alternateActions = editor.alternateActions(term),
         onLongPress = toggleSaved,
-        longPressLabel = favorite?.let { if (saved) "Remove $name from saved tags" else "Save $name" },
-        leadingIcon = if (saved) Icons.Default.Star else null,
-        stateSuffix = if (saved) "saved" else null,
+        longPressLabel = savedLabel,
+        leadingIcon = icon,
+        stateSuffix = "saved".takeIf { saved },
     )
 }
 
@@ -597,7 +611,8 @@ private fun LazyListScope.postTagSections(
     } else {
         if (filter.available && filter.open) item(key = "tag-filter") { PostTagFilterField(filter) }
         postTagList(groups, expandedGroups, onExpandGroup, filter, chip)
-        if (groups.isNotEmpty()) postTagHint()
+        // Where a tap forks a trail, the hint about tapping to edit the query would mislead.
+        if (groups.isNotEmpty() && sheetExtras?.onFork == null) postTagHint()
     }
     sheetExtras?.afterTags?.invoke(this)
 }

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.search.omnibox.OmniboxEntry
 import com.theoriacodex.app.ui.components.FeedMarks
 import com.theoriacodex.app.ui.components.feedDurations
 import com.theoriacodex.app.ui.LocalNetworkOnline
@@ -48,6 +49,8 @@ internal data class SearchRouteConfig(
     val marks: FeedMarks,
     val favoriteTags: List<FavoriteTagEntry>,
     val resolveUnknownAnimatedDurations: Boolean,
+    /** What the composer's typed text reaches besides tags; see `rememberSearchOmniboxEntries`. */
+    val omnibox: List<OmniboxEntry> = emptyList(),
 )
 
 /** Platform and navigation effects that remain owned by the application shell. */
@@ -150,6 +153,9 @@ internal fun SearchRoute(
             owner.onAction(SearchAction.Resume)
         }
         lifecycleOwner.lifecycle.addObserver(observer)
+        // Effects run before SideEffect: publish first, so actions queued before Search had an owner, such as
+        // Viewer tag edits staged from Library, reach it before the resume that runs them.
+        currentOnOwnerAvailable(owner)
         observer.synchronize(lifecycleOwner.lifecycle.currentState)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
@@ -208,6 +214,7 @@ private fun SearchRouteContent(
         onOpenSavedSearch = callbacks.onOpenSavedSearch,
         onSaveSearch = callbacks.onSaveSearch,
         onManageSavedSearches = callbacks.onManageSavedSearches,
+        omnibox = config.omnibox,
         creatorBrowsingSources = config.creatorBrowsingSources,
         onAction = owner::onAction,
         resolvePostById = resolvePostById,

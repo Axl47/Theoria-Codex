@@ -11,6 +11,7 @@ import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.search.markInputs
 import com.theoriacodex.app.search.rememberCarriedFilter
 import com.theoriacodex.app.viewer.retainPostsUntilViewerCloses
+import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
@@ -35,6 +36,9 @@ data class FeedMarks(
  */
 fun interface FeedPostFilter {
     fun filter(posts: List<Post>, knownDurationMsByPostId: Map<PostId, Long>): List<Post>
+
+    /** This filter with [range] as its date range; a feed's own filter, which reads none, stays as it is. */
+    fun withDateRange(range: DateRange?): FeedPostFilter = this
 }
 
 /** Search's filters with the marks they read; the filter every feed uses unless it has its own. */
@@ -49,12 +53,15 @@ private data class VisibilityPostFilter(
         posts, filters, liked, saved, watched,
         knownDurationMsByPostId = knownDurationMsByPostId, retainedLikedPostIds = retained,
     )
+
+    override fun withDateRange(range: DateRange?): FeedPostFilter = copy(filters = filters.copy(dateRange = range))
 }
 
 /**
  * What a feed's grid shows: its posts after the length step and its filters ([visiblePosts]), with any related
  * shelf placed among them ([related]). [filters] is the feed's media and mark filters, which the related shelf and
- * the Viewer apply too; [durations] is the length step over the feed's posts.
+ * the Viewer apply too; [durations] is the length step over the feed's posts; [postFilter] is the filter step itself,
+ * which the triage deck applies to the posts the feed gets later.
  */
 class FeedView(
     val filters: SearchVisibilityFilters,
@@ -62,6 +69,7 @@ class FeedView(
     val durationFilterActive: Boolean,
     val visiblePosts: List<Post>,
     val related: RelatedFeedPresentation,
+    val postFilter: FeedPostFilter,
 )
 
 /**
@@ -107,7 +115,7 @@ fun rememberFeedView(
         durationFilterActive = durationFilterActive,
         pendingLikePostIds = marks.pendingLikes,
     )
-    return remember(filters, metadata, durationFilterActive, visiblePosts, related) {
-        FeedView(filters, metadata, durationFilterActive, visiblePosts, related)
+    return remember(filters, metadata, durationFilterActive, visiblePosts, related, filter) {
+        FeedView(filters, metadata, durationFilterActive, visiblePosts, related, filter)
     }
 }

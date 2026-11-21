@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -20,14 +18,17 @@ import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.search.state.SearchExecutionUiState
 import com.theoriacodex.app.search.state.SearchHistoryEntry
-import com.theoriacodex.app.search.state.SearchRequest
-import com.theoriacodex.app.search.state.SearchRequestKind
+import com.theoriacodex.app.search.state.SearchQueryHistory
+import com.theoriacodex.app.search.state.SearchSourceScope
+import com.theoriacodex.app.search.state.appliedHistoryEntry
+import com.theoriacodex.app.search.state.emptySearchQuery
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchSuggestionsUiState
 import com.theoriacodex.app.search.state.SearchUiState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -41,7 +42,7 @@ class SearchInputSubmissionTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
-    fun `Undo last search dispatches only when history is available and idle`() {
+    fun `Undo last search dispatches only when there is a settled search to return to`() {
         val state = mutableStateOf(SearchUiState())
         val actions = mutableListOf<SearchAction>()
         compose.setContent { MaterialTheme { Box(Modifier.size(400.dp, 700.dp)) {
@@ -56,19 +57,15 @@ class SearchInputSubmissionTest {
         val undo = compose.onNodeWithText("Undo last search")
         undo.assertIsNotEnabled()
         compose.runOnIdle {
-            val query = state.value.query.applied
-            state.value = state.value.copy(searchHistory = listOf(SearchHistoryEntry(query, state.value.query.appliedSourceScope)))
+            val earlier = SearchHistoryEntry(emptySearchQuery().withIncludeTermsAsRequired(listOf(SearchTerm("a"))), SearchSourceScope.GlobalUnified)
+            state.value = state.value.copy(history = SearchQueryHistory(back = listOf(earlier), current = state.value.appliedHistoryEntry()))
         }
-        undo.assertIsEnabled()
-        compose.runOnIdle { state.value = state.value.copy(execution = SearchExecutionUiState(SearchRequest(10, SearchRequestKind.REPLACE, state.value.query.applied))) }
-        undo.assertIsNotEnabled()
-        compose.runOnIdle { state.value = state.value.copy(execution = SearchExecutionUiState()) }
         undo.assertIsEnabled().performClick()
         compose.runOnIdle { assertEquals(1, actions.count { it == SearchAction.UndoSearch }) }
     }
 
     @Test
-    fun `IME submits current input after eligibility changes and rejects earlier empty or blocked input`() {
+    fun `IME adds the typed tag and keeps the editor open, but blocked input stays`() {
         val state = mutableStateOf(SearchUiState())
         val submitted = mutableListOf<String>()
         val actions = mutableListOf<SearchAction>()
@@ -77,16 +74,15 @@ class SearchInputSubmissionTest {
         compose.onNodeWithTag("Search bar").performClick()
         val input = compose.onNodeWithTag("Search query input")
         input.performClick()
-        input.performImeAction()
-        compose.runOnIdle { assertTrue(submitted.isEmpty()) }
-
         input.performTextInput("old-input")
         compose.onNodeWithText("Add", substring = false).assertIsNotEnabled()
         input.performImeAction()
-        compose.runOnIdle { assertTrue(submitted.isEmpty()) }
+        compose.runOnIdle {
+            assertTrue(submitted.isEmpty())
+            assertFalse(SearchAction.ApplyDraft in actions)
+        }
 
         input.performTextReplacement("landscape")
-        compose.onNodeWithText("Add", substring = false).assertIsNotEnabled()
         compose.runOnIdle {
             state.value = state.value.copy(suggestions = state.value.suggestions.copy(canCommitInput = true))
         }
@@ -95,24 +91,21 @@ class SearchInputSubmissionTest {
 
         compose.runOnIdle {
             assertEquals(listOf("landscape"), submitted)
-            assertEquals("Owner input after submission; actions=$actions", "", state.value.suggestions.input)
-        }
-        try {
-            compose.waitUntil(2_000) {
-                input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.isEmpty()
-            }
-        } catch (failure: ComposeTimeoutException) {
-            throw AssertionError(
-                "Owner input='${state.value.suggestions.input}', " +
-                    "rendered input='${input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text}', " +
-                    "actions=$actions",
-                failure,
-            )
-        }
-        compose.runOnIdle {
-            assertEquals("Owner input after rendered reset; actions=$actions", "", state.value.suggestions.input)
+            assertFalse("actions=$actions", SearchAction.ApplyDraft in actions)
             assertTrue("Focus refresh must not resurrect submitted input: $focusRefreshInputs", focusRefreshInputs.all(String::isEmpty))
         }
+        compose.onNodeWithTag("Search composer").assertExists()
+    }
+
+    @Test
+    fun `IME with nothing typed runs the draft and closes`() {
+        val state = mutableStateOf(SearchUiState())
+        val actions = mutableListOf<SearchAction>()
+        setSubmissionContent(state, mutableListOf(), actions, mutableListOf())
+        compose.onNodeWithTag("Search bar").performClick()
+        compose.onNodeWithTag("Search query input").performImeAction()
+        compose.runOnIdle { assertTrue("actions=$actions", SearchAction.ApplyDraft in actions) }
+        compose.onNodeWithTag("Search composer").assertDoesNotExist()
     }
 
     private fun setSubmissionContent(

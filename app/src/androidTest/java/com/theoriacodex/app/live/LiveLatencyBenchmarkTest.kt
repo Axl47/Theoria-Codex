@@ -166,7 +166,7 @@ class LiveLatencyBenchmarkTest {
         val tabs = owner.data.uiRestoreRepository
         val previousTab = runBlocking {
             clearDisposableCaches(owner)
-            tabs.getLastTab().also { tabs.setLastTab(TopLevelDestination.Settings.route) }
+            tabs.getLastTab().also { tabs.setLastTab(TopLevelDestination.Library.route) }
         }
         try {
             val launch = requireNotNull(context.packageManager.getLaunchIntentForPackage(context.packageName))

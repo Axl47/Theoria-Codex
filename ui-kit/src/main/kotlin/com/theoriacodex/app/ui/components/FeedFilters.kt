@@ -186,13 +186,17 @@ private fun ActiveFilterContent(
     }
 }
 
-/** The shared filter sheet: every feed shows the same title, Reset placement, and scrolling. */
+/**
+ * The shared filter sheet: every feed shows the same title, Reset placement, and scrolling. A feed the triage deck
+ * can work through passes [onTriage], which adds a Triage action to the header; it closes the sheet, then runs.
+ */
 @Composable
 fun FeedFilterSheet(
     onDismiss: () -> Unit,
     onReset: () -> Unit,
     modifier: Modifier = Modifier,
     title: String = "Filters",
+    onTriage: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     ExpandedBottomSheet(onDismiss) {
@@ -205,6 +209,7 @@ fun FeedFilterSheet(
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                onTriage?.let { triage -> TextButton(onClick = { onDismiss(); triage() }) { Text("Triage") } }
                 TextButton(onClick = onReset) { Text("Reset") }
             }
             content()

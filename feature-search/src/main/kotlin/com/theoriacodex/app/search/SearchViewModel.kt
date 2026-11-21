@@ -4,7 +4,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.theoriacodex.app.search.state.withAcceptedSearchHistory
+import com.theoriacodex.app.search.state.appliedHistoryEntry
 import com.theoriacodex.app.search.state.CachedFirstPage
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchDraftReducer
@@ -45,7 +45,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
@@ -59,7 +58,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
 /**
@@ -82,6 +80,7 @@ class SearchViewModel(
     scrollPersistenceDelayMs: Long = DEFAULT_SCROLL_PERSISTENCE_DELAY_MS,
     scrollPersistenceDispatcher: CoroutineDispatcher = Dispatchers.IO,
     reconnections: Flow<Unit> = emptyFlow(),
+    liveSearchDelays: LiveSearchDelays = LiveSearchDelays(),
 ) : ViewModel(), RouteStateOwner<SearchUiState, SearchAction, SearchEffect>, ViewerFeedOwner {
     private val mutableState = MutableStateFlow(initialSearchState(coordinator.availableSources))
     private val effectChannel = Channel<SearchEffect>(capacity = Channel.BUFFERED)
@@ -122,12 +121,24 @@ class SearchViewModel(
     private var activeRequestJob: Job? = null
     private var restorationJob: Job? = null
     private var pendingRootSearch: (() -> Unit)? = null
+    /** A draft edit made over Search waits to run until Search is shown again. */
+    private var draftStaged = false
+    /** A first search was cancelled before it answered; its replacement stays scheduled across edits until one runs. */
+    private var firstSearchSuperseded = false
     private var latestEnvironmentSettings: AppSettings? = null
     /** The source settings the state was last reconciled with; null until Search has restored. */
     private var runtime: SourceRuntimeSettings? = null
     private val suggestionRefresh =
         SearchSuggestionRefresher(viewModelScope, mutableState, coordinator, suggestionDispatcher, autocompleteDelayMs)
     private val scrollPersistence = coordinator.scrollPersistence(scrollPersistenceDispatcher, scrollPersistenceDelayMs)
+    private val liveSearch = LiveSearchScheduler(
+        viewModelScope, liveSearchDelays,
+        onWaitingChanged = { waiting ->
+            val current = mutableState.value
+            mutableState.value = current.copy(execution = current.execution.copy(liveSearchWaiting = waiting))
+        },
+    ) { runDraft(liveKind(), SearchAcceptance.Live) }
+    private val settlement = SearchSettlement(mutableState, viewModelScope) { executionService.recordAcceptedSearch(it) }
     init {
         relatedDiagnostics.record("owner created", mutableState.value.relatedPosts)
         addCloseable("related-posts-diagnostics", java.io.Closeable {
@@ -150,6 +161,8 @@ class SearchViewModel(
 
             is SearchAction.DraftEdit -> applyDraftAction(action)
 
+            is SearchAction.StageDraftEdit -> stageDraftEdit(action.edit)
+
             is SearchAction.SelectMode -> selectMode(action.mode)
 
             is SearchAction.ToggleTemporarySource -> toggleTemporarySource(action.source)
@@ -162,15 +175,17 @@ class SearchViewModel(
 
             SearchAction.ClearAutocomplete -> clearSuggestionState()
 
-            SearchAction.UndoSearch -> {
-                undoSearch()
+            SearchAction.UndoSearch -> stepHistory(back = true)
+
+            SearchAction.RedoSearch -> stepHistory(back = false)
+
+            SearchAction.ApplyDraft -> {
+                // Live search may already run, or show, this exact draft: asking again only settles it.
+                if (mutableState.value.showsDraft) settlement.settle() else applyDraft()
                 clearSuggestionState()
             }
 
-            SearchAction.ApplyDraft -> {
-                applyDraft()
-                clearSuggestionState()
-            }
+            SearchAction.SettleSearch -> if (liveSearch.cancel()) applyDraft() else settlement.settle()
 
             is SearchAction.ApplyHistoricalQuery -> runAfterRestoration {
                 applyHistoricalQuery(action.query, action.sourceScope)
@@ -191,6 +206,11 @@ class SearchViewModel(
 
             SearchAction.Resume -> {
                 requestRouteEntryScrollRestoration()
+                if (draftStaged) {
+                    draftStaged = false
+                    // Staged before Search first opened, the edit runs on the restored draft, not the blank one.
+                    runAfterRestoration(::scheduleLiveSearch)
+                }
                 resumeSearchIfNeeded()
             }
 
@@ -202,7 +222,10 @@ class SearchViewModel(
                 )
             }
 
-            is SearchAction.OpenRelatedResult -> openRelatedResult(action)
+            is SearchAction.OpenRelatedResult -> {
+                settlement.settle()
+                openRelatedResult(action)
+            }
 
             is SearchAction.ScrollChanged -> persistScroll(action)
 
@@ -210,9 +233,10 @@ class SearchViewModel(
                 SearchStateChange.ScrollRestorationApplied(action.requestId),
             )
 
-            is SearchAction.OpenResult -> publishReduction(
-                SearchStateReducer.reduce(mutableState.value, action),
-            )
+            is SearchAction.OpenResult -> {
+                settlement.settle()
+                publishReduction(SearchStateReducer.reduce(mutableState.value, action))
+            }
         }
     }
 
@@ -224,20 +248,32 @@ class SearchViewModel(
         }
     }
 
-    /** Runs the search before the last one again, when there is one. */
-    private fun undoSearch() {
-        mutableState.value.takeIf { it.canUndoSearch }?.searchHistory?.lastOrNull()?.let {
-            applyHistoricalQuery(it.query, it.sourceScope, undo = true)
-        }
+    /** Steps back or forward through settled searches, returning to each one's place. */
+    private fun stepHistory(back: Boolean) {
+        clearSuggestionState()
+        val current = mutableState.value
+        val onScreen = current.appliedHistoryEntry(savedStateHandle.savedSearchScrollState() ?: SearchScrollState(0, 0))
+        val step = (if (back) current.history.stepBack(onScreen) else current.history.stepForward(onScreen)) ?: return
+        if (!restoreDraft(step.target.query, step.target.sourceScope)) return
+        mutableState.value = mutableState.value.copy(history = step.history)
+        runDraft(acceptance = SearchAcceptance.Step(step.target.scrollState))
     }
 
     private fun applyDraftAction(action: SearchAction.DraftEdit) {
         mutateDraft { SearchDraftReducer.edit(it, action, System.currentTimeMillis()) }
     }
 
+    /** Edits the draft from over Search without running it behind that screen; [SearchAction.Resume] runs it. */
+    private fun stageDraftEdit(edit: SearchAction.DraftEdit) {
+        liveSearch.cancel()
+        mutableState.value = SearchDraftReducer.edit(mutableState.value, edit, System.currentTimeMillis())
+        persistDraftQuery()
+        draftStaged = true
+    }
+
     /**
-     * Switches the draft to [mode]'s last search. Once results are on screen, that search also runs,
-     * so the source, terms, filters, and results always describe the same search.
+     * Switches the draft to [mode]'s last search. Once a search is on screen, waiting or running, that search also
+     * runs live, so the source, terms, filters, and results always describe the same search.
      */
     private fun selectMode(mode: QueryMode) {
         suggestionRefresh.cancelAutocomplete()
@@ -245,7 +281,8 @@ class SearchViewModel(
         mutableState.value = current
         persistDraftQuery()
         suggestionRefresh.refreshTrending()
-        if (current.content.hasExecutedSearch && current.hasPendingChanges) runDraft()
+        // Before any search has been asked for, picking a source only prepares the draft.
+        if (current.hasCommittedSearch) scheduleLiveSearch()
     }
 
     private fun toggleTemporarySource(source: SourceKey) {
@@ -257,7 +294,25 @@ class SearchViewModel(
         persistDraftQuery()
         if (input.isBlank()) suggestionRefresh.refreshTrending()
         suggestionRefresh.refreshAutocomplete(input)
+        if (reduction.state.hasCommittedSearch) scheduleLiveSearch()
     }
+
+    /** The root request in flight asks for exactly the draft. */
+    private val SearchUiState.runsDraft: Boolean
+        get() = execution.request?.takeUnless { it.isPage }?.let { request ->
+            execution.submittedQuery == query.draft && request.sourceScope == query.draftSourceScope
+        } == true
+
+    /** The draft is running, or its results are on screen, and nothing typed is waiting to join it. */
+    private val SearchUiState.showsDraft: Boolean
+        get() = suggestions.input.isBlank() && (
+            runsDraft ||
+                execution.request?.isPage != false && content.hasExecutedSearch && !hasPendingChanges && content.error == null
+        )
+
+    /** A search is on screen, waiting out its live pause or running, so a source change must reschedule it. */
+    private val SearchUiState.hasCommittedSearch: Boolean
+        get() = content.hasExecutedSearch || execution.liveSearchWaiting || execution.request?.isPage == false
 
     /** Runs the draft. A typed number not yet added as a tag is added first, so a lone nhentai ID opens its gallery. */
     private fun applyDraft() {
@@ -267,7 +322,33 @@ class SearchViewModel(
             commitTagInput(pending)
             if (mutableState.value.query.draft == draftBefore) return // opened as a gallery
         }
-        runDraft(if (mutableState.value.content.hasExecutedSearch) SearchRequestKind.REPLACE else SearchRequestKind.INITIAL)
+        runDraft(liveKind())
+    }
+
+    private fun liveKind() =
+        if (mutableState.value.content.hasExecutedSearch) SearchRequestKind.REPLACE else SearchRequestKind.INITIAL
+
+    /**
+     * The draft changed: the request in flight is now out of date, and the draft runs after a short pause unless it
+     * is back to the search on screen. An empty draft is runnable like any other, so it replaces a cancelled first search.
+     */
+    private fun scheduleLiveSearch() {
+        val current = mutableState.value
+        val request = current.execution.request
+        val runsDraft = current.runsDraft
+        val cancelsRequest = request != null && !request.isPage && !runsDraft
+        if (cancelsRequest) cancelActiveRequest()
+        // Before any search has run, the applied search is only a placeholder, so a draft equal to it still
+        // needs its own run when the first search it superseded is cancelled, including by an earlier edit
+        // whose replacement is still waiting; otherwise nothing would answer.
+        val supersedesFirstSearch = !current.content.hasExecutedSearch && (cancelsRequest || firstSearchSuperseded)
+        if ((current.hasPendingChanges || supersedesFirstSearch) && !runsDraft) {
+            firstSearchSuperseded = supersedesFirstSearch
+            liveSearch.schedule(singleSource = current.query.draftSourceScope is SearchSourceScope.Single)
+        } else {
+            firstSearchSuperseded = false
+            liveSearch.cancel()
+        }
     }
 
     private fun applyTagSearch(action: SearchAction.ApplyTagSearch) {
@@ -299,24 +380,28 @@ class SearchViewModel(
         restore()
     }
 
-    private fun applyHistoricalQuery(query: Query, sourceScope: SearchSourceScope, undo: Boolean = false) {
+    private fun applyHistoricalQuery(query: Query, sourceScope: SearchSourceScope) {
+        if (restoreDraft(query, sourceScope)) runDraft()
+    }
+
+    /** Makes [query] in [sourceScope] the draft; false, with a message, when it can no longer run here. */
+    private fun restoreDraft(query: Query, sourceScope: SearchSourceScope): Boolean {
         val reduction = SearchDraftReducer.restoreDraft(mutableState.value, query)
         if (!reduction.accepted) {
             effectChannel.trySend(SearchEffect.ShowMessage("Search source is unavailable"))
-            return
+            return false
         }
         val restoredScope = sourceScope.reconciledWith(mutableState.value.query.availableSources.toSet())
         if (sourceScope is SearchSourceScope.Temporary && restoredScope !is SearchSourceScope.Temporary) {
             effectChannel.trySend(SearchEffect.ShowMessage("Multi-Search sources are unavailable"))
-            return
+            return false
         }
         suggestionRefresh.cancelAutocomplete()
         mutableState.value = reduction.state.copy(
             query = reduction.state.query.copy(draftSourceScope = restoredScope),
         )
         persistDraftQuery()
-        val undoScrollState = if (undo) mutableState.value.searchHistory.lastOrNull()?.scrollState else null
-        runDraft(acceptance = SearchAcceptance(undo, undoScrollState))
+        return true
     }
 
     override fun loadNextPage() {
@@ -388,6 +473,7 @@ class SearchViewModel(
     private fun mutateDraft(mutation: (SearchUiState) -> SearchUiState) {
         mutableState.value = mutation(mutableState.value)
         persistDraftQuery()
+        scheduleLiveSearch()
     }
 
     /**
@@ -411,6 +497,7 @@ class SearchViewModel(
         mutableState.value = reduction.state
         clearSuggestionState()
         persistDraftQuery()
+        scheduleLiveSearch()
     }
 
     private suspend fun openDirectNhentaiGallery(galleryId: String) {
@@ -430,10 +517,10 @@ class SearchViewModel(
         rerunApplied(paintCachedFirstPage = true)
     }
 
-    /** Runs the draft as the new search. Its first results make it the applied search and enter Undo history. */
+    /** Runs the draft as the new search. Its first results make it the applied search; see [SearchSettlement]. */
     private fun runDraft(
         kind: SearchRequestKind = SearchRequestKind.REPLACE,
-        acceptance: SearchAcceptance = SearchAcceptance(),
+        acceptance: SearchAcceptance = SearchAcceptance.Settled,
     ) {
         val query = mutableState.value.query
         launchRootSearch(kind, query.draft, query.draftSourceScope, acceptance)
@@ -460,8 +547,13 @@ class SearchViewModel(
         paintCachedFirstPage: Boolean = false,
     ) {
         relatedPosts.clear(relatedResetReason)
+        liveSearch.cancel()
+        firstSearchSuperseded = false
         cancelActiveRequest()
         val executionKey = searchExecutionKey(query, sourceScope)
+        acceptance?.let {
+            settlement.begin(settle = it == SearchAcceptance.Settled, steppedTo = executionKey.takeIf { _ -> it is SearchAcceptance.Step })
+        }
         val request = SearchRequest(++nextRequestId, kind, query, sourceScope, executionKey)
         reduce(SearchStateChange.BeginRequest(request))
         launchRequest(request, failureMessage = "Search failed") {
@@ -503,8 +595,10 @@ class SearchViewModel(
             val publisher = RootResultPublisher(request, acceptance)
             val sources = sourcesFor(request.sourceScope)
             val result = executionService.executeInitial(request.query, request.sourceScope, sources) { partial ->
-                if (mutableState.value.showsPartialResults(request.id, partial)) {
-                    publisher.publish(partial, SearchStateChange.PartialResult(request.id, partial))
+                if (mutableState.value.showsPartialResults(request.id, partial) &&
+                    publisher.publish(partial, SearchStateChange.PartialResult(request.id, partial)) && acceptance != null
+                ) {
+                    settlement.partial(partial)
                 }
             }
             coroutineContext.ensureActive()
@@ -515,9 +609,7 @@ class SearchViewModel(
             if (!publisher.publish(result, SearchStateChange.RootResult(request.id, result))) return@withTimeout
             rememberFirstPage(result)
             persistDraftQuery()
-            if (acceptance != null) withContext(NonCancellable) {
-                executionService.recordAcceptedSearch(result)
-            }
+            if (acceptance != null) settlement.answered(result)
         }
 
     /** Puts one root request's results on screen; persisting it and resetting the scroll target happen only once. */
@@ -537,7 +629,7 @@ class SearchViewModel(
             val previous = mutableState.value
             reduce(change)
             pendingAcceptance = null
-            if (acceptance != null) rememberAcceptedSearchNavigation(previous, acceptance)
+            if (acceptance != null) showAcceptedSearch(previous, acceptance)
             return true
         }
     }
@@ -548,16 +640,15 @@ class SearchViewModel(
         }
     }
 
-    /** Preserve Undo history and the accepted search's route scroll request together. */
-    private fun rememberAcceptedSearchNavigation(previous: SearchUiState, acceptance: SearchAcceptance) {
-        mutableState.value = mutableState.value.withAcceptedSearchHistory(
-            previous, acceptance.undo, savedStateHandle.savedSearchScrollState() ?: SearchScrollState(0, 0),
-        )
-        val scrollState = acceptance.undoScrollState ?: SearchScrollState(0, 0)
+    /** A new search's first results are on screen: note the place left behind, then move to its own place. */
+    private fun showAcceptedSearch(previous: SearchUiState, acceptance: SearchAcceptance) {
+        settlement.shown(previous, savedStateHandle.savedSearchScrollState() ?: SearchScrollState(0, 0))
+        val restoredPlace = (acceptance as? SearchAcceptance.Step)?.scrollState
+        val scrollState = restoredPlace ?: SearchScrollState(0, 0)
         savedStateHandle[SearchSavedStateKeys.SCROLL_INDEX] = scrollState.firstVisibleItemIndex
         savedStateHandle[SearchSavedStateKeys.SCROLL_OFFSET] = scrollState.firstVisibleItemOffsetPx
         reduce(
-            if (acceptance.undoScrollState != null) SearchStateChange.RouteEntryScrollRestorationRequested(scrollState)
+            if (restoredPlace != null) SearchStateChange.RouteEntryScrollRestorationRequested(scrollState)
             else SearchStateChange.ScrollResetRequested,
         )
     }
@@ -604,6 +695,7 @@ class SearchViewModel(
 
     private fun cancelActiveRequest() {
         val requestId = mutableState.value.execution.activeRequestId
+        if (requestId != null) settlement.superseded()
         activeRequestJob?.cancel(CancellationException("Search route request cancelled"))
         activeRequestJob = null
         requestId?.let { reduce(SearchStateChange.RequestCancelled(it)) }
@@ -681,6 +773,8 @@ class SearchViewModel(
         val offset = action.firstVisibleItemOffsetPx.coerceAtLeast(0)
         savedStateHandle[SearchSavedStateKeys.SCROLL_INDEX] = index
         savedStateHandle[SearchSavedStateKeys.SCROLL_OFFSET] = offset
+        // Scrolling the results of a finished search means the user has taken it: it settles.
+        if ((index > 0 || offset > 0) && !mutableState.value.loading) settlement.settle()
         val current = mutableState.value
         if (current.query.appliedSourceScope is com.theoriacodex.app.search.state.SearchSourceScope.Temporary) return
         val queryHash = current.query.appliedQueryHash.takeIf(String::isNotBlank) ?: return
@@ -744,12 +838,17 @@ class SearchViewModel(
         effectChannel.close()
     }
 
-    /** How a search the user asked for is recorded once its first results are on screen. */
-    private data class SearchAcceptance(
-        val undo: Boolean = false,
-        /** Where the search being returned to by Undo was scrolled; null sends the new results to the top. */
-        val undoScrollState: SearchScrollState? = null,
-    )
+    /** How a new search is treated once its first results are on screen. */
+    private sealed interface SearchAcceptance {
+        /** Follows a draft edit; it is remembered only once it settles. */
+        data object Live : SearchAcceptance
+
+        /** Asked for outright, so it settles at once. */
+        data object Settled : SearchAcceptance
+
+        /** A step through history, back to [scrollState], the place it was left at. */
+        data class Step(val scrollState: SearchScrollState) : SearchAcceptance
+    }
 
     private companion object {
         const val DEFAULT_AUTOCOMPLETE_DELAY_MS = 300L

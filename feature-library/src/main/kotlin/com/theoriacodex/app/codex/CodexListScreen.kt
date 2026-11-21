@@ -1,5 +1,7 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.library.LibrarySectionHeader
+
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.background
@@ -13,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,7 +33,6 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -81,43 +81,34 @@ internal fun CodexListContent(
     presentation: CodexListPresentation,
     state: CodexListUiState,
     actions: CodexListActions,
+    header: LibrarySectionHeader,
 ) {
-    val codices = presentation.codices
-
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        CodexListHeader(codices, state, actions)
+        header { CodexListHeaderActions(presentation.libraryCodices, state, actions) }
 
         CodexListBody(presentation, state, actions)
     }
 }
 
+/** Import, Reorder and Create, placed in the Library header while Codices shows. */
 @Composable
-private fun CodexListHeader(
+private fun CodexListHeaderActions(
     codices: List<Codex>,
     state: CodexListUiState,
     actions: CodexListActions,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("Codex Library", style = MaterialTheme.typography.titleLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            CodexActionIcon(Icons.Default.FileOpen, "Import Codex", onClick = actions.importCodex)
-            CodexActionIcon(
-                icon = if (state.ordering.reorderMode) Icons.Default.Check else Icons.Default.Reorder,
-                description = if (state.ordering.reorderMode) "Done reordering Codices" else "Reorder Codices",
-                onClick = { state.ordering.toggle(codices, actions.commitReorder) },
-            )
-            CodexActionIcon(Icons.Default.Add, "Create Codex") { state.showCreateDialog = true }
-        }
-    }
+    CodexActionIcon(Icons.Default.FileOpen, "Import Codex", onClick = actions.importCodex)
+    CodexActionIcon(
+        icon = if (state.ordering.reorderMode) Icons.Default.Check else Icons.Default.Reorder,
+        description = if (state.ordering.reorderMode) "Done reordering Codices" else "Reorder Codices",
+        onClick = { state.ordering.toggle(codices, actions.commitReorder) },
+    )
+    CodexActionIcon(Icons.Default.Add, "Create Codex") { state.showCreateDialog = true }
 }
 
 @Composable
@@ -128,7 +119,7 @@ private fun CodexListBody(
 ) {
     when {
         state.ordering.reorderMode -> CodexReorderList(presentation, state, actions.setLibrarySort)
-        else -> CodexGrid(presentation, state, actions.openCodex, actions.openSavedCollectionActions)
+        else -> CodexGrid(presentation, state, actions.openCodex)
     }
 }
 
@@ -190,10 +181,7 @@ private fun CodexReorderRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             CodexReorderCover(codex, presentation.coverCandidates[codex.codexId].orEmpty())
-            CodexReorderMetadata(
-                if (codex.codexId == presentation.likesCodexId) codex.copy(name = "Saved") else codex,
-                presentation.itemCounts[codex.codexId] ?: 0, Modifier.weight(1f),
-            )
+            CodexReorderMetadata(codex, presentation.itemCounts[codex.codexId] ?: 0, Modifier.weight(1f))
             if (presentation.librarySort == CodexLibrarySort.MANUAL) CodexReorderHandle(codex, index, state)
         }
     }
@@ -220,7 +208,7 @@ private fun CodexReorderMetadata(codex: Codex, itemCount: Int, modifier: Modifie
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            "$itemCount items", style = MaterialTheme.typography.bodySmall,
+            "$itemCount ${countNoun(itemCount, "item")}", style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
@@ -231,54 +219,33 @@ private fun CodexGrid(
     presentation: CodexListPresentation,
     state: CodexListUiState,
     onOpenCodex: (String) -> Unit,
-    onOpenSavedCollectionActions: (String) -> Unit,
 ) {
+    val codices = presentation.libraryCodices
     // A first frame in manual order would move the restored scroll anchor to the wrong Codex.
-    val awaitingCounts = presentation.librarySort.usesItemCounts &&
-        presentation.codices.any { it.codexId !in presentation.itemCounts }
+    val awaitingCounts = presentation.librarySort.usesItemCounts && codices.any { it.codexId !in presentation.itemCounts }
     val awaitingUsage = presentation.librarySort.usesUsage && presentation.libraryUsage == null
     if (awaitingCounts || awaitingUsage) return
+    if (codices.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No Codices", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        return
+    }
     val sorted = sortCodicesForLibrary(
-        presentation.codices, presentation.librarySort, presentation.itemCounts, presentation.likesCodexId,
+        codices, presentation.librarySort, presentation.itemCounts, presentation.likesCodexId,
         presentation.libraryUsage.orEmpty(),
     )
-    val entries = savedCodexLibraryEntries(sorted, presentation.likesCodexId)
     val gridState = rememberLazyGridState()
-    ScrollToTopOnTabReselect(TopLevelDestination.Codex) { gridState.animateScrollToItem(0) }
+    ScrollToTopOnTabReselect(TopLevelDestination.Library) { gridState.animateScrollToItem(0) }
     com.theoriacodex.app.ui.components.AdaptiveMediaGrid(
         modifier = Modifier.fillMaxSize(),
         state = gridState,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        entries.forEachIndexed { index, codex ->
-            val saved = codex.codexId == SAVED_CODEX_ID
-            item(key = codex.codexId, span = { GridItemSpan(if (saved) maxLineSpan else 1) }) {
-                if (saved) {
-                    SavedLibrarySection(
-                        presentation, index > 0, index < entries.lastIndex, onOpenCodex, onOpenSavedCollectionActions,
-                    )
-                } else {
-                    CodexLibraryTile(codex, presentation, state, onOpenCodex)
-                }
-            }
+        sorted.forEach { codex ->
+            item(key = codex.codexId) { CodexLibraryTile(codex, presentation, state, onOpenCodex) }
         }
-    }
-}
-
-/** Manual order can place Saved anywhere, so it is set apart on whichever sides have Codices. */
-@Composable
-private fun SavedLibrarySection(
-    presentation: CodexListPresentation,
-    dividerAbove: Boolean,
-    dividerBelow: Boolean,
-    onOpenCodex: (String) -> Unit,
-    onOpenSavedCollectionActions: (String) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        if (dividerAbove) HorizontalDivider()
-        SavedCodexLibraryTile(presentation, onOpenCodex, onOpenSavedCollectionActions)
-        if (dividerBelow) HorizontalDivider()
     }
 }
 

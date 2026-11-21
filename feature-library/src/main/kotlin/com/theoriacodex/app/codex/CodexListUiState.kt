@@ -40,7 +40,10 @@ internal data class CodexListPresentation(
     /** Null until statistics first answer, or while no sort needs them. */
     val libraryUsage: Map<String, CodexUsage>? = null,
     val searchTerms: Map<SourceKey, CodexSearchTerms> = emptyMap(),
-)
+) {
+    /** What the grid and reordering show: Likes lives in Library's Saved section instead. */
+    val libraryCodices: List<Codex> get() = codices.filterNot { it.codexId == likesCodexId }
+}
 
 internal data class CodexListActions(
     val openCodex: (String) -> Unit,
@@ -55,7 +58,6 @@ internal data class CodexListActions(
     val deleteCodex: (String) -> Unit,
     val cleanCodex: (String, Set<String>) -> Unit,
     val makeAvailableOffline: ((String) -> Unit)? = null,
-    val openSavedCollectionActions: (String) -> Unit = {},
     val setLibrarySort: (CodexLibrarySort) -> Unit = {},
 )
 

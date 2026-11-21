@@ -45,6 +45,7 @@ import com.theoriacodex.app.di.SourceDependencies
 import com.theoriacodex.app.related.ViewerFeedOwner
 import com.theoriacodex.app.related.ViewerFeedSnapshot
 import com.theoriacodex.app.search.SearchViewModel
+import com.theoriacodex.app.settings.SettingsPage
 import com.theoriacodex.app.settings.SettingsScreen
 import com.theoriacodex.app.settings.SettingsDiagnosticsEntry
 import com.theoriacodex.app.settings.SettingsSitesEntry
@@ -367,7 +368,7 @@ internal fun SaveToCodexDestinationStateBoundary(
     val relevance = if (relevanceLoader != null) {
         remember(relevanceLoader, posts, searchQuery) {
             relevanceLoader.observe(posts, searchQuery)
-        }.collectAsStateWithLifecycle()
+        }.collectAsStateWithLifecycle(remember(relevanceLoader, posts, searchQuery) { relevanceLoader.latest(posts, searchQuery) })
     } else {
         remember(data.codexRepository, codices, posts, searchQuery) {
             CodexCollectionSource(data.codexRepository, data.storageDirectory, data.cacheRepository)
@@ -408,6 +409,8 @@ internal fun SettingsDestinationStateBoundary(
     statsActions: StatsActions = StatsActions(),
     diagnostics: SettingsDiagnosticsEntry? = null,
     storageTools: (@Composable () -> Unit)? = null,
+    onClose: () -> Unit = {},
+    closesFrom: SettingsPage = SettingsPage.HOME,
 ) {
     val state = owner.state.collectAsStateWithLifecycle()
     val emptySearch = remember { MutableStateFlow(com.theoriacodex.app.search.state.SearchUiState()) }
@@ -420,7 +423,7 @@ internal fun SettingsDestinationStateBoundary(
             state = it, onAction = owner::onAction, statistics = statistics.value,
             searchSources = selectedSources.intersect(it.availableSources.toSet()),
             storageSummary = storageSummary, sites = sites, statsActions = statsActions, diagnostics = diagnostics,
-            storageTools = storageTools,
+            storageTools = storageTools, onClose = onClose, closesFrom = closesFrom,
         )
     }
 }

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.journeys
 
+import com.theoriacodex.app.library.LibrarySection
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -44,7 +45,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
             hasAnyAncestor(hasTestTag("Search composer"))))
         activate(compose.onNodeWithContentDescription("Pixiv"))
         addSearchTag("landscape")
-        activate(compose.onNodeWithTag("Search composer apply"))
+        submitSearch()
         compose.waitUntil(10_000) {
             io { container.data.queryRepository.observeAppliedQuery("source:PIXIV").first() }
                 ?.includeTags?.contains("landscape") == true
@@ -72,7 +73,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         activate(compose.onNode(hasText("journeytag") and hasClickLabel("Include journeytag in Search")))
         activate(compose.onNode(hasText("journeytag") and hasClickLabel("Exclude journeytag from Search")))
         compose.onNodeWithText("Excluded").assertIsDisplayed()
-        compose.onNodeWithTag("Search composer apply").performClick()
+        submitSearch()
         compose.waitUntil(conditionDescription = "Provider excludes the saved tag", timeoutMillis = 10_000) {
             container.registry.requests.any { request ->
                 request.source == SourceKey.PIXIV && request.pageToken == null &&
@@ -99,16 +100,17 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         activate(compose.onNodeWithText("Add an alternative"))
         addSearchTag("green")
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        // This assertion concerns touch-driven focus dismissal, so Apply receives a real tap.
+        // Touch mode is reported if the composer fails to collapse after the keyboard submits.
         var nativeTouchModeBeforeApply = false
         scenario.onActivity { nativeTouchModeBeforeApply = it.window.decorView.isInTouchMode }
-        compose.onNodeWithTag("Search composer apply").performClick()
-        compose.waitUntil(conditionDescription = "Provider receives the grouped search", timeoutMillis = 10_000) {
-            container.registry.requests.any { it.source == SourceKey.PIXIV && it.pageToken == null }
+        submitSearch()
+        // Search runs live, so each tag edit may reach the provider before the final grouped query does; that one is asked once.
+        val expectedGroups = listOf(listOf("landscape"), listOf("blue", "green"))
+        fun groupedRoots() = container.registry.requests.toList().filter { request ->
+            request.source == SourceKey.PIXIV && request.pageToken == null &&
+                request.query.effectiveIncludeTermGroups.map { group -> group.terms.map { it.value } } == expectedGroups
         }
-        val root = container.registry.requests.single { it.source == SourceKey.PIXIV && it.pageToken == null }
-        assertEquals(listOf(listOf("landscape"), listOf("blue", "green")),
-            root.query.effectiveIncludeTermGroups.map { group -> group.terms.map { it.value } })
+        compose.waitUntil(conditionDescription = "Provider receives the grouped search", timeoutMillis = 10_000) { groupedRoots().isNotEmpty() }
         val summary = compose.onNodeWithText("landscape, blue or green", useUnmergedTree = true)
         try {
             compose.waitUntil(conditionDescription = "Grouped query is applied and its field is collapsed", timeoutMillis = 10_000) {
@@ -126,6 +128,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         }
         waitForCard(0)
         summary.assertIsDisplayed()
+        assertEquals(1, groupedRoots().size)
         scrollToFirstVisibleCard(SourceKey.PIXIV, 18)
         compose.waitUntil(10_000) { container.registry.requests.any { it.pageToken == "20" } }
         scrollToFirstVisibleCard(SourceKey.PIXIV, 22)
@@ -142,7 +145,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         waitForCard(22)
         compose.onNodeWithTag(cardTag).assertIsDisplayed()
         assertEquals(before, cardOffsetInViewport(cardTag), 2f)
-        tab("Settings")
+        tab("Library")
         tab("Search")
         waitForCard(22)
         compose.onNodeWithTag(cardTag).assertIsDisplayed()
@@ -165,7 +168,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
             hasAnyAncestor(hasTestTag("Search composer"))))
         activate(compose.onNodeWithContentDescription("Pixiv"))
         addSearchTag("landscape")
-        activate(compose.onNodeWithTag("Search composer apply"))
+        submitSearch()
         waitForCard(0)
         val applied = container.registry.requests.single { it.source == SourceKey.PIXIV && it.pageToken == null }.query
         val queryHash = QueryHash.from(applied)
@@ -209,7 +212,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
                 "for_you:journey", RecentSearchKind.FYP, sourceTags.keys.toList(), sourceTags)
         }
         launch()
-        tab("Recents")
+        library(LibrarySection.History)
         openRecentsSection("Searches")
         activate(compose.onNodeWithTag("Recent search:journey:multi"))
         waitForCard(0)
@@ -218,7 +221,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         assertTrue(multiRequests.all { it.query.includeTags == listOf("multi") && it.query.sort == SortMode.POPULAR })
         assertTrue(io { container.data.queryRepository.observeAppliedQuery("unified").first() == null })
         container.registry.requests.clear()
-        tab("Recents")
+        library(LibrarySection.History)
         openRecentsSection("Searches")
         activate(compose.onNodeWithTag("Recent search:for_you:journey"))
         compose.waitUntil(10_000) { container.registry.requests.count { it.pageToken == null } >= 2 }

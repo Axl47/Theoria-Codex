@@ -63,7 +63,35 @@ class CreatorFollowsViewModelTest {
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 
-    @Test fun `cancelling manual checks keeps previous durable results`() = runTest {
+    @Test fun `leaving the app cancels the automatic check but not one the user started`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            val settings = InMemorySettingsRepository()
+            val creator = CreatorProfile(SourceKey.PIXIV, "Artist", "1", uploadsQuery = "user:1")
+            val repository = CreatorFollowsRepository(settings)
+            repository.follow(creator, emptyList())
+            val adapter = object : SourceAdapter by TestAdapter(SourceKey.PIXIV), CreatorPostsSourceAdapter {
+                override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?): Page<Post> {
+                    delay(5_000)
+                    return Page(emptyList(), null)
+                }
+            }
+            val owner = CreatorFollowsViewModel(settings, TestRegistry(listOf(adapter)))
+            store.put("follows", owner)
+            owner.refreshIfStale(0L)
+            runCurrent()
+            owner.refresh()
+            owner.cancelAutomaticRefresh()
+            runCurrent()
+            assertTrue(owner.refreshing.value)
+            advanceUntilIdle()
+            assertFalse(owner.refreshing.value)
+            assertTrue(repository.observe().first().single().checkedAtEpochMs != null)
+        } finally { store.clear(); Dispatchers.resetMain() }
+    }
+
+    @Test fun `cancelling the automatic check keeps previous durable results and leaves it due`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val store = ViewModelStore()
         try {
@@ -79,13 +107,106 @@ class CreatorFollowsViewModelTest {
             }
             val owner = CreatorFollowsViewModel(settings, TestRegistry(listOf(adapter)))
             store.put("follows", owner)
-            owner.refresh()
+            owner.refreshIfStale(0L)
             runCurrent()
-            owner.cancelRefresh()
+            owner.cancelAutomaticRefresh()
             runCurrent()
             assertFalse(owner.refreshing.value)
             assertTrue(owner.errors.value.isEmpty())
             assertEquals(null, repository.observe().first().single().checkedAtEpochMs)
+            assertEquals(null, repository.observe().first().single().attemptedAtEpochMs)
+        } finally { store.clear(); Dispatchers.resetMain() }
+    }
+
+    @Test fun `app-open checks wait out the interval even after a failure`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            val settings = InMemorySettingsRepository()
+            CreatorFollowsRepository(settings).follow(CreatorProfile(SourceKey.PIXIV, "Artist", "1", uploadsQuery = "user:1"), emptyList())
+            var calls = 0
+            val adapter = object : SourceAdapter by TestAdapter(SourceKey.PIXIV), CreatorPostsSourceAdapter {
+                override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?): Page<Post> {
+                    calls++
+                    error("offline")
+                }
+            }
+            val owner = CreatorFollowsViewModel(settings, TestRegistry(listOf(adapter)))
+            store.put("follows", owner)
+            val hour = 60 * 60 * 1000L
+            listOf(0L, hour, 2 * hour, 3 * hour).forEach { now ->
+                owner.refreshIfStale(now)
+                advanceUntilIdle()
+            }
+            assertEquals(2, calls)
+            // A restarted app has no memory of the attempt, only what the follows saved.
+            val restarted = CreatorFollowsViewModel(settings, TestRegistry(listOf(adapter)))
+            store.put("restarted", restarted)
+            restarted.refreshIfStale(3 * hour + hour / 2)
+            advanceUntilIdle()
+            assertEquals(2, calls)
+        } finally { store.clear(); Dispatchers.resetMain() }
+    }
+
+    @Test fun `an automatic check skips follows checked within the interval but manual refresh does not`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            val settings = InMemorySettingsRepository()
+            val repository = CreatorFollowsRepository(settings)
+            val done = CreatorProfile(SourceKey.PIXIV, "Done", "1", uploadsQuery = "user:1")
+            val unfinished = CreatorProfile(SourceKey.PIXIV, "Unfinished", "2", uploadsQuery = "user:2")
+            listOf(done, unfinished).forEach { repository.follow(it, emptyList()) }
+            val hour = 60 * 60 * 1000L
+            // A run that was interrupted after writing the first batch only.
+            repository.recordChecks(mapOf(repository.observe().first().first().membershipId to emptyList()), 2 * hour)
+            val checked = mutableListOf<String>()
+            val adapter = object : SourceAdapter by TestAdapter(SourceKey.PIXIV), CreatorPostsSourceAdapter {
+                override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?): Page<Post> {
+                    checked += creator.displayName
+                    return Page(emptyList(), null)
+                }
+            }
+            val owner = CreatorFollowsViewModel(settings, TestRegistry(listOf(adapter)))
+            store.put("follows", owner)
+            owner.refreshIfStale(3 * hour)
+            advanceUntilIdle()
+            assertEquals(listOf("Unfinished"), checked)
+            checked.clear()
+            owner.refresh()
+            advanceUntilIdle()
+            assertEquals(listOf("Done", "Unfinished"), checked.sorted())
+        } finally { store.clear(); Dispatchers.resetMain() }
+    }
+
+    @Test fun `a manual refresh during the automatic check also checks the follows it skipped`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            val settings = InMemorySettingsRepository()
+            val repository = CreatorFollowsRepository(settings)
+            val done = CreatorProfile(SourceKey.PIXIV, "Done", "1", uploadsQuery = "user:1")
+            val stale = CreatorProfile(SourceKey.PIXIV, "Stale", "2", uploadsQuery = "user:2")
+            listOf(done, stale).forEach { repository.follow(it, emptyList()) }
+            val hour = 60 * 60 * 1000L
+            repository.recordChecks(mapOf(repository.observe().first().first().membershipId to emptyList()), 2 * hour)
+            val checked = mutableListOf<String>()
+            val adapter = object : SourceAdapter by TestAdapter(SourceKey.PIXIV), CreatorPostsSourceAdapter {
+                override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?): Page<Post> {
+                    checked += creator.displayName
+                    delay(5_000)
+                    return Page(emptyList(), null)
+                }
+            }
+            val owner = CreatorFollowsViewModel(settings, TestRegistry(listOf(adapter)))
+            store.put("follows", owner)
+            owner.refreshIfStale(3 * hour)
+            runCurrent()
+            assertEquals(listOf("Stale"), checked)
+            owner.refresh()
+            advanceUntilIdle()
+            assertEquals(listOf("Done", "Stale"), checked.drop(1).sorted())
+            assertFalse(owner.refreshing.value)
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 }

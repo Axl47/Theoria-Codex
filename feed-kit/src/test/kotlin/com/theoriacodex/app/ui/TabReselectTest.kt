@@ -23,10 +23,10 @@ class TabReselectTest {
         compose.setContent {
             CompositionLocalProvider(LocalTabReselects provides reselects) {
                 ScrollToTopOnTabReselect(TopLevelDestination.Search) { searchScrolls++ }
-                ScrollToTopOnTabReselect(TopLevelDestination.Codex) { codexScrolls++ }
+                ScrollToTopOnTabReselect(TopLevelDestination.Library) { codexScrolls++ }
             }
         }
-        compose.runOnIdle { reselects.tryEmit(TopLevelDestination.Codex) }
+        compose.runOnIdle { reselects.tryEmit(TopLevelDestination.Library) }
         compose.runOnIdle {
             assertEquals(0, searchScrolls)
             assertEquals(1, codexScrolls)

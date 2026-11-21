@@ -16,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
@@ -45,8 +46,8 @@ import org.robolectric.annotation.Config
 class SearchApplyScrollTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun `Apply resets overlapping results and repeated same-query results after acceptance`() = verifyReset(false)
-    @Test fun `Apply resets animated-only results after acceptance`() = verifyReset(true)
+    @Test fun `running the draft resets overlapping results and repeated same-query results after acceptance`() = verifyReset(false)
+    @Test fun `running the draft resets animated-only results after acceptance`() = verifyReset(true)
 
     @Test fun `animated-only scrolling updates the canonical anchor used on return`() {
         val stills = resetPosts(false)
@@ -119,17 +120,16 @@ class SearchApplyScrollTest {
                 draft = state.value.query.draft.copy(sort = SortMode.POPULAR),
             ))
         }
-        compose.onNodeWithText("Search").assertIsDisplayed()
         grid.performTouchInput { swipeUp() }
-        compose.onNodeWithText("Search").assertDoesNotExist()
         compose.runOnIdle { assertEquals(SortMode.POPULAR, state.value.query.draft.sort) }
         compose.onNode(hasContentDescription("Expand Search")).performClick()
-        compose.onNodeWithTag("Search composer apply").assertIsDisplayed()
+        compose.onNodeWithTag("Search query input").assertIsDisplayed()
         compose.onNodeWithContentDescription("Close search editor").performClick()
         repeat(2) {
             grid.performScrollToIndex(20)
             compose.onNode(hasContentDescription("Expand Search") or hasTestTag("Search bar")).performClick()
-            compose.onNodeWithTag("Search composer apply").performClick()
+            // The keyboard's Search action runs the draft at once.
+            compose.onNodeWithTag("Search query input").performImeAction()
             compose.runOnIdle {
                 val current = state.value
                 reduce(SearchStateChange.RootResult(request, SearchExecutionResult.Success(

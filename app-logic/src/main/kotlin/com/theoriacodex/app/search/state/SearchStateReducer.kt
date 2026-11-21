@@ -83,7 +83,7 @@ sealed interface SearchStateChange {
 }
 
 object SearchStateReducer {
-    /** Builds restored state: the stored search is both the draft and the applied search. */
+    /** Builds restored state: the stored search is the draft, the applied search and the settled one. */
     fun restore(initialization: SearchInitialization, appliedHash: String): SearchUiState = SearchUiState(
         query = SearchQueryUiState(
             draft = initialization.query,
@@ -100,6 +100,11 @@ object SearchStateReducer {
         ),
         content = SearchContentUiState(hasExecutedSearch = initialization.hasExecutedSearch),
         restoration = SearchRestorationUiState.Restoring,
+        // The stored search was settled when it was left, so the next one can step back to it.
+        history = SearchQueryHistory(
+            current = SearchHistoryEntry(initialization.query, initialization.sourceScope)
+                .takeIf { initialization.hasExecutedSearch },
+        ),
     )
 
     fun reduce(state: SearchUiState, change: SearchStateChange): SearchReduction {

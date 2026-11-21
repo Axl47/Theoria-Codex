@@ -1,5 +1,7 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.library.BareSectionHeader
+import com.theoriacodex.app.library.LibrarySectionHeader
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,10 +40,10 @@ fun CodexListScreen(
     onMakeAvailableOffline: ((String) -> Unit)? = null,
     initialActionCodexId: String? = null,
     onActionsDismissed: () -> Unit = {},
-    onOpenSavedCollectionActions: (String) -> Unit = {},
     librarySort: CodexLibrarySort = CodexLibrarySort.MANUAL,
     onLibrarySortChange: (CodexLibrarySort) -> Unit = {},
     libraryUsage: Map<String, CodexUsage>? = null,
+    header: LibrarySectionHeader = BareSectionHeader,
 ) {
     val state = remember {
         CodexListUiState(codices).apply {
@@ -65,10 +67,10 @@ fun CodexListScreen(
     val actions = CodexListActions(
         onOpenCodex, onImportCodex, onDownloadCodex, onShareCodex, onSearchFromCodex,
         onCommitReorder, onCreateCodex, onRenameCodex, onSetAutomaticTag, onDeleteCodex,
-        onCleanCodex, onMakeAvailableOffline, onOpenSavedCollectionActions, onLibrarySortChange,
+        onCleanCodex, onMakeAvailableOffline, onLibrarySortChange,
     )
     LaunchedEffect(codices, state.ordering.reorderMode) { state.synchronizeCodices(codices) }
-    if (initialActionCodexId == null) CodexListContent(presentation, state, actions)
+    if (initialActionCodexId == null) CodexListContent(presentation, state, actions, header)
     val hasOverlay = state.actionTarget != null || state.autoSaveTarget != null || state.searchTarget != null ||
         state.renameTarget != null ||
         state.deleteTarget != null || state.cleaningTargetId != null
