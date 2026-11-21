@@ -192,6 +192,21 @@ class ForYouSectionsStateTest {
         assertEquals(listOf("forest", "city"), owner.state.value.home.sections.map { it.title })
     }
 
+    @Test fun `Move to Saved hides its tags in the profile it started in even if the profile changes while saving`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val engine = SectionsEngine().apply { sectionLoader = { listOf(section("forest")) }; pinGate = gate }
+        val owner = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        owner.synchronizeEnvironment(AppSettings(), 3)
+        advanceUntilIdle()
+        owner.onAction(ForYouAction.SaveSection("PIXIV:forest"))
+        runCurrent()
+        owner.synchronizeEnvironment(AppSettings(activeProfileId = "other",
+            recommendationProfiles = listOf(RecommendationProfile("other", "Other"))), 2)
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(AppSettings().activeProfileId, engine.blacklistWrites.single().first)
+    }
+
     @Test fun `save removes only its row after saving and retains the row on storage failure`() = runTest {
         val engine = SectionsEngine().apply { sectionLoader = { listOf(section("forest"), section("city")) } }
         val owner = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)

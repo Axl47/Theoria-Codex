@@ -116,10 +116,12 @@ internal class ForYouHomeController(
 
     /** Dismiss hides the shelf's tags; Move to Saved also saves it first, and its Undo unsaves it again. */
     private fun remove(id: String, save: Boolean) = mutate(id) { section, isCurrent ->
+        // Read before the suspending save: a profile switch during it must not hide these tags in the new profile.
+        val profile = state().activeProfileId
         val savedId = if (save && !section.pinned) engine.pinSection(section, true) else null
         val entries = section.feed.seed.map { (source, tags) -> ForYouBlacklistEntry(source, tags) }
         val label = if (save) "Moved to Saved" else "Hid ${section.title}"
-        hide(state().activeProfileId, entries, isCurrent, label, ForYouUndoAnchor, savedId?.let { section.copy(savedSearchId = it) })
+        hide(profile, entries, isCurrent, label, ForYouUndoAnchor, savedId?.let { section.copy(savedSearchId = it) })
     }
 
     /** Strikes a tag from a why panel, then refills the slots of the shelves it took. */
