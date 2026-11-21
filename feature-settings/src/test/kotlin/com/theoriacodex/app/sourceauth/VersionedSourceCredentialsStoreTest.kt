@@ -1,9 +1,9 @@
 package com.theoriacodex.app.sourceauth
 
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.SiteCredentials
-import com.theoriacodex.sources.credentials.GelbooruCredentials
+import com.theoriacodex.sources.credentials.UserApiKey
 import com.theoriacodex.sources.credentials.PixivAuthTokens
-import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -45,18 +45,18 @@ class VersionedSourceCredentialsStoreTest {
         val envelope = FakeEnvelopeStore()
         val store = createStore(envelope)
         val pixiv = PixivAuthTokens("access", "refresh", 1234L)
-        val gelbooru = GelbooruCredentials("gel-user", "gel-key")
-        val rule34 = Rule34XxxCredentials("r34-user", "r34-key")
+        val gelbooru = UserApiKey("gel-user", "gel-key")
+        val rule34 = UserApiKey("r34-user", "r34-key")
 
         listOf(
             async { store.savePixivTokens(pixiv) },
-            async { store.saveGelbooruCredentials(gelbooru) },
-            async { store.saveRule34XxxCredentials(rule34) },
+            async { store.saveUserApiKey(SourceKey.GELBOORU, gelbooru) },
+            async { store.saveUserApiKey(SourceKey.RULE34XXX, rule34) },
         ).awaitAll()
 
         assertEquals(pixiv, store.getPixivTokens())
-        assertEquals(gelbooru, store.getGelbooruCredentials())
-        assertEquals(rule34, store.getRule34XxxCredentials())
+        assertEquals(gelbooru, store.userApiKey(SourceKey.GELBOORU))
+        assertEquals(rule34, store.userApiKey(SourceKey.RULE34XXX))
     }
 
     @Test
@@ -155,7 +155,7 @@ class VersionedSourceCredentialsStoreTest {
 
         assertEquals(SiteCredentials("42", "key"), store.get("custom_safebooru_org"))
         assertNull(store.get("custom_other_example"))
-        assertEquals(populatedSnapshot().gelbooruCredentials(), envelope.snapshot?.gelbooruCredentials())
+        assertEquals(populatedSnapshot().userApiKey(SourceKey.GELBOORU), envelope.snapshot?.userApiKey(SourceKey.GELBOORU))
         store.clear("custom_safebooru_org")
         assertNull(store.get("custom_safebooru_org"))
         assertEquals(populatedSnapshot(), envelope.snapshot)
@@ -170,7 +170,7 @@ class VersionedSourceCredentialsStoreTest {
 
         assertTrue(runCatching { store.save("GELBOORU", SiteCredentials("1", "k")) }.isFailure)
         store.save("custom_booru_example", SiteCredentials("alice", "k1"))
-        store.saveGelbooruCredentials(GelbooruCredentials("gel", "gk"))
+        store.saveUserApiKey(SourceKey.GELBOORU, UserApiKey("gel", "gk"))
 
         assertEquals(SiteCredentials("alice", "k1"), store.get("custom_booru_example"))
     }

@@ -1,7 +1,6 @@
 package com.theoriacodex.sources.health
 
 import com.theoriacodex.domain.adapter.Page
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -10,8 +9,6 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
-import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.hitomi.HitomiMediaUrlResolver
 import com.theoriacodex.sources.http.SourceByteRange
@@ -182,9 +179,6 @@ class HitomiProviderHealthProbeTest {
             supportsSortTop = true,
             supportsSortRandom = true,
             supportsExcludeTagsServerSide = true,
-            supportsDateRangeServerSide = false,
-            supportsMinScoreServerSide = false,
-            requiresCredentials = false,
         )
 
         override suspend fun resolvePost(id: PostId): Post? {
@@ -198,16 +192,6 @@ class HitomiProviderHealthProbeTest {
         override suspend fun search(query: Query, pageToken: String?): Page<Post> = error("Unexpected search")
         override suspend fun trendingTags(limit: Int): List<TagSuggestion> = error("Unexpected trending")
         override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = error("Unexpected autocomplete")
-        override suspend fun quickQuery(kind: QuickQueryKind): Query {
-            return Query(
-                mode = QueryMode.Source(SourceKey.HITOMI),
-                includeTags = emptyList(),
-                excludeTags = emptyList(),
-                sort = SortMode.NEWEST,
-                dateRange = null,
-                minScore = null,
-            )
-        }
 
         private fun animatedGallery(): Post {
             val media = List(HitomiProviderHealthProbe.ANIMATED_GALLERY_MEDIA_COUNT) {

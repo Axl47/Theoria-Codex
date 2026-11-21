@@ -6,6 +6,7 @@ import com.theoriacodex.domain.diagnostics.OffMainWork
 import com.theoriacodex.domain.source.ProbeFailure
 import com.theoriacodex.sources.gelbooru.looksLikeGelbooruAuthFailure
 import com.theoriacodex.sources.http.SourceHttpResponse
+import com.theoriacodex.sources.http.header
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
@@ -47,7 +48,7 @@ internal fun SourceHttpResponse.isGelbooruPostsEnvelope(): Boolean =
  * (including "Access denied" interstitials) are never auth evidence.
  */
 internal fun SourceHttpResponse.isGelbooruAuthRefusal(): Boolean = when {
-    statusCode == HTTP_UNAUTHORIZED && body.isBlank() -> header("WWW-Authenticate") == null
+    statusCode == HTTP_UNAUTHORIZED && body.isBlank() -> headers.header("WWW-Authenticate") == null
     statusCode !in GELBOORU_AUTH_STATUSES || looksLikeHtml() -> false
     else -> looksLikeGelbooruAuthFailure(body)
 }
@@ -101,9 +102,6 @@ private fun SourceHttpResponse.looksLikeHtml(): Boolean {
     val start = body.trimStart().take(HTML_SNIFF_CHARS).lowercase()
     return start.startsWith("<!doctype html") || start.startsWith("<html")
 }
-
-private fun SourceHttpResponse.header(name: String): String? =
-    headers.entries.firstOrNull { (key, _) -> key.equals(name, ignoreCase = true) }?.value?.firstOrNull()
 
 private const val CHALLENGE_SCAN_CHARS = 8192
 private val VERIFICATION_CHALLENGE_CORROBORATION = listOf(

@@ -11,8 +11,7 @@ import com.theoriacodex.data.repository.InMemoryStatisticsRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.sources.credentials.GelbooruCredentials
-import com.theoriacodex.sources.credentials.Rule34XxxCredentials
+import com.theoriacodex.sources.credentials.UserApiKey
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -53,8 +52,8 @@ fun kotlinx.coroutines.test.TestScope.settingsOwner(
 }
 
 class FakeSettingsAccountGateway(
-    gelbooru: GelbooruCredentials? = null,
-    rule34Xxx: Rule34XxxCredentials? = null,
+    gelbooru: UserApiKey? = null,
+    rule34Xxx: UserApiKey? = null,
 ) : SettingsAccountGateway {
     private val mutableRecovery = MutableStateFlow<CredentialStoreRecoveryState>(
         CredentialStoreRecoveryState.Ready,
@@ -62,7 +61,7 @@ class FakeSettingsAccountGateway(
     override val recoveryState: StateFlow<CredentialStoreRecoveryState> = mutableRecovery
     private var gelbooruCredential = gelbooru
     private var rule34XxxCredential = rule34Xxx
-    var savedGelbooru: GelbooruCredentials? = null
+    var savedGelbooru: UserApiKey? = null
     var gelbooruSaveCount = 0
     var failGelbooruSaveWithRecovery: CredentialStoreRecoveryState? = null
 
@@ -82,25 +81,26 @@ class FakeSettingsAccountGateway(
 
     override suspend fun startPixivAuthorization(): String = "https://example.test/pixiv"
     override suspend fun disconnectPixiv() = Unit
-    override suspend fun currentGelbooruApiKey(): String? = gelbooruCredential?.apiKey
-    override suspend fun saveGelbooruCredentials(credentials: GelbooruCredentials) {
+    override suspend fun currentApiKey(source: SourceKey): String? = when (source) {
+        SourceKey.GELBOORU -> gelbooruCredential?.apiKey
+        SourceKey.RULE34XXX -> rule34XxxCredential?.apiKey
+        else -> null
+    }
+    override suspend fun saveUserApiKey(source: SourceKey, key: UserApiKey) {
+        if (source == SourceKey.RULE34XXX) {
+            rule34XxxCredential = key
+            return
+        }
         gelbooruSaveCount += 1
         failGelbooruSaveWithRecovery?.let { recovery ->
             mutableRecovery.value = recovery
             throw CredentialStoreUnavailableException()
         }
-        savedGelbooru = credentials
-        gelbooruCredential = credentials
+        savedGelbooru = key
+        gelbooruCredential = key
     }
-    override suspend fun clearGelbooruCredentials() {
-        gelbooruCredential = null
-    }
-    override suspend fun currentRule34XxxApiKey(): String? = rule34XxxCredential?.apiKey
-    override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) {
-        rule34XxxCredential = credentials
-    }
-    override suspend fun clearRule34XxxCredentials() {
-        rule34XxxCredential = null
+    override suspend fun clearUserApiKey(source: SourceKey) {
+        if (source == SourceKey.RULE34XXX) rule34XxxCredential = null else gelbooruCredential = null
     }
     override suspend fun resetAfterReconnectRequired(): Boolean {
         mutableRecovery.value = CredentialStoreRecoveryState.Ready

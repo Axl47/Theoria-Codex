@@ -8,7 +8,6 @@ import com.theoriacodex.domain.adapter.CommentsSourceAdapter
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.FileHashLookupSourceAdapter
 import com.theoriacodex.domain.adapter.Page
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
@@ -19,40 +18,39 @@ import com.theoriacodex.domain.model.AccountDetails
 import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.domain.model.CommentPage
 import com.theoriacodex.domain.model.CreatorProfile
-import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SortMode
-import com.theoriacodex.domain.model.contentHashOrNull
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.contentHashOrNull
 import com.theoriacodex.domain.query.SearchTermLimit
 import com.theoriacodex.sources.common.autocompleteTagCounts
+import com.theoriacodex.sources.common.booruFull
+import com.theoriacodex.sources.common.booruPreview
 import com.theoriacodex.sources.common.canonicalPostPage
-import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.durationFieldMs
 import com.theoriacodex.sources.common.httpsMediaUrl
 import com.theoriacodex.sources.common.intValue
-import com.theoriacodex.sources.common.isSuccessful
+import com.theoriacodex.sources.common.keysFor
 import com.theoriacodex.sources.common.longValue
 import com.theoriacodex.sources.common.mimeFromUrlOrExt
-import com.theoriacodex.sources.common.originUrlOrNull
 import com.theoriacodex.sources.common.optionalJsonArray
 import com.theoriacodex.sources.common.optionalJsonObject
+import com.theoriacodex.sources.common.originUrlOrNull
 import com.theoriacodex.sources.common.parseJsonArray
 import com.theoriacodex.sources.common.parseJsonObject
 import com.theoriacodex.sources.common.parseOffsetDateTimeMs
+import com.theoriacodex.sources.common.requireSuccess
 import com.theoriacodex.sources.common.sourceCall
-import com.theoriacodex.sources.common.sourceNetworkFailure
-import com.theoriacodex.sources.common.sourceQuickQuery
+import com.theoriacodex.sources.common.sourceRequest
 import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.credentials.ApiKeyUse
+import com.theoriacodex.sources.credentials.UserApiKey
 import com.theoriacodex.sources.credentials.UserApiKeyCredentialLookup
-import com.theoriacodex.sources.credentials.UserApiKeyCredentials
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.THEORIA_SOURCE_USER_AGENT
-import java.io.IOException
 
 /** One site running Danbooru's software; every site shares the same API and post shape. */
 data class DanbooruSite(
@@ -66,6 +64,10 @@ data class DanbooruSite(
     val credentials: ApiKeyUse = ApiKeyUse.OPTIONAL,
 ) {
     companion object {
+        /** API keys as Danbooru's query parameters; empty without keys. */
+        fun authQuery(keys: UserApiKey?): Map<String, String> =
+            keys?.let { mapOf("login" to it.userId, "api_key" to it.apiKey) }.orEmpty()
+
         /** Guests may search two tags, and an `order:` metatag counts as one of them. */
         val DANBOORU = DanbooruSite(
             source = SourceKey.DANBOORU,
@@ -85,7 +87,7 @@ data class DanbooruSite(
 class DanbooruSourceAdapter(
     private val site: DanbooruSite,
     private val httpClient: SourceHttpClient,
-    /** [UserApiKeyCredentials.userId] is the Danbooru login name. */
+    /** [UserApiKey.userId] is the Danbooru login name. */
     private val credentials: UserApiKeyCredentialLookup = { null },
     private val gson: Gson = Gson(),
 ) : SourceAdapter, TagCountLookupSourceAdapter, CreatorPostsSourceAdapter, CommentsSourceAdapter,
@@ -98,9 +100,6 @@ class DanbooruSourceAdapter(
         supportsSortTop = true,
         supportsSortRandom = false,
         supportsExcludeTagsServerSide = true,
-        supportsDateRangeServerSide = false,
-        supportsMinScoreServerSide = false,
-        requiresCredentials = site.credentials == ApiKeyUse.REQUIRED,
         searchTermLimit = site.searchTermLimit,
     )
 
@@ -158,10 +157,6 @@ class DanbooruSourceAdapter(
 
     override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> = sourceCall {
         autocompleteTagCounts(sourceKey, tags, ::autocompleteTags)
-    }
-
-    override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceCall {
-        sourceQuickQuery(source = sourceKey, kind = kind)
     }
 
     override suspend fun resolvePost(id: PostId): Post? = sourceCall {
@@ -232,29 +227,14 @@ class DanbooruSourceAdapter(
     }
 
     private suspend fun request(path: String, query: Map<String, String> = emptyMap()): String {
-        val saved = credentials()
-        if (saved == null && site.credentials == ApiKeyUse.REQUIRED) {
-            throw SourceAdapterException(
-                reason = SourceFailureReason.AUTH_REQUIRED,
-                message = "${site.label} credentials required",
-            )
-        }
-        val authorizedQuery = saved?.let { query + mapOf("login" to it.userId, "api_key" to it.apiKey) } ?: query
-        val response = try {
-            httpClient.get(url = "${site.baseUrl}$path", query = authorizedQuery, headers = site.headers)
-        } catch (error: IOException) {
-            sourceNetworkFailure(site.label, error)
-        }
-        if (!response.isSuccessful()) {
+        val saved = credentials.keysFor(site.credentials, site.label)
+        return sourceRequest(site.label) {
+            httpClient.get(url = "${site.baseUrl}$path", query = query + DanbooruSite.authQuery(saved), headers = site.headers)
+        }.requireSuccess("${site.label} request failed") { body ->
             // Danbooru explains rejected searches (such as the tag limit) in a JSON `message`.
-            val providerMessage = runCatching { parseJsonObject(response.body, gson, site.label) }.getOrNull()
+            runCatching { parseJsonObject(body, gson, site.label) }.getOrNull()
                 ?.stringValue("message")?.trim()?.takeIf(String::isNotBlank)
-            throw SourceAdapterException(
-                reason = classifyHttpFailure(response.statusCode),
-                message = providerMessage ?: "${site.label} request failed (${response.statusCode})",
-            )
-        }
-        return response.body
+        }.body
     }
 
     /** Posts without a file URL are restricted to signed-in users, so they are left out. */
@@ -273,13 +253,8 @@ class DanbooruSourceAdapter(
         val artistTag = raw.tagList("tag_string_artist").firstOrNull()
         return Post(
             id = PostId(sourceKey, id),
-            preview = ImageRef(url = previewUrl, localPath = null, mime = mimeFromUrlOrExt(previewUrl, null) ?: fullMime),
-            full = ImageRef(
-                url = fullUrl,
-                localPath = null,
-                mime = fullMime,
-                progressiveUrls = listOfNotNull(sampleUrl).filter { it != fullUrl },
-            ),
+            preview = booruPreview(previewUrl, fullMime),
+            full = booruFull(fullUrl, fullMime, sampleUrl),
             pageUrl = "${site.baseUrl}/posts/$id",
             width = raw.intValue("image_width"),
             height = raw.intValue("image_height"),

@@ -1,14 +1,15 @@
 package com.theoriacodex.sources.http
 
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import java.io.IOException
+import java.net.URL
 import java.net.UnknownHostException
 import kotlinx.coroutines.delay
 
-/** How many times, how slowly, and for which statuses a source request is retried; see [executeWithRetry]. */
+/** How many times and how slowly a source request is retried; see [executeWithRetry]. */
 internal class SourceRetryPolicy(
     val maxRetries: Int = DEFAULT_MAX_RETRIES,
     val baseDelayMs: Long = DEFAULT_RETRY_BASE_DELAY_MS,
-    val shouldRetryStatus: (url: String, statusCode: Int) -> Boolean = ::defaultShouldRetryStatus,
 ) {
     companion object {
         const val DEFAULT_MAX_RETRIES = 2
@@ -21,6 +22,7 @@ internal class SourceRetryPolicy(
  * honors a short Retry-After. Outages are recorded in [outages] only for the outcome after retries, so a
  * request that recovers leaves nothing behind; a known-down host fails before the first attempt. A
  * non-null [extraOutage] can flag the final answer as an outage too (for example a challenge page).
+ * The outcome after retries is also all that reaches the `http` diagnostics log: an error status or a failure.
  */
 internal suspend fun executeWithRetry(
     requestUrl: String,
@@ -29,46 +31,78 @@ internal suspend fun executeWithRetry(
     extraOutage: (SourceByteResponse) -> HostOutageKind? = { null },
     block: suspend () -> SourceByteResponse,
 ): SourceByteResponse {
+    val host = HostOutageTracker.hostKey(requestUrl) ?: "unknown host"
+    return try {
+        retrying(requestUrl, policy, outages, extraOutage, block).also { response ->
+            if (response.statusCode >= 400) Diagnostics.report("http", "$host: HTTP ${response.statusCode}")
+        }
+    } catch (error: IOException) {
+        Diagnostics.report("http", "$host: request failed", error)
+        throw error
+    }
+}
+
+private suspend fun retrying(
+    requestUrl: String,
+    policy: SourceRetryPolicy,
+    outages: HostOutageTracker?,
+    extraOutage: (SourceByteResponse) -> HostOutageKind?,
+    block: suspend () -> SourceByteResponse,
+): SourceByteResponse {
     outages?.ensureAvailable(requestUrl)
     var attempt = 0
-    var lastError: Throwable? = null
-    while (attempt <= policy.maxRetries) {
+    while (true) {
         try {
             val response = block()
-            // A maintenance page's Retry-After (Danbooru sends 30 s) is not worth waiting out per request.
-            val retry = policy.shouldRetryStatus(requestUrl, response.statusCode) && !response.headers.retryAfterTooLong()
-            if (!retry || attempt == policy.maxRetries) {
+            val delayMs = policy.delayBeforeRetry(requestUrl, response, attempt)
+            if (delayMs == null) {
                 outages?.settle(requestUrl, response, extraOutage)
                 return response
             }
             attempt += 1
-            delay(
-                resolveRetryDelayMs(
-                    response = SourceHttpResponse(
-                        statusCode = response.statusCode,
-                        body = "",
-                        headers = response.headers,
-                    ),
-                    attempt = attempt,
-                    retryBaseDelayMs = policy.baseDelayMs,
-                ),
-            )
+            delay(delayMs)
         } catch (error: HostUnavailableException) {
             throw error
         } catch (error: UnknownHostException) {
             outages?.recordFailure(requestUrl, error)
             throw error
         } catch (error: IOException) {
-            lastError = error
-            outages?.recordFailure(requestUrl, error)
             if (attempt == policy.maxRetries) throw error
             attempt += 1
             delay(policy.baseDelayMs * attempt)
         }
     }
-    throw IllegalStateException("Unexpected HTTP retry state", lastError)
 }
 
+/** How long to wait before retrying [response] to failed attempt [attempt] (from 0); null when it is final. */
+private fun SourceRetryPolicy.delayBeforeRetry(requestUrl: String, response: SourceByteResponse, attempt: Int): Long? {
+    if (attempt == maxRetries || !defaultShouldRetryStatus(requestUrl, response.statusCode)) return null
+    return retryDelayMs(response.headers, attempt + 1, baseDelayMs)
+}
+
+/** 5xx answers are retried, and 429s except from Iwara, whose rate limit counts each retry and only lasts longer for it. */
+internal fun defaultShouldRetryStatus(requestUrl: String, statusCode: Int): Boolean {
+    if (statusCode in 500..599) return true
+    if (statusCode != 429) return false
+    val host = runCatching { URL(requestUrl).host.lowercase() }.getOrNull() ?: return true
+    return host != "iwara.tv" && !host.endsWith(".iwara.tv")
+}
+
+/**
+ * How long to wait before retry [attempt] of an answer with [headers]: its Retry-After when that is a few
+ * seconds, otherwise linear backoff from [baseDelayMs]. Null when Retry-After asks for longer, which is not
+ * worth waiting out inside one request (a maintenance page such as Danbooru's sends 30 s).
+ */
+internal fun retryDelayMs(headers: Map<String, List<String>>, attempt: Int, baseDelayMs: Long): Long? {
+    val retryAfterSeconds = headers.header("Retry-After")?.trim()?.toLongOrNull()
+    return when {
+        retryAfterSeconds == null || retryAfterSeconds <= 0L -> baseDelayMs * attempt
+        retryAfterSeconds > MAX_INLINE_RETRY_AFTER_SECONDS -> null
+        else -> retryAfterSeconds * 1_000L
+    }
+}
+
+private const val MAX_INLINE_RETRY_AFTER_SECONDS = 3L
 /** Records the final answer, throwing [HostUnavailableException] when it says the host is down. */
 private fun HostOutageTracker.settle(
     requestUrl: String,

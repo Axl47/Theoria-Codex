@@ -1,12 +1,10 @@
 package com.theoriacodex.sources.gelbooru
 
-import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.diagnostics.OffMainWork
 import com.theoriacodex.domain.model.AccountDetails
-import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.htmlFragmentToText
-import com.theoriacodex.sources.common.isSuccessful
 import com.theoriacodex.sources.common.parseHtml
+import com.theoriacodex.sources.common.requireSuccess
 import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.http.SourceHttpClient
 import java.time.LocalDate
@@ -58,10 +56,7 @@ suspend fun fetchGelbooruProfileOwner(
         query = mapOf("page" to "account", "s" to "profile", "id" to creatorId),
         headers = headers,
     )
-    if (!response.isSuccessful()) {
-        throw SourceAdapterException(classifyHttpFailure(response.statusCode), "Gelbooru profile failed (${response.statusCode})")
-    }
-    parseGelbooruProfileOwner(response.body)
+    parseGelbooruProfileOwner(response.requireSuccess("Gelbooru profile failed").body)
 }
 
 private fun parseGelbooruProfileOwner(html: String): String? {

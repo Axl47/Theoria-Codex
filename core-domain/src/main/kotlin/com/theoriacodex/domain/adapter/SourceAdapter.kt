@@ -22,7 +22,6 @@ interface SourceAdapter {
     suspend fun search(query: Query, pageToken: String?): Page<Post>
     suspend fun trendingTags(limit: Int): List<TagSuggestion>
     suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion>
-    suspend fun quickQuery(kind: QuickQueryKind): Query
     suspend fun resolvePost(id: PostId): Post?
 }
 
@@ -213,18 +212,7 @@ data class SourceCapabilities(
     val supportsSortTop: Boolean,
     val supportsSortRandom: Boolean,
     val supportsExcludeTagsServerSide: Boolean,
-    val supportsDateRangeServerSide: Boolean,
-    val supportsMinScoreServerSide: Boolean,
-    val requiresCredentials: Boolean,
     val supportsGroupedIncludeTagsServerSide: Boolean = false,
     /** Null when the provider accepts any number of terms per request. */
     val searchTermLimit: SearchTermLimit? = null,
 )
-
-enum class QuickQueryKind {
-    POPULAR_TODAY,
-    TOP_7D,
-    TOP_30D,
-    NEWEST,
-    RANDOM,
-}

@@ -2,11 +2,10 @@ package com.theoriacodex.app.sourceauth
 
 import com.theoriacodex.app.source.exposedRealSources
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.sources.credentials.GelbooruCredentials
+import com.theoriacodex.sources.credentials.UserApiKey
 import com.theoriacodex.sources.credentials.PixivAuthTokens
 import com.theoriacodex.sources.credentials.PixivCredentialSession
 import com.theoriacodex.sources.credentials.SessionBoundSourceCredentials
-import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,7 +45,7 @@ class ObservableSourceAccountStore(
     override val availableSources: StateFlow<Set<SourceKey>> = mutableAvailableSources.asStateFlow()
 
     override suspend fun refreshAvailability() {
-        getRule34XxxCredentials()
+        userApiKey(SourceKey.RULE34XXX)
     }
 
     override suspend fun getPixivTokens(): PixivAuthTokens? {
@@ -67,32 +66,20 @@ class ObservableSourceAccountStore(
     override suspend fun commitPixivRefresh(session: PixivCredentialSession, tokens: PixivAuthTokens?): Boolean =
         withRecoverySynchronization { pixivSessions.commitPixivRefresh(session, tokens) }
 
-    override suspend fun getGelbooruCredentials(): GelbooruCredentials? {
-        return withRecoverySynchronization { delegate.getGelbooruCredentials() }
+    override suspend fun userApiKey(source: SourceKey): UserApiKey? {
+        val key = withRecoverySynchronization { delegate.userApiKey(source) }
+        if (source == SourceKey.RULE34XXX) publishRule34XxxAvailability(key != null)
+        return key
     }
 
-    override suspend fun saveGelbooruCredentials(credentials: GelbooruCredentials) {
-        withRecoverySynchronization { delegate.saveGelbooruCredentials(credentials) }
+    override suspend fun saveUserApiKey(source: SourceKey, key: UserApiKey) {
+        withRecoverySynchronization { delegate.saveUserApiKey(source, key) }
+        if (source == SourceKey.RULE34XXX) publishRule34XxxAvailability(configured = true)
     }
 
-    override suspend fun clearGelbooruCredentials() {
-        withRecoverySynchronization { delegate.clearGelbooruCredentials() }
-    }
-
-    override suspend fun getRule34XxxCredentials(): Rule34XxxCredentials? {
-        val credentials = withRecoverySynchronization { delegate.getRule34XxxCredentials() }
-        publishRule34XxxAvailability(credentials != null)
-        return credentials
-    }
-
-    override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) {
-        withRecoverySynchronization { delegate.saveRule34XxxCredentials(credentials) }
-        publishRule34XxxAvailability(configured = true)
-    }
-
-    override suspend fun clearRule34XxxCredentials() {
-        withRecoverySynchronization { delegate.clearRule34XxxCredentials() }
-        publishRule34XxxAvailability(configured = false)
+    override suspend fun clearUserApiKey(source: SourceKey) {
+        withRecoverySynchronization { delegate.clearUserApiKey(source) }
+        if (source == SourceKey.RULE34XXX) publishRule34XxxAvailability(configured = false)
     }
 
     override suspend fun resetAfterReconnectRequired(): Boolean {

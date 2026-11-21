@@ -15,13 +15,10 @@ import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.TagSuggestion
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
-import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import com.theoriacodex.stubs.StubAdapterRegistry
@@ -280,16 +277,6 @@ class CreatorProfileCoordinatorTest {
                 override suspend fun search(query: Query, pageToken: String?): Page<Post> = Page(emptyList(), null)
                 override suspend fun trendingTags(limit: Int): List<TagSuggestion> = emptyList()
                 override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = emptyList()
-                override suspend fun quickQuery(kind: QuickQueryKind): Query {
-                    return Query(
-                        mode = QueryMode.Source(sourceKey),
-                        includeTags = emptyList(),
-                        excludeTags = emptyList(),
-                        sort = SortMode.NEWEST,
-                        dateRange = null,
-                        minScore = null,
-                    )
-                }
                 override suspend fun resolvePost(id: PostId): Post? = null
             }
             override fun unifiedOrchestrator(): UnifiedSearchOrchestrator = stubRegistry.unifiedOrchestrator()
@@ -303,9 +290,6 @@ class CreatorProfileCoordinatorTest {
             supportsSortTop = true,
             supportsSortRandom = true,
             supportsExcludeTagsServerSide = true,
-            supportsDateRangeServerSide = true,
-            supportsMinScoreServerSide = true,
-            requiresCredentials = false,
         )
     }
 }
@@ -325,24 +309,11 @@ private class FakeCreatorAdapter(
         supportsSortTop = true,
         supportsSortRandom = true,
         supportsExcludeTagsServerSide = true,
-        supportsDateRangeServerSide = true,
-        supportsMinScoreServerSide = true,
-        requiresCredentials = false,
     )
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> = Page(emptyList(), null)
     override suspend fun trendingTags(limit: Int): List<TagSuggestion> = emptyList()
     override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = emptyList()
-    override suspend fun quickQuery(kind: QuickQueryKind): Query {
-        return Query(
-            mode = QueryMode.Source(sourceKey),
-            includeTags = emptyList(),
-            excludeTags = emptyList(),
-            sort = SortMode.NEWEST,
-            dateRange = null,
-            minScore = null,
-        )
-    }
     override suspend fun resolvePost(id: PostId): Post? = null
 
     override suspend fun searchCreatorPosts(

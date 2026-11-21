@@ -20,8 +20,7 @@ import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.data.storage.CorruptionRecovery
-import com.theoriacodex.sources.credentials.GelbooruCredentials
-import com.theoriacodex.sources.credentials.Rule34XxxCredentials
+import com.theoriacodex.sources.credentials.UserApiKey
 import com.theoriacodex.sources.pixiv.PixivTokenCoordinator
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
@@ -56,12 +55,9 @@ interface SettingsAccountGateway {
     suspend fun loadSnapshot(): SettingsAccountSnapshot
     suspend fun startPixivAuthorization(): String
     suspend fun disconnectPixiv()
-    suspend fun currentGelbooruApiKey(): String?
-    suspend fun saveGelbooruCredentials(credentials: GelbooruCredentials)
-    suspend fun clearGelbooruCredentials()
-    suspend fun currentRule34XxxApiKey(): String?
-    suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials)
-    suspend fun clearRule34XxxCredentials()
+    suspend fun currentApiKey(source: SourceKey): String?
+    suspend fun saveUserApiKey(source: SourceKey, key: UserApiKey)
+    suspend fun clearUserApiKey(source: SourceKey)
     suspend fun resetAfterReconnectRequired(): Boolean
 }
 
@@ -80,15 +76,15 @@ class DefaultSettingsAccountGateway(
             pixivTokens.expiresAtEpochMs > clock() -> true to "Connected"
             else -> refreshExpiredPixivSession()
         }
-        val gelbooru = accounts.getGelbooruCredentials()
-        val rule34Xxx = accounts.getRule34XxxCredentials()
+        val gelbooru = accounts.userApiKey(SourceKey.GELBOORU)
+        val rule34Xxx = accounts.userApiKey(SourceKey.RULE34XXX)
         val gelbooruPresentation = credentialAccountPresentation(
             credential = gelbooru,
-            userId = GelbooruCredentials::userId,
+            userId = UserApiKey::userId,
         )
         val rule34XxxPresentation = credentialAccountPresentation(
             credential = rule34Xxx,
-            userId = Rule34XxxCredentials::userId,
+            userId = UserApiKey::userId,
         )
         return SettingsAccountSnapshot(
             pixivStatusLabel = pixivStatus.second,
@@ -114,16 +110,9 @@ class DefaultSettingsAccountGateway(
 
     override suspend fun startPixivAuthorization(): String = pixivAuthController.startAuthorizationUri().toString()
     override suspend fun disconnectPixiv() = accounts.clearPixivTokens()
-    override suspend fun currentGelbooruApiKey(): String? = accounts.getGelbooruCredentials()?.apiKey
-    override suspend fun saveGelbooruCredentials(credentials: GelbooruCredentials) {
-        accounts.saveGelbooruCredentials(credentials)
-    }
-    override suspend fun clearGelbooruCredentials() = accounts.clearGelbooruCredentials()
-    override suspend fun currentRule34XxxApiKey(): String? = accounts.getRule34XxxCredentials()?.apiKey
-    override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) {
-        accounts.saveRule34XxxCredentials(credentials)
-    }
-    override suspend fun clearRule34XxxCredentials() = accounts.clearRule34XxxCredentials()
+    override suspend fun currentApiKey(source: SourceKey): String? = accounts.userApiKey(source)?.apiKey
+    override suspend fun saveUserApiKey(source: SourceKey, key: UserApiKey) = accounts.saveUserApiKey(source, key)
+    override suspend fun clearUserApiKey(source: SourceKey) = accounts.clearUserApiKey(source)
     override suspend fun resetAfterReconnectRequired(): Boolean = accounts.resetAfterReconnectRequired()
 }
 
@@ -361,17 +350,17 @@ class SettingsViewModel(
             }
             is SettingsAction.SetGelbooruApiKey -> updateGelbooruApiKey(action.value)
             SettingsAction.SaveGelbooruCredentials -> saveGelbooruCredentials()
-            SettingsAction.ClearGelbooruCredentials -> runCredentialMutation(
-                dependencies.accounts::clearGelbooruCredentials,
-            )
+            SettingsAction.ClearGelbooruCredentials -> runCredentialMutation {
+                dependencies.accounts.clearUserApiKey(SourceKey.GELBOORU)
+            }
             is SettingsAction.SetRule34XxxUserId -> updateAccounts {
                 copy(rule34XxxUserIdInput = action.value.trim())
             }
             is SettingsAction.SetRule34XxxApiKey -> updateRule34XxxApiKey(action.value)
             SettingsAction.SaveRule34XxxCredentials -> saveRule34XxxCredentials()
-            SettingsAction.ClearRule34XxxCredentials -> runCredentialMutation(
-                dependencies.accounts::clearRule34XxxCredentials,
-            )
+            SettingsAction.ClearRule34XxxCredentials -> runCredentialMutation {
+                dependencies.accounts.clearUserApiKey(SourceKey.RULE34XXX)
+            }
             SettingsAction.RefreshAccounts -> refreshAccounts()
             is SettingsAction.PixivCallbackCompleted -> handlePixivCallback(action.errorMessage)
             SettingsAction.DismissCredentialRecovery -> updateAccounts { copy(showRecoveryDialog = false) }
@@ -467,13 +456,13 @@ class SettingsViewModel(
                 userIdInput = inputs.gelbooruUserIdInput,
                 replacementApiKeyInput = inputs.gelbooruApiKeyInput,
                 configuredApiKey = inputs.gelbooruApiKeyInput.takeIf(String::isNotBlank)
-                    ?: dependencies.accounts.currentGelbooruApiKey(),
+                    ?: dependencies.accounts.currentApiKey(SourceKey.GELBOORU),
             )
             if (resolved == null) {
                 updateAccounts { copy(gelbooruStatusLabel = "Missing user ID or API key") }
                 return@runCredentialMutationResult false
             }
-            dependencies.accounts.saveGelbooruCredentials(GelbooruCredentials(resolved.userId, resolved.apiKey))
+            dependencies.accounts.saveUserApiKey(SourceKey.GELBOORU, UserApiKey(resolved.userId, resolved.apiKey))
             true
         }
     }
@@ -485,13 +474,13 @@ class SettingsViewModel(
                 userIdInput = inputs.rule34XxxUserIdInput,
                 replacementApiKeyInput = inputs.rule34XxxApiKeyInput,
                 configuredApiKey = inputs.rule34XxxApiKeyInput.takeIf(String::isNotBlank)
-                    ?: dependencies.accounts.currentRule34XxxApiKey(),
+                    ?: dependencies.accounts.currentApiKey(SourceKey.RULE34XXX),
             )
             if (resolved == null) {
                 updateAccounts { copy(rule34XxxStatusLabel = "Missing user ID or API key") }
                 return@runCredentialMutationResult false
             }
-            dependencies.accounts.saveRule34XxxCredentials(Rule34XxxCredentials(resolved.userId, resolved.apiKey))
+            dependencies.accounts.saveUserApiKey(SourceKey.RULE34XXX, UserApiKey(resolved.userId, resolved.apiKey))
             true
         }
     }

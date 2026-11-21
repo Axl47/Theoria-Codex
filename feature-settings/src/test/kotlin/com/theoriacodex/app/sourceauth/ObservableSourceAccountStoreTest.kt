@@ -1,9 +1,8 @@
 package com.theoriacodex.app.sourceauth
 
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.PixivAuthTokens
-import com.theoriacodex.sources.credentials.Rule34XxxCredentials
+import com.theoriacodex.sources.credentials.UserApiKey
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.runTest
@@ -32,34 +31,34 @@ class ObservableSourceAccountStoreTest {
 
         assertFalse(SourceKey.RULE34XXX in baseSources)
 
-        store.saveRule34XxxCredentials(Rule34XxxCredentials(userId = "user", apiKey = "key"))
+        store.saveUserApiKey(SourceKey.RULE34XXX, UserApiKey(userId = "user", apiKey = "key"))
         assertTrue(SourceKey.RULE34XXX in store.availableSources.value)
         assertEquals(baseSources, store.availableSources.value - SourceKey.RULE34XXX)
 
-        store.clearRule34XxxCredentials()
+        store.clearUserApiKey(SourceKey.RULE34XXX)
         assertEquals(baseSources, store.availableSources.value)
     }
 
     @Test
     fun `reading persisted rule34 credentials publishes their capability`() = runTest {
         val delegate = FakeRecoverableCredentialsStore(
-            rule34Credentials = Rule34XxxCredentials(userId = "persisted", apiKey = "secret"),
+            rule34Credentials = UserApiKey(userId = "persisted", apiKey = "secret"),
         )
         val store = ObservableSourceAccountStore(delegate)
 
         assertFalse(SourceKey.RULE34XXX in store.availableSources.value)
 
-        assertEquals(delegate.rule34Credentials, store.getRule34XxxCredentials())
+        assertEquals(delegate.rule34Credentials, store.userApiKey(SourceKey.RULE34XXX))
         assertTrue(SourceKey.RULE34XXX in store.availableSources.value)
     }
 
     @Test
     fun `confirmed recovery reset removes credential gated capabilities`() = runTest {
         val delegate = FakeRecoverableCredentialsStore(
-            rule34Credentials = Rule34XxxCredentials(userId = "user", apiKey = "key"),
+            rule34Credentials = UserApiKey(userId = "user", apiKey = "key"),
         )
         val store = ObservableSourceAccountStore(delegate)
-        store.getRule34XxxCredentials()
+        store.userApiKey(SourceKey.RULE34XXX)
         delegate.mutableRecoveryState.value = CredentialStoreRecoveryState.ReconnectRequired
 
         assertTrue(store.resetAfterReconnectRequired())
@@ -72,7 +71,7 @@ class ObservableSourceAccountStoreTest {
     fun `credential recovery failure removes gated capabilities after any account operation`() = runTest {
         val delegate = FakeRecoverableCredentialsStore()
         val store = ObservableSourceAccountStore(delegate)
-        store.saveRule34XxxCredentials(Rule34XxxCredentials(userId = "user", apiKey = "key"))
+        store.saveUserApiKey(SourceKey.RULE34XXX, UserApiKey(userId = "user", apiKey = "key"))
         delegate.mutableRecoveryState.value = CredentialStoreRecoveryState.ReconnectRequired
 
         store.getPixivTokens()
@@ -89,10 +88,10 @@ class ObservableSourceAccountStoreTest {
 
         unavailableStates.forEach { unavailable ->
             val delegate = FakeRecoverableCredentialsStore(
-                rule34Credentials = Rule34XxxCredentials(userId = "user", apiKey = "key"),
+                rule34Credentials = UserApiKey(userId = "user", apiKey = "key"),
             )
             val store = ObservableSourceAccountStore(delegate)
-            store.getRule34XxxCredentials()
+            store.userApiKey(SourceKey.RULE34XXX)
             assertTrue(SourceKey.RULE34XXX in store.availableSources.value)
 
             delegate.mutableRecoveryState.value = unavailable
@@ -105,8 +104,8 @@ class ObservableSourceAccountStoreTest {
 
 private class FakeRecoverableCredentialsStore(
     var pixivTokens: PixivAuthTokens? = null,
-    var gelbooruCredentials: GelbooruCredentials? = null,
-    var rule34Credentials: Rule34XxxCredentials? = null,
+    var gelbooruCredentials: UserApiKey? = null,
+    var rule34Credentials: UserApiKey? = null,
 ) : RecoverableSourceCredentialsStore {
     val mutableRecoveryState = MutableStateFlow<CredentialStoreRecoveryState>(
         CredentialStoreRecoveryState.Ready,
@@ -123,24 +122,18 @@ private class FakeRecoverableCredentialsStore(
         pixivTokens = null
     }
 
-    override suspend fun getGelbooruCredentials(): GelbooruCredentials? = gelbooruCredentials
-
-    override suspend fun saveGelbooruCredentials(credentials: GelbooruCredentials) {
-        gelbooruCredentials = credentials
+    override suspend fun userApiKey(source: SourceKey): UserApiKey? = when (source) {
+        SourceKey.GELBOORU -> gelbooruCredentials
+        SourceKey.RULE34XXX -> rule34Credentials
+        else -> null
     }
 
-    override suspend fun clearGelbooruCredentials() {
-        gelbooruCredentials = null
-    }
+    override suspend fun saveUserApiKey(source: SourceKey, key: UserApiKey) = setUserApiKey(source, key)
 
-    override suspend fun getRule34XxxCredentials(): Rule34XxxCredentials? = rule34Credentials
+    override suspend fun clearUserApiKey(source: SourceKey) = setUserApiKey(source, null)
 
-    override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) {
-        rule34Credentials = credentials
-    }
-
-    override suspend fun clearRule34XxxCredentials() {
-        rule34Credentials = null
+    private fun setUserApiKey(source: SourceKey, key: UserApiKey?) {
+        if (source == SourceKey.RULE34XXX) rule34Credentials = key else gelbooruCredentials = key
     }
 
     override suspend fun resetAfterReconnectRequired(): Boolean {

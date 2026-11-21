@@ -9,7 +9,6 @@ import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.Page
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.RelatedPostsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
@@ -40,6 +39,7 @@ import com.theoriacodex.sources.common.matchesChallenge
 import com.theoriacodex.sources.common.optionalJsonArray
 import com.theoriacodex.sources.common.parseJsonArray as parseSourceJsonArray
 import com.theoriacodex.sources.common.parseJsonObject as parseSourceJsonObject
+import com.theoriacodex.sources.common.requestWithChallengeFallback
 import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.http.RequestPacer
@@ -67,9 +67,6 @@ class NhentaiSourceAdapter(
         supportsSortTop = true,
         supportsSortRandom = true,
         supportsExcludeTagsServerSide = true,
-        supportsDateRangeServerSide = false,
-        supportsMinScoreServerSide = false,
-        requiresCredentials = false,
     )
 
     override val supportedSearchScopes: Set<FacetedSearchScope> = NHENTAI_FACETS.searchScopes
@@ -102,7 +99,7 @@ class NhentaiSourceAdapter(
 
         val url = searchUrl(query.sort, exactTag, useAllEndpoint, compiledQuery, params)
 
-        val response = requestDirect(url = url, query = params)
+        val response = requestDirect(url = url, query = params, mirrorOnChallenge = true)
         val page = if (shouldUseMirrorFallback(response)) {
             mirror.search(compiledQuery, query.sort, pageIndex, useAllEndpoint)
         } else {
@@ -250,24 +247,6 @@ class NhentaiSourceAdapter(
             }
     }
 
-    override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceCall(callContext) {
-        val sort = when (kind) {
-            QuickQueryKind.POPULAR_TODAY -> SortMode.POPULAR
-            QuickQueryKind.TOP_7D -> SortMode.TOP
-            QuickQueryKind.TOP_30D -> SortMode.TOP
-            QuickQueryKind.NEWEST -> SortMode.NEWEST
-            QuickQueryKind.RANDOM -> SortMode.RANDOM
-        }
-        Query(
-            mode = QueryMode.Source(SourceKey.NHENTAI),
-            includeTags = emptyList(),
-            excludeTags = emptyList(),
-            sort = sort,
-            dateRange = null,
-            minScore = null,
-        )
-    }
-
     override suspend fun resolvePost(id: PostId): Post? = sourceCall(callContext) {
         if (id.source != SourceKey.NHENTAI) return@sourceCall null
         val galleryId = id.sourcePostId.trim().takeIf(String::isDigitsOnly) ?: return@sourceCall null
@@ -275,6 +254,7 @@ class NhentaiSourceAdapter(
         val response = requestDirect(
             url = "$NHENTAI_GALLERIES_URL/$galleryId",
             query = emptyMap(),
+            mirrorOnChallenge = true,
         )
         if (response.statusCode == 404) return@sourceCall null
         if (shouldUseMirrorFallback(response)) {
@@ -325,17 +305,17 @@ class NhentaiSourceAdapter(
         body: String,
     ): JsonArray = parseSourceJsonArray(jsonBody(requestJsonPost(url = url, body = body).ensureNhentaiOk()), gson, "NHentai")
 
+    /** With [mirrorOnChallenge], a challenge the HTTP client turned into an outage answers like one, for the mirror. */
     private suspend fun requestDirect(
         url: String,
         query: Map<String, String>,
+        mirrorOnChallenge: Boolean = false,
     ): SourceHttpResponse {
         pacer.awaitTurn()
+        suspend fun get() = httpClient.get(url = url, query = query, headers = NHENTAI_DEFAULT_HEADERS)
+        if (mirrorOnChallenge) return requestWithChallengeFallback("NHentai") { get() }
         return try {
-            httpClient.get(
-                url = url,
-                query = query,
-                headers = NHENTAI_DEFAULT_HEADERS,
-            )
+            get()
         } catch (error: IOException) {
             sourceNetworkFailure("NHentai", error)
         }

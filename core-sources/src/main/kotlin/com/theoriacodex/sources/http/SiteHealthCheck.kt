@@ -17,7 +17,7 @@ class SiteHealthCheck internal constructor(
     private val transport: suspend (HttpRequestSpec) -> SourceByteResponse,
 ) {
     constructor(tracker: HostOutageTracker, okHttpClient: OkHttpClient = defaultSourceOkHttpClient) :
-        this(tracker, { spec -> executeHttpRequest(spec, okHttpClient) })
+        this(tracker, httpTransport(okHttpClient, CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS, followRedirects = true))
 
     suspend fun check(url: String, headers: Map<String, String>, countChallenges: Boolean): Unit = sourceCall {
         val response = runCatchingPreservingCancellation { fetch(url, headers) }.getOrElse { error ->
@@ -55,9 +55,6 @@ class SiteHealthCheck internal constructor(
             headers = headers,
             body = null,
             maxBodyBytes = HOME_PAGE_MAX_BYTES,
-            connectTimeoutMs = CONNECT_TIMEOUT_MS,
-            readTimeoutMs = READ_TIMEOUT_MS,
-            followRedirects = true,
         ),
     )
 

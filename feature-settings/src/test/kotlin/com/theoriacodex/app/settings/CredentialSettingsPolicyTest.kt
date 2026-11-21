@@ -1,6 +1,6 @@
 package com.theoriacodex.app.settings
 
-import com.theoriacodex.sources.credentials.GelbooruCredentials
+import com.theoriacodex.sources.credentials.UserApiKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -11,8 +11,8 @@ class CredentialSettingsPolicyTest {
     fun `configured credential presentation never exposes stored secret`() {
         val storedSecret = "stored-secret-must-not-reach-ui"
         val presentation = credentialAccountPresentation(
-            credential = GelbooruCredentials(userId = "42", apiKey = storedSecret),
-            userId = GelbooruCredentials::userId,
+            credential = UserApiKey(userId = "42", apiKey = storedSecret),
+            userId = UserApiKey::userId,
         )
 
         assertEquals("42", presentation.userIdInput)

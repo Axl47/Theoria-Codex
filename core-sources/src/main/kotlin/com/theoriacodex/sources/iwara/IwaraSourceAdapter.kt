@@ -6,7 +6,6 @@ import com.google.gson.JsonObject
 import com.theoriacodex.domain.adapter.AccountProfileSourceAdapter
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.Page
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
@@ -19,30 +18,29 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.canonicalPostPage
-import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.durationFieldMs
 import com.theoriacodex.sources.common.firstDurationMs
 import com.theoriacodex.sources.common.intValue
-import com.theoriacodex.sources.common.isSuccessful
 import com.theoriacodex.sources.common.matchesChallenge
 import com.theoriacodex.sources.common.optionalJsonArray
 import com.theoriacodex.sources.common.optionalJsonObject
 import com.theoriacodex.sources.common.parseJsonElement
 import com.theoriacodex.sources.common.parseJsonObject
+import com.theoriacodex.sources.common.parseOffsetDateTimeMs
+import com.theoriacodex.sources.common.requestWithChallengeFallback
+import com.theoriacodex.sources.common.requireSuccess
 import com.theoriacodex.sources.common.sourceCall
-import com.theoriacodex.sources.common.sourceNetworkFailure
+import com.theoriacodex.sources.common.sourceRequest
 import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.http.SourceHttpClient
+import com.theoriacodex.sources.http.BROWSER_USER_AGENT
 import com.theoriacodex.sources.http.SourceHttpResponse
+import com.theoriacodex.sources.http.buildUrl
 import com.theoriacodex.sources.media.inferMimeFromUrl
-import java.io.IOException
 import java.net.URI
-import java.net.URLEncoder
-import java.time.Instant
 
 class IwaraSourceAdapter(
     private val httpClient: SourceHttpClient,
@@ -56,25 +54,12 @@ class IwaraSourceAdapter(
         supportsSortTop = true,
         supportsSortRandom = false,
         supportsExcludeTagsServerSide = false,
-        supportsDateRangeServerSide = false,
-        supportsMinScoreServerSide = false,
-        requiresCredentials = false,
     )
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> = sourceCall {
         val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0
         val compiledQuery = compileQueryText(query)
-        if (compiledQuery.isBlank()) {
-            val response = requestJsonObject(
-                url = "$IWARA_API_BASE/videos",
-                query = linkedMapOf(
-                    "rating" to "all",
-                    "sort" to mapSort(query.sort),
-                    "page" to pageIndex.toString(),
-                ),
-            )
-            return@sourceCall parsePagedPosts(response)
-        }
+        if (compiledQuery.isBlank()) return@sourceCall parsePagedPosts(videosPage(mapSort(query.sort), pageIndex))
         val response = requestJsonObject(
             url = "$IWARA_API_BASE/search",
             query = linkedMapOf(
@@ -89,16 +74,8 @@ class IwaraSourceAdapter(
 
     override suspend fun trendingTags(limit: Int): List<TagSuggestion> = sourceCall {
         if (limit <= 0) return@sourceCall emptyList()
-        val response = requestJsonObject(
-            url = "$IWARA_API_BASE/videos",
-            query = linkedMapOf(
-                "rating" to "all",
-                "sort" to "date",
-                "page" to "0",
-            ),
-        )
         val counts = linkedMapOf<String, Int>()
-        parseResultItems(response).forEach { item ->
+        parseResultItems(videosPage(sort = "date", page = 0)).forEach { item ->
             parseTags(item).forEach { tag ->
                 counts[tag] = (counts[tag] ?: 0) + 1
             }
@@ -143,24 +120,6 @@ class IwaraSourceAdapter(
             .orEmpty()
     }
 
-    override suspend fun quickQuery(kind: QuickQueryKind): Query = sourceCall {
-        val sort = when (kind) {
-            QuickQueryKind.POPULAR_TODAY -> SortMode.POPULAR
-            QuickQueryKind.TOP_7D -> SortMode.TOP
-            QuickQueryKind.TOP_30D -> SortMode.TOP
-            QuickQueryKind.NEWEST -> SortMode.NEWEST
-            QuickQueryKind.RANDOM -> SortMode.NEWEST
-        }
-        Query(
-            mode = QueryMode.Source(SourceKey.IWARA),
-            includeTags = emptyList(),
-            excludeTags = emptyList(),
-            sort = sort,
-            dateRange = null,
-            minScore = null,
-        )
-    }
-
     override suspend fun resolvePost(id: PostId): Post? = sourceCall {
         if (id.source != SourceKey.IWARA) return@sourceCall null
         val response = request(
@@ -179,12 +138,7 @@ class IwaraSourceAdapter(
                     fallbackMime = root.optionalJsonObject("file")?.stringValue("mime"),
                 )
             }
-        if (resolvedMedia == null) {
-            return@sourceCall parsed.copy(
-                full = null,
-                media = emptyList(),
-            )
-        }
+            ?: return@sourceCall parsed
         parsed.copy(
             full = resolvedMedia,
             media = listOf(resolvedMedia),
@@ -200,16 +154,7 @@ class IwaraSourceAdapter(
             ?: creator.profileId?.trim().takeUnless { it.isNullOrBlank() }
             ?: return@sourceCall canonicalPostPage(emptyList(), null)
         val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0
-        val response = requestJsonObject(
-            url = "$IWARA_API_BASE/videos",
-            query = linkedMapOf(
-                "rating" to "all",
-                "sort" to "date",
-                "page" to pageIndex.toString(),
-                "user" to userId,
-            ),
-        )
-        parsePagedPosts(response)
+        parsePagedPosts(videosPage(sort = "date", page = pageIndex, user = userId))
     }
 
     override fun accountFeeds(creator: CreatorProfile): List<AccountFeed> =
@@ -249,6 +194,17 @@ class IwaraSourceAdapter(
         }
     }
 
+    /** One page of `/videos` across all ratings, in Iwara's [sort] order, optionally only [user]'s uploads. */
+    private suspend fun videosPage(sort: String, page: Int, user: String? = null): JsonObject = requestJsonObject(
+        url = "$IWARA_API_BASE/videos",
+        query = buildMap {
+            put("rating", "all")
+            put("sort", sort)
+            put("page", page.toString())
+            user?.let { put("user", it) }
+        },
+    )
+
     private suspend fun requestJsonObject(
         url: String,
         query: Map<String, String>,
@@ -261,42 +217,33 @@ class IwaraSourceAdapter(
         url: String,
         query: Map<String, String>,
     ): SourceHttpResponse {
-        val response = try {
+        val response = requestWithChallengeFallback("Iwara") {
             httpClient.get(
                 url = url,
                 query = query,
                 headers = IWARA_REQUEST_HEADERS,
             )
-        } catch (error: IOException) {
-            sourceNetworkFailure("Iwara", error)
         }
         val effectiveResponse = if (shouldUseMirrorFallback(response)) {
             requestMirror(url = url, query = query)
         } else {
             response
         }
-        if (!effectiveResponse.isSuccessful() && effectiveResponse.statusCode != 404) {
-            throw SourceAdapterException(
-                reason = classifyHttpFailure(effectiveResponse.statusCode),
-                message = "Iwara request failed (${effectiveResponse.statusCode})",
-            )
-        }
-        return effectiveResponse
+        if (effectiveResponse.statusCode == 404) return effectiveResponse
+        return effectiveResponse.requireSuccess("Iwara request failed")
     }
 
     private suspend fun requestMirror(
         url: String,
         query: Map<String, String>,
     ): SourceHttpResponse {
-        val mirrorUrl = JINA_MIRROR_BASE + buildAbsoluteUrl(url, query).encodeJinaTargetUrl()
-        val mirrored = try {
+        val mirrorUrl = JINA_MIRROR_BASE + buildUrl(url, query).encodeJinaTargetUrl()
+        val mirrored = sourceRequest("Iwara mirror") {
             httpClient.get(
                 url = mirrorUrl,
                 query = emptyMap(),
                 headers = JINA_REQUEST_HEADERS,
             )
-        } catch (error: IOException) {
-            sourceNetworkFailure("Iwara mirror", error)
         }
         return mirrored.copy(body = extractJsonBody(mirrored.body))
     }
@@ -322,22 +269,6 @@ class IwaraSourceAdapter(
             reason = SourceFailureReason.PARSE,
             message = "Iwara mirror returned non-JSON content",
         )
-    }
-
-    private fun buildAbsoluteUrl(
-        baseUrl: String,
-        query: Map<String, String>,
-    ): String {
-        if (query.isEmpty()) return baseUrl
-        val separator = if ("?" in baseUrl) "&" else "?"
-        val encoded = query.entries.joinToString("&") { (key, value) ->
-            "${key.urlEncode()}=${value.urlEncode()}"
-        }
-        return baseUrl + separator + encoded
-    }
-
-    private fun String.urlEncode(): String {
-        return URLEncoder.encode(this, Charsets.UTF_8.name()).replace("+", "%20")
     }
 
     private fun String.encodeJinaTargetUrl(): String {
@@ -453,7 +384,7 @@ class IwaraSourceAdapter(
             canonicalTags = tags,
             rawTags = tags,
             authorName = creatorProfile?.displayName,
-            createdAtEpochMs = raw.stringValue("createdAt")?.let(::parseEpochMs),
+            createdAtEpochMs = parseOffsetDateTimeMs(raw.stringValue("createdAt")),
             title = raw.stringValue("title")?.trim().takeUnless { it.isNullOrBlank() },
             creatorProfile = creatorProfile,
             durationMs = parseIwaraDurationMs(raw, file),
@@ -536,10 +467,6 @@ class IwaraSourceAdapter(
         }
     }
 
-    private fun parseEpochMs(value: String): Long? {
-        return runCatching { Instant.parse(value).toEpochMilli() }.getOrNull()
-    }
-
 }
 
 /** Small rendition URL of an Iwara file object (a custom thumbnail or an avatar); null without an id. */
@@ -565,10 +492,10 @@ private const val IWARA_API_BASE = "https://api.iwara.tv"
 private const val JINA_MIRROR_BASE = "https://r.jina.ai/http://"
 private val IWARA_REQUEST_HEADERS = mapOf(
     "Referer" to "https://www.iwara.tv/",
-    "User-Agent" to "Mozilla/5.0",
+    "User-Agent" to BROWSER_USER_AGENT,
     "Accept" to "application/json, text/plain, */*",
 )
 private val JINA_REQUEST_HEADERS = mapOf(
-    "User-Agent" to "Mozilla/5.0",
+    "User-Agent" to BROWSER_USER_AGENT,
     "Accept" to "application/json, text/plain, */*",
 )

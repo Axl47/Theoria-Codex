@@ -104,6 +104,18 @@ data class Query(
     fun portableTermsForUnified(): Query = if (mode == QueryMode.Unified) normalizedForMode(mode).query else this
     fun withIncludeTermGroups(groups: List<SearchTermGroup>): Query = copy(includeTermGroups = groups)
     fun withIncludeTermsAsRequired(terms: List<SearchTerm>): Query = withIncludeTermGroups(terms.map(SearchTermGroup::single))
+
+    companion object {
+        /** [source]'s newest posts, with no terms: the request that shows a source answers searches. */
+        fun newest(source: SourceKey): Query = Query(
+            mode = QueryMode.Source(source),
+            includeTags = emptyList(),
+            excludeTags = emptyList(),
+            sort = SortMode.NEWEST,
+            dateRange = null,
+            minScore = null,
+        )
+    }
 }
 
 private fun canonicalIncludeGroups(terms: List<SearchTerm>, groups: List<SearchTermGroup>?): List<SearchTermGroup> {

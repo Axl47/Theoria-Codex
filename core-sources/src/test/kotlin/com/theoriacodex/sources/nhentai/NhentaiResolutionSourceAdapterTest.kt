@@ -11,9 +11,11 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.http.SourceHttpResponse
+import com.theoriacodex.sources.testing.ChallengingHost
 import com.theoriacodex.sources.testing.FakeHttpClient
 import java.util.ArrayDeque
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -108,6 +110,27 @@ internal class NhentaiResolutionSourceAdapterTest : NhentaiSourceAdapterTestFixt
         assertEquals("https://t.nhentai.net/galleries/3962373/thumb.webp", post.preview.url)
         assertNull(post.full)
         assertTrue(post.media.isEmpty())
+    }
+
+    @Test
+    fun `a challenge the http client turned into an outage still falls back to the mirror`() = runBlocking {
+        ChallengingHost(
+            mirrorPrefix = "https://r.jina.ai/",
+            mirrorResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    Markdown Content:
+                    [![Image 1: First Mirrored Gallery](https://t4.nhentai.net/galleries/3962373/thumb.webp) First Mirrored Gallery](https://nhentai.net/g/653211/)
+                """.trimIndent(),
+            ),
+        ).use { host ->
+            val adapter = NhentaiSourceAdapter(httpClient = host.client, minRequestIntervalMs = 0L)
+
+            repeat(2) { assertEquals("653211", adapter.search(multiTagQuery(), pageToken = null).items.single().id.sourcePostId) }
+
+            assertEquals("the outage keeps later requests off the challenged host", 1, host.hits.get())
+            assertEquals(2, host.mirrorRequests.size)
+        }
     }
 
     @Test

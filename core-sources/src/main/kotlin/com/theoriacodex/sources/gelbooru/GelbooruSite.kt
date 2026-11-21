@@ -3,7 +3,8 @@ package com.theoriacodex.sources.gelbooru
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.credentials.ApiKeyUse
-import com.theoriacodex.sources.rule34.RULE34_BROWSER_HEADERS
+import com.theoriacodex.sources.credentials.UserApiKey
+import com.theoriacodex.sources.http.BROWSER_USER_AGENT
 
 /**
  * One site running the Gelbooru 0.2 DAPI (`index.php?page=dapi`). Every field is plain data, so a
@@ -58,6 +59,10 @@ data class GelbooruSite(
     }
 
     companion object {
+        /** API keys as DAPI query parameters; empty without keys. */
+        fun authQuery(keys: UserApiKey?): Map<String, String> =
+            keys?.let { mapOf("user_id" to it.userId, "api_key" to it.apiKey) }.orEmpty()
+
         val GELBOORU = GelbooruSite(
             source = SourceKey.GELBOORU,
             label = "Gelbooru",
@@ -78,7 +83,7 @@ data class GelbooruSite(
             siteUrl = "https://rule34.xxx",
             apiUrl = "https://api.rule34.xxx/index.php",
             autocompleteUrl = "https://api.rule34.xxx/autocomplete.php",
-            headers = RULE34_BROWSER_HEADERS,
+            headers = mapOf("User-Agent" to BROWSER_USER_AGENT),
             credentials = ApiKeyUse.REQUIRED,
             postLookup = GelbooruPostLookup.ID_TAG,
             scoreSortTag = "sort:score",

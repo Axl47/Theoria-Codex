@@ -81,10 +81,10 @@ import com.theoriacodex.data.android.room.RoomRecentsRepository
 import com.theoriacodex.data.android.room.RoomProfileBackupStore
 import com.theoriacodex.data.android.room.openProfileLibrary
 import com.theoriacodex.data.android.room.TheoriaRoomDatabase
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.app.post.FileMirrorIndex
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.source.SiteProfile
@@ -277,11 +277,8 @@ internal class DefaultTheoriaAppContainer(
         publishMediaKeys = cookieBridge::updateMediaKeys,
     )
     private val sourceRegistry = CompositeSourceAdapterRegistry(
-        builtIn = AvailabilityAwareSourceAdapterRegistry(
-            delegate = allPotentialSourceRegistry,
-            availableSourceState = accountStore.availableSources,
-        ),
         potentialBuiltIns = allPotentialSourceRegistry,
+        availableBuiltIns = accountStore.availableSources,
         custom = customSourceRuntime.snapshot,
     )
     /** Built-ins the account store allows plus usable custom sites; Settings intersects saves with it. */
@@ -506,7 +503,7 @@ internal class DefaultTheoriaAppContainer(
         clearsChallenge = { url, userAgent -> siteHealthCheck.clearsChallenge(url, mapOf("User-Agent" to userAgent)) },
         runBuiltInSearch = { source ->
             sourceRegistry.adapterFor(source)?.let { adapter ->
-                adapter.search(adapter.quickQuery(QuickQueryKind.NEWEST), null)
+                adapter.search(Query.newest(adapter.sourceKey), null)
                 true
             } ?: false
         },
