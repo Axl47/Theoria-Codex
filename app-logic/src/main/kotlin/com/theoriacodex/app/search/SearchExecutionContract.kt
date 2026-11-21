@@ -2,11 +2,14 @@ package com.theoriacodex.app.search
 
 import com.theoriacodex.app.feed.FeedCursor
 import com.theoriacodex.app.search.state.SearchSourceScope
+import com.theoriacodex.app.search.state.queryMode
 import com.theoriacodex.app.search.state.sources
 import com.theoriacodex.data.repository.SourceRuntimeSettings
 import com.theoriacodex.data.repository.SourceWeightSettings
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.normalizedForMode
+import com.theoriacodex.domain.query.QueryHash
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunStatus
@@ -16,27 +19,35 @@ import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
 
-interface SearchExecutionService {
-    fun executionKeyFor(
-        query: Query,
-        sourceScope: SearchSourceScope,
-    ): String
+/**
+ * The identity of [query] run in [sourceScope], after dropping what the scope's mode cannot run. Results, cached
+ * first pages and saved scroll positions are kept per key; a temporary source pick is its own search.
+ */
+fun searchExecutionKey(query: Query, sourceScope: SearchSourceScope): String {
+    val queryHash = QueryHash.from(query.normalizedForMode(sourceScope.queryMode()).query)
+    val temporary = sourceScope as? SearchSourceScope.Temporary ?: return queryHash
+    return "$queryHash|temporary-sources:${temporary.sources.joinToString(",") { it.id }}"
+}
 
+interface SearchExecutionService {
+    /** Runs [query]'s first page; [onPartial], when given, receives usable results before every source has answered. */
     suspend fun executeInitial(
         query: Query,
         sourceScope: SearchSourceScope,
         sources: SearchSources,
+        onPartial: (suspend (SearchExecutionResult.Success) -> Unit)? = null,
     ): SearchExecutionResult
 
-    /** Like [executeInitial], handing [onPartial] usable results before every source has answered. */
-    suspend fun executeInitialProgressively(
+    suspend fun executePage(continuation: SearchContinuation): SearchPageResult
+
+    /** Retries only the failed [source] at its exact page in [previous], keeping every other source's place. */
+    suspend fun retrySource(
         query: Query,
         sourceScope: SearchSourceScope,
         sources: SearchSources,
-        onPartial: suspend (SearchExecutionResult.Success) -> Unit,
-    ): SearchExecutionResult = executeInitial(query, sourceScope, sources)
-
-    suspend fun executePage(continuation: SearchContinuation): SearchPageResult
+        previous: SearchContinuation?,
+        source: SourceKey,
+    ): SearchPageResult
 
     /**
      * The first page last remembered for [executionKey], shown while it refreshes; empty when there is none.

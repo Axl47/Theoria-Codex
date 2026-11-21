@@ -148,13 +148,12 @@ class SearchCoordinatorTest {
 
     @Test
     fun `temporary execution key binds canonical source selection`() = runTest {
-        val coordinator = coordinator(TestAdapter(SourceKey.PIXIV), TestAdapter(SourceKey.GELBOORU))
         val query = unifiedQuery("temporary")
         val scope = SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV))
 
         assertEquals(
             "${QueryHash.from(query)}|temporary-sources:GELBOORU,PIXIV",
-            coordinator.executionKeyFor(query, scope),
+            searchExecutionKey(query, scope),
         )
     }
 

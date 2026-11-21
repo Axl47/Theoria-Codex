@@ -42,7 +42,6 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.domain.orchestration.UnifiedSearchResult
-import com.theoriacodex.domain.query.QueryHash
 import com.theoriacodex.domain.query.SearchTermLimit
 import com.theoriacodex.domain.tags.pixivSearchToken
 import com.theoriacodex.domain.tags.normalizeFavoriteTagForStorage
@@ -150,7 +149,7 @@ class SearchCoordinator(
         }
         val sanitized = restored.normalizedForMode(restored.mode)
         val sourceScope = SearchSourceScope.fromQuery(sanitized.query)
-        val key = executionKey(sanitized.query, sourceScope)
+        val key = searchExecutionKey(sanitized.query, sourceScope)
         return SearchInitialization(
             query = sanitized.query,
             sourceScope = sourceScope,
@@ -181,21 +180,11 @@ class SearchCoordinator(
         return adapter.supportedSearchScopes.sortedWith(SEARCH_SCOPE_COMPARATOR)
     }
 
-    override fun executionKeyFor(query: Query, sourceScope: SearchSourceScope): String {
-        return executionKey(query.normalizedForMode(sourceScope.queryMode()).query, sourceScope)
-    }
-
     override suspend fun executeInitial(
         query: Query,
         sourceScope: SearchSourceScope,
         sources: SearchSources,
-    ): SearchExecutionResult = executeRoot(query, sourceScope, sources, onPartial = null)
-
-    override suspend fun executeInitialProgressively(
-        query: Query,
-        sourceScope: SearchSourceScope,
-        sources: SearchSources,
-        onPartial: suspend (SearchExecutionResult.Success) -> Unit,
+        onPartial: (suspend (SearchExecutionResult.Success) -> Unit)?,
     ): SearchExecutionResult = executeRoot(query, sourceScope, sources, onPartial)
 
     override suspend fun cachedFirstPage(executionKey: String, sources: Set<SourceKey>): List<Post> =
@@ -234,7 +223,7 @@ class SearchCoordinator(
 
     /** The continuation before a search's first page: its sources, weights and no tokens yet. */
     private fun firstPage(query: Query, scope: SearchSourceScope, sources: SearchSources) = SearchContinuation(
-        executionKey = executionKey(query, scope),
+        executionKey = searchExecutionKey(query, scope),
         sourceScope = scope,
         enabledSources = sources.enabled.intersect(registry.availableSources()),
         availableSources = availableSources,
@@ -300,8 +289,7 @@ class SearchCoordinator(
         return base.found(page.items, page.statuses, base.accept(page, setOf(mode.source)))
     }
 
-    /** Retries only the failed provider at its exact page, retaining every other continuation. */
-    suspend fun retrySource(
+    override suspend fun retrySource(
         query: Query,
         scope: SearchSourceScope,
         sources: SearchSources,
@@ -636,12 +624,6 @@ class SearchCoordinator(
             return query.mode == QueryMode.Source(SourceKey.PIXIV)
         }
         return error.message.orEmpty().contains("PIXIV_UNKNOWN", ignoreCase = true)
-    }
-
-    private fun executionKey(query: Query, scope: SearchSourceScope): String {
-        val queryHash = QueryHash.from(query)
-        val temporary = scope as? SearchSourceScope.Temporary ?: return queryHash
-        return "$queryHash|temporary-sources:${temporary.sources.joinToString(",") { it.id }}"
     }
 
     private fun isModeAvailable(mode: QueryMode): Boolean = when (mode) {

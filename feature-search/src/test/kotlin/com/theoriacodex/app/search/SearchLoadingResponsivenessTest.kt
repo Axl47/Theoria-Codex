@@ -52,14 +52,14 @@ internal class SearchLoadingResponsivenessTest : SearchViewModelTestFixture() {
         val lateSourcesDone = CompletableDeferred<Unit>()
         val owner = viewModel(ViewModelSearchAdapter(), executionService = { coordinator ->
             object : SearchExecutionService by coordinator {
-                override suspend fun executeInitialProgressively(
+                override suspend fun executeInitial(
                     query: Query,
                     sourceScope: SearchSourceScope,
                     sources: SearchSources,
-                    onPartial: suspend (SearchExecutionResult.Success) -> Unit,
+                    onPartial: (suspend (SearchExecutionResult.Success) -> Unit)?,
                 ): SearchExecutionResult {
                     val complete = coordinator.executeInitial(query, sourceScope, sources)
-                    onPartial(complete as SearchExecutionResult.Success)
+                    onPartial?.invoke(complete as SearchExecutionResult.Success)
                     lateSourcesDone.await()
                     return complete
                 }
@@ -142,11 +142,11 @@ internal class SearchLoadingResponsivenessTest : SearchViewModelTestFixture() {
                     ),
                 )
 
-                override suspend fun executeInitialProgressively(
+                override suspend fun executeInitial(
                     query: Query,
                     sourceScope: SearchSourceScope,
                     sources: SearchSources,
-                    onPartial: suspend (SearchExecutionResult.Success) -> Unit,
+                    onPartial: (suspend (SearchExecutionResult.Success) -> Unit)?,
                 ): SearchExecutionResult {
                     refresh.await()
                     return coordinator.executeInitial(query, sourceScope, sources)
@@ -161,14 +161,12 @@ internal class SearchLoadingResponsivenessTest : SearchViewModelTestFixture() {
         var hold = false
         val owner = viewModel(ViewModelSearchAdapter(), executionService = { coordinator ->
             object : SearchExecutionService by coordinator {
-                override suspend fun executeInitialProgressively(
+                override suspend fun executeInitial(
                     query: Query,
                     sourceScope: SearchSourceScope,
                     sources: SearchSources,
-                    onPartial: suspend (SearchExecutionResult.Success) -> Unit,
-                ): SearchExecutionResult = executeInitial(query, sourceScope, sources)
-
-                override suspend fun executeInitial(query: Query, sourceScope: SearchSourceScope, sources: SearchSources): SearchExecutionResult {
+                    onPartial: (suspend (SearchExecutionResult.Success) -> Unit)?,
+                ): SearchExecutionResult {
                     if (hold) held.await()
                     return coordinator.executeInitial(query, sourceScope, sources)
                 }

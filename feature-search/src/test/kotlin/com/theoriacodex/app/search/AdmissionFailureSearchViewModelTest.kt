@@ -148,14 +148,12 @@ internal class AdmissionFailureSearchViewModelTest : SearchViewModelTestFixture(
         var attempts = 0
         val viewModel = viewModel(adapter, reconnections = network.take(2).reconnections(), executionService = { coordinator ->
             object : SearchExecutionService by coordinator {
-                override suspend fun executeInitialProgressively(
+                override suspend fun executeInitial(
                     query: Query,
                     sourceScope: SearchSourceScope,
                     sources: SearchSources,
-                    onPartial: suspend (SearchExecutionResult.Success) -> Unit,
-                ): SearchExecutionResult = executeInitial(query, sourceScope, sources)
-
-                override suspend fun executeInitial(query: Query, sourceScope: SearchSourceScope, sources: SearchSources): SearchExecutionResult {
+                    onPartial: (suspend (SearchExecutionResult.Success) -> Unit)?,
+                ): SearchExecutionResult {
                     if ("offline" !in query.includeTags || ++attempts > 1) return coordinator.executeInitial(query, sourceScope, sources)
                     firstAttempt.await()
                     return coordinator.executeInitial(query, sourceScope, sources).also { adapter.failingTags.clear() }
@@ -190,14 +188,12 @@ internal class AdmissionFailureSearchViewModelTest : SearchViewModelTestFixture(
             val viewModel = viewModel(adapter, rootRequestTimeoutMs = 100L, reconnections = network.take(2).reconnections(),
                 executionService = { coordinator ->
                     object : SearchExecutionService by coordinator {
-                        override suspend fun executeInitialProgressively(
+                        override suspend fun executeInitial(
                             query: Query,
                             sourceScope: SearchSourceScope,
                             sources: SearchSources,
-                            onPartial: suspend (SearchExecutionResult.Success) -> Unit,
-                        ): SearchExecutionResult = executeInitial(query, sourceScope, sources)
-
-                        override suspend fun executeInitial(query: Query, sourceScope: SearchSourceScope, sources: SearchSources): SearchExecutionResult {
+                            onPartial: (suspend (SearchExecutionResult.Success) -> Unit)?,
+                        ): SearchExecutionResult {
                             if ("second" in query.includeTags && hangSecond) awaitCancellation()
                             return coordinator.executeInitial(query, sourceScope, sources)
                         }

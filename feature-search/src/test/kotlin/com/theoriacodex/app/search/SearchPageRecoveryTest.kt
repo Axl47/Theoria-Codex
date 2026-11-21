@@ -20,14 +20,12 @@ internal class SearchPageRecoveryTest : SearchViewModelTestFixture() {
             val tokens = mutableListOf<String?>()
             val owner = viewModel(ViewModelSearchAdapter(), executionService = { delegate ->
                 object : SearchExecutionService by delegate {
-                    override suspend fun executeInitialProgressively(
+                    override suspend fun executeInitial(
                         query: Query,
                         sourceScope: SearchSourceScope,
                         sources: SearchSources,
-                        onPartial: suspend (SearchExecutionResult.Success) -> Unit,
-                    ): SearchExecutionResult = executeInitial(query, sourceScope, sources)
-
-                    override suspend fun executeInitial(query: Query, sourceScope: SearchSourceScope, sources: SearchSources): SearchExecutionResult {
+                        onPartial: (suspend (SearchExecutionResult.Success) -> Unit)?,
+                    ): SearchExecutionResult {
                         roots++
                         return delegate.executeInitial(query, sourceScope, sources)
                     }

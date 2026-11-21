@@ -76,7 +76,7 @@ class SearchViewModel(
     scrollPersistenceDispatcher: CoroutineDispatcher = Dispatchers.IO,
     reconnections: Flow<Unit> = emptyFlow(),
 ) : ViewModel(), RouteStateOwner<SearchUiState, SearchAction, SearchEffect> {
-    private val mutableState = MutableStateFlow(initialSearchState(coordinator.availableSources, executionService))
+    private val mutableState = MutableStateFlow(initialSearchState(coordinator.availableSources))
     private val effectChannel = Channel<SearchEffect>(capacity = Channel.BUFFERED)
     private val relatedDiagnostics = com.theoriacodex.app.related.RelatedPostsDiagnostics("Search", this)
     private val relatedPosts = RelatedPostsRouteController(
@@ -459,7 +459,7 @@ class SearchViewModel(
     ) {
         relatedPosts.clear(relatedResetReason)
         cancelActiveRequest()
-        val executionKey = executionService.executionKeyFor(query, sourceScope)
+        val executionKey = searchExecutionKey(query, sourceScope)
         val request = SearchRequest(++nextRequestId, kind, query, sourceScope, executionKey)
         reduce(SearchStateChange.BeginRequest(request))
         launchRequest(request, failureMessage = "Search failed") {
@@ -500,7 +500,7 @@ class SearchViewModel(
         withTimeout(rootRequestTimeoutMs) {
             val publisher = RootResultPublisher(request, acceptance)
             val sources = sourcesFor(request.sourceScope)
-            val result = executionService.executeInitialProgressively(request.query, request.sourceScope, sources) { partial ->
+            val result = executionService.executeInitial(request.query, request.sourceScope, sources) { partial ->
                 if (mutableState.value.showsPartialResults(request.id, partial)) {
                     publisher.publish(partial, SearchStateChange.PartialResult(request.id, partial))
                 }
@@ -592,7 +592,7 @@ class SearchViewModel(
         reduce(SearchStateChange.BeginRequest(request, retrySource))
         launchRequest(request, failureMessage = "Could not load more results") {
             val result = if (retrySource == null) executionService.executePage(requireNotNull(continuation))
-            else coordinator.retrySource(
+            else executionService.retrySource(
                 request.query, request.sourceScope, sourcesFor(request.sourceScope), continuation, retrySource,
             )
             coroutineContext.ensureActive()
@@ -616,7 +616,7 @@ class SearchViewModel(
             try {
                 val initialization = coordinator.initializeRoute()
                 runtime = initialization.runtime
-                val appliedHash = executionService.executionKeyFor(
+                val appliedHash = searchExecutionKey(
                     initialization.query,
                     initialization.sourceScope,
                 )
