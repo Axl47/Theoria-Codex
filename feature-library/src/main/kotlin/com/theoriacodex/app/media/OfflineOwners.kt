@@ -12,7 +12,7 @@ internal fun codexIdOfOfflineOwner(owner: String): String? =
 /**
  * The ring state of each Codex kept offline, by Codex id: the share of its current posts ([members]) that are
  * settled, meaning available offline ([available]) or failed in its last run, and whether its job runs or
- * failed. Posts no longer in the Codex do not count. Codices whose members are not known yet get no ring.
+ * failed (as a whole, or for a current post). Posts no longer in the Codex do not count. Codices whose members are not known yet get no ring.
  */
 internal fun codexOfflineStates(
     owners: List<OfflineStorageOwner>,
@@ -28,7 +28,8 @@ internal fun codexOfflineStates(
         codexId to CodexOfflineState(
             fraction = if (posts.isEmpty()) 1f else settled.toFloat() / posts.size,
             running = owner.preparing || job?.isRunning == true,
-            failed = job?.let { !it.isRunning && it.failureMessage != null } == true,
+            // A failed post that has left the Codex no longer matters; a failure of the whole run always does.
+            failed = job?.let { !it.isRunning && (it.failureReason != null || failedPosts.any(posts::contains)) } == true,
         )
     }.toMap()
 

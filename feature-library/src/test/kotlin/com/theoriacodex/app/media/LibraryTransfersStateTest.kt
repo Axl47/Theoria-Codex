@@ -37,6 +37,16 @@ class LibraryTransfersStateTest {
         assertTrue(states.getValue("full").complete)
     }
 
+    @Test fun `a failed post that left the Codex does not mark the ring failed, a failed run does`() {
+        val (a, gone) = listOf("a", "gone").map { testPost(sourcePostId = it).id }
+        val owners = listOf(
+            OfflineStorageOwner("codex:left", "Left", 1, job = OfflineMediaJob(2, 1, failedPosts = setOf(gone), isRunning = false)),
+            OfflineStorageOwner("codex:run", "Run", 1, job = OfflineMediaJob(1, 1, isRunning = false, failureReason = "Blocked")),
+        )
+        val states = codexOfflineStates(owners, mapOf("left" to setOf(a), "run" to setOf(a)), available = setOf(a))
+        assertEquals(mapOf("left" to CodexOfflineState(1f), "run" to CodexOfflineState(1f, failed = true)), states)
+    }
+
     @Test fun `the header counts posts still to save across offline jobs and downloads`() {
         val offline = OfflineStorageUiState(owners = listOf(
             OfflineStorageOwner("codex:a", "A", 2, job = OfflineMediaJob(totalPosts = 10, completedPosts = 2)),
