@@ -2,6 +2,7 @@ package com.theoriacodex.app.creator
 
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.ui.components.FeedGrid
+import com.theoriacodex.app.ui.components.FeedGridDivider
 import com.theoriacodex.app.ui.components.rememberFeedView
 import com.theoriacodex.app.ui.components.FeedMarks
 import com.theoriacodex.app.ui.components.FeedView
@@ -92,6 +93,8 @@ fun CreatorProfileScreen(
     state: CreatorUiState,
     followed: Boolean = false,
     onToggleFollow: () -> Unit = {},
+    /** What the follow had seen when the page opened; null when the creator is not followed. */
+    seenAtOpen: Set<String>? = null,
     marks: FeedMarks,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     durations: FeedDurations = FeedDurations.NONE,
@@ -141,10 +144,9 @@ fun CreatorProfileScreen(
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            val account = state.feeds.isNotEmpty()
-            val followEnabled = !state.uploadsRefreshing
-            CreatorHeader(state, creator, account, followed, followEnabled, onToggleFollow, onOpenUrl, onAction)
-            CreatorFeedBody(state, related, feed, cards, gridState, pageDemand, onAction, onLongPress = { selectedActionPost = it })
+            CreatorHeader(state, creator, followed, onToggleFollow, onOpenUrl, onAction)
+            val newSince = rememberNewSinceVisit(state.selectedFeed, creator, feed.visiblePosts, seenAtOpen)
+            CreatorFeedBody(state, related, feed, cards, gridState, pageDemand, newSince, onAction, onLongPress = { selectedActionPost = it })
         }
     }
     if (showFilterSheet) {
@@ -247,18 +249,21 @@ private fun clearCreatorFilters(
     return { onFabRestoreStateChange(previous) }
 }
 
-/** The bar and, for accounts, their facts and feed tabs; landscape accounts fold all of it into one bar. */
+/**
+ * The bar and, for accounts, their facts and feed tabs (landscape accounts fold all of it into one bar), then the
+ * common tags of the uploads.
+ */
 @Composable
 private fun CreatorHeader(
     state: CreatorUiState,
     creator: CreatorProfile,
-    account: Boolean,
     followed: Boolean,
-    followEnabled: Boolean,
     onToggleFollow: () -> Unit,
     onOpenUrl: (String) -> Unit,
     onAction: (CreatorAction) -> Unit,
 ) {
+    val account = state.feeds.isNotEmpty()
+    val followEnabled = !state.uploadsRefreshing
     val onBack = { onAction(CreatorAction.Back) }
     if (account && LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) {
         CompactAccountBar(state, creator, followed, followEnabled, onToggleFollow, onOpenUrl, onBack, onAction)
@@ -266,6 +271,7 @@ private fun CreatorHeader(
         CreatorAppBar(creator, account, followed, followEnabled, onToggleFollow, onOpenUrl, onBack)
         if (account) AccountSection(state, creator, followed, followEnabled, onToggleFollow, onAction)
     }
+    if (state.selectedFeed == AccountFeed.UPLOADS) CreatorTagChips(creator, state.results)
 }
 
 /** An account's facts and its feed tabs, below the app bar. */
@@ -298,7 +304,7 @@ private fun CreatorAppBar(
         subtitle = creator.source.displayName().takeUnless { account },
         onBack = onBack,
     ) {
-        if (!account) CreatorFollowButton(followed = followed, onClick = onToggleFollow, enabled = followEnabled)
+        if (!account) CreatorFollowButton(creator, followed, followEnabled, onToggleFollow)
         CreatorLinkActions(creator, onOpenUrl)
     }
 }
@@ -324,7 +330,7 @@ private fun CompactAccountBar(
         onBack = onBack,
     ) {
         AccountFeedSegments(state.tabs, state.selectedFeed) { onAction(CreatorAction.SelectFeed(it)) }
-        if (creator.canFollow) CreatorFollowButton(followed = followed, onClick = onToggleFollow, enabled = followEnabled)
+        CreatorFollowButton(creator, followed, followEnabled, onToggleFollow)
         if (bio != null) {
             IconToggleButton(checked = bioShown, onCheckedChange = { bioShown = it }) {
                 Icon(Icons.Outlined.Info, contentDescription = "Bio")
@@ -386,6 +392,7 @@ private fun CreatorFeedBody(
     cards: FeedCardEnvironment,
     gridState: LazyStaggeredGridState,
     pageDemand: FeedPageDemandControl,
+    newSince: PostId?,
     onAction: (CreatorAction) -> Unit,
     onLongPress: (Post) -> Unit,
 ) {
@@ -414,7 +421,7 @@ private fun CreatorFeedBody(
 
         // Pull to refresh is how paging resumes after a dismissed page failure.
         else -> PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = { onAction(CreatorAction.Refresh) }) {
-            CreatorGrid(state, related, feed, cards, gridState, onAction, onLongPress)
+            CreatorGrid(state, related, feed, cards, gridState, newSince, onAction, onLongPress)
         }
     }
 }
@@ -426,12 +433,14 @@ private fun CreatorGrid(
     feed: FeedView,
     cards: FeedCardEnvironment,
     gridState: LazyStaggeredGridState,
+    newSince: PostId?,
     onAction: (CreatorAction) -> Unit,
     onLongPress: (Post) -> Unit,
 ) {
     FeedGrid(
         view = feed,
         state = gridState,
+        divider = newSince?.let { FeedGridDivider(it) { NewSinceVisitDivider() } },
         footerMessage = pagedFeedFooterMessage(
             resolvingDurations = feed.durations.readiness.isResolving,
             hasVisibleResults = feed.visiblePosts.isNotEmpty(),

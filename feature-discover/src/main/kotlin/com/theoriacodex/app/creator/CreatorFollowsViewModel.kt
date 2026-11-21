@@ -4,7 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.theoriacodex.app.ui.undo.UndoAnchor
+import com.theoriacodex.app.ui.undo.UndoOffer
+import com.theoriacodex.app.ui.undo.UndoSlot
 import com.theoriacodex.data.repository.CreatorFollowsRepository
+import com.theoriacodex.data.repository.RemovedFollow
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.followKey
 import com.theoriacodex.data.repository.newPostsCheckDue
@@ -36,28 +40,47 @@ class CreatorFollowsViewModel(
     val refreshing = mutableRefreshing.asStateFlow()
     private val mutableErrors = MutableStateFlow<Map<String, String>>(emptyMap())
     val errors = mutableErrors.asStateFlow()
+    private val mutableUnfollowed = MutableStateFlow<RemovedFollow?>(null)
+
+    /** The follow whose Undo is live, so the followed-creators sheet keeps its row's place. */
+    val unfollowed = mutableUnfollowed.asStateFlow()
     private val messageChannel = Channel<String>(Channel.BUFFERED)
     val messages = messageChannel.receiveAsFlow()
     private var refreshJob: Job? = null
     private var lastAutomaticCheck: Long? = null
 
-    fun toggle(creator: CreatorProfile, posts: List<Post>) {
+    /** The creator page's Follow button: follows, or unfollows with Undo drawn in the button's place. */
+    fun toggle(creator: CreatorProfile, posts: List<Post>, undo: UndoSlot) {
         viewModelScope.launch {
             try {
                 if (repository.observe().first().any { it.creator.followKey() == creator.followKey() }) {
-                    repository.unfollow(creator)
+                    unfollowWithUndo(creator, undo, CreatorFollowAnchors.page(creator))
                 } else repository.follow(creator, posts)
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) { messageChannel.send(error.message ?: "Could not update followed creator") }
         }
     }
 
-    fun unfollow(creator: CreatorProfile) {
+    /** The followed-creators sheet's unfollow, with Undo drawn in the row it vacated. */
+    fun unfollow(creator: CreatorProfile, undo: UndoSlot) {
         viewModelScope.launch {
-            try { repository.unfollow(creator) }
+            try { unfollowWithUndo(creator, undo, CreatorFollowAnchors.sheetRow(creator)) }
             catch (error: CancellationException) { throw error }
             catch (_: Exception) { messageChannel.send("Could not unfollow creator") }
         }
+    }
+
+    /** Unfollows at once; Undo restores the same record, so nothing the creator posted meanwhile counts as seen. */
+    private suspend fun unfollowWithUndo(creator: CreatorProfile, undo: UndoSlot, anchor: UndoAnchor) {
+        val removed = repository.unfollow(creator) ?: return
+        mutableUnfollowed.value = removed
+        val offer = UndoOffer("Unfollowed ${creator.displayName}", anchor, onExpire = { mutableUnfollowed.compareAndSet(removed, null) }) {
+            try { repository.restore(removed) }
+            catch (error: CancellationException) { throw error }
+            catch (_: Exception) { messageChannel.send("Could not follow creator again") }
+            finally { mutableUnfollowed.compareAndSet(removed, null) }
+        }
+        undo.offer(viewModelScope, offer)
     }
 
     fun cancelRefresh() { refreshJob?.cancel() }
