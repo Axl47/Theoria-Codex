@@ -7,17 +7,16 @@ import org.junit.Test
 
 class FeedPageDemandTest {
     @Test
-    fun `restoration loads absent anchor through the same bounded budget and continue`() {
+    fun `restoration loads pages past the automatic budget until the anchor is present`() {
         val demand = FeedPageDemand()
         val restoring = hiddenPage.copy(hasLocalFilters = false, visibleCount = 20,
-            canonicalCount = 20, requiredCanonicalIndex = 90)
-        for (generation in 1L..3L) {
-            assertTrue(demand.update(restoring.copy(completedGeneration = generation)).loadNextPage)
+            canonicalCount = 20, requiredCanonicalIndex = 110)
+        for (generation in 1L..5L) {
+            val result = demand.update(restoring.copy(completedGeneration = generation, canonicalCount = 20 * generation.toInt()))
+            assertTrue(result.loadNextPage)
+            assertFalse(result.showContinue)
         }
-        assertTrue(demand.update(restoring.copy(completedGeneration = 4L)).showContinue)
-        demand.continueLoading()
-        assertTrue(demand.update(restoring.copy(completedGeneration = 4L)).loadNextPage)
-        assertFalse(demand.update(restoring.copy(completedGeneration = 5L, canonicalCount = 100)).loadNextPage)
+        assertFalse(demand.update(restoring.copy(completedGeneration = 6L, canonicalCount = 120)).loadNextPage)
     }
 
     @Test

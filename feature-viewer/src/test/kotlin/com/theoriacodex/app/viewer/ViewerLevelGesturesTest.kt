@@ -119,6 +119,16 @@ class ViewerLevelGesturesTest {
         compose.runOnIdle { assertEquals(1, navigations.size) }
     }
 
+    @Test fun `a swipe the system takes back for its Back gesture navigates nowhere`() {
+        showPage()
+        compose.onNodeWithContentDescription("Media actions").performTouchInput {
+            down(centerRight)
+            repeat(3) { moveBy(Offset(-width / 6f, 0f)) }
+            cancel()
+        }
+        compose.runOnIdle { assertEquals(emptyList<ViewerHorizontalSwipeDirection>(), navigations) }
+    }
+
     @Test fun `pinch zoom exploration and PiP cannot change levels`() {
         showPage()
         compose.onNodeWithContentDescription("Media actions").performTouchInput {

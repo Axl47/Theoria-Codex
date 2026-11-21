@@ -195,9 +195,15 @@ class VideoPlaybackInfrastructure(
         )
     }
 
-    /** A supported hardware codec can still run out of resources during simultaneous autoplay. */
+    /**
+     * A supported hardware codec can still run out of resources during simultaneous autoplay.
+     * Speed changes go to the AudioTrack, which applies them at once; ExoPlayer's own time stretch
+     * waits for already-buffered audio, so hold-to-speed-up lagged its indicator on both edges.
+     */
     internal fun playerBuilder(profile: VideoPlaybackProfile): ExoPlayer.Builder {
-        val renderers = DefaultRenderersFactory(appContext).setEnableDecoderFallback(true)
+        val renderers = DefaultRenderersFactory(appContext)
+            .setEnableDecoderFallback(true)
+            .setEnableAudioTrackPlaybackParams(true)
         return ExoPlayer.Builder(appContext, renderers)
             .setLoadControl(VideoLoadControlFactory.create(profile))
             .setUsePlatformDiagnostics(profile.usesPlatformDiagnostics)

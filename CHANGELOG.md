@@ -11,9 +11,12 @@
 
 - Post menus in For You and on creator pages now show tag counts, and holding a tag saves it, as they already did in Search, the Codex and the Viewer.
 - A Codex collection's "Resolving durations…" line now spans the full width, as in other feeds.
+- In a post's hold menu, the creator's name at the top now opens their profile, as in the Viewer's information sheet, replacing the separate creator button.
 
 ### Fixed
 
+- Holding a video for 2× sped it up a moment after the 2× label appeared, and released it a moment after the label left. Speed now changes with the label.
+- Using the Back gesture from the edge of the full-screen Viewer often swiped to the next post on the way out, marking a post you never saw as watched. The Back gesture no longer changes posts.
 - Tapping Retry on a Hitomi page while its gallery was still loading could shrink the gallery back to its cover when the retry finished. The full gallery now stays.
 - Pixiv animations in the Viewer started over from the first frame when you swiped away and back. They now continue where they left off, as GIFs do.
 - In a Hitomi gallery saved for offline, the Viewer's page overview loaded each page from the site instead of the saved copy, so its tiles stayed blank offline. They now show the saved pages.
@@ -45,6 +48,7 @@
 - With a related shelf open and a filter on, creator pages loaded their next page before you reached the end.
 - In the Followed and Saved searches collections, an open related shelf made the next page load slightly early.
 - Cards in Codex collections and Recents waited for their own images as you scrolled. On unmetered networks they now load ahead, as in other feeds.
+- Undo search, and reopening the app, could leave Search at the top when your saved place was far down the results, because loading stopped after three pages. Search now keeps loading until it reaches the saved place.
 
 ## [1.9.2] - 2026-11-18
 

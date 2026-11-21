@@ -61,7 +61,7 @@ class ForYouPostActionsJourneyTest : AppJourneyFixture() {
         assertEquals(listOf(first.id), io { container.content.observeCodexItems(collection.codexId).first().map { it.postId } })
         compose.waitUntil(10_000) { io { container.data.statisticsRepository.observeStatistics().first().forYouSaveCount == 1L } }
         longPress(compose.onNodeWithTag(card))
-        activate(compose.onNodeWithText("Journey artist"))
+        activate(compose.onNodeWithContentDescription("Open Journey artist's profile"))
         compose.onNodeWithContentDescription("Back").assertIsDisplayed()
         compose.onNodeWithTag(card).assertIsDisplayed()
         UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
