@@ -5,8 +5,6 @@ import com.theoriacodex.app.search.SearchExecutionResult
 import com.theoriacodex.app.search.SearchInitialization
 import com.theoriacodex.app.search.SearchPageResult
 import com.theoriacodex.app.search.showsPartialResults
-import com.theoriacodex.domain.adapter.FacetedSearchScope
-import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
@@ -85,11 +83,7 @@ sealed interface SearchStateChange {
 
 object SearchStateReducer {
     /** Builds restored state: the stored search is both the draft and the applied search. */
-    fun restore(
-        initialization: SearchInitialization,
-        appliedHash: String,
-        supportedScopes: (QueryMode) -> List<FacetedSearchScope>,
-    ): SearchUiState = SearchUiState(
+    fun restore(initialization: SearchInitialization, appliedHash: String): SearchUiState = SearchUiState(
         query = SearchQueryUiState(
             draft = initialization.query,
             applied = initialization.query,
@@ -97,13 +91,9 @@ object SearchStateReducer {
             appliedSourceScope = initialization.sourceScope,
             appliedQueryHash = appliedHash,
             availableSources = initialization.availableSources,
-            modeOptions = listOf(QueryMode.Unified) + initialization.availableSources.map(QueryMode::Source),
-            enabledSourceCount = initialization.availableSources.size,
             unifiedSources = initialization.runtime.enabledSources.intersect(initialization.availableSources.toSet()),
-            supportedScopes = supportedScopes(initialization.query.mode),
+            scopesBySource = initialization.scopesBySource,
             validationMessage = initialization.validationMessage,
-            nhentaiLanguageFilter = initialization.query.nhentaiLanguageFilter(),
-            nhentaiFullColorFilter = initialization.query.nhentaiFullColorFilter(),
             appliedByMode = initialization.appliedByMode,
         ),
         content = SearchContentUiState(hasExecutedSearch = initialization.hasExecutedSearch),

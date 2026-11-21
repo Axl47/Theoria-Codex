@@ -46,11 +46,7 @@ class SearchSourcePickerTest {
             MaterialTheme {
                 SearchSourcePicker(
                     draftSourceScope = scope,
-                    options = listOf(
-                        QueryMode.Unified,
-                        QueryMode.Source(SourceKey.PIXIV),
-                        QueryMode.Source(SourceKey.GELBOORU),
-                    ),
+                    sources = listOf(SourceKey.PIXIV, SourceKey.GELBOORU),
                     unifiedSourceCount = 2,
                     onModeSelected = { clicked += it },
                     onTemporarySourceToggled = { source ->
@@ -103,10 +99,10 @@ class SearchSourcePickerTest {
             MaterialTheme {
                 SearchSourcePicker(
                     draftSourceScope = SearchSourceScope.GlobalUnified,
-                    options = listOf(QueryMode.Unified) + listOf(
+                    sources = listOf(
                         SourceKey.PIXIV, SourceKey.IWARA, SourceKey.RULE34XXX,
                         SourceKey.RULE34PAHEAL, SourceKey.RULE34VIDEO,
-                    ).map(QueryMode::Source),
+                    ),
                     unifiedSourceCount = 2,
                     unifiedSources = setOf(SourceKey.PIXIV, SourceKey.RULE34XXX),
                     onModeSelected = { clicked += it },

@@ -64,6 +64,8 @@ data class SearchInitialization(
     val validationMessage: String? = null,
     /** The source settings stored when Search restored, used until the route hears newer ones. */
     val runtime: SourceRuntimeSettings = SourceRuntimeSettings(),
+    /** The faceted search scopes each available source offers, for those that offer any. */
+    val scopesBySource: Map<SourceKey, List<FacetedSearchScope>> = emptyMap(),
 )
 
 /**

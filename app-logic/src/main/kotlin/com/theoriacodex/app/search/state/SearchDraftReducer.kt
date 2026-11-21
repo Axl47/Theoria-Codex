@@ -22,30 +22,19 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.normalizeGelbooruToken
 import com.theoriacodex.domain.tags.sourceTagsMatch
 
-data class SearchDraftContext(
-    val availableSources: Set<SourceKey>,
-    val appliedByMode: Map<String, Query>,
-)
-
 data class SearchDraftReduction(
     val state: SearchUiState,
-    val changed: Boolean = true,
     val accepted: Boolean = true,
 )
 
 /** Pure route-input reducer. SearchViewModel is the only holder of the returned state. */
 object SearchDraftReducer {
-    fun selectMode(
-        state: SearchUiState,
-        mode: QueryMode,
-        context: SearchDraftContext,
-        supportedScopes: (QueryMode) -> List<FacetedSearchScope>,
-    ): SearchDraftReduction {
+    fun selectMode(state: SearchUiState, mode: QueryMode): SearchDraftReduction {
         val hadSourceOwnedTerms = state.query.draft.hasSourceOwnedTerms()
-        val resolvedMode = mode.takeIf { it.isAvailable(context.availableSources) } ?: QueryMode.Unified
-        val restored = context.appliedByMode[modeKey(resolvedMode)] ?: emptySearchQuery(resolvedMode)
+        val resolvedMode = mode.takeIf { it.isAvailable(state.query.availableSources) } ?: QueryMode.Unified
+        val restored = state.query.appliedByMode[modeKey(resolvedMode)] ?: emptySearchQuery(resolvedMode)
         val sanitized = restored.copy(mode = resolvedMode).normalizedForMode(resolvedMode)
-        val scopes = supportedScopes(resolvedMode)
+        val scopes = state.query.scopesFor(resolvedMode)
         val selectedScope = state.query.selectedScope.takeIf { it in scopes }
             ?: FacetedSearchScope.All
         val validation = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE.takeIf {
@@ -57,33 +46,26 @@ object SearchDraftReducer {
                 query = state.query.copy(
                     draft = sanitized.query,
                     draftSourceScope = SearchSourceScope.fromQuery(sanitized.query),
-                    supportedScopes = scopes,
                     selectedScope = selectedScope,
                     validationMessage = validation,
-                    nhentaiLanguageFilter = sanitized.query.nhentaiLanguageFilter(),
-                    nhentaiFullColorFilter = sanitized.query.nhentaiFullColorFilter(),
                 ),
                 suggestions = SearchSuggestionsUiState(),
             ),
         )
     }
 
-    fun toggleTemporarySource(
-        state: SearchUiState,
-        source: SourceKey,
-        context: SearchDraftContext,
-        supportedScopes: (QueryMode) -> List<FacetedSearchScope>,
-    ): SearchDraftReduction {
-        if (source !in context.availableSources) return SearchDraftReduction(state, changed = false, accepted = false)
+    fun toggleTemporarySource(state: SearchUiState, source: SourceKey): SearchDraftReduction {
+        val available = state.query.availableSources.toSet()
+        if (source !in available) return SearchDraftReduction(state, accepted = false)
         val nextScope = when (val current = state.query.draftSourceScope) {
             SearchSourceScope.GlobalUnified -> {
-                val selected = state.query.unifiedSources.intersect(context.availableSources)
+                val selected = state.query.unifiedSources.intersect(available)
                 val updated = if (source in selected) selected - source else selected + source
-                if (updated.isEmpty()) return SearchDraftReduction(state, changed = false, accepted = false)
+                if (updated.isEmpty()) return SearchDraftReduction(state, accepted = false)
                 SearchSourceScope.fromSources(updated)
             }
             is SearchSourceScope.Single -> {
-                if (current.source == source) return SearchDraftReduction(state, changed = false, accepted = false)
+                if (current.source == source) return SearchDraftReduction(state, accepted = false)
                 SearchSourceScope.fromSources(listOf(current.source, source))
             }
             is SearchSourceScope.Temporary -> SearchSourceScope.fromSources(
@@ -91,22 +73,19 @@ object SearchDraftReducer {
             )
         }
         if (nextScope == state.query.draftSourceScope) {
-            return SearchDraftReduction(state, changed = false, accepted = false)
+            return SearchDraftReduction(state, accepted = false)
         }
         val sanitized = state.query.draft.normalizedForMode(nextScope.queryMode())
-        val scopes = supportedScopes(sanitized.query.mode)
+        val scopes = state.query.scopesFor(sanitized.query.mode)
         return SearchDraftReduction(
             state.copy(
                 query = state.query.copy(
                     draft = sanitized.query,
                     draftSourceScope = nextScope,
-                    supportedScopes = scopes,
                     selectedScope = state.query.selectedScope.takeIf { it in scopes }
                         ?: FacetedSearchScope.All,
                     validationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
                         .takeIf { sanitized.removedSourceOwnedTerms },
-                    nhentaiLanguageFilter = sanitized.query.nhentaiLanguageFilter(),
-                    nhentaiFullColorFilter = sanitized.query.nhentaiFullColorFilter(),
                 ),
                 suggestions = state.suggestions.copy(
                     autocomplete = emptyList(),
@@ -117,19 +96,8 @@ object SearchDraftReducer {
         )
     }
 
-    fun mutateQuery(state: SearchUiState, transform: (Query) -> Query): SearchDraftReduction {
-        val next = transform(state.query.draft)
-        return SearchDraftReduction(
-            state.copy(
-                query = state.query.copy(
-                    draft = next,
-                    nhentaiLanguageFilter = next.nhentaiLanguageFilter(),
-                    nhentaiFullColorFilter = next.nhentaiFullColorFilter(),
-                ),
-            ),
-            changed = next != state.query.draft,
-        )
-    }
+    fun mutateQuery(state: SearchUiState, transform: (Query) -> Query): SearchDraftReduction =
+        SearchDraftReduction(state.copy(query = state.query.copy(draft = transform(state.query.draft))))
 
     fun addTerm(
         state: SearchUiState,
@@ -137,16 +105,15 @@ object SearchDraftReducer {
         excluded: Boolean,
     ): SearchDraftReduction {
         val normalized = term.normalizedOrNull()
-            ?: return SearchDraftReduction(state, changed = false, accepted = false)
+            ?: return SearchDraftReduction(state, accepted = false)
         if (state.query.draft.mode == QueryMode.Unified && !normalized.isPortableGeneralTag) {
             return SearchDraftReduction(
                 state.copy(query = state.query.copy(validationMessage = UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE)),
-                changed = true,
                 accepted = false,
             )
         }
         val current = if (excluded) state.query.draft.excludeTerms else state.query.draft.includeTerms
-        if (normalized in current) return SearchDraftReduction(state, changed = false, accepted = false)
+        if (normalized in current) return SearchDraftReduction(state, accepted = false)
         val reduced = mutateQuery(state) { query ->
             if (excluded) {
                 query.copy(excludeTerms = query.excludeTerms + normalized)
@@ -193,7 +160,6 @@ object SearchDraftReducer {
                 state.copy(
                     suggestions = state.suggestions.copy(inputError = GELBOORU_SUGGESTION_REQUIRED_MESSAGE),
                 ),
-                changed = false,
                 accepted = false,
             )
         }
@@ -203,10 +169,10 @@ object SearchDraftReducer {
             term
         }
         val normalized = resolved.normalizedOrNull()
-            ?: return SearchDraftReduction(state, changed = false, accepted = false)
+            ?: return SearchDraftReduction(state, accepted = false)
         val groups = state.query.draft.effectiveIncludeTermGroups
         val group = groups.getOrNull(groupIndex)
-            ?: return SearchDraftReduction(state, changed = false, accepted = false)
+            ?: return SearchDraftReduction(state, accepted = false)
         val anchor = group.terms.first()
         if (
             normalized.facet != anchor.facet ||
@@ -215,7 +181,7 @@ object SearchDraftReducer {
             group.terms.size >= MAX_GROUP_ALTERNATIVES ||
             (state.query.draft.mode == QueryMode.Unified && !normalized.isPortableGeneralTag)
         ) {
-            return SearchDraftReduction(state, changed = false, accepted = false)
+            return SearchDraftReduction(state, accepted = false)
         }
         return mutateQuery(state) { query ->
             query.withIncludeTermGroups(
@@ -223,7 +189,7 @@ object SearchDraftReducer {
                     if (index == groupIndex) SearchTermGroup(current.terms + normalized) else current
                 }
             )
-        }.copy(accepted = true)
+        }
     }
 
     fun splitIncludeAlternative(
@@ -233,9 +199,9 @@ object SearchDraftReducer {
     ): SearchDraftReduction {
         val groups = state.query.draft.effectiveIncludeTermGroups
         val group = groups.getOrNull(groupIndex)
-            ?: return SearchDraftReduction(state, changed = false, accepted = false)
+            ?: return SearchDraftReduction(state, accepted = false)
         if (group.terms.size <= 1 || term !in group.terms) {
-            return SearchDraftReduction(state, changed = false, accepted = false)
+            return SearchDraftReduction(state, accepted = false)
         }
         val replacement = buildList {
             groups.forEachIndexed { index, current ->
@@ -248,7 +214,6 @@ object SearchDraftReducer {
             }
         }
         return mutateQuery(state) { query -> query.withIncludeTermGroups(replacement) }
-            .copy(accepted = true)
     }
 
     /**
@@ -261,20 +226,20 @@ object SearchDraftReducer {
             .distinct()
             .filterNot { it in state.query.draft.includeTerms }
             .take(MAX_GROUP_ALTERNATIVES)
-        if (fresh.isEmpty()) return SearchDraftReduction(state, changed = false, accepted = false)
+        if (fresh.isEmpty()) return SearchDraftReduction(state, accepted = false)
         return mutateQuery(state) { query ->
             query.withIncludeTermGroups(query.effectiveIncludeTermGroups + SearchTermGroup(fresh))
-        }.copy(accepted = true)
+        }
     }
 
     fun removeIncludeGroup(state: SearchUiState, groupIndex: Int): SearchDraftReduction {
         val groups = state.query.draft.effectiveIncludeTermGroups
         if (groupIndex !in groups.indices) {
-            return SearchDraftReduction(state, changed = false, accepted = false)
+            return SearchDraftReduction(state, accepted = false)
         }
         return mutateQuery(state) { query ->
             query.withIncludeTermGroups(groups.filterIndexed { index, _ -> index != groupIndex })
-        }.copy(accepted = true)
+        }
     }
 
     fun restoreTerms(
@@ -290,16 +255,14 @@ object SearchDraftReducer {
         post: Post,
         term: SearchTerm,
         excluded: Boolean,
-        availableSources: Set<SourceKey>,
-        supportedScopes: (QueryMode) -> List<FacetedSearchScope>,
     ): SearchDraftReduction {
         val normalized = term.normalizedOrNull()
-            ?: return SearchDraftReduction(state, changed = false, accepted = false)
+            ?: return SearchDraftReduction(state, accepted = false)
         var prepared = state
         if (!normalized.isPortableGeneralTag) {
             val sourceMode = QueryMode.Source(post.id.source)
-            if (!sourceMode.isAvailable(availableSources)) {
-                return SearchDraftReduction(state, changed = false, accepted = false)
+            if (!sourceMode.isAvailable(state.query.availableSources)) {
+                return SearchDraftReduction(state, accepted = false)
             }
             if (state.query.draft.mode != sourceMode) {
                 val query = state.query.draft.withIncludeTermGroups(
@@ -309,12 +272,10 @@ object SearchDraftReducer {
                     mode = sourceMode,
                     excludeTerms = state.query.draft.excludeTerms.filter(SearchTerm::isPortableGeneralTag),
                 )
-                val scopes = supportedScopes(sourceMode)
                 prepared = state.copy(
                     query = state.query.copy(
                         draft = query,
                         draftSourceScope = SearchSourceScope.Single(post.id.source),
-                        supportedScopes = scopes,
                         selectedScope = FacetedSearchScope.All,
                         validationMessage = null,
                     ),
@@ -361,7 +322,7 @@ object SearchDraftReducer {
         term: SearchTerm,
     ): SearchDraftReduction {
         val joined = postTermForGroup(state.query.draft, source, groupIndex, term)
-            ?: return SearchDraftReduction(state, changed = false, accepted = false)
+            ?: return SearchDraftReduction(state, accepted = false)
         return mutateQuery(state) { query ->
             query.withIncludeTermGroups(
                 query.effectiveIncludeTermGroups.mapIndexed { index, group ->
@@ -373,7 +334,7 @@ object SearchDraftReducer {
 
     fun selectScope(state: SearchUiState, scope: FacetedSearchScope): SearchDraftReduction {
         if (scope !in state.query.supportedScopes) {
-            return SearchDraftReduction(state, changed = false, accepted = false)
+            return SearchDraftReduction(state, accepted = false)
         }
         return SearchDraftReduction(
             state.copy(
@@ -385,32 +346,22 @@ object SearchDraftReducer {
                     searchedTags = emptyList(),
                 ),
             ),
-            changed = scope != state.query.selectedScope,
         )
     }
 
-    fun restoreDraft(
-        state: SearchUiState,
-        query: Query,
-        availableSources: Set<SourceKey>,
-        supportedScopes: (QueryMode) -> List<FacetedSearchScope>,
-    ): SearchDraftReduction {
-        if (!query.mode.isAvailable(availableSources)) {
-            return SearchDraftReduction(state, changed = false, accepted = false)
+    fun restoreDraft(state: SearchUiState, query: Query): SearchDraftReduction {
+        if (!query.mode.isAvailable(state.query.availableSources)) {
+            return SearchDraftReduction(state, accepted = false)
         }
         val sanitized = query.normalizedForMode(query.mode)
-        val scopes = supportedScopes(sanitized.query.mode)
         return SearchDraftReduction(
             state.copy(
                 query = state.query.copy(
                     draft = sanitized.query,
                     draftSourceScope = SearchSourceScope.fromQuery(sanitized.query),
-                    supportedScopes = scopes,
                     selectedScope = FacetedSearchScope.All,
                     validationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
                         .takeIf { sanitized.removedSourceOwnedTerms },
-                    nhentaiLanguageFilter = sanitized.query.nhentaiLanguageFilter(),
-                    nhentaiFullColorFilter = sanitized.query.nhentaiFullColorFilter(),
                 ),
                 suggestions = SearchSuggestionsUiState(),
             ),
@@ -425,8 +376,6 @@ object SearchDraftReducer {
                     draft = query,
                     draftSourceScope = state.query.appliedSourceScope,
                     validationMessage = null,
-                    nhentaiLanguageFilter = query.nhentaiLanguageFilter(),
-                    nhentaiFullColorFilter = query.nhentaiFullColorFilter(),
                 ),
                 suggestions = SearchSuggestionsUiState(),
             ),
@@ -443,27 +392,23 @@ object SearchDraftReducer {
         includeTermGroups: List<SearchTermGroup>,
         excludeTerms: List<SearchTerm>,
         mode: QueryMode,
-        availableSources: Set<SourceKey>,
-        supportedScopes: (QueryMode) -> List<FacetedSearchScope>,
     ): SearchDraftReduction {
         val includes = includeTermGroups.map { group -> group.terms.mapNotNull(SearchTerm::normalizedOrNull).distinct() }
             .filter(List<SearchTerm>::isNotEmpty)
             .distinctBy(List<SearchTerm>::toSet)
         val excludes = excludeTerms.mapNotNull(SearchTerm::normalizedOrNull).distinct()
             .filterNot { excluded -> includes.any { excluded in it } }
-        if ((includes.isEmpty() && excludes.isEmpty()) || !mode.isAvailable(availableSources)) {
-            return SearchDraftReduction(state, changed = false, accepted = false)
+        if ((includes.isEmpty() && excludes.isEmpty()) || !mode.isAvailable(state.query.availableSources)) {
+            return SearchDraftReduction(state, accepted = false)
         }
         val query = emptySearchQuery(mode).withIncludeTermGroups(includes.map(::SearchTermGroup))
             .copy(excludeTerms = excludes)
-        val scopes = supportedScopes(mode)
         val reset = resetInputState(state, query)
         return SearchDraftReduction(
             reset.copy(
                 query = reset.query.copy(
                     draft = query,
                     draftSourceScope = SearchSourceScope.fromQuery(query),
-                    supportedScopes = scopes,
                     selectedScope = FacetedSearchScope.All,
                     validationMessage = null,
                 ),
@@ -548,12 +493,7 @@ object SearchDraftReducer {
     fun directNhentaiGalleryIdCandidate(query: Query): String? = query.directNhentaiGalleryIdCandidate()
 
     private fun resetInputState(state: SearchUiState, query: Query): SearchUiState = state.copy(
-        query = state.query.copy(
-            draft = query,
-            validationMessage = null,
-            nhentaiLanguageFilter = query.nhentaiLanguageFilter(),
-            nhentaiFullColorFilter = query.nhentaiFullColorFilter(),
-        ),
+        query = state.query.copy(draft = query, validationMessage = null),
         suggestions = SearchSuggestionsUiState(),
     )
 
@@ -597,7 +537,7 @@ fun modeKey(mode: QueryMode): String = when (mode) {
     is QueryMode.Source -> "source:${mode.source.id}"
 }
 
-fun QueryMode.isAvailable(sources: Set<SourceKey>): Boolean = when (this) {
+fun QueryMode.isAvailable(sources: Collection<SourceKey>): Boolean = when (this) {
     QueryMode.Unified -> true
     is QueryMode.Source -> source in sources
 }

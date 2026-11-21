@@ -22,7 +22,6 @@ import org.junit.Test
 
 class SearchDraftReducerTest {
     private val available = SourceKey.builtIns.toSet()
-    private val context = SearchDraftContext(available, emptyMap())
     private val artist = FacetedSearchScope(SearchFacet.ARTIST, "artist")
     private val character = FacetedSearchScope(SearchFacet.CHARACTER, "character")
     private val tag = FacetedSearchScope(SearchFacet.TAG, "tag")
@@ -78,10 +77,13 @@ class SearchDraftReducerTest {
     @Test
     fun `mode selection restores per-mode query and rejects unavailable source`() {
         val restored = query(QueryMode.Source(SourceKey.PIXIV), listOf(SearchTerm("saved")))
-        val withHistory = SearchDraftContext(setOf(SourceKey.PIXIV), mapOf(modeKey(restored.mode) to restored))
+        val withHistory = state().let { it.copy(query = it.query.copy(
+            availableSources = listOf(SourceKey.PIXIV),
+            appliedByMode = mapOf(modeKey(restored.mode) to restored),
+        )) }
 
-        val selected = SearchDraftReducer.selectMode(state(), restored.mode, withHistory, ::noScopes).state
-        val rejected = SearchDraftReducer.selectMode(selected, QueryMode.Source(SourceKey.GELBOORU), withHistory, ::noScopes).state
+        val selected = SearchDraftReducer.selectMode(withHistory, restored.mode).state
+        val rejected = SearchDraftReducer.selectMode(selected, QueryMode.Source(SourceKey.GELBOORU)).state
 
         assertEquals(restored, selected.query.draft)
         assertEquals(QueryMode.Unified, rejected.query.draft.mode)
@@ -93,7 +95,7 @@ class SearchDraftReducerTest {
             draftSourceScope = SearchSourceScope.GlobalUnified,
             unifiedSources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU),
         ))
-        val reduced = SearchDraftReducer.toggleTemporarySource(initial, SourceKey.GELBOORU, context, ::noScopes)
+        val reduced = SearchDraftReducer.toggleTemporarySource(initial, SourceKey.GELBOORU)
         assertTrue(reduced.accepted)
         assertEquals(SearchSourceScope.Single(SourceKey.PIXIV), reduced.state.query.draftSourceScope)
         assertEquals(QueryMode.Source(SourceKey.PIXIV), reduced.state.query.draft.mode)
@@ -109,18 +111,8 @@ class SearchDraftReducerTest {
             query = state(source).query.copy(draftSourceScope = SearchSourceScope.Single(SourceKey.PIXIV)),
         )
 
-        val temporary = SearchDraftReducer.toggleTemporarySource(
-            initial,
-            SourceKey.GELBOORU,
-            context,
-            ::noScopes,
-        ).state
-        val collapsed = SearchDraftReducer.toggleTemporarySource(
-            temporary,
-            SourceKey.GELBOORU,
-            context,
-            ::noScopes,
-        ).state
+        val temporary = SearchDraftReducer.toggleTemporarySource(initial, SourceKey.GELBOORU).state
+        val collapsed = SearchDraftReducer.toggleTemporarySource(temporary, SourceKey.GELBOORU).state
 
         assertEquals(SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV)), temporary.query.draftSourceScope)
         assertEquals(QueryMode.Unified, temporary.query.draft.mode)
@@ -142,8 +134,6 @@ class SearchDraftReducerTest {
             ),
             excludeTerms = listOf(SearchTerm("blocked"), SearchTerm("fresh")),
             mode = QueryMode.Source(SourceKey.PIXIV),
-            availableSources = available,
-            supportedScopes = ::noScopes,
         )
 
         assertTrue(prepared.accepted)
@@ -151,8 +141,8 @@ class SearchDraftReducerTest {
         assertEquals(listOf("blocked"), prepared.state.query.draft.excludeTags)
         assertEquals(SortMode.NEWEST, prepared.state.query.draft.sort)
         assertTrue(prepared.state.content.results.isEmpty())
-        assertFalse(SearchDraftReducer.prepareTagSearch(state(), emptyList(), emptyList(), QueryMode.Unified, available, ::noScopes).accepted)
-        assertFalse(SearchDraftReducer.prepareTagSearch(state(), listOf(SearchTermGroup.single(SearchTerm("x"))), emptyList(), QueryMode.Source(SourceKey.GELBOORU), setOf(SourceKey.PIXIV), ::noScopes).accepted)
+        assertFalse(SearchDraftReducer.prepareTagSearch(state(), emptyList(), emptyList(), QueryMode.Unified).accepted)
+        assertFalse(SearchDraftReducer.prepareTagSearch(state(available = setOf(SourceKey.PIXIV)), listOf(SearchTermGroup.single(SearchTerm("x"))), emptyList(), QueryMode.Source(SourceKey.GELBOORU)).accepted)
     }
 
     @Test
@@ -161,7 +151,7 @@ class SearchDraftReducerTest {
         val either = SearchTermGroup(listOf(SearchTerm("sea"), SearchTerm("snow")))
         val prepared = SearchDraftReducer.prepareTagSearch(
             state(), listOf(SearchTermGroup.single(artist), either), emptyList(),
-            QueryMode.Source(SourceKey.PIXIV), available, ::noScopes,
+            QueryMode.Source(SourceKey.PIXIV),
         )
         assertEquals(listOf(SearchTermGroup.single(artist), either), prepared.state.query.draft.effectiveIncludeTermGroups)
     }
@@ -179,7 +169,7 @@ class SearchDraftReducerTest {
         assertEquals(emptyList<SearchTerm>(), SearchDraftReducer.termsLostToPostTerm(draft, SourceKey.GELBOORU, SearchTerm("sky")))
         // The report matches what adding the tag really removes.
         val added = SearchDraftReducer.addPostTerm(
-            state(draft), post(SourceKey.GELBOORU), typed, excluded = false, setOf(SourceKey.PIXIV, SourceKey.GELBOORU), ::noScopes,
+            state(draft, available = setOf(SourceKey.PIXIV, SourceKey.GELBOORU)), post(SourceKey.GELBOORU), typed, excluded = false,
         ).state.query.draft
         assertFalse(artist in added.includeTerms)
         assertFalse(hidden in added.excludeTerms)
@@ -280,7 +270,7 @@ class SearchDraftReducerTest {
             )
         }
         val faceted = state(query(QueryMode.Source(SourceKey.HITOMI))).copy(
-            query = state(query(QueryMode.Source(SourceKey.HITOMI))).query.copy(supportedScopes = scopes),
+            query = state(query(QueryMode.Source(SourceKey.HITOMI))).query.copy(scopesBySource = mapOf(SourceKey.HITOMI to scopes)),
             suggestions = SearchSuggestionsUiState(
                 autocomplete = listOf(TagSuggestion("blue_hair", "tag", 10)),
             ),
@@ -349,7 +339,7 @@ class SearchDraftReducerTest {
     @Test
     fun `faceted scoped input preserves taxonomy polarity and rejects unsupported scope`() {
         var current = state(query(QueryMode.Source(SourceKey.NHENTAI))).copy(
-            query = state(query(QueryMode.Source(SourceKey.NHENTAI))).query.copy(supportedScopes = scopes),
+            query = state(query(QueryMode.Source(SourceKey.NHENTAI))).query.copy(scopesBySource = mapOf(SourceKey.NHENTAI to scopes)),
         )
         listOf("artist:najar", "series:the idolmaster", "female:x-ray", "-character:rin").forEach { input ->
             val reduction = SearchDraftReducer.commitInput(current, input)
@@ -376,7 +366,7 @@ class SearchDraftReducerTest {
             QueryMode.Unified,
             listOf(SearchTerm("portable"), SearchTerm("najar", SearchFacet.ARTIST, "artist")),
         ).copy(excludeTerms = listOf(SearchTerm("series", SearchFacet.SERIES, "series")))
-        val restored = SearchDraftReducer.restoreDraft(state(), historical, available, ::noScopes)
+        val restored = SearchDraftReducer.restoreDraft(state(), historical)
 
         assertFalse(scoped.accepted)
         assertTrue(scoped.state.validationMessage.orEmpty().contains("specific source"))
@@ -390,12 +380,10 @@ class SearchDraftReducerTest {
         val draft = query(QueryMode.Unified, listOf(SearchTerm("portable"), SearchTerm("same", SearchFacet.TAG, "tag")))
             .copy(excludeTerms = listOf(SearchTerm("blocked")), sort = SortMode.TOP)
         val added = SearchDraftReducer.addPostTerm(
-            state(draft),
+            state(draft).let { it.copy(query = it.query.copy(scopesBySource = mapOf(SourceKey.HITOMI to scopes))) },
             post(SourceKey.HITOMI),
             SearchTerm("same", SearchFacet.ARTIST, "artist"),
             excluded = false,
-            availableSources = available,
-            supportedScopes = { scopes },
         )
         val removed = SearchDraftReducer.removeTerm(
             added.state,
@@ -412,22 +400,18 @@ class SearchDraftReducerTest {
 
     @Test
     fun `unavailable source-owned post term leaves draft unchanged while portable post tag stays unified`() {
-        val initial = state(query(QueryMode.Unified, listOf(SearchTerm("portable"))))
+        val initial = state(query(QueryMode.Unified, listOf(SearchTerm("portable"))), available = setOf(SourceKey.PIXIV))
         val rejected = SearchDraftReducer.addPostTerm(
             initial,
             post(SourceKey.HITOMI),
             SearchTerm("najar", SearchFacet.ARTIST, "artist"),
             false,
-            setOf(SourceKey.PIXIV),
-            ::noScopes,
         )
         val portable = SearchDraftReducer.addPostTerm(
             state(),
             post(SourceKey.HITOMI),
             SearchTerm("tag"),
             false,
-            available,
-            ::noScopes,
         )
 
         assertFalse(rejected.accepted)
@@ -436,14 +420,13 @@ class SearchDraftReducerTest {
         assertEquals(listOf(SearchTerm("tag")), portable.state.query.draft.includeTerms)
     }
 
-    private fun state(query: Query = query(QueryMode.Unified)): SearchUiState = SearchUiState(
+    private fun state(query: Query = query(QueryMode.Unified), available: Set<SourceKey> = this.available): SearchUiState = SearchUiState(
         query = SearchQueryUiState(
             draft = query,
             applied = query,
             draftSourceScope = SearchSourceScope.fromQuery(query),
             appliedSourceScope = SearchSourceScope.fromQuery(query),
             availableSources = available.toList(),
-            modeOptions = listOf(QueryMode.Unified) + available.map(QueryMode::Source),
         ),
     )
 
@@ -468,6 +451,4 @@ class SearchDraftReducerTest {
         authorName = null,
         createdAtEpochMs = null,
     )
-
-    private fun noScopes(@Suppress("UNUSED_PARAMETER") mode: QueryMode): List<FacetedSearchScope> = emptyList()
 }

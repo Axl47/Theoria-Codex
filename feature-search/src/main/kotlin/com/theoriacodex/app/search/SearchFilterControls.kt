@@ -151,7 +151,7 @@ internal fun DateRangeFilterSection(range: DateRange?, onPreset: (DateRangePrese
 @Composable
 internal fun SearchSourcePicker(
     draftSourceScope: SearchSourceScope,
-    options: List<QueryMode>,
+    sources: List<SourceKey>,
     unifiedSourceCount: Int,
     unifiedSources: Set<SourceKey> = emptySet(),
     onOpen: () -> Unit = {},
@@ -188,7 +188,7 @@ internal fun SearchSourcePicker(
         SourceIconMenu(
             expanded = expanded,
             onDismiss = { expanded = false },
-            options = options.filterIsInstance<QueryMode.Source>().map { it.source } - selectedSource,
+            options = sources - selectedSource,
             highlightedSources = highlightedSources,
             combinedLabel = "Unified",
             onSelect = { source ->

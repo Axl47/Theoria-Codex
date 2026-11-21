@@ -339,7 +339,7 @@ private fun SearchScreenSourcePicker(
 ) {
     SearchSourcePicker(
         draftSourceScope = state.query.draftSourceScope,
-        options = state.query.modeOptions,
+        sources = state.query.availableSources,
         unifiedSourceCount = state.query.unifiedSources.size,
         unifiedSources = state.query.unifiedSources,
         onOpen = { inputFocus.clear() },
@@ -551,10 +551,6 @@ private suspend fun resetSearchScroll(
     onAction(SearchAction.ScrollChanged(0, 0))
 }
 
-/** The sources in the order Search lists them. */
-private fun SearchUiState.sourceDisplayOrder(): List<SourceKey> =
-    query.modeOptions.mapNotNull { mode -> (mode as? QueryMode.Source)?.source }
-
 /**
  * Where a tag saved from the composer goes. Saved tags belong to a source, so a search across
  * several saves under the first one it covers; every saved tag shows while searching them all.
@@ -599,7 +595,7 @@ private fun composerSavedSearches(
 private fun savedTagSource(state: SearchUiState): SourceKey? =
     (state.query.draft.mode as? QueryMode.Source)?.source
         ?: state.query.draftSourceScope.explicitSources.firstOrNull()
-        ?: state.sourceDisplayOrder().firstOrNull()
+        ?: state.query.availableSources.firstOrNull()
 
 /** The favorite tags that apply to the draft's source, grouped per source when searching all of them. */
 @Composable
@@ -607,12 +603,11 @@ private fun rememberFavoriteTagSections(
     state: SearchUiState,
     favoriteTags: List<FavoriteTagEntry>,
 ): List<FavoriteTagSection> {
-    val sourceDisplayOrder = remember(state.query.modeOptions) { state.sourceDisplayOrder() }
-    return remember(state.query.draft.mode, favoriteTags, sourceDisplayOrder) {
+    return remember(state.query.draft.mode, favoriteTags, state.query.availableSources) {
         favoriteTagSections(
             mode = state.query.draft.mode,
             favoriteTags = favoriteTags,
-            sourceDisplayOrder = sourceDisplayOrder,
+            sourceDisplayOrder = state.query.availableSources,
         )
     }
 }

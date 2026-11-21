@@ -159,6 +159,7 @@ class SearchCoordinator(
             validationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
                 .takeIf { sanitized.removedSourceOwnedTerms },
             runtime = settings.runtime,
+            scopesBySource = searchScopesBySource(),
         )
     }
 
@@ -166,6 +167,11 @@ class SearchCoordinator(
     fun sourceTermLimits(): Map<SourceKey, SearchTermLimit> = registry.availableSources().mapNotNull { source ->
         registry.adapterFor(source)?.capabilities?.searchTermLimit?.let { source to it }
     }.toMap()
+
+    /** The faceted search scopes each available source offers, for those that offer any. */
+    fun searchScopesBySource(): Map<SourceKey, List<FacetedSearchScope>> = availableSources
+        .associateWith { source -> supportedSearchScopes(QueryMode.Source(source)) }
+        .filterValues { it.isNotEmpty() }
 
     fun supportedSearchScopes(mode: QueryMode): List<FacetedSearchScope> {
         val source = (mode as? QueryMode.Source)?.source ?: return emptyList()

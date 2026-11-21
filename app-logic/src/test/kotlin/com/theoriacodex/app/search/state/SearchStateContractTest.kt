@@ -37,7 +37,7 @@ class SearchStateContractTest {
             validationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE,
         )
 
-        val restored = SearchStateReducer.restore(initialization, "hash") { emptyList() }
+        val restored = SearchStateReducer.restore(initialization, "hash")
 
         assertEquals(UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE, restored.query.validationMessage)
         assertEquals(query, restored.query.draft)

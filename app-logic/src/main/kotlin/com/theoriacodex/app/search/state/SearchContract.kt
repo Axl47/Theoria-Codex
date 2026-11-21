@@ -120,16 +120,14 @@ data class SearchQueryUiState(
     val draftSourceScope: SearchSourceScope = SearchSourceScope.GlobalUnified,
     val appliedSourceScope: SearchSourceScope = SearchSourceScope.GlobalUnified,
     val appliedQueryHash: String = "",
+    /** Every source Search can use, in the order it lists them. */
     val availableSources: List<SourceKey> = emptyList(),
-    val modeOptions: List<QueryMode> = listOf(QueryMode.Unified),
-    val enabledSourceCount: Int = 0,
     val unifiedSources: Set<SourceKey> = emptySet(),
-    val supportedScopes: List<FacetedSearchScope> = emptyList(),
+    /** The faceted search scopes each available source offers, for those that offer any. */
+    val scopesBySource: Map<SourceKey, List<FacetedSearchScope>> = emptyMap(),
     val selectedScope: FacetedSearchScope = FacetedSearchScope.All,
     /** A notice about the draft itself, such as terms a source change removed; typing leaves it. */
     val validationMessage: String? = null,
-    val nhentaiLanguageFilter: NhentaiLanguageFilter = NhentaiLanguageFilter.ANY,
-    val nhentaiFullColorFilter: Boolean = false,
     /** Per-request term caps of the available sources that have one. */
     val sourceTermLimits: Map<SourceKey, SearchTermLimit> = emptyMap(),
     /** The last search run in each mode, by [modeKey]; picking a mode starts from it. Multi-Search runs are not kept. */
@@ -141,6 +139,19 @@ data class SearchQueryUiState(
 
     val termLimitNotices: List<SearchTermLimitNotice>
         get() = searchTermLimitNotices(draft, draftSources.sorted(), sourceTermLimits)
+
+    /** The faceted scopes the draft's source offers; Unified offers none. */
+    val supportedScopes: List<FacetedSearchScope>
+        get() = scopesFor(draft.mode)
+
+    val nhentaiLanguageFilter: NhentaiLanguageFilter
+        get() = draft.nhentaiLanguageFilter()
+
+    val nhentaiFullColorFilter: Boolean
+        get() = draft.nhentaiFullColorFilter()
+
+    fun scopesFor(mode: QueryMode): List<FacetedSearchScope> =
+        (mode as? QueryMode.Source)?.let { scopesBySource[it.source] }.orEmpty()
 }
 
 data class SearchContentUiState(
