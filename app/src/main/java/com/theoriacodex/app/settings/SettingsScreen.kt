@@ -213,7 +213,7 @@ private fun SettingsHomeGroups(
         OpenLinksRow()
     }
     SettingsGroup("Viewing") {
-        SettingsRow(SettingDestinations.Controls.title, "Search bar, seeking, swipes, rotation, quality", Icons.Default.TouchApp, onClick = {
+        SettingsRow(SettingDestinations.Controls.title, "Search bar, seeking, swipes, rotation", Icons.Default.TouchApp, onClick = {
             onSheet(SettingsSheet.CONTROLS)
         })
     }

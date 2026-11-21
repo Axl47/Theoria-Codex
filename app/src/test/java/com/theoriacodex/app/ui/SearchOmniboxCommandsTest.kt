@@ -59,10 +59,10 @@ class SearchOmniboxCommandsTest {
 
     @Test fun `a choice shows its current value and opens where it is picked`() {
         val defaults = AppSettings()
-        val settings = defaults.copy(viewer = defaults.viewer.copy(videoQuality = VideoQuality.DATA_SAVER))
+        val settings = defaults.copy(cache = defaults.cache.copy(downloadQuality = VideoQuality.DATA_SAVER))
         val opened = mutableListOf<SettingBinding>()
         val entries = searchSettingEntries(settings, dispatch = {}, open = opened::add)
-        val choice = SettingChoices.DefaultVideoQuality
+        val choice = SettingChoices.DownloadQuality
 
         val entry = entries.filterIsInstance<OmniboxEntry.Action>().single { it.title == choice.title }
         assertEquals(videoQualityLabel(VideoQuality.DATA_SAVER), entry.detail)
@@ -71,11 +71,12 @@ class SearchOmniboxCommandsTest {
         SettingChoices.all.forEach { assertNotNull(it.id, settingValueLabel(it.read(settings))) }
     }
 
-    @Test fun `hidden and Search-owned definitions are left out`() {
+    @Test fun `hidden, Search-owned and Viewer-owned definitions are left out`() {
         val titles = searchSettingEntries(AppSettings(), setOf(SettingDestinations.Diagnostics.id), {}, {}).map { it.title }
 
         assertFalse(SettingDestinations.Diagnostics.title in titles)
         assertFalse(SettingDestinations.SourceMix.title in titles)
+        assertFalse(SettingChoices.DefaultVideoQuality.title in titles)
         assertTrue(SettingDestinations.Controls.title in titles)
     }
 

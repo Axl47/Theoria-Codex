@@ -29,12 +29,15 @@ internal sealed interface SettingBinding {
 
     /** Search offers this one itself, beside the sheet it opens. */
     data object InSearch : SettingBinding
+
+    /** Set from the Viewer's playback menu, which needs a video open; the search box has no entry for it. */
+    data object InViewer : SettingBinding
 }
 
 /** Every setting definition's id bound to what opens or changes it; a test checks none is missing. */
 internal val SETTING_BINDINGS: Map<String, SettingBinding> = buildMap {
     SettingToggles.all.forEach { put(it.id, SettingBinding.Switch) }
-    put(SettingChoices.DefaultVideoQuality.id, SettingBinding.Settings(SettingsPage.HOME, SettingsSheet.CONTROLS))
+    put(SettingChoices.DefaultVideoQuality.id, SettingBinding.InViewer)
     put(SettingChoices.DownloadQuality.id, SettingBinding.Settings(SettingsPage.HOME, SettingsSheet.DOWNLOADS))
     put(SettingDestinations.Home.id, SettingBinding.Settings(SettingsPage.HOME))
     put(SettingDestinations.Stats.id, SettingBinding.Settings(SettingsPage.STATS))
@@ -64,7 +67,7 @@ internal fun searchSettingEntries(
 ): List<OmniboxEntry> = ALL_SETTING_DEFINITIONS.filter { it.id !in hidden }.mapNotNull { definition ->
     val binding = SETTING_BINDINGS.getValue(definition.id)
     when {
-        binding == SettingBinding.InSearch -> null
+        binding == SettingBinding.InSearch || binding == SettingBinding.InViewer -> null
         definition is SettingToggle -> OmniboxEntry.Toggle(definition.title, definition.read(settings), definition.keywords) { checked ->
             dispatch(SettingsAction.SetToggle(definition, checked))
         }
@@ -84,5 +87,5 @@ internal fun TheoriaShell.openSettingBinding(binding: SettingBinding, openHidden
     is SettingBinding.Settings -> openSettings(binding.page, binding.sheet)
     SettingBinding.HiddenTags -> openHiddenTags()
     SettingBinding.WhatsNew -> owners.settings.onAction(SettingsAction.OpenChangelog)
-    SettingBinding.Switch, SettingBinding.InSearch -> Unit
+    SettingBinding.Switch, SettingBinding.InSearch, SettingBinding.InViewer -> Unit
 }

@@ -18,7 +18,7 @@ import com.theoriacodex.data.repository.SettingDestinations
 import com.theoriacodex.data.repository.SettingToggles
 import com.theoriacodex.domain.model.VideoQuality
 
-/** Settings' Downloads sheet. */
+/** Settings' Downloads sheet. Default video quality is set from the Viewer's playback menu instead. */
 @Composable
 fun DownloadPreferencesSection(state: SettingsUiState, onAction: (SettingsAction) -> Unit) {
     Text(SettingDestinations.Downloads.title, style = MaterialTheme.typography.titleMedium)
@@ -31,9 +31,8 @@ fun DownloadPreferencesSection(state: SettingsUiState, onAction: (SettingsAction
     }
 }
 
-/** A quality setting as a row of chips, one per option; used by the Downloads and Controls sheets. */
 @Composable
-internal fun QualityChoices(choice: SettingChoice<VideoQuality>, selected: VideoQuality, onSelect: (VideoQuality) -> Unit) {
+private fun QualityChoices(choice: SettingChoice<VideoQuality>, selected: VideoQuality, onSelect: (VideoQuality) -> Unit) {
     Text(choice.title)
     Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth()) {
         choice.options.forEach { quality ->
