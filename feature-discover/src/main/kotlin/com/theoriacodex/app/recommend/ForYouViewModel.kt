@@ -205,6 +205,8 @@ class ForYouViewModel(
         val transition = if (startsNewScope) reduced.copy(
             state = reduced.state.copy(home = reduced.state.home.copy(activeSection = null)),
         ) else reduced
+        mutableState.value = transition.state
+        // A new recommendation root starts without a shelf; the controller alone clears it, cancelling its load.
         if (transition.state.activeRequest?.kind == ForYouRequestKind.REFRESH &&
             transition.state.activeRequest != previous.activeRequest
         ) {
@@ -212,7 +214,6 @@ class ForYouViewModel(
             hasRequestedFeed = true
             replaySearch = action as? ForYouAction.ReplaySearch
         }
-        mutableState.value = transition.state
         persistRouteInputs(transition.state)
         transition.effect?.let(::handleEffect)
         if (action is ForYouAction.SelectSource || action is ForYouAction.SelectSort) home.synchronize()

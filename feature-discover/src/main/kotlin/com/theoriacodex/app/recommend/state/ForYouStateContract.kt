@@ -523,7 +523,6 @@ private fun ForYouUiState.beginRefresh(
             emptyReason = null,
             nextRequestGeneration = request.generation + 1L,
             activeRequest = request,
-            relatedPosts = RelatedPostsUiState.Idle,
         ),
         effect = effect(request),
     )
