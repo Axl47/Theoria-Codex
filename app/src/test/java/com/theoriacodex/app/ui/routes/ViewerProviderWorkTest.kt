@@ -143,7 +143,7 @@ class ViewerProviderWorkTest {
                 override fun adapterFor(sourceKey: SourceKey) = adapter.takeIf { sourceKey == SourceKey.GELBOORU }
             }
             val workflow = ViewerRouteWorkflow(
-                graph.data, this, graph.sources.copy(registry = registry), { null },
+                graph.data, this, graph.sources.copy(registry = registry), { null }, graph.features.offlineMedia,
             )
             val callerDispatcher = currentCoroutineContext()[ContinuationInterceptor]
             assertEquals(post, workflow.resolvePost(post.id, ViewerStreamSource.RELATED))
@@ -151,6 +151,8 @@ class ViewerProviderWorkTest {
             assertEquals(2, dispatchers.size)
             dispatchers.forEach { assertSame(Dispatchers.Default, it) }
             assertSame(callerDispatcher, currentCoroutineContext()[ContinuationInterceptor])
+            // A recovery the Viewer no longer wants is dropped instead of recorded.
+            assertEquals(null, workflow.recoverMedia(post, post.preview, ViewerStreamSource.RELATED) { false })
 
             suspendResolution = true
             val job = launch { workflow.resolvePost(post.id, ViewerStreamSource.RELATED) }
@@ -187,7 +189,7 @@ class ViewerProviderWorkTest {
             val sources = graph.sources.copy(registry = registry)
             val feed = testSearchCoordinator(registry, postResolutions = sources.postResolutions)
             val workflow = ViewerRouteWorkflow(
-                graph.data, this, sources, { null },
+                graph.data, this, sources, { null }, graph.features.offlineMedia,
                 providerDispatcher = StandardTestDispatcher(testScheduler),
             )
 

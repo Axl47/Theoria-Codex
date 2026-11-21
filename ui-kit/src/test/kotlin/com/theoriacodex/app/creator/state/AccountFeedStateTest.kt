@@ -148,6 +148,29 @@ class AccountFeedStateTest {
         assertEquals("creator:GELBOORU:user:Account", opened.queryHash)
     }
 
+    @Test
+    fun `a reconnect lets a parked feed that failed load again when shown`() {
+        val onFavorites = loaded(listOf(testPost(sourcePostId = "u1")), null).reduce(CreatorAction.SelectFeed(AccountFeed.FAVORITES))
+        val request = (onFavorites.effect as CreatorEffect.LoadPage).request
+        val parked = onFavorites.state.reduce(CreatorAction.RequestFailed(request, "offline")).state
+            .reduce(CreatorAction.SelectFeed(AccountFeed.UPLOADS)).state
+
+        assertNull(parked.reduce(CreatorAction.SelectFeed(AccountFeed.FAVORITES)).effect)
+        val reload = parked.reduce(CreatorAction.Reconnected).state.reduce(CreatorAction.SelectFeed(AccountFeed.FAVORITES))
+        assertEquals(AccountFeed.FAVORITES, (reload.effect as CreatorEffect.LoadPage).feed)
+    }
+
+    @Test
+    fun `a reconnect does not retry an account failure`() {
+        val opened = CreatorUiState().reduce(CreatorAction.OpenCreator(account, bothFeeds))
+        val request = (opened.effect as CreatorEffect.LoadPage).request
+        val failed = opened.state.reduce(CreatorAction.RequestFailed(request, "sign in", CreatorFailureReason.ACCOUNT)).state
+
+        assertNull(failed.reduce(CreatorAction.Reconnected).effect)
+        val networkFailure = opened.state.reduce(CreatorAction.RequestFailed(request, "offline")).state
+        assertTrue(networkFailure.reduce(CreatorAction.Reconnected).effect is CreatorEffect.LoadPage)
+    }
+
     private fun loaded(posts: List<Post>, token: String?): CreatorUiState {
         val opened = CreatorUiState().reduce(CreatorAction.OpenCreator(account, bothFeeds))
         val request = (opened.effect as CreatorEffect.LoadPage).request

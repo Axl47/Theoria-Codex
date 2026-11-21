@@ -55,6 +55,8 @@ internal fun parseNhentaiGallery(raw: JsonObject): Post? {
         createdAtEpochMs = createdAtEpochMs,
         title = cleanNhentaiTitle(title),
         mediaCount = images.count,
+        // A listing with no pages, cover or page count is still a gallery; its pages arrive with the lookup.
+        galleryLengthUnknown = images.media.isEmpty() && images.count == null,
         taxonomy = taxonomy,
         creatorProfile = creators.firstOrNull(),
         creatorProfiles = creators,

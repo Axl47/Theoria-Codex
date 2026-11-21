@@ -44,8 +44,7 @@ class ViewerUgoiraReadyTest {
     @Test fun `an ugoira that loaded while preloading reports ready again once it becomes active`() {
         var ready = 0
         val active = mutableStateOf(false)
-        // Paused, so the active animation does not keep Compose from going idle.
-        showUgoira(active, playing = false) { ready += 1 }
+        showUgoira(active) { ready += 1 }
         compose.waitUntil(timeoutMillis = 10_000L) { ready > 0 }
         val whilePreloading = ready
 
@@ -54,7 +53,8 @@ class ViewerUgoiraReadyTest {
         assertTrue(ready > whilePreloading)
     }
 
-    private fun showUgoira(active: State<Boolean>, playing: Boolean = true, onReady: () -> Unit) {
+    // Paused: a playing, looping animation keeps Compose from ever going idle, so setContent could time out.
+    private fun showUgoira(active: State<Boolean>, onReady: () -> Unit) {
         val media = ImageRef(url = null, localPath = null, mime = PIXIV_UGOIRA_MIME)
         val post = testPost(sourcePostId = "77").copy(full = media, media = listOf(media))
         val events = ViewerRendererEvents(
@@ -66,7 +66,7 @@ class ViewerUgoiraReadyTest {
             ViewerMediaContent(
                 post, media, ViewerMediaKey(post.id, 0), ViewerMediaKind.UGOIRA,
                 ViewerRendererControls(
-                    isActive = active.value, isPlaying = playing, showControls = true, loopPlayback = true,
+                    isActive = active.value, isPlaying = false, showControls = true, loopPlayback = true,
                     playbackRate = 1f, restartRequest = 0L, loadGeneration = 0L, isPreloading = !active.value,
                 ),
                 events, ViewerVideoOptions(VideoQuality.AUTO, null, null, false), ViewerVideoPositions(),

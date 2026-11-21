@@ -144,7 +144,8 @@ internal data class ViewerRouteEffectCallbacks(
     val onToggleLike: suspend (Post) -> Unit,
     val onOpenCreatorProfile: suspend (CreatorProfile) -> Unit,
     val onApplyTag: (Post, PostTaxonomyTerm, Boolean) -> Unit,
-    val onRecoverMedia: suspend (Post, ImageRef, ViewerStreamSource) -> Post?,
+    /** Recovers media for a post; the last argument says whether the result still applies before anything records it. */
+    val onRecoverMedia: suspend (Post, ImageRef, ViewerStreamSource, () -> Boolean) -> Post?,
     val onLoadMore: (ViewerStreamSource) -> Unit,
     val onDismiss: suspend () -> Unit,
     val onRestorationUnavailable: suspend () -> Unit,
@@ -613,6 +614,11 @@ private fun ViewerViewModel.hasNoPage(post: Post): Boolean = state.value.pages.n
 /** Prevents buffered or suspended effects from crossing a Viewer session replacement. */
 internal fun ViewerEffect.isCurrentFor(state: ViewerUiState): Boolean = session == state.session
 
+/**
+ * Asks the source for working media for [post] and applies the result. A source may return [post] itself with only the
+ * failed media refreshed, so the result is dropped, before the feed records it too, when the session changed or the
+ * page's post did (its lookup finished): applying it would replace the newer post with the older one.
+ */
 private suspend fun recoverAndApplyMedia(
     viewerOwner: ViewerViewModel,
     post: Post,
@@ -621,15 +627,14 @@ private suspend fun recoverAndApplyMedia(
 ) {
     val session = viewerOwner.session.value ?: return
     if (viewerOwner.hasNoPage(post)) return
+    fun stillApplies() = viewerOwner.session.value?.sessionId == session.sessionId &&
+        viewerOwner.state.value.pages.any { page -> page.post == post }
     val recovered = try {
-        callbacks.onRecoverMedia(post, failedMedia, session.context.streamSource)
+        callbacks.onRecoverMedia(post, failedMedia, session.context.streamSource, ::stillApplies)
     } catch (error: CancellationException) {
         throw error
     } catch (_: Exception) {
         null
     } ?: return
-    val currentSession = viewerOwner.session.value
-    if (currentSession?.sessionId != session.sessionId) return
-    if (viewerOwner.hasNoPage(post)) return
-    viewerOwner.applyResolvedPost(recovered)
+    if (stillApplies()) viewerOwner.applyResolvedPost(recovered)
 }

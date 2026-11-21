@@ -43,12 +43,13 @@ import com.theoriacodex.app.di.FeatureDependencies
 import com.theoriacodex.app.codex.usesDuration
 import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
-import com.theoriacodex.app.media.observedMediaDurationMs
+import com.theoriacodex.app.ui.components.FeedPostCard
+import com.theoriacodex.app.ui.components.feedDurations
+import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
 import com.theoriacodex.app.media.rememberDurationFilterMetadata
 import com.theoriacodex.app.viewer.ViewerReturnColumn
 import com.theoriacodex.app.viewer.ViewerReturnShelf
 import com.theoriacodex.app.viewer.ViewerReturnShelfId
-import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.ui.components.PostShelfSection
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.POST_SHELF_CARD_WIDTH
@@ -145,6 +146,12 @@ private fun SavedCodexSection(
     val liveOwner = state.followedOwner ?: state.savedSearchOwner
     val feed = liveOwner?.state?.collectAsStateWithLifecycle()?.value
     val postIds = remember(posts) { posts.map { it.id } }
+    // Followed and saved-search sections are live feeds, so only they can like.
+    val durations = remember(owner, durationStates) { owner.feedDurations(durationStates, state.resolveUnknownAnimatedDurations) }
+    val cards = rememberFeedCardEnvironment(
+        sources.pixivUgoiraClient, state.likedPostIds, emptyMap(), durations,
+        onToggleLike.takeIf { state.followedOwner != null || state.savedSearchOwner != null }, resolvePost,
+    )
     ViewerReturnShelf(ViewerReturnShelfId.Saved(id), postIds, row) {
         PostShelfSection(title, count, posts, state.loading, feed?.errors?.isNotEmpty() == true,
             onOpen, { liveOwner?.retry() }, onLongPress,
@@ -155,17 +162,10 @@ private fun SavedCodexSection(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 itemsIndexed(posts, key = { _, post -> "${post.id.source.id}:${post.id.sourcePostId}" }) { index, post ->
                     Box(Modifier.width(cardWidth)) {
-                        SearchResultCard(post = post,
-                            liked = post.id in state.likedPostIds,
-                            onToggleLike = if (state.followedOwner != null || state.savedSearchOwner != null) ({ onToggleLike(post) }) else null,
-                            pixivUgoiraClient = sources.pixivUgoiraClient,
-                            mediaAspectRatio = POST_SHELF_MEDIA_ASPECT_RATIO,
-                            showTitle = false,
-                            acquiredDurationMs = observedMediaDurationMs(post, owner::observeState),
-                            showSourceBadge = true, resolvePostById = resolvePost,
-                            onClick = { onOpenViewer(posts, index) },
-                            onViewportChanged = { owner.onPostVisibilityChanged(post, it) },
-                            onAuthoritativeDurationKnown = { owner.publishPlayerDuration(post, it) })
+                        FeedPostCard(post = post, environment = cards,
+                            onClick = { onOpenViewer(posts, index) }, onLongPress = null,
+                            showSourceBadge = true, showTitle = false,
+                            mediaAspectRatio = POST_SHELF_MEDIA_ASPECT_RATIO)
                     }
                 }
                 if (feed?.canLoadMore == true) item(key = "more") { TextButton(onClick = onOpen) { Text("View all") } }

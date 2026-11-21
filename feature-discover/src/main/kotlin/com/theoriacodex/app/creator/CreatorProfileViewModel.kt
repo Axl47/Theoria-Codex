@@ -21,7 +21,10 @@ import com.theoriacodex.app.related.ViewerFeedOwner
 import com.theoriacodex.app.related.ViewerFeedSnapshot
 import com.theoriacodex.app.related.retainedLikedPostIds
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.app.media.reconnections
 import com.theoriacodex.app.media.replacingPostSnapshot
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.app.ui.state.RouteStateOwner
@@ -38,6 +41,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
@@ -50,15 +55,18 @@ class CreatorProfileViewModel(
     private val savedStateHandle: SavedStateHandle,
     coroutineScope: CoroutineScope? = null,
     relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
+    reconnections: Flow<Unit> = emptyFlow(),
 ) : ViewModel(), RouteStateOwner<CreatorUiState, CreatorAction, CreatorEffect>, ViewerFeedOwner {
     constructor(
         coordinator: CreatorProfileCoordinator,
         savedStateHandle: SavedStateHandle,
         relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
+        reconnections: Flow<Unit> = emptyFlow(),
     ) : this(
         engine = coordinator,
         savedStateHandle = savedStateHandle,
         relatedPostsLoader = relatedPostsLoader,
+        reconnections = reconnections,
     )
 
     private val ownerScope = coroutineScope ?: viewModelScope
@@ -99,6 +107,16 @@ class CreatorProfileViewModel(
             relatedDiagnostics.record("owner cleared", mutableState.value.relatedPosts)
         })
         restoredCreator()?.let { creator -> onAction(CreatorAction.OpenCreator(creator)) }
+        ownerScope.launch { reconnections.collect { retryAfterReconnect() } }
+    }
+
+    /**
+     * Reports a reconnect once any request begun offline, which may still be failing, has settled, so its outcome gets
+     * the retry too (see [CreatorAction.Reconnected]).
+     */
+    private suspend fun retryAfterReconnect() {
+        mutableState.first { !it.isRefreshing && !it.isPaging }
+        onAction(CreatorAction.Reconnected)
     }
 
     override fun onAction(action: CreatorAction) {
@@ -196,7 +214,13 @@ class CreatorProfileViewModel(
     private fun requestFailure(effect: CreatorEffect.LoadPage, error: Throwable) = CreatorAction.RequestFailed(
         effect.request,
         error.message ?: if (effect.feed == AccountFeed.FAVORITES) "Could not load favorites" else "Could not load creator uploads",
-        if (engine.supports(effect.creator)) CreatorFailureReason.REQUEST_FAILED else CreatorFailureReason.UNSUPPORTED_SOURCE,
+        when {
+            !engine.supports(effect.creator) -> CreatorFailureReason.UNSUPPORTED_SOURCE
+            error is SourceAdapterException &&
+                (error.reason == SourceFailureReason.AUTH_REQUIRED || error.reason == SourceFailureReason.AUTH_EXPIRED) ->
+                CreatorFailureReason.ACCOUNT
+            else -> CreatorFailureReason.REQUEST_FAILED
+        },
     )
 
     private fun persistCreator(creator: CreatorProfile) {
@@ -227,12 +251,14 @@ class CreatorProfileViewModel(
         fun factory(
             coordinator: CreatorProfileCoordinator,
             relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
+            networkOnline: Flow<Boolean> = emptyFlow(),
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 CreatorProfileViewModel(
                     coordinator = coordinator,
                     savedStateHandle = createSavedStateHandle(),
                     relatedPostsLoader = relatedPostsLoader,
+                    reconnections = networkOnline.reconnections(),
                 )
             }
         }

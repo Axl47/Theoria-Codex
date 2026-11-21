@@ -83,7 +83,7 @@ private fun UgoiraLoadedPlayer(
     val frameEndsMs = remember(playback.frameDelaysMs) { ugoiraFrameEndsMs(playback.frameDelaysMs) }
     val frames = rememberAnimatedFrames(
         load, frameEndsMs, durationMs = frameEndsMs.last(), controls = controls, events = events,
-        availableUntilMs = frameEndsMs[playback.frames.lastIndex], rewindWhenInactive = true,
+        availableUntilMs = frameEndsMs[playback.frames.lastIndex],
     )
     val frameIndex by remember(frames, frameEndsMs) {
         derivedStateOf { animationFrameIndexAt(frames.positionMs, frameEndsMs) }

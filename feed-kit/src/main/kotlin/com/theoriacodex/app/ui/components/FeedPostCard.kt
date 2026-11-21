@@ -65,14 +65,14 @@ fun rememberFeedCardEnvironment(
 
 /**
  * Every feed tile, in grids and shelves alike, showing the best duration known so far and reporting events against its
- * post. [likeEnabled] hides the like button while another gesture owns taps (Codex selection).
+ * post. A null [onLongPress] leaves long-press unhandled. [likeEnabled] hides the like button while another gesture owns taps (Codex selection).
  */
 @Composable
 fun FeedPostCard(
     post: Post,
     environment: FeedCardEnvironment,
     onClick: () -> Unit,
-    onLongPress: () -> Unit,
+    onLongPress: (() -> Unit)?,
     showWatchHistory: Boolean = false,
     showSourceBadge: Boolean = false,
     showTitle: Boolean = true,

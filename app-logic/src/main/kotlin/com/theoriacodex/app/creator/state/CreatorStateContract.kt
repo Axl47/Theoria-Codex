@@ -14,7 +14,14 @@ import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 
 enum class CreatorEmptyReason { NO_CREATOR, UNSUPPORTED_SOURCE, NO_RESULTS }
-enum class CreatorFailureReason { UNSUPPORTED_SOURCE, REQUEST_FAILED }
+enum class CreatorFailureReason {
+    UNSUPPORTED_SOURCE,
+    /** The source needs an account or a fresh sign-in; reconnecting won't fix it. */
+    ACCOUNT,
+    REQUEST_FAILED;
+
+    val retriesOnReconnect: Boolean get() = this == REQUEST_FAILED
+}
 enum class CreatorRequestKind { REFRESH, PAGE }
 
 data class CreatorRequestIdentity(
@@ -97,6 +104,8 @@ sealed interface CreatorAction {
     data object LoadNextPage : CreatorAction
     data object RetryPage : CreatorAction
     data object SourceUnavailable : CreatorAction
+    /** The network came back: retries the selected feed's failed request, and lets parked feeds that failed load again when shown. */
+    data object Reconnected : CreatorAction
     data class OpenResult(
         val index: Int,
         val scrollOffsetHint: Int = 0,
@@ -151,6 +160,7 @@ fun CreatorUiState.reduce(action: CreatorAction): CreatorTransition = when (acti
             beginRequest(CreatorRequestKind.PAGE)
         }
     }
+    CreatorAction.Reconnected -> reconnected()
     CreatorAction.SourceUnavailable -> CreatorTransition(
         failed(
             "Creator browsing is not available for ${creator?.source?.id?.lowercase()}.",
@@ -168,6 +178,17 @@ fun CreatorUiState.reduce(action: CreatorAction): CreatorTransition = when (acti
         )
     }
     is CreatorAction.RequestCancelled -> cancelled(action)
+}
+
+private fun CreatorUiState.reconnected(): CreatorTransition {
+    if (creator == null || isRefreshing || isPaging) return unchanged()
+    val reset = copy(
+        parkedFeeds = parkedFeeds.mapValues { (_, feed) ->
+            if (feed.failureReason?.retriesOnReconnect == true) feed.copy(errorMessage = null, failureReason = null) else feed
+        },
+    )
+    if (errorMessage == null || failureReason?.retriesOnReconnect != true) return CreatorTransition(reset)
+    return reset.reduce(if (canLoadMore) CreatorAction.RetryPage else CreatorAction.Refresh)
 }
 
 private fun CreatorUiState.pageLoaded(action: CreatorAction.PageLoaded): CreatorTransition {

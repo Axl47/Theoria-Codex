@@ -362,7 +362,7 @@ class ViewerScreenImagePipelineTest {
     }
 
     @Test
-    fun `Hitomi overview prefers webp for non animated AVIF first media`() {
+    fun `overview prefers an equivalent webp copy over a remote AVIF on every source`() {
         val media = ImageRef(
             url = "https://a1.gold-usergeneratedcontent.net/current/1/hash.avif",
             localPath = null,
@@ -373,17 +373,18 @@ class ViewerScreenImagePipelineTest {
                 "https://1.gold-usergeneratedcontent.net/images/current/1/hash.jpg",
             ),
         )
-        val post = samplePost(
-            sourceKey = SourceKey.HITOMI,
-            preview = media,
-            full = media,
-            media = listOf(media),
-        )
+        for (source in listOf(SourceKey.HITOMI, SourceKey.GELBOORU)) {
+            val post = samplePost(sourceKey = source, preview = media, full = media, media = listOf(media))
 
-        assertEquals(
-            "https://w1.gold-usergeneratedcontent.net/current/1/hash.webp",
-            viewerMediaOverviewItems(post.toViewerPageState()).single().posterLocation,
-        )
+            assertEquals(
+                "https://w1.gold-usergeneratedcontent.net/current/1/hash.webp",
+                viewerMediaOverviewItems(post.toViewerPageState()).single().posterLocation,
+            )
+        }
+        val saved = media.copy(localPath = "/saved/hash.avif")
+        val savedPost = samplePost(sourceKey = SourceKey.HITOMI, preview = saved, full = saved, media = listOf(saved))
+        val savedItem = viewerMediaOverviewItems(savedPost.toViewerPageState()).single()
+        assertEquals("/saved/hash.avif", savedItem.posterLocation)
     }
 
     @Test

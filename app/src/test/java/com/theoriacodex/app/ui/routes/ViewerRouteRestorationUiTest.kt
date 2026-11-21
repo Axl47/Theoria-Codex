@@ -77,6 +77,30 @@ class ViewerRouteRestorationUiTest {
         }
     }
 
+    @Test fun `media recovery begun before the lookup finished cannot replace its resolved post`() {
+        val owner = testViewerOwner(SavedStateHandle())
+        val recovery = CompletableDeferred<com.theoriacodex.domain.model.Post?>()
+        var recoveryRequested = false
+        val pages = listOf(1, 2).map { ImageRef(null, "/nonexistent/page-$it.jpg", "image/jpeg") }
+        val resolved = post.copy(full = pages.first(), media = pages, mediaCount = pages.size)
+        withRoute(liveOwner = owner, onRecoverMedia = { recoveryRequested = true; recovery.await() }) {
+            compose.runOnIdle {
+                val identity = requireNotNull(owner.state.value.session)
+                val key = requireNotNull(owner.state.value.currentMedia).key
+                owner.onAction(ViewerAction.MediaFailed(identity, ViewerMediaError.Recoverable(key, "Network")))
+                owner.onAction(ViewerAction.RetryMedia)
+            }
+            compose.waitUntil { recoveryRequested }
+            compose.runOnIdle {
+                owner.applyResolvedPost(resolved)
+                val refreshed = ImageRef("https://example.com/refreshed.jpg", null, "image/jpeg")
+                recovery.complete(post.copy(preview = refreshed))
+            }
+            compose.waitForIdle()
+            assertEquals(pages, owner.state.value.pages.single().post.media)
+        }
+    }
+
     @Test fun `Search exit keeps presentation without restoration UI`() {
         var wentToSearch = false
         withRoute(onGoToSearch = { wentToSearch = true }) {
@@ -218,7 +242,7 @@ class ViewerRouteRestorationUiTest {
                         effectCallbacks = ViewerRouteEffectCallbacks(
                             onSavePost = { _, _ -> }, onDownloadMedia = {}, onToggleLike = {},
                             onOpenCreatorProfile = {}, onApplyTag = { _, _, _ -> },
-                            onRecoverMedia = { _, _, _ -> onRecoverMedia() }, onLoadMore = {},
+                            onRecoverMedia = { _, _, _, _ -> onRecoverMedia() }, onLoadMore = {},
                             onDismiss = onDismiss, onRestorationUnavailable = {},
                         ),
                         screenCallbacks = ViewerScreenCallbacks(

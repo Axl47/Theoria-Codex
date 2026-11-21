@@ -5,6 +5,7 @@ import com.theoriacodex.app.statistics.statisticsCodexId
 import com.theoriacodex.app.statistics.statisticsPostKey
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.di.SourceDependencies
+import com.theoriacodex.app.media.OfflineMediaCoordinator
 import com.theoriacodex.app.media.recoverRemoteMedia
 import com.theoriacodex.app.related.ViewerFeedOwner
 import com.theoriacodex.app.statistics.statisticsTagsForPost
@@ -47,12 +48,11 @@ internal class ViewerRouteWorkflow(
     private val sources: SourceDependencies,
     /** The live feed a Viewer stream pages through, or null for a stream no feed owns. */
     private val feedOwner: (ViewerStreamSource) -> ViewerFeedOwner?,
-    private val offlineMedia: com.theoriacodex.app.media.OfflineMediaCoordinator? = null,
+    private val offlineMedia: OfflineMediaCoordinator,
     private val providerDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewerPostResolver {
-    override fun requiresResolution(post: Post): Boolean = offlineMedia?.store?.let { store ->
-        post.id in store.snapshot.value.availablePostIds && !store.hasOfflineLocations(post)
-    } == true
+    override fun requiresResolution(post: Post): Boolean =
+        post.id in offlineMedia.store.snapshot.value.availablePostIds && !offlineMedia.store.hasOfflineLocations(post)
 
     override suspend fun resolve(session: ViewerSessionIdentity, postId: PostId): Post? {
         val source = ViewerStreamSource.entries.firstOrNull { it.name == session.streamKey } ?: ViewerStreamSource.SEARCH
@@ -60,7 +60,7 @@ internal class ViewerRouteWorkflow(
     }
 
     suspend fun persistResolvedPost(resolvedPost: Post, streamSource: ViewerStreamSource) {
-        val post = offlineMedia?.withoutOfflineLocations(resolvedPost) ?: resolvedPost
+        val post = offlineMedia.withoutOfflineLocations(resolvedPost)
         val feed = feedOwner(streamSource)
         when {
             feed != null -> feed.rememberResolvedPost(post)
@@ -76,7 +76,7 @@ internal class ViewerRouteWorkflow(
     }
 
     suspend fun resolvePost(postId: PostId, streamSource: ViewerStreamSource): Post? {
-        offlineMedia?.find(postId)?.let { return it }
+        offlineMedia.find(postId)?.let { return it }
         val adapter = checkNotNull(sources.registry.adapterFor(postId.source)) {
             "${postId.source.displayName()} is unavailable"
         }
@@ -87,10 +87,12 @@ internal class ViewerRouteWorkflow(
         return resolved
     }
 
+    /** Recovers working media for [post]; a result that no longer [stillApplies] is dropped before anything records it. */
     suspend fun recoverMedia(
         post: Post,
         failedMedia: ImageRef,
         streamSource: ViewerStreamSource,
+        stillApplies: () -> Boolean = { true },
     ): Post? {
         val recovered = try {
             withContext(providerDispatcher) { recoverRemoteMedia(sources.registry, post, failedMedia) }
@@ -99,6 +101,7 @@ internal class ViewerRouteWorkflow(
         } catch (_: Exception) {
             null
         } ?: return null
+        if (!stillApplies()) return null
         persistResolvedPost(recovered, streamSource)
         return recovered
     }
@@ -113,14 +116,14 @@ internal class ViewerRouteWorkflow(
         posts: List<Post>,
         context: ViewerLaunchContext,
     ): List<Post> {
-        val offlineIds = offlineMedia?.store?.snapshot?.value?.availablePostIds.orEmpty()
+        val offlineIds = offlineMedia.store.snapshot.value.availablePostIds
         val selected = context.startIndex.coerceIn(0, posts.lastIndex.coerceAtLeast(0))
         // Normalizing every gallery can traverse thousands of media refs before navigation.
         val availablePosts = withContext(providerDispatcher) {
             posts.mapIndexed { index, post ->
                 currentCoroutineContext().ensureActive()
-                val portable = offlineMedia?.withoutOfflineLocations(post) ?: post
-                if (index in selected..selected + 1 && post.id in offlineIds) offlineMedia?.find(post.id) ?: portable else portable
+                val portable = offlineMedia.withoutOfflineLocations(post)
+                if (index in selected..selected + 1 && post.id in offlineIds) offlineMedia.find(post.id) ?: portable else portable
             }
         }
         return prepareViewerPostsForLaunch(availablePosts, context) { selectedPost ->
@@ -153,7 +156,7 @@ internal class ViewerRouteWorkflow(
         val orderedIds = request.orderedPostIds.ifEmpty { listOf(selectedId) }.distinct()
         val restored = linkedMapOf<PostId, Post>()
         for (postId in orderedIds) {
-            val post = data.codexRepository.getPost(postId) ?: recentPosts[postId] ?: offlineMedia?.find(postId)
+            val post = data.codexRepository.getPost(postId) ?: recentPosts[postId] ?: offlineMedia.find(postId)
             if (post != null) restored[postId] = post
         }
         val selected = restored[selectedId]
@@ -214,7 +217,7 @@ internal class ViewerRouteWorkflow(
 
     /** Finds a post offline or on its site, giving up after 15 seconds; unlike [resolvePost] it records nothing. */
     suspend fun resolvePostWithoutSaving(postId: PostId): Post? = withTimeoutOrNull(15_000L) {
-        offlineMedia?.find(postId)
+        offlineMedia.find(postId)
             ?: runCatchingPreservingCancellation {
                 withContext(providerDispatcher) {
                     sources.registry.adapterFor(postId.source)?.let { adapter ->
@@ -246,7 +249,7 @@ internal class ViewerRouteWorkflow(
             )
         }
         data.recentsRepository.recordWatchedPost(
-            post = offlineMedia?.withoutOfflineLocations(post) ?: post,
+            post = offlineMedia.withoutOfflineLocations(post),
             origin = origin,
             originQueryHash = session?.context?.queryHash,
             section = recentPostSectionForViewer(session?.context),
@@ -264,7 +267,7 @@ internal class ViewerRouteWorkflow(
         runCatchingPreservingCancellation {
             data.recentsRepository.recordWatchedMediaProgress(
                 // This callback can create the membership before the visible-post write completes.
-                post = offlineMedia?.withoutOfflineLocations(post) ?: post,
+                post = offlineMedia.withoutOfflineLocations(post),
                 origin = origin,
                 originQueryHash = session?.context?.queryHash,
                 section = recentPostSectionForViewer(session?.context),

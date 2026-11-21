@@ -68,6 +68,11 @@ data class Post(
     val creatorProfile: CreatorProfile? = null,
     val durationMs: Long? = null,
     val mediaCount: Int? = null,
+    /**
+     * The listing is a multi-page gallery that names neither its pages nor how many there are; they arrive with the
+     * post's lookup. A listing that knows its length sets [mediaCount] instead.
+     */
+    val galleryLengthUnknown: Boolean = false,
     val taxonomy: List<PostTaxonomyTerm> = canonicalTags.map { value ->
         PostTaxonomyTerm(value = value)
     },
@@ -144,3 +149,14 @@ fun Iterable<Post>.distinctByFile(): List<Post> {
 }
 
 private const val MD5_HEX_LENGTH = 32
+
+/**
+ * Marks an nhentai or Hitomi listing with no pages, cover or count as the gallery of unknown length it is, for posts that
+ * arrive without the flag: records saved before it existed, and Codex shares, which don't carry it. The Viewer once
+ * recognized these by their source; current listings of that shape set the flag themselves.
+ */
+fun Post.withInferredGalleryLength(): Post {
+    val sparseGallery = (id.source == SourceKey.NHENTAI || id.source == SourceKey.HITOMI) &&
+        media.isEmpty() && full == null && mediaCount == null
+    return if (sparseGallery && !galleryLengthUnknown) copy(galleryLengthUnknown = true) else this
+}

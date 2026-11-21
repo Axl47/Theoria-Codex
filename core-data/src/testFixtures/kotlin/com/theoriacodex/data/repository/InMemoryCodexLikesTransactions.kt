@@ -71,6 +71,7 @@ class InMemoryCodexLikesTransactions(
         tags: List<String>,
         eligibleAutomaticCodexIds: Set<String>,
     ): CodexLikeSyncResult {
+        if (CodexLikesPolicy.normalizeProfileId(profileId).isBlank()) return CodexLikeSyncResult(nowLiked = false, membershipChanged = false)
         val codex = codices.ensureCodex(systemCodexId, systemCodexName)
         val before = codices.observeCodexItems(codex.codexId).first().any { it.postId == post.id }
         val automaticMembershipsBefore = eligibleAutomaticCodexIds.associateWith { automaticCodexId ->

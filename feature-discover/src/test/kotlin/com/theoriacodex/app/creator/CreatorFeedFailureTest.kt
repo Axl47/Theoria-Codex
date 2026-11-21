@@ -1,5 +1,6 @@
 package com.theoriacodex.app.creator
 
+import com.theoriacodex.app.ui.components.FeedMarks
 import com.theoriacodex.app.related.testRelatedShelf
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
@@ -35,8 +36,7 @@ class CreatorFeedFailureTest {
                             errorMessage = "Pixiv could not be reached.",
                         ),
                         related = testRelatedShelf(),
-                        likedPostIds = emptySet(),
-                        savedPostIds = emptySet(),
+                        marks = FeedMarks.NONE,
                         onToggleLike = {},
                         onAction = {},
                         onRequestSaveToCodex = {},
@@ -47,8 +47,7 @@ class CreatorFeedFailureTest {
             }
         }
         compose.onNodeWithText("You're offline").assertIsDisplayed()
-        // Creator pages do not retry on reconnect, so the tile keeps the failure rather than promise one.
-        compose.onNodeWithText("Pixiv could not be reached.").assertIsDisplayed()
+        compose.onNodeWithText("This feed will retry when you reconnect.").assertIsDisplayed()
         compose.onNodeWithText("Retry").assertIsDisplayed()
     }
 }

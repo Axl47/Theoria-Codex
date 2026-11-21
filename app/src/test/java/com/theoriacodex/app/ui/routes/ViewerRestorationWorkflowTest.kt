@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.SavedStateHandle
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.app.fixtures.JourneyAppContainer
+import com.theoriacodex.app.media.OfflineMediaCoordinator
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.viewer.ViewerRestorationRequest
 import com.theoriacodex.app.viewer.ViewerSession
@@ -11,6 +12,7 @@ import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.testViewerOwner
 import com.theoriacodex.data.repository.FileBackedReadingPositionRepository
+import com.theoriacodex.data.repository.OfflineMediaStore
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
@@ -159,9 +161,15 @@ class ViewerRestorationWorkflowTest {
         )
         try {
             graph.awaitReady()
+            // The store reads on the test scheduler, so restoration's lookup timeout runs on the same clock as the
+            // read; on the graph's real IO dispatcher the virtual 15 s timeout fires before the read returns.
+            val offlineMedia = OfflineMediaCoordinator(
+                OfflineMediaStore(temporary.newFolder(), StandardTestDispatcher(testScheduler)), backgroundScope,
+                { it }, { emptyList() }, { _, _, _ -> error("Restoration never saves media offline") },
+            )
             val workflow = ViewerRouteWorkflow(
                 graph.data.copy(readingPositions = FileBackedReadingPositionRepository(graph.data.storageDirectory)),
-                this, graph.sources, { null },
+                this, graph.sources, { null }, offlineMedia,
                 providerDispatcher = StandardTestDispatcher(testScheduler),
             )
             block(graph, workflow)

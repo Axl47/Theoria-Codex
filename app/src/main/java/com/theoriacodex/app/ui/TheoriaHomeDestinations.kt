@@ -114,13 +114,10 @@ private fun SearchDestination(shell: TheoriaShell) {
 
 private fun searchRouteConfig(shell: TheoriaShell, state: BrowsingDestinationState) = SearchRouteConfig(
     savedSearches = shell.savedSearches,
-    pendingLikePostIds = shell.pendingLikePostIds[state.activeProfile.profileId].orEmpty(),
+    marks = state.feedMarks(shell.pendingLikePostIds[state.activeProfile.profileId].orEmpty()),
     settings = state.settings,
     availableSources = state.availableSources,
     creatorBrowsingSources = state.creatorBrowsingSources,
-    likedPostIds = state.likedPostIds,
-    savedPostIds = state.savedPostIds,
-    watchedPostIds = state.watchedPostIds,
     favoriteTags = state.favoriteTags,
     resolveUnknownAnimatedDurations = state.settings.contentFilters.resolveUnknownAnimatedDurations,
 )

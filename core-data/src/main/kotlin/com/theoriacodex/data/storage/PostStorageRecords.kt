@@ -8,6 +8,7 @@ import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.VideoVariant
 import com.theoriacodex.domain.model.contentHashOrNull
+import com.theoriacodex.domain.model.withInferredGalleryLength
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.withRecoveredPixivTranslations
 import kotlinx.serialization.SerialName
@@ -81,6 +82,9 @@ data class PostStorageRecord(
     val durationMs: Long? = null,
     @SerialName("mediaCount")
     val mediaCount: Int? = null,
+    // Written only when set, so records of every other post keep their exact stored form.
+    @SerialName("galleryLengthUnknown")
+    val galleryLengthUnknown: Boolean? = null,
     @SerialName("taxonomy")
     val taxonomy: List<PostTaxonomyTermStorageRecord?>? = null,
     @SerialName("creatorProfiles")
@@ -189,6 +193,7 @@ object PostStorageCodec {
             creatorProfile = post.creatorProfile?.let(::encodeCreatorProfile),
             durationMs = post.durationMs,
             mediaCount = post.mediaCount,
+            galleryLengthUnknown = post.galleryLengthUnknown.takeIf { it },
             taxonomy = post.taxonomy.map(::encodeTaxonomyTerm),
             creatorProfiles = post.creatorProfiles.map(::encodeCreatorProfile),
             contentHash = post.contentHash,
@@ -245,6 +250,7 @@ object PostStorageCodec {
             creatorProfile = creator,
             durationMs = record.durationMs,
             mediaCount = record.mediaCount,
+            galleryLengthUnknown = record.galleryLengthUnknown == true,
             taxonomy = record.taxonomy
                 ?.mapNotNull { stored -> stored?.toDomainOrNull() }
                 ?: canonicalTags.map { value -> PostTaxonomyTerm(value = value) },
@@ -252,7 +258,7 @@ object PostStorageCodec {
                 ?.mapNotNull { stored -> stored?.toDomainOrNull() }
                 ?: listOfNotNull(creator),
             contentHash = contentHashOrNull(record.contentHash),
-        ).withRecoveredPixivTranslations()
+        ).withRecoveredPixivTranslations().withInferredGalleryLength()
     }
 
     private fun encodeImageRef(ref: ImageRef): ImageRefStorageRecord {

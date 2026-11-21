@@ -126,10 +126,21 @@ class InMemoryCodexRepository : CodexRepository {
     }
 
     suspend fun deleteCodex(codexId: String) {
-        mutex.withLock {
-            codices.value = codices.value.filterNot { it.codexId == codexId }
-            itemsByCodex.value = itemsByCodex.value - codexId
-        }
+        mutex.withLock { removeCodex(codexId) }
+    }
+
+    /** Drops [codexId] and its memberships, then the posts that leaves in no collection, as the durable store does. */
+    private fun removeCodex(codexId: String) {
+        val removed = itemsByCodex.value[codexId].orEmpty().map(CodexItem::postId)
+        codices.value = codices.value.filterNot { it.codexId == codexId }
+        itemsByCodex.value = itemsByCodex.value - codexId
+        releaseOrphanedPosts(removed)
+    }
+
+    /** The durable store keeps a post only while a collection, like or Recents row holds it; this fake models collections. */
+    private fun releaseOrphanedPosts(candidates: Collection<PostId>) {
+        val held = itemsByCodex.value.values.flatMapTo(mutableSetOf()) { items -> items.map(CodexItem::postId) }
+        postsById.value = postsById.value - (candidates.toSet() - held)
     }
 
     override suspend fun deleteCodexForUndo(codexId: String): DeletedCodexSnapshot? = mutex.withLock {
@@ -137,16 +148,18 @@ class InMemoryCodexRepository : CodexRepository {
         if (position < 0) return@withLock null
         val items = itemsByCodex.value[codexId].orEmpty()
         val snapshot = DeletedCodexSnapshot(codices.value[position], position, items, items.mapNotNull { postsById.value[it.postId] })
-        codices.value = codices.value.filterNot { it.codexId == codexId }
-        itemsByCodex.value = itemsByCodex.value - codexId
+        removeCodex(codexId)
         snapshot
     }
 
     override suspend fun restoreDeletedCodex(snapshot: DeletedCodexSnapshot) {
         mutex.withLock {
-            if (codices.value.none { it.codexId == snapshot.codex.codexId }) {
-                codices.value = codices.value.toMutableList().apply {
-                    add(snapshot.position.coerceAtMost(size), snapshot.codex)
+            val current = codices.value
+            if (current.none { it.codexId == snapshot.codex.codexId }) {
+                // A Codex created under this name during the Undo window keeps it; this one gets a free one.
+                val name = CodexLikesPolicy.resolveUniqueCodexName(snapshot.codex.name, current)
+                codices.value = current.toMutableList().apply {
+                    add(snapshot.position.coerceAtMost(size), snapshot.codex.copy(name = name))
                 }
             }
         }
@@ -216,10 +229,11 @@ class InMemoryCodexRepository : CodexRepository {
     override suspend fun removeItems(codexId: String, postIds: Set<PostId>) {
         if (postIds.isEmpty()) return
         mutex.withLock {
-            val existing = itemsByCodex.value[codexId].orEmpty()
+            val existing = itemsByCodex.value[codexId] ?: return@withLock
             itemsByCodex.value = itemsByCodex.value + (
                 codexId to existing.filterNot { item -> item.postId in postIds }
             )
+            releaseOrphanedPosts(postIds)
         }
     }
 

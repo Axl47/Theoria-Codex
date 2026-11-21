@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.ui.components.FeedMarks
 import com.theoriacodex.app.ui.components.feedDurations
 import com.theoriacodex.app.ui.LocalNetworkOnline
 import com.theoriacodex.data.repository.RecentSearchEntry
@@ -44,10 +45,7 @@ internal data class SearchRouteConfig(
     val availableSources: Set<SourceKey>,
     val savedSearches: List<SavedSearchEntry> = emptyList(),
     val creatorBrowsingSources: Set<SourceKey>,
-    val likedPostIds: Set<PostId>,
-    val pendingLikePostIds: Set<PostId> = emptySet(),
-    val savedPostIds: Set<PostId>,
-    val watchedPostIds: Set<PostId>,
+    val marks: FeedMarks,
     val favoriteTags: List<FavoriteTagEntry>,
     val resolveUnknownAnimatedDurations: Boolean,
 )
@@ -215,10 +213,7 @@ private fun SearchRouteContent(
         resolvePostById = resolvePostById,
         recoverPostMedia = coordinator::recoverPostMedia,
         pixivUgoiraClient = pixivUgoiraClient,
-        likedPostIds = config.likedPostIds,
-        pendingLikePostIds = config.pendingLikePostIds,
-        savedPostIds = config.savedPostIds,
-        watchedPostIds = config.watchedPostIds,
+        marks = config.marks,
         favoriteTags = config.favoriteTags,
         durations = duration.owner.feedDurations(duration.states, config.resolveUnknownAnimatedDurations),
         onToggleLike = callbacks.onToggleLike,

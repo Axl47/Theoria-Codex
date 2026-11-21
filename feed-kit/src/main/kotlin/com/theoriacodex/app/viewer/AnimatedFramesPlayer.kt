@@ -23,11 +23,7 @@ class AnimatedFrames internal constructor(val durationMs: Long) {
  * Plays a decoded frame sequence of [durationMs] on [controls]: reports its duration and readiness once, advances at
  * the chosen rate and loop mode while active and playing, rewinds on a restart, and applies seek jumps. A change in
  * [keys] (the loaded animation) starts a new clock at 0. [availableUntilMs] holds playback at the end of the frames
- * decoded so far.
- *
- * [rewindWhenInactive] also rewinds whenever the media is not active, so it starts from its first frame when it comes
- * back. Ugoira (cards and Viewer) has rewound this way since it moved onto this clock; the Viewer's GIF keeps its
- * place across swipes.
+ * decoded so far. Inactive media pauses where it is, so a swipe away and back resumes it.
  */
 @Composable
 fun rememberAnimatedFrames(
@@ -36,7 +32,6 @@ fun rememberAnimatedFrames(
     controls: ViewerRendererControls,
     events: ViewerRendererEvents,
     availableUntilMs: Long = Long.MAX_VALUE,
-    rewindWhenInactive: Boolean = false,
 ): AnimatedFrames {
     val frames = remember(*keys, durationMs) { AnimatedFrames(durationMs) }
     LaunchedEffect(frames) { events.onDurationKnown(durationMs) }
@@ -48,8 +43,6 @@ fun rememberAnimatedFrames(
         controls.loopPlayback, events.onPlaybackCompleted, availableUntilMs,
     )
     LaunchedEffect(frames, controls.restartRequest) { if (controls.restartRequest > 0L) frames.playback.seekTo(0L) }
-    val rewind = rewindWhenInactive && !controls.isActive
-    LaunchedEffect(frames, rewind) { if (rewind) frames.playback.seekTo(0L) }
     ViewerSeekJumps(controls.seekJumpSerial, controls.seekJumpDeltaMs, { controls.isActive && !frames.scrubbing }) {
         frames.playback.seekTo(frames.positionMs + it)
     }

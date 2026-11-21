@@ -60,7 +60,22 @@ internal class OfflineManifestGoldenTest : FileBackedRepositoryTestFixture() {
             golden("v3.json").replace(GENERATION, generation) to OfflineManifest(
                 3, PostStorageCodec.encode(offline), PostStorageCodec.encode(source), listOf("codex:a", "codex:b"), listOf(5L, 5L),
             ),
+            // kotlinx-gallery.json: a listed gallery whose length is unknown, the only post that writes that flag.
+            golden("kotlinx-gallery.json") to galleryManifest(),
         )
+    }
+
+    private fun galleryManifest(): OfflineManifest {
+        val gallery = PostStorageCodec.encode(
+            Post(
+                id = PostId(SourceKey.NHENTAI, "7"),
+                preview = ImageRef("https://example.test/7-thumb.jpg", null, "image/jpeg"),
+                full = null, media = emptyList(), pageUrl = "https://example.test/g/7", width = null, height = null,
+                canonicalTags = emptyList(), rawTags = emptyList(), authorName = null, createdAtEpochMs = null,
+                title = "Gallery", galleryLengthUnknown = true,
+            ),
+        )
+        return OfflineManifest(3, gallery, gallery, listOf("codex:a"), emptyList())
     }
 
     private fun fullManifest(): OfflineManifest {

@@ -129,6 +129,18 @@ class CodexShareModelsTest {
     }
 
     @Test
+    fun `a shared gallery listing with no pages reads as a gallery of unknown length`() {
+        fun restored(source: String) = codexSharePostSnapshot(
+            parseCodexShareFile(
+                """{"version": 2, "posts": [{"source": "$source", "sourcePostId": "1", "snapshot": {"preview": {"url": "https://example.com/t.webp"}}}]}""",
+            )!!.posts!!.single(),
+        )!!
+
+        assertTrue(restored("nhentai").galleryLengthUnknown)
+        assertFalse(restored("gelbooru").galleryLengthUnknown)
+    }
+
+    @Test
     fun `malformed optional snapshot values are dropped without losing the v1 id`() {
         val parsed = parseCodexShareFile(
             malformedSnapshotJson(),

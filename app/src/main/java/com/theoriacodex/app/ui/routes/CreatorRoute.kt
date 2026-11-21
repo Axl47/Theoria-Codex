@@ -18,10 +18,11 @@ import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.creator.state.CreatorAction
 import com.theoriacodex.app.creator.state.CreatorEffect
 import com.theoriacodex.app.creator.state.CreatorUiState
+import com.theoriacodex.app.ui.LocalNetworkOnline
+import com.theoriacodex.app.ui.components.FeedMarks
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
-import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.data.repository.FeedFabRestoreState
 
@@ -30,9 +31,7 @@ internal data class CreatorRouteConfig(
     val activeCreator: CreatorProfile?,
     val followed: Boolean = false,
     val availableSources: Set<SourceKey>,
-    val likedPostIds: Set<PostId>,
-    val pendingLikePostIds: Set<PostId> = emptySet(),
-    val savedPostIds: Set<PostId>,
+    val marks: FeedMarks,
     val resolveUnknownAnimatedDurations: Boolean,
 )
 
@@ -61,7 +60,7 @@ internal fun CreatorRoute(
     onOwnerAvailable: (CreatorProfileViewModel) -> Unit = {},
 ) {
     val owner = viewModel<CreatorProfileViewModel>(
-        factory = CreatorProfileViewModel.factory(coordinator, relatedPostsLoader),
+        factory = CreatorProfileViewModel.factory(coordinator, relatedPostsLoader, LocalNetworkOnline.current),
     )
     val state by owner.state.collectAsStateWithLifecycle()
     val durationPosts = remember(state.results, state.relatedPosts) {
@@ -121,9 +120,7 @@ private fun CreatorRouteContent(
         followed = config.followed,
         onToggleFollow = { state.creator?.let { callbacks.onToggleFollow(it, state.uploads) } },
         state = state,
-        likedPostIds = config.likedPostIds,
-        pendingLikePostIds = config.pendingLikePostIds,
-        savedPostIds = config.savedPostIds,
+        marks = config.marks,
         pixivUgoiraClient = pixivUgoiraClient,
         durations = duration.owner.feedDurations(duration.states, config.resolveUnknownAnimatedDurations),
         resolvePostById = owner::resolvePost,

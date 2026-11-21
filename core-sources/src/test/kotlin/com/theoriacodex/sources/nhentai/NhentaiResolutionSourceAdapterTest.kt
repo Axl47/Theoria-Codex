@@ -110,6 +110,8 @@ internal class NhentaiResolutionSourceAdapterTest : NhentaiSourceAdapterTestFixt
         assertEquals("https://t.nhentai.net/galleries/3962373/thumb.webp", post.preview.url)
         assertNull(post.full)
         assertTrue(post.media.isEmpty())
+        assertNull(post.mediaCount)
+        assertTrue(post.galleryLengthUnknown)
     }
 
     @Test

@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -24,6 +25,9 @@ abstract class LibraryRepositoryContract {
 
     /** The transactions over [repository]'s data. */
     protected abstract fun transactionsFor(repository: CodexRepository): CodexLikesTransactions
+
+    /** The Likes [transactions] write, read back through the repository interface. */
+    protected abstract fun likesFor(transactions: CodexLikesTransactions): LikesRepository
 
     /** A Recents repository keeping at most [watchedLimit] watched rows and [searchLimit] searches, the app's limits by default. */
     protected abstract fun createRecentsRepository(
@@ -471,6 +475,125 @@ abstract class LibraryRepositoryContract {
             3,
             entries.single { it.section == RecentPostSection.CODEX }.maxViewedMediaNumber,
         )
+    }
+
+    @Test
+    fun `removing items drops memberships and releases posts no collection holds`() = runTest {
+        val repository = createCodexRepository()
+        val first = repository.createCodex("First")
+        val second = repository.createCodex("Second")
+        val solo = repositoryTestPost("solo")
+        val shared = repositoryTestPost("shared")
+        repository.addItems(first.codexId, listOf(solo, shared))
+        repository.addItem(second.codexId, shared)
+
+        repository.removeItems(first.codexId, emptySet())
+        repository.removeItems("missing", setOf(shared.id))
+        assertEquals(2, repository.observeCodexItems(first.codexId).first().size)
+        repository.removeItems(first.codexId, setOf(solo.id, shared.id, repositoryTestPost("absent").id))
+
+        assertTrue(repository.observeCodexItems(first.codexId).first().isEmpty())
+        assertEquals(listOf(shared.id), repository.observeCodexItems(second.codexId).first().map { it.postId })
+        assertNull(repository.getPost(solo.id))
+        assertEquals(shared, repository.getPost(shared.id))
+        assertEquals(setOf(shared.id), repository.observeSavedPostIds(setOf(first.codexId, second.codexId)).first())
+    }
+
+    @Test
+    fun `a deleted codex restores in place with its tags, items and posts, and restoring again changes nothing`() = runTest {
+        val repository = createCodexRepository()
+        val first = repository.createCodex("First")
+        val middle = repository.createCodex("Middle")
+        val last = repository.createCodex("Last")
+        repository.setAutomaticTag(middle.codexId, CodexAutomaticTag(SourceKey.PIXIV, "landscape"), enabled = true)
+        val post = repositoryTestPost("kept")
+        repository.addItem(middle.codexId, post)
+
+        val snapshot = checkNotNull(repository.deleteCodexForUndo(middle.codexId))
+        assertEquals(listOf(first.codexId, last.codexId), repository.observeCodices().first().map { it.codexId })
+        assertNull(repository.getPost(post.id))
+        assertNull(repository.deleteCodexForUndo(middle.codexId))
+
+        repository.restoreDeletedCodex(snapshot)
+        repository.restoreDeletedCodex(snapshot)
+
+        assertEquals(
+            listOf(first.codexId, middle.codexId, last.codexId),
+            repository.observeCodices().first().map { it.codexId },
+        )
+        assertEquals(snapshot.codex, repository.observeCodex(middle.codexId).first())
+        assertEquals(snapshot.items, repository.observeCodexItems(middle.codexId).first())
+        assertEquals(listOf(post), repository.observeCodexPosts(middle.codexId, CodexSortMode.NEWEST_SAVED).first())
+    }
+
+    @Test
+    fun `a deleted codex restores under a free name when another took its name meanwhile`() = runTest {
+        val repository = createCodexRepository()
+        val original = repository.createCodex("Trips")
+        val snapshot = checkNotNull(repository.deleteCodexForUndo(original.codexId))
+        val replacement = repository.createCodex("Trips")
+
+        repository.restoreDeletedCodex(snapshot)
+
+        val names = repository.observeCodices().first().associate { codex -> codex.codexId to codex.name }
+        assertEquals("Trips", names[replacement.codexId])
+        assertEquals("Trips 2", names[original.codexId])
+    }
+
+    @Test
+    fun `a like is profile scoped, normalizes its tags and moves its system codex membership with it`() = runTest {
+        val repository = createCodexRepository()
+        val transactions = transactionsFor(repository)
+        val likes = likesFor(transactions)
+        val post = repositoryTestPost("liked")
+        suspend fun toggle(profileId: String, tags: List<String> = emptyList()) =
+            transactions.toggleLikeAndSyncSystemCodex(profileId, "system_likes_codex", "Likes", post, tags)
+
+        assertEquals(CodexLikeSyncResult(nowLiked = false, membershipChanged = false), toggle("  "))
+        assertTrue(repository.observeCodices().first().isEmpty())
+
+        assertEquals(CodexLikeSyncResult(nowLiked = true, membershipChanged = true), toggle(" main ", listOf(" Tag ", "tag", "Other")))
+        assertEquals(listOf("Tag", "Other"), likes.observeLikes("main").first().single().tags)
+        assertEquals(setOf(post.id), likes.observeLikedPostIds("main").first())
+        assertTrue(likes.observeLikedPostIds("other").first().isEmpty())
+        assertEquals(listOf(post), repository.observeCodexPosts("system_likes_codex", CodexSortMode.NEWEST_SAVED).first())
+
+        assertEquals(CodexLikeSyncResult(nowLiked = false, membershipChanged = true), toggle("main"))
+        assertTrue(likes.observeLikes("main").first().isEmpty())
+        assertTrue(repository.observeCodexItems("system_likes_codex").first().isEmpty())
+        assertNull(repository.getPost(post.id))
+    }
+
+    @Test
+    fun `clearing likes removes only liked memberships of that profile and can be undone`() = runTest {
+        val repository = createCodexRepository()
+        val transactions = transactionsFor(repository)
+        val likes = likesFor(transactions)
+        val liked = repositoryTestPost("liked")
+        val saved = repositoryTestPost("saved")
+        val others = repositoryTestPost("others")
+        transactions.toggleLikeAndSyncSystemCodex("main", "system_likes_codex", "Likes", liked, emptyList())
+        transactions.toggleLikeAndSyncSystemCodex("other", "system_likes_other", "Likes other", others, emptyList())
+        repository.addItem("system_likes_codex", saved)
+
+        val cleared = transactions.clearLikesAndLikedMemberships("main", "system_likes_codex")
+
+        assertEquals(1, cleared.clearedLikes)
+        assertEquals(1, cleared.removedMemberships)
+        assertTrue(likes.observeLikedPostIds("main").first().isEmpty())
+        assertEquals(setOf(others.id), likes.observeLikedPostIds("other").first())
+        assertEquals(listOf(saved.id), repository.observeCodexItems("system_likes_codex").first().map { it.postId })
+        assertNull(repository.getPost(liked.id))
+
+        transactions.restoreClearedLikes(checkNotNull(cleared.undo))
+
+        assertEquals(setOf(liked.id), likes.observeLikedPostIds("main").first())
+        assertEquals(
+            setOf(liked.id, saved.id),
+            repository.observeCodexItems("system_likes_codex").first().mapTo(mutableSetOf()) { it.postId },
+        )
+        assertEquals(liked, repository.getPost(liked.id))
+        assertNull(transactions.clearLikesAndLikedMemberships("nobody", "system_likes_codex").undo)
     }
 
     private fun sampleQuery(includeTags: List<String> = listOf("landscape")): Query {
