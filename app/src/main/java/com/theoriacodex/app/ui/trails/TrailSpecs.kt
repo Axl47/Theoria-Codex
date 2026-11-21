@@ -49,13 +49,19 @@ internal fun trailTagQuery(tag: String, source: SourceKey, context: Query?): Que
     minScore = null,
 )
 
-/** Pages [query] through the read-only saved-search loader, which records nothing in Search, Recents or statistics. */
+/**
+ * Pages [query] through the read-only saved-search loader, which records nothing in Search, Recents or statistics. A page
+ * that failed throws, so the feed keeps its posts and can ask again, and the next call retries what failed.
+ */
 internal fun tagTrailPager(loader: SavedSearchFeedLoader, query: Query): TrailPager {
     val entry = SavedSearchEntry("trail", "trail", RecentSearchEntry(query, "trail", 0L), 0L)
     var branch = SavedSearchBranch(entry, listOf(SavedSearchQueryBranch(query, SearchSourceScope.fromQuery(query))))
+    var failed = false
     return TrailPager {
-        branch = loader.load(branch, retry = false)
-        if (branch.posts.isEmpty()) branch.error?.let(::error)
+        branch = loader.load(branch, retry = failed)
+        // A request error stops the loader paging; a source failing while others page on does not.
+        failed = branch.requestError != null || branch.parts.any { it.requestError != null }
+        if (failed || branch.posts.isEmpty()) branch.error?.let(::error)
         TrailPage(branch.posts, branch.canLoadMore)
     }
 }
