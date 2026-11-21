@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.unit.IntOffset
 import androidx.navigation.NavBackStackEntry
+import com.theoriacodex.app.library.LibrarySection
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.ui.navigation.TriageRequest
 import com.theoriacodex.app.statistics.StatisticsUsageCategory
@@ -70,19 +71,24 @@ internal fun RecordCodexEntryEffect(entry: NavBackStackEntry, codexId: String, s
     }
 }
 
+/**
+ * What time on a screen counts as. Library keeps the meaning of the tabs it replaced: History browses
+ * like Recents did, Codices and Saved (once a Codex screen) count as Codex. Settings counts as nothing.
+ */
 internal fun statisticsUsageCategory(
     currentRoute: String?,
     homeTabRoute: String,
+    librarySection: LibrarySection,
 ): StatisticsUsageCategory? = when (currentRoute) {
     AppRoute.Viewer -> StatisticsUsageCategory.WATCHING
     AppRoute.CreatorProfile -> StatisticsUsageCategory.BROWSING
     AppRoute.CodexDetail -> StatisticsUsageCategory.CODEX
     AppRoute.Home -> when (homeTabRoute) {
         TopLevelDestination.Search.route,
-        TopLevelDestination.Recents.route,
         TopLevelDestination.ForYou.route,
         -> StatisticsUsageCategory.BROWSING
-        TopLevelDestination.Codex.route -> StatisticsUsageCategory.CODEX
+        TopLevelDestination.Library.route ->
+            if (librarySection == LibrarySection.History) StatisticsUsageCategory.BROWSING else StatisticsUsageCategory.CODEX
         else -> null
     }
     else -> null

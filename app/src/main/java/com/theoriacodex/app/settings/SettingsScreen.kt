@@ -64,7 +64,10 @@ import kotlinx.coroutines.launch
 
 private enum class SettingsSheet { PROFILE, SOURCE_MIX, PLAYBACK, CONTROLS }
 
-/** Settings hub: each row shows its current value; short choices use sheets, larger tasks use pages. */
+/**
+ * Settings hub: each row shows its current value; short choices use sheets, larger tasks use pages.
+ * Back on [closesFrom], the page Settings was opened at, calls [onClose]; on any other page it goes home.
+ */
 @Composable
 fun SettingsScreen(
     state: SettingsUiState,
@@ -76,8 +79,10 @@ fun SettingsScreen(
     statsActions: StatsActions = StatsActions(),
     diagnostics: SettingsDiagnosticsEntry? = null,
     storageTools: (@Composable () -> Unit)? = null,
+    onClose: () -> Unit = {},
+    closesFrom: SettingsPage = SettingsPage.HOME,
 ) {
-    val openHome = { onAction(SettingsAction.OpenPage(SettingsPage.HOME)) }
+    val openHome = { if (state.page == closesFrom) onClose() else onAction(SettingsAction.OpenPage(SettingsPage.HOME)) }
     val openPost = rememberPostOpener(statsActions.openPost)
     val scope = rememberCoroutineScope()
     val chooseStatsFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -90,7 +95,7 @@ fun SettingsScreen(
         label = "Settings page",
     ) { page ->
         when (page) {
-            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, searchSources, storageSummary, sites, diagnostics != null) {
+            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, searchSources, storageSummary, sites, diagnostics != null, onClose) {
                 chooseStatsFile.launch(arrayOf("application/json", "application/octet-stream", "text/plain"))
             }
             SettingsPage.SITES -> sites?.page?.invoke(
@@ -129,6 +134,7 @@ private fun SettingsHome(
     storageSummary: String?,
     sites: SettingsSitesEntry?,
     showDiagnostics: Boolean,
+    onClose: () -> Unit,
     onCompareStats: () -> Unit,
 ) {
     var sheet by rememberSaveable { mutableStateOf<SettingsSheet?>(null) }
@@ -136,7 +142,7 @@ private fun SettingsHome(
     var renameTarget by remember { mutableStateOf<RecommendationProfile?>(null) }
     val open = { page: SettingsPage -> onAction(SettingsAction.OpenPage(page)) }
     SettingsPageColumn {
-        SettingsHeader("Settings")
+        SettingsHeader("Settings", onBack = onClose)
         ProfileCard(state, onAction, onAdd = { showAddProfile = true }, onMenu = { sheet = SettingsSheet.PROFILE })
         SettingsGroup("Stats") {
             SettingsRow("Your stats", statsSummary(statistics), Icons.Default.BarChart, onClick = {

@@ -647,6 +647,14 @@ data class SearchAnimationFilterRestoreState(
 interface UiRestoreRepository {
     suspend fun setLastTab(route: String)
     suspend fun getLastTab(): String?
+
+    /** The Library tab's section, stored by name; null until one is chosen. */
+    suspend fun setLibrarySection(section: String)
+    suspend fun getLibrarySection(): String?
+
+    /** Saved searches' new-post marks; kept with UI state because they are device-local and disposable. */
+    fun observeSavedSearchNewPosts(): Flow<SavedSearchNewPosts>
+    suspend fun updateSavedSearchNewPosts(transform: (SavedSearchNewPosts) -> SavedSearchNewPosts)
     suspend fun setSearchScrollState(queryHash: String, state: SearchScrollState)
     suspend fun getSearchScrollState(queryHash: String): SearchScrollState?
     suspend fun setFeedFabRestoreState(contextKey: String, state: FeedFabRestoreState)

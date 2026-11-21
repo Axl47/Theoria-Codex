@@ -1,5 +1,6 @@
 package com.theoriacodex.app.journeys
 
+import com.theoriacodex.app.library.LibrarySection
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -142,7 +143,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         waitForCard(22)
         compose.onNodeWithTag(cardTag).assertIsDisplayed()
         assertEquals(before, cardOffsetInViewport(cardTag), 2f)
-        tab("Settings")
+        tab("Library")
         tab("Search")
         waitForCard(22)
         compose.onNodeWithTag(cardTag).assertIsDisplayed()
@@ -209,7 +210,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
                 "for_you:journey", RecentSearchKind.FYP, sourceTags.keys.toList(), sourceTags)
         }
         launch()
-        tab("Recents")
+        library(LibrarySection.History)
         openRecentsSection("Searches")
         activate(compose.onNodeWithTag("Recent search:journey:multi"))
         waitForCard(0)
@@ -218,7 +219,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         assertTrue(multiRequests.all { it.query.includeTags == listOf("multi") && it.query.sort == SortMode.POPULAR })
         assertTrue(io { container.data.queryRepository.observeAppliedQuery("unified").first() == null })
         container.registry.requests.clear()
-        tab("Recents")
+        library(LibrarySection.History)
         openRecentsSection("Searches")
         activate(compose.onNodeWithTag("Recent search:for_you:journey"))
         compose.waitUntil(10_000) { container.registry.requests.count { it.pageToken == null } >= 2 }

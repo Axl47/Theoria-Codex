@@ -1,5 +1,6 @@
 package com.theoriacodex.app.journeys
 
+import com.theoriacodex.app.library.LibrarySection
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -33,7 +34,7 @@ class SavedSearchJourneyTest : AppJourneyFixture() {
             container.data.recentsRepository.recordSearch(query, "pin-journey", RecentSearchKind.MULTI_SEARCH, participating)
         }
         launch()
-        tab("Recents")
+        library(LibrarySection.History)
         openRecentsSection("Searches")
         compose.onNodeWithTag("Recent search:pin-journey")
             .performSemanticsAction(SemanticsActions.OnLongClick) { it() }
@@ -49,7 +50,7 @@ class SavedSearchJourneyTest : AppJourneyFixture() {
         coldGraphRelaunch()
         assertEquals(listOf(savedSearch), io { container.data.savedSearches.observeSavedSearches().first() })
         assertTrue(io { container.data.recentsRepository.observeSearches().first().isEmpty() })
-        tab("Codex")
+        library(LibrarySection.Saved)
         activate(compose.onNodeWithText("Searches"))
         compose.waitUntil(10_000) { container.registry.requests.count { it.pageToken == null } >= 2 }
         val requests = container.registry.requests.filter { it.pageToken == null }

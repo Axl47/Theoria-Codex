@@ -1,5 +1,8 @@
 package com.theoriacodex.app.journeys
 
+import com.theoriacodex.app.library.LIBRARY_SETTINGS_TAG
+import com.theoriacodex.app.library.LibrarySection
+import com.theoriacodex.app.library.librarySectionTag
 import android.graphics.Bitmap
 import android.graphics.Color
 import androidx.compose.ui.geometry.Offset
@@ -133,6 +136,20 @@ abstract class AppJourneyFixture {
         compose.waitForIdle()
     }
 
+    /** Shows Library at [section]. */
+    protected fun library(section: LibrarySection) {
+        tab("Library")
+        activate(compose.onNodeWithTag(librarySectionTag(section)))
+        compose.waitForIdle()
+    }
+
+    /** Opens Settings from Library's gear. */
+    protected fun openSettings() {
+        tab("Library")
+        activate(compose.onNodeWithTag(LIBRARY_SETTINGS_TAG))
+        compose.waitForIdle()
+    }
+
     protected fun openRecentsSection(label: String) {
         activate(compose.onNodeWithContentDescription("Filter Recents by section"))
         activate(compose.onNodeWithText(label))
@@ -148,7 +165,7 @@ abstract class AppJourneyFixture {
             )
         }
         launch()
-        tab("Recents")
+        library(LibrarySection.History)
         openRecentsSection("Searches")
         activate(compose.onNodeWithTag("Recent search:$recentSearch"))
         val card = compose.onNodeWithTag(searchCardTestTag(posts.getValue(SourceKey.PIXIV)[index].id))

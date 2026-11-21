@@ -29,9 +29,7 @@ class TheoriaAppSmokeTest {
             composeRule.onNodeWithContentDescription("Search").isDisplayed()
         }
         composeRule.onNodeWithContentDescription("Search").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Recents").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("For You").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Codex").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Settings").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Library").assertIsDisplayed()
     }
 }

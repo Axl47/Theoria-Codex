@@ -146,11 +146,14 @@ private fun ShellOverlaySheets(shell: TheoriaShell) {
     val overlays = shell.overlays
     if (overlays.showSavedSearchManagement) {
         val context = com.theoriacodex.app.ui.components.codexFeedFabContext(com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID)
+        val news by remember { shell.data.uiRestoreRepository.observeSavedSearchNewPosts() }
+            .collectAsStateWithLifecycle(com.theoriacodex.data.repository.SavedSearchNewPosts())
         shell.feedFabRestoreRegistry.state(context)?.let { restore ->
             com.theoriacodex.app.codex.SavedSearchesManagementSheet(
                 shell.savedSearches, restore, { shell.feedFabRestoreRegistry.update(context, it) },
                 shell.owners.savedSearches::rename, shell.owners.savedSearches::remove,
                 onDismiss = { overlays.showSavedSearchManagement = false },
+                newCounts = news.marks.mapValues { it.value.newPostCount },
             )
         }
     }
@@ -223,6 +226,8 @@ private fun TheoriaNavigationSurface(shell: TheoriaShell, currentRoute: String?)
         calculateBottomNavigationSizing(windowHeightDp = windowHeightDp, bottomSystemInsetDp = bottomSystemInsetDp)
     }
     val tabReselects = remember { MutableSharedFlow<TopLevelDestination>(extraBufferCapacity = 1) }
+    NewPostsCheckEffect(shell)
+    val libraryHasNew = rememberSavedNewPosts(shell.data).isNotEmpty()
     TheoriaAdaptiveScaffold(
         navigationVisible = currentRoute == AppRoute.Home,
         selectedIndex = pagerState.currentPage.coerceIn(0, TopLevelDestination.entries.lastIndex),
@@ -230,6 +235,7 @@ private fun TheoriaNavigationSurface(shell: TheoriaShell, currentRoute: String?)
         bottomBarIconSize = bottomNavigationSizing.iconSizeDp.dp,
         bottomBarWindowInsets = bottomBarWindowInsets,
         snackbarHostState = shell.snackbarHostState,
+        marked = if (libraryHasNew) setOf(TopLevelDestination.Library) else emptySet(),
         // The status bar's inset shows this color, and the Viewer's letterboxing is black.
         containerColor = if (currentRoute == AppRoute.Viewer) Color.Black else MaterialTheme.colorScheme.background,
         onDestinationSelected = { destination ->

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.journeys
 
+import com.theoriacodex.app.library.LibrarySection
 import android.app.Activity
 import android.app.Instrumentation
 import android.content.Intent
@@ -70,7 +71,7 @@ class SourceCallThreadJourneyTest : AppJourneyFixture() {
             )
         }
         launch()
-        tab("Recents")
+        library(LibrarySection.History)
         openRecentsSection("Searches")
         activate(compose.onNodeWithTag("Recent search:$RECENT_SEARCH"))
         val linkingPost = posts.getValue(SOURCE).single { it.id.sourcePostId == LINKING_POST }

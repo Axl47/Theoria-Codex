@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.app.library.LibrarySection
 import kotlinx.coroutines.flow.filterNotNull
 import com.theoriacodex.app.MainActivity
 import android.content.Intent
@@ -14,7 +15,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -24,6 +24,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.appshell.AppShellAction
 import com.theoriacodex.app.appshell.AppShellEffect
@@ -40,8 +41,6 @@ import com.theoriacodex.app.update.PendingPostInstallChangelog
 import com.theoriacodex.app.update.StartupUpdateWorkflowEffect
 import com.theoriacodex.app.update.mergeReleaseHistory
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 
 /** Hosts one-shot feedback from the shell's owners, and keeps usage time following the process. */
 @Composable
@@ -81,12 +80,7 @@ internal fun ShellOwnerHosts(shell: TheoriaShell) {
     }
     CodexCommandHost(owners.codexCommands, snackbarHostState) { deletedId ->
         if (shell.navController.currentBackStackEntry?.arguments?.getString("codexId") == deletedId) {
-            shell.navigation.goToTab(TopLevelDestination.Codex)
-        }
-    }
-    LaunchedEffect(shell.navigation.homeTabRoute) {
-        if (shell.navigation.homeTabRoute == TopLevelDestination.Settings.route) {
-            owners.settings.onAction(SettingsAction.SettingsEntered)
+            shell.goToLibrary(LibrarySection.Codices)
         }
     }
     CodexImportHost(owners.codexImports, snackbarHostState) { host ->
@@ -185,8 +179,9 @@ internal fun ShellIncomingUriEffects(
 internal fun ShellUsageEffect(shell: TheoriaShell, currentRoute: String?, statisticsCodexId: String?) {
     val appUsageTracker = shell.features.appUsageTracker
     val homeTabRoute = shell.navigation.homeTabRoute
-    LaunchedEffect(appUsageTracker, currentRoute, homeTabRoute, statisticsCodexId) {
-        appUsageTracker.onCategoryChanged(statisticsUsageCategory(currentRoute, homeTabRoute))
+    val librarySection by shell.data.librarySections.section.collectAsStateWithLifecycle()
+    LaunchedEffect(appUsageTracker, currentRoute, homeTabRoute, librarySection, statisticsCodexId) {
+        appUsageTracker.onCategoryChanged(statisticsUsageCategory(currentRoute, homeTabRoute, librarySection))
         if (currentRoute != AppRoute.Viewer) {
             appUsageTracker.onCodexTargetChanged(
                 statisticsCodexId?.takeIf { currentRoute == AppRoute.CodexDetail }
@@ -227,7 +222,7 @@ internal fun ShellFollowAndSettingsEffects(
             ).show()
             SettingsEffect.LoadChangelog -> loadReleaseHistory(shell, latestInstalledChangelog)
             SettingsEffect.ThumbnailCacheCleared -> shell.thumbnailCacheGeneration += 1
-            SettingsEffect.NavigateToSettings -> navigateToSettings(shell)
+            SettingsEffect.NavigateToSettings -> shell.showSettingsRoute()
         }
     }
 }
@@ -243,14 +238,6 @@ private suspend fun loadReleaseHistory(shell: TheoriaShell, latestInstalledChang
         }
     } finally {
         shell.owners.settings.onAction(SettingsAction.ChangelogRequestFinished)
-    }
-}
-
-/** A jump requested during startup waits for it, so restoring the last tab cannot replace Settings. */
-private fun navigateToSettings(shell: TheoriaShell) {
-    shell.scope.launch {
-        snapshotFlow { shell.navReady }.first { ready -> ready }
-        shell.navigation.goToTab(TopLevelDestination.Settings)
     }
 }
 

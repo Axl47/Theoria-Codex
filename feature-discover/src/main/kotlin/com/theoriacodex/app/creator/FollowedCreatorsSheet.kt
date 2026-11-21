@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.ui.components.SheetHeader
+import com.theoriacodex.app.ui.components.newPostsLabel
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.domain.model.CreatorProfile
 
@@ -85,8 +86,13 @@ private fun FollowedCreatorRow(
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(follow.creator.displayName, style = MaterialTheme.typography.titleMedium,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(follow.creator.source.displayName(), style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(follow.creator.source.displayName(), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    newPostsLabel(follow.newPostCount)?.let {
+                        Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
             }
             CreatorFollowButton(followed = true, onClick = { onUnfollow(follow.creator) })
         }

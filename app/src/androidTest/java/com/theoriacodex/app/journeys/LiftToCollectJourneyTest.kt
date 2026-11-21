@@ -5,6 +5,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import com.theoriacodex.app.codex.profileScopedCodexId
+import com.theoriacodex.app.library.LibrarySection
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.domain.model.Query
@@ -28,7 +29,7 @@ class LiftToCollectJourneyTest : AppJourneyFixture() {
             container.content.ensureCodex(profileScopedCodexId("profile-main", "lift"), "Lift target")
         }
         launch()
-        tab("Recents")
+        library(LibrarySection.History)
         openRecentsSection("Searches")
         compose.onNodeWithTag("Recent search:for_you:lift").performClick()
         val cardTag = searchCardTestTag(first.id)

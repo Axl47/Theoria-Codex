@@ -38,6 +38,7 @@ fun PostShelfSection(
     countSuffix: String? = null,
     onMore: (() -> Unit)? = null,
     showSeeAll: Boolean = onMore != null,
+    highlight: String? = null,
     content: @Composable () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -51,7 +52,7 @@ fun PostShelfSection(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (showSeeAll) {
-                ManagedShelfHeading(title, count, icon, countSuffix, onMore)
+                ManagedShelfHeading(title, listOfNotNull(count?.toString(), countSuffix).joinToString(" "), icon, highlight, onMore)
             } else {
                 Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -71,24 +72,24 @@ fun PostShelfSection(
     }
 }
 
-/** A shelf heading that identifies its collection and shows where See all and its actions are. */
+/**
+ * A shelf heading that identifies its collection and shows where See all and its actions are; a
+ * [highlight] such as "3 new" follows the [count] in the accent color.
+ */
 @Composable
 private fun RowScope.ManagedShelfHeading(
     title: String,
-    count: Int?,
+    count: String,
     icon: ImageVector?,
-    countSuffix: String?,
+    highlight: String?,
     onMore: (() -> Unit)?,
 ) {
     icon?.let { Icon(it, null, Modifier.padding(end = 8.dp), tint = MaterialTheme.colorScheme.primary) }
     Text(title, style = MaterialTheme.typography.titleMedium)
-    Text(
-        listOfNotNull(count?.toString(), countSuffix).joinToString(" "),
-        Modifier.padding(start = 8.dp).weight(1f),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-    )
+    Row(Modifier.padding(start = 8.dp).weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(count, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        highlight?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, maxLines = 1) }
+    }
     Text("See all", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
     onMore?.let { IconButton(onClick = it) { Icon(Icons.Default.MoreVert, "Actions for $title") } }
 }

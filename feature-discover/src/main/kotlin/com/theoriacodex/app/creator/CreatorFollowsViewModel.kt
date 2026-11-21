@@ -7,6 +7,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.data.repository.CreatorFollowsRepository
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.followKey
+import com.theoriacodex.data.repository.newPostsCheckDue
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.coroutines.mapConcurrent
@@ -38,6 +39,7 @@ class CreatorFollowsViewModel(
     private val messageChannel = Channel<String>(Channel.BUFFERED)
     val messages = messageChannel.receiveAsFlow()
     private var refreshJob: Job? = null
+    private var lastAutomaticCheck: Long? = null
 
     fun toggle(creator: CreatorProfile, posts: List<Post>) {
         viewModelScope.launch {
@@ -59,6 +61,26 @@ class CreatorFollowsViewModel(
     }
 
     fun cancelRefresh() { refreshJob?.cancel() }
+
+    /**
+     * The app-open check: refreshes only when the newest check, and the last automatic attempt, are
+     * older than the check interval, so a failing source waits for the next interval instead of retrying.
+     */
+    suspend fun refreshIfStale(nowEpochMs: Long) {
+        val follows = repository.observe().first()
+        if (follows.isEmpty() || !newPostsCheckDue(follows.map { it.checkedAtEpochMs } + lastAutomaticCheck, nowEpochMs)) return
+        lastAutomaticCheck = nowEpochMs
+        refresh()
+    }
+
+    /** The Followed feed is open, so its creators' latest posts are no longer new. */
+    fun markLatestSeen() {
+        viewModelScope.launch {
+            try { repository.markLatestSeen() }
+            catch (error: CancellationException) { throw error }
+            catch (_: Exception) { messageChannel.send("Could not update followed creators") }
+        }
+    }
 
     fun refresh() {
         if (refreshJob?.isActive == true) return

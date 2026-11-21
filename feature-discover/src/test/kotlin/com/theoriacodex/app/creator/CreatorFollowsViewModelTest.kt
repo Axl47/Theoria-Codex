@@ -88,4 +88,28 @@ class CreatorFollowsViewModelTest {
             assertEquals(null, repository.observe().first().single().checkedAtEpochMs)
         } finally { store.clear(); Dispatchers.resetMain() }
     }
+
+    @Test fun `app-open checks wait out the interval even after a failure`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            val settings = InMemorySettingsRepository()
+            CreatorFollowsRepository(settings).follow(CreatorProfile(SourceKey.PIXIV, "Artist", "1", uploadsQuery = "user:1"), emptyList())
+            var calls = 0
+            val adapter = object : SourceAdapter by TestAdapter(SourceKey.PIXIV), CreatorPostsSourceAdapter {
+                override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?): Page<Post> {
+                    calls++
+                    error("offline")
+                }
+            }
+            val owner = CreatorFollowsViewModel(settings, TestRegistry(listOf(adapter)))
+            store.put("follows", owner)
+            val hour = 60 * 60 * 1000L
+            listOf(0L, hour, 2 * hour, 3 * hour).forEach { now ->
+                owner.refreshIfStale(now)
+                advanceUntilIdle()
+            }
+            assertEquals(2, calls)
+        } finally { store.clear(); Dispatchers.resetMain() }
+    }
 }

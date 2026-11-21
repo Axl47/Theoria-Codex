@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.app.source.displayName
+import com.theoriacodex.app.ui.components.newPostsLabel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,6 +74,7 @@ internal fun SavedSearchRow(
     onRename: (SavedSearchEntry) -> Unit,
     onRemove: (SavedSearchEntry) -> Unit,
     selected: Boolean? = null,
+    newCount: Int = 0,
 ) {
     val presentation = recentSearchPresentation(entry.search)
     val context = when (entry.search.kind) {
@@ -93,7 +95,12 @@ internal fun SavedSearchRow(
                 modifier = Modifier.weight(1f).clickable { onOpen(entry) }.padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text(entry.name, style = MaterialTheme.typography.titleSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(entry.name, style = MaterialTheme.typography.titleSmall)
+                    newPostsLabel(newCount)?.let {
+                        Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
                 Text(
                     "$context · ${presentation.title}",
                     style = MaterialTheme.typography.bodySmall,
