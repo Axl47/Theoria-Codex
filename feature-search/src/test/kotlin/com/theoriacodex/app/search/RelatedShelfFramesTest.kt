@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.ui.components.FeedMarks
 import com.theoriacodex.app.ui.components.FeedDurations
 import android.app.Application
 import androidx.compose.runtime.CompositionLocalProvider
@@ -107,8 +108,7 @@ class RelatedShelfFramesTest {
                     return@CompositionLocalProvider
                 }
                 val feed = rememberSearchFeed(
-                    state, fab, emptySet(), pendingLikePostIds = emptySet(), savedPostIds = emptySet(),
-                    watchedPostIds = emptySet(), durations = FeedDurations(durationStates, resolveInBackground = true),
+                    state, fab, FeedMarks.NONE, durations = FeedDurations(durationStates, resolveInBackground = true),
                 )
                 val related = feed.related
                 SideEffect {

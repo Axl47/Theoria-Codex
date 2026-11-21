@@ -1,5 +1,8 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.ui.components.rememberFeedView
+import com.theoriacodex.app.ui.components.FeedMarks
+import com.theoriacodex.app.ui.components.FeedView
 import com.theoriacodex.app.ui.components.FeedDurations
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
@@ -8,19 +11,14 @@ import androidx.compose.runtime.remember
 import com.theoriacodex.app.feed.FeedPageDemandInput
 import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.media.DurationFilterMetadata
-import com.theoriacodex.app.media.rememberDurationFilterMetadata
-import com.theoriacodex.app.related.retainedLikedPostIds
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchRestorationUiState
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.ui.components.FeedPageDemandControl
 import com.theoriacodex.app.ui.components.RelatedFeedPresentation
 import com.theoriacodex.app.ui.components.rememberFeedPageDemand
-import com.theoriacodex.app.ui.components.rememberRelatedFeedPresentation
-import com.theoriacodex.app.viewer.retainPostsUntilViewerCloses
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.Post
-import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
 
@@ -28,23 +26,22 @@ import com.theoriacodex.domain.model.SourceKey
 class SearchFeed(
     val animatedFilterActive: Boolean,
     val animatedDurationRange: AnimatedDurationRange,
-    val animatedDurationFilterActive: Boolean,
-    val visibilityFilters: SearchVisibilityFilters,
     val isNhentaiSourceMode: Boolean,
     val displayResults: List<Post>,
-    val durationMetadata: DurationFilterMetadata,
-    val visibleResults: List<Post>,
-    val related: RelatedFeedPresentation,
-)
+    val view: FeedView,
+) {
+    val animatedDurationFilterActive: Boolean get() = view.durationFilterActive
+    val visibilityFilters: SearchVisibilityFilters get() = view.filters
+    val durationMetadata: DurationFilterMetadata get() = view.durations
+    val visibleResults: List<Post> get() = view.visiblePosts
+    val related: RelatedFeedPresentation get() = view.related
+}
 
 @Composable
 fun rememberSearchFeed(
     state: SearchUiState,
     fabRestoreState: FeedFabRestoreState,
-    likedPostIds: Set<PostId>,
-    pendingLikePostIds: Set<PostId>,
-    savedPostIds: Set<PostId>,
-    watchedPostIds: Set<PostId>,
+    marks: FeedMarks,
     durations: FeedDurations,
 ): SearchFeed {
     val animationRestoreState = fabRestoreState.searchAnimationFilter(state.query.draft.mode)
@@ -55,7 +52,6 @@ fun rememberSearchFeed(
     val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
         AnimatedDurationRange(minBucket = durationMinBucket, maxBucket = durationMaxBucket)
     }
-    val animatedDurationFilterActive = !animatedDurationRange.isFullRange && !isNhentaiSourceMode
     val visibilityFilters = remember(
         animatedFilterActive, fabRestoreState.hideLiked, fabRestoreState.hideSaved, fabRestoreState.hideWatched,
         animatedDurationRange, state.query.applied.dateRange,
@@ -66,36 +62,16 @@ fun rememberSearchFeed(
             hideWatched = fabRestoreState.hideWatched, animatedDurationRange = animatedDurationRange,
         )
     }
-    val unknownDurationPolicy = unknownAnimatedDurationPolicy(durations.resolveInBackground)
     val displayResults = remember(state.content.results, state.content.displayVersion, state.query.appliedQueryHash) {
         state.content.results
     }
-    val durationMetadata = rememberDurationFilterMetadata(displayResults, durations.states, animatedDurationFilterActive, retainKey = "search")
-    val presentedResults = durationMetadata.presentedPosts ?: displayResults
-    val retainedLikedPostIds = retainPostsUntilViewerCloses(remember(state.relatedPosts, pendingLikePostIds) {
-        state.relatedPosts.retainedLikedPostIds + pendingLikePostIds
-    })
-    val marks = visibilityFilters.markInputs(likedPostIds, savedPostIds, watchedPostIds, retainedLikedPostIds)
-    val visibleResults = rememberFilteredFeed(
-        presentedResults, visibilityFilters, unknownDurationPolicy, durationMetadata, marks, retainKey = "search",
+    val view = rememberFeedView(
+        retainKey = "search", posts = displayResults, filters = visibilityFilters, durations = durations,
+        relatedState = state.relatedPosts, marks = marks,
+        durationFilterActive = !animatedDurationRange.isFullRange && !isNhentaiSourceMode,
     )
-    val related = rememberRelatedFeedPresentation(
-        retainKey = "search",
-        pendingLikePostIds = pendingLikePostIds,
-        canonicalPosts = displayResults, visibleCanonicalPosts = visibleResults,
-        relatedState = state.relatedPosts, visibilityFilters = visibilityFilters,
-        likedPostIds = likedPostIds, savedPostIds = savedPostIds, watchedPostIds = watchedPostIds,
-        unknownAnimatedDurationPolicy = unknownDurationPolicy, durationStates = durations.states,
-        durationFilterActive = animatedDurationFilterActive,
-    )
-    return remember(
-        animatedFilterActive, animatedDurationRange, animatedDurationFilterActive, visibilityFilters,
-        isNhentaiSourceMode, displayResults, durationMetadata, visibleResults, related,
-    ) {
-        SearchFeed(
-            animatedFilterActive, animatedDurationRange, animatedDurationFilterActive, visibilityFilters,
-            isNhentaiSourceMode, displayResults, durationMetadata, visibleResults, related,
-        )
+    return remember(animatedFilterActive, animatedDurationRange, isNhentaiSourceMode, displayResults, view) {
+        SearchFeed(animatedFilterActive, animatedDurationRange, isNhentaiSourceMode, displayResults, view)
     }
 }
 

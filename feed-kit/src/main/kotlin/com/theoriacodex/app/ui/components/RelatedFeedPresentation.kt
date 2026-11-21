@@ -13,7 +13,6 @@ import com.theoriacodex.app.related.buildRelatedFeedProjection
 import com.theoriacodex.app.related.loadedPosts
 import com.theoriacodex.app.related.retainedLikedPostIds
 import com.theoriacodex.app.search.SearchVisibilityFilters
-import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.search.markInputs
 import com.theoriacodex.domain.model.Post
@@ -40,7 +39,6 @@ fun rememberRelatedFeedPresentation(
     likedPostIds: Set<PostId>,
     savedPostIds: Set<PostId>,
     watchedPostIds: Set<PostId>,
-    unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy,
     durationStates: MediaDurationStates,
     durationFilterActive: Boolean,
     pendingLikePostIds: Set<PostId> = emptySet(),
@@ -56,7 +54,6 @@ fun rememberRelatedFeedPresentation(
         relatedPosts,
         visibilityFilters,
         marks,
-        unknownAnimatedDurationPolicy,
         durationMetadata.knownDurationMsByPostId,
     ) {
         filterSearchResults(
@@ -66,7 +63,6 @@ fun rememberRelatedFeedPresentation(
             retainedLikedPostIds = marks.retained,
             savedPostIds = marks.saved,
             watchedPostIds = marks.watched,
-            unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
             knownDurationMsByPostId = durationMetadata.knownDurationMsByPostId,
         )
     }

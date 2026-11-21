@@ -212,8 +212,8 @@ class CodexFeedFramesTest {
                 }
                 val sorted = rememberSortedCodexPosts(codexId, stored, sort, emptyMap(), durationStates)
                 val feed = rememberCodexDetailFeed(
-                    codexId, sorted.orEmpty(), fab.savedCollectionFilters(), fab,
-                    FeedDurations(durationStates, resolveInBackground = true), relatedShelf = null, likedPostIds = emptySet(), sortMode = sort,
+                    codexId, sorted.orEmpty(), fab.savedCollectionFilters(),
+                    FeedDurations(durationStates, resolveInBackground = true), relatedShelf = null, sortMode = sort,
                 )
                 SideEffect { shown = feed.visiblePosts.map { it.id.sourcePostId } }
             }

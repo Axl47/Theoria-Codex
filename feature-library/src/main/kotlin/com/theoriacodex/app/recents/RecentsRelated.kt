@@ -18,7 +18,6 @@ import com.theoriacodex.app.related.RelatedShelfBinding
 import com.theoriacodex.app.related.anchorIndexIn
 import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.search.SearchVisibilityFilters
-import com.theoriacodex.app.search.unknownAnimatedDurationPolicy
 import com.theoriacodex.app.ui.components.FeedRelatedPostsShelf
 import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
 import com.theoriacodex.app.ui.components.rememberRelatedFeedPresentation
@@ -115,7 +114,6 @@ private fun rememberRecentsRelatedSlot(
         likedPostIds = cards.likedPostIds,
         savedPostIds = emptySet(),
         watchedPostIds = emptySet(),
-        unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy(resolveInBackground = false),
         durationStates = MediaDurationStates.EMPTY,
         durationFilterActive = false,
     )

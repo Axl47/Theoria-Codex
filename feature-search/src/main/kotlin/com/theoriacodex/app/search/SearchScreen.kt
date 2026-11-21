@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.ui.components.FeedMarks
 import com.theoriacodex.app.ui.components.FeedDurations
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -108,7 +109,8 @@ fun SearchScreen(
     val scope = rememberCoroutineScope()
     val gridState = rememberRetainedFeedGridState("search")
     SearchTabReselectEffect(state.restoration, gridState, onAction)
-    val feed = rememberSearchFeed(state, fabRestoreState, likedPostIds, pendingLikePostIds, savedPostIds, watchedPostIds, durations)
+    val marks = FeedMarks(likedPostIds, savedPostIds, watchedPostIds, pendingLikePostIds)
+    val feed = rememberSearchFeed(state, fabRestoreState, marks, durations)
     val serverFilters = state.query.serverFilters()
     val filterScroll = rememberFeedScrollSignal()
     var filterSheetBaseline by remember { mutableStateOf(serverFilters) }
