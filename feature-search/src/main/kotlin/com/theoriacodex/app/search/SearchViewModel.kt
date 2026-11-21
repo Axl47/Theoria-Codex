@@ -123,6 +123,8 @@ class SearchViewModel(
     private var pendingRootSearch: (() -> Unit)? = null
     /** A draft edit made over Search waits to run until Search is shown again. */
     private var draftStaged = false
+    /** A first search was cancelled before it answered; its replacement stays scheduled across edits until one runs. */
+    private var firstSearchSuperseded = false
     private var latestEnvironmentSettings: AppSettings? = null
     /** The source settings the state was last reconciled with; null until Search has restored. */
     private var runtime: SourceRuntimeSettings? = null
@@ -206,7 +208,8 @@ class SearchViewModel(
                 requestRouteEntryScrollRestoration()
                 if (draftStaged) {
                     draftStaged = false
-                    scheduleLiveSearch()
+                    // Staged before Search first opened, the edit runs on the restored draft, not the blank one.
+                    runAfterRestoration(::scheduleLiveSearch)
                 }
                 resumeSearchIfNeeded()
             }
@@ -336,11 +339,14 @@ class SearchViewModel(
         val cancelsRequest = request != null && !request.isPage && !runsDraft
         if (cancelsRequest) cancelActiveRequest()
         // Before any search has run, the applied search is only a placeholder, so a draft equal to it still
-        // needs its own run when the first search it superseded is cancelled; otherwise nothing would answer.
-        val supersedesFirstSearch = cancelsRequest && !current.content.hasExecutedSearch
+        // needs its own run when the first search it superseded is cancelled, including by an earlier edit
+        // whose replacement is still waiting; otherwise nothing would answer.
+        val supersedesFirstSearch = !current.content.hasExecutedSearch && (cancelsRequest || firstSearchSuperseded)
         if ((current.hasPendingChanges || supersedesFirstSearch) && !runsDraft) {
+            firstSearchSuperseded = supersedesFirstSearch
             liveSearch.schedule(singleSource = current.query.draftSourceScope is SearchSourceScope.Single)
         } else {
+            firstSearchSuperseded = false
             liveSearch.cancel()
         }
     }
@@ -542,6 +548,7 @@ class SearchViewModel(
     ) {
         relatedPosts.clear(relatedResetReason)
         liveSearch.cancel()
+        firstSearchSuperseded = false
         cancelActiveRequest()
         val executionKey = searchExecutionKey(query, sourceScope)
         acceptance?.let {

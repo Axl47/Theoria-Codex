@@ -2,13 +2,17 @@ package com.theoriacodex.app.search
 
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchRestorationUiState
+import com.theoriacodex.data.repository.InMemoryQueryRepository
 import com.theoriacodex.data.repository.InMemoryRecentsRepository
+import com.theoriacodex.data.repository.QueryRepository
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -207,18 +211,44 @@ internal class LiveSearchViewModelTest : SearchViewModelTestFixture() {
         assertEquals(listOf("a", "b"), owner.state.value.query.applied.includeTags)
     }
 
-    @Test fun `switching back to the empty draft replaces a first search cancelled before it answered`() = runTest(mainDispatcherRule.dispatcher) {
+    @Test fun `an edit staged before Search first opens runs on the restored draft at its first resume`() = runTest(mainDispatcherRule.dispatcher) {
+        val adapter = ViewModelSearchAdapter()
+        // Restoration outlasts the live pause, so a search scheduled at resume would run before it.
+        val stored = InMemoryQueryRepository()
+        val slowQueries = object : QueryRepository by stored {
+            override fun observeAppliedQuery(modeKey: String) = stored.observeAppliedQuery(modeKey).onStart { delay(1_000) }
+        }
+        val owner = viewModel(adapter, queryRepository = slowQueries, recentsRepository = recents)
+        owner.onAction(SearchAction.StageDraftEdit(SearchAction.AddIncludeTerm(SearchTerm("b"))))
+        // The order SearchRoute delivers them in: the queued edit, the first resume, then restoration.
+        owner.onAction(SearchAction.Resume)
+        owner.onAction(SearchAction.Restore)
+        advanceUntilIdle()
+        assertEquals(1, adapter.searchCount)
+        assertEquals(listOf("b"), owner.state.value.query.applied.includeTags)
+    }
+
+    @Test fun `switching back to the empty draft replaces a first search cancelled before it answered`() =
+        runTest(mainDispatcherRule.dispatcher) { assertFirstSearchReplacedAfterSwitching(QueryMode.Unified) }
+
+    @Test fun `a second switch keeps the replacement for a cancelled first search scheduled`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            assertFirstSearchReplacedAfterSwitching(QueryMode.Source(SourceKey.AIBOORU), QueryMode.Unified)
+        }
+
+    /** Starts a first Pixiv search, switches through [modes] before it answers, and expects the last one to run. */
+    private suspend fun TestScope.assertFirstSearchReplacedAfterSwitching(vararg modes: QueryMode) {
         val owner = viewModel(ViewModelSearchAdapter(), additionalAdapters = listOf(ViewModelSearchAdapter(SourceKey.AIBOORU)), recentsRepository = recents)
         restore(owner)
         owner.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
         owner.onAction(SearchAction.ApplyDraft)
-        owner.onAction(SearchAction.SelectMode(QueryMode.Unified))
+        modes.forEach { owner.onAction(SearchAction.SelectMode(it)) }
         assertFalse(owner.state.value.hasPendingChanges)
         assertTrue(owner.state.value.execution.liveSearchWaiting)
         advanceUntilIdle()
         assertFalse(owner.state.value.execution.liveSearchWaiting)
         assertTrue(owner.state.value.content.hasExecutedSearch)
-        assertEquals(QueryMode.Unified, owner.state.value.query.applied.mode)
+        assertEquals(modes.last(), owner.state.value.query.applied.mode)
     }
 
     private suspend fun TestScope.searched(adapter: ViewModelSearchAdapter, tag: String): SearchViewModel {
