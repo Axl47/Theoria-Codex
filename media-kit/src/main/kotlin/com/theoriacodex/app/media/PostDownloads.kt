@@ -23,6 +23,7 @@ import kotlinx.coroutines.withContext
  * The app's one download queue and the one writer of its [jobFile], created once in the app container so every
  * Activity instance uses this object: commands, workers and removals share one thread and one set of locks. Work
  * runs in [parentScope] (application-lived), so downloads and a started removal continue after the Activity finishes.
+ * The list restores at once; downloads start only after [sourcesReady] returns (see [PostDownloadQueue]).
  */
 class PostDownloads(
     context: Context,
@@ -31,13 +32,15 @@ class PostDownloads(
     readSettings: suspend () -> CacheSettings,
     resolvePost: suspend (Post) -> Post?,
     exportAnimation: suspend (Post, String) -> Result<Unit>,
+    sourcesReady: suspend () -> Unit,
 ) {
     // One thread off Main serializes every queue command and worker continuation.
     private val queueDispatcher = Dispatchers.IO.limitedParallelism(1)
     private val queueScope = CoroutineScope(parentScope.coroutineContext + SupervisorJob(parentScope.coroutineContext[Job]) + queueDispatcher)
     val feedback = MutationFeedback()
     private val backend = AndroidPostDownloadBackend(context.applicationContext, readSettings, resolvePost, exportAnimation)
-    private val queue = PostDownloadQueue(scope = queueScope, backend = backend, jobStore = FileBackedPostDownloadJobStore(jobFile))
+    private val queue = PostDownloadQueue(scope = queueScope, backend = backend, jobStore = FileBackedPostDownloadJobStore(jobFile),
+        startGate = sourcesReady)
     val batches = queue.batches
     init { command { queue.restore() } }
 

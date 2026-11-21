@@ -30,7 +30,7 @@ class PostDownloadsTest {
         ))))
         val scope = CoroutineScope(SupervisorJob())
         try {
-            val downloads = PostDownloads(context, file, scope, { CacheSettings() }, { it }, { _, _ -> Result.success(Unit) })
+            val downloads = PostDownloads(context, file, scope, { CacheSettings() }, { it }, { _, _ -> Result.success(Unit) }, sourcesReady = {})
 
             assertTrue(downloads.removeNow(setOf(2), deleteFiles = false))
             assertEquals(listOf(3L), store.load().flatMap { batch -> batch.items.map(PostDownloadItem::id) })

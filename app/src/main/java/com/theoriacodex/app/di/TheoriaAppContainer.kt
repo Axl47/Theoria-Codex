@@ -105,6 +105,7 @@ import com.theoriacodex.sources.pixiv.PixivTokenCoordinator
 import com.theoriacodex.sources.pixiv.PixivUgoiraMetadataCache
 import com.theoriacodex.app.library.LibrarySectionStore
 import java.io.File
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -274,6 +275,8 @@ internal class DefaultTheoriaAppContainer(
         recoveryRegistry = fileStoreRecoveryRegistry,
     )
     private val siteFamilies = SiteFamilyRegistry.default()
+    /** Completes when [awaitDurableStores] has finished: saved sites and browser headers are in place. */
+    private val storesReady = CompletableDeferred<Unit>()
     private val customSourceRuntime = CustomSourceRuntime(
         profiles = siteProfiles,
         credentials = credentialStore,
@@ -477,7 +480,7 @@ internal class DefaultTheoriaAppContainer(
         appUsageTracker = appUsageTracker,
         offlineMedia = offlineMedia,
         postDownloads = appPostDownloads(appContext, File(storageDirectory, "download_jobs.json"), durableStoreScope,
-            settingsRepository, sources),
+            settingsRepository, sources) { storesReady.await(); customSourceRuntime.awaitFirstBuild() },
     )
 
     override val workflows = WorkflowDependencies(
@@ -555,6 +558,7 @@ internal class DefaultTheoriaAppContainer(
         profileDeletion.recoverPendingDeletion()
         offlineCatalogReady.await()
         offlineMedia.recoverPendingJobs()
+        storesReady.complete(Unit)
         // Off the startup path: searched-tag suggestions start from what Recents remembers.
         durableStoreScope.launch {
             runCatchingPreservingCancellation {

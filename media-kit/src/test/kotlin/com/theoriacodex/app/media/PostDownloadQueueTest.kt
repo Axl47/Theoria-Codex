@@ -335,6 +335,26 @@ class PostDownloadQueueTest {
         assertEquals(listOf(1), queue.batches.value.single().items.map { it.request.selectedMedia?.pageIndex })
     }
 
+    @Test
+    fun `restored work shows at once but runs only once the start gate opens`() = runTest {
+        val backend = FakeBackend()
+        val store = object : PostDownloadJobStore {
+            override suspend fun load() = listOf(PostDownloadBatch(1, "Saved", listOf(PostDownloadItem(2, request(1)))))
+            override suspend fun save(batches: List<PostDownloadBatch>) = Unit
+        }
+        val sourcesReady = CompletableDeferred<Unit>()
+        val queue = PostDownloadQueue(backgroundScope, backend, jobStore = store, startGate = sourcesReady::await)
+
+        queue.restore()
+        runCurrent()
+        assertEquals(PostDownloadStatus.QUEUED, queue.batches.value.single().items.single().status)
+        assertTrue(backend.prepared.isEmpty())
+
+        sourcesReady.complete(Unit)
+        runCurrent()
+        assertEquals(listOf("1"), backend.prepared)
+    }
+
     private class FakeBackend : PostDownloadBackend {
         val deleted = mutableListOf<String>()
         var failDeletePost: String? = null

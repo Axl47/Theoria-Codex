@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import okhttp3.Credentials
 
@@ -67,6 +68,11 @@ internal class CustomSourceRuntime(
     private var installed: List<SourcePresentation> = emptyList()
 
     val snapshot: StateFlow<CustomSourceSnapshot> = mutableSnapshot.asStateFlow()
+
+    /** Returns once the stored sites have been built into [snapshot] at least once, so their adapters exist. */
+    suspend fun awaitFirstBuild() {
+        snapshot.first { it.revision > 0 }
+    }
 
     init {
         scope.launch {
