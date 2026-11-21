@@ -638,7 +638,7 @@ private val SearchTerm.isGeneralTag: Boolean
 
 private const val MAX_GROUP_ALTERNATIVES = 8
 
-private fun Query.nhentaiLanguageFilter(): NhentaiLanguageFilter =
+internal fun Query.nhentaiLanguageFilter(): NhentaiLanguageFilter =
     includeTerms.firstNotNullOfOrNull(SearchTerm::nhentaiLanguageFilterOrNull)
         ?: NhentaiLanguageFilter.ANY
 
@@ -652,7 +652,7 @@ private fun SearchTerm.nhentaiLanguageFilterOrNull(): NhentaiLanguageFilter? {
     }
 }
 
-private fun Query.nhentaiFullColorFilter(): Boolean = includeTerms.any(SearchTerm::isNhentaiFullColorFilter)
+internal fun Query.nhentaiFullColorFilter(): Boolean = includeTerms.any(SearchTerm::isNhentaiFullColorFilter)
 
 private fun SearchTerm.isNhentaiFullColorFilter(): Boolean =
     facet == SearchFacet.TAG && sourceNamespace in setOf(null, NHENTAI_TAG_NAMESPACE) &&

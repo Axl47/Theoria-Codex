@@ -84,48 +84,31 @@ sealed interface SearchStateChange {
 }
 
 object SearchStateReducer {
-    /** Builds restored state while preserving the authoritative applied query and source identity. */
+    /** Builds restored state: the stored search is both the draft and the applied search. */
     fun restore(
         initialization: SearchInitialization,
         appliedHash: String,
         supportedScopes: (QueryMode) -> List<FacetedSearchScope>,
-    ): SearchUiState {
-        val base = SearchUiState(
-            query = SearchQueryUiState(
-                draft = initialization.query,
-                applied = initialization.query,
-                draftSourceScope = initialization.sourceScope,
-                appliedSourceScope = initialization.sourceScope,
-                appliedQueryHash = appliedHash,
-                availableSources = initialization.availableSources,
-                modeOptions = listOf(QueryMode.Unified) + initialization.availableSources.map(QueryMode::Source),
-                enabledSourceCount = initialization.availableSources.size,
-                unifiedSources = initialization.runtime.enabledSources.intersect(initialization.availableSources.toSet()),
-                supportedScopes = supportedScopes(initialization.query.mode),
-                validationMessage = initialization.validationMessage,
-            ),
-            content = SearchContentUiState(
-                hasExecutedSearch = initialization.hasExecutedSearch,
-            ),
-            restoration = SearchRestorationUiState.Restoring,
-        )
-        val draft = SearchDraftReducer.restoreDraft(
-            base,
-            initialization.query,
-            initialization.availableSources.toSet(),
-            supportedScopes,
-        ).state
-        return draft.copy(
-            query = draft.query.copy(
-                applied = initialization.query,
-                appliedSourceScope = initialization.sourceScope,
-                appliedQueryHash = appliedHash,
-                appliedByMode = initialization.appliedByMode,
-            ),
-            content = base.content,
-            restoration = base.restoration,
-        )
-    }
+    ): SearchUiState = SearchUiState(
+        query = SearchQueryUiState(
+            draft = initialization.query,
+            applied = initialization.query,
+            draftSourceScope = initialization.sourceScope,
+            appliedSourceScope = initialization.sourceScope,
+            appliedQueryHash = appliedHash,
+            availableSources = initialization.availableSources,
+            modeOptions = listOf(QueryMode.Unified) + initialization.availableSources.map(QueryMode::Source),
+            enabledSourceCount = initialization.availableSources.size,
+            unifiedSources = initialization.runtime.enabledSources.intersect(initialization.availableSources.toSet()),
+            supportedScopes = supportedScopes(initialization.query.mode),
+            validationMessage = initialization.validationMessage,
+            nhentaiLanguageFilter = initialization.query.nhentaiLanguageFilter(),
+            nhentaiFullColorFilter = initialization.query.nhentaiFullColorFilter(),
+            appliedByMode = initialization.appliedByMode,
+        ),
+        content = SearchContentUiState(hasExecutedSearch = initialization.hasExecutedSearch),
+        restoration = SearchRestorationUiState.Restoring,
+    )
 
     fun reduce(state: SearchUiState, change: SearchStateChange): SearchReduction {
         return when (change) {
