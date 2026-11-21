@@ -584,7 +584,7 @@ enum class ViewerStreamSource {
     CODEX,
     CREATOR_PROFILE,
     RECENTS,
-    /** A Trail: a Viewer level forked from a post by tag, creator or similarity. Recorded like a search. */
+    /** A Trail: a Viewer level forked from a post by tag, creator or similarity. History stores it as [SEARCH]. */
     TRAIL,
 }
 

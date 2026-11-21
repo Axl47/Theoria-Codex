@@ -29,7 +29,7 @@ internal object AppRoute {
     const val CodexDetail = "codex/detail/{codexId}"
     const val Settings = "settings-screen"
 
-    /** The triage deck over one feed, named by a [TriageRequest]. Stream T may reshape these arguments. */
+    /** The triage deck over one feed, named by a [TriageRequest]. */
     const val Triage = "triage/{source}?feedKey={feedKey}"
 
     fun codexDetail(codexId: String): String {

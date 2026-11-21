@@ -232,7 +232,6 @@ internal fun ViewerRoute(
     )
 }
 
-/** The navigation-scoped owner. Its factory reads the latest dependencies and settings, not the first ones. */
 /** The trail row's crumbs and query for [level], naming a root level after what [session] was opened from. */
 @Composable
 private fun rememberViewerTrail(level: ViewerLevel, session: ViewerSession?): ViewerTrail {
@@ -240,6 +239,7 @@ private fun rememberViewerTrail(level: ViewerLevel, session: ViewerSession?): Vi
     return remember(level, session?.saveQuery) { ViewerTrail(level.crumbs, session?.saveQuery, level.popTo) }
 }
 
+/** The navigation-scoped owner. Its factory reads the latest dependencies and settings, not the first ones. */
 @Composable
 private fun rememberViewerOwner(
     latestDependencies: State<ViewerRouteDependencies>,
