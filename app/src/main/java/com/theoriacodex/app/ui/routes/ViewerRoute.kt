@@ -52,7 +52,6 @@ import com.theoriacodex.app.viewer.ViewerReturnTransition
 import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.newViewerPosts
 import com.theoriacodex.app.viewer.state.ViewerAction
-import com.theoriacodex.app.viewer.withRelatedPosts
 import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.viewer.state.ViewerEffect
 import com.theoriacodex.app.viewer.state.ViewerUiState
@@ -393,9 +392,7 @@ private fun ViewerRouteRenderer(
 ) {
     ViewerScreen(
         comments = rememberViewerComments(viewerOwner, renderConfig.commentOrder, screenCallbacks.onCommentOrderSelected, screenCallbacks.onOpenUrl),
-        uiState = viewerState.copy(related = com.theoriacodex.app.viewer.state.ViewerRelatedUiState(
-            related.state, related.posts, activeSession?.relatedNavigation, activeSession?.relatedPostIds.orEmpty(),
-        )),
+        uiState = viewerState,
         saveToCodexQuery = activeSession?.saveQuery,
         creatorBrowsingSources = renderConfig.creatorBrowsingSources,
         onAction = { action -> viewerOwner.dispatch(action, screenCallbacks) },
@@ -407,13 +404,7 @@ private fun ViewerRouteRenderer(
         invertMultiImageScrollDirection = renderConfig.invertMultiImageScrollDirection,
         videoQuality = renderConfig.videoQuality,
         likedPostIds = renderConfig.likedPostIds,
-        onIncludeRelatedPosts = {
-            related.state.requestOrNull?.seed?.id?.let { seedId ->
-                viewerOwner.updateSession { current -> current.withRelatedPosts(seedId, related.posts) }
-            }
-        },
-        onDismissRelatedPosts = { related.source?.let(screenCallbacks.onDismissRelatedPosts) },
-        onRetryRelatedPosts = { related.source?.let(screenCallbacks.onRetryRelatedPosts) },
+        relatedShelf = rememberViewerRelatedShelf(related, viewerOwner, latestScreenCallbacks),
         onRequestMediaRecovery = { post, failedMedia ->
             routeScope.launch {
                 if (viewerOwner.session.value == null) return@launch
@@ -443,6 +434,21 @@ private fun ViewerRouteRenderer(
         onOpenCreatorFallback = screenCallbacks.onOpenCreatorFallback,
         contextActions = rememberViewerContextActions(related.source, activeSession?.context, latestScreenCallbacks),
         playbackDiagnosticsEnabled = com.theoriacodex.app.BuildConfig.BENCHMARK_FIXTURES_ENABLED,
+    )
+}
+
+@Composable
+private fun rememberViewerRelatedShelf(
+    related: ViewerRelatedPosts,
+    viewerOwner: ViewerViewModel,
+    callbacks: State<ViewerRouteScreenCallbacks>,
+) = remember(related, viewerOwner, callbacks) {
+    com.theoriacodex.app.viewer.ViewerRelatedShelf(
+        state = related.state,
+        posts = related.posts,
+        onInclude = { related.state.requestOrNull?.seed?.id?.let { seedId -> viewerOwner.includeRelatedPosts(seedId, related.posts) } },
+        onDismiss = { related.source?.let(callbacks.value.onDismissRelatedPosts) },
+        onRetry = { related.source?.let(callbacks.value.onRetryRelatedPosts) },
     )
 }
 
@@ -567,11 +573,12 @@ internal suspend fun appendLiveSourcePosts(
     background: CoroutineContext = Dispatchers.Default,
 ) {
     val session = viewerOwner.session.value ?: return
+    val basis = viewerOwner.state.value.pages
     val appended = withContext(background) {
-        liveSourceState.visiblePostsFor(session)?.let { incoming -> newViewerPosts(session.posts, incoming) }
+        liveSourceState.visiblePostsFor(session)?.let { incoming -> newViewerPosts(basis.map { it.post }, incoming) }
     }
     if (appended.isNullOrEmpty()) return
-    viewerOwner.appendSessionPosts(basis = session, posts = appended)
+    viewerOwner.appendSessionPosts(session, basis, appended)
 }
 
 /**
@@ -717,6 +724,8 @@ private fun rememberViewerRelatedPosts(
     return remember(relatedSource, relatedState, relatedPosts) { ViewerRelatedPosts(relatedSource, relatedState, relatedPosts) }
 }
 
+private fun ViewerViewModel.hasNoPage(post: Post): Boolean = state.value.pages.none { page -> page.post.id == post.id }
+
 /** Prevents buffered or suspended effects from crossing a Viewer session replacement. */
 internal fun ViewerEffect.isCurrentFor(state: ViewerUiState): Boolean = session == state.session
 
@@ -727,7 +736,7 @@ private suspend fun recoverAndApplyMedia(
     callbacks: ViewerRouteEffectCallbacks,
 ) {
     val session = viewerOwner.session.value ?: return
-    if (session.posts.none { current -> current.id == post.id }) return
+    if (viewerOwner.hasNoPage(post)) return
     val recovered = try {
         callbacks.onRecoverMedia(post, failedMedia, session.context.streamSource)
     } catch (error: CancellationException) {
@@ -737,6 +746,6 @@ private suspend fun recoverAndApplyMedia(
     } ?: return
     val currentSession = viewerOwner.session.value
     if (currentSession?.sessionId != session.sessionId) return
-    if (currentSession.posts.none { current -> current.id == post.id }) return
+    if (viewerOwner.hasNoPage(post)) return
     viewerOwner.applyResolvedPost(recovered)
 }

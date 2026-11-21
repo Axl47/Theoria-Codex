@@ -105,9 +105,7 @@ internal fun BoxScope.ViewerChromeOverlays(
     invertMultiImageScrollDirection: Boolean,
     onAction: (ViewerAction) -> Unit,
     loadMoreFromStrip: () -> Unit,
-    onIncludeRelatedPosts: () -> Unit,
-    onDismissRelatedPosts: () -> Unit,
-    onRetryRelatedPosts: () -> Unit,
+    relatedShelf: ViewerRelatedShelf,
     comments: ViewerComments,
 ) {
     val selection = frame.selection
@@ -155,16 +153,16 @@ internal fun BoxScope.ViewerChromeOverlays(
     }
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_STRIPS && !frame.mediaOverviewVisible, Modifier.align(Alignment.TopEnd).padding(top = 72.dp).then(fadesWhileScrubbing)) {
         ViewerRelatedStrip(
-            state = frame.uiState.related.state, posts = frame.uiState.related.posts, currentPostId = selection.post.id,
+            state = relatedShelf.state, posts = relatedShelf.posts, currentPostId = selection.post.id,
             onSelect = { post ->
                 controls.markInteraction()
                 if (post.id != selection.post.id) {
                     pendingPostId.value = post.id
-                    onIncludeRelatedPosts()
+                    relatedShelf.onInclude()
                 }
             },
-            onDismiss = { onDismissRelatedPosts(); controls.markInteraction() },
-            onRetry = { onRetryRelatedPosts(); controls.markInteraction() },
+            onDismiss = { relatedShelf.onDismiss(); controls.markInteraction() },
+            onRetry = { relatedShelf.onRetry(); controls.markInteraction() },
             enabled = !swipe.settling && !swipe.dragging,
             onExpandedChange = { screen.relatedStripExpanded = it },
             onInteraction = { controls.markInteraction() },

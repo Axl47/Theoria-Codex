@@ -17,7 +17,7 @@ import androidx.compose.ui.test.swipeRight
 import com.theoriacodex.app.related.RelatedPostsRequest
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.testing.testPost
-import com.theoriacodex.app.viewer.state.ViewerRelatedUiState
+import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.app.viewer.state.reduceViewerState
 import com.theoriacodex.data.repository.ViewerLaunchContext
@@ -82,22 +82,20 @@ class ViewerRelatedNavigationTest {
 
     private fun showViewer() {
         val initial = ViewerSession(originals, ViewerLaunchContext("query", 1, ViewerStreamSource.SEARCH, 0), sessionId = "screen-order")
-        val session = mutableStateOf(initial)
         state = mutableStateOf(reduceViewerState(ViewerUiState.Empty, initial.toReplaceViewerSessionAction()).state)
         compose.setContent {
             MaterialTheme {
                 ViewerScreen(
-                    uiState = state.value.copy(related = ViewerRelatedUiState(
-                        RelatedPostsUiState.Loaded(RelatedPostsRequest(originals[1], 1, 1), related), related,
-                        session.value.relatedNavigation, session.value.relatedPostIds,
-                    )),
+                    uiState = state.value,
                     creatorBrowsingSources = emptySet(),
                     onAction = { state.value = reduceViewerState(state.value, it).state },
-                    onIncludeRelatedPosts = {
-                        session.value = session.value.withRelatedPosts(originals[1].id, related)
-                            .let { it.copy(context = it.context.copy(startIndex = state.value.currentPageIndex)) }
-                        state.value = reduceViewerState(state.value, session.value.toReplaceViewerSessionAction()).state
-                    },
+                    relatedShelf = ViewerRelatedShelf(
+                        RelatedPostsUiState.Loaded(RelatedPostsRequest(originals[1], 1, 1), related), related,
+                        onInclude = {
+                            val include = ViewerAction.IncludeRelatedPosts(requireNotNull(state.value.session), originals[1].id, related)
+                            state.value = reduceViewerState(state.value, include).state
+                        },
+                    ),
                     onRemoveIncludeTerm = { _, _ -> }, onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
                 )
             }

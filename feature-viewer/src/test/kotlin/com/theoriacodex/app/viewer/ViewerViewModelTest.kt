@@ -38,10 +38,10 @@ class ViewerViewModelTest {
     fun `cold restoration keeps original order and resumes the anchor of transient recommendations`() = runTest {
         val originals = listOf(post("seed"), post("next"))
         val related = post("related")
-        val retained = session("branch", originals).withRelatedPosts(originals.first().id, listOf(related))
         val handle = SavedStateHandle()
         val owner = ViewerViewModel(handle, scopeOverride = this)
-        owner.replaceSession(retained)
+        owner.replaceSession(session("branch", originals))
+        owner.includeRelatedPosts(originals.first().id, listOf(related))
         owner.onAction(ViewerAction.SelectPage(2))
         val restored = ViewerViewModel(handle, scopeOverride = this).restorationRequest
         assertEquals(originals.map { it.id }, restored?.orderedPostIds)
@@ -58,7 +58,7 @@ class ViewerViewModelTest {
         owner.onAction(ViewerAction.SetPlaybackRate(2f))
         owner.onAction(ViewerAction.SetPlaybackMode(com.theoriacodex.app.viewer.state.ViewerPlaybackMode.NEXT))
         // A live payload update must retain the selection while its settings write is still pending.
-        owner.updateSession { it }
+        owner.appendSessionPosts(requireNotNull(owner.session.value), owner.state.value.pages, listOf(post("more")))
         assertEquals(com.theoriacodex.app.viewer.state.ViewerPlaybackMode.NEXT, owner.state.value.controls.playbackMode)
         preference = com.theoriacodex.app.viewer.state.ViewerPlaybackMode.NEXT
         owner.clearSession()
@@ -160,6 +160,28 @@ class ViewerViewModelTest {
         owner.onAction(ViewerAction.SelectPage(0))
         advanceUntilIdle()
         assertEquals(2, attempts.get())
+        owner.clearSession()
+    }
+
+    @Test
+    fun `including related posts keeps every page's playback, readiness and work`() = runTest {
+        val seed = post("seed", media = listOf(video("seed.mp4")))
+        val owner = ViewerViewModel(SavedStateHandle(), scopeOverride = this)
+        owner.replaceSession(session("related", listOf(seed, post("next"))))
+        val identity = requireNotNull(owner.state.value.session)
+        owner.onAction(ViewerAction.MediaReady(identity, requireNotNull(owner.state.value.currentMedia).key, 0L))
+        owner.onAction(ViewerAction.SetPlaybackRate(2f))
+        owner.onAction(ViewerAction.Pause)
+        val before = owner.state.value.pages
+
+        owner.includeRelatedPosts(seed.id, listOf(post("next"), post("r1", media = listOf(video("r1.mp4")))))
+
+        val state = owner.state.value
+        assertEquals(listOf("seed", "next", "r1"), state.pages.map { it.post.id.sourcePostId })
+        before.forEachIndexed { index, page -> assertSame(page, state.pages[index]) }
+        assertEquals(2f, state.controls.playback.playbackRate)
+        assertFalse(state.controls.playback.playing)
+        assertEquals(true, state.currentMedia?.ready)
         owner.clearSession()
     }
 
@@ -295,7 +317,7 @@ class ViewerViewModelTest {
         runCurrent()
         assertEquals(0, owner.state.value.currentPage?.selectedMediaIndex)
         assertEquals(2, handle.get<Int>(ViewerSavedStateKeys.MEDIA_INDEX))
-        owner.updateSession { it }
+        owner.appendSessionPosts(requireNotNull(owner.session.value), owner.state.value.pages, listOf(post("more")))
         resolved.complete(gallery)
         owner.onAction(ViewerAction.RequestCurrentPageResolution)
         advanceUntilIdle()
@@ -329,7 +351,7 @@ class ViewerViewModelTest {
     }
 
     @Test
-    fun `route owner keeps transient session metadata synchronized with resolved and appended pages`() = runTest {
+    fun `resolved and appended pages keep the selection and leave the launch payload as it was`() = runTest {
         val owner = ViewerViewModel(SavedStateHandle(), scopeOverride = this)
         val initial = session(
             "owned",
@@ -341,14 +363,13 @@ class ViewerViewModelTest {
 
         val resolved = initial.posts[1].copy(title = "Resolved")
         owner.applyResolvedPost(resolved)
-        owner.updateSession { current -> current.copy(posts = current.posts + post("third")) }
+        owner.appendSessionPosts(initial, owner.state.value.pages, listOf(post("third")))
 
-        assertEquals(listOf("first", "second", "third"), owner.session.value?.posts?.map { it.id.sourcePostId })
-        assertEquals("Resolved", owner.session.value?.posts?.get(1)?.title)
+        assertEquals(listOf("first", "second", "third"), owner.state.value.pages.map { it.post.id.sourcePostId })
         assertEquals("Resolved", owner.state.value.pages[1].post.title)
         assertEquals(1, owner.state.value.currentPageIndex)
         assertEquals(1, owner.state.value.currentPage?.selectedMediaIndex)
-        assertEquals(1, owner.session.value?.context?.startIndex)
+        assertSame(initial, owner.session.value)
 
         owner.clearSession()
         assertNull(owner.session.value)
@@ -406,7 +427,6 @@ class ViewerViewModelTest {
         advanceUntilIdle()
         assertEquals(ViewerResolutionStatus.RESOLVED, owner.state.value.currentPage?.resolution?.status)
         assertEquals("Resolved", owner.state.value.currentPage?.post?.title)
-        assertEquals("Resolved", owner.session.value?.posts?.single()?.title)
 
         val mediaKey = requireNotNull(owner.state.value.currentMedia?.key)
         owner.onAction(ViewerAction.QueuePrefetch(listOf(mediaKey)))

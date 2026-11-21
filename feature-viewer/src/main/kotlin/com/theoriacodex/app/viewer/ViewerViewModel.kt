@@ -17,6 +17,7 @@ import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerEffect
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerMediaState
+import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.app.viewer.state.ViewerPrefetchOutcome
 import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
 import com.theoriacodex.app.viewer.state.ViewerResolutionStatus
@@ -143,7 +144,8 @@ class ViewerViewModel(
         }
         reduction.effects.forEach(::handleEffect)
         if (action is ViewerAction.SelectPage || action is ViewerAction.ReplaceSession || action is ViewerAction.AppendPosts ||
-            action is ViewerAction.PlaybackCompleted || action is ViewerAction.SlideshowAdvance) {
+            action is ViewerAction.IncludeRelatedPosts || action is ViewerAction.PlaybackCompleted ||
+            action is ViewerAction.SlideshowAdvance) {
             reconcileResolutionLookahead()
             showComments()
         }
@@ -185,57 +187,50 @@ class ViewerViewModel(
         }
     }
 
-    /** Keeps transient launch metadata and immutable render pages under the same route owner. */
-    fun updateSession(transform: (ViewerSession) -> ViewerSession) {
-        val current = mutableSession.value ?: return
-        val updated = transform(current)
-        if (updated == current) return
-        val currentIndex = state.value.currentPageIndex
-        val currentMediaIndex = state.value.currentPage?.let { it.pendingMediaIndex ?: it.selectedMediaIndex } ?: 0
-        val replacement = updated.copy(
-            context = updated.context.copy(startIndex = currentIndex),
-        )
-        replaceSession(replacement)
-        if (currentMediaIndex > 0) onAction(ViewerAction.SelectMedia(currentMediaIndex))
-    }
-
     /**
-     * Appends to the live session the [posts] that [basis], an earlier snapshot of it, lacked. Unlike [updateSession]
-     * it builds pages for the new posts only and keeps the session's work, selection and playback, so a feed page
-     * costs what it adds. Ignored once another session replaced [basis]; posts it gained since are not repeated.
+     * Appends to [session] the [posts] its pages lacked when they were [basis]. It builds pages for the new posts
+     * only and keeps the session's work, selection and playback, so a feed page costs what it adds. Ignored once
+     * another session replaced [session]; posts the pages gained since [basis] are not repeated.
      */
-    fun appendSessionPosts(basis: ViewerSession, posts: List<Post>) {
+    fun appendSessionPosts(session: ViewerSession, basis: List<ViewerPageState>, posts: List<Post>) {
         val current = mutableSession.value ?: return
-        if (current.sessionId != basis.sessionId) return
-        val added = if (current.posts === basis.posts) posts else newViewerPosts(current.posts, posts)
+        if (current.sessionId != session.sessionId) return
+        val pages = state.value.pages
+        val added = if (pages === basis) posts else newViewerPosts(pages.map { it.post }, posts)
         if (added.isEmpty()) return
-        val updated = current.copy(
-            posts = current.posts + added,
-            context = current.context.copy(startIndex = state.value.currentPageIndex),
-        )
-        mutableSession.value = updated
         onAction(
             ViewerAction.AppendPosts(
-                session = updated.toViewerSessionIdentity(),
+                session = current.toViewerSessionIdentity(),
                 posts = added,
-                resolutionRequiredPostIds = updated.resolutionRequiredPostIds(added, ::requiresResolution),
-                initialMediaIndices = updated.initialMediaIndices,
+                resolutionRequiredPostIds = current.resolutionRequiredPostIds(added, ::requiresResolution),
+                initialMediaIndices = current.initialMediaIndices,
+            ),
+        )
+    }
+
+    /** Enters the related shelf's recommendation branch from [seedId], keeping every page the session already has. */
+    fun includeRelatedPosts(seedId: PostId, posts: List<Post>) {
+        val current = mutableSession.value ?: return
+        onAction(
+            ViewerAction.IncludeRelatedPosts(
+                session = current.toViewerSessionIdentity(),
+                seedId = seedId,
+                posts = posts,
+                resolutionRequiredPostIds = current.resolutionRequiredPostIds(posts, ::requiresResolution),
+                initialMediaIndices = current.initialMediaIndices,
             ),
         )
     }
 
     private fun requiresResolution(post: Post): Boolean = postResolver?.requiresResolution(post) == true
 
+    /** Replaces a page's post with its [resolved] form, keeping what only its listing knew. */
     fun applyResolvedPost(resolved: Post) {
-        val current = mutableSession.value ?: return
-        val index = current.posts.indexOfFirst { candidate -> candidate.id == resolved.id }
-        if (index < 0) return
-        val post = resolved.keepingListingDataOf(current.posts[index])
+        if (mutableSession.value == null) return
+        val listed = state.value.pages.firstOrNull { page -> page.post.id == resolved.id }?.post ?: return
+        val post = resolved.keepingListingDataOf(listed)
         sessionJobs.keys.filterIsInstance<ViewerWorkKey.Prefetch>().filter { it.mediaKey.postId == post.id }
             .forEach { key -> sessionJobs.remove(key)?.cancel() }
-        mutableSession.value = current.copy(
-            posts = current.posts.toMutableList().apply { this[index] = post },
-        )
         state.value.session?.let { identity ->
             onAction(ViewerAction.ResolutionCompleted(identity, post))
         }
@@ -251,7 +246,7 @@ class ViewerViewModel(
         val current = synchronized(lock) {
             val active = mutableSession.value ?: return
             if (active.toViewerSessionIdentity() != identity ||
-                active.posts.none { it.id == post.id } || !recordedVisiblePosts.add(post.id)
+                state.value.pages.none { it.post.id == post.id } || !recordedVisiblePosts.add(post.id)
             ) return
             active
         }
@@ -517,7 +512,7 @@ class ViewerViewModel(
     }
 
     private fun persist(rendered: ViewerUiState) {
-        val current = rendered.forOriginalNavigation(mutableSession.value)
+        val current = rendered.forOriginalNavigation()
         val session = current.session ?: run {
             clearSavedState()
             return
@@ -622,8 +617,6 @@ internal fun ViewerSession.toReplaceViewerSessionAction(
         posts = posts.toList(),
         initialPageIndex = context.startIndex,
         initialMediaIndices = initialMediaIndices,
-        relatedNavigation = relatedNavigation,
-        relatedPostIds = relatedPostIds,
         resolutionRequiredPostIds = resolutionRequiredPostIds(posts, requiresResolution),
     )
 }

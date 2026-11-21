@@ -171,22 +171,6 @@ class ViewerSessionCoordinatorTest {
     }
 
     @Test
-    fun `merges incoming viewer posts without duplicating existing ids`() {
-        val first = samplePost(source = SourceKey.PIXIV, sourcePostId = "1")
-        val duplicate = samplePost(source = SourceKey.PIXIV, sourcePostId = "1").copy(title = "updated")
-        val second = samplePost(source = SourceKey.PIXIV, sourcePostId = "2")
-
-        assertEquals(listOf(first, second), mergeViewerPosts(listOf(first), listOf(duplicate, second)))
-    }
-
-    @Test
-    fun `merge preserves empty list instances for no-op updates`() {
-        val current = listOf(samplePost(source = SourceKey.AIBOORU, sourcePostId = "1"))
-
-        assertSame(current, mergeViewerPosts(current, emptyList()))
-    }
-
-    @Test
     fun `usable media bypasses a delayed provider while Viewer refresh remains required`() = runTest {
         val viable = samplePost(
             source = SourceKey.GELBOORU,

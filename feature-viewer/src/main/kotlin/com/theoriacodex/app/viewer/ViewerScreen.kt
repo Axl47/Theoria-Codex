@@ -70,9 +70,7 @@ fun ViewerScreen(
     onOpenCreatorFallback: ((Post) -> Unit)? = null,
     contextActions: ViewerContextActions = ViewerContextActions(),
     playbackDiagnosticsEnabled: Boolean = false,
-    onIncludeRelatedPosts: () -> Unit = {},
-    onDismissRelatedPosts: () -> Unit = {},
-    onRetryRelatedPosts: () -> Unit = {},
+    relatedShelf: ViewerRelatedShelf = ViewerRelatedShelf.None,
     comments: ViewerComments = ViewerComments.None,
 ) {
     val returnProgress = rememberViewerReturnProgress()
@@ -98,7 +96,7 @@ fun ViewerScreen(
         fetchTagVideoCounts, canLoadMoreFromSource, loadingMoreFromSource, invertMultiImageScrollDirection, likedPostIds,
         onRequestMediaRecovery, onVisiblePostChanged, onVisibleMediaChanged, durations,
         onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, onGoToSearch, onOpenCreatorFallback, contextActions,
-        playbackDiagnosticsEnabled, onIncludeRelatedPosts, onDismissRelatedPosts, onRetryRelatedPosts, comments,
+        playbackDiagnosticsEnabled, relatedShelf, comments,
     )
 }
 
@@ -138,9 +136,7 @@ private fun ViewerLoadedScreen(
     onOpenCreatorFallback: ((Post) -> Unit)?,
     contextActions: ViewerContextActions,
     playbackDiagnosticsEnabled: Boolean,
-    onIncludeRelatedPosts: () -> Unit,
-    onDismissRelatedPosts: () -> Unit,
-    onRetryRelatedPosts: () -> Unit,
+    relatedShelf: ViewerRelatedShelf,
     comments: ViewerComments,
 ) {
     val readReturnProgress = remember(returnProgress) { { returnProgress.value } }
@@ -191,7 +187,7 @@ private fun ViewerLoadedScreen(
             }
             ViewerChromeOverlays(
                 frame, postPagerState, screen, controls, swipe, activity, quality, qualityHeight, pendingPostId, likedPostIds,
-                invertMultiImageScrollDirection, onAction, loadMoreFromStrip, onIncludeRelatedPosts, onDismissRelatedPosts, onRetryRelatedPosts, comments,
+                invertMultiImageScrollDirection, onAction, loadMoreFromStrip, relatedShelf, comments,
             )
         }
     }

@@ -206,10 +206,10 @@ class ViewerSwipeAnimationTest {
             CompositionLocalProvider(LocalViewerReturnTransition provides transition) {
                 MaterialTheme {
                     ViewerScreen(
-                        uiState = state.value.copy(related = relatedState(first, posts, related)), creatorBrowsingSources = emptySet(),
+                        uiState = state.value.copy(related = relatedBranch(first, posts, related)), creatorBrowsingSources = emptySet(),
                         invertMultiImageScrollDirection = inverted,
                         onAction = { state.value = reduceViewerState(state.value, it).state },
-                        onIncludeRelatedPosts = {
+                        relatedShelf = relatedShelf(first, posts, related) {
                             state.value = reduceViewerState(state.value,
                                 com.theoriacodex.app.viewer.state.ViewerAction.ReplaceSession(ViewerSessionIdentity("swipe"), posts)).state
                         },
@@ -222,15 +222,18 @@ class ViewerSwipeAnimationTest {
     }
 
 
-    private fun relatedState(first: Post, posts: List<Post>, related: Boolean) =
-        com.theoriacodex.app.viewer.state.ViewerRelatedUiState(
-                                    if (related) com.theoriacodex.app.related.RelatedPostsUiState.Loaded(
-                                        com.theoriacodex.app.related.RelatedPostsRequest(first, 0, 1), posts.drop(1))
-                                        else com.theoriacodex.app.related.RelatedPostsUiState.Idle,
-                                    if (related) posts.drop(1) else emptyList(),
-                                    if (related) com.theoriacodex.app.viewer.state.ViewerRelatedNavigation(first.id, posts.drop(1).map { it.id }) else null,
-                                    if (related) posts.drop(1).mapTo(mutableSetOf()) { it.id } else emptySet(),
-                                )
+    private fun relatedShelf(first: Post, posts: List<Post>, related: Boolean, onInclude: () -> Unit) = ViewerRelatedShelf(
+        if (related) com.theoriacodex.app.related.RelatedPostsUiState.Loaded(
+            com.theoriacodex.app.related.RelatedPostsRequest(first, 0, 1), posts.drop(1))
+            else com.theoriacodex.app.related.RelatedPostsUiState.Idle,
+        if (related) posts.drop(1) else emptyList(),
+        onInclude = onInclude,
+    )
+
+    private fun relatedBranch(first: Post, posts: List<Post>, related: Boolean) = com.theoriacodex.app.viewer.state.ViewerRelatedBranch(
+        if (related) com.theoriacodex.app.viewer.state.ViewerRelatedNavigation(first.id, posts.drop(1).map { it.id }) else null,
+        if (related) posts.drop(1).mapTo(mutableSetOf()) { it.id } else emptySet(),
+    )
 
 
     private fun performHeldDrag(

@@ -101,6 +101,7 @@ fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReducti
     return when (action) {
         is ViewerAction.ReplaceSession -> error("Handled above")
         is ViewerAction.AppendPosts -> state.ifCurrentSession(action.session) { appendPosts(action) }
+        is ViewerAction.IncludeRelatedPosts -> state.ifCurrentSession(action.session) { includeRelatedPosts(action) }
         is ViewerAction.SelectPage -> state.selectPage(action.pageIndex)
         is ViewerAction.SelectMedia -> state.selectMedia(action.mediaIndex)
         is ViewerAction.SelectOverviewMedia -> state.selectMedia(action.mediaIndex)
@@ -178,7 +179,8 @@ private fun ViewerUiState.replaceSession(action: ViewerAction.ReplaceSession): V
                     // Nor may it end a running slideshow; a new session starts without one.
                     slideshow = session == action.session && controls.slideshow,
                 ),
-                related = ViewerRelatedUiState(navigation = action.relatedNavigation, extraPostIds = action.relatedPostIds),
+                // A live update keeps the branch the user entered; a new session starts on its original feed.
+                related = if (session == action.session) related else ViewerRelatedBranch(),
             )
         },
     )
@@ -190,6 +192,27 @@ private fun ViewerUiState.appendPosts(action: ViewerAction.AppendPosts): ViewerU
         post.toNewViewerPageState({ it.id in action.resolutionRequiredPostIds }, action.initialMediaIndices)
     },
 )
+
+/** Adding branch posts never changes which pages belong to the original feed, which the bottom strip shows. */
+private fun ViewerUiState.includeRelatedPosts(action: ViewerAction.IncludeRelatedPosts): ViewerUiState {
+    val originalIds = pages.mapNotNullTo(mutableSetOf()) { page -> page.post.id.takeUnless { it in related.extraPostIds } }
+    val navigation = related.navigation
+    val anchor = action.seedId.takeIf { it in originalIds } ?: navigation?.anchor ?: return this
+    val prefix = navigation?.postIds.orEmpty().let { ids ->
+        if (action.seedId in originalIds) emptyList() else ids.take(ids.indexOf(action.seedId) + 1)
+    }
+    val branchIds = (prefix + action.posts.map { it.id }).filterNot { it == anchor }.distinct()
+    val added = com.theoriacodex.app.viewer.newViewerPosts(pages.map { it.post }, action.posts)
+    return copy(
+        pages = pages + added.map { post ->
+            post.toNewViewerPageState({ it.id in action.resolutionRequiredPostIds }, action.initialMediaIndices)
+        },
+        related = ViewerRelatedBranch(
+            navigation = ViewerRelatedNavigation(anchor, branchIds),
+            extraPostIds = related.extraPostIds + (action.posts.mapTo(mutableSetOf(), Post::id) - originalIds),
+        ),
+    )
+}
 
 private fun ViewerUiState.reduceToggleOverview(): ViewerReduction =
     ViewerReduction(

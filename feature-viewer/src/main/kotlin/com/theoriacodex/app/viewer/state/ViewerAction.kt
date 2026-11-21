@@ -12,13 +12,23 @@ sealed interface ViewerAction {
         val initialPageIndex: Int = 0,
         val resolutionRequiredPostIds: Set<PostId> = emptySet(),
         val initialMediaIndices: Map<PostId, Int> = emptyMap(),
-        val relatedNavigation: ViewerRelatedNavigation? = null,
-        val relatedPostIds: Set<PostId> = emptySet(),
     ) : ViewerAction
 
     /** Adds [posts] after the live [session]'s pages, leaving the pages, selection and controls it has untouched. */
     data class AppendPosts(
         val session: ViewerSessionIdentity,
+        val posts: List<Post>,
+        val resolutionRequiredPostIds: Set<PostId> = emptySet(),
+        val initialMediaIndices: Map<PostId, Int> = emptyMap(),
+    ) : ViewerAction
+
+    /**
+     * Enters, or extends, the recommendation branch from [seedId] with the related shelf's [posts]. Like
+     * [AppendPosts] it adds pages only for the posts the session lacks and leaves every other page untouched.
+     */
+    data class IncludeRelatedPosts(
+        val session: ViewerSessionIdentity,
+        val seedId: PostId,
         val posts: List<Post>,
         val resolutionRequiredPostIds: Set<PostId> = emptySet(),
         val initialMediaIndices: Map<PostId, Int> = emptyMap(),

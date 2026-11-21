@@ -118,9 +118,11 @@ sealed interface ViewerMediaError {
 
 data class ViewerRelatedNavigation(val anchor: PostId, val postIds: List<PostId>)
 
-data class ViewerRelatedUiState(
-    val state: com.theoriacodex.app.related.RelatedPostsUiState = com.theoriacodex.app.related.RelatedPostsUiState.Idle,
-    val posts: List<Post> = emptyList(),
+/**
+ * The recommendation branch entered from the related shelf: where it leaves the original feed, and which of the
+ * pages are recommendations rather than the feed's own posts.
+ */
+data class ViewerRelatedBranch(
     val navigation: ViewerRelatedNavigation? = null,
     val extraPostIds: Set<PostId> = emptySet(),
 )
@@ -133,7 +135,7 @@ data class ViewerUiState(
     val overview: ViewerOverviewState = ViewerOverviewState(),
     val prefetch: ViewerPrefetchState = ViewerPrefetchState(),
     val mediaError: ViewerMediaError? = null,
-    val related: ViewerRelatedUiState = ViewerRelatedUiState(),
+    val related: ViewerRelatedBranch = ViewerRelatedBranch(),
 ) {
     val currentPage: ViewerPageState?
         get() = pages.getOrNull(currentPageIndex)

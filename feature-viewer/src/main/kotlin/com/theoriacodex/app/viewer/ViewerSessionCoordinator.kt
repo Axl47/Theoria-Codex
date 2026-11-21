@@ -11,6 +11,10 @@ import java.util.UUID
 
 data class ViewerRelatedBinding(val source: ViewerStreamSource, val queryHash: String)
 
+/**
+ * One Viewer launch: what was opened and where from. Its [posts] are the launch payload and never change; the
+ * live post list, which grows with the feed and the related shelf, is [com.theoriacodex.app.viewer.state.ViewerUiState.pages].
+ */
 data class ViewerSession(
     val posts: List<Post>,
     val context: ViewerLaunchContext,
@@ -24,8 +28,6 @@ data class ViewerSession(
     // Captured applied query for contextual save ranking; never inferred from another live route.
     val saveQuery: com.theoriacodex.domain.model.Query? = null,
     val relatedBinding: ViewerRelatedBinding? = null,
-    val relatedNavigation: com.theoriacodex.app.viewer.state.ViewerRelatedNavigation? = null,
-    val relatedPostIds: Set<com.theoriacodex.domain.model.PostId> = emptySet(),
     // A comment link's target on the first post; the Viewer opens its comments on it once, when the session launches.
     val focusComment: CommentTarget? = null,
 )
@@ -80,12 +82,6 @@ suspend fun prepareViewerPostsForLaunch(
     if (!requiresPrelaunchViewerPostResolution(selectedPost)) return posts
     val resolved = resolvePost(selectedPost)?.keepingListingDataOf(selectedPost) ?: return posts
     return posts.toMutableList().apply { this[startIndex] = resolved }
-}
-
-internal fun mergeViewerPosts(current: List<Post>, incoming: List<Post>): List<Post> {
-    if (incoming.isEmpty()) return current
-    if (current.isEmpty()) return incoming
-    return current + newViewerPosts(current, incoming)
 }
 
 /** The posts of [incoming] that [current] lacks, in order and without repeats. */

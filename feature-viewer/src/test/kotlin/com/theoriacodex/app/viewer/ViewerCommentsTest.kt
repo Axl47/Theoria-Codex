@@ -88,7 +88,6 @@ class ViewerCommentsTest {
 
         owner.applyResolvedPost(listed.copy(commentHint = null, title = "Resolved"))
 
-        assertEquals(CommentHint(4), owner.session.value?.posts?.single()?.commentHint)
         assertEquals(CommentHint(4), owner.state.value.currentPage?.post?.commentHint)
         assertEquals("Resolved", owner.state.value.currentPage?.post?.title)
     }
