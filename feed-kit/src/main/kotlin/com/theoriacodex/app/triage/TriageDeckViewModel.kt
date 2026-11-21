@@ -51,7 +51,9 @@ class TriageDeckViewModel(
     /** Every write and reversal, run one at a time in the order they were asked for. */
     private val writes = Channel<suspend () -> Unit>(Channel.UNLIMITED)
     private var latest: Work? = null
-    private var pagedAtSize = -1
+    /** [TriageFeedSnapshot.loaded] of the latest snapshot, and what it was when the deck last asked for a page. */
+    private var loaded = 0
+    private var pagedAtLoaded = -1
 
     init {
         // Ends once the deck has closed and the queue has drained, so it holds the deck no longer than its writes.
@@ -60,6 +62,7 @@ class TriageDeckViewModel(
         }
         viewModelScope.launch {
             feed.snapshots.collect { snapshot ->
+                loaded = snapshot.loaded
                 mutableState.update { deck ->
                     val known = deck.posts.mapTo(HashSet(), { post -> post.id })
                     val grown = deck.copy(
@@ -147,8 +150,8 @@ class TriageDeckViewModel(
 
     private fun pageIfNearEnd() {
         val deck = mutableState.value
-        if (!deck.canLoadMore || deck.posts.size == pagedAtSize || deck.posts.size - deck.index > PAGE_AHEAD) return
-        pagedAtSize = deck.posts.size
+        if (!deck.canLoadMore || loaded == pagedAtLoaded || deck.posts.size - deck.index > PAGE_AHEAD) return
+        pagedAtLoaded = loaded
         feed.loadNextPage()
     }
 

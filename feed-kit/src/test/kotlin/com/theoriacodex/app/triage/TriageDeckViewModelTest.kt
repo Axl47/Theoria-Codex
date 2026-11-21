@@ -175,7 +175,7 @@ class TriageDeckViewModelTest {
         assertEquals(listOf(posts[1].id), actions.unliked)
     }
 
-    @Test fun `the deck asks a live feed for its next page near the end, once per size`() = runTest {
+    @Test fun `the deck asks a live feed for its next page near the end, once per page loaded`() = runTest {
         val live = FakeFeed(posts.take(7), canLoadMore = true)
         val deck = deck(live)
         assertEquals(0, live.pagesRequested)
@@ -187,6 +187,20 @@ class TriageDeckViewModelTest {
         live.emit(posts, canLoadMore = false)
         assertEquals(8, deck.state.value.posts.size)
         assertEquals(3, deck.state.value.index)
+    }
+
+    @Test fun `a page with no post the grid shows still lets the deck ask for the next one`() = runTest {
+        val live = FakeFeed(posts.take(1), canLoadMore = true)
+        val deck = deck(live)
+        deck.decideCurrent(TriageChoice.Skip)
+        assertEquals(1, live.pagesRequested)
+        live.emit(posts.take(1), canLoadMore = true, loaded = 20)
+        assertEquals(2, live.pagesRequested)
+        live.emit(posts.take(1), canLoadMore = true, loaded = 20)
+        assertEquals(2, live.pagesRequested)
+        live.emit(posts.take(1), canLoadMore = false, loaded = 40)
+        assertEquals(2, live.pagesRequested)
+        assertTrue(deck.state.value.finished)
     }
 
     @Test fun `a repeated snapshot never duplicates posts and the deck ends when the feed has no more`() = runTest {
@@ -265,7 +279,9 @@ class TriageDeckViewModelTest {
         var pagesRequested = 0
         override val snapshots: Flow<TriageFeedSnapshot> = flow
         override fun loadNextPage() { pagesRequested++ }
-        fun emit(posts: List<Post>, canLoadMore: Boolean) { flow.value = TriageFeedSnapshot(posts, canLoadMore) }
+        fun emit(posts: List<Post>, canLoadMore: Boolean, loaded: Int = posts.size) {
+            flow.value = TriageFeedSnapshot(posts, canLoadMore, loaded)
+        }
     }
 
     private class FakeActions : TriageActions {

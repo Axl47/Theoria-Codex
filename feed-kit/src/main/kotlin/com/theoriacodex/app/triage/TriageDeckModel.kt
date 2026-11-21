@@ -9,8 +9,11 @@ import com.theoriacodex.domain.tags.normalizeMatchToken
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 
-/** The posts a deck works through so far, and whether its origin feed has more. */
-data class TriageFeedSnapshot(val posts: List<Post>, val canLoadMore: Boolean)
+/**
+ * The posts a deck works through so far, and whether its origin feed has more. [loaded] counts the posts the origin
+ * feed has loaded before the grid's filters, so it grows with every page, even one none of whose posts pass them.
+ */
+data class TriageFeedSnapshot(val posts: List<Post>, val canLoadMore: Boolean, val loaded: Int = posts.size)
 
 /** Where a deck's posts come from: a live feed that pages, or a fixed list. */
 interface TriageFeed {

@@ -96,7 +96,7 @@ private fun ViewerFeedOwner.seededTriageFeed(
     val snapshots = combine(feed, if (seed.lengthFilterActive) lengths else flowOf(emptyMap())) { current, decided ->
         if (current == null) return@combine TriageFeedSnapshot(emptyList(), canLoadMore = false)
         val shown = seed.filter(current.results, decidedLengths(current.results, decided))
-        TriageFeedSnapshot(seed.posts + shown, current.canLoadMore)
+        TriageFeedSnapshot(seed.posts + shown, current.canLoadMore, loaded = current.results.size)
     }.distinctUntilChanged().flowOn(Dispatchers.Default)
     return SeededTriageFeed(snapshots, feed.map { current -> current?.results.orEmpty() }) {
         if (owner.viewerFeed.queryHash == queryHash) owner.loadNextPage()
