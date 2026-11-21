@@ -45,7 +45,7 @@ class SavedSearchControlsTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
-    fun `a bookmark saves under the query's own name and confirms only once the save commits`() {
+    fun `the menu's save saves under the query's own name and confirms only once the save commits`() {
         val recent = search(RecentSearchKind.SOURCE)
         var saved by mutableStateOf(emptyList<SavedSearchEntry>())
         var justSaved by mutableStateOf<String?>(null)
@@ -59,6 +59,7 @@ class SavedSearchControlsTest {
         openSearches()
         compose.onNodeWithTag("Recent search:${recent.queryHash}")
             .performSemanticsAction(SemanticsActions.OnLongClick) { it() }
+        compose.onNodeWithText("Save search").performClick()
         assertEquals(listOf(recentSearchPresentation(recent).title to recent), requested)
         compose.onNodeWithText("Saved").assertDoesNotExist()
 
@@ -84,6 +85,7 @@ class SavedSearchControlsTest {
         openSearches()
         compose.onNodeWithTag("Recent search:${recent.queryHash}")
             .performSemanticsAction(SemanticsActions.OnLongClick) { it() }
+        compose.onNodeWithText("Rename saved search").performClick()
         compose.onNode(hasSetTextAction()).assertTextEquals("Evening")
         compose.onNode(hasSetTextAction()).performTextReplacement("Morning recipe")
         compose.onNode(hasSetTextAction()).performImeAction()

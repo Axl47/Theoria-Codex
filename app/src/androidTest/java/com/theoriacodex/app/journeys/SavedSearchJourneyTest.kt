@@ -40,7 +40,8 @@ class SavedSearchJourneyTest : AppJourneyFixture() {
         openRecentsSection("Searches")
         compose.onNodeWithTag("Recent search:pin-journey")
             .performSemanticsAction(SemanticsActions.OnLongClick) { it() }
-        // Long-press saves at once under the query's name; once it commits, Rename names it in the row.
+        activate(compose.onNodeWithText("Save search"))
+        // Saving is immediate, under the query's name; once it commits, Rename names it in the row.
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Rename").fetchSemanticsNodes().isNotEmpty() }
         activate(compose.onNodeWithText("Rename"))
         compose.onNode(hasSetTextAction()).performTextReplacement("My landscapes")

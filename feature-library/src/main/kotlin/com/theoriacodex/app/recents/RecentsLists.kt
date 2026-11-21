@@ -50,14 +50,16 @@ import com.theoriacodex.app.search.relativeTimeLabel
 import com.theoriacodex.app.ui.undo.UndoRow
 
 /**
- * What History's rows and tiles can do to their own entry: save a search in place ([saving]), or be removed
- * ([onRemoveSearch], [onRemovePost]). [removedSearch] keeps its row or tile in place to show the Undo offer.
+ * What History's rows and tiles can do to their own entry: save a search in place ([saving]), open a search's
+ * long-press menu ([onSearchMenu]), or be removed ([onRemoveSearch], [onRemovePost]). [removedSearch] keeps its
+ * row or tile in place to show the Undo offer.
  */
 internal class RecentsRowActions(
     val saving: RecentSearchSaving?,
     val removedSearch: RecentSearchEntry?,
     val onRemoveSearch: ((RecentSearchEntry) -> Unit)?,
     val onRemovePost: ((RecentPostEntry) -> Unit)?,
+    val onSearchMenu: ((RecentSearchEntry) -> Unit)?,
 )
 
 /** The body under the header, for whichever section is selected. */
@@ -272,7 +274,10 @@ private fun SearchHistoryList(
                         UndoRow(recentSearchRemovalAnchor(entry), Modifier.padding(vertical = 4.dp))
                     } else {
                         RemovableEntry(rows.onRemoveSearch?.let { remove -> { remove(entry) } }) { removeAction ->
-                            RecentSearchRow(entry, now, onClick = { onOpenSearch(entry) }, saving = rows.saving, removeAction)
+                            RecentSearchRow(
+                                entry, now, onClick = { onOpenSearch(entry) }, onLongPress = rows.onSearchMenu?.let { { it(entry) } },
+                                saving = rows.saving, modifier = removeAction,
+                            )
                         }
                     }
                 }
@@ -329,7 +334,8 @@ private fun ActivityList(
                             UndoRow(recentSearchRemovalAnchor(entry), Modifier.width(RECENT_SEARCH_TILE_MAX_WIDTH))
                         } else {
                             RecentSearchTile(
-                                entry, now, onClick = { onOpenSearch(entry) }, saving = rows.saving,
+                                entry, now, onClick = { onOpenSearch(entry) }, onLongPress = rows.onSearchMenu?.let { { it(entry) } },
+                                saving = rows.saving,
                                 modifier = historyRemoval(rows.onRemoveSearch?.let { remove -> { remove(entry) } }),
                             )
                         }

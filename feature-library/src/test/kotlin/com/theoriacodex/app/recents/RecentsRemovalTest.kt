@@ -14,6 +14,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.ui.undo.ProvideUndoSlot
@@ -106,6 +108,20 @@ class RecentsRemovalTest {
         compose.onNodeWithText("No searches").assertExists()
         compose.onNodeWithText("Search", substring = false).performClick()
         compose.onNodeWithText("Undo").assertExists()
+    }
+
+    @Test
+    fun `long-press menus remove a search tile and a post from History`() {
+        compose.setContent { MaterialTheme { TestRecents() } }
+
+        compose.onNodeWithTag("Recent search:${search.queryHash}").performSemanticsAction(SemanticsActions.OnLongClick) { it() }
+        compose.onNodeWithText("Remove from History").performClick()
+        compose.onNodeWithTag(searchCardTestTag(post.post.id)).performSemanticsAction(SemanticsActions.OnLongClick) { it() }
+        // The post menu's last row sits below the sheet's first screen.
+        compose.onNodeWithText("Remove from History").performScrollTo().performClick()
+
+        assertEquals(listOf(search), removedSearches)
+        assertEquals(listOf(post), removedPosts)
     }
 
     @After

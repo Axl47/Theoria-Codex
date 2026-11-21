@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -18,6 +19,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
+import com.theoriacodex.app.ui.components.ActionMenuRow
+import com.theoriacodex.app.ui.components.ActionMenuSheet
 import com.theoriacodex.app.ui.components.InlineNameField
 import com.theoriacodex.data.repository.MAX_SAVED_SEARCH_NAME_LENGTH
 import com.theoriacodex.data.repository.RecentSearchEntry
@@ -97,8 +100,35 @@ internal fun SaveSearchControl(entry: RecentSearchEntry, saving: RecentSearchSav
     }
 }
 
-/** What long-pressing [entry] does, for TalkBack: the same as its bookmark. */
-internal fun RecentSearchSaving.longPressLabel(entry: RecentSearchEntry) =
-    if (savedFor(entry) == null) "Save search" else "Rename saved search"
+/**
+ * A search entry's long-press menu: the bookmark's action (save, or rename once saved) and, with [onRemove],
+ * Remove from History, which leaves the same Undo placeholder as a swipe.
+ */
+@Composable
+internal fun RecentSearchMenu(
+    entry: RecentSearchEntry,
+    saving: RecentSearchSaving?,
+    onRemove: ((RecentSearchEntry) -> Unit)?,
+    onDismiss: () -> Unit,
+) {
+    ActionMenuSheet(onDismiss) {
+        saving?.let { save ->
+            val saved = save.savedFor(entry) != null
+            ActionMenuRow(
+                if (saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                if (saved) "Rename saved search" else "Save search",
+            ) {
+                onDismiss()
+                save.bookmark(entry)
+            }
+        }
+        onRemove?.let { remove ->
+            ActionMenuRow(Icons.Default.Delete, REMOVE_FROM_HISTORY, tint = MaterialTheme.colorScheme.error) {
+                onDismiss()
+                remove(entry)
+            }
+        }
+    }
+}
 
 private fun savedSearchName(entry: RecentSearchEntry) = recentSearchPresentation(entry).title.take(MAX_SAVED_SEARCH_NAME_LENGTH)

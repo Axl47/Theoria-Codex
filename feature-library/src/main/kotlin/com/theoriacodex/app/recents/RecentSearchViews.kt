@@ -65,12 +65,16 @@ internal fun recentSearchQueryText(query: Query, quiet: Color, excluded: Color):
     if (length == 0) withStyle(SpanStyle(color = quiet)) { append("No tags") }
 }
 
-/** One entry of the Searches section: up to two lines of query, its context, and a visible save. [modifier] goes on its clickable node. */
+/**
+ * One entry of the Searches section: up to two lines of query, its context, and a visible save. [onLongPress] opens
+ * its menu; [modifier] goes on its clickable node.
+ */
 @Composable
 internal fun RecentSearchRow(
     entry: RecentSearchEntry,
     now: Long,
     onClick: () -> Unit,
+    onLongPress: (() -> Unit)?,
     saving: RecentSearchSaving?,
     modifier: Modifier = Modifier,
 ) {
@@ -81,8 +85,8 @@ internal fun RecentSearchRow(
             .fillMaxWidth()
             .combinedClickable(
                 onClick = onClick,
-                onLongClickLabel = saving?.longPressLabel(entry),
-                onLongClick = saving?.let { { it.bookmark(entry) } },
+                onLongClickLabel = SEARCH_MENU_LABEL,
+                onLongClick = onLongPress,
             )
             .padding(vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -117,12 +121,13 @@ internal fun RecentSearchRow(
     }
 }
 
-/** A compact search in the All view's per-day row, with the same save as rows. [modifier] goes on its clickable node. */
+/** A compact search in the All view's per-day row, with the same save and menu as rows. [modifier] goes on its clickable node. */
 @Composable
 internal fun RecentSearchTile(
     entry: RecentSearchEntry,
     now: Long,
     onClick: () -> Unit,
+    onLongPress: (() -> Unit)?,
     saving: RecentSearchSaving?,
     modifier: Modifier = Modifier,
 ) {
@@ -134,8 +139,8 @@ internal fun RecentSearchTile(
             .clip(CardShape)
             .combinedClickable(
                 onClick = onClick,
-                onLongClickLabel = saving?.longPressLabel(entry),
-                onLongClick = saving?.let { { it.bookmark(entry) } },
+                onLongClickLabel = SEARCH_MENU_LABEL,
+                onLongClick = onLongPress,
             ),
         shape = CardShape,
     ) {
@@ -220,6 +225,7 @@ private fun recentSearchContext(entry: RecentSearchEntry, accent: Color): Annota
 }
 
 internal val RECENT_SEARCH_TILE_MAX_WIDTH = 240.dp
+private const val SEARCH_MENU_LABEL = "Search actions"
 private val CardShape = RoundedCornerShape(14.dp)
 private const val MARK_CORNER_FRACTION = 0.28f
 private const val MARK_GLYPH_FRACTION = 0.55f
