@@ -225,6 +225,31 @@ class OfflineStorageViewModelTest {
         }
     }
 
+    @Test fun `deleting a Codex while its offline preparation loads never starts a job for it`() = runBlocking {
+        withTimeout(10_000) {
+            codices.ensureCodex("a", "First")
+            val started = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            val repository = object : CodexRepository by codices {
+                override fun observeCodexPosts(codexId: String, sort: CodexSortMode) = flow {
+                    started.complete(Unit)
+                    release.await()
+                    emit(listOf(post()))
+                }
+            }
+            val coordinator = coordinator()
+            val owner = owner(coordinator, repository)
+            owner.makeAvailableOffline("a")
+            started.await()
+
+            // The Codex delete's commit removes the owner straight through the coordinator.
+            coordinator.remove(codexOfflineOwner("a"))
+            release.complete(Unit)
+            owner.state.first { it.preparingOwners.isEmpty() }
+            assertTrue(coordinator.jobs.value.isEmpty())
+        }
+    }
+
     private fun coordinator() = OfflineMediaCoordinator(
         store = OfflineMediaStore(temporary.newFolder()), scope = scope,
         resolve = { it }, selectMedia = { it.media }, acquire = { _, _, output -> output.writeText("media") },

@@ -2,8 +2,6 @@ package com.theoriacodex.app.media
 
 import android.app.DownloadManager
 import android.content.Context
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import com.theoriacodex.app.viewer.requiresLazyMediaResolution
 import com.theoriacodex.app.ui.state.MutationFeedback
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -15,28 +13,31 @@ import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Owned by the Activity so changing routes or recreating its UI cannot restart a download. */
-class PostDownloadsViewModel(
+/**
+ * The app's one download queue and the one writer of its [jobFile], created once in the app container so every
+ * Activity instance uses this object: commands, workers and removals share one thread and one set of locks. Work
+ * runs in [parentScope] (application-lived), so downloads and a started removal continue after the Activity finishes.
+ */
+class PostDownloads(
     context: Context,
+    jobFile: File,
+    parentScope: CoroutineScope,
     readSettings: suspend () -> CacheSettings,
     resolvePost: suspend (Post) -> Post?,
     exportAnimation: suspend (Post, String) -> Result<Unit>,
-) : ViewModel() {
+) {
     // One thread off Main serializes every queue command and worker continuation.
     private val queueDispatcher = Dispatchers.IO.limitedParallelism(1)
-    // Retain the ViewModel Job so leaving the Activity stops downloads.
-    private val queueScope = CoroutineScope(viewModelScope.coroutineContext + queueDispatcher)
+    private val queueScope = CoroutineScope(parentScope.coroutineContext + SupervisorJob(parentScope.coroutineContext[Job]) + queueDispatcher)
     val feedback = MutationFeedback()
     private val backend = AndroidPostDownloadBackend(context.applicationContext, readSettings, resolvePost, exportAnimation)
-    private val queue = PostDownloadQueue(
-        scope = queueScope,
-        backend = backend,
-        jobStore = FileBackedPostDownloadJobStore(File(context.filesDir, "theoria_codex/download_jobs.json")),
-    )
+    private val queue = PostDownloadQueue(scope = queueScope, backend = backend, jobStore = FileBackedPostDownloadJobStore(jobFile))
     val batches = queue.batches
     init { command { queue.restore() } }
 
@@ -61,12 +62,11 @@ class PostDownloadsViewModel(
 
     /**
      * Removes the downloads (and their files, for [deleteFiles]) on the queue's thread and returns whether every one
-     * went; the caller offers Retry otherwise. A deferred removal commits through this after its Undo, possibly after
-     * this ViewModel is cleared, so a started removal finishes deleting and saving the queue even then.
+     * went, a removed gallery's pages included; the caller offers Retry otherwise. A deferred removal commits through
+     * this after its Undo; once started it finishes deleting and saving the queue even if its caller is cancelled.
      */
     suspend fun removeNow(itemIds: Set<Long>, deleteFiles: Boolean): Boolean = withContext(queueDispatcher + NonCancellable) {
         queue.removeItems(itemIds, deleteFiles)
-        queue.batches.value.none { batch -> batch.items.any { it.id in itemIds } }
     }
 
     fun cancel(batchId: Long) {

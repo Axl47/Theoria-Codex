@@ -21,6 +21,7 @@ import com.theoriacodex.sources.custom.SiteFamilyRegistry
 import com.theoriacodex.sources.custom.SiteProber
 import com.theoriacodex.app.di.UpdateDependencies
 import com.theoriacodex.app.di.WorkflowDependencies
+import com.theoriacodex.app.di.appPostDownloads
 import com.theoriacodex.app.media.BoundedMediaDurationProbe
 import com.theoriacodex.app.media.MediaDurationAcquisitionEngine
 import com.theoriacodex.app.media.MediaDurationCoordinator
@@ -160,6 +161,7 @@ class JourneyAppContainer(
         ),
         appUsageTracker = AppUsageTracker(statistics, ownerScope),
         offlineMedia = offline,
+        postDownloads = appPostDownloads(appContext, storageDirectory.resolve("download_jobs.json"), ownerScope, settings, sources),
     )
     override val workflows = WorkflowDependencies(
         com.theoriacodex.app.codex.CodexCleaningService(content),

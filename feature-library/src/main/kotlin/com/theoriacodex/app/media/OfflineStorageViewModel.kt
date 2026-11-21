@@ -16,11 +16,8 @@ import com.theoriacodex.app.ui.undo.PendingRemoval
 import com.theoriacodex.app.ui.undo.UndoLifetime
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -96,8 +93,6 @@ class OfflineStorageViewModel(
     private val scope = scopeOverride ?: viewModelScope
     private val removals = DeferredRemovals<String>(removalScope, ::commitRemoval)
     private val controls = MutableStateFlow(OfflineStorageUiState())
-    private val preparationLock = Any()
-    private val preparations = mutableMapOf<String, Job>()
     private val failures = Channel<String>(Channel.BUFFERED)
 
     /** Why "Make available offline" could not start, once per attempt; the app shows it when the sheet is closed. */
@@ -151,13 +146,14 @@ class OfflineStorageViewModel(
 
     /**
      * Keeps [codexId] offline, or tops up its copy: posts already retained are skipped, not downloaded again.
-     * When it cannot start, the reason goes to [message] and to [preparationFailures].
+     * When it cannot start, the reason goes to [message] and to [preparationFailures]. The coordinator owns the
+     * loading, so removing the copy (or deleting the Codex) stops it before clearing.
      */
     fun makeAvailableOffline(codexId: String) {
         val owner = codexOfflineOwner(codexId)
         if (controls.value.working || owner in controls.value.preparingOwners || offline.jobs.value[owner]?.isRunning == true) return
         controls.update { it.copy(preparingOwners = it.preparingOwners + owner, message = null) }
-        val preparation = scope.launch(start = CoroutineStart.LAZY) {
+        val preparation = offline.prepare(owner) {
             val result = runCatchingPreservingCancellation {
                 withContext(dispatcher) { codices.observeCodexPosts(codexId, CodexSortMode.NEWEST_SAVED).first() }
             }
@@ -168,12 +164,7 @@ class OfflineStorageViewModel(
                 else -> offline.makeAvailableOffline(owner, posts)
             }
         }
-        synchronized(preparationLock) { preparations[owner] = preparation }
-        preparation.invokeOnCompletion {
-            synchronized(preparationLock) { preparations.remove(owner) }
-            controls.update { it.copy(preparingOwners = it.preparingOwners - owner) }
-        }
-        preparation.start()
+        preparation.invokeOnCompletion { controls.update { it.copy(preparingOwners = it.preparingOwners - owner) } }
     }
 
     private fun preparationFailed(reason: String) {
@@ -187,10 +178,7 @@ class OfflineStorageViewModel(
         offline.retry(owner)
     }
 
-    fun cancel(owner: String) {
-        synchronized(preparationLock) { preparations[owner] }?.cancel()
-        offline.cancel(owner)
-    }
+    fun cancel(owner: String) = offline.cancel(owner)
 
     /**
      * Removes [owner]'s offline copies as deferred destruction: the row hides at once with Undo in its place, and
@@ -220,20 +208,12 @@ class OfflineStorageViewModel(
 
     override fun onCleared() = removals.commitAll()
 
-    /** Removes [key]'s copies (see [OFFLINE_ALL_REMOVAL]) after stopping its preparation; false when it failed. */
+    /** Removes [key]'s copies (see [OFFLINE_ALL_REMOVAL]); the coordinator stops preparations first. False on failure. */
     private suspend fun commitRemoval(key: String): Boolean {
         controls.update { it.copy(working = true) }
         try {
             return runCatchingPreservingCancellation {
-                if (key == OFFLINE_ALL_REMOVAL) {
-                    val loading = synchronized(preparationLock) { preparations.values.toList() }
-                    loading.forEach { it.cancel() }
-                    loading.forEach { it.join() }
-                    offline.clear()
-                } else {
-                    synchronized(preparationLock) { preparations[key] }?.cancelAndJoin()
-                    offline.remove(key)
-                }
+                if (key == OFFLINE_ALL_REMOVAL) offline.clear() else offline.remove(key)
             }.isSuccess
         } finally {
             controls.update { it.copy(working = false) }

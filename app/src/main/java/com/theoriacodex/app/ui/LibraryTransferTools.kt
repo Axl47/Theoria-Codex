@@ -28,7 +28,7 @@ import com.theoriacodex.app.backup.BackupDialogs
 import com.theoriacodex.app.backup.BackupViewModel
 import com.theoriacodex.app.backup.ProfileBackupActions
 import com.theoriacodex.app.di.TheoriaAppContainer
-import com.theoriacodex.app.media.PostDownloadsViewModel
+import com.theoriacodex.app.media.PostDownloads
 import com.theoriacodex.app.media.MediaCacheMaintenance
 import com.theoriacodex.app.media.OfflineStorageViewModel
 import com.theoriacodex.app.media.OfflineStorageSummary
@@ -38,12 +38,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import com.theoriacodex.app.media.totalBytes
 import com.theoriacodex.app.media.PostDownloadItem
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
-/** Activity-owned transfer work with shell-owned Android document pickers and transient dialogs. */
+/**
+ * Transfer work (the app's one download queue, Activity-owned removals, backup and offline owners) with shell-owned
+ * Android document pickers and transient dialogs.
+ */
 internal class LibraryTransferTools(
-    val downloads: PostDownloadsViewModel,
+    val downloads: PostDownloads,
     val downloadRemovals: DownloadRemovals,
     val backup: BackupViewModel,
     val offline: OfflineStorageViewModel,
@@ -74,16 +76,7 @@ internal fun rememberLibraryTransferTools(
     onMessage: suspend (String) -> Unit,
 ): LibraryTransferTools {
     val context = LocalContext.current.applicationContext
-    val downloads = viewModel(key = "library-downloads") {
-        PostDownloadsViewModel(
-            context = context,
-            readSettings = { container.data.settingsRepository.observeSettings().first().cache },
-            resolvePost = { post -> container.sources.registry.adapterFor(post.id.source)?.resolvePost(post.id) },
-            exportAnimation = { post, marker ->
-                container.sources.pixivUgoiraClient.exportToMp4(context, post.id.sourcePostId, post.title, marker).map { }
-            },
-        )
-    }
+    val downloads = container.features.postDownloads
     val backup = viewModel(key = "profile-backup") {
         BackupViewModel(ProfileBackupActions(container.workflows.profileBackup), AndroidBackupDocuments(context.contentResolver))
     }

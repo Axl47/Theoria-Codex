@@ -313,14 +313,32 @@ class PostDownloadQueueTest {
         val originalId = queue.batches.value.single().items.single().id
         runCurrent()
         assertEquals(3, queue.batches.value.single().items.size)
-        queue.removeItems(setOf(originalId), deleteFiles = true)
+        assertTrue(queue.removeItems(setOf(originalId), deleteFiles = true))
         assertTrue(queue.batches.value.isEmpty())
         assertEquals(3, backend.deleted.size)
+    }
+
+    @Test
+    fun `removing an expanded gallery reports failure when one of its pages stays`() = runTest {
+        val backend = FakeBackend()
+        backend.prepareOverride = { request ->
+            if (request.selectedMedia == null) PreparedPostDownload.Gallery(galleryDownloadPages(request.post))
+            else PreparedPostDownload.Saved
+        }
+        backend.failDeletePage = 1
+        val queue = PostDownloadQueue(backgroundScope, backend)
+        queue.submit("Gallery", listOf(PostDownloadRequest(request(1).post.copy(media = List(3) { MEDIA }, mediaCount = 3))))
+        val originalId = queue.batches.value.single().items.single().id
+        runCurrent()
+
+        assertFalse(queue.removeItems(setOf(originalId), deleteFiles = true))
+        assertEquals(listOf(1), queue.batches.value.single().items.map { it.request.selectedMedia?.pageIndex })
     }
 
     private class FakeBackend : PostDownloadBackend {
         val deleted = mutableListOf<String>()
         var failDeletePost: String? = null
+        var failDeletePage: Int? = null
         val prepared = mutableListOf<String>()
         val requests = mutableListOf<PostDownloadRequest>()
         val cancelled = mutableListOf<Long>()
@@ -340,7 +358,9 @@ class PostDownloadQueueTest {
         override suspend fun cancel(downloadId: Long) { cancelled += downloadId }
         override suspend fun deleteFile(item: PostDownloadItem) {
             val postId = item.request.post.id.sourcePostId
-            if (postId == failDeletePost) throw java.io.IOException("File access denied")
+            if (postId == failDeletePost || failDeletePage != null && item.request.selectedMedia?.pageIndex == failDeletePage) {
+                throw java.io.IOException("File access denied")
+            }
             deleted += postId
         }
     }
