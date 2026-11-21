@@ -7,56 +7,89 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 /** How long typing in the Edit page's name or header fields pauses before the change is saved. */
 internal val TYPING_SAVE_DELAY = 600.milliseconds
 
+/** What the user last left in the Edit page's live fields; [headers] is null while those fields are invalid. */
+internal data class LiveFields(val label: String, val include: Boolean, val headers: SiteHeaders?)
+
 /**
  * Saves the Edit page's name, opt-in and headers shortly after each change, so only keys need a Save.
- * Only the latest change waits: a newer one replaces it, and a change back to the saved values (a null
- * edit) clears it. [flush] saves a waiting change at once, for leaving the page; [save] runs in [scope]
- * unless [flush] is given a scope that outlives it.
+ * Only the latest values wait: a newer change replaces them, and [flush] sends them at once, for leaving the page.
+ * Writes run one at a time in [writeScope], which should outlive the page's owner, so a write already started or
+ * flushed as the owner is cleared still completes; [timerScope] only times the typing pause.
+ *
+ * Each write sends only what differs from the site as saved (so it never rewrites a value saved elsewhere, such as
+ * the browser check's agent), counting this owner's own writes that [savedSite] may not show yet. A change back
+ * to a value already written is therefore written again, and a change back to the saved value writes nothing.
  */
 internal class SiteLiveEdits(
-    private val scope: CoroutineScope,
-    private val save: suspend (sourceId: String, edit: CustomSiteEdit) -> Unit,
+    private val timerScope: CoroutineScope,
+    private val writeScope: CoroutineScope,
+    private val savedSite: (sourceId: String) -> CustomSiteSummary?,
+    private val save: suspend (sourceId: String, edit: CustomSiteEdit) -> Boolean,
 ) {
-    private var waiting: Pair<String, CustomSiteEdit>? = null
+    private val latest = AtomicReference<Pair<String, LiveFields>?>(null)
+    private val writes = Mutex()
+
+    /** Per site, what this owner's successful writes saved; touched only while holding [writes]. */
+    private val written = mutableMapOf<String, CustomSiteEdit>()
     private var timer: Job? = null
 
-    fun schedule(sourceId: String, edit: CustomSiteEdit?, wait: Duration) {
+    fun schedule(sourceId: String, fields: LiveFields, wait: Duration) {
         timer?.cancel()
-        waiting = edit?.let { sourceId to it }
-        if (edit == null) return
-        timer = scope.launch {
+        latest.set(sourceId to fields)
+        timer = timerScope.launch {
             delay(wait)
-            saveWaiting()
+            launchWrite()
         }
     }
 
-    fun flush(into: CoroutineScope = scope) {
+    fun flush() {
         timer?.cancel()
-        if (waiting != null) into.launch { saveWaiting() }
+        launchWrite()
     }
 
-    private suspend fun saveWaiting() {
-        val (sourceId, edit) = waiting ?: return
-        waiting = null
-        save(sourceId, edit)
+    private fun launchWrite() {
+        if (latest.get() == null) return
+        writeScope.launch {
+            writes.withLock {
+                while (true) {
+                    val (sourceId, fields) = latest.getAndSet(null) ?: break
+                    val site = savedSite(sourceId) ?: continue
+                    val edit = liveEdit(site.after(written[sourceId]), fields) ?: continue
+                    if (save(sourceId, edit)) written[sourceId] = written[sourceId]?.let { edit.over(it) } ?: edit
+                }
+            }
+        }
     }
 }
 
-/**
- * The live part of an edit: only what differs from [site], so a change never rewrites a value saved
- * elsewhere meanwhile (the browser check's agent). [headers] is null when the fields are invalid; null
- * when nothing differs.
- */
-internal fun liveEdit(site: CustomSiteSummary, fields: SiteFields, headers: SiteHeaders?): CustomSiteEdit? {
+/** Only what differs from [site]; null when nothing does. Invalid headers ([LiveFields.headers] null) never differ. */
+private fun liveEdit(site: CustomSiteSummary, fields: LiveFields): CustomSiteEdit? {
     val label = fields.label.trim().takeIf { it != site.label }
-    val include = fields.includeInUnifiedAndForYou.takeIf { it != site.includedInUnifiedAndForYou }
-    val changedHeaders = headers?.takeIf { it != site.headers }
-    if (label == null && include == null && changedHeaders == null) return null
-    return CustomSiteEdit(label = label, headers = changedHeaders, includeInUnifiedAndForYou = include)
+    val include = fields.include.takeIf { it != site.includedInUnifiedAndForYou }
+    val headers = fields.headers?.takeIf { it != site.headers }
+    if (label == null && include == null && headers == null) return null
+    return CustomSiteEdit(label = label, headers = headers, includeInUnifiedAndForYou = include)
 }
+
+/** This site once [edit] (a live edit already saved) is applied. */
+private fun CustomSiteSummary.after(edit: CustomSiteEdit?): CustomSiteSummary = if (edit == null) this else copy(
+    label = edit.label ?: label,
+    headers = edit.headers ?: headers,
+    includedInUnifiedAndForYou = edit.includeInUnifiedAndForYou ?: includedInUnifiedAndForYou,
+)
+
+/** This live edit written after [earlier]: its values win, and [earlier]'s fill the rest. */
+private fun CustomSiteEdit.over(earlier: CustomSiteEdit) = CustomSiteEdit(
+    label = label ?: earlier.label,
+    headers = headers ?: earlier.headers,
+    includeInUnifiedAndForYou = includeInUnifiedAndForYou ?: earlier.includeInUnifiedAndForYou,
+)

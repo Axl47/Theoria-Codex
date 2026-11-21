@@ -161,7 +161,7 @@ internal class ForYouHomeController(
 
     /**
      * Fills up to [MAX_REFILLS] of the slots [record] freed with new shelves from the planner, each where a hidden
-     * shelf stood. An Undo before a refill lands keeps it out.
+     * shelf stood. An Undo before a refill lands keeps it out, and so does a strike made while it loaded.
      */
     private suspend fun refill(record: HiddenShelves, isCurrent: () -> Boolean) {
         for ((index, _) in record.removed.take(MAX_REFILLS)) {
@@ -169,7 +169,7 @@ internal class ForYouHomeController(
             val section = engine.loadSections(input).firstOrNull() ?: return
             if (!isCurrent() || hidden.none { it === record }) return
             val rows = state().home.sections
-            if (rows.any { it.id == section.id }) continue
+            if (rows.any { it.id == section.id } || hiddenNow(section)) continue
             update(state().home.copy(sections = rows.toMutableList().apply { add(index.coerceAtMost(size), section) }))
             record.refills += section.id
         }
@@ -349,7 +349,7 @@ internal class ForYouHomeController(
         if (generation != expected) return
         if (section == null) {
             emit(ForYouEffect.ShowMessage("No new searches yet. Like more posts to discover more interests."))
-        } else if (state().home.sections.none { it.id == section.id }) {
+        } else if (state().home.sections.none { it.id == section.id } && !hiddenNow(section)) {
             update(state().home.copy(sections = state().home.sections + section))
         }
     }
@@ -359,12 +359,14 @@ internal class ForYouHomeController(
         val home = state().home
         val order = home.sections.map { it.id }
         // A tag struck while these loaded must not bring back the shelves it hides.
-        val blocked = state().blacklistEntries
-        val ordered = sections.filterNot { blocked.hidesShelf(it.feed.seed, it.pinned) }.sortedBy { order.indexOf(it.id).takeIf { index -> index >= 0 } ?: Int.MAX_VALUE }
+        val ordered = sections.filterNot(::hiddenNow).sortedBy { order.indexOf(it.id).takeIf { index -> index >= 0 } ?: Int.MAX_VALUE }
         update(home.copy(sections = ordered, loading = false, mixedLoading = false,
             mixedFeed = mixed ?: home.mixedFeed))
         if (mixed != null && home.activeSection == null) admit(mixed)
     }
+
+    /** Whether the profile's current hidden tags hide [section]; a shelf planned before a strike can land after it. */
+    private fun hiddenNow(section: ForYouSection) = state().blacklistEntries.hidesShelf(section.feed.seed, section.pinned)
 
     private fun mutate(id: String, operation: suspend (ForYouSection, () -> Boolean) -> Unit) {
         val section = state().home.sections.firstOrNull { it.id == id } ?: return
