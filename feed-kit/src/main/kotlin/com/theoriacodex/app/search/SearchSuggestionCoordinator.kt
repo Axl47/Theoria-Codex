@@ -1,6 +1,5 @@
 package com.theoriacodex.app.search
 
-import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.data.repository.SearchedTagKey
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
@@ -33,7 +32,6 @@ internal class SearchSuggestionCoordinator(
     private val tagSuggestionStore: TagSuggestionStore,
     private val clock: () -> Long,
     private val supportedSearchScopes: (QueryMode) -> List<FacetedSearchScope>,
-    private val effectiveEnabledSources: (SearchSourceScope) -> Set<SourceKey>,
     /** Current per-tag search counts from Statistics, read on every keystroke. */
     private val searchCounts: () -> Map<SearchedTagKey, Long> = { emptyMap() },
 ) {
@@ -44,7 +42,7 @@ internal class SearchSuggestionCoordinator(
 
     internal suspend fun fetchAutocomplete(
         query: Query,
-        sourceScope: SearchSourceScope,
+        sources: Set<SourceKey>,
         selectedScope: FacetedSearchScope,
         input: String,
         trending: List<TagSuggestion>,
@@ -55,9 +53,9 @@ internal class SearchSuggestionCoordinator(
             return SearchAutocompleteResult(input, request.scope, message)
         }
         if (request.prefix.isBlank()) return fetchFeaturedAutocomplete(query, request.scope, input)
-        val searched = searchedTags(query.mode, sourceScope, request.scope, request.prefix)
+        val searched = searchedTags(query.mode, sources, request.scope, request.prefix)
         return when (val mode = query.mode) {
-            QueryMode.Unified -> fetchUnifiedAutocomplete(sourceScope, request.scope, input, request.prefix) { update ->
+            QueryMode.Unified -> fetchUnifiedAutocomplete(sources, request.scope, input, request.prefix) { update ->
                 onUpdate(update.copy(searchedTags = searched))
             }
             is QueryMode.Source -> fetchSourceAutocomplete(mode, request.scope, input, request.prefix, trending)
@@ -67,7 +65,7 @@ internal class SearchSuggestionCoordinator(
     /** Returns only local knowledge so the route can publish before its network debounce. */
     internal fun cachedAutocomplete(
         query: Query,
-        sourceScope: SearchSourceScope,
+        sources: Set<SourceKey>,
         selectedScope: FacetedSearchScope,
         input: String,
         trending: List<TagSuggestion>,
@@ -80,19 +78,19 @@ internal class SearchSuggestionCoordinator(
             return cachedFeaturedAutocomplete(query, request.scope, input)
         }
         return when (val mode = query.mode) {
-            QueryMode.Unified -> cachedUnifiedAutocomplete(sourceScope, request.scope, input, request.prefix)
+            QueryMode.Unified -> cachedUnifiedAutocomplete(sources, request.scope, input, request.prefix)
             is QueryMode.Source -> cachedSourceAutocomplete(mode, request.scope, input, request.prefix, trending)
-        }.copy(searchedTags = searchedTags(query.mode, sourceScope, request.scope, request.prefix))
+        }.copy(searchedTags = searchedTags(query.mode, sources, request.scope, request.prefix))
     }
 
     /** History for the input's resolved [scope]; Unified runs only portable general tags, so it offers only those. */
     private fun searchedTags(
         mode: QueryMode,
-        sourceScope: SearchSourceScope,
+        sources: Set<SourceKey>,
         scope: FacetedSearchScope,
         prefix: String,
     ): List<SearchTerm> = when (mode) {
-        QueryMode.Unified -> rankSearchedTags(searchCounts(), effectiveEnabledSources(sourceScope), prefix,
+        QueryMode.Unified -> rankSearchedTags(searchCounts(), sources, prefix,
             SEARCHED_TAG_SUGGESTION_LIMIT, SearchTerm::isPortableGeneralTag)
         is QueryMode.Source -> rankSearchedTags(searchCounts(), setOf(mode.source), prefix,
             SEARCHED_TAG_SUGGESTION_LIMIT, scope::accepts)
@@ -125,17 +123,16 @@ internal class SearchSuggestionCoordinator(
     }
 
     private suspend fun fetchUnifiedAutocomplete(
-        sourceScope: SearchSourceScope,
+        sources: Set<SourceKey>,
         selectedScope: FacetedSearchScope,
         input: String,
         prefix: String,
         onUpdate: suspend (SearchAutocompleteResult) -> Unit,
     ): SearchAutocompleteResult = coroutineScope {
-        val enabled = effectiveEnabledSources(sourceScope)
         val updates = Mutex()
         val fetched = mutableMapOf<SourceKey, List<TagSuggestion>>()
-        var result = cachedUnifiedAutocomplete(sourceScope, selectedScope, input, prefix)
-        enabled.map { source -> async {
+        var result = cachedUnifiedAutocomplete(sources, selectedScope, input, prefix)
+        sources.map { source -> async {
             val suggestions = fetchUnifiedSuggestionsForSource(source, prefix)
             updates.withLock {
                 fetched[source] = suggestions
@@ -143,7 +140,7 @@ internal class SearchSuggestionCoordinator(
                     input = input,
                     selectedScope = selectedScope,
                     autocomplete = rankUnifiedTagSuggestions(
-                        enabled.map { key -> key to (fetched[key].orEmpty() + cachedUnifiedSuggestionsForSource(key, prefix)) },
+                        sources.map { key -> key to (fetched[key].orEmpty() + cachedUnifiedSuggestionsForSource(key, prefix)) },
                         prefix, AUTOCOMPLETE_RESULT_LIMIT,
                     ),
                 )
@@ -154,12 +151,12 @@ internal class SearchSuggestionCoordinator(
     }
 
     private fun cachedUnifiedAutocomplete(
-        sourceScope: SearchSourceScope,
+        sources: Set<SourceKey>,
         selectedScope: FacetedSearchScope,
         input: String,
         prefix: String,
     ): SearchAutocompleteResult {
-        val candidates = effectiveEnabledSources(sourceScope).map { source ->
+        val candidates = sources.map { source ->
             source to cachedUnifiedSuggestionsForSource(source, prefix)
         }
         return SearchAutocompleteResult(
@@ -423,24 +420,23 @@ internal class SearchSuggestionCoordinator(
 
     internal suspend fun fetchTrending(
         query: Query,
-        sourceScope: SearchSourceScope,
+        sources: Set<SourceKey>,
         forceRefresh: Boolean = false,
     ): List<TagSuggestion> = coroutineScope {
         val now = clock()
         when (val mode = query.mode) {
             QueryMode.Unified -> {
-                val enabled = effectiveEnabledSources(sourceScope)
-                if (enabled.isEmpty()) return@coroutineScope emptyList()
-                val cached = enabled.associateWith {
+                        if (sources.isEmpty()) return@coroutineScope emptyList()
+                val cached = sources.associateWith {
                     rankedTrending(it, TRENDING_PER_SOURCE_CACHE_LIMIT)
                 }
-                enabled.filter { source ->
+                sources.filter { source ->
                     shouldRefreshTrending(source, now, forceRefresh, cached[source].orEmpty())
                 }.map { source ->
                     async { fetchTrendingForSource(source, TRENDING_FETCH_PER_SOURCE_LIMIT) }
                 }.awaitAll()
                 interleaveTagSuggestions(
-                    enabled.map { source ->
+                    sources.map { source ->
                         source to rankedTrending(source, TRENDING_PER_SOURCE_CACHE_LIMIT)
                     },
                     UNIFIED_TRENDING_LIMIT,
@@ -458,12 +454,11 @@ internal class SearchSuggestionCoordinator(
 
     internal fun cachedTrending(
         query: Query,
-        sourceScope: SearchSourceScope,
+        sources: Set<SourceKey>,
     ): List<TagSuggestion> = when (val mode = query.mode) {
         QueryMode.Unified -> {
-            val enabled = effectiveEnabledSources(sourceScope)
-            interleaveTagSuggestions(
-                enabled.map { source ->
+                interleaveTagSuggestions(
+                sources.map { source ->
                     source to rankedTrending(source, TRENDING_PER_SOURCE_CACHE_LIMIT)
                 },
                 UNIFIED_TRENDING_LIMIT,

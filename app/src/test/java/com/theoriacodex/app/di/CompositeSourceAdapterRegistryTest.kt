@@ -114,9 +114,7 @@ class CompositeSourceAdapterRegistryTest {
 
         capabilities.value = setOf(SourceKey.PIXIV)
 
-        val searchChange = search.updateEnvironment(com.theoriacodex.data.repository.AppSettings())
-        assertTrue(searchChange.sourcesChanged)
-        assertEquals(listOf(SourceKey.PIXIV), searchChange.availableSources)
+        assertEquals(listOf(SourceKey.PIXIV), search.availableSources)
         forYou.onSourceAvailabilityChanged()
         advanceUntilIdle()
         assertNull(forYou.state.value.selectedSource)

@@ -110,7 +110,7 @@ private fun CodexDetailEntry(
             SavedCodexRoute(
                 data = shell.data,
                 sources = shell.sources,
-                durations = shell.features.mediaDurationCoordinator,
+                features = shell.features,
                 restoreRegistry = shell.feedFabRestoreRegistry,
                 onBack = { shell.navController.popBackStack() },
                 onOpenCodex = { shell.navController.navigate(AppRoute.codexDetail(it)) },
@@ -143,6 +143,7 @@ private fun CodexDetailDestination(shell: TheoriaShell, codexId: String) {
         fabRestoreState = fabRestoreState,
         data = shell.data,
         sources = shell.sources,
+        features = shell.features,
         durationStates = durationStates,
     ) { state ->
         SideEffect {

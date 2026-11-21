@@ -117,12 +117,14 @@ internal class RequestOwnershipSearchViewModelTest : SearchViewModelTestFixture(
                         override suspend fun executeInitialProgressively(
                             query: Query,
                             sourceScope: SearchSourceScope,
+                            sources: SearchSources,
                             onPartial: suspend (SearchExecutionResult.Success) -> Unit,
-                        ): SearchExecutionResult = executeInitial(query, sourceScope)
+                        ): SearchExecutionResult = executeInitial(query, sourceScope, sources)
 
                         override suspend fun executeInitial(
                             query: Query,
                             sourceScope: SearchSourceScope,
+                        sources: SearchSources,
                         ): SearchExecutionResult = kotlinx.coroutines.awaitCancellation()
                     }
                 },

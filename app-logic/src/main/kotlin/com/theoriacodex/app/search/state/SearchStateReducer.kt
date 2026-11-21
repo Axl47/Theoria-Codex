@@ -100,6 +100,7 @@ object SearchStateReducer {
                 availableSources = initialization.availableSources,
                 modeOptions = listOf(QueryMode.Unified) + initialization.availableSources.map(QueryMode::Source),
                 enabledSourceCount = initialization.availableSources.size,
+                unifiedSources = initialization.runtime.enabledSources.intersect(initialization.availableSources.toSet()),
                 supportedScopes = supportedScopes(initialization.query.mode),
                 validationMessage = initialization.validationMessage,
             ),

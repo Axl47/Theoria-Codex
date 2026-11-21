@@ -12,8 +12,8 @@ import com.theoriacodex.app.codex.sortLiveCodexPosts
 import com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID
 import com.theoriacodex.app.codex.SavedSearchesCodexViewModel
 import com.theoriacodex.app.di.DataDependencies
+import com.theoriacodex.app.di.FeatureDependencies
 import com.theoriacodex.app.di.SourceDependencies
-import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.ui.components.FeedTraceSections
 import com.theoriacodex.app.ui.components.rememberComputedOffMain
 import com.theoriacodex.data.repository.CodexSortMode
@@ -25,6 +25,7 @@ import com.theoriacodex.domain.model.Codex
 internal fun SavedSearchesCodexBoundary(
     data: DataDependencies,
     sources: SourceDependencies,
+    features: FeatureDependencies,
     settings: com.theoriacodex.data.repository.AppSettings,
     filters: FeedFabRestoreState,
     sort: CodexSortMode,
@@ -33,17 +34,10 @@ internal fun SavedSearchesCodexBoundary(
 ) {
     val entries = rememberRetained("saved-searches") { data.savedSearches.observeSavedSearches() }.value ?: return
     val available = sources.availableSources.collectAsStateWithLifecycle().value
-    val execution = remember(data, sources.registry) {
-        SearchCoordinator(sources.registry, data.queryRepository, data.settingsRepository, data.uiRestoreRepository,
-            data.recentsRepository, data.statisticsRepository, postResolutions = sources.postResolutions,
-            fileMirrors = data.fileMirrors)
-    }
     val owner = viewModel<SavedSearchesCodexViewModel>(
         viewModelStoreOwner = com.theoriacodex.app.codex.LocalSavedCodexSessionOwner.current
             ?: checkNotNull(androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner.current),
-        factory = SavedSearchesCodexViewModel.factory(
-            execution, data.cacheRepository, com.theoriacodex.app.related.RelatedPostsLoader(sources.registry, data.fileMirrors),
-        ),
+        factory = SavedSearchesCodexViewModel.factory(features.search, data.cacheRepository, features.relatedPosts),
     )
     val selected = remember(entries, filters.excludedSavedSearches) {
         val excluded = filters.excludedSavedSearches.toSet()

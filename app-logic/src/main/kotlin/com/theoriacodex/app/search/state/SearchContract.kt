@@ -104,6 +104,12 @@ sealed interface SearchSourceScope {
     }
 }
 
+/** The sources this scope searches among [available]: its own, or for Unified the [unified] ones. */
+fun SearchSourceScope.sources(unified: Set<SourceKey>, available: Set<SourceKey>): Set<SourceKey> = when (this) {
+    SearchSourceScope.GlobalUnified -> unified
+    else -> explicitSources.toSet()
+}.intersect(available)
+
 data class SearchQueryUiState(
     val draft: Query = emptySearchQuery(),
     val applied: Query = emptySearchQuery(),
@@ -126,10 +132,7 @@ data class SearchQueryUiState(
 ) {
     /** Sources the draft would search: the picked source, a temporary mix, or every Unified source. */
     val draftSources: Set<SourceKey>
-        get() = when (val scope = draftSourceScope) {
-            SearchSourceScope.GlobalUnified -> unifiedSources
-            else -> scope.explicitSources.toSet()
-        }
+        get() = draftSourceScope.sources(unifiedSources, availableSources.toSet())
 
     val termLimitNotices: List<SearchTermLimitNotice>
         get() = searchTermLimitNotices(draft, draftSources.sorted(), sourceTermLimits)

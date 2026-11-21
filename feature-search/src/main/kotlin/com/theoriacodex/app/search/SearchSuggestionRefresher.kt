@@ -39,7 +39,7 @@ internal class SearchSuggestionRefresher(
         autocompleteJob = scope.launch {
             val cached = withContext(dispatcher) {
                 coordinator.cachedAutocomplete(
-                    localState.query.draft, localState.query.draftSourceScope,
+                    localState.query.draft, localState.query.draftSources,
                     localState.query.selectedScope, input, localState.suggestions.trending,
                 )
             }
@@ -47,7 +47,7 @@ internal class SearchSuggestionRefresher(
             if (autocompleteDelayMs > 0) delay(autocompleteDelayMs)
             val result = withContext(dispatcher) {
                 coordinator.fetchAutocomplete(
-                    localState.query.draft, localState.query.draftSourceScope,
+                    localState.query.draft, localState.query.draftSources,
                     localState.query.selectedScope, input, localState.suggestions.trending,
                     onUpdate = { update ->
                         withContext(Dispatchers.Main.immediate) { publishAutocompleteIfCurrent(generation, update) }
@@ -75,11 +75,11 @@ internal class SearchSuggestionRefresher(
         val requestState = state.value
         trendingJob = scope.launch {
             val cached = withContext(dispatcher) {
-                coordinator.cachedTrending(requestState.query.draft, requestState.query.draftSourceScope)
+                coordinator.cachedTrending(requestState.query.draft, requestState.query.draftSources)
             }
             if (cached.isNotEmpty()) state.value = state.value.withTrendingSuggestions(cached)
             val trending = withContext(dispatcher) {
-                coordinator.fetchTrending(requestState.query.draft, requestState.query.draftSourceScope)
+                coordinator.fetchTrending(requestState.query.draft, requestState.query.draftSources)
             }
             coroutineContext.ensureActive()
             val current = state.value

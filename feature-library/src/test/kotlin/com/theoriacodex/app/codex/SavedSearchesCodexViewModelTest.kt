@@ -204,7 +204,7 @@ class SavedSearchesCodexViewModelTest {
         try {
             val coordinator = testSearchCoordinator(TestRegistry(adapters), queryRepository = queries,
                 recentsRepository = recents, statisticsRepository = statistics, computationDispatcher = dispatcher)
-            val owner = SavedSearchesCodexViewModel(coordinator, SavedSearchFeedLoader(coordinator, dispatcher), InMemoryCacheRepository())
+            val owner = SavedSearchesCodexViewModel(SavedSearchFeedLoader(coordinator, dispatcher), InMemoryCacheRepository())
             store.put("owner", owner)
             body(owner)
         } finally { store.clear(); Dispatchers.resetMain() }

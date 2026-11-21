@@ -27,6 +27,8 @@ import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.ui.state.RouteStateOwner
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.data.repository.SourceRuntimeSettings
+import com.theoriacodex.app.search.state.sources
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.Query
@@ -110,6 +112,8 @@ class SearchViewModel(
     private var restorationJob: Job? = null
     private var pendingRootSearch: (() -> Unit)? = null
     private var latestEnvironmentSettings: AppSettings? = null
+    /** The source settings the state was last reconciled with; null until Search has restored. */
+    private var runtime: SourceRuntimeSettings? = null
     private val suggestionRefresh =
         SearchSuggestionRefresher(viewModelScope, mutableState, coordinator, suggestionDispatcher, autocompleteDelayMs)
     private val scrollPersistence = coordinator.scrollPersistence(scrollPersistenceDispatcher, scrollPersistenceDelayMs)
@@ -403,7 +407,7 @@ class SearchViewModel(
     fun synchronizeEnvironment(settings: AppSettings) {
         val previous = latestEnvironmentSettings
         latestEnvironmentSettings = settings
-        if (!coordinator.isInitialized) return
+        if (runtime == null) return
         val selectedSources = mutableState.value.query.draftSources
         val weightsChanged = previous != null && selectedSources.size > 1 &&
             com.theoriacodex.data.repository.SourceWeightSettings.weightsFor(previous.runtime, selectedSources) !=
@@ -415,41 +419,40 @@ class SearchViewModel(
 
     private fun reconcileEnvironment(settings: AppSettings, scheduleRetry: Boolean): Boolean {
         val hadExecutedSearch = mutableState.value.content.hasExecutedSearch
-        val change = coordinator.updateEnvironment(settings)
+        val settingsChanged = runtime != settings.runtime
+        runtime = settings.runtime
         val current = mutableState.value
-        val available = change.availableSources.toSet()
+        val availableSources = coordinator.availableSources
+        val available = availableSources.toSet()
+        val sourcesChanged = available != current.query.availableSources.toSet()
         val draftScope = current.query.draftSourceScope.reconciledWith(available)
         val appliedScope = current.query.appliedSourceScope.reconciledWith(available)
         val draft = current.query.draft.reconciledWith(draftScope)
         val applied = current.query.applied.reconciledWith(appliedScope)
         val scopes = coordinator.supportedSearchScopes(draft.mode)
-        val enabledCount = when (draftScope) {
-            SearchSourceScope.GlobalUnified -> settings.runtime.enabledSources.intersect(available).size
-            is SearchSourceScope.Single -> setOf(draftScope.source).intersect(available).size
-            is SearchSourceScope.Temporary -> draftScope.sources.toSet().intersect(available).size
-        }
+        val unifiedSources = settings.runtime.enabledSources.intersect(available)
         mutableState.value = current.copy(
             query = current.query.copy(
                 draft = draft,
                 applied = applied,
                 draftSourceScope = draftScope,
                 appliedSourceScope = appliedScope,
-                availableSources = change.availableSources,
-                modeOptions = listOf(QueryMode.Unified) + change.availableSources.map(QueryMode::Source),
-                enabledSourceCount = enabledCount,
-                unifiedSources = settings.runtime.enabledSources.intersect(available),
-                sourceTermLimits = change.sourceTermLimits,
+                availableSources = availableSources,
+                modeOptions = listOf(QueryMode.Unified) + availableSources.map(QueryMode::Source),
+                enabledSourceCount = draftScope.sources(unifiedSources, available).size,
+                unifiedSources = unifiedSources,
+                sourceTermLimits = coordinator.sourceTermLimits(),
                 supportedScopes = scopes,
                 selectedScope = current.query.selectedScope.takeIf { it in scopes }
                     ?: com.theoriacodex.domain.adapter.FacetedSearchScope.All,
             ),
         )
         persistDraftQuery()
-        val requiresRetry = hadExecutedSearch && (change.settingsChanged || change.sourcesChanged ||
+        val requiresRetry = hadExecutedSearch && (settingsChanged || sourcesChanged ||
             draft != current.query.draft || applied != current.query.applied)
         if (requiresRetry && scheduleRetry) {
             rerunApplied(
-                relatedResetReason = "environment: runtime=${change.settingsChanged} sources=${change.sourcesChanged} " +
+                relatedResetReason = "environment: runtime=$settingsChanged sources=$sourcesChanged " +
                     "draft=${draft != current.query.draft} applied=${applied != current.query.applied}",
             )
         }
@@ -538,7 +541,7 @@ class SearchViewModel(
         launchRequest(request, failureMessage = "Search failed") {
             try {
                 if (paintCachedFirstPage) {
-                    val posts = executionService.cachedFirstPage(request.executionKey, request.sourceScope)
+                    val posts = executionService.cachedFirstPage(request.executionKey, sourcesFor(request.sourceScope).enabled)
                     reduce(SearchStateChange.ShowCachedFirstPage(request.id, posts))
                 }
                 executeRootRequest(request, acceptance)
@@ -572,7 +575,8 @@ class SearchViewModel(
     private suspend fun executeRootRequest(request: SearchRequest, acceptance: SearchAcceptance?) =
         withTimeout(rootRequestTimeoutMs) {
             val publisher = RootResultPublisher(request, acceptance)
-            val result = executionService.executeInitialProgressively(request.query, request.sourceScope) { partial ->
+            val sources = sourcesFor(request.sourceScope)
+            val result = executionService.executeInitialProgressively(request.query, request.sourceScope, sources) { partial ->
                 if (mutableState.value.showsPartialResults(request.id, partial)) {
                     publisher.publish(partial, SearchStateChange.PartialResult(request.id, partial))
                 }
@@ -664,7 +668,9 @@ class SearchViewModel(
         reduce(SearchStateChange.BeginRequest(request, retrySource))
         launchRequest(request, failureMessage = "Could not load more results") {
             val result = if (retrySource == null) executionService.executePage(requireNotNull(continuation))
-            else coordinator.retrySource(request.query, request.sourceScope, continuation, retrySource)
+            else coordinator.retrySource(
+                request.query, request.sourceScope, sourcesFor(request.sourceScope), continuation, retrySource,
+            )
             coroutineContext.ensureActive()
             reduce(SearchStateChange.PageResult(request.id, result))
         }
@@ -685,6 +691,7 @@ class SearchViewModel(
         restorationJob = viewModelScope.launch {
             try {
                 val initialization = coordinator.initializeRoute()
+                runtime = initialization.runtime
                 val appliedHash = executionService.executionKeyFor(
                     initialization.query,
                     initialization.sourceScope,
@@ -781,6 +788,11 @@ class SearchViewModel(
     private fun updateSuggestionInput(input: String) {
         mutableState.value = mutableState.value.withSuggestionInput(input)
     }
+    /** What a search in [scope] runs on under the current source settings. */
+    private fun sourcesFor(scope: SearchSourceScope): SearchSources = SearchSources.of(
+        runtime ?: SourceRuntimeSettings(), scope, coordinator.availableSources.toSet(),
+    )
+
     private fun draftContext(): SearchDraftContext = SearchDraftContext(
         availableSources = mutableState.value.query.availableSources.toSet(),
         appliedByMode = mutableState.value.query.appliedByMode,

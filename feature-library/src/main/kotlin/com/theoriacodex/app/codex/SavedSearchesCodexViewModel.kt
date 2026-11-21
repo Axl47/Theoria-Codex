@@ -18,7 +18,6 @@ fun isVirtualCodex(id: String) = id == FOLLOWED_CODEX_ID || id == SAVED_SEARCHES
 
 /** A query collection owns live continuations, never durable Codex memberships. */
 class SavedSearchesCodexViewModel(
-    private val coordinator: SearchCoordinator,
     private val loader: SavedSearchFeedLoader,
     cache: CacheRepository,
     relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
@@ -38,10 +37,9 @@ class SavedSearchesCodexViewModel(
         sort: CodexSortMode = CodexSortMode.NEWEST_SAVED, usage: Map<String, CodexUsage> = emptyMap(),
         durations: Map<PostId, Long> = emptyMap()) {
         feed.updateCoverSort(sort, usage, durations)
-        loader.updateAvailableSources(sources)
-        coordinator.updateEnvironment(settings.copy(runtime = settings.runtime.copy(
+        loader.updateEnvironment(sources, settings.runtime.copy(
             enabledSources = settings.runtime.enabledSources.intersect(sources),
-        )))
+        ))
         val changed = selected.map { it.id to it.search } != entries.map { it.id to it.search } ||
             sources != available || settings.runtime != runtime
         entries = selected
@@ -58,7 +56,7 @@ class SavedSearchesCodexViewModel(
         fun factory(coordinator: SearchCoordinator, cache: CacheRepository, relatedPostsLoader: RelatedPostsLoading) =
             viewModelFactory {
                 initializer {
-                    SavedSearchesCodexViewModel(coordinator, SavedSearchFeedLoader(coordinator), cache, relatedPostsLoader)
+                    SavedSearchesCodexViewModel(SavedSearchFeedLoader(coordinator), cache, relatedPostsLoader)
                 }
             }
     }

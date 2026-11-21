@@ -8,7 +8,6 @@ import com.theoriacodex.app.source.PostResolutionFlights
 import com.theoriacodex.app.search.state.modeKey
 import com.theoriacodex.app.search.state.queryMode
 import com.theoriacodex.app.source.inPresentationOrder
-import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.QueryRepository
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.SearchFirstPageStore
@@ -106,14 +105,11 @@ class SearchCoordinator(
         seenTags.record(posts)
         fileMirrors.learn(posts)
     }
-    @Volatile private var runtimeSettings = AppSettings()
-    private var availableSourcesSnapshot = registry.availableSources()
     private val suggestionCoordinator = SearchSuggestionCoordinator(
         registry = registry,
         tagSuggestionStore = tagSuggestionStore,
         clock = clock,
         supportedSearchScopes = ::supportedSearchScopes,
-        effectiveEnabledSources = ::effectiveEnabledSources,
         searchCounts = searchCounts::value,
     )
     private val tagCounts = TagCountCoordinator(registry, tagSuggestionStore, ::autocompletePrefixForSource,
@@ -129,19 +125,12 @@ class SearchCoordinator(
     private val scrollPersistenceMutex = Mutex()
     private val persistedScrollStateByQuery = mutableMapOf<String, SearchScrollState>()
 
-    @Volatile
-    private var initialized = false
-
     val availableSources: List<SourceKey>
         get() = registry.availableSources().inPresentationOrder()
 
-    val isInitialized: Boolean
-        get() = initialized
-
     suspend fun initializeRoute(): SearchInitialization {
         tagSuggestionStore.awaitLoaded()
-        runtimeSettings = settingsRepository.observeSettings().first()
-        availableSourcesSnapshot = registry.availableSources()
+        val settings = settingsRepository.observeSettings().first()
         val modes = listOf(QueryMode.Unified) + availableSources.map(QueryMode::Source)
         val storedByMode = modes.mapNotNull { mode ->
             queryRepository.observeAppliedQuery(modeKey(mode)).first()
@@ -158,7 +147,6 @@ class SearchCoordinator(
         val sanitized = restored.normalizedForMode(restored.mode)
         val sourceScope = SearchSourceScope.fromQuery(sanitized.query)
         val key = executionKey(sanitized.query, sourceScope)
-        initialized = true
         return SearchInitialization(
             query = sanitized.query,
             sourceScope = sourceScope,
@@ -168,19 +156,12 @@ class SearchCoordinator(
                 uiRestoreRepository.getSearchScrollState(key) != null,
             validationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
                 .takeIf { sanitized.removedSourceOwnedTerms },
+            runtime = settings.runtime,
         )
     }
 
-    fun updateEnvironment(settings: AppSettings): SearchEnvironmentChange {
-        val settingsChanged = runtimeSettings.runtime != settings.runtime
-        runtimeSettings = settings
-        val current = registry.availableSources()
-        val sourcesChanged = current != availableSourcesSnapshot
-        availableSourcesSnapshot = current
-        return SearchEnvironmentChange(settingsChanged, sourcesChanged, current.inPresentationOrder(), sourceTermLimits())
-    }
-
-    private fun sourceTermLimits(): Map<SourceKey, SearchTermLimit> = registry.availableSources().mapNotNull { source ->
+    /** Per-request term caps of the available sources that have one. */
+    fun sourceTermLimits(): Map<SourceKey, SearchTermLimit> = registry.availableSources().mapNotNull { source ->
         registry.adapterFor(source)?.capabilities?.searchTermLimit?.let { source to it }
     }.toMap()
 
@@ -197,19 +178,18 @@ class SearchCoordinator(
     override suspend fun executeInitial(
         query: Query,
         sourceScope: SearchSourceScope,
-    ): SearchExecutionResult = executeRoot(query, sourceScope, onPartial = null)
+        sources: SearchSources,
+    ): SearchExecutionResult = executeRoot(query, sourceScope, sources, onPartial = null)
 
     override suspend fun executeInitialProgressively(
         query: Query,
         sourceScope: SearchSourceScope,
+        sources: SearchSources,
         onPartial: suspend (SearchExecutionResult.Success) -> Unit,
-    ): SearchExecutionResult = executeRoot(query, sourceScope, onPartial)
+    ): SearchExecutionResult = executeRoot(query, sourceScope, sources, onPartial)
 
-    /** The key doesn't cover the enabled sources, so a source turned off or removed since is dropped here. */
-    override suspend fun cachedFirstPage(executionKey: String, sourceScope: SearchSourceScope): List<Post> {
-        val sources = effectiveEnabledSources(sourceScope)
-        return firstPageStore?.load(executionKey).orEmpty().filter { it.id.source in sources }.also(fileMirrors::learn)
-    }
+    override suspend fun cachedFirstPage(executionKey: String, sources: Set<SourceKey>): List<Post> =
+        firstPageStore?.load(executionKey).orEmpty().filter { it.id.source in sources }.also(fileMirrors::learn)
 
     override suspend fun rememberFirstPage(executionKey: String, posts: List<Post>) {
         firstPageStore?.save(executionKey, posts)
@@ -218,13 +198,14 @@ class SearchCoordinator(
     private suspend fun executeRoot(
         query: Query,
         sourceScope: SearchSourceScope,
+        sources: SearchSources,
         onPartial: (suspend (SearchExecutionResult.Success) -> Unit)?,
     ): SearchExecutionResult {
         currentCoroutineContext().ensureActive()
         val sanitized = query.normalizedForMode(sourceScope.queryMode()).query
-        val enabled = effectiveEnabledSources(sourceScope)
+        val enabled = sources.enabled.intersect(registry.availableSources())
         val available = availableSources
-        val weights = effectiveWeights(enabled)
+        val weights = sources.weights
         val key = executionKey(sanitized, sourceScope)
         return try {
             when (val mode = sanitized.mode) {
@@ -374,12 +355,13 @@ class SearchCoordinator(
     suspend fun retrySource(
         query: Query,
         scope: SearchSourceScope,
+        sources: SearchSources,
         previous: SearchContinuation?,
         source: SourceKey,
     ): SearchPageResult {
-        val enabled = effectiveEnabledSources(scope)
+        val enabled = sources.enabled.intersect(registry.availableSources())
         val base = previous ?: continuation(
-            executionKey(query, scope), query, scope, enabled, availableSources, effectiveWeights(enabled),
+            executionKey(query, scope), query, scope, enabled, availableSources, sources.weights,
         )
         if (source !in enabled) return SearchPageResult.Failure(
             base.executionKey, emptyList(), "Source is no longer available",
@@ -565,14 +547,14 @@ class SearchCoordinator(
 
     suspend fun fetchAutocomplete(
         query: Query,
-        sourceScope: SearchSourceScope,
+        sources: Set<SourceKey>,
         selectedScope: FacetedSearchScope,
         input: String,
         trending: List<TagSuggestion>,
         onUpdate: suspend (SearchAutocompleteResult) -> Unit = {},
     ): SearchAutocompleteResult = suggestionCoordinator.fetchAutocomplete(
         query,
-        sourceScope,
+        sources,
         selectedScope,
         input,
         trending,
@@ -581,13 +563,13 @@ class SearchCoordinator(
 
     fun cachedAutocomplete(
         query: Query,
-        sourceScope: SearchSourceScope,
+        sources: Set<SourceKey>,
         selectedScope: FacetedSearchScope,
         input: String,
         trending: List<TagSuggestion>,
     ): SearchAutocompleteResult = suggestionCoordinator.cachedAutocomplete(
         query,
-        sourceScope,
+        sources,
         selectedScope,
         input,
         trending,
@@ -595,14 +577,14 @@ class SearchCoordinator(
 
     suspend fun fetchTrending(
         query: Query,
-        sourceScope: SearchSourceScope,
+        sources: Set<SourceKey>,
         forceRefresh: Boolean = false,
-    ): List<TagSuggestion> = suggestionCoordinator.fetchTrending(query, sourceScope, forceRefresh)
+    ): List<TagSuggestion> = suggestionCoordinator.fetchTrending(query, sources, forceRefresh)
 
     fun cachedTrending(
         query: Query,
-        sourceScope: SearchSourceScope,
-    ): List<TagSuggestion> = suggestionCoordinator.cachedTrending(query, sourceScope)
+        sources: Set<SourceKey>,
+    ): List<TagSuggestion> = suggestionCoordinator.cachedTrending(query, sources)
 
     fun tagVideoCount(
         source: SourceKey,
@@ -758,18 +740,6 @@ class SearchCoordinator(
         val record = resolveFailuresByExecution[executionKey]?.get(postId) ?: return false
         return record.reason == SourceFailureReason.RATE_LIMITED && clock() < record.backoffUntilMs
     }
-
-    private fun effectiveEnabledSources(scope: SearchSourceScope): Set<SourceKey> {
-        val available = registry.availableSources()
-        return when (scope) {
-            SearchSourceScope.GlobalUnified -> runtimeSettings.runtime.enabledSources.intersect(available)
-            is SearchSourceScope.Single -> setOf(scope.source).intersect(available)
-            is SearchSourceScope.Temporary -> scope.sources.toSet().intersect(available)
-        }
-    }
-
-    private fun effectiveWeights(sources: Set<SourceKey>): Map<SourceKey, Double> =
-        com.theoriacodex.data.repository.SourceWeightSettings.weightsFor(runtimeSettings.runtime, sources)
 
     private fun excludedStatuses(
         scope: SearchSourceScope,

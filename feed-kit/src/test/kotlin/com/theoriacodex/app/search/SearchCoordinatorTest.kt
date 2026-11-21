@@ -164,15 +164,19 @@ class SearchCoordinatorTest {
             settingsRepository = settings,
             adapters = arrayOf(pixiv, gelbooru),
         )
-        coordinator.initializeRoute()
+        val runtime = coordinator.initializeRoute().runtime
+        val available = coordinator.availableSources.toSet()
 
+        val gelbooruScope = SearchSourceScope.Single(SourceKey.GELBOORU)
         val source = coordinator.executeInitial(
             query(SourceKey.GELBOORU, "source"),
-            SearchSourceScope.Single(SourceKey.GELBOORU),
+            gelbooruScope,
+            SearchSources.of(runtime, gelbooruScope, available),
         ) as SearchExecutionResult.Success
         val unified = coordinator.executeInitial(
             unifiedQuery("unified"),
             SearchSourceScope.GlobalUnified,
+            SearchSources.of(runtime, SearchSourceScope.GlobalUnified, available),
         ) as SearchExecutionResult.Success
 
         assertEquals(listOf("source"), gelbooru.searchedTags.first())
