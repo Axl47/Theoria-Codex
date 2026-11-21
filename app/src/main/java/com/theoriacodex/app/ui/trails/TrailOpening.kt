@@ -20,6 +20,7 @@ import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 
 /** A fork ready to show: its crumb label and its feed. */
@@ -49,7 +50,11 @@ internal class TrailHandoffViewModel : ViewModel() {
 internal fun rememberTrailHandoff(): TrailHandoffViewModel =
     viewModel(viewModelStoreOwner = LocalContext.current.findActivity() as ComponentActivity)
 
-/** The shell's [TrailOpener]: loads a fork's first page, then pushes it as another Viewer entry. */
+/**
+ * The shell's [TrailOpener]: loads a fork's first page, then pushes it as another Viewer entry, but only over the screen it
+ * was asked from. When the user has moved on meanwhile it opens nothing and ends in a [CancellationException], since
+ * there is no failure to report.
+ */
 @Composable
 internal fun rememberTrailOpener(shell: TheoriaShell): TrailOpener {
     val handoff = rememberTrailHandoff()
@@ -57,6 +62,7 @@ internal fun rememberTrailOpener(shell: TheoriaShell): TrailOpener {
 }
 
 private suspend fun TheoriaShell.openTrail(request: TrailRequest, handoff: TrailHandoffViewModel): Boolean {
+    val origin = navController.currentBackStackEntry
     val spec = trailSpec(request, shellTrailSources()) ?: return false
     val feed = TrailFeed("trail:${UUID.randomUUID()}", spec.pager, features.relatedPosts)
     var opened = false
@@ -70,6 +76,7 @@ private suspend fun TheoriaShell.openTrail(request: TrailRequest, handoff: Trail
             ),
         )
         if (session != null) {
+            if (navController.currentBackStackEntry !== origin) throw CancellationException("The screen this trail was opened from is gone")
             handoff.hand(session.sessionId, TrailLevel(spec.label, feed))
             // A fork saves no launch context: the Viewer it covers keeps its own for restoration.
             launchViewer(session, saveContext = false, singleTop = false)

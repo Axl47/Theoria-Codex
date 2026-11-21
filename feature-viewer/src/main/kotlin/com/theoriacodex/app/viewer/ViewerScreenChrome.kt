@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
@@ -46,6 +47,7 @@ internal fun BoxScope.ViewerChromeOverlays(
     val selection = frame.selection
     val navigation = frame.navigation
     OpenInfoSheetForFocusedComment(comments, selection.post, frame.uiState.controls.panel == ViewerPanel.INFO, controls)
+    LaunchedEffect(selection.post.id) { screen.trailForks.follow(selection.post.id) }
     // While scrubbing everything but the timeline steps back. Only its alpha changes, so the strip keeps its scroll position.
     val scrubFade by animateFloatAsState(if (screen.timelineInteractionActive) 0f else 1f, tween(TheoriaMotion.SHORT_MS), label = "Viewer scrub fade")
     val fadesWhileScrubbing = Modifier.graphicsLayer { alpha = scrubFade }
@@ -62,7 +64,7 @@ internal fun BoxScope.ViewerChromeOverlays(
             source = selection.post.id.source.displayName(),
             indexLabel = if (selection.mediaItems.size > 1) "${selection.mediaIndex + 1} / ${selection.mediaItems.size}" else null,
             onBack = { controls.requestDismiss() },
-        ) { ViewerTrailRow(selection.post, trail, config.creatorBrowsingSources) }
+        ) { ViewerTrailRow(selection.post, trail, config.creatorBrowsingSources, screen.trailForks, controls::markInteraction) }
     }
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_STRIPS && !frame.mediaOverviewVisible, Modifier.align(Alignment.TopEnd).padding(top = 112.dp).then(fadesWhileScrubbing)) {
         ViewerRelatedStrip(

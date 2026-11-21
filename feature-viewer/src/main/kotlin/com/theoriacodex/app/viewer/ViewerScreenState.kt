@@ -37,6 +37,9 @@ internal class ViewerScreenState {
     /** The dock's Save fan; lives here so the auto-hide can see when the Save button holds the chrome. */
     val saveFan = ViewerSaveFanState()
 
+    /** This level's trail forks; closed when the screen leaves. */
+    val trailForks = ViewerTrailForks()
+
     /** Read when the info sheet opens; the sheet resets it on close, so any other way of opening it starts at the top. */
     var infoSheetTarget by mutableStateOf(InfoSheetTarget.Top)
 }
@@ -64,6 +67,9 @@ internal class ViewerControls(
 
     /** What the open info sheet was asked to show; consumed once as the sheet opens. */
     val infoSheetTarget: InfoSheetTarget get() = screen.infoSheetTarget
+
+    /** The level's trail forks, for the info sheet's tags. */
+    val trailForks: ViewerTrailForks get() = screen.trailForks
 
     fun resetInfoSheetTarget() {
         screen.infoSheetTarget = InfoSheetTarget.Top
