@@ -136,7 +136,7 @@ private fun CodexDetailEntry(
                 restoreRegistry = shell.feedFabRestoreRegistry,
                 header = { SavedBackHeader { shell.navController.popBackStack() } },
                 onOpenCodex = { shell.navController.navigate(AppRoute.codexDetail(it)) },
-                onOpenViewer = shell::openSavedShelfViewer,
+                onOpenViewer = shell::openCodexViewer,
                 onOpenCodexActions = shell.overlays::openCollectionActions,
                 resolvePost = { shell.viewerRouteWorkflow.resolvePost(it, ViewerStreamSource.CODEX) },
                 onToggleLike = { shell.toggleLikeAndSyncCodex(it) },
@@ -427,6 +427,7 @@ private fun viewerScreenCallbacks(shell: TheoriaShell) = ViewerScreenCallbacks(
     onPlaybackModeSelected = { shell.owners.settings.onAction(SettingsAction.SetViewerPlaybackMode(it)) },
     onCommentOrderSelected = { shell.owners.settings.onAction(SettingsAction.SetCommentOrder(it)) },
     onVisiblePostChanged = { post, viewedMediaNumber, session ->
+        shell.data.markViewedNewPost(post, session)
         shell.viewerRouteWorkflow.recordVisiblePost(post, viewedMediaNumber, session)
     },
     onVisibleMediaChanged = { post, viewedMediaNumber, session ->
