@@ -53,6 +53,28 @@ class CreatorProfileViewModelTest {
     }
 
     @Test
+    fun `the follow's seen ids are read before the first visit records more`() = runTest {
+        val creator = creator(SourceKey.PIXIV, "followed")
+        val gate = CompletableDeferred<Unit>()
+        val engine = FakeCreatorRouteEngine().apply {
+            seen = mutableSetOf("old")
+            seenGate = gate
+            openResults = listOf(testPost(sourcePostId = "new"), testPost(sourcePostId = "old"))
+        }
+        val viewModel = CreatorProfileViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        viewModel.onAction(CreatorAction.OpenCreator(creator))
+        advanceUntilIdle()
+        assertTrue(engine.visits.isEmpty())
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(CreatorSeenSnapshot(creator, setOf("old")), viewModel.seenAtOpen.value)
+        assertEquals(listOf(creator), engine.visits)
+        assertEquals(setOf("new", "old"), engine.seen)
+    }
+
+    @Test
     fun `opening a replacement creator owns new identity and saved inputs`() = runTest {
         val first = creator(SourceKey.PIXIV, "first")
         val replacement = creator(SourceKey.IWARA, "second")
@@ -387,6 +409,15 @@ private class FakeCreatorRouteEngine : CreatorRouteEngine {
 
     override suspend fun recordAcceptedVisit(creator: CreatorProfile, posts: List<Post>) {
         visits += creator
+        seen?.addAll(posts.map { it.id.sourcePostId })
+    }
+
+    var seen: MutableSet<String>? = null
+    var seenGate: CompletableDeferred<Unit>? = null
+
+    override suspend fun seenPostIds(creator: CreatorProfile): Set<String>? {
+        seenGate?.await()
+        return seen?.toSet()
     }
 
     override suspend fun resolvePost(postId: PostId): Post? = null

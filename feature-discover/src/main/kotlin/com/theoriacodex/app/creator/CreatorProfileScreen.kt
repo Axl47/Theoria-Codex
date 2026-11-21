@@ -2,6 +2,7 @@ package com.theoriacodex.app.creator
 
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.ui.components.FeedGrid
+import com.theoriacodex.app.ui.components.FeedGridDivider
 import com.theoriacodex.app.ui.components.rememberFeedView
 import com.theoriacodex.app.ui.components.FeedMarks
 import com.theoriacodex.app.ui.components.FeedView
@@ -92,6 +93,8 @@ fun CreatorProfileScreen(
     state: CreatorUiState,
     followed: Boolean = false,
     onToggleFollow: () -> Unit = {},
+    /** What the follow had seen when the page opened; null when the creator is not followed. */
+    seenAtOpen: Set<String>? = null,
     marks: FeedMarks,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     durations: FeedDurations = FeedDurations.NONE,
@@ -144,7 +147,11 @@ fun CreatorProfileScreen(
             val account = state.feeds.isNotEmpty()
             val followEnabled = !state.uploadsRefreshing
             CreatorHeader(state, creator, account, followed, followEnabled, onToggleFollow, onOpenUrl, onAction)
-            CreatorFeedBody(state, related, feed, cards, gridState, pageDemand, onAction, onLongPress = { selectedActionPost = it })
+            val uploads = state.selectedFeed == AccountFeed.UPLOADS
+            val newSince = remember(feed.visiblePosts, seenAtOpen, uploads) {
+                seenAtOpen?.takeIf { uploads }?.let { newSinceVisitBoundary(feed.visiblePosts, creator, it) }
+            }
+            CreatorFeedBody(state, related, feed, cards, gridState, pageDemand, newSince, onAction, onLongPress = { selectedActionPost = it })
         }
     }
     if (showFilterSheet) {
@@ -386,6 +393,7 @@ private fun CreatorFeedBody(
     cards: FeedCardEnvironment,
     gridState: LazyStaggeredGridState,
     pageDemand: FeedPageDemandControl,
+    newSince: PostId?,
     onAction: (CreatorAction) -> Unit,
     onLongPress: (Post) -> Unit,
 ) {
@@ -414,7 +422,7 @@ private fun CreatorFeedBody(
 
         // Pull to refresh is how paging resumes after a dismissed page failure.
         else -> PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = { onAction(CreatorAction.Refresh) }) {
-            CreatorGrid(state, related, feed, cards, gridState, onAction, onLongPress)
+            CreatorGrid(state, related, feed, cards, gridState, newSince, onAction, onLongPress)
         }
     }
 }
@@ -426,12 +434,14 @@ private fun CreatorGrid(
     feed: FeedView,
     cards: FeedCardEnvironment,
     gridState: LazyStaggeredGridState,
+    newSince: PostId?,
     onAction: (CreatorAction) -> Unit,
     onLongPress: (Post) -> Unit,
 ) {
     FeedGrid(
         view = feed,
         state = gridState,
+        divider = newSince?.let { FeedGridDivider(it) { NewSinceVisitDivider() } },
         footerMessage = pagedFeedFooterMessage(
             resolvingDurations = feed.durations.readiness.isResolving,
             hasVisibleResults = feed.visiblePosts.isNotEmpty(),

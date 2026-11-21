@@ -13,6 +13,17 @@ class CreatorNewPostsPolicyTest {
     private val creator = CreatorProfile(SourceKey.PIXIV, "Artist", "1", uploadsQuery = "user:1")
     private fun posts(vararg ids: String) = ids.map { testPost(sourcePostId = it) }
 
+    @Test fun `the divider goes before the first seen post when new posts precede it`() {
+        assertEquals("b", newSinceVisitBoundary(posts("n1", "n2", "b", "a"), creator, setOf("a", "b"))?.sourcePostId)
+    }
+
+    @Test fun `no divider when nothing loaded was seen, the first post was, or seen ids are another source's`() {
+        assertNull(newSinceVisitBoundary(posts("n1", "n2"), creator, setOf("a")))
+        assertNull(newSinceVisitBoundary(posts("a", "n1", "b"), creator, setOf("a", "b")))
+        val otherSource = listOf(testPost(sourcePostId = "n1"), testPost(SourceKey.IWARA, "a"))
+        assertNull(newSinceVisitBoundary(otherSource, creator, setOf("a")))
+    }
+
     @Test fun `sheet rows put new posts first and hold an unfollowed creator's place until restored`() {
         fun follow(id: String, new: Int = 0) = FollowedCreator(
             creator.copy(profileId = id, uploadsQuery = "user:$id"), "m$id",

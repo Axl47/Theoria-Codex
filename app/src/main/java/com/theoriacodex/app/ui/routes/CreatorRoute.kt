@@ -119,10 +119,12 @@ private fun CreatorRouteContent(
         owner.onAction(CreatorAction.OpenRelatedResult(index, posts))
     }
     val undo = LocalUndoSlot.current
+    val seen by owner.seenAtOpen.collectAsStateWithLifecycle()
     CreatorProfileScreen(
         related = related,
         followed = config.followed,
         onToggleFollow = { state.creator?.let { callbacks.onToggleFollow(it, state.uploads, undo) } },
+        seenAtOpen = seen?.takeIf { config.followed && it.creator == state.creator }?.seenPostIds,
         state = state,
         marks = config.marks,
         pixivUgoiraClient = pixivUgoiraClient,

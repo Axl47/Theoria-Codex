@@ -29,6 +29,9 @@ interface CreatorRouteEngine {
     suspend fun accountDetails(creator: CreatorProfile): AccountDetails? = null
     suspend fun load(creator: CreatorProfile, feed: AccountFeed, pageToken: String?): Page<Post>
     suspend fun recordAcceptedVisit(creator: CreatorProfile, posts: List<Post>)
+
+    /** The post ids [creator]'s follow has seen, or null when it is not followed. */
+    suspend fun seenPostIds(creator: CreatorProfile): Set<String>? = null
     suspend fun resolvePost(postId: PostId): Post?
 }
 
@@ -69,6 +72,8 @@ class CreatorProfileCoordinator(
     override suspend fun recordAcceptedVisit(creator: CreatorProfile, posts: List<Post>) {
         follows?.recordVisit(creator, posts)
     }
+
+    override suspend fun seenPostIds(creator: CreatorProfile): Set<String>? = follows?.seenPostIds(creator)
 
     override suspend fun resolvePost(postId: PostId): Post? {
         val adapter = registry.adapterFor(postId.source) ?: return null
