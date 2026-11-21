@@ -11,7 +11,12 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.performClick
+import org.junit.Assert.assertFalse
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.pinch
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.swipeLeft
@@ -73,6 +78,25 @@ class ViewerVerticalGalleryTest {
         compose.waitForIdle()
         assertEquals(0, state.value.currentPageIndex)
         assertTrue("selected page ${state.value.currentPage?.selectedMediaIndex}", (state.value.currentPage?.selectedMediaIndex ?: 0) > 0)
+    }
+
+    @Test fun `starting a slideshow in a zoomed vertical gallery lets the next touch stop it`() {
+        show()
+        compose.onRoot().performTouchInput {
+            pinch(Offset(centerX - width * 0.1f, centerY), Offset(centerX + width * 0.1f, centerY),
+                Offset(centerX - width * 0.4f, centerY), Offset(centerX + width * 0.4f, centerY))
+        }
+        compose.waitForIdle()
+        // Hold the clock so the slideshow cannot run to its end on its own before the touch.
+        compose.mainClock.autoAdvance = false
+        state.value = reduceViewerState(state.value, ViewerAction.SetSlideshow(true)).state
+        Snapshot.sendApplyNotifications()
+        compose.mainClock.advanceTimeBy(FRAME_MS * 3)
+        compose.waitForIdle()
+        assertTrue(state.value.controls.slideshow)
+        compose.onRoot().performTouchInput { click(Offset(centerX, centerY - height / 8f)) }
+        compose.mainClock.advanceTimeBy(TAP_SETTLE_MS)
+        assertFalse(state.value.controls.slideshow)
     }
 
     @Test fun `a sideways swipe in a vertical gallery moves to the next post`() {
@@ -195,5 +219,10 @@ class ViewerVerticalGalleryTest {
         }
         compose.onNodeWithText("Right to left").assertIsDisplayed()
         assertEquals(0, compose.onAllNodes(hasText("Vertical")).fetchSemanticsNodes().size)
+    }
+
+    private companion object {
+        const val FRAME_MS = 16L
+        const val TAP_SETTLE_MS = 500L
     }
 }
