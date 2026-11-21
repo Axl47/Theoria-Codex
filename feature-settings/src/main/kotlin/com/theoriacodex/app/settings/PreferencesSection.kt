@@ -20,7 +20,7 @@ fun PreferencesSection(state: SettingsUiState, onAction: (SettingsAction) -> Uni
             state.settings.oldSearchBar) { onAction(SettingsAction.SetOldSearchBar(it)) }
         PreferenceToggle("Instant Seek", "Seek while dragging instead of showing thumbnail previews.",
             state.settings.viewer.instantSeek) { onAction(SettingsAction.SetInstantSeek(it)) }
-        PreferenceToggle("Invert Scroll Direction", "Reverse swipes within multi-media posts.",
+        PreferenceToggle("Invert Scroll Direction", "Reverse swipes in multi-media posts, except galleries given their own reading mode.",
             state.settings.viewer.invertMultiImageScrollDirection) { onAction(SettingsAction.SetInvertScrollDirection(it)) }
         PreferenceToggle("Auto-Rotate Videos", "Rotate to fit the video you open.",
             state.settings.viewer.autoRotateVideos) { onAction(SettingsAction.SetAutoRotateVideos(it)) }

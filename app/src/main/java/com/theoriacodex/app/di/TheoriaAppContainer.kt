@@ -60,6 +60,9 @@ import com.theoriacodex.data.repository.MediaDurationRepository
 import com.theoriacodex.data.repository.QueryRepository
 import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.ReadingPositionRepository
+import com.theoriacodex.data.repository.GalleryReadingModeRepository
+import com.theoriacodex.data.repository.FileBackedGalleryReadingModeRepository
+import com.theoriacodex.data.repository.InMemoryGalleryReadingModeRepository
 import com.theoriacodex.data.repository.FileBackedReadingPositionRepository
 import com.theoriacodex.data.repository.InMemoryReadingPositionRepository
 import com.theoriacodex.data.repository.FileBackedSavedSearchRepository
@@ -128,6 +131,7 @@ data class DataDependencies(
     val mediaDurationRepository: MediaDurationRepository,
     val recoveredStores: StateFlow<List<CorruptionRecovery>>,
     val readingPositions: ReadingPositionRepository = InMemoryReadingPositionRepository(),
+    val galleryReadingModes: GalleryReadingModeRepository = InMemoryGalleryReadingModeRepository(),
     val savedSearches: SavedSearchRepository = InMemorySavedSearchRepository(),
     /** This session's copies of one file across sites; feeds teach it what they list. */
     val fileMirrors: FileMirrorIndex = FileMirrorIndex(),
@@ -407,6 +411,7 @@ internal class DefaultTheoriaAppContainer(
         mediaDurationRepository = mediaDurationRepository,
         recoveredStores = fileStoreRecoveryRegistry.recoveries,
         readingPositions = readingPositions,
+        galleryReadingModes = FileBackedGalleryReadingModeRepository(storageDirectory),
         savedSearches = savedSearches,
     )
 

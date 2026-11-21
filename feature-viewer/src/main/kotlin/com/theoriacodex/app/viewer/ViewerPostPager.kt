@@ -27,6 +27,7 @@ import com.theoriacodex.app.ui.motion.TheoriaHaptics
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerPageState
+import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -55,6 +56,10 @@ internal fun ViewerPostPagerSurface(
     val selection = frame.selection
     // Pinches write the transform every pointer event; only crossing the zoomed boundary changes the pager.
     val zoomed by remember(viewerTransform) { derivedStateOf { viewerTransform.value.isZoomed } }
+    val vertical = config.readingModeOf(frame.uiState.currentPage) == GalleryReadingMode.VERTICAL
+    val verticalGallery = screen.verticalGalleries[selection.post.id]?.takeIf { vertical }
+    // Only the shown layout's zoom holds the gestures: a horizontal zoom left over from before a switch to Vertical must not.
+    val layoutZoomed = if (vertical) verticalGallery?.zoomed == true else zoomed
     val reservedBottom = if (frame.chromeVisible && selection.isAnimated) {
         with(LocalDensity.current) { (VIEWER_TIMELINE_HEIGHT + LocalViewerPostStripInset.current).toPx() }
     } else 0f
@@ -62,12 +67,13 @@ internal fun ViewerPostPagerSurface(
         Modifier.fillMaxSize()
             .viewerGestures(
                 ViewerGestureConfig(
-                    enabled = !zoomed && !frame.inPictureInPicture && !frame.touchExplorationEnabled &&
+                    enabled = !layoutZoomed && !frame.inPictureInPicture && !frame.touchExplorationEnabled &&
                         !screen.pendingDismiss && !frame.returning && !frame.opening,
                     levels = levelControls,
                     volumeAdjustable = selection.media?.let(::isVideoMediaRef) == true,
                     holdScrub = LocalViewerHoldScrub.current,
                     reservedBottomPx = reservedBottom,
+                    verticalScroll = verticalGallery?.scrollGesture,
                 ),
                 viewerGestureHandler(swipe, dismissDrag, screen, controls, haptics, flingVelocity, scope, frame.uiState.controls.slideshow),
             )
@@ -78,9 +84,7 @@ internal fun ViewerPostPagerSurface(
                 state = postPagerState,
                 key = { index -> encodeViewerPostId(frame.posts[index].id) },
                 userScrollEnabled = false,
-                reverseLayout = viewerMediaPagerReverseLayout(
-                    frame.uiState.currentPage?.swipeMediaCount() ?: 1, config.invertMultiImageScrollDirection,
-                ),
+                reverseLayout = config.readingModeOf(frame.uiState.currentPage).reversed,
                 modifier = Modifier.fillMaxSize(),
             ) { postPage ->
                 ViewerPostPage(
@@ -126,6 +130,28 @@ private fun viewerGestureHandler(
     override fun onScrubStart() = controls.markInteraction()
 }
 
+/** A gallery read as one vertical strip; its end card opens the next post. */
+@Composable
+private fun ViewerVerticalPostPage(
+    postPage: Int,
+    pageState: ViewerPageState,
+    frame: ViewerFrame,
+    screen: ViewerScreenState,
+    controls: ViewerControls,
+    swipe: ViewerSwipeController,
+    dismissDrag: ViewerDismissDrag,
+    readReturnProgress: () -> Float,
+    host: ViewerScreenHost,
+) {
+    val next = frame.navigation.pages.getOrNull(postPage + 1)
+    ViewerVerticalGallery(
+        postPage, pageState, frame, screen, controls, host,
+        dismissDrag = dismissDrag.takeIf { postPage == frame.navigation.currentIndex },
+        readReturnProgress = readReturnProgress,
+        onOpenNext = next?.let { { swipe.navigateTo(ViewerHorizontalSwipeTarget(postPage + 1, it.targetMediaIndex)) } },
+    )
+}
+
 /** One post's media pager, with the effects that keep it in step with the selection. */
 @Composable
 private fun ViewerPostPage(
@@ -147,6 +173,9 @@ private fun ViewerPostPage(
 ) {
     val post = frame.posts[postPage]
     val pageState = frame.navigation.pages[postPage]
+    if (config.readingModeOf(pageState) == GalleryReadingMode.VERTICAL) {
+        return ViewerVerticalPostPage(postPage, pageState, frame, screen, controls, swipe, dismissDrag, readReturnProgress, host)
+    }
     val postMedia = pageState.media
     val knownDurationMs by remember(post, host.durations) { host.durations.observe(post) }.collectAsStateWithLifecycle(null)
     val initialMediaPage = pageState.selectedMediaIndex.coerceIn(0, postMedia.lastIndex)
@@ -159,10 +188,7 @@ private fun ViewerPostPage(
     HorizontalPager(
         state = mediaPagerState,
         userScrollEnabled = false,
-        reverseLayout = viewerMediaPagerReverseLayout(
-            mediaCount = pageState.swipeMediaCount(),
-            invertMultiImageScrollDirection = config.invertMultiImageScrollDirection,
-        ),
+        reverseLayout = config.readingModeOf(pageState).reversed,
         modifier = Modifier.fillMaxSize(),
         contentPadding = if (frame.mediaEdgeToEdge) PaddingValues(0.dp) else PaddingValues(top = 40.dp),
         pageSpacing = if (frame.mediaEdgeToEdge) 0.dp else 8.dp,
