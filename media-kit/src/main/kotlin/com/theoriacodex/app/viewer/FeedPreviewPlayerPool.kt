@@ -37,7 +37,6 @@ class FeedPreviewPlayerPool(
     private val slots = ReusableVideoSlotPool<ExoPlayer, VideoPlaybackIdentity>(
         maxIdleResources = FEED_PREVIEW_MAX_IDLE_PLAYERS,
         idleTimeoutMs = FEED_PREVIEW_IDLE_TIMEOUT_MS,
-        excessReleaseDelayMs = FEED_PREVIEW_EXCESS_RELEASE_DELAY_MS,
         clock = clock,
         createResource = ::createPlayer,
     )
@@ -253,13 +252,13 @@ class VideoPlayerLease internal constructor(
 
 /**
  * Pure lease/retention policy kept separate from Media3 so reuse remains directly testable.
- * Idle resources beyond [maxIdleResources] are released [excessReleaseDelayMs] after cleanup is scheduled.
+ * Idle resources beyond [maxIdleResources] are released [FEED_PREVIEW_EXCESS_RELEASE_DELAY_MS] after cleanup is
+ * scheduled, in the feed and the Viewer alike.
  */
 class ReusableVideoSlotPool<Resource : Any, Identity : Any>(
     private val maxIdleResources: Int,
     private val idleTimeoutMs: Long,
     private val clock: () -> Long,
-    private val excessReleaseDelayMs: Long = 0L,
     private val createResource: () -> Resource,
 ) {
     data class Lease<Resource : Any>(
@@ -383,7 +382,7 @@ class ReusableVideoSlotPool<Resource : Any, Identity : Any>(
 
     fun nextCleanupDelayMs(nowMs: Long = clock()): Long? {
         if (idleSlots.isEmpty() || activeResourceCount > 0) return null
-        if (idleSlots.size > maxIdleResources) return excessReleaseDelayMs
+        if (idleSlots.size > maxIdleResources) return FEED_PREVIEW_EXCESS_RELEASE_DELAY_MS
         val oldest = idleSlots.first()
         return (idleTimeoutMs - (nowMs - oldest.idleSinceMs)).coerceAtLeast(0L)
     }

@@ -163,6 +163,7 @@ class VideoPlaybackInfrastructureTest {
         assertTrue(pool.recycle(second))
         assertTrue(pool.recycle(third))
         assertEquals(3, pool.idleResourceCount)
+        assertEquals(FEED_PREVIEW_EXCESS_RELEASE_DELAY_MS, pool.nextCleanupDelayMs())
 
         val releasedFirst = pool.pollExpired()
         assertSame(first.resource, releasedFirst)
