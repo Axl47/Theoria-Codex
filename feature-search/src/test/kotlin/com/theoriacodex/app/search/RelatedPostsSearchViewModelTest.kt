@@ -38,7 +38,7 @@ internal class RelatedPostsSearchViewModelTest : SearchViewModelTestFixture() {
             viewModel.onAction(SearchAction.ApplyDraft)
             advanceUntilIdle()
 
-            viewModel.onAction(SearchAction.RelatedLikeCommitted(seed, LikeToggleOutcome.LIKED))
+            viewModel.related.onLikeCommitted(seed, LikeToggleOutcome.LIKED)
             advanceUntilIdle()
 
             assertEquals(listOf("seed"), resultIds(viewModel))
@@ -55,7 +55,7 @@ internal class RelatedPostsSearchViewModelTest : SearchViewModelTestFixture() {
             assertEquals(ViewerStreamSource.RELATED, open.context.streamSource)
             assertEquals(false, open.liveSearchBinding)
 
-            viewModel.onAction(SearchAction.RelatedLikeCommitted(seed, LikeToggleOutcome.UNLIKED))
+            viewModel.related.onLikeCommitted(seed, LikeToggleOutcome.UNLIKED)
             assertEquals(RelatedPostsUiState.Idle, viewModel.state.value.relatedPosts)
         }
 
@@ -71,7 +71,7 @@ internal class RelatedPostsSearchViewModelTest : SearchViewModelTestFixture() {
             viewModel.onAction(SearchAction.AddIncludeTerm(com.theoriacodex.domain.model.SearchTerm("seed")))
             viewModel.onAction(SearchAction.ApplyDraft)
             advanceUntilIdle()
-            viewModel.onAction(SearchAction.RelatedLikeCommitted(seed, LikeToggleOutcome.LIKED))
+            viewModel.related.onLikeCommitted(seed, LikeToggleOutcome.LIKED)
             advanceUntilIdle()
             // Applying the search left its move to the top open, waiting for the grid to acknowledge it.
             assertNotNull(viewModel.openScrollState())

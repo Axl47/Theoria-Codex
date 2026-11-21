@@ -6,7 +6,6 @@ import com.theoriacodex.app.search.SearchContinuation
 import com.theoriacodex.app.search.SearchTermLimitNotice
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.searchTermLimitNotices
-import com.theoriacodex.app.related.LikeToggleOutcome
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.ViewerLaunchContext
@@ -331,10 +330,6 @@ sealed interface SearchAction {
     data class SetNhentaiLanguage(val filter: NhentaiLanguageFilter) : DraftEdit
     data class SetNhentaiFullColor(val enabled: Boolean) : DraftEdit
     data class RememberResolvedPost(val post: Post) : SearchAction
-    data class RelatedLikeCommitted(
-        val post: Post,
-        val outcome: LikeToggleOutcome,
-    ) : SearchAction
     /** "More like this" from a post's action menu: opens the related shelf without a like. */
     data class ShowRelatedPosts(val post: Post) : SearchAction
     data object RetryRelatedPosts : SearchAction

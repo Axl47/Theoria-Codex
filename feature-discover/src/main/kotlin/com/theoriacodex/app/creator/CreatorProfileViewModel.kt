@@ -123,10 +123,6 @@ class CreatorProfileViewModel(
 
     private fun reduceAction(action: CreatorAction) {
         when (action) {
-            is CreatorAction.RelatedLikeCommitted -> {
-                relatedPosts.onLikeCommitted(action.post, action.outcome)
-                return
-            }
             is CreatorAction.ShowRelatedPosts -> {
                 relatedPosts.show(action.post)
                 return

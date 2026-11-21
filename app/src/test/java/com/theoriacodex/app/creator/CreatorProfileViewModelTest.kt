@@ -204,7 +204,7 @@ class CreatorProfileViewModelTest {
         val owner = CreatorProfileViewModel(engine, SavedStateHandle(), this, loader)
         owner.onAction(CreatorAction.OpenCreator(creator(SourceKey.PIXIV, "creator")))
         advanceUntilIdle()
-        owner.onAction(CreatorAction.RelatedLikeCommitted(seed, LikeToggleOutcome.LIKED))
+        owner.related.onLikeCommitted(seed, LikeToggleOutcome.LIKED)
         advanceUntilIdle()
 
         assertEquals(listOf(seed), owner.state.value.results)
@@ -217,7 +217,7 @@ class CreatorProfileViewModelTest {
         assertFalse(viewer.liveSearchBinding)
         assertEquals(listOf(sibling), viewer.posts)
 
-        owner.onAction(CreatorAction.RelatedLikeCommitted(sibling, LikeToggleOutcome.LIKED))
+        owner.related.onLikeCommitted(sibling, LikeToggleOutcome.LIKED)
         advanceUntilIdle()
         assertEquals(listOf(seed, sibling), owner.state.value.results)
         assertEquals("next", owner.state.value.nextPageToken)
@@ -225,7 +225,7 @@ class CreatorProfileViewModelTest {
         assertTrue(owner.state.value.relatedPosts.loadedPosts.isEmpty())
         owner.onAction(CreatorAction.ShowPreviousRelatedPosts)
         assertFalse(sibling in owner.state.value.relatedPosts.loadedPosts)
-        owner.onAction(CreatorAction.RelatedLikeCommitted(sibling, LikeToggleOutcome.UNLIKED))
+        owner.related.onLikeCommitted(sibling, LikeToggleOutcome.UNLIKED)
         assertEquals(RelatedPostsUiState.Idle, owner.state.value.relatedPosts)
         assertEquals(1, engine.visits.size)
     }
@@ -263,7 +263,7 @@ class CreatorProfileViewModelTest {
             val owner = CreatorProfileViewModel(engine, SavedStateHandle(), this, loader)
             owner.onAction(CreatorAction.OpenCreator(creator(SourceKey.PIXIV, "first")))
             advanceUntilIdle()
-            owner.onAction(CreatorAction.RelatedLikeCommitted(seed, LikeToggleOutcome.LIKED))
+            owner.related.onLikeCommitted(seed, LikeToggleOutcome.LIKED)
             runCurrent()
             assertTrue(owner.state.value.relatedPosts is RelatedPostsUiState.Loading)
             owner.onAction(if (replace) {
@@ -287,7 +287,7 @@ class CreatorProfileViewModelTest {
         val owner = CreatorProfileViewModel(engine, SavedStateHandle(), this, loader)
         owner.onAction(CreatorAction.OpenCreator(creator(SourceKey.PIXIV, "creator")))
         advanceUntilIdle()
-        owner.onAction(CreatorAction.RelatedLikeCommitted(seed, LikeToggleOutcome.LIKED))
+        owner.related.onLikeCommitted(seed, LikeToggleOutcome.LIKED)
         advanceUntilIdle()
         assertTrue(owner.state.value.relatedPosts is RelatedPostsUiState.Failed)
         fail = false
@@ -299,7 +299,7 @@ class CreatorProfileViewModelTest {
         assertEquals(RelatedPostsUiState.Idle, owner.state.value.relatedPosts)
 
         val unsupported = CreatorProfileViewModel(engine, SavedStateHandle(), coroutineScope = this)
-        unsupported.onAction(CreatorAction.RelatedLikeCommitted(seed, LikeToggleOutcome.LIKED))
+        unsupported.related.onLikeCommitted(seed, LikeToggleOutcome.LIKED)
         assertEquals(RelatedPostsUiState.Idle, unsupported.state.value.relatedPosts)
     }
 

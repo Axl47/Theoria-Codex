@@ -28,6 +28,7 @@ import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
 import com.theoriacodex.app.related.ViewerFeedOwner
 import com.theoriacodex.app.related.ViewerFeedSnapshot
 import com.theoriacodex.app.related.retainedLikedPostIds
+import com.theoriacodex.app.related.relatedViewerContext
 import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.ui.state.RouteStateOwner
 import com.theoriacodex.data.repository.SearchScrollState
@@ -202,7 +203,6 @@ class SearchViewModel(
                 )
             }
 
-            is SearchAction.RelatedLikeCommitted -> relatedPosts.onLikeCommitted(action.post, action.outcome)
             is SearchAction.ShowRelatedPosts -> relatedPosts.show(action.post)
 
             SearchAction.RetryRelatedPosts -> relatedPosts.retry()
@@ -343,12 +343,7 @@ class SearchViewModel(
         effectChannel.trySend(
             SearchEffect.OpenViewer(
                 posts = action.visibleResults.toList(),
-                context = ViewerLaunchContext(
-                    queryHash = "related:${request.seed.id.source.id}:${request.seed.id.sourcePostId}",
-                    startIndex = action.index,
-                    streamSource = ViewerStreamSource.RELATED,
-                    scrollOffsetHint = 0,
-                ),
+                context = relatedViewerContext(request.seed, action.index),
                 liveSearchBinding = false,
             )
         )
