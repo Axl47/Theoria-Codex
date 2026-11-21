@@ -59,7 +59,10 @@ sealed interface CodexSaveResult {
     data class Failure(val message: String) : CodexSaveResult
 }
 
-/** Platform-free Codex JSON transfer; ContentResolver/FileProvider remain shell effects. */
+/**
+ * Platform-free Codex JSON transfer; ContentResolver/FileProvider remain shell effects. [keepOffline]
+ * hears every committed save, so a Codex kept offline also keeps the posts saved into it.
+ */
 class CodexTransferService constructor(
     private val codexRepository: CodexRepository,
     private val transactions: CodexLikesTransactions,
@@ -67,6 +70,7 @@ class CodexTransferService constructor(
     private val sourceRegistry: SourceAdapterRegistry,
     private val workerDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val canonicalizePost: (Post) -> Post = { it },
+    private val keepOffline: (codexId: String, posts: List<Post>) -> Unit = { _, _ -> },
 ) {
     suspend fun export(codexId: String): CodexExportResult = withContext(workerDispatcher) {
         runCatchingPreservingCancellation { exportInside(codexId) }
@@ -162,6 +166,7 @@ class CodexTransferService constructor(
             val committed = runCatchingPreservingCancellation {
                 codexRepository.addItems(codexId, uniquePosts)
             }.getOrElse { return@withContext CodexSaveResult.Failure("Could not save posts. Please try again.") }
+            keepOffline(codexId, uniquePosts)
             CodexSaveResult.Success(committed, cacheCommittedPosts(uniquePosts, cacheFullImage))
         }
 

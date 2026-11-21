@@ -18,6 +18,7 @@ import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.media.OfflineAwareCacheRepository
 import com.theoriacodex.app.media.OfflineMediaAcquisition
 import com.theoriacodex.app.media.OfflineMediaCoordinator
+import com.theoriacodex.app.media.codexOfflineOwner
 import com.theoriacodex.app.codex.LikesCodexSyncService
 import com.theoriacodex.app.codex.transfer.CodexTransferService
 import com.theoriacodex.app.recommend.ForYouCoordinator
@@ -485,6 +486,7 @@ internal class DefaultTheoriaAppContainer(
             cacheRepository = cacheRepository,
             sourceRegistry = sourceRegistry,
             canonicalizePost = offlineMedia::withoutOfflineLocations,
+            keepOffline = { codexId, posts -> offlineMedia.keepOffline(codexOfflineOwner(codexId), posts) },
         ),
         profileBackup = profileBackup,
         autoBackup = autoBackup,
