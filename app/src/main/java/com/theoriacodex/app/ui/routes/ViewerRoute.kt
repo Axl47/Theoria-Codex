@@ -284,7 +284,7 @@ internal fun ViewerRoute(
     LaunchedEffect(viewerOwner, restoration.claimedSessionId, restoration.attempt) { restoration.run() }
     ViewerLiveSourceMergeEffect(viewerOwner, session, liveSourceState)
     CollectRouteEffects(viewerOwner.effects) { effect ->
-        handleViewerEffect(effect, viewerOwner, latestEffectCallbacks.value, latestDependencies, viewerReturn)
+        handleViewerEffect(effect, viewerOwner, latestEffectCallbacks.value, latestDependencies, viewerReturn, routeScope)
     }
     ViewerUsageTargetEffect(session?.context, viewerState, dependencies.onCodexUsageTargetChanged)
 
@@ -576,7 +576,8 @@ internal suspend fun appendLiveSourcePosts(
 
 /**
  * Handles one effect against the state at its delivery, not when it was emitted. Effects run in
- * order because the collector awaits each one, so nothing here may launch work of its own.
+ * order because the collector awaits each one; media recovery waits on a provider, so it runs in
+ * [routeScope] instead, where it cannot hold a later Dismiss behind it.
  */
 private suspend fun handleViewerEffect(
     effect: ViewerEffect,
@@ -584,6 +585,7 @@ private suspend fun handleViewerEffect(
     callbacks: ViewerRouteEffectCallbacks,
     dependencies: State<ViewerRouteDependencies>,
     viewerReturn: ViewerReturnTransition?,
+    routeScope: CoroutineScope,
 ) {
     val currentState = viewerOwner.state.value
     if (!effect.isCurrentFor(currentState)) return
@@ -601,7 +603,7 @@ private suspend fun handleViewerEffect(
         is ViewerEffect.ApplyTag -> post(effect.postId)?.let { selected ->
             callbacks.onApplyTag(selected, effect.term, effect.excluded)
         }
-        is ViewerEffect.RetryMedia -> retryViewerMedia(effect, currentState, viewerOwner, callbacks)
+        is ViewerEffect.RetryMedia -> routeScope.launch { retryViewerMedia(effect, currentState, viewerOwner, callbacks) }
         is ViewerEffect.LoadMore -> viewerOwner.session.value?.context?.streamSource?.let(callbacks.onLoadMore)
         is ViewerEffect.Dismiss -> {
             viewerOwner.clearSession(retainPresentation = true)
