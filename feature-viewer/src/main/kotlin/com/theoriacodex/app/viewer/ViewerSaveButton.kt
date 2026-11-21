@@ -46,7 +46,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -54,6 +53,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -123,8 +123,9 @@ internal fun ViewerSaveButton(post: Post, context: ViewerSaveContext, fan: Viewe
                 contentDescription = state.description()
                 onClick { run(state.tapCommand()); true }
                 customActions = listOf(CustomAccessibilityAction("Choose Codex") { onOpenPicker(); true })
+                // Inside the cleared semantics, or clearing would drop it.
+                testTag = "viewer-dock-save"
             }
-            .testTag("viewer-dock-save")
             .height(40.dp)
             .animateContentSize()
             .padding(start = 6.dp, end = 14.dp),
