@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.data.repository.CreatorFollowsRepository
+import com.theoriacodex.data.repository.FollowedCreator
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.followKey
 import com.theoriacodex.data.repository.newPostsCheckDue
@@ -39,7 +40,7 @@ class CreatorFollowsViewModel(
     private val messageChannel = Channel<String>(Channel.BUFFERED)
     val messages = messageChannel.receiveAsFlow()
     private var refreshJob: Job? = null
-    private var lastAutomaticCheck: Long? = null
+    private var refreshIsAutomatic = false
 
     fun toggle(creator: CreatorProfile, posts: List<Post>) {
         viewModelScope.launch {
@@ -60,45 +61,36 @@ class CreatorFollowsViewModel(
         }
     }
 
-    fun cancelRefresh() { refreshJob?.cancel() }
+    /** Stops the app-open check when the app leaves the foreground; a refresh the user started carries on. */
+    fun cancelAutomaticRefresh() { if (refreshIsAutomatic) refreshJob?.cancel() }
 
     /**
-     * The app-open check: refreshes only when the newest check, and the last automatic attempt, are
-     * older than the check interval, so a failing source waits for the next interval instead of retrying.
+     * The app-open check: refreshes only when the newest check or failed attempt, which are saved with
+     * the follows, is older than the check interval, so a failing source waits for the next interval
+     * instead of retrying, restarts included.
      */
     suspend fun refreshIfStale(nowEpochMs: Long) {
         val follows = repository.observe().first()
-        if (follows.isEmpty() || !newPostsCheckDue(follows.map { it.checkedAtEpochMs } + lastAutomaticCheck, nowEpochMs)) return
-        lastAutomaticCheck = nowEpochMs
-        refresh()
+        if (follows.isEmpty() || !newPostsCheckDue(follows.flatMap { listOf(it.checkedAtEpochMs, it.attemptedAtEpochMs) }, nowEpochMs)) return
+        startRefresh(automatic = true, at = nowEpochMs)
     }
 
-    /** The Followed feed is open, so its creators' latest posts are no longer new. */
-    fun markLatestSeen() {
-        viewModelScope.launch {
-            try { repository.markLatestSeen() }
-            catch (error: CancellationException) { throw error }
-            catch (_: Exception) { messageChannel.send("Could not update followed creators") }
+    fun refresh() = startRefresh(automatic = false, at = System.currentTimeMillis())
+
+    private fun startRefresh(automatic: Boolean, at: Long) {
+        if (refreshJob?.isActive == true) {
+            // A refresh the user asks for while the automatic one runs is theirs from then on.
+            if (!automatic) refreshIsAutomatic = false
+            return
         }
-    }
-
-    fun refresh() {
-        if (refreshJob?.isActive == true) return
+        refreshIsAutomatic = automatic
         refreshJob = viewModelScope.launch {
             mutableRefreshing.value = true
             mutableErrors.value = emptyMap()
             try {
-                repository.observe().first().mapConcurrent(concurrency = 2) { follow ->
-                    try {
-                        val adapter = registry.adapterFor(follow.creator.source) as? CreatorPostsSourceAdapter
-                            ?: error("Source unavailable; check source accounts")
-                        val page = withTimeoutOrNull(15_000L) { adapter.searchCreatorPosts(follow.creator, null) }
-                            ?: error("Source timed out; check again")
-                        repository.recordCheck(follow, page.items, System.currentTimeMillis())
-                    } catch (error: CancellationException) { throw error }
-                    catch (error: Exception) {
-                        mutableErrors.update { it + (follow.creator.followKey() to (error.message ?: "Could not check creator")) }
-                    }
+                repository.observe().first().chunked(WRITE_BATCH_SIZE).forEach { batch ->
+                    val results = batch.mapConcurrent(concurrency = 2) { follow -> follow.membershipId to checkCreator(follow) }
+                    repository.recordChecks(results.toMap(), at)
                 }
             } catch (error: CancellationException) { throw error }
             catch (_: Exception) { messageChannel.send("Could not load followed creators") }
@@ -106,7 +98,22 @@ class CreatorFollowsViewModel(
         }
     }
 
+    /** [follow]'s newest posts, or null after recording why the check failed. */
+    private suspend fun checkCreator(follow: FollowedCreator): List<Post>? = try {
+        val adapter = registry.adapterFor(follow.creator.source) as? CreatorPostsSourceAdapter
+            ?: error("Source unavailable; check source accounts")
+        withTimeoutOrNull(15_000L) { adapter.searchCreatorPosts(follow.creator, null) }?.items
+            ?: error("Source timed out; check again")
+    } catch (error: CancellationException) { throw error }
+    catch (error: Exception) {
+        mutableErrors.update { it + (follow.creator.followKey() to (error.message ?: "Could not check creator")) }
+        null
+    }
+
     companion object {
+        /** Creators checked per settings write, so a large list neither rewrites settings per creator nor loses its progress when cancelled. */
+        private const val WRITE_BATCH_SIZE = 25
+
         fun factory(settings: SettingsRepository, registry: SourceAdapterRegistry) = viewModelFactory {
             initializer { CreatorFollowsViewModel(settings, registry) }
         }
