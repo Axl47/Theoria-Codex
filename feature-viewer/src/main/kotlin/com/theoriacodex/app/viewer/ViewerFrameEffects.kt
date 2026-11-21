@@ -16,8 +16,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
+import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.app.viewer.state.ViewerAction
+import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.CoroutineScope
@@ -27,7 +29,7 @@ import kotlinx.coroutines.launch
 internal fun rememberViewerSwipe(
     frame: ViewerFrame,
     postPagerState: PagerState,
-    invertMultiImageScrollDirection: Boolean,
+    config: ViewerScreenConfig,
     screen: ViewerScreenState,
     controls: ViewerControls,
     flingVelocity: Float,
@@ -43,26 +45,8 @@ internal fun rememberViewerSwipe(
         mediaPager = { index -> posts.getOrNull(index)?.let { screen.mediaPagers[it.id] } },
         postIdAt = { index -> posts.getOrNull(index)?.id },
         postIndexOf = { id -> posts.indexOfFirst { it.id == id } },
-        target = { origin, direction ->
-            val page = pages.getOrNull(origin.postIndex)
-            val neighbor = origin.postIndex + if (direction == ViewerHorizontalSwipeDirection.Next) 1 else -1
-            page?.let {
-                viewerHorizontalSwipeTarget(
-                    currentPostIndex = origin.postIndex,
-                    currentMediaIndex = origin.mediaIndex,
-                    currentMediaCount = it.media.size,
-                    postCount = posts.size,
-                    targetPostMediaCount = pages.getOrNull(neighbor)?.media?.size ?: 0,
-                    direction = direction,
-                    galleryMediaPending = it.hasPendingGalleryMedia(),
-                    targetMediaIndex = pages.getOrNull(neighbor)?.targetMediaIndex ?: 0,
-                )
-            }
-        },
-        swipeSign = { index ->
-            val mediaCount = pages.getOrNull(index)?.swipeMediaCount() ?: 1
-            if (viewerMediaPagerReverseLayout(mediaCount, invertMultiImageScrollDirection)) -1f else 1f
-        },
+        target = { origin, direction -> swipeTargetFrom(origin, direction, pages, posts.size, config) },
+        swipeSign = { index -> if (config.readingModeOf(pages.getOrNull(index)).reversed) -1f else 1f },
         prepareDestination = { target ->
             posts.getOrNull(target.postIndex)?.let { screen.pendingMediaJumpByPost[it.id] = target.mediaIndex }
         },
@@ -78,6 +62,29 @@ internal fun rememberViewerSwipe(
     val swipe = remember { ViewerSwipeController(scope, swipeContextState) }
     LaunchedEffect(frame.uiState.session) { swipe.reset() }
     return swipe
+}
+
+/** Where a swipe from [origin] lands. A vertical gallery scrolls its own pages, so a swipe always changes post. */
+private fun swipeTargetFrom(
+    origin: ViewerHorizontalSwipeTarget,
+    direction: ViewerHorizontalSwipeDirection,
+    pages: List<ViewerPageState>,
+    postCount: Int,
+    config: ViewerScreenConfig,
+): ViewerHorizontalSwipeTarget? {
+    val page = pages.getOrNull(origin.postIndex) ?: return null
+    val neighbor = pages.getOrNull(origin.postIndex + if (direction == ViewerHorizontalSwipeDirection.Next) 1 else -1)
+    val vertical = config.readingModeOf(page) == GalleryReadingMode.VERTICAL
+    return viewerHorizontalSwipeTarget(
+        currentPostIndex = origin.postIndex,
+        currentMediaIndex = if (vertical) 0 else origin.mediaIndex,
+        currentMediaCount = if (vertical) 1 else page.media.size,
+        postCount = postCount,
+        targetPostMediaCount = neighbor?.media?.size ?: 0,
+        direction = direction,
+        galleryMediaPending = !vertical && page.hasPendingGalleryMedia(),
+        targetMediaIndex = neighbor?.targetMediaIndex ?: 0,
+    )
 }
 
 /** Every effect that follows the frame, in the order they must start. Per-page effects live in the page. */

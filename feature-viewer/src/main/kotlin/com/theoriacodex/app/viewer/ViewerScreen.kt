@@ -38,6 +38,7 @@ import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerUiState
+import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
@@ -137,7 +138,7 @@ private fun ViewerLoadedScreen(
         ViewerFrame(uiState, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape)
     }
     val flingVelocity = with(LocalDensity.current) { VIEWER_FLING_VELOCITY.toPx() }
-    val swipe = rememberViewerSwipe(frame, postPagerState, config.invertMultiImageScrollDirection, screen, controls, flingVelocity, scope, onAction)
+    val swipe = rememberViewerSwipe(frame, postPagerState, config, screen, controls, flingVelocity, scope, onAction)
     val loadMoreFromStrip = rememberViewerLoadMore(navigation.originalPosts.size, canLoadMoreFromSource, loadingMoreFromSource, onAction)
     ViewerFrameEffects(
         frame, screen, controls, swipe, dismissDrag, postPagerState, pendingPostId, canLoadMoreFromSource,
@@ -151,7 +152,7 @@ private fun ViewerLoadedScreen(
     ) {
         ViewerBackdrop(returnProgress, dismissDrag) {
             if (frame.mediaOverviewVisible && selection.overviewAvailable) {
-                ViewerOverview(selection, screen, controls, onAction)
+                ViewerOverview(frame, config, controls, host)
             } else {
                 ViewerPostPagerSurface(
                     frame, postPagerState, viewerTransform, screen, controls, swipe, dismissDrag, levelControls, readReturnProgress, flingVelocity,
@@ -217,11 +218,21 @@ private fun ViewerBackdrop(
 
 @Composable
 private fun ViewerOverview(
-    selection: ViewerSelection,
-    screen: ViewerScreenState,
+    frame: ViewerFrame,
+    config: ViewerScreenConfig,
     controls: ViewerControls,
-    onAction: (ViewerAction) -> Unit,
+    host: ViewerScreenHost,
 ) {
+    val selection = frame.selection
+    val page = frame.navigation.pages[frame.navigation.currentIndex]
+    val readingModes = ViewerReadingModeChoice(
+        selected = config.readingModeOf(page),
+        available = GalleryReadingMode.entries.filter { it != GalleryReadingMode.VERTICAL || page.verticalReadingAvailable() },
+        onSelect = { mode ->
+            host.onGalleryReadingModeSelected(selection.post.id, mode)
+            controls.markPassiveInteraction()
+        },
+    )
     ViewerMediaOverviewGrid(
         post = selection.post,
         items = selection.overviewItems,
@@ -231,6 +242,7 @@ private fun ViewerOverview(
             controls.setOverviewVisible(false)
         },
         modifier = Modifier.fillMaxSize(),
+        readingModes = readingModes,
     )
 }
 

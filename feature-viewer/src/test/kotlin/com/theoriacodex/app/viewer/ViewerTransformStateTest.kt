@@ -74,13 +74,6 @@ class ViewerTransformStateTest {
     }
 
     @Test
-    fun `multi-image scroll inversion only reverses multi-image layouts`() {
-        assertTrue(viewerMediaPagerReverseLayout(mediaCount = 3, invertMultiImageScrollDirection = true))
-        assertFalse(viewerMediaPagerReverseLayout(mediaCount = 1, invertMultiImageScrollDirection = true))
-        assertFalse(viewerMediaPagerReverseLayout(mediaCount = 3, invertMultiImageScrollDirection = false))
-    }
-
-    @Test
     fun `flings follow their direction and slow releases need distance`() {
         fun decide(displacement: Float, velocity: Float, movement: Float = displacement) =
             viewerSwipeDecision(displacement, movement, velocity, pageExtent = 1000f, flingVelocity = 400f)

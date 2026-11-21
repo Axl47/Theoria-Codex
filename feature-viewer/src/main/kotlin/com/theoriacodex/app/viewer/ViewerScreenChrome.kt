@@ -49,7 +49,7 @@ internal fun BoxScope.ViewerChromeOverlays(
     // While scrubbing everything but the timeline steps back. Only its alpha changes, so the strip keeps its scroll position.
     val scrubFade by animateFloatAsState(if (screen.timelineInteractionActive) 0f else 1f, tween(TheoriaMotion.SHORT_MS), label = "Viewer scrub fade")
     val fadesWhileScrubbing = Modifier.graphicsLayer { alpha = scrubFade }
-    val mirrored = viewerMediaPagerReverseLayout(selection.mediaItems.size, config.invertMultiImageScrollDirection)
+    val mirrored = config.readingModeOf(navigation.pages.getOrNull(navigation.currentIndex)).reversed
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_STRIPS && !frame.mediaOverviewVisible, Modifier.align(Alignment.BottomCenter)) {
         val stripIndex = navigation.originalPosts.indexOfFirst { it.id == frame.posts.getOrNull(postPagerState.currentPage)?.id }
             .takeIf { it >= 0 } ?: navigation.stripAnchorIndex

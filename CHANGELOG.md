@@ -4,6 +4,7 @@
 
 ### Added
 
+- Galleries can be read left to right, right to left, or as one vertical scroll. Choose the mode at the top of a gallery's page overview; each gallery keeps its own choice, and the others follow Invert Scroll Direction. In vertical mode, swipe sideways to change post, pull down at the top to close, and the controls hide as you scroll down and return as you scroll up. The mode switch in the overview does the same as you scroll its pages. Vertical is offered for galleries of still images.
 - Search, creator profiles and For You show "No more results" at the bottom once a feed has no further pages, where the list used to just stop.
 
 ### Changed
