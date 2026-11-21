@@ -1,11 +1,8 @@
 package com.theoriacodex.app.source
 
-import com.theoriacodex.mediakit.R
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.app.search.DANBOORU_ANIMATED_SEARCH_TAGS
-import com.theoriacodex.app.search.GELBOORU_ANIMATED_SEARCH_TAGS
 import com.theoriacodex.domain.source.CustomSourceIds
-import com.theoriacodex.domain.source.ProtocolFamily
+import com.theoriacodex.mediakit.R
 import com.theoriacodex.sources.http.THEORIA_SOURCE_USER_AGENT
 
 /**
@@ -65,8 +62,6 @@ data class SourcePresentation(
     val mark: String? = null,
     /** Media requests' User-Agent; Danbooru's CDN challenges generic browser agents. */
     val userAgent: String = BROWSER_USER_AGENT,
-    /** Tags for the built-in "Animated" saved group; empty when the source has no animated tags. */
-    val animatedSearchTags: List<String> = emptyList(),
     /** Feed cards never step up from the preview to a lighter rendition; the Viewer still does. */
     val cardsStayOnPreview: Boolean = false,
     val durationLookup: DurationLookupPolicy = DurationLookupPolicy(),
@@ -101,7 +96,6 @@ object SourcePresentationCatalog {
             group = SourcePresentationGroup.ILLUSTRATION,
             order = 0,
             logo = SourceLogoAsset.RawSvg(R.raw.gelbooru_logo),
-            animatedSearchTags = GELBOORU_ANIMATED_SEARCH_TAGS,
             durationLookup = DurationLookupPolicy(startIntervalMs = 500L, notFoundMeansThrottled = true),
         ),
         SourcePresentation(
@@ -114,7 +108,6 @@ object SourcePresentationCatalog {
             logo = SourceLogoAsset.Text,
             mark = "DB",
             userAgent = THEORIA_SOURCE_USER_AGENT,
-            animatedSearchTags = DANBOORU_ANIMATED_SEARCH_TAGS,
         ),
         SourcePresentation(
             source = SourceKey.AIBOORU,
@@ -125,7 +118,6 @@ object SourcePresentationCatalog {
             order = 10,
             logo = SourceLogoAsset.Text,
             mark = "AI",
-            animatedSearchTags = DANBOORU_ANIMATED_SEARCH_TAGS,
         ),
         SourcePresentation(
             source = SourceKey.NHENTAI,
@@ -164,7 +156,6 @@ object SourcePresentationCatalog {
             order = 5,
             logo = SourceLogoAsset.Text,
             mark = "R34",
-            animatedSearchTags = GELBOORU_ANIMATED_SEARCH_TAGS,
             // A sample on every card would download far more than the previews the feed was tuned around.
             cardsStayOnPreview = true,
         ),
@@ -274,7 +265,6 @@ fun customSourcePresentation(
     referer: String? = null,
     userAgent: String? = null,
     order: Int = Int.MAX_VALUE,
-    family: ProtocolFamily? = null,
     iconUrl: String? = null,
 ): SourcePresentation {
     require(source.isCustom) { "Built-in sources have catalog entries" }
@@ -288,11 +278,6 @@ fun customSourcePresentation(
         logo = SourceLogoAsset.Favicon(iconUrl ?: "${baseUrl ?: "https://${CustomSourceIds.hostLabel(source.id)}"}/favicon.ico"),
         mark = label.firstOrNull(Char::isLetterOrDigit)?.uppercase() ?: "?",
         userAgent = userAgent ?: BROWSER_USER_AGENT,
-        animatedSearchTags = when (family) {
-            ProtocolFamily.GELBOORU_02 -> GELBOORU_ANIMATED_SEARCH_TAGS
-            ProtocolFamily.DANBOORU -> DANBOORU_ANIMATED_SEARCH_TAGS
-            null -> emptyList()
-        },
         // A user-added site's rate limits are unknown; pace it like Gelbooru.
         durationLookup = DurationLookupPolicy(startIntervalMs = 500L),
     )

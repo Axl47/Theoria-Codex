@@ -220,4 +220,18 @@ data class SourceCapabilities(
      * search history confirms it, and Unified looks up the provider's spelling before searching.
      */
     val requiresExactTags: Boolean = false,
+    /**
+     * The term that asks this source's server for animated posts when a search wants them; null when it has none and
+     * the phone's filter does all the work (it runs either way).
+     */
+    val animatedTerm: AnimatedSearchTerm? = null,
+)
+
+/**
+ * A source's way to ask for animated posts: [term] is added to the request as one more required tag; [overLimit]
+ * replaces it when the source's term limit is already full and costs no term itself (Danbooru's `filetype:`).
+ */
+data class AnimatedSearchTerm(
+    val term: SearchTerm,
+    val overLimit: SearchTerm? = null,
 )

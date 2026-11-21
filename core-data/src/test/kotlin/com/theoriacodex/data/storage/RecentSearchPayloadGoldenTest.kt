@@ -2,6 +2,7 @@ package com.theoriacodex.data.storage
 
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.domain.model.DateRange
+import com.theoriacodex.domain.model.MediaFilter
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
@@ -44,7 +45,8 @@ class RecentSearchPayloadGoldenTest {
         )
     }
 
-    // The Gson rows are all Multi-Search or FYP, so source.json, captured from the kotlinx encoder, adds a source mode.
+    // The Gson rows are all Multi-Search or FYP, so source.json and animated.json, captured from the kotlinx encoder,
+    // add a source mode and the media key.
     @Test
     fun `the goldens hold every stored key`() {
         val source = RecentSearchPayload(
@@ -59,10 +61,23 @@ class RecentSearchPayloadGoldenTest {
             kind = RecentSearchKind.SOURCE,
             sources = listOf(SourceKey.PIXIV),
         )
+        val animated = RecentSearchPayload(
+            query = Query(
+                mode = QueryMode.Source(SourceKey.DANBOORU),
+                includeTags = listOf("cat"),
+                excludeTags = emptyList(),
+                sort = SortMode.NEWEST,
+                dateRange = null,
+                minScore = null,
+            ).copy(media = MediaFilter.ANIMATED),
+            kind = RecentSearchKind.SOURCE,
+            sources = listOf(SourceKey.DANBOORU),
+        )
         assertStoredFormat(
             golden("multi-search.json") to record(multiSearch),
             golden("fyp.json") to record(fyp),
             golden("source.json") to record(source),
+            golden("animated.json") to record(animated),
         )
     }
 

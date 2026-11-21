@@ -641,9 +641,9 @@ data class FeedFabRestoreState(
     val searchAnimationByScope: Map<String, SearchAnimationFilterRestoreState> = emptyMap(),
 )
 
+/** Search's duration filter per scope; "animated only" moved into the query itself, so stored copies ignore it. */
 @Serializable
 data class SearchAnimationFilterRestoreState(
-    @SerialName("animatedOnly") val animatedOnly: Boolean = false,
     @SerialName("durationMinBucket") val durationMinBucket: Int = 0,
     @SerialName("durationMaxBucket") val durationMaxBucket: Int = 25,
 )

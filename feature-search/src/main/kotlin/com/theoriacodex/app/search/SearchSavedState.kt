@@ -1,6 +1,7 @@
 package com.theoriacodex.app.search
 
 import com.theoriacodex.domain.model.DateRange
+import com.theoriacodex.domain.model.MediaFilter
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
@@ -32,13 +33,15 @@ internal object SearchSavedQueryCodec {
             query.minScore?.toString() ?: NULL,
             encodeGroups(query.effectiveIncludeTermGroups),
             encodeTerms(query.excludeTerms),
+            query.media.name,
         ).joinToString("|")
     }
 
     fun decode(encoded: String): Query? {
         return runCatching {
             val parts = encoded.split('|')
-            require(parts.size == 7)
+            // A draft saved before the media part existed has 7 parts.
+            require(parts.size == 7 || parts.size == 8)
             Query(
                 mode = decodeMode(parts[0]),
                 includeTerms = decodeGroups(parts[5]).flatMap(SearchTermGroup::terms),
@@ -54,7 +57,7 @@ internal object SearchSavedQueryCodec {
                 },
                 minScore = parts[4].takeUnless { it == NULL }?.toInt(),
                 includeTermGroups = decodeGroups(parts[5]),
-            )
+            ).copy(media = parts.getOrNull(7)?.let(MediaFilter::valueOf) ?: MediaFilter.ANY)
         }.getOrNull()
     }
 

@@ -1,20 +1,19 @@
 package com.theoriacodex.sources.hitomi
 
+import com.theoriacodex.domain.adapter.AnimatedSearchTerm
+import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
-import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.MediaRecoverySourceAdapter
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
-import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
+import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.coroutines.mapConcurrent
-import com.theoriacodex.sources.common.asIntOrNull
-import com.theoriacodex.sources.common.autocompleteTagCounts
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -26,6 +25,8 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.canonicalHitomiArtistIdentity
+import com.theoriacodex.sources.common.asIntOrNull
+import com.theoriacodex.sources.common.autocompleteTagCounts
 import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.http.SourceHttpBodyTooLargeException
@@ -69,6 +70,8 @@ class HitomiSourceAdapter(
         supportsSortTop = true,
         supportsSortRandom = true,
         supportsExcludeTagsServerSide = true,
+        // Anime galleries are the ones the Viewer plays as video.
+        animatedTerm = AnimatedSearchTerm(SearchTerm("anime", SearchFacet.TYPE, HITOMI_TYPE_NAMESPACE)),
     )
 
     override val supportedSearchScopes: Set<FacetedSearchScope> = HITOMI_FACETS.searchScopes
