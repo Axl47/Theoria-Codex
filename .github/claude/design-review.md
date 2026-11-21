@@ -12,11 +12,12 @@ Everything the workflow gathered is in `.claude-review/`:
 - `pr.json`: title, description, author, base branch, size and the issues it closes.
 - `issue-<number>.md`: each linked issue. Read these and the description before any code, so you judge
   the change against the problem it claims to solve.
-- `pr.diff`: the full diff. When the diff is too large for GitHub's API, the file says so; use
-  `files.json` and read the changed files directly instead.
+- `pr.diff`: the full diff against the base branch.
 - `files.json`: every changed file with its additions and deletions.
 - `request.md`: present only when someone asked for this review with an @claude comment. Treat it as
   the requester's focus: weight your review toward it, and answer it directly if it asks a question.
+  When the comment was left on a line of the diff, the file starts with that file, line and hunk, so
+  "this" in the request refers to that code.
 
 The pull request's head is checked out, so read whatever surrounding code you need to understand the
 change: callers, the modules it touches, and the shared code it should or should not be using.

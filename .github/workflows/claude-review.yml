@@ -134,6 +134,9 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ needs.decide.outputs.pr }}
           REQUEST: ${{ github.event.comment.body }}
+          REQUEST_PATH: ${{ github.event.comment.path }}
+          REQUEST_LINE: ${{ github.event.comment.line || github.event.comment.original_line }}
+          REQUEST_HUNK: ${{ github.event.comment.diff_hunk }}
         run: |
           mkdir -p .claude-review
           gh pr view "$PR" --repo "$REPO" \
@@ -141,10 +144,16 @@ jobs:
             > .claude-review/pr.json
           gh pr view "$PR" --repo "$REPO" --json files > .claude-review/files.json
           if ! gh pr diff "$PR" --repo "$REPO" > .claude-review/pr.diff 2> diff-error.txt; then
-            {
-              echo "GitHub's API could not return this diff ($(head -c 300 diff-error.txt))."
-              echo "Use files.json and read the changed files in the checkout instead."
-            } > .claude-review/pr.diff
+            # GitHub's API refuses very large diffs, so build it locally from the base branch instead.
+            base=$(jq -r .baseRefName .claude-review/pr.json)
+            if git fetch --quiet --no-tags --unshallow --filter=blob:none origin "+refs/heads/$base:refs/remotes/origin/$base" &&
+               git diff "origin/$base...HEAD" > .claude-review/pr.diff; then
+              echo "::notice::GitHub's API could not return the diff ($(head -c 200 diff-error.txt)), so it was built locally."
+            else
+              echo "::error::Neither GitHub's API nor git could produce this pull request's diff."
+              cat diff-error.txt
+              exit 1
+            fi
           fi
           jq -r '.closingIssuesReferences[]? | "\(.number) \(.url)"' .claude-review/pr.json |
             while read -r number url; do
@@ -152,7 +161,13 @@ jobs:
                 > ".claude-review/issue-$number.md" || true
             done
           if [[ -n "$REQUEST" ]]; then
-            printf '%s\n' "$REQUEST" > .claude-review/request.md
+            {
+              if [[ -n "$REQUEST_PATH" ]]; then
+                printf 'Asked on %s, line %s, about this part of the diff:\n\n~~~~diff\n%s\n~~~~\n\n' \
+                  "$REQUEST_PATH" "${REQUEST_LINE:-?}" "$REQUEST_HUNK"
+              fi
+              printf '%s\n' "$REQUEST"
+            } > .claude-review/request.md
           fi
 
       - name: Review the design
@@ -167,6 +182,7 @@ jobs:
             --model claude-opus-5-5
             --max-turns 40
             --allowedTools "Read,Grep,Glob,Write"
+            --disallowedTools "Bash,Edit,MultiEdit,NotebookEdit,WebFetch,WebSearch"
 
       - name: Post the review
         env:
