@@ -14,9 +14,11 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -249,6 +251,20 @@ class OfflineMediaCoordinatorTest {
         proceed.complete(Unit)
         runCurrent()
         assertTrue(coordinator.jobs.value.isEmpty())
+    }
+
+    @Test
+    fun `a save while clear waits on a preparation starts no job and leaves no copy`() = runTest {
+        val (coordinator, store) = gatedCoordinator()
+        val proceed = loadedPreparation(coordinator)
+        val clearing = launch { coordinator.clear() }
+        runCurrent()
+        coordinator.saveOnCollectionSave(post("b"))
+        proceed.complete(Unit)
+        clearing.join()
+        advanceUntilIdle()
+        assertTrue(coordinator.jobs.value.isEmpty())
+        assertEquals(0, store.snapshot.value.postCount)
     }
 
     private fun TestScope.gatedCoordinator(): Pair<OfflineMediaCoordinator, OfflineMediaStore> {

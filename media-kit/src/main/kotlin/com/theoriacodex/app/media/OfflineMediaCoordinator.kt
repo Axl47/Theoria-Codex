@@ -41,7 +41,7 @@ class OfflineMediaCoordinator(
     private val persistence = Mutex()
     private val active = mutableMapOf<String, Job>()
     private val preparations = mutableMapOf<String, Job>()
-    // Owners being removed (with how many removals run), and how many clears run: preparations cannot admit then.
+    // Owners being removed (with how many removals run), and how many clears run: no job is admitted for them then.
     private val removing = mutableMapOf<String, Int>()
     private var clearing = 0
     private val requests = mutableMapOf<String, List<Post>>()
@@ -83,8 +83,8 @@ class OfflineMediaCoordinator(
 
     /**
      * Runs [prepare] as [owner]'s preparation: it loads what to keep, then passes it to `start`, which starts the
-     * job like [makeAvailableOffline]. `start` admits it only while this preparation is [owner]'s current one, not
-     * cancelled, and no removal or clear runs, all checked under the lock that admits jobs. A newer preparation,
+     * job like [makeAvailableOffline]. `start` admits it only while this preparation is [owner]'s current one and not
+     * cancelled, checked under the lock that admits jobs (which also refuses during a removal or clear). A newer preparation,
      * [cancel], [remove] and [clear] cancel it, so a list loaded before any of them can never start a job (for an
      * owner that is gone, or a request the user stopped). The returned job completes when it ends.
      */
@@ -93,8 +93,7 @@ class OfflineMediaCoordinator(
         job = scope.launch(start = CoroutineStart.LAZY) {
             prepare { posts ->
                 synchronized(lock) {
-                    val admitted = preparations[owner] === job && job.isActive && clearing == 0 && owner !in removing
-                    if (admitted) enqueueOffline(owner, posts, start = true)
+                    if (preparations[owner] === job && job.isActive) enqueueOffline(owner, posts, start = true)
                 }
             }
         }
@@ -120,9 +119,14 @@ class OfflineMediaCoordinator(
         enqueueOffline(owner, posts, start = true)
     }
 
+    /**
+     * The one place every offline job is admitted. While [remove] runs for [owner] or [clear] runs it admits nothing,
+     * so they stop every job admitted before them and no later one can write a copy after they clear.
+     */
     private fun enqueueOffline(owner: String, posts: List<Post>, start: Boolean): Job? {
         require(owner.isNotBlank())
         synchronized(lock) {
+            if (clearing > 0 || owner in removing) return null
             if (active[owner]?.let { !it.isCompleted && !it.isCancelled } == true) {
                 // A running job takes the new posts at its tail; repeating its own posts changes nothing.
                 val merged = (requests[owner].orEmpty() + posts).distinctBy(Post::id)
