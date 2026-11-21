@@ -101,7 +101,7 @@ private fun SitesListPage(
             }
         }
         if (state.sites.isEmpty()) {
-            EmptyState("No added sites", actionLabel = "Add site", onAction = { onAction(CustomSitesAction.StartAdd) })
+            EmptyState("No added sites")
         } else {
             AddedSitesGroup(state, testAll.takeIf { state.builtInSites.isEmpty() }, onAction)
         }

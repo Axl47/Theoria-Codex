@@ -278,7 +278,7 @@ private fun CodexDetailFilterFab(
     FeedFilterFab(
         modifier = Modifier.padding(bottom = 8.dp),
         labels = codexFilterLabels(filters, customFiltersActive),
-        contentDescription = "Filter Codex collection",
+        contentDescription = "Filter and sort",
         onClick = onClick,
         onClear = {
             val previous = fabRestoreState
