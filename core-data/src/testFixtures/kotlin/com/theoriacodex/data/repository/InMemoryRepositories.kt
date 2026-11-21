@@ -404,6 +404,18 @@ class InMemoryRecentsRepository(
         }
     }
 
+    override suspend fun removeWatchedPost(postId: PostId, section: RecentPostSection) {
+        mutex.withLock {
+            watched.value = watched.value.filterNot { entry -> entry.post.id == postId && entry.section == section }
+        }
+    }
+
+    override suspend fun removeSearch(queryHash: String) {
+        mutex.withLock {
+            searches.value = searches.value.filterNot { entry -> entry.queryHash == queryHash.trim() }
+        }
+    }
+
     override suspend fun clearWatchedPosts(section: RecentPostSection) {
         mutex.withLock {
             watched.value = watched.value.filterNot { entry -> entry.section == section }

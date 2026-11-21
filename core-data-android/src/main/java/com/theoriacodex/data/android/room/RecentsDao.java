@@ -30,6 +30,8 @@ public interface RecentsDao {
     int trimWatched(int limit);
     @Query("DELETE FROM recent_watched") int deleteWatched();
     @Query("DELETE FROM recent_watched WHERE section = :section") int deleteWatchedSection(String section);
+    @Query("DELETE FROM recent_watched WHERE source = :source AND source_post_id = :postId AND section = :section")
+    int deleteWatchedEntry(String source, String postId, String section);
 
     @Query("SELECT * FROM recent_searches ORDER BY searched_at_epoch_ms DESC, sort_sequence DESC, query_hash ASC")
     Flow<List<RecentSearchEntity>> observeSearches();
