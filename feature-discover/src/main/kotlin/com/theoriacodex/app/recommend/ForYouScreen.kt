@@ -66,6 +66,8 @@ import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedFailureTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
+import com.theoriacodex.app.ui.navigation.rememberTriageAction
+import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.app.ui.components.FeedPageDemandControl
 import com.theoriacodex.app.ui.components.FeedScrollSignal
 import com.theoriacodex.app.ui.components.FeedLoadingState
@@ -161,7 +163,9 @@ fun ForYouScreen(
         ForYouSortSheet(
             state.sortMode, fabRestoreState, feed, onFabRestoreStateChange, onAction,
             // The sheet reset has no undo affordance, so the undo callback is intentionally discarded.
-            onReset = @Suppress("IgnoredReturnValue") { clearFilters() }, onDismiss = { showSortSheet = false },
+            onReset = @Suppress("IgnoredReturnValue") { clearFilters() },
+            onTriage = rememberTriageAction(ViewerStreamSource.FOR_YOU, state.queryHash, state.results.isNotEmpty()),
+            onDismiss = { showSortSheet = false },
         )
     }
 }
@@ -518,9 +522,10 @@ private fun ForYouSortSheet(
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
     onAction: (ForYouAction) -> Unit,
     onReset: () -> Unit,
+    onTriage: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
-    FeedFilterSheet(onDismiss = onDismiss, onReset = onReset) {
+    FeedFilterSheet(onDismiss = onDismiss, onReset = onReset, onTriage = onTriage) {
         FilterSection("Sort") {
             SortMode.entries.forEach { mode ->
                 FilterChoiceChip(sortModeLabel(mode), selectedSort == mode) {

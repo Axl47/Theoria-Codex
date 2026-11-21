@@ -1,5 +1,7 @@
 package com.theoriacodex.app.ui.navigation
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.theoriacodex.data.repository.ViewerStreamSource
 
@@ -19,3 +21,17 @@ fun interface TriageOpener {
 }
 
 val LocalTriageOpener = staticCompositionLocalOf { TriageOpener.None }
+
+/**
+ * The action for a feed's filter sheet ([com.theoriacodex.app.ui.components.FeedFilterSheet]'s `onTriage`): opens
+ * the deck over [feedKey] from [source]. Null, so the sheet offers no Triage, when there is no [feedKey] or no
+ * [hasPosts] to work through, or when nothing in the app provides a [LocalTriageOpener].
+ */
+@Composable
+fun rememberTriageAction(source: ViewerStreamSource, feedKey: String?, hasPosts: Boolean): (() -> Unit)? {
+    val opener = LocalTriageOpener.current
+    return remember(opener, source, feedKey, hasPosts) {
+        if (opener === TriageOpener.None || feedKey.isNullOrBlank() || !hasPosts) null
+        else ({ opener.openTriage(TriageRequest(source, feedKey)) })
+    }
+}

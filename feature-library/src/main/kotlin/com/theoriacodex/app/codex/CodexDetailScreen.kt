@@ -63,6 +63,8 @@ import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
+import com.theoriacodex.app.ui.navigation.rememberTriageAction
+import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.app.ui.components.FeedScrollSignal
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.FeedPostActionSheet
@@ -163,6 +165,8 @@ fun CodexDetailScreen(
             { updatedSort -> onFabRestoreStateChange(fabRestoreState.copy(sortMode = updatedSort.name)) },
             resetFilters, { showFilterSheet = false },
             customFilters?.let { content -> ({ content { showFilterSheet = false } }) }, posts.any(::isAnimatedPost),
+            // Followed and Saved searches pass a custom header; the deck only knows Codices, which Likes is one of.
+            onTriage = rememberTriageAction(ViewerStreamSource.CODEX, "codex:$codexId".takeIf { customHeader == null }, posts.isNotEmpty()),
         )
     }
     selectedActionPost?.let { post ->
@@ -633,8 +637,9 @@ internal fun CodexFilterSheet(
     onDismiss: () -> Unit,
     followedFilters: (@Composable () -> Unit)? = null,
     hasAnimatedPosts: Boolean = true,
+    onTriage: (() -> Unit)? = null,
 ) {
-    FeedFilterSheet(onDismiss = onDismiss, onReset = onReset, modifier = Modifier.testTag("codex-filter-scroll")) {
+    FeedFilterSheet(onDismiss = onDismiss, onReset = onReset, modifier = Modifier.testTag("codex-filter-scroll"), onTriage = onTriage) {
         FilterSection("Sort") {
             // Length sorts mean nothing without animations, unless one is already chosen.
             CodexSortMode.entries.filter { hasAnimatedPosts || !it.usesDuration || it == sortMode }.forEach { mode ->

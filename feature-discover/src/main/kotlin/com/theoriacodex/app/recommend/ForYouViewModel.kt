@@ -462,7 +462,7 @@ class ForYouViewModel(
 }
 
 private fun ForYouUiState.viewerFeed() = ViewerFeedSnapshot(
-    queryHash = "for_you:$seedId",
+    queryHash = queryHash,
     results = results,
     canLoadMore = canLoadMore,
     loadingMore = isPaging,

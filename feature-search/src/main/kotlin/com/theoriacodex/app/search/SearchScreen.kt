@@ -40,6 +40,7 @@ import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
+import com.theoriacodex.app.ui.navigation.rememberTriageAction
 import com.theoriacodex.app.ui.components.FeedPageDemandControl
 import com.theoriacodex.app.ui.components.FeedScrollSignal
 import com.theoriacodex.app.ui.components.FilterChoiceChip
@@ -49,6 +50,7 @@ import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
 import com.theoriacodex.app.ui.components.rememberFeedScrollSignal
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.FeedFabRestoreState
+import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.app.search.state.SearchSourceScope
@@ -150,7 +152,11 @@ fun SearchScreen(
         SearchFavoriteTags(state, favoriteTags, onAction, onRemoveFavoriteTag, onRenameFavoriteTag) { chrome.showFavoriteTagSheet = false }
     }
     if (chrome.showFilterSheet) {
-        SearchFilterSheet(state, feed, fabRestoreState, onAction, onFabRestoreStateChange, filterActions::resetFilterDraft) {
+        // The deck follows the applied query, so a draft that has not searched yet has nothing to triage.
+        val onTriage = rememberTriageAction(
+            ViewerStreamSource.SEARCH, state.query.appliedQueryHash.takeIf(String::isNotBlank), state.content.results.isNotEmpty(),
+        )
+        SearchFilterSheet(state, feed, fabRestoreState, onAction, onFabRestoreStateChange, filterActions::resetFilterDraft, onTriage) {
             // Filters apply live as they change; closing the sheet settles the search they made.
             chrome.showFilterSheet = false
             onAction(SearchAction.SettleSearch)
@@ -618,6 +624,7 @@ private fun SearchFilterSheet(
     onAction: (SearchAction) -> Unit,
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
     onReset: () -> Unit,
+    onTriage: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     val mode = state.query.draft.mode
@@ -647,6 +654,7 @@ private fun SearchFilterSheet(
         nhentaiFullColorFilter = state.query.nhentaiFullColorFilter,
         nhentaiLanguageFilter = state.query.nhentaiLanguageFilter,
         onReset = onReset,
+        onTriage = onTriage,
         onDismiss = onDismiss,
     )
 }
@@ -669,9 +677,10 @@ private fun FilterSheet(
     nhentaiFullColorFilter: Boolean,
     nhentaiLanguageFilter: NhentaiLanguageFilter,
     onReset: () -> Unit,
+    onTriage: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
-    FeedFilterSheet(onDismiss = onDismiss, onReset = onReset) {
+    FeedFilterSheet(onDismiss = onDismiss, onReset = onReset, onTriage = onTriage) {
         FilterSection("Sort") {
             SortMode.entries.forEach { mode ->
                 FilterChoiceChip(sortModeLabel(mode), query.sort == mode) { onAction(SearchAction.SelectSort(mode)) }

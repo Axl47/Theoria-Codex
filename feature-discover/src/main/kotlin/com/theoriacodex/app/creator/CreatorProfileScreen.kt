@@ -65,6 +65,8 @@ import com.theoriacodex.app.ui.components.DismissibleFailure
 import com.theoriacodex.app.ui.components.FeedFailureTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
+import com.theoriacodex.app.ui.navigation.rememberTriageAction
+import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.app.ui.components.FeedPageDemandControl
 import com.theoriacodex.app.ui.components.FeedLoadingState
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
@@ -149,7 +151,9 @@ fun CreatorProfileScreen(
         CreatorFilterSheet(
             fabRestoreState, feed.filters.animatedDurationRange, onFabRestoreStateChange,
             // The sheet reset has no undo affordance, so the undo callback is intentionally discarded.
-            onReset = @Suppress("IgnoredReturnValue") { clearFilters() }, onDismiss = { showFilterSheet = false },
+            onReset = @Suppress("IgnoredReturnValue") { clearFilters() },
+            onTriage = rememberTriageAction(ViewerStreamSource.CREATOR_PROFILE, state.queryHash, state.results.isNotEmpty()),
+            onDismiss = { showFilterSheet = false },
         )
     }
     selectedActionPost?.let { post ->
@@ -478,9 +482,10 @@ private fun CreatorFilterSheet(
     animatedDurationRange: AnimatedDurationRange,
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
     onReset: () -> Unit,
+    onTriage: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
-    FeedFilterSheet(onDismiss = onDismiss, onReset = onReset) {
+    FeedFilterSheet(onDismiss = onDismiss, onReset = onReset, onTriage = onTriage) {
         FilterSection("Show") {
             FilterChoiceChip("Animated only", fabRestoreState.animatedOnly) {
                 onFabRestoreStateChange(fabRestoreState.copy(animatedOnly = !fabRestoreState.animatedOnly))
