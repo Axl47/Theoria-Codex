@@ -147,4 +147,35 @@ class CreatorFollowsViewModelTest {
             assertEquals(2, calls)
         } finally { store.clear(); Dispatchers.resetMain() }
     }
+
+    @Test fun `an automatic check skips follows checked within the interval but manual refresh does not`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            val settings = InMemorySettingsRepository()
+            val repository = CreatorFollowsRepository(settings)
+            val done = CreatorProfile(SourceKey.PIXIV, "Done", "1", uploadsQuery = "user:1")
+            val unfinished = CreatorProfile(SourceKey.PIXIV, "Unfinished", "2", uploadsQuery = "user:2")
+            listOf(done, unfinished).forEach { repository.follow(it, emptyList()) }
+            val hour = 60 * 60 * 1000L
+            // A run that was interrupted after writing the first batch only.
+            repository.recordChecks(mapOf(repository.observe().first().first().membershipId to emptyList()), 2 * hour)
+            val checked = mutableListOf<String>()
+            val adapter = object : SourceAdapter by TestAdapter(SourceKey.PIXIV), CreatorPostsSourceAdapter {
+                override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?): Page<Post> {
+                    checked += creator.displayName
+                    return Page(emptyList(), null)
+                }
+            }
+            val owner = CreatorFollowsViewModel(settings, TestRegistry(listOf(adapter)))
+            store.put("follows", owner)
+            owner.refreshIfStale(3 * hour)
+            advanceUntilIdle()
+            assertEquals(listOf("Unfinished"), checked)
+            checked.clear()
+            owner.refresh()
+            advanceUntilIdle()
+            assertEquals(listOf("Done", "Unfinished"), checked.sorted())
+        } finally { store.clear(); Dispatchers.resetMain() }
+    }
 }
