@@ -105,7 +105,6 @@ import com.theoriacodex.sources.pixiv.PixivTokenCoordinator
 import com.theoriacodex.sources.pixiv.PixivUgoiraMetadataCache
 import com.theoriacodex.app.library.LibrarySectionStore
 import java.io.File
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -275,8 +274,6 @@ internal class DefaultTheoriaAppContainer(
         recoveryRegistry = fileStoreRecoveryRegistry,
     )
     private val siteFamilies = SiteFamilyRegistry.default()
-    /** Completes when [awaitDurableStores] has finished: saved sites and browser headers are in place. */
-    private val storesReady = CompletableDeferred<Unit>()
     private val customSourceRuntime = CustomSourceRuntime(
         profiles = siteProfiles,
         credentials = credentialStore,
@@ -289,6 +286,8 @@ internal class DefaultTheoriaAppContainer(
         scope = durableStoreScope,
         publishMediaKeys = cookieBridge::updateMediaKeys,
     )
+    /** Opened at the end of [awaitDurableStores]: restored downloads and offline jobs wait on it. */
+    private val sourceReadiness = SourceReadiness(accountStore::refreshAvailability) { customSourceRuntime.awaitFirstBuild() }
     private val sourceRegistry = CompositeSourceAdapterRegistry(
         potentialBuiltIns = allPotentialSourceRegistry,
         availableBuiltIns = accountStore.availableSources,
@@ -480,7 +479,7 @@ internal class DefaultTheoriaAppContainer(
         appUsageTracker = appUsageTracker,
         offlineMedia = offlineMedia,
         postDownloads = appPostDownloads(appContext, File(storageDirectory, "download_jobs.json"), durableStoreScope,
-            settingsRepository, sources) { storesReady.await(); customSourceRuntime.awaitFirstBuild() },
+            settingsRepository, sources, sourceReadiness::await),
     )
 
     override val workflows = WorkflowDependencies(
@@ -557,8 +556,12 @@ internal class DefaultTheoriaAppContainer(
         profileBackup.recoverPendingRestore()
         profileDeletion.recoverPendingDeletion()
         offlineCatalogReady.await()
-        offlineMedia.recoverPendingJobs()
-        storesReady.complete(Unit)
+        sourceReadiness.open()
+        // Restored offline jobs resolve posts too, so they resume once every source is ready, off the startup path.
+        durableStoreScope.launch {
+            sourceReadiness.await()
+            runCatchingPreservingCancellation { offlineMedia.recoverPendingJobs() }
+        }
         // Off the startup path: searched-tag suggestions start from what Recents remembers.
         durableStoreScope.launch {
             runCatchingPreservingCancellation {
