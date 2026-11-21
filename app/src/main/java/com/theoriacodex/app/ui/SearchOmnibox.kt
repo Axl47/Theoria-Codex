@@ -13,9 +13,11 @@ import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.routes.BrowsingDestinationState
 import com.theoriacodex.app.ui.routes.rememberRetained
 import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.SavedSearchEntry
+import com.theoriacodex.domain.model.CreatorProfile
 import kotlinx.coroutines.launch
 
 /** A preference the one box switches in place: how it reads from settings and the Settings action that writes it. */
@@ -48,8 +50,9 @@ internal fun searchToggleEntries(settings: AppSettings, dispatch: (SettingsActio
         OmniboxEntry.Toggle(command.title, command.read(settings), command.keywords) { checked -> dispatch(command.write(checked)) }
     }
 
-/** Settings pages the one box opens; titles match their Settings rows. */
+/** Settings and the pages of it the one box opens; page titles match their Settings rows. */
 private enum class SettingsPageCommand(val title: String, val keywords: List<String>, val page: SettingsPage) {
+    HOME("Settings", listOf("preferences", "options"), SettingsPage.HOME),
     SITES("Sites", listOf("sources", "accounts", "sign in", "log in"), SettingsPage.SITES),
     HIDDEN_TAGS("Hidden tags", listOf("blacklist", "blocked", "mute"), SettingsPage.HIDDEN_TAGS),
     STORAGE("Storage & caching", listOf("cache", "space", "clear"), SettingsPage.STORAGE),
@@ -57,23 +60,28 @@ private enum class SettingsPageCommand(val title: String, val keywords: List<Str
     DIAGNOSTICS("Diagnostics report", listOf("diagnostics", "logs", "errors"), SettingsPage.DIAGNOSTICS),
 }
 
+/** Creators of recently watched posts the one box offers after the followed ones. */
+private const val RECENT_CREATOR_LIMIT = 20
+
 /**
  * Everything besides tags that Search's composer matches typed text against: the active profile's Codices,
- * followed creators, saved and recent searches, and commands, each bound to what picking it does.
+ * followed creators and those of recently watched posts, saved and recent searches, and commands, each bound to
+ * what picking it does.
  */
 @Composable
 internal fun rememberSearchOmniboxEntries(shell: TheoriaShell, state: BrowsingDestinationState): List<OmniboxEntry> {
     val codices = rememberRetained("omnibox-codices") { shell.data.codexRepository.observeCodices() }.value.orEmpty()
     val recents = rememberRetained("omnibox-recent-searches") { shell.data.recentsRepository.observeSearches() }.value.orEmpty()
+    val watched = rememberRetained("omnibox-watched-posts") { shell.data.recentsRepository.observeWatchedPosts() }.value.orEmpty()
     val saved = shell.savedSearches
     val profileId = state.activeProfile.profileId
-    return remember(shell, codices, recents, saved, state.settings, profileId) {
+    return remember(shell, codices, recents, watched, saved, state.settings, profileId) {
         buildList {
             codices.filter { codexBelongsToProfile(it.codexId, profileId) }.mapTo(this) { codex ->
                 OmniboxEntry.Action(OmniboxKind.CODEX, codex.name) { shell.navController.navigate(AppRoute.codexDetail(codex.codexId)) }
             }
-            state.settings.followedCreators.mapTo(this) { follow ->
-                val creator = follow.creator
+            val followed = state.settings.followedCreators.map { it.creator }
+            (followed + recentCreators(watched, followed)).mapTo(this) { creator ->
                 OmniboxEntry.Action(OmniboxKind.CREATOR, creator.displayName, creator.source.displayName()) {
                     shell.scope.launch { shell.openCreatorProfile(creator) }
                 }
@@ -91,6 +99,21 @@ internal fun rememberSearchOmniboxEntries(shell: TheoriaShell, state: BrowsingDe
             addAll(destinationCommands(shell))
         }
     }
+}
+
+/** The creators of [watched] posts, latest first and each once, leaving out those already [followed]. */
+internal fun recentCreators(
+    watched: List<RecentPostEntry>,
+    followed: List<CreatorProfile>,
+    limit: Int = RECENT_CREATOR_LIMIT,
+): List<CreatorProfile> {
+    fun CreatorProfile.key() = source to (profileId ?: displayName)
+    val seen = followed.mapTo(mutableSetOf()) { it.key() }
+    return watched.sortedByDescending(RecentPostEntry::viewedAtEpochMs).asSequence()
+        .flatMap { it.post.creatorProfiles }
+        .filter { seen.add(it.key()) }
+        .take(limit)
+        .toList()
 }
 
 private fun destinationCommands(shell: TheoriaShell): List<OmniboxEntry> {

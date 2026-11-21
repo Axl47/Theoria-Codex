@@ -35,6 +35,7 @@ import com.theoriacodex.app.related.RelatedPostsRouteController
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.related.RelatedShelfBinding
 import com.theoriacodex.app.related.requestOrNull
+import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.ui.components.codexFeedFabContext
 import com.theoriacodex.app.ui.components.creatorFeedFabContext
@@ -371,11 +372,13 @@ private fun viewerEffectCallbacks(shell: TheoriaShell) = ViewerRouteEffectCallba
     onToggleLike = { post -> shell.toggleLikeAndSyncCodex(post) },
     onOpenCreatorProfile = { creator -> shell.openCreatorProfile(creator) },
     onApplyTag = { post, term, excluded ->
-        if (excluded) {
-            shell.routes.postTagSearchActions.addExclude(post, term.toSearchTerm())
+        // Staged, so the search does not rerun behind the Viewer and replace the card it returns to.
+        val edit = if (excluded) {
+            SearchAction.AddPostExcludeTerm(post, term.toSearchTerm())
         } else {
-            shell.routes.postTagSearchActions.addInclude(post, term.toSearchTerm())
+            SearchAction.AddPostIncludeTerm(post, term.toSearchTerm())
         }
+        shell.routes.dispatchOrQueue(SearchAction.StageDraftEdit(edit))
     },
     onRecoverMedia = shell.viewerRouteWorkflow::recoverMedia,
     onLoadMore = shell.viewerRouteWorkflow::loadMore,

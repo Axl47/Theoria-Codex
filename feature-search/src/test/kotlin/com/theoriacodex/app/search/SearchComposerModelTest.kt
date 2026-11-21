@@ -65,6 +65,13 @@ class SearchComposerModelTest {
         assertEquals(null, composerTypedAction(ComposerAddTarget.Required, "  "))
     }
 
+    @Test fun `separators around typed text never reach the committed tag`() {
+        assertEquals(SearchAction.CommitTagInput("scenery"), composerTypedAction(ComposerAddTarget.Required, ",scenery, "))
+        assertEquals(SearchAction.CommitTagInput("-scenery"), composerTypedAction(ComposerAddTarget.Excluded, "-,scenery;"))
+        assertEquals(SearchAction.CommitTagInput("hello,_world"), composerTypedAction(ComposerAddTarget.Required, "hello,_world"))
+        assertEquals(null, composerTypedAction(ComposerAddTarget.Required, ","))
+    }
+
     private val blueHair = FavoriteTagEntry(SourceKey.GELBOORU, "blue_hair")
     private fun gelbooruDraft(include: List<SearchTerm> = emptyList(), exclude: List<SearchTerm> = emptyList()) =
         emptySearchQuery(QueryMode.Source(SourceKey.GELBOORU))

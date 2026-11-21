@@ -342,6 +342,11 @@ sealed interface SearchAction {
     data object Restore : SearchAction
     data object Resume : SearchAction
     data class CommitTagInput(val input: String) : SearchAction
+    /**
+     * Applies [edit] to the draft from a screen over Search (the Viewer) without running it there; the draft runs
+     * live, after the usual pause, once Search is shown again ([Resume]).
+     */
+    data class StageDraftEdit(val edit: DraftEdit) : SearchAction
     data class AddPostIncludeTerm(val post: Post, val term: SearchTerm) : DraftEdit
     data class AddPostExcludeTerm(val post: Post, val term: SearchTerm) : DraftEdit
     data class AddPostIncludeAlternative(val post: Post, val groupIndex: Int, val term: SearchTerm) : DraftEdit
