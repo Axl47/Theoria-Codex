@@ -2,6 +2,7 @@ package com.theoriacodex.app.media
 
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.ui.undo.DEFAULT_UNDO_DURATION
+import com.theoriacodex.app.ui.undo.PendingRemoval
 import com.theoriacodex.domain.model.ImageRef
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -36,6 +37,16 @@ class LibraryTransfersStateTest {
         assertTrue(states.getValue("full").complete)
     }
 
+    @Test fun `a failed post that left the Codex does not mark the ring failed, a failed run does`() {
+        val (a, gone) = listOf("a", "gone").map { testPost(sourcePostId = it).id }
+        val owners = listOf(
+            OfflineStorageOwner("codex:left", "Left", 1, job = OfflineMediaJob(2, 1, failedPosts = setOf(gone), isRunning = false)),
+            OfflineStorageOwner("codex:run", "Run", 1, job = OfflineMediaJob(1, 1, isRunning = false, failureReason = "Blocked")),
+        )
+        val states = codexOfflineStates(owners, mapOf("left" to setOf(a), "run" to setOf(a)), available = setOf(a))
+        assertEquals(mapOf("left" to CodexOfflineState(1f), "run" to CodexOfflineState(1f, failed = true)), states)
+    }
+
     @Test fun `the header counts posts still to save across offline jobs and downloads`() {
         val offline = OfflineStorageUiState(owners = listOf(
             OfflineStorageOwner("codex:a", "A", 2, job = OfflineMediaJob(totalPosts = 10, completedPosts = 2)),
@@ -60,6 +71,18 @@ class LibraryTransfersStateTest {
         runCurrent()
         assertEquals(listOf(setOf(1L) to true, setOf(2L, 3L) to false), commits)
         assertTrue(removals.pending.value.isEmpty())
+    }
+
+    @Test fun `a removed gallery that expands into pages keeps one Undo row in its place and hides the pages`() {
+        val removal = DownloadRemoval(setOf(1L), deleteFiles = false, downloadUndoAnchor(1))
+        val pages = (2L..4L).map { download(it, PostDownloadStatus.QUEUED).copy(expandedFrom = 1L) }
+        val batches = listOf(PostDownloadBatch(10, "Gallery", pages + download(5, PostDownloadStatus.SAVED)))
+
+        val content = TransfersSheetContent(OfflineStorageUiState(), batches, mapOf(removal to PendingRemoval("Removed")))
+
+        assertEquals(listOf(2L, 5L), content.shownItems.map { it.id })
+        assertEquals(mapOf(2L to removal), content.tileRemovals)
+        assertEquals(listOf(5L), content.visibleItems.map { it.id })
     }
 
     private fun download(id: Long, status: PostDownloadStatus) = PostDownloadItem(

@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -31,6 +32,7 @@ import com.theoriacodex.app.codex.CodexDetailScreen
 import com.theoriacodex.app.codex.CodexHeaderActions
 import com.theoriacodex.app.codex.CodexUndoAnchors
 import com.theoriacodex.app.codex.SAVED_CODEX_ID
+import com.theoriacodex.app.media.CodexOfflineRemovalUndo
 import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.related.RelatedPostsRouteController
@@ -143,6 +145,8 @@ private fun CodexDetailEntry(
                 resolvePost = { shell.viewerRouteWorkflow.resolvePost(it, ViewerStreamSource.CODEX) },
                 onToggleLike = { shell.toggleLikeAndSyncCodex(it) },
             )
+            // Offline copies removed from a shelf's Codex menu here; leaving this screen commits them.
+            CodexOfflineRemovalUndo(Modifier.align(Alignment.BottomCenter))
         } else {
             CodexDetailDestination(shell, codexId, entry.codexTagSheetRequest())
         }

@@ -15,7 +15,7 @@ import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -26,8 +26,10 @@ class PostDownloadsViewModel(
     resolvePost: suspend (Post) -> Post?,
     exportAnimation: suspend (Post, String) -> Result<Unit>,
 ) : ViewModel() {
-    // Retain the ViewModel Job and serialize commands with worker continuations off Main.
-    private val queueScope = CoroutineScope(viewModelScope.coroutineContext + Dispatchers.IO.limitedParallelism(1))
+    // One thread off Main serializes every queue command and worker continuation.
+    private val queueDispatcher = Dispatchers.IO.limitedParallelism(1)
+    // Retain the ViewModel Job so leaving the Activity stops downloads.
+    private val queueScope = CoroutineScope(viewModelScope.coroutineContext + queueDispatcher)
     val feedback = MutationFeedback()
     private val backend = AndroidPostDownloadBackend(context.applicationContext, readSettings, resolvePost, exportAnimation)
     private val queue = PostDownloadQueue(
@@ -59,12 +61,13 @@ class PostDownloadsViewModel(
 
     /**
      * Removes the downloads (and their files, for [deleteFiles]) on the queue's thread and returns whether every one
-     * went; the caller offers Retry otherwise. A deferred removal commits through this after its Undo.
+     * went; the caller offers Retry otherwise. A deferred removal commits through this after its Undo, possibly after
+     * this ViewModel is cleared, so a started removal finishes deleting and saving the queue even then.
      */
-    suspend fun removeNow(itemIds: Set<Long>, deleteFiles: Boolean): Boolean = queueScope.async {
+    suspend fun removeNow(itemIds: Set<Long>, deleteFiles: Boolean): Boolean = withContext(queueDispatcher + NonCancellable) {
         queue.removeItems(itemIds, deleteFiles)
         queue.batches.value.none { batch -> batch.items.any { it.id in itemIds } }
-    }.await()
+    }
 
     fun cancel(batchId: Long) {
         command { queue.cancel(batchId) }

@@ -9,10 +9,12 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
@@ -50,12 +52,14 @@ internal class LibraryTransferTools(
     val chooseBackup: () -> Unit,
     val chooseAutoBackupFolder: () -> Unit,
     val turnOffAutoBackup: () -> Unit,
+    sheetOpen: MutableState<Boolean>,
+    sheetCodexId: MutableState<String?>,
 ) {
-    /** Whether the Library's offline and downloads sheet is open. */
-    var showDownloads by mutableStateOf(false)
+    /** Whether the Library's offline and downloads sheet is open; saved, so a rotation keeps it open. */
+    var showDownloads by sheetOpen
 
     /** The Codex whose offline row the open sheet scrolls to and marks, if it was opened for one. */
-    var markedCodexId by mutableStateOf<String?>(null)
+    var markedCodexId by sheetCodexId
 
     /** Opens the offline and downloads sheet, on [codexId]'s row when one is given. */
     fun openTransfers(codexId: String?) {
@@ -100,6 +104,8 @@ internal fun rememberLibraryTransferTools(
     }
     val autoBackup = container.workflows.autoBackup
     val autoBackupFolder = rememberAutoBackupFolderPicker(autoBackup)
+    val sheetOpen = rememberSaveable { mutableStateOf(false) }
+    val sheetCodexId = rememberSaveable { mutableStateOf<String?>(null) }
     val currentMessage by rememberUpdatedState(onMessage)
     LaunchedEffect(backup) { backup.effects.collect { currentMessage(it) } }
     AutoBackupFailureEffect(autoBackup) { currentMessage(it) }
@@ -112,6 +118,8 @@ internal fun rememberLibraryTransferTools(
                 context.contentResolver.releaseAutoBackupFolder(autoBackup?.status?.value?.folderUri)
                 autoBackup?.disable()
             },
+            sheetOpen = sheetOpen,
+            sheetCodexId = sheetCodexId,
         )
     }
     // The open sheet shows the reason itself; closed, it would otherwise be lost.
