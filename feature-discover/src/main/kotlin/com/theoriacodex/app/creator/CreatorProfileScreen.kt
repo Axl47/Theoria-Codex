@@ -202,7 +202,7 @@ private fun rememberCreatorPageDemand(
     ),
     filters = feed.visibilityFilters,
     gridState = gridState,
-    canonicalIndexForVisibleItems = feed.related.projection::greatestVisibleCanonicalIndex,
+    projection = feed.related.projection,
     onLoadNextPage = { onAction(CreatorAction.LoadNextPage) },
 )
 

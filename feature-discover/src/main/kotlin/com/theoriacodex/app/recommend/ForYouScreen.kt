@@ -356,8 +356,7 @@ private fun rememberForYouPageDemand(
     ),
     filters = feed.visibilityFilters,
     gridState = gridState,
-    presentedItemCount = feed.related.projection.entries.size,
-    canonicalIndexForVisibleItems = feed.related.projection::greatestVisibleCanonicalIndex,
+    projection = feed.related.projection,
     onLoadNextPage = { onAction(ForYouAction.LoadNextPage) },
 )
 
