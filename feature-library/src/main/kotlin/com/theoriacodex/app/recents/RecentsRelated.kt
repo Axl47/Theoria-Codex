@@ -104,8 +104,7 @@ private fun rememberRecentsRelatedSlot(
 ): RecentsRelatedSlot? {
     val request = binding?.state?.requestOrNull ?: return null
     val environment = rememberFeedCardEnvironment(
-        cards.pixivUgoiraClient, cards.likedPostIds, emptyMap(), cards.durationStateForPost, cards.onToggleLike,
-        cards.onDurationPostVisibilityChanged, cards.onAuthoritativeDurationKnown,
+        cards.pixivUgoiraClient, cards.likedPostIds, emptyMap(), cards.durations, cards.onToggleLike,
     )
     val presentation = rememberRelatedFeedPresentation(
         retainKey = retainKey,

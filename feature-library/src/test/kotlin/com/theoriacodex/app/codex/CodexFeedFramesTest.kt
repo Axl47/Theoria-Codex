@@ -1,5 +1,6 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.ui.components.FeedDurations
 import android.app.Application
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
@@ -211,8 +212,8 @@ class CodexFeedFramesTest {
                 }
                 val sorted = rememberSortedCodexPosts(codexId, stored, sort, emptyMap(), durationStates)
                 val feed = rememberCodexDetailFeed(
-                    codexId, sorted.orEmpty(), fab.savedCollectionFilters(), fab, durationStates,
-                    resolveUnknownAnimatedDurations = true, relatedShelf = null, likedPostIds = emptySet(), sortMode = sort,
+                    codexId, sorted.orEmpty(), fab.savedCollectionFilters(), fab,
+                    FeedDurations(durationStates, resolveInBackground = true), relatedShelf = null, likedPostIds = emptySet(), sortMode = sort,
                 )
                 SideEffect { shown = feed.visiblePosts.map { it.id.sourcePostId } }
             }

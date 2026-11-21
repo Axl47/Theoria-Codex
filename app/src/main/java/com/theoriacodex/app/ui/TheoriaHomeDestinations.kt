@@ -1,5 +1,7 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.app.media.MediaDurationStates
+import com.theoriacodex.app.ui.components.feedDurations
 import android.widget.Toast
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
@@ -291,10 +293,8 @@ private fun RecentsDestination(shell: TheoriaShell) {
             fypSearches = state.fypSearches,
             activity = state.activity,
             pixivUgoiraClient = shell.sources.pixivUgoiraClient,
-            durationStateForPost = durationOwner::observeState,
-            onDurationPostVisibilityChanged = durationOwner::onPostVisibilityChanged,
-            onDurationEnvironmentChanged = durationOwner::onEnvironmentChanged,
-            onAuthoritativeDurationKnown = durationOwner::publishPlayerDuration,
+            // Recents filters no lengths, so it only reports what its cards learn.
+            durations = durationOwner.feedDurations(MediaDurationStates.EMPTY, resolveInBackground = false),
             likedPostIds = state.likedPostIds,
             creatorBrowsingSources = shell.sources.registry.creatorBrowsingSources(),
             tagVideoCountProvider = shell.features.search::tagVideoCount,

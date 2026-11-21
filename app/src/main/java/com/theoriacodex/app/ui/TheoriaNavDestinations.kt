@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.app.ui.components.feedDurations
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContentScope
 import androidx.compose.animation.EnterTransition
@@ -196,15 +197,9 @@ private fun CodexDetailContent(
         availableSources = state.availableSources,
         creatorBrowsingSources = state.creatorBrowsingSources,
         pixivUgoiraClient = shell.sources.pixivUgoiraClient,
-        resolveUnknownAnimatedDurations = state.resolveUnknownAnimatedDurations,
-        durationStates = durationStates,
-        durationStateForPost = durationOwner::observeState,
+        durations = durationOwner.feedDurations(durationStates, state.resolveUnknownAnimatedDurations),
         tagVideoCountProvider = { source, tag -> shell.features.search.tagVideoCount(source, tag) },
         fetchTagVideoCounts = { source, tags -> shell.features.search.fetchTagVideoCounts(source, tags) },
-        onDurationFilterChanged = durationOwner::onFilterChanged,
-        onDurationPostVisibilityChanged = durationOwner::onPostVisibilityChanged,
-        onDurationEnvironmentChanged = durationOwner::onEnvironmentChanged,
-        onAuthoritativeDurationKnown = durationOwner::publishPlayerDuration,
         resolvePostById = { postId -> shell.viewerRouteWorkflow.resolvePost(postId, ViewerStreamSource.CODEX) },
         onOpenViewer = { posts, index -> shell.openCodexViewer(codexId, posts, index) },
         onRemovePosts = { posts -> commands.remove(codexId, state.items, posts) },

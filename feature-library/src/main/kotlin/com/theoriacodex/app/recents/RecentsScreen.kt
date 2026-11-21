@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recents
 
+import com.theoriacodex.app.ui.components.FeedDurations
 import com.theoriacodex.app.source.SourcePresentationCatalog
 import com.theoriacodex.app.source.NullableSourceKeySaver
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
@@ -52,8 +53,6 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.media.MediaDurationState
-import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.viewer.ViewerReturnColumn
@@ -81,7 +80,6 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.app.search.rememberPostWatchEntry
 import com.theoriacodex.app.search.relativeTimeLabel
-import kotlinx.coroutines.flow.Flow
 
 @Composable
 fun RecentsScreen(
@@ -91,10 +89,7 @@ fun RecentsScreen(
     fypSearches: List<RecentSearchEntry>,
     activity: List<RecentActivityEntry>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
-    durationStateForPost: (Post) -> Flow<MediaDurationState?> = noMediaDurationStateForPost,
-    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit = { _, _ -> },
-    onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit = { _, _ -> },
-    onAuthoritativeDurationKnown: (Post, Long) -> Unit = { _, _ -> },
+    durations: FeedDurations = FeedDurations.NONE,
     likedPostIds: Set<PostId> = emptySet(),
     onToggleLike: ((Post) -> Unit)? = null,
     creatorBrowsingSources: Set<SourceKey> = emptySet(),
@@ -133,8 +128,7 @@ fun RecentsScreen(
     var selectedActionSection by remember { mutableStateOf(RecentPostSection.WATCHED) }
     var searchToPin by remember { mutableStateOf<RecentSearchEntry?>(null) }
     val onPinSearch = onSaveSearch?.let { { entry: RecentSearchEntry -> searchToPin = entry } }
-    val cards = RecentsPostCards(pixivUgoiraClient, likedPostIds, durationStateForPost, onDurationPostVisibilityChanged,
-        onDurationEnvironmentChanged, onAuthoritativeDurationKnown, onToggleLike)
+    val cards = RecentsPostCards(pixivUgoiraClient, likedPostIds, durations, onToggleLike)
     val relatedSlot = rememberRecentsRelated(related, filter, selectedSource, visible, cards, onShownPostsChanged) { selectedActionPost = it }
 
     Column(
@@ -278,8 +272,7 @@ private fun RecentsTab(
             onPinSearch = onPinSearch,
         )
         RecentsFilter.ALL -> ActivityList(
-            visible.activity, cards.pixivUgoiraClient, cards.likedPostIds, cards.durationStateForPost, cards.onDurationPostVisibilityChanged,
-            cards.onAuthoritativeDurationKnown, cards.onToggleLike, onLongPress, related,
+            visible.activity, cards, onLongPress, related,
             emptyMessage = sourceEmptyMessage ?: "Recent posts and applied searches appear here.",
             watchedPosts = visible.watchedPosts,
             codexPosts = visible.codexPosts,
@@ -324,10 +317,7 @@ private fun rememberVisibleRecents(
 internal class RecentsPostCards(
     val pixivUgoiraClient: PixivUgoiraClient?,
     val likedPostIds: Set<PostId>,
-    val durationStateForPost: (Post) -> Flow<MediaDurationState?>,
-    val onDurationPostVisibilityChanged: (Post, Boolean) -> Unit,
-    val onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit,
-    val onAuthoritativeDurationKnown: (Post, Long) -> Unit,
+    val durations: FeedDurations,
     val onToggleLike: ((Post) -> Unit)?,
 )
 
@@ -346,13 +336,7 @@ private fun RecentPostsGrid(
     WatchedGrid(
         watchedPosts = posts,
         now = now,
-        pixivUgoiraClient = cards.pixivUgoiraClient,
-        likedPostIds = cards.likedPostIds,
-        durationStateForPost = cards.durationStateForPost,
-        onDurationPostVisibilityChanged = cards.onDurationPostVisibilityChanged,
-        onDurationEnvironmentChanged = cards.onDurationEnvironmentChanged,
-        onAuthoritativeDurationKnown = cards.onAuthoritativeDurationKnown,
-        onToggleLike = cards.onToggleLike,
+        cards = cards,
         related = related,
         onOpenWatchedPost = onOpen,
         onLongPress = { onLongPress(it, section) },
@@ -426,13 +410,7 @@ private fun recentsIsEmpty(
 private fun WatchedGrid(
     watchedPosts: List<RecentPostEntry>,
     now: Long,
-    pixivUgoiraClient: PixivUgoiraClient?,
-    likedPostIds: Set<PostId>,
-    durationStateForPost: (Post) -> Flow<MediaDurationState?>,
-    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit,
-    onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit,
-    onAuthoritativeDurationKnown: (Post, Long) -> Unit,
-    onToggleLike: ((Post) -> Unit)?,
+    cards: RecentsPostCards,
     related: RecentsRelatedSlot?,
     onOpenWatchedPost: (Int) -> Unit,
     onLongPress: (Post) -> Unit,
@@ -445,7 +423,7 @@ private fun WatchedGrid(
     }
     val gridState = rememberRetainedFeedGridState("recents")
     ScrollToTopOnTabReselect(TopLevelDestination.Recents) { gridState.animateScrollToItem(0) }
-    DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
+    DurationRouteEnvironmentEffect(gridState, cards.durations.onEnvironmentChanged)
     val rows = remember(watchedPosts, now, related?.request) {
         recentsGridRows(watchedPosts, now).withRelatedShelf(related?.request, watchedPosts)
     }
@@ -466,8 +444,7 @@ private fun WatchedGrid(
                     val post = row.entry.post
                     item(key = "${post.id.source.id}:${post.id.sourcePostId}") {
                         RecentPostCard(
-                            row.entry, now, pixivUgoiraClient, likedPostIds, durationStateForPost,
-                            onDurationPostVisibilityChanged, onAuthoritativeDurationKnown, onToggleLike,
+                            row.entry, now, cards,
                             viewedMediaNumber = row.entry.maxViewedMediaNumber.takeIf { showMediaProgress },
                             onClick = { onOpenWatchedPost(row.index) },
                             onLongPress = { onLongPress(post) },
@@ -494,12 +471,7 @@ private fun RecentsDayHeading(label: String) {
 private fun RecentPostCard(
     entry: RecentPostEntry,
     now: Long,
-    pixivUgoiraClient: PixivUgoiraClient?,
-    likedPostIds: Set<PostId>,
-    durationStateForPost: (Post) -> Flow<MediaDurationState?>,
-    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit,
-    onAuthoritativeDurationKnown: (Post, Long) -> Unit,
-    onToggleLike: ((Post) -> Unit)?,
+    cards: RecentsPostCards,
     viewedMediaNumber: Int?,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
@@ -511,8 +483,8 @@ private fun RecentPostCard(
         post = post,
         mediaAspectRatio = mediaAspectRatio,
         showTitle = showTitle,
-        pixivUgoiraClient = pixivUgoiraClient,
-        acquiredDurationMs = observedMediaDurationMs(post, durationStateForPost),
+        pixivUgoiraClient = cards.pixivUgoiraClient,
+        acquiredDurationMs = observedMediaDurationMs(post, cards.durations.stateForPost),
         showSourceBadge = true,
         metadataLabel = relativeTimeLabel(
             now,
@@ -520,12 +492,12 @@ private fun RecentPostCard(
                 ?: entry.viewedAtEpochMs,
         ),
         viewedMediaNumber = viewedMediaNumber,
-        liked = post.id in likedPostIds,
-        onToggleLike = onToggleLike?.let { toggle -> { toggle(post) } },
+        liked = post.id in cards.likedPostIds,
+        onToggleLike = cards.onToggleLike?.let { toggle -> { toggle(post) } },
         onClick = onClick,
         onLongPress = onLongPress,
-        onViewportChanged = { visible -> onDurationPostVisibilityChanged(post, visible) },
-        onAuthoritativeDurationKnown = { durationMs -> onAuthoritativeDurationKnown(post, durationMs) },
+        onViewportChanged = { visible -> cards.durations.onPostVisibilityChanged(post, visible) },
+        onAuthoritativeDurationKnown = { durationMs -> cards.durations.onAuthoritativeDurationKnown(post, durationMs) },
     )
 }
 
@@ -572,12 +544,7 @@ private fun SearchHistoryList(
 @Composable
 private fun ActivityList(
     activity: List<RecentActivityEntry>,
-    pixivUgoiraClient: PixivUgoiraClient?,
-    likedPostIds: Set<PostId>,
-    durationStateForPost: (Post) -> Flow<MediaDurationState?>,
-    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit,
-    onAuthoritativeDurationKnown: (Post, Long) -> Unit,
-    onToggleLike: ((Post) -> Unit)?,
+    cards: RecentsPostCards,
     onLongPress: (Post, RecentPostSection) -> Unit,
     related: RecentsRelatedSlot?,
     watchedPosts: List<RecentPostEntry>,
@@ -610,8 +577,7 @@ private fun ActivityList(
                 is RecentsTimelineItem.Day -> RecentsDayHeading(item.label)
                 RecentsTimelineItem.RelatedShelf -> related?.content?.invoke()
                 is RecentsTimelineItem.Posts -> RecentPostsRow(
-                    item.entries, now, pixivUgoiraClient, likedPostIds, durationStateForPost,
-                    onDurationPostVisibilityChanged, onAuthoritativeDurationKnown, onToggleLike, onLongPress,
+                    item.entries, now, cards, onLongPress,
                     onOpen = { entry -> openRecentPost(entry, watchedPosts, codexPosts, onOpenWatchedPost, onOpenCodexPost) },
                 )
                 is RecentsTimelineItem.Searches -> LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -635,12 +601,7 @@ private fun ActivityList(
 private fun RecentPostsRow(
     entries: List<RecentPostEntry>,
     now: Long,
-    pixivUgoiraClient: PixivUgoiraClient?,
-    likedPostIds: Set<PostId>,
-    durationStateForPost: (Post) -> Flow<MediaDurationState?>,
-    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit,
-    onAuthoritativeDurationKnown: (Post, Long) -> Unit,
-    onToggleLike: ((Post) -> Unit)?,
+    cards: RecentsPostCards,
     onLongPress: (Post, RecentPostSection) -> Unit,
     onOpen: (RecentPostEntry) -> Unit,
 ) {
@@ -659,8 +620,7 @@ private fun RecentPostsRow(
             items(entries, key = { "${it.section}:${it.post.id.source.id}:${it.post.id.sourcePostId}" }) { entry ->
                 Box(Modifier.width(POST_SHELF_CARD_WIDTH)) {
                     RecentPostCard(
-                        entry, now, pixivUgoiraClient, likedPostIds, durationStateForPost,
-                        onDurationPostVisibilityChanged, onAuthoritativeDurationKnown, onToggleLike,
+                        entry, now, cards,
                         viewedMediaNumber = null,
                         onClick = { onOpen(entry) },
                         onLongPress = { onLongPress(entry.post, entry.section) },

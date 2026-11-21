@@ -1,5 +1,6 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.ui.components.FeedDurations
 import androidx.activity.compose.BackHandler
 import com.theoriacodex.app.media.isAnimatedPost
 import androidx.compose.runtime.MutableState
@@ -49,14 +50,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.AnimatedDurationRange
-import com.theoriacodex.app.media.MediaDurationState
-import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.media.rememberDurationFilterMetadata
-import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchResultCard
-import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.search.rememberCarriedFilter
 import com.theoriacodex.app.search.unknownAnimatedDurationPolicy
 import com.theoriacodex.app.source.displayName
@@ -78,7 +75,6 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
-import kotlinx.coroutines.flow.Flow
 
 /** Not answered yet is not the same as gone; saying so would flash on every first open. */
 @Composable
@@ -105,13 +101,7 @@ fun CodexDetailScreen(
     availableSources: Set<SourceKey>,
     creatorBrowsingSources: Set<SourceKey>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
-    resolveUnknownAnimatedDurations: Boolean = false,
-    durationStates: MediaDurationStates = MediaDurationStates.EMPTY,
-    durationStateForPost: (Post) -> Flow<MediaDurationState?> = noMediaDurationStateForPost,
-    onDurationFilterChanged: (Boolean) -> Unit = {},
-    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit = { _, _ -> },
-    onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit = { _, _ -> },
-    onAuthoritativeDurationKnown: (Post, Long) -> Unit = { _, _ -> },
+    durations: FeedDurations = FeedDurations.NONE,
     onOpenViewer: (List<Post>, Int) -> Unit,
     resolvePostById: suspend (PostId) -> Post? = { null },
     onAddPostsToAnotherCodex: (List<Post>) -> Unit,
@@ -151,12 +141,12 @@ fun CodexDetailScreen(
     val supportsLanguage = remember(sourceOptions) { supportsCodexLanguageFilter(sourceOptions.toSet()) }
     val supportsFullColor = remember(sourceOptions) { supportsCodexFullColorFilter(sourceOptions.toSet()) }
     val filters = remember(fabRestoreState) { fabRestoreState.savedCollectionFilters() }
-    val feed = rememberCodexDetailFeed(codexId, posts, filters, fabRestoreState, durationStates, resolveUnknownAnimatedDurations, related, likedPostIds, sortMode)
+    val feed = rememberCodexDetailFeed(codexId, posts, filters, fabRestoreState, durations, related, likedPostIds, sortMode)
     val applyFilters = { updated: CodexCollectionFilters -> onFabRestoreStateChange(fabRestoreState.withCollectionFilters(updated)) }
     CodexFilterReconciliationEffect(filters, sourceOptions, supportsLanguage, supportsFullColor, applyFilters)
     val resolveAllDurations = feed.durationFilterActive || sortMode.usesDuration
-    LaunchedEffect(resolveAllDurations) { onDurationFilterChanged(resolveAllDurations) }
-    DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
+    LaunchedEffect(resolveAllDurations) { durations.onFilterChanged(resolveAllDurations) }
+    DurationRouteEnvironmentEffect(gridState, durations.onEnvironmentChanged)
     if (codexName == null) return CodexUnavailable(loading, onBack)
     val filterScroll = rememberFeedScrollSignal()
     val resetFilters = { onFabRestoreStateChange(FeedFabRestoreState(sortMode = CodexSortMode.NEWEST_SAVED.name)) }
@@ -172,8 +162,7 @@ fun CodexDetailScreen(
     ) { padding ->
         CodexDetailBody(
             padding, codexName, posts, feed, filters, customHeader, customFiltersActive, editSelection, { editSelection = it },
-            isLikesCodex, likedPostIds, onToggleLike, loading, gridState, pixivUgoiraClient, resolvePostById, durationStateForPost,
-            onDurationPostVisibilityChanged, onAuthoritativeDurationKnown, onOpenViewer, { selectedActionPost = it }, emptyMessage,
+            isLikesCodex, likedPostIds, onToggleLike, loading, gridState, pixivUgoiraClient, resolvePostById, durations, onOpenViewer, { selectedActionPost = it }, emptyMessage,
             onTitleLongPress, onBack, onAddPostsToAnotherCodex, onRemovePosts, onDeleteCodex = { showDeleteConfirm = true },
         )
     }
@@ -232,9 +221,7 @@ private fun CodexDetailBody(
     gridState: LazyStaggeredGridState,
     pixivUgoiraClient: PixivUgoiraClient?,
     resolvePostById: suspend (PostId) -> Post?,
-    durationStateForPost: (Post) -> Flow<MediaDurationState?>,
-    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit,
-    onAuthoritativeDurationKnown: (Post, Long) -> Unit,
+    durations: FeedDurations,
     onOpenViewer: (List<Post>, Int) -> Unit,
     onOpenPostActions: (Post) -> Unit,
     emptyMessage: String?,
@@ -256,8 +243,7 @@ private fun CodexDetailBody(
         )
         CodexDetailGrid(
             feed.visiblePosts, likedPostIds, onToggleLike, posts.isEmpty(), loading, feed.resolvingDurations,
-            editSelection, gridState, pixivUgoiraClient, resolvePostById, feed.acquiredDurations, durationStateForPost,
-            onDurationPostVisibilityChanged, onAuthoritativeDurationKnown,
+            editSelection, gridState, pixivUgoiraClient, resolvePostById, feed.acquiredDurations, durations,
             { index -> onOpenViewer(feed.visiblePosts, index) },
             { postId -> onEditSelectionChange(editSelection.toggle(postId)) },
             onEditSelectionChange, onOpenPostActions, emptyMessage, feed.related,
@@ -307,8 +293,7 @@ internal fun rememberCodexDetailFeed(
     posts: List<Post>,
     filters: CodexCollectionFilters,
     fabRestoreState: FeedFabRestoreState,
-    durationStates: MediaDurationStates,
-    resolveUnknownAnimatedDurations: Boolean,
+    durations: FeedDurations,
     relatedShelf: RelatedShelfBinding?,
     likedPostIds: Set<PostId>,
     sortMode: CodexSortMode,
@@ -318,9 +303,9 @@ internal fun rememberCodexDetailFeed(
     val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
         AnimatedDurationRange(durationMinBucket, durationMaxBucket)
     }
-    val unknownDurationPolicy = unknownAnimatedDurationPolicy(resolveUnknownAnimatedDurations)
+    val unknownDurationPolicy = unknownAnimatedDurationPolicy(durations.resolveInBackground)
     val durationFilterActive = !animatedDurationRange.isFullRange
-    val durationMetadata = rememberDurationFilterMetadata(posts, durationStates, durationFilterActive, retainKey = "codex-detail:$codexId")
+    val durationMetadata = rememberDurationFilterMetadata(posts, durations.states, durationFilterActive, retainKey = "codex-detail:$codexId")
     val acquiredDurations = durationMetadata.knownDurationMsByPostId
     // The filter's reveal keeps shown cards in place, which a length sort must not do as lengths arrive.
     val presentedPosts = durationMetadata.presentedPosts?.takeUnless { sortMode.usesDuration } ?: posts
@@ -330,7 +315,7 @@ internal fun rememberCodexDetailFeed(
     val resolvingDurations = durationMetadata.readiness.isResolving
     val durationsBlockPaging = durationMetadata.blocksPaging
     val related = relatedShelf?.let { shelf ->
-        rememberCodexRelatedFeed("codex-detail:$codexId", shelf, posts, visiblePosts, filters, likedPostIds, durationStates, unknownDurationPolicy, durationFilterActive)
+        rememberCodexRelatedFeed("codex-detail:$codexId", shelf, posts, visiblePosts, filters, likedPostIds, durations.states, unknownDurationPolicy, durationFilterActive)
     }
     return remember(visiblePosts, acquiredDurations, durationFilterActive, resolvingDurations, durationsBlockPaging, related) {
         CodexDetailFeed(visiblePosts, acquiredDurations, durationFilterActive, resolvingDurations, durationsBlockPaging, related)
@@ -544,9 +529,7 @@ private fun CodexDetailGrid(
     pixivUgoiraClient: PixivUgoiraClient?,
     resolvePostById: suspend (PostId) -> Post?,
     acquiredDurations: Map<PostId, Long>,
-    durationStateForPost: (Post) -> Flow<MediaDurationState?>,
-    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit,
-    onAuthoritativeDurationKnown: (Post, Long) -> Unit,
+    durations: FeedDurations,
     onOpenViewer: (Int) -> Unit,
     onToggleSelection: (PostId) -> Unit,
     onSelectionChange: (CodexEditSelection) -> Unit,
@@ -557,7 +540,7 @@ private fun CodexDetailGrid(
     if (posts.isEmpty()) return CodexDetailEmptyState(collectionIsEmpty, loading, resolvingDurations, emptyMessage)
     val footerMessage = if (resolvingDurations) "Resolving durations…" else null
     val card: @Composable (Int, Post) -> Unit = { index, post ->
-        val observedDurationMs = observedMediaDurationMs(post, durationStateForPost)
+        val observedDurationMs = observedMediaDurationMs(post, durations.stateForPost)
         CodexSelectablePostCard(
             post = post,
             liked = post.id in likedPostIds,
@@ -567,8 +550,7 @@ private fun CodexDetailGrid(
             pixivUgoiraClient = pixivUgoiraClient,
             resolvePostById = resolvePostById,
             acquiredDurationMs = observedDurationMs ?: acquiredDurations[post.id],
-            onDurationPostVisibilityChanged = onDurationPostVisibilityChanged,
-            onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
+            durations = durations,
             onOpenViewer = onOpenViewer,
             onToggleSelection = onToggleSelection,
             onOpenPostActions = onOpenPostActions,
@@ -576,8 +558,7 @@ private fun CodexDetailGrid(
     }
     if (relatedFeed != null) {
         val environment = rememberFeedCardEnvironment(
-            pixivUgoiraClient, likedPostIds, acquiredDurations, durationStateForPost, onToggleLike,
-            onDurationPostVisibilityChanged, onAuthoritativeDurationKnown,
+            pixivUgoiraClient, likedPostIds, acquiredDurations, durations, onToggleLike,
         )
         CodexRelatedPostGrid(relatedFeed, posts, gridState, footerMessage, environment, onOpenPostActions, card)
         return
@@ -630,8 +611,7 @@ private fun CodexSelectablePostCard(
     pixivUgoiraClient: PixivUgoiraClient?,
     resolvePostById: suspend (PostId) -> Post?,
     acquiredDurationMs: Long?,
-    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit,
-    onAuthoritativeDurationKnown: (Post, Long) -> Unit,
+    durations: FeedDurations,
     onOpenViewer: (Int) -> Unit,
     onToggleSelection: (PostId) -> Unit,
     onOpenPostActions: (Post) -> Unit,
@@ -651,10 +631,8 @@ private fun CodexSelectablePostCard(
             },
             // While selecting, the grid's drag-select owns long press.
             onLongPress = { if (!editSelection.active) onOpenPostActions(post) },
-            onViewportChanged = { visible -> onDurationPostVisibilityChanged(post, visible) },
-            onAuthoritativeDurationKnown = { durationMs ->
-                onAuthoritativeDurationKnown(post, durationMs)
-            },
+            onViewportChanged = { visible -> durations.onPostVisibilityChanged(post, visible) },
+            onAuthoritativeDurationKnown = { durationMs -> durations.onAuthoritativeDurationKnown(post, durationMs) },
         )
         if (editSelection.active) {
             CodexSelectionMarker(selected = post.id in editSelection.selectedPostIds)

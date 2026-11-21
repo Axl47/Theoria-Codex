@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.ui.components.FeedDurations
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.runtime.Composable
@@ -7,7 +8,6 @@ import androidx.compose.runtime.remember
 import com.theoriacodex.app.feed.FeedPageDemandInput
 import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.media.DurationFilterMetadata
-import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.media.rememberDurationFilterMetadata
 import com.theoriacodex.app.related.retainedLikedPostIds
 import com.theoriacodex.app.search.state.SearchAction
@@ -45,8 +45,7 @@ fun rememberSearchFeed(
     pendingLikePostIds: Set<PostId>,
     savedPostIds: Set<PostId>,
     watchedPostIds: Set<PostId>,
-    durationStates: MediaDurationStates,
-    resolveUnknownAnimatedDurations: Boolean,
+    durations: FeedDurations,
 ): SearchFeed {
     val animationRestoreState = fabRestoreState.searchAnimationFilter(state.query.draft.mode)
     val durationMinBucket = animationRestoreState.durationMinBucket
@@ -67,11 +66,11 @@ fun rememberSearchFeed(
             hideWatched = fabRestoreState.hideWatched, animatedDurationRange = animatedDurationRange,
         )
     }
-    val unknownDurationPolicy = unknownAnimatedDurationPolicy(resolveUnknownAnimatedDurations)
+    val unknownDurationPolicy = unknownAnimatedDurationPolicy(durations.resolveInBackground)
     val displayResults = remember(state.content.results, state.content.displayVersion, state.query.appliedQueryHash) {
         state.content.results
     }
-    val durationMetadata = rememberDurationFilterMetadata(displayResults, durationStates, animatedDurationFilterActive, retainKey = "search")
+    val durationMetadata = rememberDurationFilterMetadata(displayResults, durations.states, animatedDurationFilterActive, retainKey = "search")
     val presentedResults = durationMetadata.presentedPosts ?: displayResults
     val retainedLikedPostIds = retainPostsUntilViewerCloses(remember(state.relatedPosts, pendingLikePostIds) {
         state.relatedPosts.retainedLikedPostIds + pendingLikePostIds
@@ -86,7 +85,7 @@ fun rememberSearchFeed(
         canonicalPosts = displayResults, visibleCanonicalPosts = visibleResults,
         relatedState = state.relatedPosts, visibilityFilters = visibilityFilters,
         likedPostIds = likedPostIds, savedPostIds = savedPostIds, watchedPostIds = watchedPostIds,
-        unknownAnimatedDurationPolicy = unknownDurationPolicy, durationStates = durationStates,
+        unknownAnimatedDurationPolicy = unknownDurationPolicy, durationStates = durations.states,
         durationFilterActive = animatedDurationFilterActive,
     )
     return remember(

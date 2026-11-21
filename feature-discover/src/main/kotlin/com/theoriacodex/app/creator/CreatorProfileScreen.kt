@@ -1,5 +1,6 @@
 package com.theoriacodex.app.creator
 
+import com.theoriacodex.app.ui.components.FeedDurations
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.theoriacodex.app.media.animatedDurationRangeLabel
@@ -50,9 +51,6 @@ import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.feed.FeedPageDemandInput
 import com.theoriacodex.app.ui.components.rememberFeedPageDemand
 import com.theoriacodex.app.ui.components.FeedContinueLoading
-import com.theoriacodex.app.media.MediaDurationState
-import com.theoriacodex.app.media.MediaDurationStates
-import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.media.copyTextToClipboard
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchDurationFilterPresentation
@@ -89,7 +87,6 @@ import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
-import kotlinx.coroutines.flow.Flow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -101,13 +98,7 @@ fun CreatorProfileScreen(
     pendingLikePostIds: Set<PostId> = emptySet(),
     savedPostIds: Set<PostId>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
-    resolveUnknownAnimatedDurations: Boolean = false,
-    durationStates: MediaDurationStates = MediaDurationStates.EMPTY,
-    durationStateForPost: (Post) -> Flow<MediaDurationState?> = noMediaDurationStateForPost,
-    onDurationFilterChanged: (Boolean) -> Unit = {},
-    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit = { _, _ -> },
-    onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit = { _, _ -> },
-    onAuthoritativeDurationKnown: (Post, Long) -> Unit = { _, _ -> },
+    durations: FeedDurations = FeedDurations.NONE,
     resolvePostById: (suspend (PostId) -> Post?)? = null,
     onToggleLike: (Post) -> Unit,
     onAction: (CreatorAction) -> Unit,
@@ -125,9 +116,9 @@ fun CreatorProfileScreen(
     var showFilterSheet by remember { mutableStateOf(false) }
     // Each feed keeps its own scroll position and duration reveal order.
     val gridState = rememberRetainedFeedGridState(state.selectedFeed.retainKey)
-    val feed = rememberCreatorFeed(state, pendingLikePostIds, likedPostIds, savedPostIds, fabRestoreState, durationStates, resolveUnknownAnimatedDurations)
-    LaunchedEffect(feed.durationFilter.active) { onDurationFilterChanged(feed.durationFilter.active) }
-    DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
+    val feed = rememberCreatorFeed(state, pendingLikePostIds, likedPostIds, savedPostIds, fabRestoreState, durations)
+    LaunchedEffect(feed.durationFilter.active) { durations.onFilterChanged(feed.durationFilter.active) }
+    DurationRouteEnvironmentEffect(gridState, durations.onEnvironmentChanged)
     val pageDemand = rememberCreatorPageDemand(state, feed, gridState, onAction)
     val creator = state.creator
     if (creator == null) {
@@ -135,8 +126,7 @@ fun CreatorProfileScreen(
         return
     }
     val cards = rememberFeedCardEnvironment(
-        pixivUgoiraClient, likedPostIds, feed.durationFilter.knownDurationMsByPostId, durationStateForPost,
-        onToggleLike, onDurationPostVisibilityChanged, onAuthoritativeDurationKnown, resolvePostById,
+        pixivUgoiraClient, likedPostIds, feed.durationFilter.knownDurationMsByPostId, durations, onToggleLike, resolvePostById,
     )
     val filterScroll = rememberFeedScrollSignal()
     val clearFilters: () -> () -> Unit = { clearCreatorFilters(fabRestoreState, onFabRestoreStateChange) }
@@ -222,8 +212,7 @@ private fun rememberCreatorFeed(
     likedPostIds: Set<PostId>,
     savedPostIds: Set<PostId>,
     fabRestoreState: FeedFabRestoreState,
-    durationStates: MediaDurationStates,
-    resolveUnknownAnimatedDurations: Boolean,
+    durations: FeedDurations,
 ): CreatorFeed {
     val animatedOnly = fabRestoreState.animatedOnly
     val hideLiked = fabRestoreState.hideLiked
@@ -242,7 +231,7 @@ private fun rememberCreatorFeed(
         )
     }
     val durationFilter = rememberSearchDurationFilterPresentation(
-        state.results, animatedDurationRange, durationStates, resolveUnknownAnimatedDurations, retainKey = state.selectedFeed.retainKey,
+        state.results, animatedDurationRange, durations.states, durations.resolveInBackground, retainKey = state.selectedFeed.retainKey,
     )
     val presentedResults = durationFilter.presentedPosts ?: state.results
     val retainedLikedPostIds = retainPostsUntilViewerCloses(remember(state.relatedPosts, pendingLikePostIds) {
@@ -264,7 +253,7 @@ private fun rememberCreatorFeed(
         savedPostIds = savedPostIds,
         watchedPostIds = emptySet(),
         unknownAnimatedDurationPolicy = durationFilter.unknownPolicy,
-        durationStates = durationStates,
+        durationStates = durations.states,
         durationFilterActive = durationFilter.active,
     )
     return remember(animatedDurationRange, visibilityFilters, durationFilter, visibleResults, related) {

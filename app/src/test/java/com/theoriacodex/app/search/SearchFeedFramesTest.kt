@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.ui.components.FeedDurations
 import android.app.Application
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
@@ -300,7 +301,7 @@ class SearchFeedFramesTest {
                 }
                 val feed = rememberSearchFeed(
                     state, fab, liked, pendingLikePostIds = emptySet(), savedPostIds = emptySet(),
-                    watchedPostIds = emptySet(), durationStates = durationStates, resolveUnknownAnimatedDurations = true,
+                    watchedPostIds = emptySet(), durations = FeedDurations(durationStates, resolveInBackground = true),
                 )
                 val entries = feed.related.projection.entries
                 SideEffect { shown = entries.map { (it as RelatedFeedEntry.PostEntry).post.id.sourcePostId } }

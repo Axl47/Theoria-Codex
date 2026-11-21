@@ -43,23 +43,23 @@ fun rememberFeedCardEnvironment(
     pixivUgoiraClient: PixivUgoiraClient?,
     likedPostIds: Set<PostId>,
     acquiredDurations: Map<PostId, Long>,
-    durationStateForPost: (Post) -> Flow<MediaDurationState?>,
+    durations: FeedDurations,
     onToggleLike: ((Post) -> Unit)?,
-    onViewportChanged: (Post, Boolean) -> Unit,
-    onAuthoritativeDurationKnown: (Post, Long) -> Unit,
     resolvePostById: (suspend (PostId) -> Post?)? = null,
 ): FeedCardEnvironment {
     val liked = rememberUpdatedState(likedPostIds)
-    val durations = rememberUpdatedState(acquiredDurations)
+    val known = rememberUpdatedState(acquiredDurations)
     // A fresh resolver instance each recomposition must not rebuild the environment, so tiles call through the latest one.
     val latestResolve = rememberUpdatedState(resolvePostById)
     val resolver: (suspend (PostId) -> Post?)? = if (resolvePostById == null) null else {
         remember<suspend (PostId) -> Post?> { { postId -> latestResolve.value?.invoke(postId) } }
     }
-    return remember(pixivUgoiraClient, durationStateForPost, onToggleLike, onViewportChanged, onAuthoritativeDurationKnown, resolver) {
+    val durationStateForPost = durations.stateForPost
+    val onViewportChanged = durations.onPostVisibilityChanged
+    val onDurationKnown = durations.onAuthoritativeDurationKnown
+    return remember(pixivUgoiraClient, durationStateForPost, onToggleLike, onViewportChanged, onDurationKnown, resolver) {
         FeedCardEnvironment(
-            pixivUgoiraClient, liked, durations, durationStateForPost,
-            onToggleLike, onViewportChanged, onAuthoritativeDurationKnown, resolver,
+            pixivUgoiraClient, liked, known, durationStateForPost, onToggleLike, onViewportChanged, onDurationKnown, resolver,
         )
     }
 }

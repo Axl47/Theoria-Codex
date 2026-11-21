@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recommend
 
+import com.theoriacodex.app.ui.components.FeedDurations
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.theoriacodex.app.media.animatedDurationRangeLabel
@@ -51,9 +52,6 @@ import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.feed.FeedPageDemandInput
 import com.theoriacodex.app.ui.components.rememberFeedPageDemand
 import com.theoriacodex.app.ui.components.FeedContinueLoading
-import com.theoriacodex.app.media.MediaDurationState
-import com.theoriacodex.app.media.MediaDurationStates
-import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recommend.state.ForYouEmptyReason
 import com.theoriacodex.app.recommend.state.ForYouUiState
@@ -90,7 +88,6 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
-import kotlinx.coroutines.flow.Flow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -98,13 +95,7 @@ fun ForYouScreen(
     state: ForYouUiState,
     likedPostIds: Set<PostId>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
-    resolveUnknownAnimatedDurations: Boolean = false,
-    durationStates: MediaDurationStates = MediaDurationStates.EMPTY,
-    durationStateForPost: (Post) -> Flow<MediaDurationState?> = noMediaDurationStateForPost,
-    onDurationFilterChanged: (Boolean) -> Unit = {},
-    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit = { _, _ -> },
-    onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit = { _, _ -> },
-    onAuthoritativeDurationKnown: (Post, Long) -> Unit = { _, _ -> },
+    durations: FeedDurations = FeedDurations.NONE,
     resolvePostById: (suspend (PostId) -> Post?)? = null,
     onToggleLike: (Post) -> Unit,
     onAction: (ForYouAction) -> Unit,
@@ -133,9 +124,9 @@ fun ForYouScreen(
     var showSortSheet by remember { mutableStateOf(false) }
     var showSourceMenu by remember { mutableStateOf(false) }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
-    val feed = rememberForYouFeed(state, fabRestoreState, durationStates, resolveUnknownAnimatedDurations)
-    LaunchedEffect(feed.durationFilter.active) { onDurationFilterChanged(feed.durationFilter.active) }
-    DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
+    val feed = rememberForYouFeed(state, fabRestoreState, durations)
+    LaunchedEffect(feed.durationFilter.active) { durations.onFilterChanged(feed.durationFilter.active) }
+    DurationRouteEnvironmentEffect(gridState, durations.onEnvironmentChanged)
     val filterScroll = rememberFeedScrollSignal()
     val filterLabels = forYouFilterLabels(state.sortMode, feed)
     val clearFilters: () -> () -> Unit = {
@@ -143,8 +134,7 @@ fun ForYouScreen(
     }
     val pageDemand = rememberForYouPageDemand(state, feed, gridState, onAction)
     val cards = rememberFeedCardEnvironment(
-        pixivUgoiraClient, likedPostIds, feed.durationFilter.knownDurationMsByPostId, durationStateForPost,
-        onToggleLike, onDurationPostVisibilityChanged, onAuthoritativeDurationKnown, resolvePostById,
+        pixivUgoiraClient, likedPostIds, feed.durationFilter.knownDurationMsByPostId, durations, onToggleLike, resolvePostById,
     )
 
     AnimatedContent(
@@ -154,8 +144,7 @@ fun ForYouScreen(
     ) { homeVisible ->
         if (homeVisible) {
             savedStates.SaveableStateProvider("overview") {
-                ForYouHomeScreen(state, likedPostIds, pixivUgoiraClient, feed::filterHomePosts,
-                    durationStateForPost, onDurationPostVisibilityChanged, onAuthoritativeDurationKnown, onToggleLike,
+                ForYouHomeScreen(state, likedPostIds, pixivUgoiraClient, feed::filterHomePosts, durations, onToggleLike,
                     { selectedActionPost = it }, onAction, { showSortSheet = true }, filterLabels, clearFilters,
                     onOpenPreview = { id, posts, index -> onAction(ForYouAction.OpenSectionResult(id, index, posts, feed.visibilityFilters)) })
             }
@@ -289,8 +278,7 @@ private data class ForYouFeed(
 private fun rememberForYouFeed(
     state: ForYouUiState,
     fabRestoreState: FeedFabRestoreState,
-    durationStates: MediaDurationStates,
-    resolveUnknownAnimatedDurations: Boolean,
+    durations: FeedDurations,
 ): ForYouFeed {
     val animatedOnly = fabRestoreState.animatedOnly
     val durationMinBucket = fabRestoreState.durationMinBucket
@@ -309,7 +297,7 @@ private fun rememberForYouFeed(
         } else state.results
     }
     val durationFilter = rememberSearchDurationFilterPresentation(
-        durationPosts, animatedDurationRange, durationStates, resolveUnknownAnimatedDurations, retainKey = "for-you",
+        durationPosts, animatedDurationRange, durations.states, durations.resolveInBackground, retainKey = "for-you",
     )
     // Home sections are shelves, so only the result grid takes the reveal order.
     val presentedResults = durationFilter.presentedPosts.takeUnless { state.home.visible } ?: state.results
@@ -327,7 +315,7 @@ private fun rememberForYouFeed(
         savedPostIds = emptySet(),
         watchedPostIds = emptySet(),
         unknownAnimatedDurationPolicy = durationFilter.unknownPolicy,
-        durationStates = durationStates,
+        durationStates = durations.states,
         durationFilterActive = durationFilter.active,
     )
     return remember(animatedOnly, animatedDurationRange, visibilityFilters, durationFilter, visibleResults, related) {

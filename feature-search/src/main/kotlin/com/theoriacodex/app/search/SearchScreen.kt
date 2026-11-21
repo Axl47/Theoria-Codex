@@ -1,12 +1,12 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.ui.components.FeedDurations
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
@@ -27,10 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.AnimatedDurationRange
-import com.theoriacodex.app.media.MediaDurationState
-import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.media.animatedDurationRangeLabel
-import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchQueryUiState
 import com.theoriacodex.app.search.state.SearchUiState
@@ -64,11 +61,9 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
-import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -88,13 +83,7 @@ fun SearchScreen(
     savedPostIds: Set<PostId> = emptySet(),
     watchedPostIds: Set<PostId> = emptySet(),
     favoriteTags: List<FavoriteTagEntry> = emptyList(),
-    resolveUnknownAnimatedDurations: Boolean = false,
-    durationStates: MediaDurationStates = MediaDurationStates.EMPTY,
-    durationStateForPost: (Post) -> Flow<MediaDurationState?> = noMediaDurationStateForPost,
-    onDurationFilterChanged: (Boolean) -> Unit = {},
-    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit = { _, _ -> },
-    onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit = { _, _ -> },
-    onAuthoritativeDurationKnown: (Post, Long) -> Unit = { _, _ -> },
+    durations: FeedDurations = FeedDurations.NONE,
     onToggleLike: ((Post) -> Unit)? = null,
     onOpenCreatorProfile: (CreatorProfile) -> Unit,
     onOpenLegacyCreatorProfile: (Post) -> Unit,
@@ -119,13 +108,13 @@ fun SearchScreen(
     val scope = rememberCoroutineScope()
     val gridState = rememberRetainedFeedGridState("search")
     SearchTabReselectEffect(state.restoration, gridState, onAction)
-    val feed = rememberSearchFeed(state, fabRestoreState, likedPostIds, pendingLikePostIds, savedPostIds, watchedPostIds, durationStates, resolveUnknownAnimatedDurations)
+    val feed = rememberSearchFeed(state, fabRestoreState, likedPostIds, pendingLikePostIds, savedPostIds, watchedPostIds, durations)
     val serverFilters = state.query.serverFilters()
     val filterScroll = rememberFeedScrollSignal()
     var filterSheetBaseline by remember { mutableStateOf(serverFilters) }
-    LaunchedEffect(feed.animatedDurationFilterActive) { onDurationFilterChanged(feed.animatedDurationFilterActive) }
-    DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
-    val pageDemand = rememberSearchScrollAndPaging(state, feed, gridState, resolveUnknownAnimatedDurations, onAction)
+    LaunchedEffect(feed.animatedDurationFilterActive) { durations.onFilterChanged(feed.animatedDurationFilterActive) }
+    DurationRouteEnvironmentEffect(gridState, durations.onEnvironmentChanged)
+    val pageDemand = rememberSearchScrollAndPaging(state, feed, gridState, durations.resolveInBackground, onAction)
     SearchScrollDismissEffect(gridState, chrome, inputFocus)
     val applyDraft = { chrome.applyDraft(inputFocus, onAction) }
     val filterActions = SearchFilterActions(state, fabRestoreState, rememberUpdatedState(serverFilters), onAction, onFabRestoreStateChange, applyDraft)
@@ -143,8 +132,7 @@ fun SearchScreen(
     ) { padding ->
         SearchChromeLayout(
             padding, state, feed, fabRestoreState, chrome, oldSearchBar, sourcePicker, applyDraft, gridState, pageDemand, inputFocus,
-            pixivUgoiraClient, likedPostIds, durationStateForPost, onToggleLike, onDurationPostVisibilityChanged,
-            onAuthoritativeDurationKnown, resolvePostById, recoverPostMedia, onAction,
+            pixivUgoiraClient, likedPostIds, durations, onToggleLike, resolvePostById, recoverPostMedia, onAction,
         ) { post ->
             inputFocus.clear()
             actionPost.open(post, state.content.results, scope, resolvePostById)
@@ -219,10 +207,8 @@ private fun SearchChromeLayout(
     inputFocus: SearchInputFocus,
     pixivUgoiraClient: PixivUgoiraClient?,
     likedPostIds: Set<PostId>,
-    durationStateForPost: (Post) -> Flow<MediaDurationState?>,
+    durations: FeedDurations,
     onToggleLike: ((Post) -> Unit)?,
-    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit,
-    onAuthoritativeDurationKnown: (Post, Long) -> Unit,
     resolvePostById: suspend (PostId) -> Post?,
     recoverPostMedia: suspend (Post, ImageRef) -> Post?,
     onAction: (SearchAction) -> Unit,
@@ -239,8 +225,7 @@ private fun SearchChromeLayout(
         inputField = { SearchChromeInput(state, feed, fabRestoreState, chrome, oldSearchBar, sourcePicker, applyDraft) },
     ) {
         val cards = rememberFeedCardEnvironment(
-            pixivUgoiraClient, likedPostIds, feed.durationMetadata.knownDurationMsByPostId, durationStateForPost,
-            onToggleLike, onDurationPostVisibilityChanged, onAuthoritativeDurationKnown,
+            pixivUgoiraClient, likedPostIds, feed.durationMetadata.knownDurationMsByPostId, durations, onToggleLike,
         )
         SearchResultsBody(state, feed, cards, gridState, pageDemand, inputFocus, resolvePostById, recoverPostMedia, onAction, openPostActions)
     }

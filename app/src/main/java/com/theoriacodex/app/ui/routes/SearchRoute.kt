@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.ui.components.feedDurations
 import com.theoriacodex.app.ui.LocalNetworkOnline
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.SavedSearchEntry
@@ -388,13 +389,7 @@ private fun SearchRouteContent(
         savedPostIds = config.savedPostIds,
         watchedPostIds = config.watchedPostIds,
         favoriteTags = config.favoriteTags,
-        resolveUnknownAnimatedDurations = config.resolveUnknownAnimatedDurations,
-        durationStates = duration.states,
-        durationStateForPost = duration.stateForPost,
-        onDurationFilterChanged = duration.owner::onFilterChanged,
-        onDurationPostVisibilityChanged = duration.owner::onPostVisibilityChanged,
-        onDurationEnvironmentChanged = duration.owner::onEnvironmentChanged,
-        onAuthoritativeDurationKnown = duration.owner::publishPlayerDuration,
+        durations = duration.owner.feedDurations(duration.states, config.resolveUnknownAnimatedDurations),
         onToggleLike = callbacks.onToggleLike,
         onOpenCreatorProfile = callbacks.onOpenCreatorProfile,
         onOpenLegacyCreatorProfile = callbacks.onOpenLegacyCreatorProfile,
