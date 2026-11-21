@@ -3,6 +3,7 @@ package com.theoriacodex.app.backup
 import android.text.format.DateUtils
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -20,10 +21,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.data.repository.ProfileBackupPreview
 
 @Composable
-fun BackupControls(state: BackupUiState, onExport: () -> Unit, onImport: () -> Unit) {
+fun BackupControls(state: BackupUiState, onIncludeRecents: (Boolean) -> Unit, onExport: () -> Unit, onImport: () -> Unit) {
+    SwitchRow(
+        title = "Include Recents and statistics",
+        checked = state.includeRecents,
+        enabled = !state.busy,
+        contentPadding = PaddingValues(0.dp),
+        onCheckedChange = onIncludeRecents,
+    )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = onExport, enabled = !state.busy, modifier = Modifier.weight(1f)) {
             Text("Back up profiles")

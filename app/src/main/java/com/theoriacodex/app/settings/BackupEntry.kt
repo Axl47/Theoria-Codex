@@ -25,7 +25,7 @@ internal fun rememberSettingsBackupEntry(tools: LibraryTransferTools): SettingsB
 @Composable
 private fun BackupPageControls(tools: LibraryTransferTools) {
     val backupState by tools.backup.state.collectAsStateWithLifecycle()
-    BackupControls(backupState, tools.chooseBackupDestination, tools.chooseBackup)
+    BackupControls(backupState, tools.backup::includeRecents, tools.chooseBackupDestination, tools.chooseBackup)
     tools.autoBackup?.let { owner ->
         val status by owner.status.collectAsStateWithLifecycle()
         AutoBackupControls(status, tools.chooseAutoBackupFolder, { owner.backUpNow() }, tools.turnOffAutoBackup)

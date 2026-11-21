@@ -38,6 +38,7 @@ data class BackupUiState(
     val operation: BackupOperation? = null,
     val preview: ProfileBackupPreview? = null,
     val applyPreferences: Boolean = false,
+    val includeRecents: Boolean = true,
 ) {
     val busy: Boolean get() = operation != null
 }
@@ -58,19 +59,25 @@ class BackupViewModel(
         if (!state.value.busy) mutableState.update { it.copy(applyPreferences = apply) }
     }
 
+    /** Whether the next manual backup carries Recents, reading positions and statistics. */
+    fun includeRecents(include: Boolean) {
+        if (!state.value.busy) mutableState.update { it.copy(includeRecents = include) }
+    }
+
     fun dismissDialog() {
         if (state.value.busy) return
         selectedBytes = null
         mutableState.update { it.copy(preview = null, applyPreferences = false) }
     }
 
-    /** Writes a backup of everything, Recents and statistics included, to [document] (null when picking was cancelled). */
+    /** Writes a backup to [document] (null when picking was cancelled), with Recents and statistics if chosen. */
     fun export(document: String?) {
         if (document == null || state.value.busy) return
+        val includeRecents = state.value.includeRecents
         mutableState.update { it.copy(operation = BackupOperation.EXPORT) }
         viewModelScope.launch {
             val result = runCatchingPreservingCancellation {
-                withContext(ioDispatcher) { writeExport(document) }
+                withContext(ioDispatcher) { writeExport(document, includeRecents) }
             }
             mutableState.update { it.copy(operation = null) }
             messages.send(result.fold(
@@ -128,10 +135,10 @@ class BackupViewModel(
         }
     }
 
-    private suspend fun writeExport(document: String) {
+    private suspend fun writeExport(document: String, includeRecents: Boolean) {
         var completed = false
         try {
-            documents.write(document, actions.export(includeRecents = true))
+            documents.write(document, actions.export(includeRecents))
             completed = true
         } finally {
             if (!completed) withContext(NonCancellable) {

@@ -128,11 +128,12 @@ class BackupViewModelTest {
     fun `failed export removes its incomplete document and allows another export`() = runTest {
         val owner = owner()
         documents.writeFailure = IOException("disk full")
+        owner.includeRecents(false)
         owner.export("destination")
         advanceUntilIdle()
 
         assertEquals(listOf("destination"), documents.discarded)
-        assertTrue(actions.includedRecents)
+        assertFalse(actions.includedRecents)
         assertFalse(owner.state.value.busy)
         assertEquals("Could not save the backup. Please try again.", owner.effects.first())
 
