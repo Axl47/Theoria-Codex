@@ -64,7 +64,7 @@ import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.PostBoundTagSection
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.DismissibleFailure
-import com.theoriacodex.app.ui.components.FeedErrorTile
+import com.theoriacodex.app.ui.components.FeedFailureTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
 import com.theoriacodex.app.ui.components.FeedPageDemandControl
@@ -446,7 +446,7 @@ private fun CreatorFeedBody(
 ) {
     state.errorMessage?.takeIf { state.canLoadMore }?.let { message ->
         DismissibleFailure(message) { dismiss ->
-            FeedErrorTile(message = message, onRetry = { onAction(CreatorAction.RetryPage) }, onDismiss = dismiss)
+            FeedFailureTile(message, onRetry = { onAction(CreatorAction.RetryPage) }, retriesOnReconnect = false, onDismiss = dismiss)
         }
     }
     FeedContinueLoading(pageDemand)
@@ -454,10 +454,8 @@ private fun CreatorFeedBody(
         state.isRefreshing && feed.visibleResults.isEmpty() -> FeedLoadingState()
 
         state.errorMessage != null && !state.canLoadMore && feed.visibleResults.isEmpty() -> {
-            FeedErrorTile(
-                message = state.errorMessage.orEmpty(),
-                onRetry = { onAction(CreatorAction.Refresh) },
-            )
+            // Creator pages do not retry by themselves on reconnect, so the failure keeps its own message.
+            FeedFailureTile(state.errorMessage.orEmpty(), onRetry = { onAction(CreatorAction.Refresh) }, retriesOnReconnect = false)
         }
 
         feed.visibleResults.isEmpty() && state.relatedPosts == RelatedPostsUiState.Idle -> {

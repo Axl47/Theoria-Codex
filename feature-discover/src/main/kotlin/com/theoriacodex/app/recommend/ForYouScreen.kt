@@ -1,9 +1,5 @@
 package com.theoriacodex.app.recommend
 
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.theoriacodex.app.search.OFFLINE_FEED_MESSAGE
-import com.theoriacodex.app.search.OFFLINE_FEED_TITLE
-import com.theoriacodex.app.ui.LocalNetworkOnline
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.theoriacodex.app.media.animatedDurationRangeLabel
@@ -69,7 +65,7 @@ import com.theoriacodex.app.search.rememberFilteredFeed
 import com.theoriacodex.app.search.rememberSearchDurationFilterPresentation
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.components.FeedEmptyTile
-import com.theoriacodex.app.ui.components.FeedErrorTile
+import com.theoriacodex.app.ui.components.FeedFailureTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
 import com.theoriacodex.app.ui.components.FeedPageDemandControl
@@ -464,7 +460,7 @@ private fun ForYouFeedBody(
         state.isRefreshing && feed.visibleResults.isEmpty() -> FeedLoadingState()
 
         state.errorMessage != null && feed.visibleResults.isEmpty() -> {
-            ForYouFeedError(state.errorMessage.orEmpty()) { onAction(ForYouAction.Refresh(shuffle = true)) }
+            FeedFailureTile(state.errorMessage.orEmpty(), onRetry = { onAction(ForYouAction.Refresh(shuffle = true)) })
         }
 
         feed.related.projection.entries.isEmpty() -> FeedEmptyTile(message = forYouEmptyMessage(state, feed))
@@ -517,16 +513,6 @@ private fun ForYouFeedBody(
             }
         }
     }
-}
-
-@Composable
-private fun ForYouFeedError(message: String, onRetry: () -> Unit) {
-    val online by LocalNetworkOnline.current.collectAsStateWithLifecycle()
-    FeedErrorTile(
-        message = if (online) message else OFFLINE_FEED_MESSAGE,
-        title = OFFLINE_FEED_TITLE.takeUnless { online },
-        onRetry = onRetry,
-    )
 }
 
 @Composable
