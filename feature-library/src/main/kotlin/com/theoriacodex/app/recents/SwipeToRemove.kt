@@ -40,21 +40,22 @@ import kotlin.math.roundToInt
  * Lets [content] be swiped left to remove it. Only a leftward horizontal drag is claimed: rightward and
  * vertical drags pass through, so the tab pager and the list keep working from the row. Past
  * [REMOVE_FRACTION] of the width, or after a fast fling, the content slides out and [onRemove] runs.
- * TalkBack gets the same action as a custom action named [label].
+ * TalkBack gets the same action as a custom action named [label], on the modifier [content] receives: [content]
+ * applies it to its clickable node, the one TalkBack focuses.
  */
 @Composable
 internal fun SwipeToRemove(
     label: String,
     onRemove: () -> Unit,
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
+    content: @Composable (Modifier) -> Unit,
 ) {
     val offset = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val remove by rememberUpdatedState(onRemove)
+    val removeAction = Modifier.removeAction(label) { remove() }
     Box(
         modifier
-            .semantics { customActions = listOf(CustomAccessibilityAction(label) { remove(); true }) }
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val pointer = awaitLeftSwipeStart() ?: return@awaitEachGesture
@@ -80,9 +81,13 @@ internal fun SwipeToRemove(
             },
     ) {
         if (offset.value < 0f) RemoveBackdrop(Modifier.matchParentSize())
-        Box(Modifier.offset { IntOffset(offset.value.roundToInt(), 0) }) { content() }
+        Box(Modifier.offset { IntOffset(offset.value.roundToInt(), 0) }) { content(removeAction) }
     }
 }
+
+/** TalkBack's custom action [label] running [onRemove], for the clickable node of a removable entry. */
+internal fun Modifier.removeAction(label: String, onRemove: () -> Unit): Modifier =
+    semantics { customActions = listOf(CustomAccessibilityAction(label) { onRemove(); true }) }
 
 /**
  * Waits for a drag past touch slop and claims it only when it heads left more than up or down; returns

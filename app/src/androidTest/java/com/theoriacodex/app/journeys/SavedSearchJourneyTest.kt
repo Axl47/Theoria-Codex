@@ -3,10 +3,12 @@ package com.theoriacodex.app.journeys
 import com.theoriacodex.app.library.LibrarySection
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
 import com.theoriacodex.data.repository.RecentSearchKind
@@ -38,10 +40,11 @@ class SavedSearchJourneyTest : AppJourneyFixture() {
         openRecentsSection("Searches")
         compose.onNodeWithTag("Recent search:pin-journey")
             .performSemanticsAction(SemanticsActions.OnLongClick) { it() }
-        // Long-press saves at once under the query's name; Rename names it.
+        // Long-press saves at once under the query's name; once it commits, Rename names it in the row.
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Rename").fetchSemanticsNodes().isNotEmpty() }
         activate(compose.onNodeWithText("Rename"))
         compose.onNode(hasSetTextAction()).performTextReplacement("My landscapes")
-        compose.onNodeWithText("Save", substring = false).performClick()
+        compose.onNode(hasSetTextAction()).performImeAction()
         compose.waitUntil(10_000) {
             io { container.data.savedSearches.observeSavedSearches().first().singleOrNull()?.name == "My landscapes" }
         }

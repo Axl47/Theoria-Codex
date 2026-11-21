@@ -20,6 +20,7 @@ import com.theoriacodex.app.library.LibrarySection
 import com.theoriacodex.app.library.LibrarySectionHeader
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.media.MediaDurationStates
+import com.theoriacodex.app.recents.RecentSearchSaves
 import com.theoriacodex.app.recents.RecentsClearTarget
 import com.theoriacodex.app.recents.RecentsEntryRemoval
 import com.theoriacodex.app.recents.RecentsLoading
@@ -127,6 +128,9 @@ private fun RecentsDestination(shell: TheoriaShell, header: LibrarySectionHeader
     val undo = LocalUndoSlot.current
     val removal = remember(shell, undo) { RecentsEntryRemoval(shell.data.recentsRepository, undo, shell.scope) }
     val removedSearch by removal.removedSearch.collectAsStateWithLifecycle()
+    val savedSearchOwner = shell.owners.savedSearches
+    val savedSearches by savedSearchOwner.savedSearches.collectAsStateWithLifecycle()
+    val justSavedSearchId by savedSearchOwner.justSavedId.collectAsStateWithLifecycle()
     RecentsDestinationStateBoundary(shell.data, loading = { RecentsLoading(header) }) { state ->
         val durationOwner = rememberRecentsDurationOwner(shell, state)
         val relatedOwner = viewModel<RecentsRelatedViewModel>(
@@ -136,7 +140,7 @@ private fun RecentsDestination(shell: TheoriaShell, header: LibrarySectionHeader
         RecentsScreen(
             related = rememberRelatedShelfBinding(shell, relatedOwner.state, relatedOwner.related),
             onShownPostsChanged = relatedOwner::showing,
-            onSaveSearch = shell.owners.savedSearches::saveInPlace,
+            saves = RecentSearchSaves(savedSearches, justSavedSearchId, savedSearchOwner::saveInPlace, savedSearchOwner::rename),
             onRemoveSearch = removal::removeSearch,
             onRemovePost = removal::removePost,
             removedSearch = removedSearch,

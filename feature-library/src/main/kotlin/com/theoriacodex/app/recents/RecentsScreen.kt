@@ -27,7 +27,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,10 +38,8 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.components.LoadingState
 import com.theoriacodex.app.ui.components.SingleChoiceMenu
-import kotlinx.coroutines.delay
 import com.theoriacodex.app.ui.components.SourceSelector
 import com.theoriacodex.app.ui.components.expandableControlSemantics
 import com.theoriacodex.app.ui.components.FeedPostActionSheet
@@ -52,7 +49,6 @@ import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchEntry
-import com.theoriacodex.data.repository.MAX_SAVED_SEARCH_NAME_LENGTH
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -77,7 +73,7 @@ fun RecentsScreen(
     onOpenSearch: (RecentSearchEntry) -> Unit,
     onOpenFypSearch: (RecentSearchEntry) -> Unit,
     onClear: (RecentsClearTarget) -> Unit,
-    onSaveSearch: ((String, RecentSearchEntry) -> Unit)? = null,
+    saves: RecentSearchSaves? = null,
     onRemoveSearch: ((RecentSearchEntry) -> Unit)? = null,
     onRemovePost: ((RecentPostEntry) -> Unit)? = null,
     removedSearch: RecentSearchEntry? = null,
@@ -91,14 +87,12 @@ fun RecentsScreen(
     var showMenu by remember { mutableStateOf(false) }
     var selectedSource by rememberSaveable(stateSaver = NullableSourceKeySaver) { mutableStateOf<SourceKey?>(null) }
     val visible = rememberVisibleRecents(watchedPosts, codexPosts, searches, fypSearches, activity, selectedSource)
-    val sourceEmptyMessage = selectedSource?.let { "No recent activity from ${it.displayName()}." }
     val openWatchedPost: (Int) -> Unit = { onOpenWatchedPost(visible.watchedPosts, it) }
     val openCodexPost: (Int) -> Unit = { onOpenCodexPost(visible.codexPosts, it) }
     val now = remember(watchedPosts, codexPosts, searches, fypSearches, activity) { System.currentTimeMillis() }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var selectedActionSection by remember { mutableStateOf(RecentPostSection.WATCHED) }
-    var searchToRename by remember { mutableStateOf<RecentSearchEntry?>(null) }
-    val saving = rememberRecentSearchSaving(onSaveSearch) { searchToRename = it }
+    val saving = rememberRecentSearchSaving(saves)
     val rows = RecentsRowActions(saving, removedSearch, onRemoveSearch, onRemovePost)
     val cards = rememberRecentsPostCards(pixivUgoiraClient, likedPostIds, durations, onToggleLike)
     val relatedSlot = rememberRecentsRelated(related, filter, selectedSource, visible, cards, onShownPostsChanged) { selectedActionPost = it }
@@ -114,7 +108,7 @@ fun RecentsScreen(
         }
 
         RecentsTab(
-            filter, searchFilter, { searchFilter = it }, visible, sourceEmptyMessage, now, cards, relatedSlot,
+            filter, searchFilter, { searchFilter = it }, visible, now, cards, relatedSlot,
             { post, section ->
                 selectedActionPost = post
                 selectedActionSection = section
@@ -140,14 +134,11 @@ fun RecentsScreen(
             }.takeIf { maxOf(post.mediaCount ?: 1, post.media.size) > 1 },
             onShowRelated = related?.let { shelf -> { shelf.controller.show(post) } },
             liked = post.id in likedPostIds, onToggleLike = onToggleLike,
+            onRemoveFromCodex = onRemovePost?.let { remove ->
+                visible.entryFor(post, selectedActionSection)?.let { entry -> { remove(entry) } }
+            },
+            removeLabel = REMOVE_FROM_HISTORY,
         )
-    }
-
-    searchToRename?.let { entry ->
-        SavedSearchNameDialog(savedSearchName(entry), renaming = true, { searchToRename = null }) { name ->
-            onSaveSearch?.invoke(name, entry)
-            searchToRename = null
-        }
     }
 }
 
@@ -162,37 +153,6 @@ fun RecentsLoading(header: LibrarySectionHeader = BareSectionHeader) {
         LoadingState(Modifier.fillMaxSize())
     }
 }
-
-/** Saves at once under the query's own name; the saved search shows "Saved · Rename" for [SAVED_CONFIRM_MS]. */
-@Composable
-private fun rememberRecentSearchSaving(
-    onSaveSearch: ((String, RecentSearchEntry) -> Unit)?,
-    onRename: (RecentSearchEntry) -> Unit,
-): RecentSearchSaving? {
-    var saved by remember { mutableStateOf<RecentSearchEntry?>(null) }
-    LaunchedEffect(saved) {
-        if (saved != null) {
-            delay(SAVED_CONFIRM_MS)
-            saved = null
-        }
-    }
-    val save = onSaveSearch ?: return null
-    return RecentSearchSaving(
-        saved = saved,
-        save = { entry ->
-            save(savedSearchName(entry), entry)
-            saved = entry
-        },
-        rename = { entry ->
-            saved = null
-            onRename(entry)
-        },
-    )
-}
-
-private fun savedSearchName(entry: RecentSearchEntry) = recentSearchPresentation(entry).title.take(MAX_SAVED_SEARCH_NAME_LENGTH)
-
-private const val SAVED_CONFIRM_MS = 5_000L
 
 @Composable
 private fun RecentsSourceSelector(selectedSource: SourceKey?, onSelected: (SourceKey?) -> Unit) {
@@ -244,14 +204,22 @@ private fun RecentsSectionSelector(filter: RecentsFilter, onSelected: (RecentsFi
     }
 }
 
-/** Recents after the source filter; everything the tabs show comes from here. */
+/** Recents after the [source] filter; everything the tabs show comes from here. */
 internal class VisibleRecents(
     val watchedPosts: List<RecentPostEntry>,
     val codexPosts: List<RecentPostEntry>,
     val searches: List<RecentSearchEntry>,
     val fypSearches: List<RecentSearchEntry>,
     val activity: List<RecentActivityEntry>,
-)
+    private val source: SourceKey?,
+) {
+    /** Whether the source filter lets [entry] through, so a removed search's Undo placeholder belongs here. */
+    fun shows(entry: RecentSearchEntry) = entry.matchesSource(source)
+
+    /** The History entry [post] was long-pressed as, if it is one (related posts are not). */
+    fun entryFor(post: Post, section: RecentPostSection): RecentPostEntry? =
+        (if (section == RecentPostSection.CODEX) codexPosts else watchedPosts).firstOrNull { it.post.id == post.id }
+}
 
 @Composable
 private fun rememberVisibleRecents(
@@ -268,6 +236,7 @@ private fun rememberVisibleRecents(
         searches.filter { it.matchesSource(source) },
         fypSearches.filter { it.matchesSource(source) },
         activity.filter { it.matchesSource(source) },
+        source,
     )
 }
 

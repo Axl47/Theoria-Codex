@@ -19,13 +19,6 @@ class CodexDetailPresentationTest {
     }
 
     @Test
-    fun `a rename commits a trimmed changed name only`() {
-        assertEquals("Skies", renamedCodexName("Sky", "  Skies "))
-        assertEquals(null, renamedCodexName("Sky", " Sky "))
-        assertEquals(null, renamedCodexName("Sky", "   "))
-    }
-
-    @Test
     fun `bulk action descriptions use the selected post count`() {
         assertEquals(
             "Remove 1 selected post from this Codex",

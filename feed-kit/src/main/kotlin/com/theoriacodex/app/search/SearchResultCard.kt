@@ -103,6 +103,7 @@ fun SearchResultCard(
     onLongPress: (() -> Unit)? = null,
     onViewportChanged: (Boolean) -> Unit = {},
     onAuthoritativeDurationKnown: (Long) -> Unit = {},
+    modifier: Modifier = Modifier,
 ) {
     val viewerReturn = LocalViewerReturnTransition.current
     val viewerReturnGrid = LocalViewerReturnGrid.current
@@ -126,7 +127,7 @@ fun SearchResultCard(
         post, mediaGeometry::boundsInWindow, liked, onToggleLike, onLongPress,
     )
     ElevatedCard(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .testTag(searchCardTestTag(post.id))
             .clickable {
