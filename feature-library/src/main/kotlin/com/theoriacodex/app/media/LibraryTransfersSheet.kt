@@ -67,16 +67,12 @@ fun LibraryTransfersSheet(
         UndoLeaveEffect(LIBRARY_TRANSFERS_UNDO_SCOPE)
         val liveAnchor = LocalUndoSlot.current.offer.collectAsStateWithLifecycle().value?.anchor
             ?.takeIf { it.scope == LIBRARY_TRANSFERS_UNDO_SCOPE }
-        val items = remember(batches) { batches.asReversed().flatMap { it.items } }
-        val shownItems = items.filter { it.id !in hiddenDownloads || liveAnchor == downloadUndoAnchor(it.id) }
-        val offlineUndo = liveAnchor?.takeIf { it.key == OfflineAllUndoAnchor.key || it.key in offline.hiddenOwners }
-        val downloadsUndo = liveAnchor?.takeIf { it == DownloadsUndoAnchor }
+        val content = TransfersSheetContent(offline, batches, hiddenDownloads, liveAnchor)
         val marked = markedCodexId?.let(::codexOfflineOwner)
         val grid = rememberLazyGridState()
-        val offlineRowsStart = 1 + listOfNotNull(offline.message, offlineUndo).size
         LaunchedEffect(marked) {
             val row = offline.owners.indexOfFirst { it.id == marked }
-            if (row >= 0) grid.scrollToItem(offlineRowsStart + row)
+            if (row >= 0) grid.scrollToItem(content.offlineRowsStart + row)
         }
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
@@ -85,21 +81,48 @@ fun LibraryTransfersSheet(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            val showOffline = offline.owners.isNotEmpty() || offlineUndo != null || offline.message != null
-            val showDownloads = shownItems.isNotEmpty() || downloadsUndo != null
-            if (!showOffline && !showDownloads) fullLine("empty") { EmptyState("Nothing offline or downloaded") }
-            if (showOffline) offlineSection(offline, offlineActions, offlineUndo, marked)
-            if (showDownloads) {
-                fullLine("downloads-header") { DownloadsHeader(batches, items.filter { it.id !in hiddenDownloads }, downloadActions) }
-                downloadsUndo?.let { anchor -> fullLine("downloads-undo") { UndoRow(anchor) } }
-                items(shownItems, key = { "download:${it.id}" }) { item ->
-                    if (item.id in hiddenDownloads) {
-                        UndoRow(downloadUndoAnchor(item.id))
-                    } else {
-                        DownloadItemCard(item, batches.firstOrNull { batch -> batch.items.any { it.id == item.id } }, downloadActions)
-                    }
-                }
-            }
+            if (!content.showOffline && !content.showDownloads) fullLine("empty") { EmptyState("Nothing offline or downloaded") }
+            if (content.showOffline) offlineSection(offline, offlineActions, content.offlineUndo, marked)
+            if (content.showDownloads) downloadsSection(content, batches, hiddenDownloads, downloadActions)
+        }
+    }
+}
+
+/**
+ * What the sheet lists given the live Undo offer ([liveAnchor]): a hidden download keeps its slot, drawn as
+ * Undo, while its own offer lives; section-wide offers draw under their section's header.
+ */
+private class TransfersSheetContent(
+    offline: OfflineStorageUiState,
+    batches: List<PostDownloadBatch>,
+    hiddenDownloads: Set<Long>,
+    liveAnchor: UndoAnchor?,
+) {
+    private val items = batches.asReversed().flatMap { it.items }
+    val visibleItems = items.filter { it.id !in hiddenDownloads }
+    val shownItems = items.filter { it.id !in hiddenDownloads || liveAnchor == downloadUndoAnchor(it.id) }
+    val offlineUndo = liveAnchor?.takeIf { it.key == OfflineAllUndoAnchor.key || it.key in offline.hiddenOwners }
+    val downloadsUndo = liveAnchor?.takeIf { it == DownloadsUndoAnchor }
+    val showOffline = offline.owners.isNotEmpty() || offlineUndo != null || offline.message != null
+    val showDownloads = shownItems.isNotEmpty() || downloadsUndo != null
+
+    /** The grid index of the first offline owner row: after the header, any message and any Undo row. */
+    val offlineRowsStart = 1 + listOfNotNull(offline.message, offlineUndo).size
+}
+
+private fun LazyGridScope.downloadsSection(
+    content: TransfersSheetContent,
+    batches: List<PostDownloadBatch>,
+    hidden: Set<Long>,
+    actions: DownloadTileActions,
+) {
+    fullLine("downloads-header") { DownloadsHeader(batches, content.visibleItems, actions) }
+    content.downloadsUndo?.let { anchor -> fullLine("downloads-undo") { UndoRow(anchor) } }
+    items(content.shownItems, key = { "download:${it.id}" }) { item ->
+        if (item.id in hidden) {
+            UndoRow(downloadUndoAnchor(item.id))
+        } else {
+            DownloadItemCard(item, batches.firstOrNull { batch -> batch.items.any { it.id == item.id } }, actions)
         }
     }
 }

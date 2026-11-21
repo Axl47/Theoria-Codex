@@ -93,10 +93,11 @@ private fun OfflineOwnerMenu(owner: OfflineStorageOwner, enabled: Boolean, actio
 /** What the row says is kept: posts available, or the running job's progress. */
 internal fun offlineOwnerStatus(owner: OfflineStorageOwner): String {
     val job = owner.job
+    val kept = if (owner.availablePosts == 1) "1 post offline" else "${owner.availablePosts} posts offline"
     return when {
         owner.preparing -> "Loading Codex"
         job?.isRunning == true -> "Saving ${job.completedPosts} of ${job.totalPosts}"
-        job?.isCancelled == true -> "Cancelled · ${owner.availablePosts} posts offline"
-        else -> "${owner.availablePosts} posts offline"
+        job?.isCancelled == true -> "Cancelled · $kept"
+        else -> kept
     }
 }
