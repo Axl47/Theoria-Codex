@@ -119,6 +119,25 @@ class ViewerVerticalGalleryTest {
         }
     }
 
+    @Test fun `opening and closing the overview keeps a vertical gallery's scroll position`() {
+        show()
+        repeat(2) { compose.onRoot().performTouchInput { swipeUp(startY = centerY + height / 4f, endY = centerY - height / 4f) } }
+        compose.waitForIdle()
+        val before = pagePosition()
+        assertTrue("scrolled past page 1: $before", before.first > 1)
+        compose.runOnIdle { state.value = reduceViewerState(state.value, ViewerAction.ToggleOverview).state }
+        compose.onNodeWithText("Vertical").assertIsDisplayed()
+        compose.runOnIdle { state.value = reduceViewerState(state.value, ViewerAction.ToggleOverview).state }
+        compose.waitForIdle()
+        assertEquals(before, pagePosition())
+    }
+
+    /** The first page on screen and how far its top sits from the screen's top. */
+    private fun pagePosition(): Pair<Int, Float> {
+        val page = (1..gallery.media.size).first { runCatching { compose.onNodeWithContentDescription("Page $it").assertIsDisplayed() }.isSuccess }
+        return page to compose.onNodeWithContentDescription("Page $page").fetchSemanticsNode().positionInRoot.y
+    }
+
     @Test fun `the overview switches a gallery's reading mode`() {
         val chosen = mutableListOf<Pair<PostId, GalleryReadingMode>>()
         state.value = reduceViewerState(state.value, ViewerAction.ToggleOverview).state

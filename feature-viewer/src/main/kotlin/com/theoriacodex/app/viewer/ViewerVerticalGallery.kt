@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -123,8 +122,12 @@ internal fun ViewerVerticalGallery(
     val post = pageState.post
     val pages = pageState.media
     val isCurrentPost = postPage == frame.navigation.currentIndex
-    val list = rememberLazyListState(initialFirstVisibleItemIndex = pageState.selectedMediaIndex.coerceIn(0, maxOf(0, pages.lastIndex)))
-    val gallery = remember(list) { ViewerVerticalGalleryState(list) }
+    val gallery = remember(post.id) {
+        screen.verticalGalleryPositions.getOrPut(post.id) {
+            ViewerVerticalGalleryState(LazyListState(pageState.selectedMediaIndex.coerceIn(0, maxOf(0, pages.lastIndex))))
+        }
+    }
+    val list = gallery.list
     DisposableEffect(post.id, gallery) {
         screen.verticalGalleries[post.id] = gallery
         onDispose { if (screen.verticalGalleries[post.id] === gallery) screen.verticalGalleries.remove(post.id) }

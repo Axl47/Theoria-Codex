@@ -56,8 +56,10 @@ internal fun ViewerPostPagerSurface(
     val selection = frame.selection
     // Pinches write the transform every pointer event; only crossing the zoomed boundary changes the pager.
     val zoomed by remember(viewerTransform) { derivedStateOf { viewerTransform.value.isZoomed } }
-    val verticalGallery = screen.verticalGalleries[selection.post.id]
-        ?.takeIf { config.readingModeOf(frame.uiState.currentPage) == GalleryReadingMode.VERTICAL }
+    val vertical = config.readingModeOf(frame.uiState.currentPage) == GalleryReadingMode.VERTICAL
+    val verticalGallery = screen.verticalGalleries[selection.post.id]?.takeIf { vertical }
+    // Only the shown layout's zoom holds the gestures: a horizontal zoom left over from before a switch to Vertical must not.
+    val layoutZoomed = if (vertical) verticalGallery?.zoomed == true else zoomed
     val reservedBottom = if (frame.chromeVisible && selection.isAnimated) {
         with(LocalDensity.current) { (VIEWER_TIMELINE_HEIGHT + LocalViewerPostStripInset.current).toPx() }
     } else 0f
@@ -65,7 +67,7 @@ internal fun ViewerPostPagerSurface(
         Modifier.fillMaxSize()
             .viewerGestures(
                 ViewerGestureConfig(
-                    enabled = !zoomed && verticalGallery?.zoomed != true && !frame.inPictureInPicture && !frame.touchExplorationEnabled &&
+                    enabled = !layoutZoomed && !frame.inPictureInPicture && !frame.touchExplorationEnabled &&
                         !screen.pendingDismiss && !frame.returning && !frame.opening,
                     levels = levelControls,
                     volumeAdjustable = selection.media?.let(::isVideoMediaRef) == true,
