@@ -41,6 +41,7 @@ import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.related.RelatedPostsUiState
+import com.theoriacodex.app.related.ViewerFeedSnapshot
 import com.theoriacodex.app.viewer.ViewerMediaPrefetcher
 import com.theoriacodex.app.viewer.ViewerPostDurations
 import com.theoriacodex.app.viewer.ViewerPostResolver
@@ -85,51 +86,32 @@ internal data class ViewerRouteDependencies(
     val onCodexUsageTargetChanged: (CodexUsageTarget?) -> Unit = {},
 )
 
-/** Immutable source-owner snapshot consumed by a live Viewer session. */
-internal data class ViewerRouteLiveSourceSnapshot(
-    val queryHash: String? = null,
-    val results: List<Post> = emptyList(),
-    val canLoadMore: Boolean = false,
-    val loadingMore: Boolean = false,
-    val retainedLikedPostIds: Set<PostId> = emptySet(),
-    val relatedPosts: RelatedPostsUiState = RelatedPostsUiState.Idle,
-)
-
 /**
- * Route-owned Search, For You, and Creator state needed to extend a live Viewer stream.
+ * The live feeds a Viewer stream can extend from, keyed by the stream each one launches, plus the library state
+ * their visibility filters read.
  *
  * Exact query identity prevents a source refresh or route replacement from appending unrelated
  * posts. Visibility policy is applied at the Viewer boundary so newly paged posts obey the same
  * filters as the launch payload.
  */
 internal data class ViewerRouteLiveSourceState(
-    val search: ViewerRouteLiveSourceSnapshot = ViewerRouteLiveSourceSnapshot(),
-    val forYou: ViewerRouteLiveSourceSnapshot = ViewerRouteLiveSourceSnapshot(),
-    val creatorProfile: ViewerRouteLiveSourceSnapshot = ViewerRouteLiveSourceSnapshot(),
+    val feeds: Map<ViewerStreamSource, ViewerFeedSnapshot> = emptyMap(),
     val likedPostIds: Set<PostId> = emptySet(),
     val savedPostIds: Set<PostId> = emptySet(),
     val watchedPostIds: Set<PostId> = emptySet(),
     val unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy =
         UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS,
 ) {
-    fun forSource(source: ViewerStreamSource): ViewerRouteLiveSourceSnapshot? = when (source) {
-        ViewerStreamSource.SEARCH -> search
-        ViewerStreamSource.FOR_YOU -> forYou
-        ViewerStreamSource.CREATOR_PROFILE -> creatorProfile
-        ViewerStreamSource.RELATED,
-        ViewerStreamSource.CODEX,
-        ViewerStreamSource.RECENTS,
-        -> null
-    }
+    fun forSource(source: ViewerStreamSource): ViewerFeedSnapshot? = feeds[source]
 
-    fun relatedSourceFor(session: ViewerSession): ViewerRouteLiveSourceSnapshot? {
+    fun relatedSourceFor(session: ViewerSession): ViewerFeedSnapshot? {
         val source = session.relatedBinding?.source ?: session.context.streamSource
         val query = session.relatedBinding?.queryHash ?: session.context.queryHash
         return forSource(source)?.takeIf { it.queryHash == query }
     }
 
     /** The snapshot of the source [session] was launched from, while that source still shows the launch's query. */
-    fun matching(session: ViewerSession?): ViewerRouteLiveSourceSnapshot? = session?.let { active ->
+    fun matching(session: ViewerSession?): ViewerFeedSnapshot? = session?.let { active ->
         forSource(active.context.streamSource)?.takeIf { snapshot -> snapshot.queryHash == active.context.queryHash }
     }
 

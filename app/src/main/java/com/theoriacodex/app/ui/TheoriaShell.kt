@@ -54,7 +54,6 @@ import com.theoriacodex.app.creator.CreatorFollowsViewModel
 import com.theoriacodex.app.creator.CreatorProfileViewModel
 import com.theoriacodex.app.creator.CreatorOpeningWorkflow
 import com.theoriacodex.app.source.FileCopyLookup
-import com.theoriacodex.app.creator.state.CreatorAction
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.media.PostDownloadItem
 import com.theoriacodex.app.post.PostMutationViewModel
@@ -64,6 +63,7 @@ import com.theoriacodex.app.recents.fypSeedBySource
 import com.theoriacodex.app.recommend.ForYouViewModel
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.related.LikeToggleOutcome
+import com.theoriacodex.app.related.ViewerFeedOwner
 import com.theoriacodex.app.search.SearchViewModel
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchSourceScope
@@ -135,6 +135,13 @@ internal class RouteOwners {
     val viewer = RouteOwnerSlot<ViewerViewModel>()
     private val pendingSearchActions = PendingRouteActions<SearchAction>()
     private val pendingForYouActions = PendingRouteActions<ForYouAction>()
+
+    /** The live feeds a Viewer session can follow. */
+    val feeds: List<ViewerFeedOwner>
+        get() = listOfNotNull(search.current, forYou.current, creator.current)
+
+    /** The live feed that launches Viewer streams from [source], if any. */
+    fun feed(source: ViewerStreamSource): ViewerFeedOwner? = feeds.firstOrNull { feed -> feed.streamSource == source }
 
     fun close() {
         search.clear()
@@ -379,9 +386,7 @@ internal class TheoriaShell(
         data = data,
         cacheScope = scope,
         sources = sources,
-        searchOwner = { routes.search.current },
-        forYouOwner = { routes.forYou.current },
-        creatorOwner = { routes.creator.current },
+        feedOwner = routes::feed,
         offlineMedia = features.offlineMedia,
     )
     /** Saves one tag, or an "or" group with an optional name, for the active profile. */
@@ -486,40 +491,17 @@ internal class TheoriaShell(
         }
     }
 
-    /** A like action bound to the Search owner and query current now; a later query ignores its result. */
-    fun searchLikeAction(): (Post) -> Unit {
-        val owner = routes.search.current
-        val query = owner?.state?.value?.query?.appliedQueryHash
+    /**
+     * A like action bound to the feed behind [source] and the query it shows now: a committed like opens or clears
+     * that feed's related shelf, unless the feed has since moved to another query or owner.
+     */
+    fun feedLikeAction(source: ViewerStreamSource): (Post) -> Unit {
+        val owner = routes.feed(source)
+        val queryHash = owner?.viewerFeed?.queryHash
         return { post ->
             toggleLikeAndSyncCodex(post) { outcome ->
-                if (owner?.state?.value?.query?.appliedQueryHash == query) {
-                    owner?.onAction(SearchAction.RelatedLikeCommitted(post, outcome))
-                }
-            }
-        }
-    }
-
-    /** A like action bound to the For You owner and seed current now; a later seed ignores its result. */
-    fun forYouLikeAction(): (Post) -> Unit {
-        val owner = routes.forYou.current
-        val seed = owner?.state?.value?.seedId
-        return { post ->
-            toggleLikeAndSyncCodex(post) { outcome ->
-                if (owner?.state?.value?.seedId == seed) {
-                    owner?.onAction(ForYouAction.RelatedLikeCommitted(post, outcome))
-                }
-            }
-        }
-    }
-
-    /** A like action bound to the Creator owner and query current now; a later query ignores its result. */
-    fun creatorLikeAction(): (Post) -> Unit {
-        val owner = routes.creator.current
-        val query = owner?.state?.value?.queryHash
-        return { post ->
-            toggleLikeAndSyncCodex(post) { outcome ->
-                if (owner?.state?.value?.queryHash == query) {
-                    owner?.onAction(CreatorAction.RelatedLikeCommitted(post, outcome))
+                if (owner != null && routes.feed(source) === owner && owner.viewerFeed.queryHash == queryHash) {
+                    owner.related.onLikeCommitted(post, outcome)
                 }
             }
         }

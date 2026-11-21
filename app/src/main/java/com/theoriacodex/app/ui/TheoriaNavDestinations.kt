@@ -34,7 +34,6 @@ import com.theoriacodex.app.related.RelatedPostsRouteController
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.related.RelatedShelfBinding
 import com.theoriacodex.app.related.requestOrNull
-import com.theoriacodex.app.related.retainedLikedPostIds
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.ui.components.codexFeedFabContext
 import com.theoriacodex.app.ui.components.creatorFeedFabContext
@@ -51,7 +50,6 @@ import com.theoriacodex.app.ui.routes.ViewerDestinationStateBoundary
 import com.theoriacodex.app.ui.routes.ViewerRoute
 import com.theoriacodex.app.ui.routes.ViewerRouteDependencies
 import com.theoriacodex.app.ui.routes.ViewerRouteEffectCallbacks
-import com.theoriacodex.app.ui.routes.ViewerRouteLiveSourceSnapshot
 import com.theoriacodex.app.ui.routes.ViewerRouteLiveSourceState
 import com.theoriacodex.app.ui.routes.virtualCodexUi
 import com.theoriacodex.app.viewer.ViewerRelatedBinding
@@ -258,7 +256,7 @@ private fun CreatorDestination(shell: TheoriaShell) {
             callbacks = CreatorRouteCallbacks(
                 onToggleFollow = shell.owners.follows::toggle,
                 onOpenViewer = { effect ->
-                    val likeAction = shell.creatorLikeAction()
+                    val likeAction = shell.feedLikeAction(ViewerStreamSource.CREATOR_PROFILE)
                     shell.viewerSessions.retain(
                         shell.viewerRouteWorkflow.prepareResumableSession(ViewerSession(
                             posts = effect.posts,
@@ -276,7 +274,7 @@ private fun CreatorDestination(shell: TheoriaShell) {
                     }
                 },
                 onNavigateBack = { shell.navController.popBackStack() },
-                onToggleLike = { post -> shell.creatorLikeAction()(post) },
+                onToggleLike = { post -> shell.feedLikeAction(ViewerStreamSource.CREATOR_PROFILE)(post) },
                 onRequestSaveToCodex = { post -> shell.requestSaveToCodex(post) },
                 onSaveToDevice = shell::requestSaveToDevice,
                 onOpenUrl = { url -> openInBrowser(shell.appContext, url) },
@@ -299,9 +297,7 @@ private fun ViewerDestination(shell: TheoriaShell) {
     ViewerDestinationStateBoundary(
         data = shell.data,
         sources = shell.sources,
-        searchOwner = routes.search.current,
-        forYouOwner = routes.forYou.current,
-        creatorOwner = routes.creator.current,
+        feedOwners = routes.feeds,
     ) { state ->
         ViewerRoute(
             dependencies = ViewerRouteDependencies(
@@ -340,33 +336,12 @@ private fun ViewerDestination(shell: TheoriaShell) {
     }
 }
 
+/** Pending likes stay visible in a feed that hides liked posts until the like commits or fails. */
 private fun viewerLiveSourceState(
     state: ViewerDestinationState,
     pendingLikes: Set<com.theoriacodex.domain.model.PostId>,
 ) = ViewerRouteLiveSourceState(
-    search = ViewerRouteLiveSourceSnapshot(
-        queryHash = state.search.query.appliedQueryHash.takeIf(String::isNotBlank),
-        results = state.search.content.results,
-        relatedPosts = state.search.relatedPosts,
-        retainedLikedPostIds = state.search.relatedPosts.retainedLikedPostIds + pendingLikes,
-        canLoadMore = state.search.content.canLoadMore,
-        loadingMore = state.search.loadingMore,
-    ),
-    forYou = ViewerRouteLiveSourceSnapshot(
-        queryHash = "for_you:${state.forYou.seedId}",
-        relatedPosts = state.forYou.relatedPosts,
-        results = state.forYou.results,
-        canLoadMore = state.forYou.canLoadMore,
-        loadingMore = state.forYou.isPaging,
-    ),
-    creatorProfile = ViewerRouteLiveSourceSnapshot(
-        queryHash = state.creator.queryHash,
-        results = state.creator.results,
-        relatedPosts = state.creator.relatedPosts,
-        retainedLikedPostIds = state.creator.relatedPosts.retainedLikedPostIds + pendingLikes,
-        canLoadMore = state.creator.canLoadMore,
-        loadingMore = state.creator.isPaging,
-    ),
+    feeds = state.feeds.mapValues { (_, feed) -> feed.copy(retainedLikedPostIds = feed.retainedLikedPostIds + pendingLikes) },
     likedPostIds = state.browsing.likedPostIds,
     savedPostIds = state.browsing.savedPostIds,
     watchedPostIds = state.browsing.watchedPostIds,

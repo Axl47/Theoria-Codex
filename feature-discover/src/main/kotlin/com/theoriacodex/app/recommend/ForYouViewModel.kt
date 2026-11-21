@@ -27,6 +27,9 @@ import com.theoriacodex.app.related.RelatedPostsLoading
 import com.theoriacodex.app.related.RelatedPostsRouteController
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
+import com.theoriacodex.app.related.ViewerFeedOwner
+import com.theoriacodex.app.related.ViewerFeedSnapshot
+import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.app.ui.state.RouteStateOwner
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
@@ -44,6 +47,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
@@ -59,7 +64,7 @@ class ForYouViewModel(
     coroutineScope: CoroutineScope? = null,
     relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
     reconnections: Flow<Unit> = emptyFlow(),
-) : ViewModel(), RouteStateOwner<ForYouUiState, ForYouAction, ForYouEffect> {
+) : ViewModel(), RouteStateOwner<ForYouUiState, ForYouAction, ForYouEffect>, ViewerFeedOwner {
     constructor(
         coordinator: ForYouCoordinator,
         savedStateHandle: SavedStateHandle,
@@ -116,6 +121,10 @@ class ForYouViewModel(
     override val state: StateFlow<ForYouUiState> = mutableState.asStateFlow()
     private val effectChannel = Channel<ForYouEffect>(capacity = Channel.BUFFERED)
     override val effects: Flow<ForYouEffect> = effectChannel.receiveAsFlow()
+    override val streamSource = ViewerStreamSource.FOR_YOU
+    override val viewerFeed: ViewerFeedSnapshot get() = mutableState.value.viewerFeed()
+    override val viewerFeedChanges: Flow<ViewerFeedSnapshot> = mutableState.map { it.viewerFeed() }.distinctUntilChanged()
+    override val related: RelatedPostsRouteController get() = relatedPosts
 
     private val home = ForYouHomeController(
         scope = ownerScope, engine = engine, state = { mutableState.value },
@@ -323,7 +332,9 @@ class ForYouViewModel(
 
     suspend fun resolvePost(postId: PostId): Post? = engine.resolvePost(postId)?.also(::rememberResolvedPost)
 
-    fun rememberResolvedPost(post: Post) {
+    override fun loadNextPage() = onAction(ForYouAction.LoadNextPage)
+
+    override fun rememberResolvedPost(post: Post) {
         val current = mutableState.value
         mutableState.value = current.copy(results = current.results.replacingPostSnapshot(post))
     }
@@ -477,3 +488,11 @@ class ForYouViewModel(
         internal const val KEY_SORT_MODE = "for_you_sort_mode"
     }
 }
+
+private fun ForYouUiState.viewerFeed() = ViewerFeedSnapshot(
+    queryHash = "for_you:$seedId",
+    results = results,
+    canLoadMore = canLoadMore,
+    loadingMore = isPaging,
+    relatedPosts = relatedPosts,
+)

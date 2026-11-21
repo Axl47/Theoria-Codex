@@ -152,7 +152,7 @@ class OfflineViewerWorkflowTest {
     }
 
     private fun kotlinx.coroutines.test.TestScope.workflow(graph: JourneyAppContainer) = ViewerRouteWorkflow(
-        graph.data, this, graph.sources, { null }, { null }, { null }, offlineMedia = graph.features.offlineMedia,
+        graph.data, this, graph.sources, { null }, offlineMedia = graph.features.offlineMedia,
     )
 
     private fun assertLocalGallery(post: Post, directory: File) {

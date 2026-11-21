@@ -99,7 +99,7 @@ private fun SearchDestination(shell: TheoriaShell) {
                 onOpenSourceAccounts = { shell.owners.settings.onAction(SettingsAction.OpenCustomSites) },
                 onOpenViewer = { effect -> shell.openSearchViewer(effect) },
                 onShowMessage = { message -> Toast.makeText(shell.appContext, message, Toast.LENGTH_SHORT).show() },
-                onToggleLike = { post -> shell.searchLikeAction()(post) },
+                onToggleLike = { post -> shell.feedLikeAction(ViewerStreamSource.SEARCH)(post) },
                 onOpenCreatorProfile = shell::launchOpenCreator,
                 onOpenLegacyCreatorProfile = shell::launchOpenCreator,
                 onRequestSaveToCodex = { post ->
@@ -130,7 +130,7 @@ private fun searchRouteConfig(shell: TheoriaShell, state: BrowsingDestinationSta
 
 /** Binds the Viewer's like action and related posts to the Search query current at this tap. */
 private suspend fun TheoriaShell.openSearchViewer(effect: SearchEffect.OpenViewer) {
-    val likeAction = searchLikeAction()
+    val likeAction = feedLikeAction(ViewerStreamSource.SEARCH)
     val current = routes.search.current?.state?.value?.query
     viewerSessions.retain(
         viewerRouteWorkflow.prepareResumableSession(ViewerSession(
@@ -176,7 +176,7 @@ private fun ForYouDestination(shell: TheoriaShell) {
                 onOpenSourceAccounts = { shell.owners.settings.onAction(SettingsAction.OpenCustomSites) },
                 onShowMessage = { message -> Toast.makeText(shell.appContext, message, Toast.LENGTH_SHORT).show() },
                 onSeedHidden = { _, _ -> shell.showActionableFeedback("Seed hidden", "Undo") },
-                onToggleLike = { post -> shell.forYouLikeAction()(post) },
+                onToggleLike = { post -> shell.feedLikeAction(ViewerStreamSource.FOR_YOU)(post) },
                 onRequestSaveToCodex = { post -> shell.requestSaveToCodex(post, fromForYou = true) },
                 onSaveToDevice = shell::requestSaveToDevice,
                 onOpenCreatorProfile = shell::launchOpenCreator,
@@ -198,7 +198,7 @@ private fun ForYouDestination(shell: TheoriaShell) {
 
 /** Binds the Viewer's like action and related posts to the For You seed current at this tap. */
 private suspend fun TheoriaShell.openForYouViewer(effect: ForYouEffect.OpenViewer) {
-    val likeAction = forYouLikeAction()
+    val likeAction = feedLikeAction(ViewerStreamSource.FOR_YOU)
     viewerSessions.retain(
         viewerRouteWorkflow.prepareResumableSession(ViewerSession(
             posts = effect.posts,

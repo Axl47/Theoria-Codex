@@ -1,6 +1,7 @@
 package com.theoriacodex.app.ui.routes
 
 import androidx.lifecycle.SavedStateHandle
+import com.theoriacodex.app.related.ViewerFeedSnapshot
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.testing.SteppedDispatcher
 import com.theoriacodex.app.testing.testPost
@@ -27,7 +28,7 @@ class ViewerLiveSourceAppendTest {
 
     // The feed has loaded p3 and p4; p4 is liked, and the launch hides liked posts.
     private val source = ViewerRouteLiveSourceState(
-        search = ViewerRouteLiveSourceSnapshot(queryHash = "q", results = posts),
+        feeds = mapOf(ViewerStreamSource.SEARCH to ViewerFeedSnapshot(queryHash = "q", results = posts)),
         likedPostIds = setOf(posts[3].id),
     )
 

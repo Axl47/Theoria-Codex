@@ -161,7 +161,7 @@ class ViewerRestorationWorkflowTest {
             graph.awaitReady()
             val workflow = ViewerRouteWorkflow(
                 graph.data.copy(readingPositions = FileBackedReadingPositionRepository(graph.data.storageDirectory)),
-                this, graph.sources, { null }, { null }, { null },
+                this, graph.sources, { null },
                 providerDispatcher = StandardTestDispatcher(testScheduler),
             )
             block(graph, workflow)

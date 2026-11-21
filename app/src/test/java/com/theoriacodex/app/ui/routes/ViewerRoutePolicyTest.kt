@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModelStore
 import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.viewer.ViewerSession
+import com.theoriacodex.app.related.ViewerFeedSnapshot
 import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.state.ViewerEffect
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
@@ -28,26 +29,25 @@ import org.junit.Test
 class ViewerRoutePolicyTest {
     @Test
     fun `related launches keep explicit origin and reject a replaced source query`() {
-        val snapshot = ViewerRouteLiveSourceSnapshot(queryHash = "origin")
-        val state = ViewerRouteLiveSourceState(search = snapshot)
+        val snapshot = ViewerFeedSnapshot(queryHash = "origin")
+        val state = ViewerRouteLiveSourceState(feeds = mapOf(ViewerStreamSource.SEARCH to snapshot))
         val related = session("related:PIXIV:seed", ViewerStreamSource.RELATED, SearchVisibilityFilters())
         val bound = related.copy(relatedBinding = com.theoriacodex.app.viewer.ViewerRelatedBinding(ViewerStreamSource.SEARCH, "origin"))
         assertEquals(snapshot, state.relatedSourceFor(bound))
         assertEquals(null, state.relatedSourceFor(related))
-        assertEquals(null, state.copy(search = snapshot.copy(queryHash = "replacement")).relatedSourceFor(bound))
+        assertEquals(null, state.copy(feeds = mapOf(ViewerStreamSource.SEARCH to snapshot.copy(queryHash = "replacement"))).relatedSourceFor(bound))
     }
 
     @Test
     fun `search and creator viewer retain liked seeds until related shelf dismissal`() {
         val liked = post("liked")
-        val snapshot = ViewerRouteLiveSourceSnapshot(
+        val snapshot = ViewerFeedSnapshot(
             queryHash = "active",
             results = listOf(liked),
             retainedLikedPostIds = setOf(liked.id),
         )
         val state = ViewerRouteLiveSourceState(
-            search = snapshot,
-            creatorProfile = snapshot,
+            feeds = mapOf(ViewerStreamSource.SEARCH to snapshot, ViewerStreamSource.CREATOR_PROFILE to snapshot),
             likedPostIds = setOf(liked.id),
             savedPostIds = setOf(liked.id),
         )
@@ -55,8 +55,7 @@ class ViewerRoutePolicyTest {
             val session = session("active", source, SearchVisibilityFilters(hideLiked = true, hideSaved = true))
             assertEquals(listOf(liked), state.visiblePostsFor(session))
             assertEquals(emptyList<Post>(), state.copy(
-                search = snapshot.copy(retainedLikedPostIds = emptySet()),
-                creatorProfile = snapshot.copy(retainedLikedPostIds = emptySet()),
+                feeds = state.feeds.mapValues { (_, feed) -> feed.copy(retainedLikedPostIds = emptySet()) },
             ).visiblePostsFor(session))
         }
     }
@@ -126,10 +125,10 @@ class ViewerRoutePolicyTest {
             ),
         )
         val state = ViewerRouteLiveSourceState(
-            search = ViewerRouteLiveSourceSnapshot(
+            feeds = mapOf(ViewerStreamSource.SEARCH to ViewerFeedSnapshot(
                 queryHash = "search:active",
                 results = listOf(liked, saved, watched, visible),
-            ),
+            )),
             likedPostIds = setOf(liked.id),
             savedPostIds = setOf(saved.id),
             watchedPostIds = setOf(watched.id),
@@ -138,7 +137,7 @@ class ViewerRoutePolicyTest {
         assertEquals(listOf(visible), state.visiblePostsFor(session))
         assertNull(
             state.copy(
-                search = state.search.copy(queryHash = "search:replacement"),
+                feeds = state.feeds.mapValues { (_, feed) -> feed.copy(queryHash = "search:replacement") },
             ).visiblePostsFor(session),
         )
     }
@@ -152,11 +151,11 @@ class ViewerRoutePolicyTest {
             filters = SearchVisibilityFilters(hideLiked = true),
         )
         val state = ViewerRouteLiveSourceState(
-            forYou = ViewerRouteLiveSourceSnapshot(
+            feeds = mapOf(ViewerStreamSource.FOR_YOU to ViewerFeedSnapshot(
                 queryHash = "for_you:seed",
                 results = listOf(liked),
                 canLoadMore = true,
-            ),
+            )),
             likedPostIds = setOf(liked.id),
         )
 

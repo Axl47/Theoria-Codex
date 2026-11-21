@@ -237,7 +237,7 @@ class CreatorProfileViewModelTest {
         val owner = CreatorProfileViewModel(engine, SavedStateHandle(), this, CreatorRelatedLoader { listOf(testPost(sourcePostId = "similar")) })
         owner.onAction(CreatorAction.OpenCreator(creator(SourceKey.PIXIV, "creator")))
         advanceUntilIdle()
-        val shelves = ViewerRelatedShelves({ null }, { null }, { owner })
+        val shelves = ViewerRelatedShelves { source -> owner.takeIf { it.streamSource == source } }
 
         listOf(ViewerStreamSource.SEARCH, ViewerStreamSource.FOR_YOU, ViewerStreamSource.CODEX).forEach { shelves.show(it, seed) }
         advanceUntilIdle()
