@@ -1,6 +1,5 @@
 package com.theoriacodex.app.codex
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -9,8 +8,6 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BookmarkAdd
@@ -20,26 +17,19 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.ui.components.InlineNameField
 import com.theoriacodex.domain.model.Post
 
 /** What Codex detail's own header can do beyond selection; null entries hide their control. */
@@ -100,7 +90,7 @@ internal fun CodexEditableHeader(
 
 /**
  * Back, the Codex's name and post count, and [actions]. With [onRename], tapping the name turns it into a text
- * field in place: keyboard Done commits a changed name, Back or an empty name leaves it as it was.
+ * field in place: keyboard Done or leaving the field commits a changed name, Back or an empty name leaves it as it was.
  */
 @Composable
 private fun CodexTitleBar(
@@ -117,7 +107,10 @@ private fun CodexTitleBar(
     ) {
         IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
         if (renaming && onRename != null) {
-            CodexNameField(codexName, Modifier.weight(1f)) { name ->
+            InlineNameField(
+                codexName, MaterialTheme.typography.titleMedium,
+                Modifier.weight(1f).padding(end = 8.dp).testTag("codex-name-field"),
+            ) { name ->
                 renaming = false
                 name?.let(onRename)
             }
@@ -150,28 +143,6 @@ private fun CodexTitle(codexName: String, summary: String, modifier: Modifier, o
         )
     }
 }
-
-/** The title being renamed; [onDone] gets the new name, or null when nothing should change. */
-@Composable
-private fun CodexNameField(codexName: String, modifier: Modifier, onDone: (String?) -> Unit) {
-    var value by remember { mutableStateOf(TextFieldValue(codexName, TextRange(0, codexName.length))) }
-    val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focus.requestFocus() }
-    BackHandler { onDone(null) }
-    OutlinedTextField(
-        value = value,
-        onValueChange = { value = it },
-        singleLine = true,
-        textStyle = MaterialTheme.typography.titleMedium,
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = { onDone(renamedCodexName(codexName, value.text)) }),
-        modifier = modifier.padding(end = 8.dp).focusRequester(focus).testTag("codex-name-field"),
-    )
-}
-
-/** The name a rename commits: trimmed, or null when it is empty or unchanged. */
-internal fun renamedCodexName(current: String, typed: String): String? =
-    typed.trim().takeIf { it.isNotEmpty() && it != current }
 
 @Composable
 private fun CodexSelectionActions(

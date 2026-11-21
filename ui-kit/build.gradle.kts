@@ -42,6 +42,8 @@ dependencies {
     implementation(project(":core-domain"))
     implementation(project(":core-data"))
 
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(platform(libs.androidx.compose.bom))
