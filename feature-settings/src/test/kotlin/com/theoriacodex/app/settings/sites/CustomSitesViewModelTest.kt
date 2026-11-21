@@ -283,6 +283,31 @@ class CustomSitesViewModelTest {
         assertTrue(owner.state.value.form is SiteForm.Edit)
     }
 
+    @Test fun `an agent typed beside an invalid referer is saved, and the referer once corrected`() = runTest {
+        controller.sites.value = listOf(site())
+        val owner = owner()
+        owner.onAction(CustomSitesAction.StartEdit("custom_safebooru_org"))
+        owner.onAction(CustomSitesAction.SetUserAgent("U1"))
+        owner.onAction(CustomSitesAction.SetReferer("a\nb"))
+        advanceTimeBy(TYPING_SAVE_DELAY.inWholeMilliseconds + 1)
+        owner.onAction(CustomSitesAction.SetReferer("https://ref.example/"))
+        owner.onAction(CustomSitesAction.CloseForm)
+        runCurrent()
+        val expected = listOf(CustomSiteEdit(userAgent = HeaderEdit.Replace("U1")), CustomSiteEdit(referer = HeaderEdit.Replace("https://ref.example/")))
+        assertEquals(expected, controller.edits.map { it.second })
+    }
+
+    @Test fun `a blank name waits unsaved while the opt-in beside it is saved`() = runTest {
+        controller.sites.value = listOf(site())
+        val owner = owner()
+        owner.onAction(CustomSitesAction.StartEdit("custom_safebooru_org"))
+        owner.onAction(CustomSitesAction.SetLabel(" "))
+        owner.onAction(CustomSitesAction.SetIncludeInUnifiedAndForYou(true))
+        owner.onAction(CustomSitesAction.CloseForm)
+        runCurrent()
+        assertEquals(listOf(CustomSiteEdit(includeInUnifiedAndForYou = true)), controller.edits.map { it.second })
+    }
+
     @Test fun `closing the edit page saves a name still waiting`() = runTest {
         controller.sites.value = listOf(site())
         val owner = owner()
