@@ -3,11 +3,15 @@ package com.theoriacodex.app.codex
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Style
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilterChip
@@ -16,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,35 +28,80 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.tags.TagCount
 import com.theoriacodex.app.ui.components.SingleChoiceMenu
 import com.theoriacodex.app.ui.navigation.TriageMode
 import com.theoriacodex.app.ui.navigation.TriageRequest
 import com.theoriacodex.app.ui.navigation.TriageSeed
 import com.theoriacodex.app.ui.navigation.rememberTriageAction
 import com.theoriacodex.data.repository.CodexSortMode
+import com.theoriacodex.domain.model.Post
 
 /** Codex detail's sort, the sorts it offers, and the transient tag filter, for [CodexDetailChipRow]. */
 internal class CodexDetailChips(
     val sortMode: CodexSortMode,
     val sortModes: List<CodexSortMode>,
     val onSortChange: (CodexSortMode) -> Unit,
-    val tags: List<CodexTagCount>,
-    val selectedTagKey: String?,
-    val onSelectTag: (String?) -> Unit,
+    val tagFilter: CodexTagFilter,
     val onTriage: (() -> Unit)?,
 )
 
 /**
- * The match key of the tag filtering Codex [codexId], cleared when [tags] no longer offer it. Transient: a quick look
- * inside this Codex, so it is neither a saved filter nor part of the restore record.
+ * Codex detail's tag filter: the Codex's [tags] (most common first; [known] once computed), the match keys of the
+ * [selected] ones, which the grid keeps posts carrying all of, and the tag [sheet] that chooses any of them.
+ */
+internal class CodexTagFilter(
+    val tags: List<TagCount>,
+    val selected: List<String>,
+    val onSelectedChange: (List<String>) -> Unit,
+    val sheet: CodexTagSheet?,
+    val onSheetChange: (CodexTagSheet?) -> Unit,
+    val known: Boolean = true,
+) {
+    /** The chosen tags as spelled on screen, in the order chosen. */
+    val selectedTags: List<String> get() = selected.mapNotNull { key -> tags.firstOrNull { it.key == key }?.tag }
+
+    /** Adds the tag of [key] to the filter, or takes it out when it is in. */
+    fun toggle(key: String) = onSelectedChange(if (key in selected) selected - key else selected + key)
+}
+
+/**
+ * Codex [codexId]'s tag filter over [posts], whose tags are computed off the main thread. Once they are known for the
+ * loaded Codex ([settled]), chosen tags it no longer offers are dropped. The chosen tags are transient, a quick look
+ * inside this Codex, so neither a saved filter nor part of the restore record; they and the open sheet survive
+ * recreation. [sheetRequested] (from outside the screen, such as a Library tile's menu) opens the sheet and is then
+ * reported handled through [onSheetRequestHandled].
  */
 @Composable
-internal fun rememberCodexTagFilter(codexId: String, tags: List<CodexTagCount>): MutableState<String?> {
-    val key = rememberSaveable(codexId) { mutableStateOf<String?>(null) }
-    LaunchedEffect(tags) { if (tags.none { it.key == key.value }) key.value = null }
-    return key
+internal fun rememberCodexTagFilter(
+    codexId: String,
+    posts: List<Post>,
+    settled: Boolean,
+    sheetRequested: Boolean,
+    onSheetRequestHandled: () -> Unit,
+): CodexTagFilter {
+    val tags by rememberCodexTags(posts)
+    var keys by rememberSaveable(codexId, saver = TagKeysSaver) { mutableStateOf(emptyList()) }
+    var sheet by rememberSaveable { mutableStateOf<CodexTagSheet?>(null) }
+    LaunchedEffect(tags, settled) {
+        tags?.takeIf { settled }?.let { known -> keys = keys.filter { key -> known.any { it.key == key } } }
+    }
+    LaunchedEffect(sheetRequested) {
+        if (sheetRequested) {
+            sheet = CodexTagSheet.Filter
+            onSheetRequestHandled()
+        }
+    }
+    return CodexTagFilter(tags.orEmpty(), keys, { keys = it }, sheet, { sheet = it }, known = tags != null)
 }
+
+private val TagKeysSaver = Saver<MutableState<List<String>>, ArrayList<String>>(
+    save = { ArrayList(it.value) },
+    restore = { mutableStateOf(it) },
+)
 
 /**
  * The Triage chip's action for Codex [codexId], where a left swipe removes the post from it. Likes keeps the plain
@@ -71,15 +121,20 @@ internal fun codexSortModes(hasAnimatedPosts: Boolean, current: CodexSortMode): 
     CodexSortMode.entries.filter { hasAnimatedPosts || !it.usesDuration || it == current }
 
 /**
- * The row under Codex detail's header: the sort as a chip with a menu, Triage, then the Codex's most common tags.
- * A tag filters the grid at once; tapping it again clears it.
+ * The row under Codex detail's header: the tag filter, the sort as a chip with a menu, Triage, then the Codex's most
+ * common tags as shortcuts. The first chip opens the tag sheet and shows and clears the filter; a shortcut adds its
+ * tag to the filter at once, and tapping it again takes it out.
  */
 @Composable
 internal fun CodexDetailChipRow(chips: CodexDetailChips, modifier: Modifier = Modifier) {
+    val filter = chips.tagFilter
     LazyRow(
         modifier = modifier.fillMaxWidth().testTag("codex-chip-row"),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        item(key = "tags") {
+            CodexTagFilterChip(filter.selectedTags, { filter.onSheetChange(CodexTagSheet.Filter) }) { filter.onSelectedChange(emptyList()) }
+        }
         item(key = "sort") { CodexSortChip(chips.sortMode, chips.sortModes, chips.onSortChange) }
         chips.onTriage?.let { triage ->
             item(key = "triage") {
@@ -90,15 +145,44 @@ internal fun CodexDetailChipRow(chips: CodexDetailChips, modifier: Modifier = Mo
                 )
             }
         }
-        items(chips.tags, key = { "tag:${it.key}" }) { tag ->
-            val selected = tag.key == chips.selectedTagKey
+        items(filter.tags.take(CODEX_TAG_CHIP_LIMIT), key = { "tag:${it.key}" }) { tag ->
             FilterChip(
-                selected = selected,
-                onClick = { chips.onSelectTag(tag.key.takeUnless { selected }) },
+                selected = tag.key in filter.selected,
+                onClick = { filter.toggle(tag.key) },
                 label = { Text(tag.tag) },
             )
         }
     }
+}
+
+/** "Tags" until tags are chosen, then the chosen tags with a button that clears them. */
+@Composable
+private fun CodexTagFilterChip(selectedTags: List<String>, onOpen: () -> Unit, onClear: () -> Unit) {
+    val active = selectedTags.isNotEmpty()
+    FilterChip(
+        selected = active,
+        onClick = onOpen,
+        label = {
+            Text(
+                if (active) selectedTags.joinToString(", ") else "Tags",
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 200.dp),
+            )
+        },
+        leadingIcon = { Icon(Icons.Default.Sell, contentDescription = null, Modifier.size(18.dp)) },
+        trailingIcon = if (active) {
+            {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "Clear tags",
+                    modifier = Modifier.size(18.dp).clickable(onClickLabel = "Clear tags", role = Role.Button, onClick = onClear),
+                )
+            }
+        } else {
+            null
+        },
+    )
 }
 
 @Composable

@@ -44,7 +44,7 @@ class CreatorNewPostsPolicyTest {
             testPost(sourcePostId = "3", canonicalTags = listOf("sea", "fog")),
         )
         val tags = creatorTopTags(tagged)
-        assertEquals(listOf("sea" to 3, "fog" to 2), tags.map { it.name to it.count })
+        assertEquals(listOf("sea" to 3, "fog" to 2), tags.map { it.tag to it.count })
         assertEquals("1", tags.first().from.id.sourcePostId)
     }
 }

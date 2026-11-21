@@ -17,7 +17,7 @@ import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
@@ -92,19 +92,6 @@ internal fun CodexListOverlays(
     }
 
     CodexAutoSaveOverlay(presentation, state, actions)
-
-    state.searchTarget?.let { codex ->
-        CodexTagSearchSheet(
-            codexName = codex.name,
-            sources = presentation.searchSourceOptions[codex.codexId].orEmpty(),
-            terms = presentation.searchTerms,
-            onDismiss = { state.searchTarget = null },
-            onSearch = { source, query ->
-                state.searchTarget = null
-                actions.searchFromCodex(codex.codexId, source, query)
-            },
-        )
-    }
 }
 
 @Composable
@@ -221,7 +208,7 @@ private fun CodexActionSheet(
         CodexActionRows(
             codex = codex,
             isLikesCodex = isLikesCodex,
-            searchEnabled = presentation.searchSourceOptions[codex.codexId].orEmpty().isNotEmpty(),
+            hasPosts = (presentation.itemCounts[codex.codexId] ?: 0) > 0,
             state = state,
             actions = actions,
         )
@@ -246,14 +233,12 @@ private fun CodexActionHeader(codex: Codex, presentation: CodexListPresentation)
 private fun CodexActionRows(
     codex: Codex,
     isLikesCodex: Boolean,
-    searchEnabled: Boolean,
+    hasPosts: Boolean,
     state: CodexListUiState,
     actions: CodexListActions,
 ) {
     val close = { state.actionTarget = null }
-    ActionMenuRow(Icons.Default.Search, "Search with these tags", searchEnabled) {
-        state.searchTarget = codex; close()
-    }
+    ActionMenuRow(Icons.Default.Sell, "Filter by tag", hasPosts) { close(); actions.filterByTag(codex.codexId) }
     ActionMenuRow(Icons.Default.Share, "Share") { close(); actions.shareCodex(codex.codexId) }
     ActionMenuDivider()
     ActionMenuRow(Icons.Default.Download, "Download") { close(); actions.downloadCodex(codex.codexId) }

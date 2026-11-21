@@ -478,7 +478,7 @@ internal class TheoriaShell(
         navigation.goToTab(TopLevelDestination.Search)
         val tags = query.effectiveIncludeTermGroups.map { group -> group.terms.joinToString(" or ") { it.value } } +
             query.excludeTerms.map { "-${it.value}" }
-        toast("Searching ${source.displayName()} codex tags: ${tags.joinToString(separator = ", ")}")
+        toast("Searching ${source.displayName()} Codex tags: ${tags.joinToString(separator = ", ")}")
     }
 
     suspend fun downloadCodex(codexId: String) {
@@ -497,10 +497,10 @@ internal class TheoriaShell(
     suspend fun shareCodex(codexId: String) {
         val export = workflows.codexTransfer.export(codexId)
         if (export !is CodexExportResult.Success) {
-            toast(if (export is CodexExportResult.NotFound) "Codex not found" else "Could not export codex")
+            toast(if (export is CodexExportResult.NotFound) "Codex not found" else "Could not export Codex")
             return
         }
-        if (!shareExportDocument(export.payload, "application/json", "Share codex")) toast("Could not export codex")
+        if (!shareExportDocument(export.payload, "application/json", "Share Codex")) toast("Could not export Codex")
     }
 
     suspend fun shareStats(file: StatsShareFile) {

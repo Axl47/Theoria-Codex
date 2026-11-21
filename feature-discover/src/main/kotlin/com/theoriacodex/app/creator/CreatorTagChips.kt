@@ -15,7 +15,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.tags.TagPickerChip
-import com.theoriacodex.app.tags.postActionTerms
+import com.theoriacodex.app.tags.TagCount
+import com.theoriacodex.app.tags.topTags
 import com.theoriacodex.app.ui.navigation.LocalTrailOpener
 import com.theoriacodex.app.ui.navigation.TrailOpener
 import com.theoriacodex.app.ui.navigation.TrailRequest
@@ -24,22 +25,13 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SearchTerm
 import kotlinx.coroutines.launch
 
-/** One of a creator's most common tags, with a loaded post carrying it for the Trail to fork from. */
-internal data class CreatorTag(val name: String, val count: Int, val from: Post)
-
 /**
  * The general tags most of [posts] carry, most common first (ties keep first-seen order). A tag on a single post
- * says nothing about the creator, so only tags on at least two posts count.
+ * says nothing about the creator, so only tags on at least two posts count. Each keeps a loaded post carrying it
+ * for the Trail to fork from.
  */
-internal fun creatorTopTags(posts: List<Post>, limit: Int = CREATOR_TAG_LIMIT): List<CreatorTag> {
-    val counts = linkedMapOf<String, CreatorTag>()
-    posts.forEach { post ->
-        postActionTerms(post).filter(SearchTerm::isGeneralTag).map(SearchTerm::value).distinct().forEach { tag ->
-            counts[tag] = counts[tag]?.let { it.copy(count = it.count + 1) } ?: CreatorTag(tag, 1, post)
-        }
-    }
-    return counts.values.filter { it.count >= 2 }.sortedByDescending(CreatorTag::count).take(limit)
-}
+internal fun creatorTopTags(posts: List<Post>): List<TagCount> =
+    topTags(posts, CREATOR_TAG_LIMIT, counted = 2..Int.MAX_VALUE, includeTerm = SearchTerm::isGeneralTag)
 
 /** The creator's common tags across the posts loaded so far; a tap opens a Trail of that tag. */
 @Composable
@@ -55,20 +47,20 @@ internal fun CreatorTagChips(creator: CreatorProfile, posts: List<Post>) {
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        items(tags, key = CreatorTag::name) { tag ->
+        items(tags, key = TagCount::tag) { tag ->
             TagPickerChip(
-                label = tag.name,
+                label = tag.tag,
                 count = null,
                 compact = true,
-                tapLabel = "Start a trail from ${tag.name}",
-                enabled = busy == null && tag.name !in empty,
-                stateSuffix = "no posts".takeIf { tag.name in empty },
+                tapLabel = "Start a trail from ${tag.tag}",
+                enabled = busy == null && tag.tag !in empty,
+                stateSuffix = "no posts".takeIf { tag.tag in empty },
                 onTap = {
-                    busy = tag.name
+                    busy = tag.tag
                     scope.launch {
                         try {
-                            val opened = opener.openTrail(TrailRequest.Tag(tag.name, creator.source, context = null, from = tag.from))
-                            if (!opened) empty += tag.name
+                            val opened = opener.openTrail(TrailRequest.Tag(tag.tag, creator.source, context = null, from = tag.from))
+                            if (!opened) empty += tag.tag
                         } finally { busy = null }
                     }
                 },

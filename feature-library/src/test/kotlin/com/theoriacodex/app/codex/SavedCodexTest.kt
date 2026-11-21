@@ -24,7 +24,7 @@ class SavedCodexTest {
             MaterialTheme {
                 CodexListScreen(codices, mapOf("ordinary" to 2, likesId to 4), emptyMap(),
                     { kotlinx.coroutines.flow.flowOf(CodexActionOptions()) },
-                    {}, {}, {}, {}, { _, _, _ -> }, {}, {}, { _, _ -> }, { _, _, _ -> }, {},
+                    {}, {}, {}, {}, {}, {}, {}, { _, _ -> }, { _, _, _ -> }, {},
                     likesId, { _, _ -> })
             }
         }

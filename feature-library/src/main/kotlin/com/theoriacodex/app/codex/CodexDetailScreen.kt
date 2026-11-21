@@ -14,6 +14,7 @@ import androidx.activity.compose.BackHandler
 import com.theoriacodex.app.media.isAnimatedPost
 import androidx.compose.runtime.MutableState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.theoriacodex.app.media.animatedDurationRangeLabel
@@ -51,6 +52,8 @@ import androidx.compose.runtime.setValue
 import com.theoriacodex.app.ui.components.LoadingState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
@@ -70,6 +73,7 @@ import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 
 /** Not answered yet is not the same as gone; saying so would flash on every first open. */
@@ -82,8 +86,8 @@ private fun CodexUnavailable(loading: Boolean, onBack: () -> Unit) {
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("This codex no longer exists.", style = MaterialTheme.typography.titleMedium)
-        TextButton(onClick = onBack) { Text("Back to codex list") }
+        Text("Codex not found", style = MaterialTheme.typography.titleMedium)
+        TextButton(onClick = onBack) { Text("Back") }
     }
 }
 
@@ -116,6 +120,11 @@ fun CodexDetailScreen(
     likedPostIds: Set<PostId> = emptySet(),
     onToggleLike: ((Post) -> Unit)? = null,
     related: RelatedShelfBinding? = null,
+    /** Takes the tag sheet's chosen tags to a site search; null leaves Search sites out. */
+    onSearchSites: ((SourceKey, Query) -> Unit)? = null,
+    /** Asks the screen to open its tag sheet, as a Library tile's Filter by tag does. */
+    tagSheetRequested: Boolean = false,
+    onTagSheetRequestHandled: () -> Unit = {},
 ) {
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var showFilterSheet by remember { mutableStateOf(false) }
@@ -125,9 +134,8 @@ fun CodexDetailScreen(
     val supportsLanguage = remember(sourceOptions) { supportsCodexLanguageFilter(sourceOptions.toSet()) }
     val supportsFullColor = remember(sourceOptions) { supportsCodexFullColorFilter(sourceOptions.toSet()) }
     val filters = remember(fabRestoreState) { fabRestoreState.savedCollectionFilters() }
-    val tags = remember(posts) { codexTopTags(posts) }
-    var tagKey by rememberCodexTagFilter(codexId, tags)
-    val feed = rememberCodexDetailFeed(codexId, posts, filters, durations, related, sortMode, tagKey)
+    val tagFilter = rememberCodexTagFilter(codexId, posts, settled = !loading, tagSheetRequested, onTagSheetRequestHandled)
+    val feed = rememberCodexDetailFeed(codexId, posts, filters, durations, related, sortMode, tagFilter.selected)
     val applyFilters = { updated: CodexCollectionFilters -> onFabRestoreStateChange(fabRestoreState.withCollectionFilters(updated)) }
     CodexFilterReconciliationEffect(filters, sourceOptions, supportsLanguage, supportsFullColor, applyFilters)
     val resolveAllDurations = feed.durationFilterActive || sortMode.usesDuration
@@ -140,7 +148,7 @@ fun CodexDetailScreen(
     val chips = CodexDetailChips(
         sortMode, codexSortModes(posts.any(::isAnimatedPost), sortMode),
         { updatedSort -> onFabRestoreStateChange(fabRestoreState.copy(sortMode = updatedSort.name)) },
-        tags, tagKey, { tagKey = it },
+        tagFilter,
         // Followed and Saved searches pass a custom header; the deck only knows Codices, which Likes is one of.
         rememberCodexTriageAction(codexId, real = customHeader == null, seed = feed.triageSeed()),
     )
@@ -156,7 +164,7 @@ fun CodexDetailScreen(
         },
     ) { padding ->
         CodexDetailBody(
-            padding, codexId, codexName, posts, feed, related, filters.isActive || tagKey != null, chips, customHeader, customFiltersActive,
+            padding, codexId, codexName, posts, feed, related, filters.isActive || tagFilter.selected.isNotEmpty(), chips, customHeader, customFiltersActive,
             editSelection, { editSelection = it }, likedPostIds, onToggleLike, loading, gridState, pixivUgoiraClient, resolvePostById,
             durations, onOpenViewer, { selectedActionPost = it }, emptyMessage, headerActions, onBack, onAddPostsToAnotherCodex, onRemovePosts,
         )
@@ -167,6 +175,7 @@ fun CodexDetailScreen(
             customFilters?.let { content -> ({ content { showFilterSheet = false } }) },
         )
     }
+    CodexTagSheets(tagFilter, codexName, posts, availableSources, onSearchSites)
     selectedActionPost?.let { post ->
         FeedPostActionSheet(
             post, creatorBrowsingSources, { selectedActionPost = null }, onSavePostToDevice, { onAddPostsToAnotherCodex(listOf(it)) },
@@ -220,8 +229,11 @@ private fun CodexDetailBody(
     onAddPostsToAnotherCodex: (List<Post>) -> Unit,
     onRemovePosts: (List<Post>) -> Unit,
 ) {
+    val focusManager = LocalFocusManager.current
     Column(
-        modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 12.dp)
+            // A tap nothing else takes leaves the title's rename field, which commits it.
+            .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } },
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (customHeader != null) {
@@ -268,16 +280,16 @@ private fun CodexDetailFilterFab(
 }
 
 /**
- * Keeps the posts the collection's saved filters and its transient [tagKey] let through; compared by equality, so
+ * Keeps the posts the collection's saved filters and its transient [tagKeys] let through; compared by equality, so
  * a filter change refilters.
  */
-private data class CodexPostFilter(val filters: CodexCollectionFilters, val tagKey: String?) : FeedPostFilter {
+private data class CodexPostFilter(val filters: CodexCollectionFilters, val tagKeys: List<String>) : FeedPostFilter {
     override fun filter(posts: List<Post>, knownDurationMsByPostId: Map<PostId, Long>): List<Post> =
-        filterCodexCollectionPosts(posts, filters, knownDurationMsByPostId).withCodexTag(tagKey)
+        filterCodexCollectionPosts(posts, filters, knownDurationMsByPostId).withCodexTags(tagKeys)
 }
 
 /**
- * The grid's feed for Codex [codexId]: [posts] after the length step, [filters] and the tag of [tagKey], plus the
+ * The grid's feed for Codex [codexId]: [posts] after the length step, [filters] and the tags of [tagKeys], plus the
  * related shelf of [relatedShelf] when the collection has one. The shelf takes only the collection's media filters.
  */
 @Composable
@@ -288,7 +300,7 @@ internal fun rememberCodexDetailFeed(
     durations: FeedDurations,
     relatedShelf: RelatedShelfBinding?,
     sortMode: CodexSortMode,
-    tagKey: String? = null,
+    tagKeys: List<String> = emptyList(),
 ): FeedView {
     val visibility = remember(filters.animatedOnly, filters.animatedDurationRange) {
         SearchVisibilityFilters(animatedOnly = filters.animatedOnly, animatedDurationRange = filters.animatedDurationRange)
@@ -297,7 +309,7 @@ internal fun rememberCodexDetailFeed(
         "codex-detail:$codexId", posts, visibility, durations, relatedShelf?.state ?: RelatedPostsUiState.Idle,
         // The filter's reveal keeps shown cards in place, which a length sort must not do as lengths arrive.
         revealInOrder = !sortMode.usesDuration,
-        postFilter = remember(filters, tagKey) { CodexPostFilter(filters, tagKey) },
+        postFilter = remember(filters, tagKeys) { CodexPostFilter(filters, tagKeys) },
     )
 }
 
@@ -379,13 +391,9 @@ private fun CodexDetailEmptyState(collectionIsEmpty: Boolean, loading: Boolean, 
     } else {
         FeedEmptyTile(
             // A live feed (Followed, saved searches) is not a Codex, so it states only what to do.
-            title = when {
-                emptyMessage != null -> null
-                collectionIsEmpty -> "This codex is empty"
-                else -> "No matching posts"
-            },
+            title = "No matching posts".takeUnless { emptyMessage != null || collectionIsEmpty },
             message = emptyMessage ?: when {
-                collectionIsEmpty -> "Browse and save posts"
+                collectionIsEmpty -> "No posts"
                 resolvingDurations -> "Resolving durations…"
                 else -> "Adjust your filters"
             },

@@ -43,7 +43,7 @@ class CodexCleaningUiTest {
             CodexListScreen(
                 codices = codices.value, itemCounts = emptyMap(), codexCoverCandidates = emptyMap(),
                 observeActionOptions = { flowOf(CodexActionOptions()) }, onOpenCodex = {}, onImportCodex = {},
-                onDownloadCodex = {}, onShareCodex = {}, onSearchFromCodex = { _, _, _ -> }, onCommitReorder = {},
+                onDownloadCodex = {}, onShareCodex = {}, onFilterByTag = {}, onCommitReorder = {},
                 onCreateCodex = {}, onRenameCodex = { _, _ -> }, onSetAutomaticTag = { _, _, _ -> }, onDeleteCodex = {},
                 likesCodexId = likesId, onCleanCodex = { id, sources -> submitted = id to sources },
             )

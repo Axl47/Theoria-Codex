@@ -208,7 +208,7 @@ internal fun CodexLibraryDestination(
             onShareCodex = { codexId ->
                 shell.scope.launch(start = CoroutineStart.UNDISPATCHED) { shell.shareCodex(codexId) }
             },
-            onSearchFromCodex = { _, source, query -> shell.searchFromCodex(source, query) },
+            onFilterByTag = shell::openCodexTagSheet,
             onCleanCodex = { targetId, comparisonIds ->
                 commands.clean(state.activeProfile.profileId, targetId, comparisonIds, undoAnchor)
             },

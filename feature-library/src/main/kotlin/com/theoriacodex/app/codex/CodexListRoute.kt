@@ -14,8 +14,6 @@ import com.theoriacodex.data.repository.CodexLibrarySort
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flowOf
@@ -31,7 +29,7 @@ fun CodexListScreen(
     onImportCodex: () -> Unit,
     onDownloadCodex: (String) -> Unit,
     onShareCodex: (String) -> Unit,
-    onSearchFromCodex: (String, SourceKey, Query) -> Unit,
+    onFilterByTag: (String) -> Unit,
     onCommitReorder: (List<String>) -> Unit,
     onCreateCodex: (String) -> Unit,
     onRenameCodex: (String, String) -> Unit,
@@ -53,29 +51,27 @@ fun CodexListScreen(
             actionTarget = codices.firstOrNull { it.codexId == initialActionCodexId }
         }
     }
-    val targetId = state.actionTarget?.codexId ?: state.autoSaveTarget?.codexId ?: state.searchTarget?.codexId
+    val targetId = state.actionTarget?.codexId ?: state.autoSaveTarget?.codexId
     var retry by remember(targetId) { mutableIntStateOf(0) }
     val options = key(targetId, retry) { rememberCodexActionOptions(targetId, observeActionOptions) }
     val presentation = CodexListPresentation(
         codices, itemCounts, codexCoverCandidates,
-        targetId?.let { mapOf(it to options.options.sources) }.orEmpty(),
         targetId?.let { mapOf(it to options.options.tags) }.orEmpty(), likesCodexId,
         actionLoading = options.loading,
         actionFailed = options.failed,
         retryActionOptions = { retry++ },
         librarySort = librarySort,
         libraryUsage = libraryUsage,
-        searchTerms = options.options.searchTerms,
         observeCleaningMatches = observeCleaningMatches,
     )
     val actions = CodexListActions(
-        onOpenCodex, onImportCodex, onDownloadCodex, onShareCodex, onSearchFromCodex,
+        onOpenCodex, onImportCodex, onDownloadCodex, onShareCodex, onFilterByTag,
         onCommitReorder, onCreateCodex, onRenameCodex, onSetAutomaticTag, onDeleteCodex,
         onCleanCodex, onMakeAvailableOffline, onLibrarySortChange,
     )
     LaunchedEffect(codices) { state.synchronizeCodices(codices) }
     if (initialActionCodexId == null) CodexListContent(presentation, state, actions, header)
-    val hasOverlay = state.actionTarget != null || state.autoSaveTarget != null || state.searchTarget != null ||
+    val hasOverlay = state.actionTarget != null || state.autoSaveTarget != null ||
         state.renameTarget != null ||
         state.deleteTarget != null || state.cleaningTargetId != null
     LaunchedEffect(hasOverlay) {

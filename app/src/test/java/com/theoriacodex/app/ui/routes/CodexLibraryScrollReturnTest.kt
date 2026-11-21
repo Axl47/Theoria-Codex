@@ -145,7 +145,7 @@ class CodexLibraryScrollReturnTest {
                                     onImportCodex = {},
                                     onDownloadCodex = {},
                                     onShareCodex = {},
-                                    onSearchFromCodex = { _, _, _ -> },
+                                    onFilterByTag = {},
                                     onCommitReorder = {},
                                     onCreateCodex = {},
                                     onRenameCodex = { _, _ -> },
