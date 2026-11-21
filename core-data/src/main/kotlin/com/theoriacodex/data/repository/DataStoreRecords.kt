@@ -137,6 +137,9 @@ internal fun normalizeUiRestoreState(state: PersistedUiRestoreState): PersistedU
         scrollStates = boundedScrollStates,
         feedFabRestoreStates = boundedFabStates,
         viewerLaunchContext = state.viewerLaunchContext,
+        savedSearchNewPosts = state.savedSearchNewPosts.copy(
+            marks = state.savedSearchNewPosts.marks.entries.take(MAX_SAVED_SEARCHES).associate { it.key to it.value },
+        ),
     )
 }
 

@@ -42,7 +42,7 @@ import kotlinx.coroutines.launch
 internal fun LibraryDestination(shell: TheoriaShell) {
     val store = shell.data.librarySections
     val section by store.section.collectAsStateWithLifecycle()
-    val marked = if (rememberSavedNewCounts(shell.data).isEmpty()) emptySet() else setOf(LibrarySection.Saved)
+    val marked = if (rememberSavedNewPosts(shell.data).isEmpty()) emptySet() else setOf(LibrarySection.Saved)
     val header: LibrarySectionHeader = { actions ->
         LibraryHeader(section, store::select, onOpenSettings = { shell.openSettings() }, marked = marked, actions = actions)
     }

@@ -38,7 +38,8 @@ import com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID
 import com.theoriacodex.app.codex.filterCodexCollectionPosts
 import com.theoriacodex.app.codex.newFirst
 import com.theoriacodex.app.ui.components.newPostsLabel
-import com.theoriacodex.app.ui.rememberSavedNewCounts
+import com.theoriacodex.app.ui.rememberSavedNewPosts
+import com.theoriacodex.data.repository.markKey
 import com.theoriacodex.app.codex.likesCodexIdForProfile
 import com.theoriacodex.app.codex.savedCollectionFilters
 import com.theoriacodex.app.codex.savedCodexChildren
@@ -92,10 +93,9 @@ internal fun SavedCodexRoute(
     val likesId = likesCodexIdForProfile(profileId)
     val likesCount = rememberRetained("likes:$profileId") { data.likesRepository.observeLikedPostIds(profileId) }.value?.size ?: return
     val counts = mapOf(likesId to likesCount, FOLLOWED_CODEX_ID to settings.followedCreators.size, SAVED_SEARCHES_CODEX_ID to searches.size)
-    val newCounts = rememberSavedNewCounts(data)
-    val newFollowedPosts = remember(settings.followedCreators) { settings.followedCreators.flatMap { it.newPostIds }.toSet() }
+    val news = rememberSavedNewPosts(data)
     val scroll = rememberLazyListState()
-    val children = remember(likesId, newCounts) { savedCodexChildren(likesId).newFirst(newCounts) }
+    val children = remember(likesId, news) { savedCodexChildren(likesId).newFirst(news) }
     val shelfIds = remember(children) { children.map { ViewerReturnShelfId.Saved(it.codexId) } }
     ScrollToTopOnTabReselect(TopLevelDestination.Library) { scroll.animateScrollToItem(0) }
     Column(Modifier.fillMaxSize()) {
@@ -105,8 +105,7 @@ internal fun SavedCodexRoute(
                 verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 children.forEach { child ->
                     item(key = child.codexId) {
-                        val news = SavedShelfNews(newCounts[child.codexId] ?: 0, newFollowedPosts.takeIf { child.codexId == FOLLOWED_CODEX_ID })
-                        SavedCodexShelf(child, counts.getValue(child.codexId), news, data, sources, features, restoreRegistry, { scroll.isScrollInProgress },
+                        SavedCodexShelf(child, counts.getValue(child.codexId), news[child.codexId].orEmpty(), data, sources, features, restoreRegistry, { scroll.isScrollInProgress },
                             SavedShelfActions({ onOpenCodex(child.codexId) }, { onOpenCodexActions(child.codexId) },
                                 { posts, position -> onOpenViewer(child.codexId, posts, position) }, resolvePost, onToggleLike))
                     }
@@ -125,9 +124,6 @@ internal fun SavedBackHeader(onBack: () -> Unit) {
     }
 }
 
-/** A shelf's unseen posts: how many, and which to show first (Followed knows them by ID). */
-private class SavedShelfNews(val count: Int, val postIds: Set<PostId>?)
-
 /** What a Saved shelf can do: open its collection or its actions, open a post, and like. */
 private class SavedShelfActions(
     val open: () -> Unit,
@@ -141,7 +137,7 @@ private class SavedShelfActions(
 private fun SavedCodexShelf(
     child: Codex,
     count: Int,
-    news: SavedShelfNews,
+    news: Set<String>,
     data: DataDependencies,
     sources: SourceDependencies,
     features: FeatureDependencies,
@@ -168,7 +164,7 @@ private fun SavedCodexSection(
     id: String,
     title: String,
     count: Int,
-    news: SavedShelfNews,
+    news: Set<String>,
     restore: FeedFabRestoreState,
     sort: CodexSortMode,
     owner: MediaDurationRouteViewModel,
@@ -184,9 +180,10 @@ private fun SavedCodexSection(
     SideEffect { owner.synchronize(id, state.posts, state.resolveUnknownAnimatedDurations) }
     val filters = remember(restore) { restore.savedCollectionFilters() }
     val metadata = rememberDurationFilterMetadata(state.posts, durationStates, !filters.animatedDurationRange.isFullRange)
-    val posts = remember(state.posts, filters, metadata.knownDurationMsByPostId, news.postIds) {
+    // New posts lead the strip.
+    val posts = remember(state.posts, filters, metadata.knownDurationMsByPostId, news) {
         filterCodexCollectionPosts(state.posts, filters, metadata.knownDurationMsByPostId)
-            .let { shown -> news.postIds?.let { new -> shown.sortedByDescending { it.id in new } } ?: shown }
+            .sortedByDescending { it.id.markKey() in news }
     }
     SideEffect { owner.onFilterChanged(!filters.animatedDurationRange.isFullRange || sort.usesDuration) }
     val cardWidth = POST_SHELF_CARD_WIDTH
@@ -208,7 +205,7 @@ private fun SavedCodexSection(
             icon = savedCodexChildIcon(id),
             countSuffix = savedCodexCountSuffix(id),
             onMore = onLongPress,
-            highlight = newPostsLabel(news.count)) {
+            highlight = newPostsLabel(news.size)) {
             LazyRow(state = row, modifier = Modifier.height(rowHeight), contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 itemsIndexed(posts, key = { _, post -> "${post.id.source.id}:${post.id.sourcePostId}" }) { index, post ->

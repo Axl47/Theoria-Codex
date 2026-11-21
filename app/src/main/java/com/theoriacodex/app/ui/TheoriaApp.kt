@@ -145,11 +145,14 @@ private fun ShellOverlaySheets(shell: TheoriaShell) {
     val overlays = shell.overlays
     if (overlays.showSavedSearchManagement) {
         val context = com.theoriacodex.app.ui.components.codexFeedFabContext(com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID)
+        val news by remember { shell.data.uiRestoreRepository.observeSavedSearchNewPosts() }
+            .collectAsStateWithLifecycle(com.theoriacodex.data.repository.SavedSearchNewPosts())
         shell.feedFabRestoreRegistry.state(context)?.let { restore ->
             com.theoriacodex.app.codex.SavedSearchesManagementSheet(
                 shell.savedSearches, restore, { shell.feedFabRestoreRegistry.update(context, it) },
                 shell.owners.savedSearches::rename, shell.owners.savedSearches::remove,
                 onDismiss = { overlays.showSavedSearchManagement = false },
+                newCounts = news.marks.mapValues { it.value.newPostCount },
             )
         }
     }
@@ -222,8 +225,8 @@ private fun TheoriaNavigationSurface(shell: TheoriaShell, currentRoute: String?)
         calculateBottomNavigationSizing(windowHeightDp = windowHeightDp, bottomSystemInsetDp = bottomSystemInsetDp)
     }
     val tabReselects = remember { MutableSharedFlow<TopLevelDestination>(extraBufferCapacity = 1) }
-    NewPostsCheckEffect(shell.owners.follows)
-    val libraryHasNew = rememberSavedNewCounts(shell.data).isNotEmpty()
+    NewPostsCheckEffect(shell)
+    val libraryHasNew = rememberSavedNewPosts(shell.data).isNotEmpty()
     TheoriaAdaptiveScaffold(
         navigationVisible = currentRoute == AppRoute.Home,
         selectedIndex = pagerState.currentPage.coerceIn(0, TopLevelDestination.entries.lastIndex),

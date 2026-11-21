@@ -442,6 +442,14 @@ class InMemoryUiRestoreRepository : UiRestoreRepository {
 
     override suspend fun getLibrarySection(): String? = librarySection.value
 
+    private val savedSearchNewPosts = MutableStateFlow(SavedSearchNewPosts())
+
+    override fun observeSavedSearchNewPosts(): Flow<SavedSearchNewPosts> = savedSearchNewPosts
+
+    override suspend fun updateSavedSearchNewPosts(transform: (SavedSearchNewPosts) -> SavedSearchNewPosts) {
+        mutex.withLock { savedSearchNewPosts.value = transform(savedSearchNewPosts.value) }
+    }
+
     override suspend fun setLastTab(route: String) {
         mutex.withLock {
             lastTab.value = route

@@ -29,6 +29,7 @@ fun SavedSearchesCodexFilters(
     onChange: (FeedFabRestoreState) -> Unit,
     onRename: (String, String) -> Unit,
     onRemove: (String) -> Unit,
+    newCounts: Map<String, Int> = emptyMap(),
 ) {
     var filter by remember { mutableStateOf("") }
     var renaming by remember { mutableStateOf<SavedSearchEntry?>(null) }
@@ -53,6 +54,7 @@ fun SavedSearchesCodexFilters(
                     onChange(state.copy(excludedSavedSearches = next.intersect(currentIds).toList()))
                 },
                 onRename = { renaming = it }, onRemove = { onRemove(it.id) }, selected = entry.id !in excluded,
+                newCount = newCounts[entry.id] ?: 0,
             )
         }
     }
