@@ -50,6 +50,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.creator.state.CreatorAction
+import com.theoriacodex.app.creator.state.CreatorFailureReason
 import com.theoriacodex.app.creator.state.CreatorUiState
 import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.feed.FeedPageDemandInput
@@ -386,7 +387,10 @@ private fun CreatorFeedBody(
 ) {
     state.errorMessage?.takeIf { state.canLoadMore }?.let { message ->
         DismissibleFailure(message) { dismiss ->
-            FeedFailureTile(message, onRetry = { onAction(CreatorAction.RetryPage) }, onDismiss = dismiss)
+            FeedFailureTile(
+                message, onRetry = { onAction(CreatorAction.RetryPage) },
+                accountProblem = state.failureReason == CreatorFailureReason.ACCOUNT, onDismiss = dismiss,
+            )
         }
     }
     FeedContinueLoading(pageDemand)
@@ -394,7 +398,10 @@ private fun CreatorFeedBody(
         state.isRefreshing && feed.visiblePosts.isEmpty() -> FeedLoadingState()
 
         state.errorMessage != null && !state.canLoadMore && feed.visiblePosts.isEmpty() -> {
-            FeedFailureTile(state.errorMessage.orEmpty(), onRetry = { onAction(CreatorAction.Refresh) })
+            FeedFailureTile(
+                state.errorMessage.orEmpty(), onRetry = { onAction(CreatorAction.Refresh) },
+                accountProblem = state.failureReason == CreatorFailureReason.ACCOUNT,
+            )
         }
 
         feed.visiblePosts.isEmpty() && related.state == RelatedPostsUiState.Idle -> {

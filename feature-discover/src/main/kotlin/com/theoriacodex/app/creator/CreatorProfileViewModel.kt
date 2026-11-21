@@ -23,6 +23,8 @@ import com.theoriacodex.app.related.retainedLikedPostIds
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.app.media.reconnections
 import com.theoriacodex.app.media.replacingPostSnapshot
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.app.ui.state.RouteStateOwner
@@ -109,15 +111,12 @@ class CreatorProfileViewModel(
     }
 
     /**
-     * Retries a request that failed while offline: a failed later page retries its continuation, a failed first page
-     * refreshes. Waits out any request begun offline, which may still be failing, so its outcome gets this retry too.
+     * Reports a reconnect once any request begun offline, which may still be failing, has settled, so its outcome gets
+     * the retry too (see [CreatorAction.Reconnected]).
      */
     private suspend fun retryAfterReconnect() {
-        val current = mutableState.first { !it.isRefreshing && !it.isPaging }
-        if (current.creator == null || current.errorMessage == null ||
-            current.failureReason == CreatorFailureReason.UNSUPPORTED_SOURCE
-        ) return
-        onAction(if (current.canLoadMore) CreatorAction.RetryPage else CreatorAction.Refresh)
+        mutableState.first { !it.isRefreshing && !it.isPaging }
+        onAction(CreatorAction.Reconnected)
     }
 
     override fun onAction(action: CreatorAction) {
@@ -215,7 +214,13 @@ class CreatorProfileViewModel(
     private fun requestFailure(effect: CreatorEffect.LoadPage, error: Throwable) = CreatorAction.RequestFailed(
         effect.request,
         error.message ?: if (effect.feed == AccountFeed.FAVORITES) "Could not load favorites" else "Could not load creator uploads",
-        if (engine.supports(effect.creator)) CreatorFailureReason.REQUEST_FAILED else CreatorFailureReason.UNSUPPORTED_SOURCE,
+        when {
+            !engine.supports(effect.creator) -> CreatorFailureReason.UNSUPPORTED_SOURCE
+            error is SourceAdapterException &&
+                (error.reason == SourceFailureReason.AUTH_REQUIRED || error.reason == SourceFailureReason.AUTH_EXPIRED) ->
+                CreatorFailureReason.ACCOUNT
+            else -> CreatorFailureReason.REQUEST_FAILED
+        },
     )
 
     private fun persistCreator(creator: CreatorProfile) {
