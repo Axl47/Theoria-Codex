@@ -84,6 +84,12 @@ internal class ViewerVerticalGalleryState(val list: LazyListState) {
 
     val zoomed: Boolean get() = scale > 1.01f
 
+    /** Returns the pages to fit, as starting a slideshow does for horizontal media. */
+    fun resetZoom() {
+        scale = 1f
+        panX = 0f
+    }
+
     /**
      * Scales around ([focusX], [focusY]) and pans by [panBy], keeping the pages inside the screen's width. Every page
      * grows by the same factor, so moving the list's offset in its first visible page by that factor keeps the row
