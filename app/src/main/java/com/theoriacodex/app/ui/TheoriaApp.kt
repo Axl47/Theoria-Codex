@@ -158,6 +158,7 @@ private fun TheoriaAppShellContent(
                         StartupSurface(shell, appShellState)
                     }
                     ShellLiftOverlay(shell)
+                    ShellHiddenTagsSheet(shell)
                     ShellDialogs(shell, appShellState)
                 }
             }

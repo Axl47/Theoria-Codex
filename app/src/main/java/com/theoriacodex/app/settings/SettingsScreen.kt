@@ -27,7 +27,6 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -105,7 +104,6 @@ fun SettingsScreen(
                     controls = { BuiltInAccountControls(it, state.accounts, onAction) },
                 ),
             )
-            SettingsPage.HIDDEN_TAGS -> HiddenTagsPage(state, onAction, openHome)
             SettingsPage.STORAGE -> StoragePage(state, onAction, storageTools, openHome)
             SettingsPage.STATS -> StatsScreen(statistics, openPost, openHome)
             SettingsPage.STATS_SHARE -> StatsSharePreview(
@@ -197,10 +195,6 @@ private fun SettingsHomeGroups(
     open: (SettingsPage) -> Unit,
 ) {
     SettingsGroup("Recommendations") {
-        SettingsRow("Hidden tags", hiddenTagsSummary(state), Icons.Default.VisibilityOff, onClick = {
-            open(SettingsPage.HIDDEN_TAGS)
-        })
-        SettingsRowDivider()
         SettingsRow("Source mix", sourceMixSummary(state, searchSources), Icons.Default.Tune, onClick = {
             onSheet(SettingsSheet.SOURCE_MIX)
         })
@@ -325,36 +319,6 @@ private fun ProfileCard(
                     selected = false, onClick = onAdd, label = { Text("New") },
                     leadingIcon = { Icon(Icons.Default.Add, "Add recommendation profile") },
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun HiddenTagsPage(state: SettingsUiState, onAction: (SettingsAction) -> Unit, onBack: () -> Unit) {
-    SettingsPageColumn {
-        SettingsHeader("Hidden tags", onBack, SETTINGS_PATH)
-        Text(
-            "Hidden from For You on ${state.activeProfile.name}",
-            modifier = Modifier.padding(horizontal = 4.dp),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        if (state.activeProfileBlacklist.isEmpty()) {
-            Text("No hidden tags yet.", Modifier.padding(4.dp), style = MaterialTheme.typography.bodyMedium)
-        } else {
-            SettingsGroup(null) {
-                state.activeProfileBlacklist.forEachIndexed { index, entry ->
-                    if (index > 0) SettingsRowDivider()
-                    SettingsRow(
-                        entry.tags.joinToString(" + "), entry.source.displayName(),
-                        trailing = {
-                            TextButton(onClick = {
-                                onAction(SettingsAction.RemoveBlacklistEntry(entry.source, entry.tags))
-                            }) { Text("Remove") }
-                        },
-                    )
-                }
             }
         }
     }
@@ -498,11 +462,6 @@ internal fun scenarioLabel(scenario: ScenarioPreset): String = when (scenario) {
 internal fun statsSummary(statistics: StatisticsSummary): String =
     "${formatStatsDuration(statistics.totalForegroundMs)} in app · " +
         "${statistics.watchedPostCount} watched · ${statistics.savedPostCount} saved"
-
-internal fun hiddenTagsSummary(state: SettingsUiState): String {
-    val count = state.activeProfileBlacklist.size
-    return "$count ${if (count == 1) "set" else "sets"} on ${state.activeProfile.name}"
-}
 
 internal fun sourceMixSummary(state: SettingsUiState, sources: Set<SourceKey>): String {
     if (sources.size < 2) return "Hold sources in Search to combine them"

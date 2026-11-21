@@ -45,6 +45,8 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Reorder
+import androidx.compose.material.icons.filled.VisibilityOff
+import com.theoriacodex.app.ui.navigation.LocalHiddenTagsOpener
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -274,6 +276,11 @@ private fun ForYouHomeMenu(
         ActionMenuRow(Icons.Default.Reorder, "Reorder", idle) {
             onDismiss()
             onReorder()
+        }
+        val hiddenTags = LocalHiddenTagsOpener.current
+        ActionMenuRow(Icons.Default.VisibilityOff, "Hidden tags") {
+            onDismiss()
+            hiddenTags.openHiddenTags()
         }
     }
 }

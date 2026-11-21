@@ -14,7 +14,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 
 /** Pages inside Settings; held by the owner so other screens can open Settings at a page. */
-enum class SettingsPage { HOME, SITES, HIDDEN_TAGS, STORAGE, STATS, STATS_SHARE, STATS_COMPARE, DIAGNOSTICS }
+enum class SettingsPage { HOME, SITES, STORAGE, STATS, STATS_SHARE, STATS_COMPARE, DIAGNOSTICS }
 
 /**
  * What Sites shows of the accounts Settings owns: a built-in source's status line (null when it has no

@@ -19,6 +19,7 @@ import com.theoriacodex.app.search.LocalPostWatchPresentation
 import com.theoriacodex.app.search.rememberPostWatchPresentation
 import com.theoriacodex.app.source.LocalSourceHealth
 import com.theoriacodex.app.ui.components.LocalPostMenuActions
+import com.theoriacodex.app.ui.navigation.LocalHiddenTagsOpener
 import com.theoriacodex.app.ui.navigation.LocalLiftController
 import com.theoriacodex.app.ui.navigation.LocalNewCodexOpener
 import com.theoriacodex.app.ui.navigation.LocalTrailOpener
@@ -56,6 +57,7 @@ internal fun ShellCompositionLocals(shell: TheoriaShell, content: @Composable ()
         LocalRelatedPostsSupport provides relatedPostsSupport,
         LocalTriageOpener provides rememberTriageOpener(shell),
         LocalNewCodexOpener provides remember { NewCodexRequests() },
+        LocalHiddenTagsOpener provides remember { HiddenTagsRequests() },
         content = content,
     )
 }

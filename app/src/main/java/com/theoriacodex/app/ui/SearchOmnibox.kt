@@ -10,6 +10,7 @@ import com.theoriacodex.app.search.omnibox.OmniboxKind
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsPage
 import com.theoriacodex.app.source.displayName
+import com.theoriacodex.app.ui.navigation.LocalHiddenTagsOpener
 import com.theoriacodex.app.ui.routes.BrowsingDestinationState
 import com.theoriacodex.app.ui.routes.rememberRetained
 import com.theoriacodex.data.repository.AppSettings
@@ -51,7 +52,6 @@ internal fun searchToggleEntries(settings: AppSettings, dispatch: (SettingsActio
 /** Settings pages the one box opens; titles match their Settings rows. */
 private enum class SettingsPageCommand(val title: String, val keywords: List<String>, val page: SettingsPage) {
     SITES("Sites", listOf("sources", "accounts", "sign in", "log in"), SettingsPage.SITES),
-    HIDDEN_TAGS("Hidden tags", listOf("blacklist", "blocked", "mute"), SettingsPage.HIDDEN_TAGS),
     STORAGE("Storage & caching", listOf("cache", "space", "clear"), SettingsPage.STORAGE),
     STATS("Your stats", listOf("stats", "statistics", "usage"), SettingsPage.STATS),
     DIAGNOSTICS("Diagnostics report", listOf("diagnostics", "logs", "errors"), SettingsPage.DIAGNOSTICS),
@@ -67,7 +67,8 @@ internal fun rememberSearchOmniboxEntries(shell: TheoriaShell, state: BrowsingDe
     val recents = rememberRetained("omnibox-recent-searches") { shell.data.recentsRepository.observeSearches() }.value.orEmpty()
     val saved = shell.savedSearches
     val profileId = state.activeProfile.profileId
-    return remember(shell, codices, recents, saved, state.settings, profileId) {
+    val hiddenTags = LocalHiddenTagsOpener.current
+    return remember(shell, codices, recents, saved, state.settings, profileId, hiddenTags) {
         buildList {
             codices.filter { codexBelongsToProfile(it.codexId, profileId) }.mapTo(this) { codex ->
                 OmniboxEntry.Action(OmniboxKind.CODEX, codex.name) { shell.navController.navigate(AppRoute.codexDetail(codex.codexId)) }
@@ -89,6 +90,9 @@ internal fun rememberSearchOmniboxEntries(shell: TheoriaShell, state: BrowsingDe
             }
             addAll(searchToggleEntries(state.settings, shell.owners.settings::onAction))
             addAll(destinationCommands(shell))
+            add(OmniboxEntry.Action(OmniboxKind.COMMAND, "Hidden tags", keywords = listOf("blacklist", "blocked", "mute")) {
+                hiddenTags.openHiddenTags()
+            })
         }
     }
 }
