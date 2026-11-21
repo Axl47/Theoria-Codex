@@ -22,8 +22,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.app.backup.AndroidBackupDocuments
 import com.theoriacodex.app.backup.AutoBackupControls
 import com.theoriacodex.app.backup.AutoBackupWorkflow
@@ -54,8 +52,8 @@ import kotlinx.coroutines.flow.map
 /** Activity-owned transfer work with shell-owned Android document pickers and transient dialogs. */
 internal class LibraryTransferTools(
     val downloads: PostDownloadsViewModel,
-    val backup: BackupViewModel?,
-    val offline: OfflineStorageViewModel?,
+    val backup: BackupViewModel,
+    val offline: OfflineStorageViewModel,
     val autoBackup: AutoBackupWorkflow?,
     val chooseBackupDestination: () -> Unit,
     val chooseBackup: () -> Unit,
@@ -71,44 +69,35 @@ internal fun rememberLibraryTransferTools(
     onMessage: suspend (String) -> Unit,
 ): LibraryTransferTools {
     val context = LocalContext.current.applicationContext
-    val downloads = viewModel<PostDownloadsViewModel>(
-        key = "library-downloads",
-        factory = viewModelFactory {
-            initializer {
-                PostDownloadsViewModel(
-                    context = context,
-                    readSettings = { container.data.settingsRepository.observeSettings().first().cache },
-                    resolvePost = { post -> container.sources.registry.adapterFor(post.id.source)?.resolvePost(post.id) },
-                    exportAnimation = { post, marker ->
-                        container.sources.pixivUgoiraClient.exportToMp4(context, post.id.sourcePostId, post.title, marker).map { }
-                    },
-                )
-            }
-        },
-    )
-    val backup = container.workflows.profileBackup?.let { service ->
-        viewModel<BackupViewModel>(key = "profile-backup", factory = viewModelFactory {
-            initializer { BackupViewModel(ProfileBackupActions(service), AndroidBackupDocuments(context.contentResolver)) }
-        })
-    }
-    val offline = container.features.offlineMedia?.let { coordinator ->
-        val maintenance = remember(container) {
-            MediaCacheMaintenance(context, container.data.cacheRepository, container.sources.pixivUgoiraClient)
-        }
-        viewModel<OfflineStorageViewModel>(key = "offline-storage",
-            factory = OfflineStorageViewModel.factory(container.data.codexRepository, coordinator, maintenance),
+    val downloads = viewModel(key = "library-downloads") {
+        PostDownloadsViewModel(
+            context = context,
+            readSettings = { container.data.settingsRepository.observeSettings().first().cache },
+            resolvePost = { post -> container.sources.registry.adapterFor(post.id.source)?.resolvePost(post.id) },
+            exportAnimation = { post, marker ->
+                container.sources.pixivUgoiraClient.exportToMp4(context, post.id.sourcePostId, post.title, marker).map { }
+            },
         )
     }
+    val backup = viewModel(key = "profile-backup") {
+        BackupViewModel(ProfileBackupActions(container.workflows.profileBackup), AndroidBackupDocuments(context.contentResolver))
+    }
+    val maintenance = remember(container) {
+        MediaCacheMaintenance(context, container.data.cacheRepository, container.sources.pixivUgoiraClient)
+    }
+    val offline = viewModel<OfflineStorageViewModel>(key = "offline-storage",
+        factory = OfflineStorageViewModel.factory(container.data.codexRepository, container.features.offlineMedia, maintenance),
+    )
     val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        backup?.export(uri?.toString())
+        backup.export(uri?.toString())
     }
     val import = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        backup?.import(uri?.toString())
+        backup.import(uri?.toString())
     }
     val autoBackup = container.workflows.autoBackup
     val autoBackupFolder = rememberAutoBackupFolderPicker(autoBackup)
     val currentMessage by rememberUpdatedState(onMessage)
-    LaunchedEffect(backup) { backup?.effects?.collect { currentMessage(it) } }
+    LaunchedEffect(backup) { backup.effects.collect { currentMessage(it) } }
     AutoBackupFailureEffect(autoBackup) { currentMessage(it) }
     return remember(downloads, backup, offline, export, import, autoBackup, autoBackupFolder) {
         LibraryTransferTools(downloads, backup, offline, autoBackup,
@@ -148,8 +137,8 @@ private fun AutoBackupFailureEffect(autoBackup: AutoBackupWorkflow?, onMessage: 
 }
 
 @Composable
-internal fun libraryStorageSummary(tools: LibraryTransferTools): String? {
-    val owner = tools.offline ?: return null
+internal fun libraryStorageSummary(tools: LibraryTransferTools): String {
+    val owner = tools.offline
     LaunchedEffect(owner) { owner.refreshUsage() }
     val state by owner.state.collectAsStateWithLifecycle()
     return "${Formatter.formatShortFileSize(LocalContext.current, state.totalBytes())} used"
@@ -158,15 +147,11 @@ internal fun libraryStorageSummary(tools: LibraryTransferTools): String? {
 @Composable
 internal fun LibraryTransferSettings(tools: LibraryTransferTools) {
     val batches by tools.downloads.batches.collectAsStateWithLifecycle()
-    tools.offline?.let { owner ->
-        val state by owner.state.collectAsStateWithLifecycle()
-        OfflineStorageSummary(state, batches.savedBytes())
-    }
+    val offlineState by tools.offline.state.collectAsStateWithLifecycle()
+    OfflineStorageSummary(offlineState, batches.savedBytes())
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        tools.offline?.let { owner ->
-            OutlinedButton(onClick = owner::open, modifier = Modifier.weight(1f)) {
-                Text("Manage storage")
-            }
+        OutlinedButton(onClick = tools.offline::open, modifier = Modifier.weight(1f)) {
+            Text("Manage storage")
         }
         DownloadJobsButton(
             batches = batches,
@@ -174,10 +159,8 @@ internal fun LibraryTransferSettings(tools: LibraryTransferTools) {
             modifier = Modifier.weight(1f),
         )
     }
-    tools.backup?.let { owner ->
-        val state by owner.state.collectAsStateWithLifecycle()
-        BackupControls(state, owner::showExportOptions, tools.chooseBackup)
-    }
+    val backupState by tools.backup.state.collectAsStateWithLifecycle()
+    BackupControls(backupState, tools.backup::showExportOptions, tools.chooseBackup)
     tools.autoBackup?.let { owner ->
         val status by owner.status.collectAsStateWithLifecycle()
         AutoBackupControls(status, tools.chooseAutoBackupFolder, { owner.backUpNow() }, tools.turnOffAutoBackup)
@@ -189,15 +172,14 @@ internal fun LibraryTransferDialogs(tools: LibraryTransferTools, onOpenPost: sus
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var openingDownload by remember { mutableStateOf(false) }
-    tools.offline?.let { owner ->
-        val state by owner.state.collectAsStateWithLifecycle()
-        val downloadBatches by tools.downloads.batches.collectAsStateWithLifecycle()
-        if (state.isOpen) OfflineStorageSheet(
-            state, owner::dismiss, owner::retry, owner::cancel, owner::requestRemove,
-            owner::requestClearOffline, owner::confirmRemoval, owner::dismissRemoval, owner::clearDisposableCache,
-            downloadBytes = downloadBatches.savedBytes(),
-        )
-    }
+    val offline = tools.offline
+    val offlineState by offline.state.collectAsStateWithLifecycle()
+    val downloadBatches by tools.downloads.batches.collectAsStateWithLifecycle()
+    if (offlineState.isOpen) OfflineStorageSheet(
+        offlineState, offline::dismiss, offline::retry, offline::cancel, offline::requestRemove,
+        offline::requestClearOffline, offline::confirmRemoval, offline::dismissRemoval, offline::clearDisposableCache,
+        downloadBytes = downloadBatches.savedBytes(),
+    )
     if (tools.showDownloads) {
         val batches by tools.downloads.batches.collectAsStateWithLifecycle()
         DownloadJobsSheet(
@@ -225,10 +207,9 @@ internal fun LibraryTransferDialogs(tools: LibraryTransferTools, onOpenPost: sus
             onDismiss = { tools.showDownloads = false },
         )
     }
-    tools.backup?.let { owner ->
-        val state by owner.state.collectAsStateWithLifecycle()
-        BackupDialogs(state, owner::dismissDialog, owner::includeRecents, owner::applyPreferences,
-            onExport = { owner.dismissDialog(); tools.chooseBackupDestination() }, onRestore = owner::restore,
-        )
-    }
+    val backup = tools.backup
+    val backupState by backup.state.collectAsStateWithLifecycle()
+    BackupDialogs(backupState, backup::dismissDialog, backup::includeRecents, backup::applyPreferences,
+        onExport = { backup.dismissDialog(); tools.chooseBackupDestination() }, onRestore = backup::restore,
+    )
 }

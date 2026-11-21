@@ -303,7 +303,7 @@ internal fun CodexLibraryDestination(shell: TheoriaShell, actionCodexId: String?
             onDownloadCodex = { codexId ->
                 shell.scope.launch(start = CoroutineStart.UNDISPATCHED) { shell.downloadCodex(codexId) }
             },
-            onMakeAvailableOffline = shell.transfers.offline?.let { it::makeAvailableOffline },
+            onMakeAvailableOffline = shell.transfers.offline::makeAvailableOffline,
             onShareCodex = { codexId ->
                 shell.scope.launch(start = CoroutineStart.UNDISPATCHED) { shell.shareCodex(codexId) }
             },

@@ -30,8 +30,6 @@ import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
@@ -293,50 +291,33 @@ internal class ShellOwners(
 private fun rememberShellOwners(container: TheoriaAppContainer, appContext: Context): ShellOwners {
     val data = container.data
     val workflows = container.workflows
-    val savedSearches = viewModel<SavedSearchViewModel>(
-        key = "saved-searches",
-        factory = viewModelFactory { initializer { SavedSearchViewModel(data.savedSearches) } },
-    )
-    val codexCommands = viewModel<CodexCommandViewModel>(
-        key = "codex-command-owner",
-        factory = viewModelFactory {
-            initializer {
-                CodexCommandViewModel(
-                    data.codexRepository, workflows.likesCodexSync::clearProfile, workflows.likesCodexSync::restoreClearedLikes,
-                    workflows.codexTransfer::reorderVisibleCodices, workflows.codexCleaning,
-                )
-            }
-        },
-    )
-    val postMutations = viewModel<PostMutationViewModel>(
-        key = "post-mutations",
-        factory = viewModelFactory { initializer { PostMutationViewModel(data.settingsRepository, workflows.likesCodexSync::toggle) } },
-    )
-    val codexSaves = viewModel<CodexSaveViewModel>(
-        key = "codex-save-owner",
-        factory = viewModelFactory {
-            initializer { CodexSaveViewModel(workflows.codexTransfer, data.codexRepository, data.statisticsRepository) }
-        },
-    )
+    val savedSearches = viewModel(key = "saved-searches") { SavedSearchViewModel(data.savedSearches) }
+    val codexCommands = viewModel(key = "codex-command-owner") {
+        CodexCommandViewModel(
+            data.codexRepository, workflows.likesCodexSync::clearProfile, workflows.likesCodexSync::restoreClearedLikes,
+            workflows.codexTransfer::reorderVisibleCodices, workflows.codexCleaning,
+        )
+    }
+    val postMutations = viewModel(key = "post-mutations") {
+        PostMutationViewModel(data.settingsRepository, workflows.likesCodexSync::toggle)
+    }
+    val codexSaves = viewModel(key = "codex-save-owner") {
+        CodexSaveViewModel(workflows.codexTransfer, data.codexRepository, data.statisticsRepository)
+    }
     val settings = viewModel<SettingsViewModel>(key = "settings-route-owner", factory = settingsViewModelFactory(container))
     val follows = viewModel<CreatorFollowsViewModel>(
         key = "creator-follows",
         factory = CreatorFollowsViewModel.factory(data.settingsRepository, container.sources.registry),
     )
-    val codexImports = viewModel<CodexImportViewModel>(
-        key = "codex-import-owner",
-        factory = viewModelFactory {
-            initializer {
-                CodexImportViewModel(
-                    transfer = workflows.codexTransfer,
-                    readDocument = { document ->
-                        readBoundedTextDocument(CODEX_SHARE_MAX_BYTES) { appContext.contentResolver.openInputStream(document.toUri()) }
-                    },
-                    newTargetCodexId = { profileScopedCodexId(data.currentActiveRecommendationProfile().profileId) },
-                )
-            }
-        },
-    )
+    val codexImports = viewModel(key = "codex-import-owner") {
+        CodexImportViewModel(
+            transfer = workflows.codexTransfer,
+            readDocument = { document ->
+                readBoundedTextDocument(CODEX_SHARE_MAX_BYTES) { appContext.contentResolver.openInputStream(document.toUri()) }
+            },
+            newTargetCodexId = { profileScopedCodexId(data.currentActiveRecommendationProfile().profileId) },
+        )
+    }
     return remember(savedSearches, codexCommands, postMutations, codexSaves, settings, follows, codexImports) {
         ShellOwners(savedSearches, codexCommands, postMutations, codexSaves, settings, follows, codexImports)
     }

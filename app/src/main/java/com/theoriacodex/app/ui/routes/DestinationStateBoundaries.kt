@@ -20,8 +20,6 @@ import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.app.appshell.PendingIncomingUri
 import com.theoriacodex.app.codex.LocalCodexSaveRelevanceLoader
 import com.theoriacodex.app.codex.sortLiveCodexPosts
@@ -202,11 +200,9 @@ internal fun browsingMetadataOwner(data: DataDependencies): BrowsingMetadataView
     viewModelStoreOwner = LocalContext.current.findActivity() as? ViewModelStoreOwner
         ?: checkNotNull(LocalViewModelStoreOwner.current),
     key = "browsing-metadata",
-    factory = remember(data) { viewModelFactory {
-        initializer { BrowsingMetadataViewModel(data.settingsRepository, data.likesRepository,
-            data.codexRepository, data.recentsRepository, mirrors = data.fileMirrors) }
-    } },
-)
+) {
+    BrowsingMetadataViewModel(data.settingsRepository, data.likesRepository, data.codexRepository, data.recentsRepository, mirrors = data.fileMirrors)
+}
 
 @Composable
 internal fun CodexDestinationStateBoundary(
