@@ -166,7 +166,7 @@ class OfflineMediaCoordinatorTest {
     }
 
     @Test
-    fun `posts saved into a kept owner join its copy and other owners are left alone`() = runTest {
+    fun `posts saved into a kept owner download alone and other owners are left alone`() = runTest {
         val store = OfflineMediaStore(temporary.newFolder(), ioDispatcher = StandardTestDispatcher(testScheduler))
         val acquisitions = mutableListOf<String>()
         val coordinator = OfflineMediaCoordinator(store, backgroundScope, { it }, { it.media }, { post, _, file ->
@@ -178,11 +178,51 @@ class OfflineMediaCoordinatorTest {
         coordinator.jobs.first { it["codex:a"]?.isRunning == false }
 
         coordinator.keepOffline("codex:a", listOf(post("b")))
-        val topped = coordinator.jobs.first { it["codex:a"]?.let { job -> !job.isRunning && job.totalPosts == 2 } == true }
+        val topped = coordinator.jobs.first { it["codex:a"]?.let { job -> !job.isRunning && job.completedPosts == 1 && job.totalPosts == 1 } == true }
 
-        assertEquals(2, topped.getValue("codex:a").completedPosts)
+        assertEquals(1, topped.getValue("codex:a").completedPosts)
         assertEquals(listOf("a", "b"), acquisitions)
         assertEquals(mapOf("codex:a" to 2), store.snapshot.value.postsByOwner)
+        assertNull(coordinator.jobs.value["codex:other"])
+    }
+
+    @Test
+    fun `a cancelled request stays stopped when posts are saved until Retry runs it with them`() = runTest {
+        val store = OfflineMediaStore(temporary.newFolder(), ioDispatcher = StandardTestDispatcher(testScheduler))
+        val acquisitions = mutableListOf<String>()
+        val coordinator = OfflineMediaCoordinator(store, backgroundScope, { it }, { it.media }, { post, _, file ->
+            acquisitions += post.id.sourcePostId
+            file.writeText("bytes")
+        })
+        coordinator.makeAvailableOffline("codex:a", listOf(post("a")))
+        coordinator.cancel("codex:a")
+        coordinator.keepOffline("codex:a", listOf(post("b")))
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(acquisitions.isEmpty())
+        assertTrue(coordinator.jobs.value.getValue("codex:a").isCancelled)
+
+        coordinator.retry("codex:a")
+        coordinator.jobs.first { it["codex:a"]?.let { job -> !job.isRunning && job.completedPosts == 2 } == true }
+        assertEquals(listOf("a", "b"), acquisitions)
+    }
+
+    @Test
+    fun `an owner with neither copies nor a running job gets nothing when posts are saved`() = runTest {
+        val store = OfflineMediaStore(temporary.newFolder(), ioDispatcher = StandardTestDispatcher(testScheduler))
+        val acquisitions = mutableListOf<String>()
+        val coordinator = OfflineMediaCoordinator(store, backgroundScope, { it }, { it.media }, { post, _, _ ->
+            acquisitions += post.id.sourcePostId
+            throw IOException("offline")
+        })
+        coordinator.makeAvailableOffline("codex:a", listOf(post("a")))
+        coordinator.jobs.first { it["codex:a"]?.isRunning == false }
+
+        coordinator.keepOffline("codex:a", listOf(post("b")))
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(listOf("a"), acquisitions)
+        assertEquals(setOf(post("a").id), coordinator.jobs.value.getValue("codex:a").failedPosts)
     }
 
     private fun post(id: String): Post {
