@@ -26,15 +26,6 @@ class ViewerTrailLevelTest {
     private fun feed(job: Job = Job()) = TrailFeed("trail:t", { TrailPage(listOf(post("a")), true) }, related(), CoroutineScope(job))
 
     @Test
-    fun `a trail is the run of Viewer entries ending at an entry`() {
-        val stack = listOf(false, true, true, false, true)
-
-        assertEquals(1..2, viewerTrailRun(stack, 2))
-        assertEquals(4..4, viewerTrailRun(stack, 4))
-        assertTrue(viewerTrailRun(stack, 0).isEmpty())
-    }
-
-    @Test
     fun `a root crumb names its search's tags, else where it was opened from`() {
         val search = Query(QueryMode.Unified, listOf("long_hair", "cat"), emptyList(), SortMode.NEWEST, null, null)
 

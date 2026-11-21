@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.codex.CreateCodexDialog
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.lift.LiftOverlay
@@ -56,8 +57,9 @@ internal fun ShellLiftOverlay(shell: TheoriaShell) {
 @Composable
 private fun CreateCodexForPostDialog(shell: TheoriaShell, post: Post, onDone: () -> Unit) {
     val settings = shell.owners.settings
+    val profileName = settings.state.collectAsStateWithLifecycle().value.activeProfile.name
     CreateCodexDialog(
-        profileName = settings.state.value.activeProfile.name,
+        profileName = profileName,
         onDismiss = onDone,
         onCreate = { name ->
             val state = settings.state.value

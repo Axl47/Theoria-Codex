@@ -20,7 +20,6 @@ import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import java.util.UUID
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 
 /** A fork ready to show: its crumb label and its feed. */
@@ -60,8 +59,9 @@ internal fun rememberTrailOpener(shell: TheoriaShell): TrailOpener {
 private suspend fun TheoriaShell.openTrail(request: TrailRequest, handoff: TrailHandoffViewModel): Boolean {
     val spec = trailSpec(request, shellTrailSources()) ?: return false
     val feed = TrailFeed("trail:${UUID.randomUUID()}", spec.pager, features.relatedPosts)
-    val session = try {
-        if (!feed.start()) null else viewerRouteWorkflow.prepareResumableSession(
+    var opened = false
+    try {
+        val session = if (!feed.start()) null else viewerRouteWorkflow.prepareResumableSession(
             ViewerSession(
                 posts = feed.viewerFeed.results,
                 context = ViewerLaunchContext(feed.queryHash, 0, ViewerStreamSource.TRAIL, 0),
@@ -69,18 +69,17 @@ private suspend fun TheoriaShell.openTrail(request: TrailRequest, handoff: Trail
                 saveQuery = spec.query,
             ),
         )
-    } catch (error: CancellationException) {
-        feed.close()
-        throw error
+        if (session != null) {
+            handoff.hand(session.sessionId, TrailLevel(spec.label, feed))
+            // A fork saves no launch context: the Viewer it covers keeps its own for restoration.
+            launchViewer(session, saveContext = false, singleTop = false)
+            opened = true
+        }
+    } finally {
+        // Also on cancellation: a fork that never opened has no entry to close its feed.
+        if (!opened) feed.close()
     }
-    if (session == null) {
-        feed.close()
-        return false
-    }
-    handoff.hand(session.sessionId, TrailLevel(spec.label, feed))
-    // A fork saves no launch context: the Viewer it covers keeps its own for restoration.
-    launchViewer(session, saveContext = false, singleTop = false)
-    return true
+    return opened
 }
 
 /** Each trail kind bound to the shell's loaders, read with the current sources and settings. */

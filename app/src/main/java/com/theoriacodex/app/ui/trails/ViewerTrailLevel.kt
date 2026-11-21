@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -57,14 +58,6 @@ internal class ViewerTrailEntryViewModel(val claimed: TrailLevel?) : ViewModel()
     }
 }
 
-/** The run of Viewer entries ending at [index]: the trail [index] belongs to, oldest first. Empty when it is no Viewer. */
-internal fun viewerTrailRun(isViewer: List<Boolean>, index: Int): IntRange {
-    if (isViewer.getOrNull(index) != true) return IntRange.EMPTY
-    var start = index
-    while (start > 0 && isViewer[start - 1]) start--
-    return start..index
-}
-
 /** A root level's crumb: the search it shows, or where it was opened from. */
 internal fun viewerRootLabel(context: ViewerLaunchContext, query: Query?): String =
     query?.includeTags?.joinToString(" ") { it.replace('_', ' ') }?.takeIf { it.isNotBlank() } ?: when (context.streamSource) {
@@ -79,7 +72,7 @@ internal fun viewerRootLabel(context: ViewerLaunchContext, query: Query?): Strin
 
 /**
  * Binds [entry], a Viewer destination, to its trail: claims the fork the opener handed over for the session this entry
- * is about to show ([pendingSessionId]), and derives the crumbs from the Viewer entries stacked under it.
+ * is about to show ([pendingSessionId]), and derives the crumbs from the Viewer entries it was opened on.
  */
 @Composable
 internal fun rememberViewerLevel(navController: NavHostController, entry: NavBackStackEntry, pendingSessionId: String?): ViewerLevel {
@@ -88,32 +81,45 @@ internal fun rememberViewerLevel(navController: NavHostController, entry: NavBac
         viewModelStoreOwner = entry,
         factory = viewModelFactory { initializer { ViewerTrailEntryViewModel(handoff.claim(pendingSessionId)) } },
     )
-    owner.claimed?.let { if (entry.savedStateHandle.get<String>(TRAIL_LABEL_KEY) == null) entry.savedStateHandle[TRAIL_LABEL_KEY] = it.label }
-    val stack by navController.currentBackStack.collectAsStateWithLifecycle()
-    return remember(stack, entry, owner) {
-        val index = stack.indexOf(entry)
-        val isViewer = stack.map { it.destination.route == AppRoute.Viewer }
-        val run = viewerTrailRun(isViewer, index)
+    val saved = entry.savedStateHandle
+    owner.claimed?.let { if (saved.get<String>(TRAIL_LABEL_KEY) == null) saved[TRAIL_LABEL_KEY] = it.label }
+    if (saved.get<ArrayList<String>>(TRAIL_ANCESTOR_IDS_KEY) == null) saved.recordAncestors(navController.previousBackStackEntry)
+    val label by saved.getStateFlow<String?>(TRAIL_LABEL_KEY, null).collectAsStateWithLifecycle()
+    return remember(entry, owner, label) {
+        val ancestors = saved.get<ArrayList<String>>(TRAIL_ANCESTOR_LABELS_KEY).orEmpty()
         ViewerLevel(
-            isFork = run.first < index,
-            crumbs = run.map { ViewerCrumb(stack[it].savedStateHandle.get<String>(TRAIL_LABEL_KEY) ?: "Viewer") },
+            isFork = ancestors.isNotEmpty(),
+            crumbs = (ancestors + (label ?: UNNAMED_LEVEL)).map(::ViewerCrumb),
             feed = owner.claimed?.feed,
-            coveredByFork = {
-                val live = navController.currentBackStack.value
-                live.getOrNull(live.indexOf(entry) + 1)?.destination?.route == AppRoute.Viewer
-            },
-            popTo = { crumb ->
-                val live = navController.currentBackStack.value
-                repeat((live.indexOf(entry) - (run.first + crumb)).coerceAtLeast(0)) { navController.popBackStack() }
-            },
+            coveredByFork = { navController.currentBackStackEntry?.savedStateHandle?.get<ArrayList<String>>(TRAIL_ANCESTOR_IDS_KEY)?.contains(entry.id) == true },
+            popTo = { crumb -> repeat((ancestors.size - crumb).coerceAtLeast(0)) { navController.popBackStack() } },
             nameRoot = { context, query ->
-                if (entry.savedStateHandle.get<String>(TRAIL_LABEL_KEY) == null) entry.savedStateHandle[TRAIL_LABEL_KEY] = viewerRootLabel(context, query)
+                if (saved.get<String>(TRAIL_LABEL_KEY) == null) saved[TRAIL_LABEL_KEY] = viewerRootLabel(context, query)
             },
         )
     }
 }
 
+/**
+ * Records, once and while this entry is first on top, the Viewer entries it was opened on ([previous] and that
+ * entry's own ancestors). Each level carries its trail in its saved state, so crumbs survive process death, when the
+ * levels underneath are not composed.
+ */
+private fun SavedStateHandle.recordAncestors(previous: NavBackStackEntry?) {
+    val parent = previous?.takeIf { it.destination.route == AppRoute.Viewer }
+    val parentState = parent?.savedStateHandle
+    this[TRAIL_ANCESTOR_LABELS_KEY] = ArrayList(
+        parentState?.let { it.get<ArrayList<String>>(TRAIL_ANCESTOR_LABELS_KEY).orEmpty() + (it.get<String>(TRAIL_LABEL_KEY) ?: UNNAMED_LEVEL) }.orEmpty(),
+    )
+    this[TRAIL_ANCESTOR_IDS_KEY] = ArrayList(
+        parentState?.let { it.get<ArrayList<String>>(TRAIL_ANCESTOR_IDS_KEY).orEmpty() + parent.id }.orEmpty(),
+    )
+}
+
 private const val TRAIL_LABEL_KEY = "viewer-trail-label"
+private const val TRAIL_ANCESTOR_LABELS_KEY = "viewer-trail-ancestor-labels"
+private const val TRAIL_ANCESTOR_IDS_KEY = "viewer-trail-ancestor-ids"
+private const val UNNAMED_LEVEL = "Viewer"
 
 /**
  * These callbacks adjusted for [level]: a fork's dismiss only pops its own entry (leaving Search's launch context alone), and its feed pages the TRAIL stream, which no
