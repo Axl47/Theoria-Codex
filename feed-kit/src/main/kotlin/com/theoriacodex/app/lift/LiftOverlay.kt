@@ -103,9 +103,8 @@ private suspend fun failureOf(
         is LiftAction.Save -> {
             val record = quickSave.quickSave(post, action.codexId, drop.lift.query)
                 ?: return "Could not save to ${action.codexName}"
-            // Undo reverses only this save: a later save has replaced it as the last one.
-            // TODO(merge): undo(record)
-            if (record.undoable && onSaved(record) && quickSave.lastQuickSave.value == record) quickSave.undoLastQuickSave()
+            // Undo reverses exactly this save, even when a later save has replaced it as the last one.
+            if (record.undoable && onSaved(record)) quickSave.undoQuickSave(record)
         }
         LiftAction.NewCodex -> onNewCodex(post)
         LiftAction.ToggleLike -> drop.lift.like?.toggle?.invoke()
