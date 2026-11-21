@@ -766,9 +766,10 @@ class SearchCoordinator(
                     status.errorMessage?.contains("PIXIV_UNKNOWN", ignoreCase = true) == true)
         }
 
+    /** Unified answers per-source failures as statuses, so only a Pixiv search throws Pixiv's own error. */
     private fun isPixivUnknownError(error: Throwable, query: Query): Boolean {
         if (error is SourceAdapterException && error.reason == SourceFailureReason.UNKNOWN) {
-            return query.mode == QueryMode.Unified || query.mode == QueryMode.Source(SourceKey.PIXIV)
+            return query.mode == QueryMode.Source(SourceKey.PIXIV)
         }
         return error.message.orEmpty().contains("PIXIV_UNKNOWN", ignoreCase = true)
     }

@@ -46,6 +46,20 @@ import org.junit.Test
 
 class SourceRetryTest {
     @Test
+    fun `another source's unknown error is not reported as Pixiv's`() = runTest {
+        val registry = TestRegistry(listOf(TestAdapter(SourceKey.GELBOORU)))
+        val failing = object : SourceAdapterRegistry by registry {
+            override fun unifiedOrchestrator(): UnifiedSearchOrchestrator =
+                throw SourceAdapterException(SourceFailureReason.UNKNOWN, "Gelbooru broke")
+        }
+        val owner = testSearchCoordinator(failing)
+
+        val result = owner.executeInitial(unifiedQuery("tag"), SearchSourceScope.GlobalUnified)
+
+        assertEquals("Gelbooru broke", (result as SearchExecutionResult.Failure).message)
+    }
+
+    @Test
     fun `a single-source first page failure reaches Diagnostics`() = runTest {
         val pixiv = TestAdapter(SourceKey.PIXIV).apply {
             failure = SourceAdapterException(SourceFailureReason.AUTH_REQUIRED, "credentials required")
