@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recents
 
+import com.theoriacodex.app.ui.undo.UndoAction
 import com.theoriacodex.data.repository.InMemoryRecentsRepository
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentSearchEntry
@@ -43,7 +44,7 @@ class RecentsClearWorkflowTest {
             searches = searches.filterNot { it.kind == RecentSearchKind.FYP },
             fypSearches = searches.filter { it.kind == RecentSearchKind.FYP },
             showActionableFeedback = { message, action ->
-                feedback += message to action
+                feedback += message to action.label
                 assertEquals(emptyList<RecentPostEntry>(), repository.observeWatchedPosts().first())
                 assertEquals(emptyList<RecentSearchEntry>(), repository.observeSearches().first())
                 true
@@ -72,7 +73,7 @@ class RecentsClearWorkflowTest {
             fypSearches = emptyList(),
             showActionableFeedback = { message, action ->
                 assertEquals("Watched history cleared", message)
-                assertEquals("Undo", action)
+                assertEquals(UndoAction.Undo, action)
                 false
             },
         )
@@ -106,7 +107,7 @@ class RecentsClearWorkflowTest {
             fypSearches = fyp,
             showActionableFeedback = { message, action ->
                 assertEquals("For You history cleared", message)
-                assertEquals("Undo", action)
+                assertEquals(UndoAction.Undo, action)
                 assertEquals(searches.filterNot { it.kind == RecentSearchKind.FYP }, repository.observeSearches().first())
                 true
             },
@@ -142,7 +143,7 @@ class RecentsClearWorkflowTest {
             RecentsClearTarget.FYP, emptyList(), emptyList(), manual,
             original.filter { it.kind == RecentSearchKind.FYP },
         ) { message, action ->
-            messages += message to action
+            messages += message to action.label
             val expected = if (clears == 1) original else manual
             assertEquals(expected, stored.observeSearches().first())
             true

@@ -7,6 +7,10 @@ import com.theoriacodex.data.repository.DeletedCodexSnapshot
 import com.theoriacodex.data.repository.CodexCleaningRequest
 import com.theoriacodex.data.repository.CodexCleaningSnapshot
 import com.theoriacodex.data.repository.CodexRepository
+import com.theoriacodex.app.ui.undo.UndoAction
+import com.theoriacodex.app.ui.undo.UndoAnchor
+import com.theoriacodex.app.ui.undo.UndoOffer
+import com.theoriacodex.app.ui.undo.UndoSlot
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
@@ -35,15 +39,25 @@ sealed interface CodexCommand {
     data class Restore(val items: List<CodexItem>, val posts: List<Post>) : CodexCommand
 }
 
+/** Where Codex offers are drawn: one Codex's detail screen, or the Library's Codices section. */
+object CodexUndoAnchors {
+    const val DETAIL_SCOPE = "codex-detail"
+    const val LIBRARY_SCOPE = "library-codices"
+    val Library = UndoAnchor(LIBRARY_SCOPE)
+    fun detail(codexId: String) = UndoAnchor(DETAIL_SCOPE, codexId)
+}
+
+/** The outcome of one command; [anchor] is where its Undo or Retry is offered. */
 data class CodexCommandFeedback(
     val id: Long,
     val command: CodexCommand,
     val succeeded: Boolean,
     val undo: CodexCommand? = null,
     val removedCount: Int = 0,
+    val anchor: UndoAnchor = CodexUndoAnchors.Library,
 ) {
     val action: CodexCommand? get() = if (succeeded) undo else command
-    val actionLabel: String? get() = if (!succeeded) "Retry" else if (undo != null) "Undo" else null
+    val undoAction: UndoAction? get() = if (!succeeded) UndoAction.Retry else if (undo != null) UndoAction.Undo else null
     val message: String get() = when (command) {
         is CodexCommand.Clean -> when {
             !succeeded -> "Could not clean Codex"
@@ -64,7 +78,11 @@ data class CodexCommandFeedback(
     }
 }
 
-/** Serial retained mutations with acknowledged feedback; cancelling a UI collector loses no Retry or Undo. */
+/**
+ * Serial retained mutations with acknowledged feedback; cancelling a UI collector loses no Retry or Undo.
+ * Notices without an action are shown as snackbars; Undo and Retry move into the app's [UndoSlot] through
+ * [offer], anchored where each command was given.
+ */
 class CodexCommandViewModel(
     private val repository: CodexRepository,
     private val clearLikes: suspend (String) -> ClearedLikesSnapshot?,
@@ -79,41 +97,61 @@ class CodexCommandViewModel(
     private val mutableFeedback = MutableStateFlow<List<CodexCommandFeedback>>(emptyList())
     val feedback = mutableFeedback.asStateFlow()
 
-    fun clean(profileId: String, targetId: String, comparisonIds: Set<String>) = submit(
-        CodexCommand.Clean(CodexCleaningRequest(profileId, targetId, comparisonIds.toSet())),
-    )
+    // Each command takes the anchor of the surface it was given on; Library is where the Codex menus live.
+    fun clean(profileId: String, targetId: String, comparisonIds: Set<String>, anchor: UndoAnchor = CodexUndoAnchors.Library) =
+        submit(CodexCommand.Clean(CodexCleaningRequest(profileId, targetId, comparisonIds.toSet())), anchor)
 
-    fun create(profileId: String, name: String) = submit(CodexCommand.Create(profileScopedCodexId(profileId), name))
-    fun rename(id: String, name: String) = submit(CodexCommand.Rename(id, name))
-    fun automaticTag(id: String, tag: CodexAutomaticTag, enabled: Boolean) = submit(CodexCommand.AutomaticTag(id, tag, enabled))
-    fun reorder(ids: List<String>) = submit(CodexCommand.Reorder(ids.toList()))
-    fun delete(id: String, profileId: String) = submit(
+    fun create(profileId: String, name: String, anchor: UndoAnchor = CodexUndoAnchors.Library) =
+        submit(CodexCommand.Create(profileScopedCodexId(profileId), name), anchor)
+    fun rename(id: String, name: String, anchor: UndoAnchor = CodexUndoAnchors.Library) = submit(CodexCommand.Rename(id, name), anchor)
+    fun automaticTag(id: String, tag: CodexAutomaticTag, enabled: Boolean, anchor: UndoAnchor = CodexUndoAnchors.Library) =
+        submit(CodexCommand.AutomaticTag(id, tag, enabled), anchor)
+    fun reorder(ids: List<String>, anchor: UndoAnchor = CodexUndoAnchors.Library) = submit(CodexCommand.Reorder(ids.toList()), anchor)
+
+    /** Deleting from Codex detail navigates to the Library, so its Undo is offered there by default. */
+    fun delete(id: String, profileId: String, anchor: UndoAnchor = CodexUndoAnchors.Library) = submit(
         if (id == likesCodexIdForProfile(profileId)) CodexCommand.ClearLikes(profileId) else CodexCommand.Delete(id),
+        anchor,
     )
 
-    fun remove(id: String, items: List<CodexItem>, posts: List<Post>) {
+    fun remove(id: String, items: List<CodexItem>, posts: List<Post>, anchor: UndoAnchor = CodexUndoAnchors.detail(id)) {
         val postIds = posts.mapTo(mutableSetOf(), Post::id)
         val selected = items.filter { it.postId in postIds }
-        if (selected.isNotEmpty()) submit(CodexCommand.Remove(id, selected, posts.toList()))
+        if (selected.isNotEmpty()) submit(CodexCommand.Remove(id, selected, posts.toList()), anchor)
     }
 
     /** Removes [post] from Codex [id] for a surface that shows the post without the Codex's items, such as the Viewer. */
     fun removePost(id: String, post: Post) {
-        scope.launch { remove(id, repository.observeCodexItems(id).first(), listOf(post)) }
+        scope.launch { remove(id, repository.observeCodexItems(id).first(), listOf(post), UndoAnchor.App) }
     }
 
     fun acknowledge(id: Long, performAction: Boolean) {
-        val item = feedback.value.firstOrNull { it.id == id } ?: return
-        mutableFeedback.update { current -> current.filterNot { it.id == id } }
-        if (performAction) item.action?.let(::submit)
+        val item = take(id) ?: return
+        if (performAction) item.action?.let { submit(it, item.anchor) }
     }
 
-    private fun submit(command: CodexCommand) {
+    /** Moves actionable feedback [id] into [undo]; its Undo or Retry then runs here, in this owner's scope. */
+    fun offer(id: Long, undo: UndoSlot) {
+        val item = take(id) ?: return
+        val action = item.action ?: return
+        val label = item.undoAction ?: return
+        undo.offer(scope, UndoOffer(item.message, item.anchor, label) { submit(action, item.anchor) })
+    }
+
+    private fun take(id: Long): CodexCommandFeedback? {
+        val item = feedback.value.firstOrNull { it.id == id } ?: return null
+        mutableFeedback.update { current -> current.filterNot { it.id == id } }
+        return item
+    }
+
+    private fun submit(command: CodexCommand, anchor: UndoAnchor) {
         scope.launch {
             mutex.withLock {
                 val result = runCatchingPreservingCancellation { execute(command) }
                 val outcome = result.getOrNull()
-                val feedback = CodexCommandFeedback(++nextId, command, result.isSuccess, outcome?.undo, outcome?.removedCount ?: 0)
+                val feedback = CodexCommandFeedback(
+                    ++nextId, command, result.isSuccess, outcome?.undo, outcome?.removedCount ?: 0, anchor,
+                )
                 mutableFeedback.update { it + feedback }
             }
         }

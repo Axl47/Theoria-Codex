@@ -1,5 +1,6 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.ui.undo.UndoAction
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.InMemoryCodexLikesTransactions
@@ -61,11 +62,11 @@ class CodexRemovalWorkflowTest {
         runCurrent()
         assertEquals(original, stored.observeCodexItems(codex.codexId).first())
         val failure = owner.feedback.value.single()
-        assertEquals("Retry", failure.actionLabel)
+        assertEquals(UndoAction.Retry, failure.undoAction)
         owner.acknowledge(failure.id, true)
         runCurrent()
         val removed = owner.feedback.value.single()
-        assertEquals("Undo", removed.actionLabel)
+        assertEquals(UndoAction.Undo, removed.undoAction)
         assertEquals(listOf(original.last()), stored.observeCodexItems(codex.codexId).first())
         owner.acknowledge(removed.id, true)
         runCurrent()
@@ -164,7 +165,7 @@ class CodexRemovalWorkflowTest {
         runCurrent()
         assertEquals(listOf(second.codexId), repository.observeCodices().first().map { it.codexId })
         val deleted = owner.feedback.value.single()
-        assertEquals("Undo", deleted.actionLabel)
+        assertEquals(UndoAction.Undo, deleted.undoAction)
 
         owner.acknowledge(deleted.id, performAction = true)
         runCurrent()
@@ -186,7 +187,7 @@ class CodexRemovalWorkflowTest {
 
         owner.delete(likesCodexIdForProfile("profile-main"), "profile-main")
         runCurrent()
-        assertEquals(null, owner.feedback.value.single().actionLabel)
+        assertEquals(null, owner.feedback.value.single().undoAction)
         owner.acknowledge(owner.feedback.value.single().id, performAction = false)
 
         val post = testPost(sourcePostId = "liked")

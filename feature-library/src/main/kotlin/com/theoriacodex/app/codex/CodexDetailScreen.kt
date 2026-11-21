@@ -58,6 +58,7 @@ import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
 import com.theoriacodex.app.ui.navigation.rememberTriageAction
+import com.theoriacodex.app.ui.undo.UndoPill
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.app.ui.components.FeedScrollSignal
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
@@ -139,6 +140,7 @@ fun CodexDetailScreen(
     Scaffold(
         modifier = Modifier.nestedScroll(filterScroll.connection),
         contentWindowInsets = WindowInsets(0),
+        snackbarHost = { UndoPill(CodexUndoAnchors.detail(codexId)) },
         floatingActionButton = {
             CodexDetailFilterFab(
                 filters, sortMode, customFiltersActive, fabRestoreState, filterScroll, resetFilters, onFabRestoreStateChange,

@@ -61,6 +61,10 @@ import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.codex.SaveToCodexSheet
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.di.TheoriaAppContainer
+import com.theoriacodex.app.ui.undo.ProvideUndoSlot
+import com.theoriacodex.app.ui.undo.UndoSlot
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.tags.PostTagContextProvider
@@ -94,6 +98,26 @@ internal fun TheoriaAppContent(
     appShellOwner: AppShellViewModel,
     incomingUri: Uri? = null,
     onIncomingUriConsumed: () -> Unit = {},
+) {
+    // One undo slot per Activity, kept across recreation like the shell's other owners.
+    val undo = viewModel(key = "undo-slot") { UndoSlotOwner() }.slot
+    ProvideUndoSlot(undo) {
+        TheoriaAppShellContent(appContainer, viewerSessionOwner, appShellOwner, incomingUri, onIncomingUriConsumed)
+    }
+}
+
+/** Holds the app's one [UndoSlot] in the Activity's ViewModel store. */
+private class UndoSlotOwner : ViewModel() {
+    val slot = UndoSlot()
+}
+
+@Composable
+private fun TheoriaAppShellContent(
+    appContainer: TheoriaAppContainer,
+    viewerSessionOwner: ViewerSessionRetentionViewModel,
+    appShellOwner: AppShellViewModel,
+    incomingUri: Uri?,
+    onIncomingUriConsumed: () -> Unit,
 ) {
     val shell = rememberTheoriaShell(appContainer, viewerSessionOwner, appShellOwner)
     ShellOwnerHosts(shell)

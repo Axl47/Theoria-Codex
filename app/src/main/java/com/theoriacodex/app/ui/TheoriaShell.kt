@@ -10,9 +10,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.MutableState
@@ -379,15 +377,6 @@ internal class TheoriaShell(
         scope.launch {
             runCatchingPreservingCancellation { data.statisticsRepository.recordPostUrlCopy() }
         }
-    }
-
-    suspend fun showActionableFeedback(message: String, actionLabel: String): Boolean {
-        return snackbarHostState.showSnackbar(
-            message = message,
-            actionLabel = actionLabel,
-            withDismissAction = false,
-            duration = SnackbarDuration.Long,
-        ) == SnackbarResult.ActionPerformed
     }
 
     fun requestSaveToCodex(post: Post, fromForYou: Boolean = false, searchQuery: Query? = null) {
