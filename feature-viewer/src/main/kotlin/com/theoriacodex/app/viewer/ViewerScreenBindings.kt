@@ -28,6 +28,8 @@ data class ViewerScreenConfig(
 /** What the Viewer asks of the app: navigation, persistence and platform behavior. The app builds one per shell. */
 data class ViewerScreenCallbacks(
     val onPlaybackModeSelected: (ViewerPlaybackMode) -> Unit = {},
+    /** A quality picked from the playback menu, which becomes the default video quality. */
+    val onVideoQualitySelected: (VideoQuality) -> Unit = {},
     val onCommentOrderSelected: (CommentOrder) -> Unit = {},
     val onVisiblePostChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
     val onVisibleMediaChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
@@ -52,5 +54,6 @@ class ViewerScreenHost(
     val onRequestMediaRecovery: ((Post, ImageRef) -> Unit)? = null,
     val onVisiblePostChanged: ((Post, Int) -> Unit)? = null,
     val onVisibleMediaChanged: ((Post, Int) -> Unit)? = null,
+    val onVideoQualitySelected: (VideoQuality) -> Unit = {},
     val durations: ViewerPostDurations = ViewerPostDurations.None,
 )

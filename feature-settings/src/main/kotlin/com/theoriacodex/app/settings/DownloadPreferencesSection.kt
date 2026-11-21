@@ -18,12 +18,12 @@ import com.theoriacodex.data.repository.SettingDestinations
 import com.theoriacodex.data.repository.SettingToggles
 import com.theoriacodex.domain.model.VideoQuality
 
+/** Settings' Downloads sheet. Default video quality is set from the Viewer's playback menu instead. */
 @Composable
-fun MediaPreferencesSection(state: SettingsUiState, onAction: (SettingsAction) -> Unit) {
-    Text(SettingDestinations.Playback.title, style = MaterialTheme.typography.titleMedium)
-    listOf(SettingChoices.DefaultVideoQuality, SettingChoices.DownloadQuality).forEach { choice ->
-        QualityChoices(choice, choice.read(state.settings)) { onAction(SettingsAction.SetChoice(choice, it)) }
-    }
+fun DownloadPreferencesSection(state: SettingsUiState, onAction: (SettingsAction) -> Unit) {
+    Text(SettingDestinations.Downloads.title, style = MaterialTheme.typography.titleMedium)
+    val choice = SettingChoices.DownloadQuality
+    QualityChoices(choice, choice.read(state.settings)) { onAction(SettingsAction.SetChoice(choice, it)) }
     listOf(SettingToggles.DownloadsOverMetered, SettingToggles.DownloadsOverRoaming).forEach { toggle ->
         SwitchRow(toggle, state.settings, contentPadding = PaddingValues(vertical = 4.dp)) {
             onAction(SettingsAction.SetToggle(toggle, it))

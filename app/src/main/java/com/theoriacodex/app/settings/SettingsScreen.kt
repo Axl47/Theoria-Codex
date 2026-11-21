@@ -20,7 +20,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NewReleases
-import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.BugReport
@@ -63,7 +63,7 @@ import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.launch
 
-private enum class SettingsSheet { PROFILE, SOURCE_MIX, PLAYBACK, CONTROLS }
+private enum class SettingsSheet { PROFILE, SOURCE_MIX, DOWNLOADS, CONTROLS }
 
 private val STORAGE_TOGGLES = listOf(SettingToggles.KeepMediaOffline, SettingToggles.FindAnimationDurations)
 
@@ -218,10 +218,6 @@ private fun SettingsHomeGroups(
         OpenLinksRow()
     }
     SettingsGroup("Viewing") {
-        SettingsRow(SettingDestinations.Playback.title, playbackSummary(state), Icons.Default.PlayCircle, onClick = {
-            onSheet(SettingsSheet.PLAYBACK)
-        })
-        SettingsRowDivider()
         SettingsRow(SettingDestinations.Controls.title, "Search bar, seeking, swipes, rotation", Icons.Default.TouchApp, onClick = {
             onSheet(SettingsSheet.CONTROLS)
         })
@@ -233,6 +229,10 @@ private fun SettingsHomeGroups(
             Icons.Default.Storage,
             onClick = { open(SettingsPage.STORAGE) },
         )
+        SettingsRowDivider()
+        SettingsRow(SettingDestinations.Downloads.title, downloadsSummary(state), Icons.Default.Download, onClick = {
+            onSheet(SettingsSheet.DOWNLOADS)
+        })
         backup?.let {
             SettingsRowDivider()
             SettingsRow(
@@ -286,7 +286,7 @@ private fun SettingsHomeSheet(
             SettingsSheet.SOURCE_MIX -> UnifiedSourceSettings(searchSources, state.settings.runtime) {
                 onAction(SettingsAction.SetSourceWeights(searchSources, it))
             }
-            SettingsSheet.PLAYBACK -> MediaPreferencesSection(state, onAction)
+            SettingsSheet.DOWNLOADS -> DownloadPreferencesSection(state, onAction)
             SettingsSheet.CONTROLS -> PreferencesSection(state, onAction)
         }
     }
@@ -482,6 +482,5 @@ internal fun sourceMixSummary(state: SettingsUiState, sources: Set<SourceKey>): 
     }
 }
 
-internal fun playbackSummary(state: SettingsUiState): String =
-    "Video ${videoQualityLabel(state.settings.viewer.videoQuality)} · " +
-        "Downloads ${videoQualityLabel(state.settings.cache.downloadQuality)}"
+internal fun downloadsSummary(state: SettingsUiState): String =
+    "${videoQualityLabel(state.settings.cache.downloadQuality)} quality"
