@@ -105,14 +105,17 @@ class RoomPayloadGoldenTest {
     }
 
     // Pins: the goldens hold every key the post record declares. Gson never wrote a local path for the full image
-    // or a gallery entry in these goldens, so post-payload-offline.json is captured from the kotlinx encoder.
+    // or a gallery entry in these goldens, so post-payload-offline.json is captured from the kotlinx encoder, as is
+    // post-payload-gallery.json for the flag only a listed gallery of unknown length sets.
     @Test fun `golden posts payloads hold every stored key`() {
         val offline = PostStorageCodec.encode(goldenOfflinePost)
         assertStoredFormat(
             golden("post-payload-full.json") to PostStorageCodec.encode(goldenFullPost),
             golden("post-payload-offline.json") to offline,
+            golden("post-payload-gallery.json") to PostStorageCodec.encode(goldenGalleryPost),
         )
     }
+
 
     private fun golden(name: String): String =
         checkNotNull(javaClass.getResource("/golden/$name")) { "missing golden $name" }.readText()
@@ -197,4 +200,13 @@ private val goldenFullPost = Post(
 private val goldenOfflinePost = goldenFullPost.copy(
     full = goldenFullPost.full?.copy(localPath = "/data/offline/full.mp4"),
     media = goldenFullPost.media.mapIndexed { index, media -> media.copy(localPath = "/data/offline/$index") },
+)
+
+/** Source of `golden/post-payload-gallery.json`, captured from the kotlinx encoder: a listed gallery of unknown length. */
+private val goldenGalleryPost = Post(
+    id = PostId(SourceKey.NHENTAI, "gold-gallery"),
+    preview = ImageRef("https://example.com/thumb.jpg", null, "image/jpeg"),
+    full = null, media = emptyList(), pageUrl = "https://example.com/g/1", width = null, height = null,
+    canonicalTags = emptyList(), rawTags = emptyList(), authorName = null, createdAtEpochMs = null,
+    title = "Gallery", galleryLengthUnknown = true,
 )
