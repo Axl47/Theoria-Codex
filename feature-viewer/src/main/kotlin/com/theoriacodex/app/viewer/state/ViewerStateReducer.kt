@@ -50,7 +50,7 @@ private fun Post.toNewViewerPageState(
     return if (resolves && requested > page.media.lastIndex) page.copy(pendingMediaIndex = requested) else page
 }
 
-internal fun Post.toViewerPageState(
+fun Post.toViewerPageState(
     selectedMediaIndex: Int = 0,
     resolution: ViewerResolutionState = ViewerResolutionState(),
 ): ViewerPageState {

@@ -23,7 +23,6 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.media.isVideoMediaRef
-import com.theoriacodex.app.media.postMediaItems
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
@@ -160,7 +159,7 @@ private fun ViewerPostPage(
 ) {
     val post = frame.posts[postPage]
     val pageState = frame.navigation.pages[postPage]
-    val postMedia = remember(post) { postMediaItems(post) }
+    val postMedia = pageState.media
     val knownDurationMs by remember(post, durations) { durations.observe(post) }.collectAsStateWithLifecycle(null)
     val initialMediaPage = pageState.selectedMediaIndex.coerceIn(0, postMedia.lastIndex)
     val mediaPagerState = rememberPagerState(initialPage = initialMediaPage, pageCount = { postMedia.size })
@@ -180,7 +179,7 @@ private fun ViewerPostPage(
         contentPadding = if (frame.mediaEdgeToEdge) PaddingValues(0.dp) else PaddingValues(top = 40.dp),
         pageSpacing = if (frame.mediaEdgeToEdge) 0.dp else 8.dp,
     ) { mediaPage ->
-        val media = postMedia[mediaPage]
+        val media = postMedia[mediaPage].ref
         val loadGeneration = pageState.media.getOrNull(mediaPage)?.loadGeneration ?: 0L
         val key = ViewerMediaKey(post.id, mediaPage)
         val active = postPage == frame.navigation.currentIndex && mediaPage == frame.selection.mediaIndex

@@ -8,7 +8,6 @@ import com.theoriacodex.app.media.postPlaybackMediaCandidate
 import com.theoriacodex.app.source.exposedRealSources
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.search.state.SearchSourceScope
-import com.theoriacodex.app.viewer.ViewerMediaOverviewKind
 import com.theoriacodex.app.viewer.viewerMediaOverviewItems
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.model.PostId

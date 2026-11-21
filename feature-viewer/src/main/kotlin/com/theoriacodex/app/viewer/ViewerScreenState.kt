@@ -13,8 +13,8 @@ import androidx.compose.runtime.setValue
 import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isPixivUgoiraMedia
 import com.theoriacodex.app.media.isVideoMediaRef
-import com.theoriacodex.app.media.postMediaItems
 import com.theoriacodex.app.viewer.state.ViewerAction
+import com.theoriacodex.app.viewer.state.ViewerMediaState
 import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.domain.model.ImageRef
@@ -159,10 +159,12 @@ internal class ViewerSelection(
 }
 
 @Composable
-internal fun rememberViewerSelection(uiState: ViewerUiState, post: Post, canPlayUgoira: Boolean): ViewerSelection {
-    val mediaItems = remember(post) { postMediaItems(post) }
+internal fun rememberViewerSelection(uiState: ViewerUiState, page: ViewerPageState, canPlayUgoira: Boolean): ViewerSelection {
+    val post = page.post
+    // The page's media and its kinds follow its post, so a readiness change rebuilds neither list.
+    val mediaItems = remember(post) { page.media.map(ViewerMediaState::ref) }
     val mediaIndex = uiState.currentPage?.selectedMediaIndex?.coerceIn(0, mediaItems.lastIndex) ?: 0
-    val overviewItems = remember(post) { viewerMediaOverviewItems(post) }
+    val overviewItems = remember(post) { viewerMediaOverviewItems(page) }
     return remember(post, mediaItems, mediaIndex, canPlayUgoira, overviewItems) {
         ViewerSelection(post, mediaItems, mediaIndex, canPlayUgoira, overviewItems)
     }

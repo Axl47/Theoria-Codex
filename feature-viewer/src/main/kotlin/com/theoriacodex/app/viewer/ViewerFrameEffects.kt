@@ -15,7 +15,6 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.media.postMediaItems
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.domain.model.Post
@@ -50,9 +49,9 @@ internal fun rememberViewerSwipe(
                 viewerHorizontalSwipeTarget(
                     currentPostIndex = origin.postIndex,
                     currentMediaIndex = origin.mediaIndex,
-                    currentMediaCount = postMediaItems(it.post).size,
+                    currentMediaCount = it.media.size,
                     postCount = posts.size,
-                    targetPostMediaCount = posts.getOrNull(neighbor)?.let { post -> postMediaItems(post).size } ?: 0,
+                    targetPostMediaCount = pages.getOrNull(neighbor)?.media?.size ?: 0,
                     direction = direction,
                     galleryMediaPending = it.hasPendingGalleryMedia(),
                     targetMediaIndex = targetMediaIndex(pages.getOrNull(neighbor)),

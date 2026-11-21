@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import coil.Coil
+import com.theoriacodex.app.viewer.state.ViewerMediaKind
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -26,7 +27,7 @@ class ViewerPageThumbnailWarmTest {
     private val items = List(12) { index ->
         // Page 5 has no dedicated thumbnail: its poster stands in and is not warmed.
         val thumbnail = if (index == 5) "/poster/5.jpg" else "/thumb/$index.jpg"
-        ViewerMediaOverviewItem(index, ImageRef(null, "/poster/$index.jpg", "image/jpeg"), ViewerMediaOverviewKind.STILL_IMAGE, "/poster/$index.jpg", thumbnail)
+        ViewerMediaOverviewItem(index, ImageRef(null, "/poster/$index.jpg", "image/jpeg"), ViewerMediaKind.IMAGE, "/poster/$index.jpg", thumbnail)
     }
 
     @After fun resetCoil() = Coil.reset()

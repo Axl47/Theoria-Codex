@@ -36,13 +36,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.theoriacodex.app.media.isAnimatedImageMediaRef
-import com.theoriacodex.app.media.isGifMediaRef
-import com.theoriacodex.app.media.isPixivUgoiraMedia
-import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.media.PostMediaKind
+import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.mediaKind
-import com.theoriacodex.app.media.postMediaItems
+import com.theoriacodex.app.viewer.state.ViewerMediaKind
+import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -81,7 +79,7 @@ private fun ViewerOverviewCell(source: SourceKey, item: ViewerMediaOverviewItem,
         Text("${item.mediaIndex + 1}", color = Color.White, style = MaterialTheme.typography.labelMedium,
             modifier = Modifier.align(Alignment.TopStart).background(Color.Black.copy(alpha = 0.62f))
                 .padding(horizontal = 6.dp, vertical = 3.dp))
-        item.kind.badgeLabel?.let { label ->
+        item.kind.overviewBadgeLabel?.let { label ->
             ViewerOverviewBadge(item.kind, label, Modifier.align(Alignment.BottomEnd))
         }
     }
@@ -96,7 +94,7 @@ private fun ViewerOverviewPoster(source: SourceKey, item: ViewerMediaOverviewIte
         return
     }
     val imageModifier = Modifier.fillMaxSize().padding(4.dp)
-    AsyncImage(thumbnail, "Media ${item.mediaIndex + 1}: ${item.kind.accessibilityLabel}", imageModifier, contentScale = ContentScale.Fit)
+    AsyncImage(thumbnail, "Media ${item.mediaIndex + 1}: ${item.kind.overviewAccessibilityLabel}", imageModifier, contentScale = ContentScale.Fit)
     if (item.posterLocation != item.thumbnailLocation) ViewerOverviewOriginal(source, item, imageModifier)
 }
 
@@ -163,47 +161,60 @@ private fun rememberViewerOverviewRequest(
 }
 
 @Composable
-private fun ViewerOverviewBadge(kind: ViewerMediaOverviewKind, label: String, modifier: Modifier) {
+private fun ViewerOverviewBadge(kind: ViewerMediaKind, label: String, modifier: Modifier) {
     Row(modifier.background(Color.Black.copy(alpha = 0.72f)).padding(horizontal = 7.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (kind == ViewerMediaOverviewKind.VIDEO) Icon(Icons.Default.PlayArrow, null, tint = Color.White)
+        if (kind == ViewerMediaKind.VIDEO) Icon(Icons.Default.PlayArrow, null, tint = Color.White)
         Text(label, color = Color.White, style = MaterialTheme.typography.labelMedium)
     }
 }
 
-internal fun shouldDecodeStaticOverviewFrame(kind: ViewerMediaOverviewKind): Boolean {
-    return kind != ViewerMediaOverviewKind.ANIMATED_IMAGE
-}
+internal fun shouldDecodeStaticOverviewFrame(kind: ViewerMediaKind): Boolean = !kind.isAnimatedImage
 
-enum class ViewerMediaOverviewKind(
-    val badgeLabel: String?,
-    val accessibilityLabel: String,
-) {
-    STILL_IMAGE(badgeLabel = null, accessibilityLabel = "still image"),
-    ANIMATED_IMAGE(badgeLabel = "Animated", accessibilityLabel = "animated image"),
-    GIF(badgeLabel = "GIF", accessibilityLabel = "GIF"),
-    UGOIRA(badgeLabel = "Ugoira", accessibilityLabel = "Ugoira animation"),
-    VIDEO(badgeLabel = "Video", accessibilityLabel = "video"),
-    UNKNOWN(badgeLabel = "Media", accessibilityLabel = "media"),
-}
+private val ViewerMediaKind.isAnimatedImage
+    get() = this == ViewerMediaKind.ANIMATED_IMAGE || this == ViewerMediaKind.ANIMATED_WEBP
+
+/** The overview tile's corner badge; a still image has none. */
+internal val ViewerMediaKind.overviewBadgeLabel: String?
+    get() = when (this) {
+        ViewerMediaKind.IMAGE -> null
+        ViewerMediaKind.ANIMATED_IMAGE, ViewerMediaKind.ANIMATED_WEBP -> "Animated"
+        ViewerMediaKind.GIF -> "GIF"
+        ViewerMediaKind.UGOIRA -> "Ugoira"
+        ViewerMediaKind.VIDEO -> "Video"
+        ViewerMediaKind.UNKNOWN -> "Media"
+    }
+
+private val ViewerMediaKind.overviewAccessibilityLabel: String
+    get() = when (this) {
+        ViewerMediaKind.IMAGE -> "still image"
+        ViewerMediaKind.ANIMATED_IMAGE, ViewerMediaKind.ANIMATED_WEBP -> "animated image"
+        ViewerMediaKind.GIF -> "GIF"
+        ViewerMediaKind.UGOIRA -> "Ugoira animation"
+        ViewerMediaKind.VIDEO -> "video"
+        ViewerMediaKind.UNKNOWN -> "media"
+    }
 
 data class ViewerMediaOverviewItem(
     val mediaIndex: Int,
     val media: ImageRef,
-    val kind: ViewerMediaOverviewKind,
+    val kind: ViewerMediaKind,
     val posterLocation: String?,
     // A smaller stand-in for pickers; equals the poster when the provider has none.
     val thumbnailLocation: String? = posterLocation,
 )
 
-fun viewerMediaOverviewItems(post: Post): List<ViewerMediaOverviewItem> {
-    return postMediaItems(post).mapIndexed { index, media ->
-        val kind = viewerMediaOverviewKind(post, media)
+/** The overview's tiles for [page], from the media its state already lists and classifies. */
+fun viewerMediaOverviewItems(page: ViewerPageState): List<ViewerMediaOverviewItem> {
+    val post = page.post
+    return page.media.mapIndexed { index, state ->
+        val media = state.ref
+        val kind = state.kind
         val posterLocation = viewerMediaOverviewPosterLocation(post, media, kind)
         // A locally saved page keeps using its local file.
         val thumbnail = media.thumbnailUrl?.takeIf {
-            kind == ViewerMediaOverviewKind.STILL_IMAGE && media.localPath.isNullOrBlank() && it.isNotBlank()
+            kind == ViewerMediaKind.IMAGE && media.localPath.isNullOrBlank() && it.isNotBlank()
         }
         ViewerMediaOverviewItem(
             mediaIndex = index,
@@ -219,37 +230,20 @@ internal fun viewerMediaOverviewAvailable(items: List<ViewerMediaOverviewItem>):
     return items.size > 1
 }
 
-internal fun viewerMediaOverviewKind(post: Post, media: ImageRef): ViewerMediaOverviewKind {
-    if (isPixivUgoiraMedia(post, media)) return ViewerMediaOverviewKind.UGOIRA
-    if (isVideoMediaRef(media)) return ViewerMediaOverviewKind.VIDEO
-    if (isGifMediaRef(media)) return ViewerMediaOverviewKind.GIF
-    if (isAnimatedImageMediaRef(media)) return ViewerMediaOverviewKind.ANIMATED_IMAGE
-    return when (mediaKind(media)) {
-        PostMediaKind.IMAGE -> ViewerMediaOverviewKind.STILL_IMAGE
-        PostMediaKind.VIDEO -> ViewerMediaOverviewKind.VIDEO
-        PostMediaKind.UGOIRA -> ViewerMediaOverviewKind.UGOIRA
-        PostMediaKind.UNKNOWN -> ViewerMediaOverviewKind.UNKNOWN
-    }
-}
-
-internal fun viewerMediaOverviewPosterLocation(
-    post: Post,
-    media: ImageRef,
-    kind: ViewerMediaOverviewKind = viewerMediaOverviewKind(post, media),
-): String? {
+private fun viewerMediaOverviewPosterLocation(post: Post, media: ImageRef, kind: ViewerMediaKind): String? {
     val mediaPoster = when (kind) {
-        ViewerMediaOverviewKind.STILL_IMAGE -> {
+        ViewerMediaKind.IMAGE -> {
             if (post.id.source == SourceKey.HITOMI) {
                 overviewWebPImageLocation(media) ?: viewerPrefetchImageLocation(post, media)
             } else {
                 viewerPrefetchImageLocation(post, media)
             }
         }
-        ViewerMediaOverviewKind.ANIMATED_IMAGE -> staticOverviewImageLocation(media)
-        ViewerMediaOverviewKind.GIF,
-        ViewerMediaOverviewKind.UGOIRA,
-        ViewerMediaOverviewKind.VIDEO,
-        ViewerMediaOverviewKind.UNKNOWN,
+        ViewerMediaKind.ANIMATED_IMAGE, ViewerMediaKind.ANIMATED_WEBP -> staticOverviewImageLocation(media)
+        ViewerMediaKind.GIF,
+        ViewerMediaKind.UGOIRA,
+        ViewerMediaKind.VIDEO,
+        ViewerMediaKind.UNKNOWN,
         -> null
     }
     if (mediaPoster != null) return mediaPoster

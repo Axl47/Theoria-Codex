@@ -150,7 +150,7 @@ private fun ViewerLoadedScreen(
     LaunchedEffect(posts, navigation.currentIndex, videoPositions) { videoPositions.retainAround(posts.map { it.id }, navigation.currentIndex) }
     // Starting a slideshow also returns zoomed media to fit, so the next touch reaches the gesture that stops it.
     val viewerTransform = remember(uiState.session?.value, uiState.currentMedia?.key, uiState.controls.slideshow) { mutableStateOf(ViewerTransformState()) }
-    val selection = rememberViewerSelection(uiState, posts[navigation.currentIndex], pixivUgoiraClient != null)
+    val selection = rememberViewerSelection(uiState, navigation.pages[navigation.currentIndex], pixivUgoiraClient != null)
     WarmViewerPageThumbnails(selection.post.id, selection.overviewItems, selection.mediaIndex)
     // Brightness holds for every media and the overview (PiP hands it back); the remembered volume returns for video only.
     val levelControls = rememberViewerLevelControls(!inPictureInPicture, restoreVolume = selection.media?.let(::isVideoMediaRef) == true && !uiState.overview.visible)

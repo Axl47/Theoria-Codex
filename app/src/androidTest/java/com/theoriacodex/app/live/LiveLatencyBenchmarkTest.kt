@@ -35,8 +35,9 @@ import com.theoriacodex.app.search.feedPreviewDecodeSize
 import com.theoriacodex.app.search.previewAspectRatio
 import com.theoriacodex.app.search.state.modeKey
 import com.theoriacodex.app.ui.TopLevelDestination
-import com.theoriacodex.app.viewer.ViewerMediaOverviewKind
+import com.theoriacodex.app.viewer.state.ViewerMediaKind
 import com.theoriacodex.app.viewer.buildViewerImageRequest
+import com.theoriacodex.app.viewer.state.toViewerPageState
 import com.theoriacodex.app.viewer.viewerMediaOverviewItems
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.SourceAdapter
@@ -234,9 +235,9 @@ class LiveLatencyBenchmarkTest {
             viewerMediaDeliveryPlan(post, media).primary?.location?.let { buildViewerImageRequest(context, it, source) }
         }
         loadAll("viewer", viewerRequests, report)
-        val gallery = resolved.firstOrNull { post -> viewerMediaOverviewItems(post).size >= MIN_GALLERY_PAGES } ?: return
-        val pages = viewerMediaOverviewItems(gallery)
-            .filter { it.kind == ViewerMediaOverviewKind.STILL_IMAGE }
+        val gallery = resolved.firstOrNull { post -> viewerMediaOverviewItems(post.toViewerPageState()).size >= MIN_GALLERY_PAGES } ?: return
+        val pages = viewerMediaOverviewItems(gallery.toViewerPageState())
+            .filter { it.kind == ViewerMediaKind.IMAGE }
             .take(GALLERY_PAGES)
             .mapNotNull { item ->
                 item.thumbnailLocation?.let {

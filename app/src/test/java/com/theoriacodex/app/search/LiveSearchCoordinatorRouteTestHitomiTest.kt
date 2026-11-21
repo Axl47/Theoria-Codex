@@ -8,7 +8,8 @@ import com.theoriacodex.app.media.postPlaybackMediaCandidate
 import com.theoriacodex.app.source.exposedRealSources
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.search.state.SearchSourceScope
-import com.theoriacodex.app.viewer.ViewerMediaOverviewKind
+import com.theoriacodex.app.viewer.state.ViewerMediaKind
+import com.theoriacodex.app.viewer.state.toViewerPageState
 import com.theoriacodex.app.viewer.viewerMediaOverviewItems
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.model.AccountFeed
@@ -198,13 +199,13 @@ internal class LiveSearchCoordinatorRouteTestHitomiTest : LiveSearchCoordinatorR
                     term.sourceNamespace == "type"
             },
         )
-        val animatedOverview = viewerMediaOverviewItems(animatedGallery)
+        val animatedOverview = viewerMediaOverviewItems(animatedGallery.toViewerPageState())
         assertEquals(44, animatedOverview.size)
         assertEquals((0 until 44).toList(), animatedOverview.map { item -> item.mediaIndex })
         assertTrue(
             "Hitomi gallery $ANIMATED_GALLERY_ID was not mapped as 44 animated images",
             animatedOverview.all { item ->
-                item.kind == ViewerMediaOverviewKind.ANIMATED_IMAGE && item.media.isAnimated
+                item.kind == ViewerMediaKind.ANIMATED_WEBP && item.media.isAnimated
             },
         )
         val webPUrl = requireNotNull(animatedOverview.first().posterLocation) {
@@ -252,9 +253,9 @@ internal class LiveSearchCoordinatorRouteTestHitomiTest : LiveSearchCoordinatorR
         assertTrue("Hitomi anime unexpectedly exposed a creator", anime.creatorProfiles.isEmpty())
         val animeMedia = postMediaItems(anime)
         assertEquals("Hitomi anime exposed poster records as pages", 1, animeMedia.size)
-        val animeOverview = viewerMediaOverviewItems(anime)
+        val animeOverview = viewerMediaOverviewItems(anime.toViewerPageState())
         assertEquals(listOf(0), animeOverview.map { item -> item.mediaIndex })
-        assertEquals(listOf(ViewerMediaOverviewKind.VIDEO), animeOverview.map { item -> item.kind })
+        assertEquals(listOf(ViewerMediaKind.VIDEO), animeOverview.map { item -> item.kind })
         val video = requireNotNull(postPlaybackMediaCandidate(anime)) {
             "Hitomi anime $ANIME_GALLERY_ID did not expose a playback candidate"
         }
