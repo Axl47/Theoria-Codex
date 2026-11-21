@@ -104,12 +104,15 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         var nativeTouchModeBeforeApply = false
         scenario.onActivity { nativeTouchModeBeforeApply = it.window.decorView.isInTouchMode }
         submitSearch()
+        // Each committed edit also runs live after a pause, so slower tag entry can reach the provider with a
+        // partial query first; only the grouped one matters here.
+        val grouped = listOf(listOf("landscape"), listOf("blue", "green"))
         compose.waitUntil(conditionDescription = "Provider receives the grouped search", timeoutMillis = 10_000) {
-            container.registry.requests.any { it.source == SourceKey.PIXIV && it.pageToken == null }
+            container.registry.requests.any { request ->
+                request.source == SourceKey.PIXIV && request.pageToken == null &&
+                    request.query.effectiveIncludeTermGroups.map { group -> group.terms.map { it.value } } == grouped
+            }
         }
-        val root = container.registry.requests.single { it.source == SourceKey.PIXIV && it.pageToken == null }
-        assertEquals(listOf(listOf("landscape"), listOf("blue", "green")),
-            root.query.effectiveIncludeTermGroups.map { group -> group.terms.map { it.value } })
         val summary = compose.onNodeWithText("landscape, blue or green", useUnmergedTree = true)
         try {
             compose.waitUntil(conditionDescription = "Grouped query is applied and its field is collapsed", timeoutMillis = 10_000) {

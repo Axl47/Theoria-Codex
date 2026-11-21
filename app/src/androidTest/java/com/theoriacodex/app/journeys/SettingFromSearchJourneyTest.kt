@@ -4,10 +4,13 @@ import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTextInput
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.UiDevice
 import com.theoriacodex.data.repository.SettingToggles
 import kotlinx.coroutines.flow.first
 import org.junit.Test
@@ -24,7 +27,12 @@ class SettingFromSearchJourneyTest : AppJourneyFixture() {
         activate(compose.onNode(hasText(toggle.title) and isToggleable() and hasAnyAncestor(hasTestTag("Search composer"))))
         compose.waitUntil(10_000) { io { toggle.read(container.settings.observeSettings().first()) } }
 
-        scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        // The composer is its own Dialog window, so system Back (not the Activity's dispatcher) closes it; the
+        // first press may only hide the keyboard.
+        val composer = compose.onNodeWithTag("Search composer")
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        repeat(2) { if (composer.isDisplayed()) device.pressBack().also { compose.waitForIdle() } }
+        compose.waitUntil(10_000) { !composer.isDisplayed() }
         openSettings()
         activate(compose.onNodeWithText("Controls"))
         compose.onNode(hasText(toggle.title) and isToggleable()).assertIsOn()
