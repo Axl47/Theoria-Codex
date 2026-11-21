@@ -48,8 +48,18 @@ internal class TrailFeed(
         scope, relatedLoader, currentState = { RelatedPostsUiState.Idle }, canonicalPosts = { snapshot.value.results }, updateState = {},
     )
 
-    /** Loads the first page; true when it holds posts to show. */
-    suspend fun start(): Boolean = step() && snapshot.value.results.isNotEmpty()
+    /**
+     * Loads the first page, and up to [FIRST_PAGE_LIMIT] pages while [visible] finds nothing to show in them, as feeds
+     * do under filters. Returns what [visible] shows, empty when nothing loaded or a page failed.
+     */
+    suspend fun start(visible: (List<Post>) -> List<Post> = { it }): List<Post> {
+        repeat(FIRST_PAGE_LIMIT) {
+            if (!step()) return emptyList()
+            val shown = visible(snapshot.value.results)
+            if (shown.isNotEmpty() || !snapshot.value.canLoadMore) return shown
+        }
+        return emptyList()
+    }
 
     override fun loadNextPage() {
         val current = snapshot.value
@@ -76,5 +86,10 @@ internal class TrailFeed(
         if (error is CancellationException) currentCoroutineContext().ensureActive()
         snapshot.update { it.copy(loadingMore = false) }
         false
+    }
+
+    private companion object {
+        /** Search's own automatic page limit (FeedPageDemand), so a filtered fork gives up as soon as a feed would. */
+        const val FIRST_PAGE_LIMIT = 3
     }
 }

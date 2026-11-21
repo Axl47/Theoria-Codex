@@ -4,12 +4,15 @@ import com.theoriacodex.app.codex.SavedSearchBranch
 import com.theoriacodex.app.codex.SavedSearchFeedLoader
 import com.theoriacodex.app.codex.SavedSearchQueryBranch
 import com.theoriacodex.app.related.RelatedPostsLoading
+import com.theoriacodex.app.media.AnimatedDurationRange
+import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.model.CreatorProfile
+import com.theoriacodex.domain.model.MediaFilter
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
@@ -39,14 +42,27 @@ internal fun trailSpec(request: TrailRequest, sources: TrailSources): TrailSpec?
     is TrailRequest.Similar -> sources.similar(request.from)?.let { TrailSpec("Similar", null, it) }
 }
 
-/** One tag, searched where the level it came from searched: everywhere for a Unified level, else the post's own source. */
-internal fun trailTagQuery(tag: String, source: SourceKey, context: Query?): Query = Query(
-    mode = if (context?.mode == QueryMode.Unified) QueryMode.Unified else QueryMode.Source(source),
-    includeTags = listOf(tag),
-    excludeTags = emptyList(),
-    sort = context?.sort ?: SortMode.NEWEST,
-    dateRange = null,
-    minScore = null,
+/**
+ * One tag, searched where the level it came from searched (everywhere for a Unified level, else the post's own source)
+ * and under that level's filters: its sort, media, dates and, where it searched the same place, its exclusions.
+ */
+internal fun trailTagQuery(tag: String, source: SourceKey, context: Query?): Query {
+    val mode = if (context?.mode == QueryMode.Unified) QueryMode.Unified else QueryMode.Source(source)
+    val tagOnly = Query(mode, listOf(tag), emptyList(), context?.sort ?: SortMode.NEWEST, context?.dateRange, null)
+    if (context == null) return tagOnly
+    // Another source's exclusions may name tags this one spells differently, so they stay with their level.
+    val excluded = if (context.mode == mode) context.excludeTerms.filterNot { it.value.equals(tag, ignoreCase = true) } else emptyList()
+    return tagOnly.copy(excludeTerms = excluded, media = context.media)
+}
+
+/**
+ * The phone-side filters a fork keeps from the level it leaves. A tag trail's own query decides its media and dates.
+ * A length filter is dropped: a fork's lengths are not known yet, and an unknown length would hide every post.
+ */
+internal fun trailVisibilityFilters(parent: SearchVisibilityFilters, query: Query?): SearchVisibilityFilters = parent.copy(
+    animatedOnly = query?.let { it.media == MediaFilter.ANIMATED } ?: parent.animatedOnly,
+    dateRange = query?.dateRange,
+    animatedDurationRange = AnimatedDurationRange.Full,
 )
 
 /**
