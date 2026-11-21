@@ -271,7 +271,7 @@ private fun TheoriaNavigationSurface(shell: TheoriaShell, currentRoute: String?)
             else shell.scope.launch { navigateTopLevelDestination(navigation.navController, pagerState, destination) }
         },
     ) { contentModifier ->
-        CompositionLocalProvider(LocalTabReselects provides tabReselects) {
+        CompositionLocalProvider(LocalTabReselects provides tabReselects, *libraryTransferLocals(shell.transfers)) {
             SharedTransitionLayout(contentModifier) {
                 TheoriaNavHost(shell, this)
             }

@@ -181,9 +181,10 @@ internal fun BrowsingDestinationStateBoundary(
 @Composable
 internal fun RecentsDestinationStateBoundary(
     data: DataDependencies,
+    loading: @Composable () -> Unit = {},
     content: @Composable (RecentsDestinationState) -> Unit,
 ) {
-    val recentState = browsingMetadataOwner(data).recents.collectAsStateWithLifecycle().value ?: return
+    val recentState = browsingMetadataOwner(data).recents.collectAsStateWithLifecycle().value ?: return loading()
     content(recentState)
 }
 

@@ -189,6 +189,10 @@ interface RecentsRepository {
         watchedPosts: List<RecentPostEntry> = emptyList(),
         searches: List<RecentSearchEntry> = emptyList(),
     )
+    /** Removes one post from one History section; [restoreEntries] with the removed entry puts it back. */
+    suspend fun removeWatchedPost(postId: PostId, section: RecentPostSection)
+    /** Removes one search; [restoreEntries] with the removed entry puts it back. */
+    suspend fun removeSearch(queryHash: String)
     suspend fun clearWatchedPosts(section: RecentPostSection)
     /** Remove only this section and capture the exact Undo payload in the same transaction. */
     suspend fun clearSearches(section: RecentSearchSection): List<RecentSearchEntry>

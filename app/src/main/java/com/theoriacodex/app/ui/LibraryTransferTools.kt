@@ -5,8 +5,6 @@ import android.net.Uri
 import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -14,12 +12,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.backup.AndroidBackupDocuments
@@ -30,19 +26,16 @@ import com.theoriacodex.app.backup.BackupDialogs
 import com.theoriacodex.app.backup.BackupViewModel
 import com.theoriacodex.app.backup.ProfileBackupActions
 import com.theoriacodex.app.di.TheoriaAppContainer
-import com.theoriacodex.app.media.DownloadJobsButton
-import com.theoriacodex.app.media.DownloadJobsSheet
 import com.theoriacodex.app.media.PostDownloadsViewModel
 import com.theoriacodex.app.media.MediaCacheMaintenance
 import com.theoriacodex.app.media.OfflineStorageViewModel
 import com.theoriacodex.app.media.OfflineStorageSummary
-import com.theoriacodex.app.media.savedBytes
+import com.theoriacodex.app.media.DownloadRemovals
+import com.theoriacodex.app.media.StorageSheet
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.lifecycle.viewModelScope
 import com.theoriacodex.app.media.totalBytes
-import com.theoriacodex.app.media.OfflineStorageSheet
-import kotlinx.coroutines.launch
 import com.theoriacodex.app.media.PostDownloadItem
-import com.theoriacodex.app.media.openPostDownload
-import com.theoriacodex.app.media.openDownloadedPostFile
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -50,6 +43,7 @@ import kotlinx.coroutines.flow.map
 /** Activity-owned transfer work with shell-owned Android document pickers and transient dialogs. */
 internal class LibraryTransferTools(
     val downloads: PostDownloadsViewModel,
+    val downloadRemovals: DownloadRemovals,
     val backup: BackupViewModel,
     val offline: OfflineStorageViewModel,
     val autoBackup: AutoBackupWorkflow?,
@@ -58,7 +52,17 @@ internal class LibraryTransferTools(
     val chooseAutoBackupFolder: () -> Unit,
     val turnOffAutoBackup: () -> Unit,
 ) {
+    /** Whether the Library's offline and downloads sheet is open. */
     var showDownloads by mutableStateOf(false)
+
+    /** The Codex whose offline row the open sheet scrolls to and marks, if it was opened for one. */
+    var markedCodexId by mutableStateOf<String?>(null)
+
+    /** Opens the offline and downloads sheet, on [codexId]'s row when one is given. */
+    fun openTransfers(codexId: String?) {
+        markedCodexId = codexId
+        showDownloads = true
+    }
 }
 
 @Composable
@@ -98,7 +102,7 @@ internal fun rememberLibraryTransferTools(
     LaunchedEffect(backup) { backup.effects.collect { currentMessage(it) } }
     AutoBackupFailureEffect(autoBackup) { currentMessage(it) }
     return remember(downloads, backup, offline, export, import, autoBackup, autoBackupFolder) {
-        LibraryTransferTools(downloads, backup, offline, autoBackup,
+        LibraryTransferTools(downloads, DownloadRemovals(downloads::remove, downloads.viewModelScope), backup, offline, autoBackup,
             chooseBackupDestination = { export.launch("theoria-backup.json") },
             chooseBackup = { import.launch(arrayOf("application/json", "application/octet-stream")) },
             chooseAutoBackupFolder = { autoBackupFolder.launch(null) },
@@ -144,61 +148,19 @@ internal fun libraryStorageSummary(tools: LibraryTransferTools): String {
 
 @Composable
 internal fun LibraryTransferSettings(tools: LibraryTransferTools) {
-    val batches by tools.downloads.batches.collectAsStateWithLifecycle()
     val offlineState by tools.offline.state.collectAsStateWithLifecycle()
-    OfflineStorageSummary(offlineState, batches.savedBytes())
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = tools.offline::open, modifier = Modifier.weight(1f)) {
-            Text("Manage storage")
-        }
-        DownloadJobsButton(
-            batches = batches,
-            onClick = { tools.showDownloads = true },
-            modifier = Modifier.weight(1f),
-        )
+    OfflineStorageSummary(offlineState)
+    OutlinedButton(onClick = tools.offline::open, modifier = Modifier.fillMaxWidth()) {
+        Text("Manage storage")
     }
 }
 
 @Composable
 internal fun LibraryTransferDialogs(tools: LibraryTransferTools, onOpenPost: suspend (PostDownloadItem) -> Unit) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var openingDownload by remember { mutableStateOf(false) }
     val offline = tools.offline
     val offlineState by offline.state.collectAsStateWithLifecycle()
-    val downloadBatches by tools.downloads.batches.collectAsStateWithLifecycle()
-    if (offlineState.isOpen) OfflineStorageSheet(
-        offlineState, offline::dismiss, offline::retry, offline::cancel, offline::requestRemove,
-        offline::requestClearOffline, offline::confirmRemoval, offline::dismissRemoval, offline::clearDisposableCache,
-        downloadBytes = downloadBatches.savedBytes(),
-    )
-    if (tools.showDownloads) {
-        val batches by tools.downloads.batches.collectAsStateWithLifecycle()
-        DownloadJobsSheet(
-            batches = batches,
-            onCancel = tools.downloads::cancel,
-            onRetryFailed = tools.downloads::retryFailed,
-            onOpen = { item ->
-                if (!openingDownload) {
-                    openingDownload = true
-                    scope.launch {
-                        try {
-                            openPostDownload(item, tools.downloads::localFile,
-                                openFile = { openDownloadedPostFile(context, it) },
-                                openPost = {
-                                    tools.showDownloads = false
-                                    onOpenPost(it)
-                                },
-                            )
-                        } finally { openingDownload = false }
-                    }
-                }
-            },
-            onRemove = tools.downloads::remove,
-            localFile = tools.downloads::localFile,
-            onDismiss = { tools.showDownloads = false },
-        )
-    }
+    if (offlineState.isOpen) StorageSheet(offlineState, offline::dismiss, offline::refreshUsage, offline::clearDisposableCache)
+    if (tools.showDownloads) LibraryTransfersSheetHost(tools, onOpenPost)
     val backup = tools.backup
     val backupState by backup.state.collectAsStateWithLifecycle()
     BackupDialogs(backupState, backup::dismissDialog, backup::applyPreferences, backup::restore)

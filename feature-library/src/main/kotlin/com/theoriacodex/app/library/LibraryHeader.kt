@@ -58,8 +58,9 @@ val BareSectionHeader: LibrarySectionHeader = { actions ->
 }
 
 /**
- * Library's title row (title, the active section's [actions], the Settings gear) above the section
- * switcher. A section in [marked] carries a dot while another section is showing.
+ * Library's title row (title, the active section's [actions], the offline and downloads entry
+ * [transfers], the Settings gear) above the section switcher. A section in [marked] carries a dot while
+ * another section is showing.
  */
 @Composable
 fun LibraryHeader(
@@ -67,6 +68,7 @@ fun LibraryHeader(
     onSelect: (LibrarySection) -> Unit,
     onOpenSettings: () -> Unit,
     marked: Set<LibrarySection>,
+    transfers: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -76,6 +78,7 @@ fun LibraryHeader(
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             actions()
+            transfers()
             IconButton(onClick = onOpenSettings, modifier = Modifier.testTag(LIBRARY_SETTINGS_TAG)) {
                 Icon(Icons.Default.Settings, "Settings")
             }

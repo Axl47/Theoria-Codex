@@ -165,6 +165,26 @@ class OfflineMediaCoordinatorTest {
         assertEquals(source, coordinator.withoutOfflineLocations(playback.copy()))
     }
 
+    @Test
+    fun `posts saved into a kept owner join its copy and other owners are left alone`() = runTest {
+        val store = OfflineMediaStore(temporary.newFolder(), ioDispatcher = StandardTestDispatcher(testScheduler))
+        val acquisitions = mutableListOf<String>()
+        val coordinator = OfflineMediaCoordinator(store, backgroundScope, { it }, { it.media }, { post, _, file ->
+            acquisitions += post.id.sourcePostId
+            file.writeText("bytes")
+        })
+        coordinator.keepOffline("codex:other", listOf(post("x")))
+        coordinator.makeAvailableOffline("codex:a", listOf(post("a")))
+        coordinator.jobs.first { it["codex:a"]?.isRunning == false }
+
+        coordinator.keepOffline("codex:a", listOf(post("b")))
+        val topped = coordinator.jobs.first { it["codex:a"]?.let { job -> !job.isRunning && job.totalPosts == 2 } == true }
+
+        assertEquals(2, topped.getValue("codex:a").completedPosts)
+        assertEquals(listOf("a", "b"), acquisitions)
+        assertEquals(mapOf("codex:a" to 2), store.snapshot.value.postsByOwner)
+    }
+
     private fun post(id: String): Post {
         val ref = ImageRef("https://example.test/$id.png", null, "image/png")
         return Post(

@@ -77,20 +77,31 @@ class OfflineMediaCoordinator(
 
     fun makeAvailableOffline(owner: String, posts: List<Post>) { enqueueOffline(owner, posts, start = true) }
 
+    /**
+     * Adds [posts] to [owner]'s offline copy when that owner is kept offline (it has copies or a job), so a
+     * Codex kept offline stays complete as posts are saved into it. Joins a running job, or re-runs the
+     * owner's last request plus [posts]; posts already retained are skipped, not downloaded again.
+     */
+    fun keepOffline(owner: String, posts: List<Post>) {
+        if (owner !in store.snapshot.value.postsByOwner && owner !in jobs.value) return
+        val previous = synchronized(lock) { requests[owner].orEmpty() }
+        enqueueOffline(owner, previous + posts, start = true)
+    }
+
     private fun enqueueOffline(owner: String, posts: List<Post>, start: Boolean): Job? {
         require(owner.isNotBlank())
         synchronized(lock) {
             if (active[owner]?.let { !it.isCompleted && !it.isCancelled } == true) {
-                if (owner == AUTOMATIC_OFFLINE_OWNER) {
-                    val merged = (requests[owner].orEmpty() + posts).distinctBy(Post::id)
-                    check(merged.size <= MAX_AUTOMATIC_OFFLINE_POSTS) { "The offline save queue is full" }
-                    requests[owner] = merged
-                    mutableJobs.update { jobs ->
-                        val current = jobs[owner] ?: return@update jobs
-                        jobs + (owner to current.copy(totalPosts = merged.size))
-                    }
-                    checkpointInBackground(owner)
+                // A running job takes the new posts at its tail; repeating its own posts changes nothing.
+                val merged = (requests[owner].orEmpty() + posts).distinctBy(Post::id)
+                if (merged.size == requests[owner]?.size) return null
+                if (owner == AUTOMATIC_OFFLINE_OWNER) check(merged.size <= MAX_AUTOMATIC_OFFLINE_POSTS) { "The offline save queue is full" }
+                requests[owner] = merged
+                mutableJobs.update { jobs ->
+                    val current = jobs[owner] ?: return@update jobs
+                    jobs + (owner to current.copy(totalPosts = merged.size))
                 }
+                checkpointInBackground(owner)
                 return null
             }
             val unique = posts.distinctBy(Post::id)
