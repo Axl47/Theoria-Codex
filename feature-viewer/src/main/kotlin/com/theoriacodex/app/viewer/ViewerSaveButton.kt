@@ -81,8 +81,8 @@ import kotlinx.coroutines.launch
 data class ViewerSaveContext(val query: Query? = null, val fromForYou: Boolean = false)
 
 /**
- * The hold fan's live gesture, shared by the Save button that drives it and [ViewerSaveFanOverlay] that draws it, and
- * whether the button needs the chrome to stay up ([holdsChrome]).
+ * The hold fan's live gesture, shared by the Save button that drives it and [ViewerSaveFanOverlay] that draws it,
+ * whether the button needs the chrome to stay up ([holdsChrome]), and the button's latest [suggestions].
  */
 @Stable
 internal class ViewerSaveFanState {
@@ -91,6 +91,9 @@ internal class ViewerSaveFanState {
     var anchor by mutableStateOf(Offset.Zero)
     var targets by mutableStateOf<List<CollectTarget<ViewerSaveFanTarget>>>(emptyList())
     val collect = CollectTargetsState<ViewerSaveFanTarget>()
+
+    /** The latest suggestions; kept here, outside the dock, so hiding and showing the controls does not reload them. */
+    var suggestions by mutableStateOf<ViewerPostSuggestions?>(null)
 
     /** Whether the button shows a save that just landed, with its Undo. */
     var showingSaved by mutableStateOf(false)
@@ -114,7 +117,7 @@ internal fun ViewerSaveButton(
 ) {
     val quickSave = LocalQuickSave.current
     val newCodex = LocalNewCodexOpener.current
-    val suggestions = rememberSettledSaveSuggestions(quickSave, post, context.query)
+    val suggestions = rememberSettledSaveSuggestions(quickSave, post, context.query, fan)
     val lastSave by quickSave.lastQuickSave.collectAsStateWithLifecycle()
     val state = viewerSaveButtonState(post.id, suggestions, lastSave, rememberSavedUndoClock(lastSave))
     val scope = rememberCoroutineScope()
@@ -176,13 +179,12 @@ internal fun ViewerSaveFanOverlay(fan: ViewerSaveFanState) {
 
 /** Suggestions for the settled post; the previous post's stay until the new ones arrive, since scoring walks the library. */
 @Composable
-private fun rememberSettledSaveSuggestions(quickSave: QuickSave, post: Post, query: Query?): ViewerPostSuggestions? {
-    var latest by remember(quickSave) { mutableStateOf<ViewerPostSuggestions?>(null) }
-    LaunchedEffect(quickSave, post.id, query) {
+private fun rememberSettledSaveSuggestions(quickSave: QuickSave, post: Post, query: Query?, fan: ViewerSaveFanState): ViewerPostSuggestions? {
+    LaunchedEffect(quickSave, post.id, query, fan) {
         delay(SUGGESTION_SETTLE_MS)
-        quickSave.suggestions(post, query).collect { latest = ViewerPostSuggestions(post.id, it) }
+        quickSave.suggestions(post, query).collect { fan.suggestions = ViewerPostSuggestions(post.id, it) }
     }
-    return latest
+    return fan.suggestions
 }
 
 /** The time, re-read when [lastSave] lands and again when its Undo window closes. */
