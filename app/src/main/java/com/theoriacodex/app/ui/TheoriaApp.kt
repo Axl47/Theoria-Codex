@@ -30,7 +30,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.sources.http.SiteHealthCheck
 import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.app.source.startSourceHealthCheck
@@ -136,7 +135,7 @@ internal fun TheoriaAppContent(
     val currentRoute = backStackEntry?.destination?.route
     ShellUsageEffect(shell, currentRoute, backStackEntry?.arguments?.getString("codexId"))
     PagerScrollFocusEffect(shell.navigation.pagerState)
-    ShellFollowAndSettingsEffects(shell, currentRoute, appShellState.latestInstalledChangelog)
+    ShellFollowAndSettingsEffects(shell, appShellState.latestInstalledChangelog)
     HomeTabEffects(shell, currentRoute)
     ShellPlatformEffects(shell, currentRoute)
     ActiveProfileCoordinationEffect(
@@ -163,7 +162,7 @@ internal fun TheoriaAppContent(
     ) {
         com.theoriacodex.app.codex.SavedCodexSession {
             PostTagContextProvider(
-                shell.routes.searchOwner?.state,
+                shell.routes.search.current?.state,
                 shell.features.search::fetchSearchTermCounts,
                 shell.routes.postTagSearchActions,
                 savedTags,

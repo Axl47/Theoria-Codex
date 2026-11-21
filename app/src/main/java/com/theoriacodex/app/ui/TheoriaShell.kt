@@ -30,8 +30,6 @@ import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
@@ -51,17 +49,20 @@ import com.theoriacodex.app.codex.transfer.readBoundedTextDocument
 import com.theoriacodex.app.codex.transfer.saveExportToDownloads
 import com.theoriacodex.app.codex.transfer.writeExportDocument
 import com.theoriacodex.app.creator.CreatorFollowsViewModel
+import com.theoriacodex.app.creator.CreatorProfileViewModel
 import com.theoriacodex.app.creator.CreatorOpeningWorkflow
 import com.theoriacodex.app.source.FileCopyLookup
-import com.theoriacodex.app.creator.state.CreatorAction
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.media.PostDownloadItem
 import com.theoriacodex.app.post.PostMutationViewModel
 import com.theoriacodex.app.recents.RecentsClearWorkflow
 import com.theoriacodex.app.recents.SavedSearchViewModel
 import com.theoriacodex.app.recents.fypSeedBySource
+import com.theoriacodex.app.recommend.ForYouViewModel
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.related.LikeToggleOutcome
+import com.theoriacodex.app.related.ViewerFeedOwner
+import com.theoriacodex.app.search.SearchViewModel
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.codex.SearchSaveMemory
@@ -85,16 +86,13 @@ import com.theoriacodex.app.source.ExternalPostDeepLink
 import com.theoriacodex.app.ui.components.FeedFabRestoreRegistry
 import com.theoriacodex.app.ui.components.rememberFeedFabRestoreRegistry
 import com.theoriacodex.app.ui.routes.CreatorProfileStateSaver
-import com.theoriacodex.app.ui.routes.CreatorRouteOwnerHandle
-import com.theoriacodex.app.ui.routes.ForYouRouteOwnerHandle
 import com.theoriacodex.app.ui.routes.PendingRouteActions
-import com.theoriacodex.app.ui.routes.RouteOwnerHandleBinding
-import com.theoriacodex.app.ui.routes.SearchRouteOwnerHandle
-import com.theoriacodex.app.ui.routes.ViewerRouteOwnerHandle
+import com.theoriacodex.app.ui.routes.RouteOwnerSlot
 import com.theoriacodex.app.ui.routes.ViewerRouteWorkflow
 import com.theoriacodex.app.ui.routes.activeRecommendationProfile
 import com.theoriacodex.app.update.ReleaseChangelogEntry
 import com.theoriacodex.app.viewer.ViewerSession
+import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
@@ -108,59 +106,61 @@ import com.theoriacodex.app.tags.PostTagSearchActions
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * The Search, For You, and Creator owners the shell may reach, and actions waiting for one to exist.
+ * The navigation-owned ViewModels the shell may reach, and actions waiting for Search or For You to exist.
  *
- * These bindings outlive individual destination compositions. Viewer can keep paging through a
- * still-live back-stack owner; only ViewModel lease closure removes the matching handle. Hold one
- * instance for the shell's whole lifetime and close it only when the shell leaves composition.
+ * The slots outlive individual destination compositions: Viewer can keep paging through a still-live
+ * back-stack owner, and only that owner's clear empties its slot. Hold one instance for the shell's
+ * whole lifetime and close it only when the shell leaves composition.
  */
 @Stable
 internal class RouteOwners {
-    var searchOwner by mutableStateOf<SearchRouteOwnerHandle?>(null)
-        private set
-    var forYouOwner by mutableStateOf<ForYouRouteOwnerHandle?>(null)
-        private set
-    var creatorOwner by mutableStateOf<CreatorRouteOwnerHandle?>(null)
-        private set
-    val searchBinding = RouteOwnerHandleBinding<SearchRouteOwnerHandle> { owner -> searchOwner = owner }
-    val forYouBinding = RouteOwnerHandleBinding<ForYouRouteOwnerHandle> { owner -> forYouOwner = owner }
-    val creatorBinding = RouteOwnerHandleBinding<CreatorRouteOwnerHandle> { owner -> creatorOwner = owner }
+    val search = RouteOwnerSlot<SearchViewModel>()
+    val forYou = RouteOwnerSlot<ForYouViewModel>()
+    val creator = RouteOwnerSlot<CreatorProfileViewModel>()
+    /** The Viewer while its destination is composed. */
+    val viewer = RouteOwnerSlot<ViewerViewModel>()
     private val pendingSearchActions = PendingRouteActions<SearchAction>()
     private val pendingForYouActions = PendingRouteActions<ForYouAction>()
 
+    /** The live feeds a Viewer session can follow. */
+    val feeds: List<ViewerFeedOwner>
+        get() = listOfNotNull(search.current, forYou.current, creator.current)
+
+    /** The live feed that launches Viewer streams from [source], if any. */
+    fun feed(source: ViewerStreamSource): ViewerFeedOwner? = feeds.firstOrNull { feed -> feed.streamSource == source }
+
     fun close() {
-        searchBinding.close()
-        forYouBinding.close()
-        creatorBinding.close()
+        search.clear()
+        forYou.clear()
+        creator.clear()
+        viewer.clear()
     }
 
-    fun publishSearch(owner: SearchRouteOwnerHandle) {
-        searchBinding.publish(owner)
-        pendingSearchActions.flush(owner::dispatch)
+    fun publishSearch(owner: SearchViewModel) {
+        search.publish(owner)
+        pendingSearchActions.flush { action -> owner.onAction(action); true }
     }
 
-    fun publishForYou(owner: ForYouRouteOwnerHandle) {
-        forYouBinding.publish(owner)
-        pendingForYouActions.flush(owner::dispatch)
+    fun publishForYou(owner: ForYouViewModel) {
+        forYou.publish(owner)
+        pendingForYouActions.flush { action -> owner.onAction(action); true }
     }
 
     fun dispatchOrQueue(action: SearchAction): Boolean =
-        pendingSearchActions.dispatchOrEnqueue(action) { queuedAction -> searchOwner?.dispatch(queuedAction) == true }
+        pendingSearchActions.dispatchOrEnqueue(action) { queued -> search.current?.onAction(queued) != null }
 
     fun dispatchOrQueue(action: ForYouAction): Boolean =
-        pendingForYouActions.dispatchOrEnqueue(action) { queuedAction -> forYouOwner?.dispatch(queuedAction) == true }
+        pendingForYouActions.dispatchOrEnqueue(action) { queued -> forYou.current?.onAction(queued) != null }
 
     val addSearchIncludeTerm: (Post, SearchTerm) -> Boolean = { post, term ->
         dispatchOrQueue(SearchAction.AddPostIncludeTerm(post, term))
@@ -188,31 +188,31 @@ internal class HomeNavigation(
     val navController: NavHostController,
     homeTabRoute: MutableState<String>,
     val pagerState: PagerState,
+    private val scope: CoroutineScope,
 ) {
     var homeTabRoute by homeTabRoute
-    var pendingTopLevelRoute by mutableStateOf<String?>(null)
 
     val currentRoute: String?
         get() = navController.currentBackStackEntry?.destination?.route
 
-    fun goToSearch() {
-        homeTabRoute = TopLevelDestination.Search.route
-        pendingTopLevelRoute = TopLevelDestination.Search.route
-        if (navController.currentDestination?.route != AppRoute.Home &&
-            !navController.popBackStack(AppRoute.Home, inclusive = false)
-        ) {
+    /**
+     * Selects a tab without a page animation, which is how every cross-tab jump arrives. With another
+     * screen on top, the pager moves there when Home returns ([HomeTabEffects] scrolls to [homeTabRoute]).
+     */
+    fun showTab(destination: TopLevelDestination) {
+        homeTabRoute = destination.route
+        if (currentRoute == AppRoute.Home) scope.launch { pagerState.scrollToRoute(destination.route) }
+    }
+
+    /** Returns to Home from any screen and selects [destination]'s tab. */
+    fun goToTab(destination: TopLevelDestination) {
+        if (currentRoute != AppRoute.Home && !navController.popBackStack(AppRoute.Home, inclusive = false)) {
             navController.navigate(AppRoute.Home) {
                 popUpTo(navController.graph.findStartDestination().id)
                 launchSingleTop = true
             }
         }
-    }
-
-    /** Selects a tab without a page animation, which is how every cross-tab jump arrives. */
-    suspend fun showTab(destination: TopLevelDestination) {
-        val targetIndex = TopLevelDestination.entries.indexOf(destination)
-        homeTabRoute = destination.route
-        if (pagerState.currentPage != targetIndex) pagerState.scrollToPage(targetIndex)
+        showTab(destination)
     }
 }
 
@@ -290,50 +290,33 @@ internal class ShellOwners(
 private fun rememberShellOwners(container: TheoriaAppContainer, appContext: Context): ShellOwners {
     val data = container.data
     val workflows = container.workflows
-    val savedSearches = viewModel<SavedSearchViewModel>(
-        key = "saved-searches",
-        factory = viewModelFactory { initializer { SavedSearchViewModel(data.savedSearches) } },
-    )
-    val codexCommands = viewModel<CodexCommandViewModel>(
-        key = "codex-command-owner",
-        factory = viewModelFactory {
-            initializer {
-                CodexCommandViewModel(
-                    data.codexRepository, workflows.likesCodexSync::clearProfile, workflows.likesCodexSync::restoreClearedLikes,
-                    workflows.codexTransfer::reorderVisibleCodices, workflows.codexCleaning,
-                )
-            }
-        },
-    )
-    val postMutations = viewModel<PostMutationViewModel>(
-        key = "post-mutations",
-        factory = viewModelFactory { initializer { PostMutationViewModel(data.settingsRepository, workflows.likesCodexSync::toggle) } },
-    )
-    val codexSaves = viewModel<CodexSaveViewModel>(
-        key = "codex-save-owner",
-        factory = viewModelFactory {
-            initializer { CodexSaveViewModel(workflows.codexTransfer, data.codexRepository, data.statisticsRepository) }
-        },
-    )
+    val savedSearches = viewModel(key = "saved-searches") { SavedSearchViewModel(data.savedSearches) }
+    val codexCommands = viewModel(key = "codex-command-owner") {
+        CodexCommandViewModel(
+            data.codexRepository, workflows.likesCodexSync::clearProfile, workflows.likesCodexSync::restoreClearedLikes,
+            workflows.codexTransfer::reorderVisibleCodices, workflows.codexCleaning,
+        )
+    }
+    val postMutations = viewModel(key = "post-mutations") {
+        PostMutationViewModel(data.settingsRepository, workflows.likesCodexSync::toggle)
+    }
+    val codexSaves = viewModel(key = "codex-save-owner") {
+        CodexSaveViewModel(workflows.codexTransfer, data.codexRepository, data.statisticsRepository)
+    }
     val settings = viewModel<SettingsViewModel>(key = "settings-route-owner", factory = settingsViewModelFactory(container))
     val follows = viewModel<CreatorFollowsViewModel>(
         key = "creator-follows",
         factory = CreatorFollowsViewModel.factory(data.settingsRepository, container.sources.registry),
     )
-    val codexImports = viewModel<CodexImportViewModel>(
-        key = "codex-import-owner",
-        factory = viewModelFactory {
-            initializer {
-                CodexImportViewModel(
-                    transfer = workflows.codexTransfer,
-                    readDocument = { document ->
-                        readBoundedTextDocument(CODEX_SHARE_MAX_BYTES) { appContext.contentResolver.openInputStream(document.toUri()) }
-                    },
-                    newTargetCodexId = { profileScopedCodexId(data.currentActiveRecommendationProfile().profileId) },
-                )
-            }
-        },
-    )
+    val codexImports = viewModel(key = "codex-import-owner") {
+        CodexImportViewModel(
+            transfer = workflows.codexTransfer,
+            readDocument = { document ->
+                readBoundedTextDocument(CODEX_SHARE_MAX_BYTES) { appContext.contentResolver.openInputStream(document.toUri()) }
+            },
+            newTargetCodexId = { profileScopedCodexId(data.currentActiveRecommendationProfile().profileId) },
+        )
+    }
     return remember(savedSearches, codexCommands, postMutations, codexSaves, settings, follows, codexImports) {
         ShellOwners(savedSearches, codexCommands, postMutations, codexSaves, settings, follows, codexImports)
     }
@@ -375,7 +358,6 @@ internal class TheoriaShell(
     var pendingCreatorProfile by pendingCreatorProfile
     var thumbnailCacheGeneration by thumbnailCacheGeneration
     var navReady by mutableStateOf(appShellOwner.state.value.appReady)
-    var activeViewerOwner by mutableStateOf<ViewerRouteOwnerHandle?>(null)
     val creatorOpening = CreatorOpeningWorkflow(sources.registry, sources.httpClient)
     private val fileCopies = FileCopyLookup(sources.registry)
     val recentsClearWorkflow = RecentsClearWorkflow(data.recentsRepository)
@@ -383,9 +365,7 @@ internal class TheoriaShell(
         data = data,
         cacheScope = scope,
         sources = sources,
-        searchOwner = { routes.searchOwner },
-        forYouOwner = { routes.forYouOwner },
-        creatorOwner = { routes.creatorOwner },
+        feedOwner = routes::feed,
         offlineMedia = features.offlineMedia,
     )
     /** Saves one tag, or an "or" group with an optional name, for the active profile. */
@@ -441,11 +421,11 @@ internal class TheoriaShell(
      */
     suspend fun openCreatorProfile(creator: CreatorProfile) {
         pendingCreatorProfile = creator
-        val viewerSession = activeViewerOwner?.session?.value
+        val viewerSession = routes.viewer.current?.session?.value
         val viewerUsesCreatorFeed = viewerSession != null && ViewerStreamSource.CREATOR_PROFILE in
             listOf(viewerSession.context.streamSource, viewerSession.relatedBinding?.source)
         if (navigation.currentRoute == AppRoute.Viewer && viewerUsesCreatorFeed) {
-            activeViewerOwner?.clearSession()
+            routes.viewer.current?.clearSession(retainPresentation = true)
             viewerSessions.clear()
             features.search.setViewerLaunchContext(null)
             navController.popBackStack(AppRoute.Viewer, inclusive = true)
@@ -490,40 +470,17 @@ internal class TheoriaShell(
         }
     }
 
-    /** A like action bound to the Search owner and query current now; a later query ignores its result. */
-    fun searchLikeAction(): (Post) -> Unit {
-        val owner = routes.searchBinding.current
-        val query = owner?.state?.value?.query?.appliedQueryHash
+    /**
+     * A like action bound to the feed behind [source] and the query it shows now: a committed like opens or clears
+     * that feed's related shelf, unless the feed has since moved to another query or owner.
+     */
+    fun feedLikeAction(source: ViewerStreamSource): (Post) -> Unit {
+        val owner = routes.feed(source)
+        val queryHash = owner?.viewerFeed?.queryHash
         return { post ->
             toggleLikeAndSyncCodex(post) { outcome ->
-                if (owner?.state?.value?.query?.appliedQueryHash == query) {
-                    owner?.dispatch(SearchAction.RelatedLikeCommitted(post, outcome))
-                }
-            }
-        }
-    }
-
-    /** A like action bound to the For You owner and seed current now; a later seed ignores its result. */
-    fun forYouLikeAction(): (Post) -> Unit {
-        val owner = routes.forYouBinding.current
-        val seed = owner?.state?.value?.seedId
-        return { post ->
-            toggleLikeAndSyncCodex(post) { outcome ->
-                if (owner?.state?.value?.seedId == seed) {
-                    owner?.dispatch(ForYouAction.RelatedLikeCommitted(post, outcome))
-                }
-            }
-        }
-    }
-
-    /** A like action bound to the Creator owner and query current now; a later query ignores its result. */
-    fun creatorLikeAction(): (Post) -> Unit {
-        val owner = routes.creatorBinding.current
-        val query = owner?.currentState()?.queryHash
-        return { post ->
-            toggleLikeAndSyncCodex(post) { outcome ->
-                if (owner?.currentState()?.queryHash == query) {
-                    owner?.dispatch(CreatorAction.RelatedLikeCommitted(post, outcome))
+                if (owner != null && routes.feed(source) === owner && owner.viewerFeed.queryHash == queryHash) {
+                    owner.related.onLikeCommitted(post, outcome)
                 }
             }
         }
@@ -538,7 +495,7 @@ internal class TheoriaShell(
         routes.dispatchOrQueue(
             SearchAction.ApplyTagSearch(query.effectiveIncludeTermGroups, query.excludeTerms, query.mode),
         )
-        navigation.goToSearch()
+        navigation.goToTab(TopLevelDestination.Search)
         val tags = query.effectiveIncludeTermGroups.map { group -> group.terms.joinToString(" or ") { it.value } } +
             query.excludeTerms.map { "-${it.value}" }
         toast("Searching ${source.displayName()} codex tags: ${tags.joinToString(separator = ", ")}")
@@ -731,48 +688,32 @@ internal class TheoriaShell(
             streamSource = ViewerStreamSource.SEARCH,
             scrollOffsetHint = 0,
         )
-        viewerSessions.retain(
-            ViewerSession(
-                posts = listOf(resolved),
-                context = context,
-                liveSearchBinding = false,
-                initialMediaIndices = mapOf(resolved.id to deepLink.initialMediaIndex),
-                focusComment = deepLink.comment,
-            ),
+        val session = ViewerSession(
+            posts = listOf(resolved),
+            context = context,
+            liveSearchBinding = false,
+            initialMediaIndices = mapOf(resolved.id to deepLink.initialMediaIndex),
+            focusComment = deepLink.comment,
         )
-        data.uiRestoreRepository.setViewerLaunchContext(context)
-        navController.navigate(AppRoute.Viewer) {
-            launchSingleTop = true
-        }
+        // Unlike other one-post launches, a shared link leaves an open Viewer underneath and reuses one on top.
+        launchViewer(session, saveContext = true, singleTop = true)
     }
 
     fun openHistoricalSearch(entry: RecentSearchEntry) {
-        scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            val historicalScope = when (entry.kind) {
-                RecentSearchKind.MULTI_SEARCH -> SearchSourceScope.fromSources(entry.sources)
-                RecentSearchKind.SOURCE,
-                RecentSearchKind.UNIFIED,
-                RecentSearchKind.FYP,
-                -> SearchSourceScope.fromQuery(entry.query)
-            }
-            routes.dispatchOrQueue(SearchAction.ApplyHistoricalQuery(query = entry.query, sourceScope = historicalScope))
-            navigation.pendingTopLevelRoute = TopLevelDestination.Search.route
-            navigation.homeTabRoute = TopLevelDestination.Search.route
-            navController.navigate(AppRoute.Home) {
-                popUpTo(navController.graph.findStartDestination().id) {
-                    saveState = true
-                }
-                launchSingleTop = true
-                restoreState = true
-            }
-            navigation.showTab(TopLevelDestination.Search)
+        val historicalScope = when (entry.kind) {
+            RecentSearchKind.MULTI_SEARCH -> SearchSourceScope.fromSources(entry.sources)
+            RecentSearchKind.SOURCE,
+            RecentSearchKind.UNIFIED,
+            RecentSearchKind.FYP,
+            -> SearchSourceScope.fromQuery(entry.query)
         }
+        routes.dispatchOrQueue(SearchAction.ApplyHistoricalQuery(query = entry.query, sourceScope = historicalScope))
+        navigation.goToTab(TopLevelDestination.Search)
     }
 
     fun openHistoricalForYouSearch(entry: RecentSearchEntry) {
         routes.dispatchOrQueue(ForYouAction.ReplaySearch(seedBySource = entry.fypSeedBySource(), sortMode = entry.query.sort))
-        navigation.homeTabRoute = TopLevelDestination.ForYou.route
-        scope.launch { navigation.showTab(TopLevelDestination.ForYou) }
+        navigation.showTab(TopLevelDestination.ForYou)
     }
 
     /** Opens a finished download in a fresh Viewer session at the page that was saved. */
@@ -793,72 +734,6 @@ internal class TheoriaShell(
     suspend fun previewStatisticsPost(postId: PostId): Post? = runCatchingPreservingCancellation {
         data.codexRepository.getPost(postId) ?: viewerRouteWorkflow.resolvePostWithoutSaving(postId)
     }.getOrNull()
-
-    /** Replaces any open Viewer with a session holding one post, or reports that the post could not be loaded. */
-    private suspend fun openSinglePostViewer(queryHash: String, initialMediaIndex: Int = 0, load: suspend () -> Post?) {
-        val post = runCatchingPreservingCancellation { load() }.getOrNull()
-        if (post == null) {
-            snackbarHostState.showSnackbar("This post could not be opened. Try again.")
-            return
-        }
-        openViewerSession(queryHash, listOf(post), initialMediaIndex)
-    }
-
-    /** Replaces any open Viewer with a fresh session over [posts], which also teach the file mirror index. */
-    private suspend fun openViewerSession(queryHash: String, posts: List<Post>, initialMediaIndex: Int = 0) {
-        data.fileMirrors.learn(posts)
-        if (navigation.currentRoute == AppRoute.Viewer) {
-            activeViewerOwner?.clearSession()
-            viewerSessions.clear()
-            navController.popBackStack(AppRoute.Viewer, inclusive = true)
-        }
-        val context = ViewerLaunchContext(queryHash, 0, ViewerStreamSource.RECENTS, 0)
-        viewerSessions.retain(
-            ViewerSession(
-                posts = posts,
-                context = context,
-                liveSearchBinding = false,
-                initialMediaIndices = posts.firstOrNull()?.let { first -> mapOf(first.id to initialMediaIndex) }.orEmpty(),
-            ),
-        )
-        data.uiRestoreRepository.setViewerLaunchContext(context)
-        navController.navigate(AppRoute.Viewer)
-    }
-
-    /** Opens the Viewer from a Codex; resumes at the saved position when this post has one. */
-    fun openCodexViewer(codexId: String, visiblePosts: List<Post>, index: Int) {
-        openStaticViewer(visiblePosts, "codex:$codexId", index, ViewerStreamSource.CODEX, persistContext = true)
-    }
-
-    /** Opens a related shelf no feed owner pages, such as a live Codex's; like other related streams it is not restored. */
-    fun openRelatedViewer(seed: Post, shelfPosts: List<Post>, index: Int) {
-        val queryHash = "related:${seed.id.source.id}:${seed.id.sourcePostId}"
-        openStaticViewer(shelfPosts, queryHash, index, ViewerStreamSource.RELATED, persistContext = false)
-    }
-
-    private fun openStaticViewer(
-        visiblePosts: List<Post>,
-        queryHash: String,
-        index: Int,
-        streamSource: ViewerStreamSource,
-        persistContext: Boolean,
-    ) {
-        val context = ViewerLaunchContext(
-            queryHash = queryHash,
-            startIndex = index,
-            streamSource = streamSource,
-            scrollOffsetHint = 0,
-        )
-        scope.launch {
-            viewerSessions.retain(
-                viewerRouteWorkflow.prepareResumableSession(
-                    ViewerSession(posts = visiblePosts, context = context, liveSearchBinding = false),
-                ),
-            )
-            if (persistContext) data.uiRestoreRepository.setViewerLaunchContext(context)
-            navController.navigate(AppRoute.Viewer)
-        }
-    }
 }
 
 /** Creates the shell once per container; ViewModels resolve against the Activity's store here. */
@@ -887,7 +762,7 @@ internal fun rememberTheoriaShell(
     val routes = remember { RouteOwners() }
     val pendingSave = remember { PendingCodexSave() }
     val overlays = remember { ShellOverlays() }
-    val navigation = remember(navController, pagerState) { HomeNavigation(navController, homeTabRoute, pagerState) }
+    val navigation = remember(navController, pagerState) { HomeNavigation(navController, homeTabRoute, pagerState, scope) }
     return remember(container, viewerSessions, appShellOwner, appContext, scope, registry, transfers, owners, codexImportLauncher, navigation) {
         TheoriaShell(
             container, viewerSessions, appShellOwner, appContext, scope, snackbarHostState, registry, transfers, owners,

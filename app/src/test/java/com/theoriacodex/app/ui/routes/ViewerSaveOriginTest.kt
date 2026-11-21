@@ -104,7 +104,7 @@ class ViewerSaveOriginTest {
         val durations = MediaDurationCoordinator(MediaDurationAcquirer { error("Static post must not acquire duration") })
         var savedContext: ViewerLaunchContext? = null
         var savedQuery: Query? = null
-        var owner: ViewerRouteOwnerHandle? = null
+        var owner: com.theoriacodex.app.viewer.ViewerViewModel? = null
         try {
             compose.setContent {
                 MaterialTheme {

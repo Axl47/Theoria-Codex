@@ -20,8 +20,6 @@ import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.app.appshell.PendingIncomingUri
 import com.theoriacodex.app.codex.LocalCodexSaveRelevanceLoader
 import com.theoriacodex.app.codex.sortLiveCodexPosts
@@ -43,8 +41,10 @@ import com.theoriacodex.app.codex.CodexCoverCandidate
 import com.theoriacodex.app.codex.codexBelongsToProfile
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.di.SourceDependencies
+import com.theoriacodex.app.related.ViewerFeedOwner
+import com.theoriacodex.app.related.ViewerFeedSnapshot
+import com.theoriacodex.app.search.SearchViewModel
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
-import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsScreen
 import com.theoriacodex.app.settings.SettingsDiagnosticsEntry
 import com.theoriacodex.app.settings.SettingsSitesEntry
@@ -58,9 +58,7 @@ import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostEntry
-import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchEntry
-import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.ViewerStreamSource
@@ -140,9 +138,8 @@ internal data class SaveToCodexDestinationState(
 
 internal data class ViewerDestinationState(
     val browsing: BrowsingDestinationState,
-    val search: com.theoriacodex.app.search.state.SearchUiState,
-    val forYou: com.theoriacodex.app.recommend.state.ForYouUiState,
-    val creator: com.theoriacodex.app.creator.state.CreatorUiState,
+    /** What each live feed shows now, keyed by the Viewer stream it launches. */
+    val feeds: Map<ViewerStreamSource, ViewerFeedSnapshot>,
 )
 
 /** The state read belongs to this restart scope, never to the caller's shell scope. */
@@ -200,11 +197,9 @@ internal fun browsingMetadataOwner(data: DataDependencies): BrowsingMetadataView
     viewModelStoreOwner = LocalContext.current.findActivity() as? ViewModelStoreOwner
         ?: checkNotNull(LocalViewModelStoreOwner.current),
     key = "browsing-metadata",
-    factory = remember(data) { viewModelFactory {
-        initializer { BrowsingMetadataViewModel(data.settingsRepository, data.likesRepository,
-            data.codexRepository, data.recentsRepository, mirrors = data.fileMirrors) }
-    } },
-)
+) {
+    BrowsingMetadataViewModel(data.settingsRepository, data.likesRepository, data.codexRepository, data.recentsRepository, mirrors = data.fileMirrors)
+}
 
 @Composable
 internal fun CodexDestinationStateBoundary(
@@ -411,7 +406,7 @@ internal fun SaveToCodexDestinationStateBoundary(
 @Composable
 internal fun SettingsDestinationStateBoundary(
     owner: SettingsViewModel,
-    searchOwner: SearchRouteOwnerHandle?,
+    searchOwner: SearchViewModel?,
     storageSummary: String? = null,
     sites: SettingsSitesEntry? = null,
     statsActions: StatsActions = StatsActions(),
@@ -471,26 +466,18 @@ internal fun PixivAuthorizationCallbackEffect(
 internal fun ViewerDestinationStateBoundary(
     data: DataDependencies,
     sources: SourceDependencies,
-    searchOwner: SearchRouteOwnerHandle?,
-    forYouOwner: ForYouRouteOwnerHandle?,
-    creatorOwner: CreatorRouteOwnerHandle?,
+    feedOwners: List<ViewerFeedOwner>,
     content: @Composable (ViewerDestinationState) -> Unit,
 ) {
     BrowsingDestinationStateBoundary(data, sources) { browsing ->
-        val emptySearch = remember { MutableStateFlow(com.theoriacodex.app.search.state.SearchUiState()) }
-        val emptyForYou = remember { MutableStateFlow(com.theoriacodex.app.recommend.state.ForYouUiState()) }
-        val emptyCreator = remember { MutableStateFlow(com.theoriacodex.app.creator.state.CreatorUiState()) }
-        val searchState = (searchOwner?.state ?: emptySearch).collectAsStateWithLifecycle()
-        val forYouState = (forYouOwner?.state ?: emptyForYou).collectAsStateWithLifecycle()
-        val creatorState = (creatorOwner?.state ?: emptyCreator).collectAsStateWithLifecycle()
-        content(
-            ViewerDestinationState(
-                browsing = browsing,
-                search = searchState.value,
-                forYou = forYouState.value,
-                creator = creatorState.value,
-            ),
-        )
+        // Only what a Viewer reads from each feed, so the rest of a feed's state never recomposes the Viewer.
+        val feeds = feedOwners.associate { owner ->
+            key(owner) {
+                owner.streamSource to remember(owner) { owner.viewerFeedChanges }
+                    .collectAsStateWithLifecycle(owner.viewerFeed).value
+            }
+        }
+        content(ViewerDestinationState(browsing = browsing, feeds = feeds))
     }
 }
 

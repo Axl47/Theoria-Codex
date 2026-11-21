@@ -25,13 +25,17 @@ import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.related.RelatedPostsLoading
 import com.theoriacodex.app.related.RelatedPostsRouteController
 import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
+import com.theoriacodex.app.related.ViewerFeedOwner
+import com.theoriacodex.app.related.ViewerFeedSnapshot
+import com.theoriacodex.app.related.retainedLikedPostIds
+import com.theoriacodex.app.related.relatedViewerContext
 import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.ui.state.RouteStateOwner
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.SourceRuntimeSettings
-import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
@@ -50,6 +54,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -76,7 +82,7 @@ class SearchViewModel(
     scrollPersistenceDelayMs: Long = DEFAULT_SCROLL_PERSISTENCE_DELAY_MS,
     scrollPersistenceDispatcher: CoroutineDispatcher = Dispatchers.IO,
     reconnections: Flow<Unit> = emptyFlow(),
-) : ViewModel(), RouteStateOwner<SearchUiState, SearchAction, SearchEffect> {
+) : ViewModel(), RouteStateOwner<SearchUiState, SearchAction, SearchEffect>, ViewerFeedOwner {
     private val mutableState = MutableStateFlow(initialSearchState(coordinator.availableSources))
     private val effectChannel = Channel<SearchEffect>(capacity = Channel.BUFFERED)
     private val relatedDiagnostics = com.theoriacodex.app.related.RelatedPostsDiagnostics("Search", this)
@@ -107,6 +113,10 @@ class SearchViewModel(
 
     override val state: StateFlow<SearchUiState> = mutableState.asStateFlow()
     override val effects: Flow<SearchEffect> = effectChannel.receiveAsFlow()
+    override val streamSource = ViewerStreamSource.SEARCH
+    override val viewerFeed: ViewerFeedSnapshot get() = mutableState.value.viewerFeed()
+    override val viewerFeedChanges: Flow<ViewerFeedSnapshot> = mutableState.map { it.viewerFeed() }.distinctUntilChanged()
+    override val related: RelatedPostsRouteController get() = relatedPosts
 
     private var nextRequestId = 0L
     private var activeRequestJob: Job? = null
@@ -192,7 +202,6 @@ class SearchViewModel(
                 )
             }
 
-            is SearchAction.RelatedLikeCommitted -> relatedPosts.onLikeCommitted(action.post, action.outcome)
             is SearchAction.ShowRelatedPosts -> relatedPosts.show(action.post)
 
             SearchAction.RetryRelatedPosts -> relatedPosts.retry()
@@ -320,10 +329,12 @@ class SearchViewModel(
         runDraft(acceptance = SearchAcceptance(undo, undoScrollState))
     }
 
-    private fun loadNextPage() {
+    override fun loadNextPage() {
         val current = mutableState.value
         if (current.content.canLoadMore && current.execution.continuation != null) launchPage()
     }
+
+    override fun rememberResolvedPost(post: Post) = onAction(SearchAction.RememberResolvedPost(post))
 
     private fun openRelatedResult(action: SearchAction.OpenRelatedResult) {
         if (action.index !in action.visibleResults.indices) return
@@ -331,12 +342,7 @@ class SearchViewModel(
         effectChannel.trySend(
             SearchEffect.OpenViewer(
                 posts = action.visibleResults.toList(),
-                context = ViewerLaunchContext(
-                    queryHash = "related:${request.seed.id.source.id}:${request.seed.id.sourcePostId}",
-                    startIndex = action.index,
-                    streamSource = ViewerStreamSource.RELATED,
-                    scrollOffsetHint = 0,
-                ),
+                context = relatedViewerContext(request.seed, action.index),
                 liveSearchBinding = false,
             )
         )
@@ -763,3 +769,12 @@ class SearchViewModel(
         const val ROOT_REQUEST_TIMEOUT_MESSAGE = "Search timed out. Check your connection and try again."
     }
 }
+
+private fun SearchUiState.viewerFeed() = ViewerFeedSnapshot(
+    queryHash = query.appliedQueryHash.takeIf(String::isNotBlank),
+    results = content.results,
+    canLoadMore = content.canLoadMore,
+    loadingMore = loadingMore,
+    retainedLikedPostIds = relatedPosts.retainedLikedPostIds,
+    relatedPosts = relatedPosts,
+)

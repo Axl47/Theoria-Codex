@@ -24,7 +24,7 @@ internal fun settingsViewModelFactory(container: TheoriaAppContainer): ViewModel
                 codexRepository = container.data.codexRepository,
                 statisticsRepository = container.data.statisticsRepository,
                 appUsageTracker = container.features.appUsageTracker,
-                profileMutations = DefaultSettingsProfileMutations(requireNotNull(container.workflows.profileDeletion)),
+                profileMutations = DefaultSettingsProfileMutations(container.workflows.profileDeletion),
                 accounts = DefaultSettingsAccountGateway(
                     accounts = container.sources.accounts,
                     pixivTokens = container.sources.pixivTokens,

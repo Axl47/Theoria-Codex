@@ -27,8 +27,6 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
-import java.io.Closeable
-import kotlinx.coroutines.flow.StateFlow
 
 /** App-level inputs rendered by For You or used to reconcile recommendation inputs. */
 internal data class ForYouRouteConfig(
@@ -60,37 +58,6 @@ internal data class ForYouRouteCallbacks(
     val onGoToSearch: () -> Unit,
 )
 
-/** Non-owning access used by Viewer and other destinations while Home owns the ViewModel. */
-internal class ForYouRouteOwnerHandle(
-    owner: ForYouViewModel,
-) : ObservableRouteOwnerHandle {
-    private val ownerLease = owner.createRouteOwnerLease()
-
-    /** Read-only state while the navigation-owned ViewModel remains alive. */
-    val state: StateFlow<ForYouUiState>?
-        get() = ownerLease.withOwner { activeOwner -> activeOwner.state }
-
-    override fun invokeOnOwnerCleared(listener: () -> Unit): Closeable {
-        return ownerLease.invokeOnClose(listener)
-    }
-
-    fun dispatch(action: ForYouAction): Boolean {
-        return ownerLease.withOwner { activeOwner ->
-            activeOwner.onAction(action)
-            true
-        } ?: false
-    }
-
-    fun rememberResolvedPost(post: Post): Boolean {
-        return ownerLease.withOwner { activeOwner ->
-            activeOwner.rememberResolvedPost(post)
-            true
-        } ?: false
-    }
-
-    fun currentState(): ForYouUiState? = ownerLease.withOwner { activeOwner -> activeOwner.state.value }
-}
-
 /** Navigation-scoped For You owner plus its immutable rendering boundary. */
 @Composable
 internal fun ForYouRoute(
@@ -102,7 +69,7 @@ internal fun ForYouRoute(
     fabRestoreState: FeedFabRestoreState,
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
     callbacks: ForYouRouteCallbacks,
-    onOwnerAvailable: (ForYouRouteOwnerHandle) -> Unit = {},
+    onOwnerAvailable: (ForYouViewModel) -> Unit = {},
 ) {
     val owner = viewModel<ForYouViewModel>(
         key = FOR_YOU_ROUTE_OWNER_KEY,
@@ -129,10 +96,9 @@ internal fun ForYouRoute(
         posts = durationPosts,
         resolveInBackground = config.resolveUnknownAnimatedDurations,
     )
-    val ownerHandle = remember(owner) { ForYouRouteOwnerHandle(owner) }
     val currentOnOwnerAvailable by rememberUpdatedState(onOwnerAvailable)
 
-    SideEffect { currentOnOwnerAvailable(ownerHandle) }
+    SideEffect { currentOnOwnerAvailable(owner) }
 
     LaunchedEffect(owner, config.settings, config.activeProfileLikesCount) {
         owner.synchronizeEnvironment(

@@ -2,105 +2,83 @@ package com.theoriacodex.app.ui.routes
 
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
-import java.io.Closeable
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RouteOwnerLifecycleTest {
     @Test
-    fun `route owner lease rejects access after explicit close`() {
-        val owner = RecordingOwner()
-        val lease = WeakRouteOwnerLease(owner)
-
-        lease.withOwner { activeOwner -> activeOwner.dispatchCount += 1 }
-        lease.close()
-        val result = lease.withOwner { activeOwner -> activeOwner.dispatchCount += 1 }
-
-        assertEquals(1, owner.dispatchCount)
-        assertNull(result)
-    }
-
-    @Test
-    fun `view model clear closes its registered route owner lease`() {
-        val viewModel = object : ViewModel() {}
-        val lease = viewModel.createRouteOwnerLease()
-        var closeCount = 0
-        lease.invokeOnClose { closeCount += 1 }
-
-        clearViewModel(viewModel)
-        lease.close()
-
-        assertNull(lease.withOwner { it })
-        assertEquals(1, closeCount)
-    }
-
-    @Test
-    fun `repeated route lease creation reuses one view model closeable and clears once`() {
+    fun `view model clear empties the slot that published it`() {
         val viewModel = RecordingViewModel()
-        val firstLease = viewModel.createRouteOwnerLease()
-        val secondLease = viewModel.createRouteOwnerLease()
-        var closeCount = 0
-        firstLease.invokeOnClose { closeCount += 1 }
+        val slot = RouteOwnerSlot<RecordingViewModel>()
 
-        assertSame(firstLease, secondLease)
+        slot.publish(viewModel)
+        assertSame(viewModel, slot.current)
 
         clearViewModel(viewModel)
-        firstLease.close()
-        secondLease.close()
 
-        assertNull(firstLease.withOwner { it })
-        assertEquals(1, closeCount)
+        assertNull(slot.current)
     }
 
     @Test
-    fun `view model clear removes the matching published state and actions`() {
+    fun `an old owner's clear cannot empty a slot holding its replacement`() {
+        val first = RecordingViewModel()
+        val second = RecordingViewModel()
+        val slot = RouteOwnerSlot<RecordingViewModel>()
+
+        slot.publish(first)
+        slot.publish(second)
+        clearViewModel(first)
+
+        assertSame(second, slot.current)
+
+        clearViewModel(second)
+
+        assertNull(slot.current)
+    }
+
+    @Test
+    fun `republishing one owner keeps one closeable on it, and several slots each empty on its clear`() {
         val viewModel = RecordingViewModel()
-        val handle = LeaseBackedRecordingHandle(viewModel)
-        var publishedState: StateFlow<String>? = null
-        val binding = RouteOwnerHandleBinding<LeaseBackedRecordingHandle> { published ->
-            publishedState = published?.state
-        }
+        val shellSlot = RouteOwnerSlot<RecordingViewModel>()
+        val recreatedShellSlot = RouteOwnerSlot<RecordingViewModel>()
 
-        binding.publish(handle)
-
-        assertEquals("loaded results", publishedState?.value)
-        assertTrue(handle.dispatch())
+        shellSlot.publish(viewModel)
+        val signal = viewModel.getCloseable<AutoCloseable>("route-owner-cleared")
+        repeat(2) { shellSlot.publish(viewModel) }
+        recreatedShellSlot.publish(viewModel)
+        assertSame(signal, viewModel.getCloseable<AutoCloseable>("route-owner-cleared"))
 
         clearViewModel(viewModel)
 
-        assertNull(binding.current)
-        assertNull(publishedState)
-        assertNull(handle.state)
-        assertFalse(handle.dispatch())
-        assertEquals(1, viewModel.dispatchCount)
+        assertNull(shellSlot.current)
+        assertNull(recreatedShellSlot.current)
     }
 
     @Test
-    fun `late old owner close cannot clear a newer published handle`() {
-        val first = ManuallyClosingHandle()
-        val second = ManuallyClosingHandle()
-        var published: ManuallyClosingHandle? = null
-        val binding = RouteOwnerHandleBinding<ManuallyClosingHandle> { handle -> published = handle }
+    fun `an owner cleared before publication leaves the slot empty`() {
+        val viewModel = RecordingViewModel()
+        clearViewModel(viewModel)
+        val slot = RouteOwnerSlot<RecordingViewModel>()
 
-        binding.publish(first)
-        val inFlightOldClose = first.captureCloseSignal()
-        binding.publish(second)
+        slot.publish(viewModel)
 
-        inFlightOldClose()
+        assertNull(slot.current)
+    }
 
-        assertSame(second, binding.current)
-        assertSame(second, published)
+    @Test
+    fun `a cleared slot ignores its former owner's later clear`() {
+        val viewModel = RecordingViewModel()
+        val slot = RouteOwnerSlot<RecordingViewModel>()
+        slot.publish(viewModel)
+        slot.clear()
+        val replacement = RecordingViewModel()
+        slot.publish(replacement)
 
-        second.closeOwner()
+        clearViewModel(viewModel)
 
-        assertNull(binding.current)
-        assertNull(published)
+        assertSame(replacement, slot.current)
     }
 
     @Test
@@ -128,23 +106,6 @@ class RouteOwnerLifecycleTest {
         assertEquals(2, resumeCount)
     }
 
-    @Test
-    fun `published route handles expose read only state flows`() {
-        listOf(
-            SearchRouteOwnerHandle::class.java,
-            ForYouRouteOwnerHandle::class.java,
-            CreatorRouteOwnerHandle::class.java,
-        ).forEach { handleClass ->
-            val stateGetter = handleClass.declaredMethods.single { method ->
-                method.name.startsWith("getState")
-            }
-            assertTrue(
-                "${handleClass.simpleName} must expose immutable StateFlow state",
-                StateFlow::class.java.isAssignableFrom(stateGetter.returnType),
-            )
-        }
-    }
-
     private fun clearViewModel(viewModel: ViewModel) {
         ViewModel::class.java.declaredMethods.single { method ->
             method.name.startsWith("clear") && method.parameterCount == 0
@@ -154,53 +115,5 @@ class RouteOwnerLifecycleTest {
         }
     }
 
-    private class RecordingOwner(
-        var dispatchCount: Int = 0,
-    )
-
-    private class RecordingViewModel : ViewModel() {
-        val state = MutableStateFlow("loaded results")
-        var dispatchCount = 0
-    }
-
-    private class LeaseBackedRecordingHandle(
-        owner: RecordingViewModel,
-    ) : ObservableRouteOwnerHandle {
-        private val lease = owner.createRouteOwnerLease()
-
-        val state: StateFlow<String>?
-            get() = lease.withOwner { activeOwner -> activeOwner.state }
-
-        fun dispatch(): Boolean {
-            return lease.withOwner { activeOwner ->
-                activeOwner.dispatchCount += 1
-                true
-            } ?: false
-        }
-
-        override fun invokeOnOwnerCleared(listener: () -> Unit): Closeable {
-            return lease.invokeOnClose(listener)
-        }
-    }
-
-    private class ManuallyClosingHandle : ObservableRouteOwnerHandle {
-        private val listeners = linkedSetOf<() -> Unit>()
-
-        override fun invokeOnOwnerCleared(listener: () -> Unit): Closeable {
-            listeners += listener
-            return Closeable { listeners -= listener }
-        }
-
-        /** Captures the callback as though closure had already copied it before replacement. */
-        fun captureCloseSignal(): () -> Unit {
-            val captured = listeners.toList()
-            return { captured.forEach { listener -> listener() } }
-        }
-
-        fun closeOwner() {
-            val captured = listeners.toList()
-            listeners.clear()
-            captured.forEach { listener -> listener() }
-        }
-    }
+    private class RecordingViewModel : ViewModel()
 }

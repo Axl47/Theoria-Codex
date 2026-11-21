@@ -41,6 +41,7 @@ import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.related.RelatedPostsUiState
+import com.theoriacodex.app.related.ViewerFeedSnapshot
 import com.theoriacodex.app.viewer.ViewerMediaPrefetcher
 import com.theoriacodex.app.viewer.ViewerPostDurations
 import com.theoriacodex.app.viewer.ViewerPostResolver
@@ -69,7 +70,6 @@ import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -88,51 +88,32 @@ internal data class ViewerRouteDependencies(
     val onCodexUsageTargetChanged: (CodexUsageTarget?) -> Unit = {},
 )
 
-/** Immutable source-owner snapshot consumed by a live Viewer session. */
-internal data class ViewerRouteLiveSourceSnapshot(
-    val queryHash: String? = null,
-    val results: List<Post> = emptyList(),
-    val canLoadMore: Boolean = false,
-    val loadingMore: Boolean = false,
-    val retainedLikedPostIds: Set<PostId> = emptySet(),
-    val relatedPosts: RelatedPostsUiState = RelatedPostsUiState.Idle,
-)
-
 /**
- * Route-owned Search, For You, and Creator state needed to extend a live Viewer stream.
+ * The live feeds a Viewer stream can extend from, keyed by the stream each one launches, plus the library state
+ * their visibility filters read.
  *
  * Exact query identity prevents a source refresh or route replacement from appending unrelated
  * posts. Visibility policy is applied at the Viewer boundary so newly paged posts obey the same
  * filters as the launch payload.
  */
 internal data class ViewerRouteLiveSourceState(
-    val search: ViewerRouteLiveSourceSnapshot = ViewerRouteLiveSourceSnapshot(),
-    val forYou: ViewerRouteLiveSourceSnapshot = ViewerRouteLiveSourceSnapshot(),
-    val creatorProfile: ViewerRouteLiveSourceSnapshot = ViewerRouteLiveSourceSnapshot(),
+    val feeds: Map<ViewerStreamSource, ViewerFeedSnapshot> = emptyMap(),
     val likedPostIds: Set<PostId> = emptySet(),
     val savedPostIds: Set<PostId> = emptySet(),
     val watchedPostIds: Set<PostId> = emptySet(),
     val unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy =
         UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS,
 ) {
-    fun forSource(source: ViewerStreamSource): ViewerRouteLiveSourceSnapshot? = when (source) {
-        ViewerStreamSource.SEARCH -> search
-        ViewerStreamSource.FOR_YOU -> forYou
-        ViewerStreamSource.CREATOR_PROFILE -> creatorProfile
-        ViewerStreamSource.RELATED,
-        ViewerStreamSource.CODEX,
-        ViewerStreamSource.RECENTS,
-        -> null
-    }
+    fun forSource(source: ViewerStreamSource): ViewerFeedSnapshot? = feeds[source]
 
-    fun relatedSourceFor(session: ViewerSession): ViewerRouteLiveSourceSnapshot? {
+    fun relatedSourceFor(session: ViewerSession): ViewerFeedSnapshot? {
         val source = session.relatedBinding?.source ?: session.context.streamSource
         val query = session.relatedBinding?.queryHash ?: session.context.queryHash
         return forSource(source)?.takeIf { it.queryHash == query }
     }
 
     /** The snapshot of the source [session] was launched from, while that source still shows the launch's query. */
-    fun matching(session: ViewerSession?): ViewerRouteLiveSourceSnapshot? = session?.let { active ->
+    fun matching(session: ViewerSession?): ViewerFeedSnapshot? = session?.let { active ->
         forSource(active.context.streamSource)?.takeIf { snapshot -> snapshot.queryHash == active.context.queryHash }
     }
 
@@ -174,29 +155,6 @@ internal data class ViewerRouteEffectCallbacks(
 )
 
 /**
- * Non-owning access to the small amount of Viewer state the navigation shell must coordinate.
- *
- * The handle deliberately does not expose actions, effects, renderer state, or platform jobs. It
- * also rejects work after the navigation-scoped owner is cleared instead of relying on eventual
- * garbage collection of a weak reference.
- */
-internal class ViewerRouteOwnerHandle(
-    owner: ViewerViewModel,
-) {
-    private val ownerLease = owner.createRouteOwnerLease()
-
-    val session: StateFlow<ViewerSession?>?
-        get() = ownerLease.withOwner { activeOwner -> activeOwner.session }
-
-    fun clearSession(): Boolean {
-        return ownerLease.withOwner { activeOwner ->
-            activeOwner.clearSession(retainPresentation = true)
-            true
-        } ?: false
-    }
-}
-
-/**
  * Navigation-scoped Viewer host.
  *
  * The activity owner only holds a pending process-local navigation payload. This destination
@@ -210,7 +168,7 @@ internal fun ViewerRoute(
     liveSourceState: ViewerRouteLiveSourceState,
     effectCallbacks: ViewerRouteEffectCallbacks,
     screenCallbacks: ViewerScreenCallbacks,
-    onOwnerChanged: (ViewerRouteOwnerHandle?) -> Unit = {},
+    onOwnerChanged: (ViewerViewModel?) -> Unit = {},
 ) {
     val viewerReturn = LocalViewerReturnTransition.current
     DisposableEffect(viewerReturn) {
@@ -227,14 +185,13 @@ internal fun ViewerRoute(
         key = "viewer-duration-owner",
         factory = MediaDurationRouteViewModel.factory(dependencies.mediaDurationCoordinator, "viewer"),
     )
-    val ownerHandle = remember(viewerOwner) { ViewerRouteOwnerHandle(viewerOwner) }
     val viewerState by viewerOwner.state.collectAsStateWithLifecycle()
     val session by viewerOwner.session.collectAsStateWithLifecycle()
     val retainedPostIds = remember(viewerState.pages) { viewerState.pages.mapTo(mutableSetOf()) { it.post.id } }
     SideEffect { viewerReturn?.retainPosts(retainedPostIds) }
     val restoration = rememberViewerSessionRestoration(viewerOwner, latestDependencies)
     DisposableEffect(viewerOwner) {
-        latestOnOwnerChanged.value(ownerHandle)
+        latestOnOwnerChanged.value(viewerOwner)
         onDispose { latestOnOwnerChanged.value(null) }
     }
     LaunchedEffect(viewerOwner, restoration.claimedSessionId, restoration.attempt) { restoration.run() }

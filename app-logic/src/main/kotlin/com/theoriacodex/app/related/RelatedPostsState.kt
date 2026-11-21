@@ -1,7 +1,17 @@
 package com.theoriacodex.app.related
 
+import com.theoriacodex.data.repository.ViewerLaunchContext
+import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+
+/** Where a Viewer opened on the related shelf of [seed] starts; related streams are never restored. */
+fun relatedViewerContext(seed: Post, index: Int) = ViewerLaunchContext(
+    queryHash = "related:${seed.id.source.id}:${seed.id.sourcePostId}",
+    startIndex = index,
+    streamSource = ViewerStreamSource.RELATED,
+    scrollOffsetHint = 0,
+)
 
 enum class LikeToggleOutcome {
     LIKED,

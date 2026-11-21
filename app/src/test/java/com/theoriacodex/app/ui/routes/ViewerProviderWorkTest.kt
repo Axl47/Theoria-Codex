@@ -58,7 +58,7 @@ class ViewerProviderWorkTest {
                 }
             }
             val workflow = ViewerRouteWorkflow(
-                graph.data, this, graph.sources, { null }, { null }, { null },
+                graph.data, this, graph.sources, { null },
                 offlineMedia = graph.features.offlineMedia,
             )
 
@@ -96,7 +96,7 @@ class ViewerProviderWorkTest {
                 }
             }
             val workflow = ViewerRouteWorkflow(
-                graph.data, this, graph.sources, { null }, { null }, { null },
+                graph.data, this, graph.sources, { null },
                 offlineMedia = graph.features.offlineMedia,
                 providerDispatcher = StandardTestDispatcher(testScheduler),
             )
@@ -143,7 +143,7 @@ class ViewerProviderWorkTest {
                 override fun adapterFor(sourceKey: SourceKey) = adapter.takeIf { sourceKey == SourceKey.GELBOORU }
             }
             val workflow = ViewerRouteWorkflow(
-                graph.data, this, graph.sources.copy(registry = registry), { null }, { null }, { null },
+                graph.data, this, graph.sources.copy(registry = registry), { null },
             )
             val callerDispatcher = currentCoroutineContext()[ContinuationInterceptor]
             assertEquals(post, workflow.resolvePost(post.id, ViewerStreamSource.RELATED))
@@ -187,7 +187,7 @@ class ViewerProviderWorkTest {
             val sources = graph.sources.copy(registry = registry)
             val feed = testSearchCoordinator(registry, postResolutions = sources.postResolutions)
             val workflow = ViewerRouteWorkflow(
-                graph.data, this, sources, { null }, { null }, { null },
+                graph.data, this, sources, { null },
                 providerDispatcher = StandardTestDispatcher(testScheduler),
             )
 

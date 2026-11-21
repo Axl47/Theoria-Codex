@@ -167,16 +167,16 @@ data class FeatureDependencies(
     val creatorProfile: CreatorProfileCoordinator,
     val mediaDurationCoordinator: MediaDurationCoordinator,
     val appUsageTracker: AppUsageTracker,
-    val offlineMedia: OfflineMediaCoordinator? = null,
+    val offlineMedia: OfflineMediaCoordinator,
 )
 
 data class WorkflowDependencies(
     val codexCleaning: CodexCleaningService,
     val likesCodexSync: LikesCodexSyncService,
     val codexTransfer: CodexTransferService,
-    val profileBackup: ProfileBackupService? = null,
+    val profileBackup: ProfileBackupService,
     val autoBackup: AutoBackupWorkflow? = null,
-    val profileDeletion: ProfileDeletionService? = null,
+    val profileDeletion: ProfileDeletionService,
 )
 
 interface TheoriaAppContainer {

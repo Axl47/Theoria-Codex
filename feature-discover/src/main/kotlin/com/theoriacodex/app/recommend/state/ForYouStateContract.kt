@@ -5,8 +5,8 @@ import com.theoriacodex.app.recommend.ForYouFeedResult
 import com.theoriacodex.app.feed.mergeFeedPosts
 import com.theoriacodex.app.feed.mergeFeedStatuses
 import com.theoriacodex.app.recommend.buildForYouSeedId
-import com.theoriacodex.app.related.LikeToggleOutcome
 import com.theoriacodex.app.related.RelatedPostsUiState
+import com.theoriacodex.app.related.relatedViewerContext
 import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.requiresAccount
@@ -130,10 +130,6 @@ sealed interface ForYouAction {
         val visibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
     ) : ForYouAction
     data object GoToSearch : ForYouAction
-    data class RelatedLikeCommitted(
-        val post: Post,
-        val outcome: LikeToggleOutcome,
-    ) : ForYouAction
     /** "More like this" from a post's action menu: opens the related shelf without a like. */
     data class ShowRelatedPosts(val post: Post) : ForYouAction
     data object RetryRelatedPosts : ForYouAction
@@ -278,7 +274,6 @@ fun ForYouUiState.reduce(action: ForYouAction): ForYouTransition {
         ForYouAction.RefreshSections,
         is ForYouAction.PinSection,
         is ForYouAction.DismissSection,
-        is ForYouAction.RelatedLikeCommitted,
         is ForYouAction.ShowRelatedPosts,
         ForYouAction.RetryRelatedPosts,
         ForYouAction.DismissRelatedPosts,
@@ -412,12 +407,7 @@ private fun ForYouUiState.openRelatedResult(action: ForYouAction.OpenRelatedResu
             state = this,
             effect = ForYouEffect.OpenViewer(
                 posts = action.visibleResults.toList(),
-                context = ViewerLaunchContext(
-                    queryHash = "related:${request.seed.id.source.id}:${request.seed.id.sourcePostId}",
-                    startIndex = action.index,
-                    streamSource = ViewerStreamSource.RELATED,
-                    scrollOffsetHint = 0,
-                ),
+                context = relatedViewerContext(request.seed, action.index),
                 liveSearchBinding = false,
             ),
         )
@@ -523,7 +513,6 @@ private fun ForYouUiState.beginRefresh(
             emptyReason = null,
             nextRequestGeneration = request.generation + 1L,
             activeRequest = request,
-            relatedPosts = RelatedPostsUiState.Idle,
         ),
         effect = effect(request),
     )

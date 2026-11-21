@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -39,6 +40,8 @@ import com.theoriacodex.app.update.PendingPostInstallChangelog
 import com.theoriacodex.app.update.StartupUpdateWorkflowEffect
 import com.theoriacodex.app.update.mergeReleaseHistory
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 /** Hosts one-shot feedback from the shell's owners, and keeps usage time following the process. */
 @Composable
@@ -78,8 +81,7 @@ internal fun ShellOwnerHosts(shell: TheoriaShell) {
     }
     CodexCommandHost(owners.codexCommands, snackbarHostState) { deletedId ->
         if (shell.navController.currentBackStackEntry?.arguments?.getString("codexId") == deletedId) {
-            shell.navigation.homeTabRoute = TopLevelDestination.Codex.route
-            shell.navController.popBackStack(AppRoute.Home, inclusive = false)
+            shell.navigation.goToTab(TopLevelDestination.Codex)
         }
     }
     LaunchedEffect(shell.navigation.homeTabRoute) {
@@ -210,7 +212,6 @@ internal fun PagerScrollFocusEffect(pagerState: PagerState) {
 @Composable
 internal fun ShellFollowAndSettingsEffects(
     shell: TheoriaShell,
-    currentRoute: String?,
     latestInstalledChangelog: PendingPostInstallChangelog?,
 ) {
     val appContext = shell.appContext
@@ -226,7 +227,7 @@ internal fun ShellFollowAndSettingsEffects(
             ).show()
             SettingsEffect.LoadChangelog -> loadReleaseHistory(shell, latestInstalledChangelog)
             SettingsEffect.ThumbnailCacheCleared -> shell.thumbnailCacheGeneration += 1
-            SettingsEffect.NavigateToSettings -> navigateToSettings(shell, currentRoute)
+            SettingsEffect.NavigateToSettings -> navigateToSettings(shell)
         }
     }
 }
@@ -245,19 +246,15 @@ private suspend fun loadReleaseHistory(shell: TheoriaShell, latestInstalledChang
     }
 }
 
-private fun navigateToSettings(shell: TheoriaShell, currentRoute: String?) {
-    val navigation = shell.navigation
-    navigation.pendingTopLevelRoute = TopLevelDestination.Settings.route
-    navigation.homeTabRoute = TopLevelDestination.Settings.route
-    if (shell.navReady && currentRoute != AppRoute.Home) {
-        val returnedHome = navigation.navController.popBackStack(AppRoute.Home, inclusive = false)
-        if (!returnedHome) {
-            navigation.navController.navigate(AppRoute.Home) { launchSingleTop = true }
-        }
+/** A jump requested during startup waits for it, so restoring the last tab cannot replace Settings. */
+private fun navigateToSettings(shell: TheoriaShell) {
+    shell.scope.launch {
+        snapshotFlow { shell.navReady }.first { ready -> ready }
+        shell.navigation.goToTab(TopLevelDestination.Settings)
     }
 }
 
-/** Restores the saved home tab, applies requested jumps, and saves the tab once the pager rests. */
+/** Shows the selected home tab whenever Home is on top, and saves the tab once the pager rests. */
 @Composable
 internal fun HomeTabEffects(shell: TheoriaShell, currentRoute: String?) {
     val navigation = shell.navigation
@@ -270,12 +267,6 @@ internal fun HomeTabEffects(shell: TheoriaShell, currentRoute: String?) {
         pagerState.scrollToRoute(navigation.homeTabRoute)
         homeTabRestoreComplete = true
     }
-    LaunchedEffect(shell.navReady, currentRoute, navigation.pendingTopLevelRoute) {
-        val targetRoute = navigation.pendingTopLevelRoute
-        if (targetRoute == null || !onHome) return@LaunchedEffect
-        pagerState.scrollToRoute(targetRoute)
-        navigation.pendingTopLevelRoute = null
-    }
     LaunchedEffect(shell.navReady, currentRoute, homeTabRestoreComplete, pagerState.currentPage, pagerState.isScrollInProgress) {
         if (!onHome || !homeTabRestoreComplete || pagerState.isScrollInProgress) return@LaunchedEffect
         val route = TopLevelDestination.entries[pagerState.currentPage.coerceIn(0, TopLevelDestination.entries.lastIndex)].route
@@ -287,7 +278,7 @@ internal fun HomeTabEffects(shell: TheoriaShell, currentRoute: String?) {
     }
 }
 
-private suspend fun PagerState.scrollToRoute(route: String) {
+internal suspend fun PagerState.scrollToRoute(route: String) {
     val targetIndex = TopLevelDestination.entries.indexOfFirst { destination -> destination.route == route }.coerceAtLeast(0)
     if (targetIndex != currentPage) scrollToPage(targetIndex)
 }

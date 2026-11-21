@@ -24,8 +24,6 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.data.repository.FeedFabRestoreState
-import java.io.Closeable
-import kotlinx.coroutines.flow.StateFlow
 
 /** App-level inputs rendered by Creator or used to reconcile source capability. */
 internal data class CreatorRouteConfig(
@@ -53,37 +51,6 @@ internal data class CreatorRouteCallbacks(
     val onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
 )
 
-/** Non-owning access used by Viewer while the Creator back-stack entry owns the ViewModel. */
-internal class CreatorRouteOwnerHandle(
-    owner: CreatorProfileViewModel,
-) : ObservableRouteOwnerHandle {
-    private val ownerLease = owner.createRouteOwnerLease()
-
-    /** Read-only state while the navigation-owned ViewModel remains alive. */
-    val state: StateFlow<CreatorUiState>?
-        get() = ownerLease.withOwner { activeOwner -> activeOwner.state }
-
-    override fun invokeOnOwnerCleared(listener: () -> Unit): Closeable {
-        return ownerLease.invokeOnClose(listener)
-    }
-
-    fun dispatch(action: CreatorAction): Boolean {
-        return ownerLease.withOwner { activeOwner ->
-            activeOwner.onAction(action)
-            true
-        } ?: false
-    }
-
-    fun rememberResolvedPost(post: Post): Boolean {
-        return ownerLease.withOwner { activeOwner ->
-            activeOwner.rememberResolvedPost(post)
-            true
-        } ?: false
-    }
-
-    fun currentState(): CreatorUiState? = ownerLease.withOwner { activeOwner -> activeOwner.state.value }
-}
-
 /** Navigation-scoped Creator owner plus its immutable rendering boundary. */
 @Composable
 internal fun CreatorRoute(
@@ -95,7 +62,7 @@ internal fun CreatorRoute(
     fabRestoreState: FeedFabRestoreState,
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
     callbacks: CreatorRouteCallbacks,
-    onOwnerAvailable: (CreatorRouteOwnerHandle) -> Unit = {},
+    onOwnerAvailable: (CreatorProfileViewModel) -> Unit = {},
 ) {
     val owner = viewModel<CreatorProfileViewModel>(
         factory = CreatorProfileViewModel.factory(coordinator, relatedPostsLoader),
@@ -112,10 +79,9 @@ internal fun CreatorRoute(
         posts = durationPosts,
         resolveInBackground = config.resolveUnknownAnimatedDurations,
     )
-    val ownerHandle = remember(owner) { CreatorRouteOwnerHandle(owner) }
     val currentOnOwnerAvailable by rememberUpdatedState(onOwnerAvailable)
 
-    SideEffect { currentOnOwnerAvailable(ownerHandle) }
+    SideEffect { currentOnOwnerAvailable(owner) }
 
     LaunchedEffect(owner, config.activeCreator) {
         config.activeCreator?.let { creator ->

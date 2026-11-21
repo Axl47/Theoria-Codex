@@ -34,7 +34,6 @@ import com.theoriacodex.app.related.RelatedPostsRouteController
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.related.RelatedShelfBinding
 import com.theoriacodex.app.related.requestOrNull
-import com.theoriacodex.app.related.retainedLikedPostIds
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.ui.components.codexFeedFabContext
 import com.theoriacodex.app.ui.components.creatorFeedFabContext
@@ -51,14 +50,11 @@ import com.theoriacodex.app.ui.routes.ViewerDestinationStateBoundary
 import com.theoriacodex.app.ui.routes.ViewerRoute
 import com.theoriacodex.app.ui.routes.ViewerRouteDependencies
 import com.theoriacodex.app.ui.routes.ViewerRouteEffectCallbacks
-import com.theoriacodex.app.ui.routes.ViewerRouteLiveSourceSnapshot
 import com.theoriacodex.app.ui.routes.ViewerRouteLiveSourceState
 import com.theoriacodex.app.ui.routes.virtualCodexUi
-import com.theoriacodex.app.viewer.ViewerRelatedBinding
 import com.theoriacodex.app.viewer.ViewerReturnLifetime
 import com.theoriacodex.app.viewer.ViewerScreenCallbacks
 import com.theoriacodex.app.viewer.ViewerScreenConfig
-import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.viewerMediaPrefetcher
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.FeedFabRestoreState
@@ -220,7 +216,7 @@ private fun CodexDetailContent(
         onRemoveIncludeTerm = routes.removeSearchIncludeTerm,
         onRemoveExcludeTerm = routes.removeSearchExcludeTerm,
         onFavoriteTagLongPress = shell.addFavoriteTag,
-        onGoToSearch = { shell.navigation.goToSearch() },
+        onGoToSearch = { shell.navigation.goToTab(TopLevelDestination.Search) },
         onBack = { shell.navController.popBackStack() },
         onDeleteCodex = { commands.delete(codexId, state.activeProfile.profileId) },
         isLikesCodex = codexId == likesCodexIdForProfile(state.activeProfile.profileId),
@@ -257,26 +253,17 @@ private fun CreatorDestination(shell: TheoriaShell) {
             onFabRestoreStateChange = { updated -> shell.feedFabRestoreRegistry.update(fabContext, updated) },
             callbacks = CreatorRouteCallbacks(
                 onToggleFollow = shell.owners.follows::toggle,
+                // Creator pages save no launch context; a launch that will not follow the feed reuses a Viewer on top.
                 onOpenViewer = { effect ->
-                    val likeAction = shell.creatorLikeAction()
-                    shell.viewerSessions.retain(
-                        shell.viewerRouteWorkflow.prepareResumableSession(ViewerSession(
-                            posts = effect.posts,
-                            context = effect.context,
-                            liveSearchBinding = effect.liveSearchBinding,
-                            searchVisibilityFilters = effect.visibilityFilters,
-                            onToggleLike = likeAction,
-                            relatedBinding = ViewerRelatedBinding(
-                                ViewerStreamSource.CREATOR_PROFILE, routes.creatorBinding.current?.currentState()?.queryHash.orEmpty(),
-                            ),
-                        )),
+                    shell.openFeedViewer(
+                        ViewerStreamSource.CREATOR_PROFILE,
+                        FeedViewerLaunch(effect.posts, effect.context, effect.liveSearchBinding, effect.visibilityFilters),
+                        saveContext = false,
+                        singleTop = !effect.liveSearchBinding,
                     )
-                    shell.navController.navigate(AppRoute.Viewer) {
-                        launchSingleTop = !effect.liveSearchBinding
-                    }
                 },
                 onNavigateBack = { shell.navController.popBackStack() },
-                onToggleLike = { post -> shell.creatorLikeAction()(post) },
+                onToggleLike = { post -> shell.feedLikeAction(ViewerStreamSource.CREATOR_PROFILE)(post) },
                 onRequestSaveToCodex = { post -> shell.requestSaveToCodex(post) },
                 onSaveToDevice = shell::requestSaveToDevice,
                 onOpenUrl = { url -> openInBrowser(shell.appContext, url) },
@@ -285,7 +272,7 @@ private fun CreatorDestination(shell: TheoriaShell) {
                 onRemoveIncludeTerm = routes.removeSearchIncludeTerm,
                 onRemoveExcludeTerm = routes.removeSearchExcludeTerm,
             ),
-            onOwnerAvailable = routes.creatorBinding::publish,
+            onOwnerAvailable = routes.creator::publish,
         )
     }
 }
@@ -299,9 +286,7 @@ private fun ViewerDestination(shell: TheoriaShell) {
     ViewerDestinationStateBoundary(
         data = shell.data,
         sources = shell.sources,
-        searchOwner = routes.searchOwner,
-        forYouOwner = routes.forYouOwner,
-        creatorOwner = routes.creatorOwner,
+        feedOwners = routes.feeds,
     ) { state ->
         ViewerRoute(
             dependencies = ViewerRouteDependencies(
@@ -311,7 +296,7 @@ private fun ViewerDestination(shell: TheoriaShell) {
                     }
                 },
                 sessionRetentionOwner = shell.viewerSessions,
-                canonicalizePost = { post -> shell.features.offlineMedia?.withoutOfflineLocations(post) ?: post },
+                canonicalizePost = shell.features.offlineMedia::withoutOfflineLocations,
                 postResolver = shell.viewerRouteWorkflow,
                 mediaPrefetcher = viewerMediaPrefetcher(shell.appContext, shell.sources.pixivUgoiraClient) { state.browsing.settings.viewer.videoQuality },
                 mediaDurationCoordinator = shell.features.mediaDurationCoordinator,
@@ -335,38 +320,17 @@ private fun ViewerDestination(shell: TheoriaShell) {
             liveSourceState = viewerLiveSourceState(state, shell.pendingLikePostIds[state.browsing.activeProfile.profileId].orEmpty()),
             effectCallbacks = effectCallbacks,
             screenCallbacks = screenCallbacks,
-            onOwnerChanged = { owner -> shell.activeViewerOwner = owner },
+            onOwnerChanged = { owner -> if (owner == null) routes.viewer.clear() else routes.viewer.publish(owner) },
         )
     }
 }
 
+/** Pending likes stay visible in a feed that hides liked posts until the like commits or fails. */
 private fun viewerLiveSourceState(
     state: ViewerDestinationState,
     pendingLikes: Set<com.theoriacodex.domain.model.PostId>,
 ) = ViewerRouteLiveSourceState(
-    search = ViewerRouteLiveSourceSnapshot(
-        queryHash = state.search.query.appliedQueryHash.takeIf(String::isNotBlank),
-        results = state.search.content.results,
-        relatedPosts = state.search.relatedPosts,
-        retainedLikedPostIds = state.search.relatedPosts.retainedLikedPostIds + pendingLikes,
-        canLoadMore = state.search.content.canLoadMore,
-        loadingMore = state.search.loadingMore,
-    ),
-    forYou = ViewerRouteLiveSourceSnapshot(
-        queryHash = "for_you:${state.forYou.seedId}",
-        relatedPosts = state.forYou.relatedPosts,
-        results = state.forYou.results,
-        canLoadMore = state.forYou.canLoadMore,
-        loadingMore = state.forYou.isPaging,
-    ),
-    creatorProfile = ViewerRouteLiveSourceSnapshot(
-        queryHash = state.creator.queryHash,
-        results = state.creator.results,
-        relatedPosts = state.creator.relatedPosts,
-        retainedLikedPostIds = state.creator.relatedPosts.retainedLikedPostIds + pendingLikes,
-        canLoadMore = state.creator.canLoadMore,
-        loadingMore = state.creator.isPaging,
-    ),
+    feeds = state.feeds.mapValues { (_, feed) -> feed.copy(retainedLikedPostIds = feed.retainedLikedPostIds + pendingLikes) },
     likedPostIds = state.browsing.likedPostIds,
     savedPostIds = state.browsing.savedPostIds,
     watchedPostIds = state.browsing.watchedPostIds,
@@ -375,7 +339,7 @@ private fun viewerLiveSourceState(
 
 /** Names where a Viewer download came from, by the stream the session was launched from. */
 private suspend fun TheoriaShell.viewerDownloadOrigin(): String {
-    val launch = activeViewerOwner?.session?.value?.context
+    val launch = routes.viewer.current?.session?.value?.context
     return when (launch?.streamSource) {
         ViewerStreamSource.SEARCH -> "Search"
         ViewerStreamSource.FOR_YOU -> "FYP"
@@ -396,7 +360,7 @@ private fun viewerEffectCallbacks(shell: TheoriaShell) = ViewerRouteEffectCallba
         shell.requestSaveToCodex(
             post = post,
             fromForYou = context.streamSource == ViewerStreamSource.FOR_YOU,
-            searchQuery = shell.activeViewerOwner?.session?.value
+            searchQuery = shell.routes.viewer.current?.session?.value
                 ?.takeIf { it.context.queryHash == context.queryHash }?.saveQuery,
         )
     },
@@ -450,7 +414,7 @@ private fun viewerScreenCallbacks(shell: TheoriaShell) = ViewerScreenCallbacks(
     onFavoriteTagLongPress = shell.addFavoriteTag,
     onGoToSearch = {
         shell.scope.launch { shell.features.search.setViewerLaunchContext(null) }
-        shell.navigation.goToSearch()
+        shell.navigation.goToTab(TopLevelDestination.Search)
     },
     onOpenCreatorFallback = shell::launchOpenCreator,
 )
