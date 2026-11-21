@@ -3,6 +3,8 @@ package com.theoriacodex.app.viewer
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.systemGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
@@ -14,6 +16,7 @@ import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.input.pointer.util.addPointerInputChange
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
@@ -148,13 +151,18 @@ internal interface ViewerGestureHandler {
 internal fun Modifier.viewerGestures(config: ViewerGestureConfig, handler: ViewerGestureHandler): Modifier {
     val currentConfig by rememberUpdatedState(config)
     val currentHandler by rememberUpdatedState(handler)
+    val systemGestures = WindowInsets.systemGestures
+    val layoutDirection = LocalLayoutDirection.current
     return pointerInput(Unit) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
             val gesture = currentConfig
             if (!gesture.enabled || down.position.y > size.height - gesture.reservedBottomPx) return@awaitEachGesture
+            // A horizontal swipe from a system gesture edge is Back, which takes the touch after it starts.
+            val onBackEdge = down.position.x < systemGestures.getLeft(this, layoutDirection) ||
+                down.position.x > size.width - systemGestures.getRight(this, layoutDirection)
             currentHandler.onPress()
-            when (val end = readViewerGesture(down, gesture) { currentHandler }) {
+            when (val end = readViewerGesture(down, gesture, onBackEdge) { currentHandler }) {
                 is ViewerGestureEnd.Horizontal -> currentHandler.onHorizontalRelease(end.x, end.velocity)
                 is ViewerGestureEnd.Dismiss -> { currentHandler.onDismissRelease(end.velocityY); currentHandler.onGestureEnd() }
                 ViewerGestureEnd.Info -> { currentHandler.onInfoSwipe(); currentHandler.onGestureEnd() }
@@ -171,7 +179,7 @@ private sealed interface ViewerGestureEnd {
     data object None : ViewerGestureEnd
 }
 
-/** [Held]: the finger outlasted a long press, which already acted, so the rest of its drag does nothing. */
+/** [Held]: the rest of the drag does nothing, because a long press already acted or the system owns the swipe. */
 private enum class ViewerGestureMode { Pending, Horizontal, Scrub, Level, Dismiss, Info, Held }
 
 /** The level a vertical drag from [this] column adjusts, if any. */
@@ -186,6 +194,7 @@ private fun ViewerGestureColumn.levelControl(config: ViewerGestureConfig): Viewe
 private suspend fun AwaitPointerEventScope.readViewerGesture(
     down: PointerInputChange,
     config: ViewerGestureConfig,
+    onBackEdge: Boolean,
     handler: () -> ViewerGestureHandler,
 ): ViewerGestureEnd {
     // Frames batch touch samples; the tracker needs the historical ones too, or a flick that arrives
@@ -194,6 +203,7 @@ private suspend fun AwaitPointerEventScope.readViewerGesture(
     val gesture = ViewerGestureTracker(
         column = viewerGestureColumn(down.position.x, size),
         config = config,
+        onBackEdge = onBackEdge,
         handler = handler,
         touchSlop = viewConfiguration.touchSlop,
         longPressTimeoutMs = viewConfiguration.longPressTimeoutMillis,
@@ -205,6 +215,9 @@ private suspend fun AwaitPointerEventScope.readViewerGesture(
         while (true) {
             val change = awaitPointerEvent(PointerEventPass.Initial).changes.singleOrNull()
                 ?.takeIf { it.id == down.id } ?: return ViewerGestureEnd.None
+            // The system took the touch (the Back gesture does, mid-swipe): Compose reports a lift that
+            // arrives already consumed, which must not read as a flick to another post.
+            if (!change.pressed && change.isConsumed) return ViewerGestureEnd.None
             tracker.addPointerInputChange(change)
             gesture.follow(change)
             if (!change.pressed) {
@@ -224,6 +237,7 @@ private suspend fun AwaitPointerEventScope.readViewerGesture(
 private class ViewerGestureTracker(
     private val column: ViewerGestureColumn,
     private val config: ViewerGestureConfig,
+    private val onBackEdge: Boolean,
     private val handler: () -> ViewerGestureHandler,
     private val touchSlop: Float,
     private val longPressTimeoutMs: Long,
@@ -271,7 +285,7 @@ private class ViewerGestureTracker(
             !horizontal && !vertical -> ViewerGestureMode.Pending
             config.holdScrub?.holding == true -> if (horizontal) ViewerGestureMode.Scrub else ViewerGestureMode.Held
             pressedForMs >= longPressTimeoutMs -> ViewerGestureMode.Held
-            horizontal -> ViewerGestureMode.Horizontal
+            horizontal -> if (onBackEdge) ViewerGestureMode.Held else ViewerGestureMode.Horizontal
             levelControl != null -> ViewerGestureMode.Level
             y > 0f -> ViewerGestureMode.Dismiss
             else -> ViewerGestureMode.Info

@@ -31,6 +31,7 @@ import coil.compose.AsyncImage
 import com.theoriacodex.app.codex.LocalCodexPostIds
 import com.theoriacodex.app.codex.PreloadCodexSaveRelevance
 import com.theoriacodex.app.codex.codexSavedColor
+import com.theoriacodex.app.creator.CreatorProfileAction
 import com.theoriacodex.app.creator.creatorProfileActions
 import com.theoriacodex.app.post.displayTitleOrNull
 import com.theoriacodex.app.related.LocalRelatedPostsSupport
@@ -90,8 +91,16 @@ fun PostActionSheet(
         emptyList()
     }
 
+    // The first creator is the header's link, as in the Viewer's information sheet; others get rows.
+    fun openCreator(action: CreatorProfileAction) = dismissThen {
+        action.profile?.let { onOpenCreatorProfile?.invoke(it) } ?: onOpenLegacyCreatorProfile?.invoke()
+    }
+
     ActionMenuSheet(onDismiss) {
-        PostActionHeader(post)
+        PostActionHeader(
+            post,
+            creator = creatorActions.firstOrNull()?.let { action -> HeaderLink(action.label) { openCreator(action) } },
+        )
         ActionMenuFollowUpRow(Icons.Default.Sell, "Search terms") { showingTerms = true }
         onShowRelated?.takeIf { LocalRelatedPostsSupport.current(post.id.source) }?.let { showRelated ->
             ActionMenuRow(Icons.Default.AutoAwesome, "More like this") { dismissThen(showRelated) }
@@ -101,14 +110,11 @@ fun PostActionSheet(
         onSaveToCodex?.let { save -> SaveToCodexRow(post, saveToCodexLabel) { dismissThen(save) } }
         ActionMenuRow(Icons.Default.Download, "Save to device") { dismissThen(onSaveToDevice) }
 
-        if (creatorActions.isNotEmpty() || onStartOver != null || onGoToSearch != null) {
+        val extraCreators = creatorActions.drop(1)
+        if (extraCreators.isNotEmpty() || onStartOver != null || onGoToSearch != null) {
             ActionMenuDivider()
         }
-        PostCreatorRows(post, creatorBrowsingSources, onOpenProfile = { profile ->
-            dismissThen { onOpenCreatorProfile?.invoke(profile) }
-        }, onOpenLegacyPost = {
-            dismissThen { onOpenLegacyCreatorProfile?.invoke() }
-        }, enabled = onOpenCreatorProfile != null)
+        extraCreators.forEach { action -> ActionMenuRow(Icons.Default.Person, action.label) { openCreator(action) } }
         onStartOver?.let { startOver ->
             ActionMenuRow(Icons.Default.Replay, "Start over") { dismissThen(startOver) }
         }
@@ -159,23 +165,6 @@ private fun SaveToCodexRow(post: Post, label: String, onClick: () -> Unit) {
         ActionMenuRow(Icons.Default.BookmarkAdded, label, tint = codexSavedColor(), onClick = onClick)
     } else {
         ActionMenuRow(Icons.Default.BookmarkAdd, label, onClick = onClick)
-    }
-}
-
-/** One labeled row per browsable creator of [post]. */
-@Composable
-internal fun PostCreatorRows(
-    post: Post,
-    creatorBrowsingSources: Set<SourceKey>,
-    onOpenProfile: (CreatorProfile) -> Unit,
-    onOpenLegacyPost: () -> Unit,
-    enabled: Boolean = true,
-) {
-    if (!enabled) return
-    creatorProfileActions(post, creatorBrowsingSources).forEach { action ->
-        ActionMenuRow(Icons.Default.Person, action.label) {
-            action.profile?.let(onOpenProfile) ?: onOpenLegacyPost()
-        }
     }
 }
 
