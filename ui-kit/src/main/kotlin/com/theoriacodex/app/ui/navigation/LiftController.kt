@@ -33,6 +33,9 @@ interface LiftController {
      */
     fun start(post: Post, cardBounds: Rect, pointer: Offset, query: Query? = null, like: LiftLike? = null): Boolean
 
+    /** A lift is in progress, so another card's long press must not start or open anything. */
+    val lifting: Boolean get() = false
+
     fun move(pointer: Offset)
 
     fun end(pointer: Offset): LiftRelease
