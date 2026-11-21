@@ -1,5 +1,7 @@
 package com.theoriacodex.app.recommend
 
+import com.theoriacodex.app.feed.FeedCursor
+import com.theoriacodex.app.feed.nextPage
 import com.theoriacodex.app.post.FileMirrorIndex
 import com.theoriacodex.app.source.PostResolutionFlights
 import com.theoriacodex.app.search.NoOpTagSuggestionStore
@@ -84,14 +86,8 @@ class ForYouCoordinator(
         } else initial
     }
 
-    override suspend fun loadPage(continuation: ForYouContinuation, sources: Set<SourceKey>): UnifiedSearchResult =
-        registry.unifiedOrchestrator().search(
-            query = continuation.query,
-            enabledSources = sources,
-            pageTokens = continuation.pageTokens.filterKeys { it in sources },
-            weights = SourceWeightNormalization.normalize(sources, continuation.weights),
-            queryOverridesBySource = continuation.queriesBySource.filterKeys { it in sources },
-        ).also { page ->
+    override suspend fun loadPage(continuation: FeedCursor, sources: Set<SourceKey>): UnifiedSearchResult =
+        registry.unifiedOrchestrator().nextPage(continuation, sources).also { page ->
             fileMirrors.learn(page.items)
             page.items.forEach { post ->
                 runCatchingPreservingCancellation { statisticsRepository.recordPostAvailable(post) }
@@ -136,7 +132,7 @@ class ForYouCoordinator(
         seed: Map<SourceKey, List<String>>,
         likesCount: Int,
     ): ForYouFeedResult {
-        val continuation = ForYouContinuation(
+        val continuation = FeedCursor(
             query = forYouBaseQuery(request.sortMode),
             queriesBySource = seed.mapValues { (source, tags) -> forYouSourceQuery(source, tags, request.sortMode) },
             weights = SourceWeightNormalization.normalize(seed.keys, request.settings.runtime.sourceWeights),

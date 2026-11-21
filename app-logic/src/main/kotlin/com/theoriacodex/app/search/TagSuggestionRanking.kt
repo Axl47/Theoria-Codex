@@ -12,22 +12,13 @@ fun rankTagSuggestions(
     suggestions: List<TagSuggestion>,
     prefix: String,
     limit: Int,
-): List<TagSuggestion> {
-    if (limit <= 0) return emptyList()
-    val indexed = suggestions.mapIndexedNotNull { index, suggestion ->
-        val quality = if (prefix.isBlank()) MatchQuality.PREFIX else suggestion.matchQuality(prefix)
-        quality?.let { RankedSuggestion(suggestion, it, index) }
-    }
-    return indexed
-        .distinctBy { ranked -> normalizeMatchToken(ranked.suggestion.text) }
-        .sortedWith(
-            compareBy<RankedSuggestion>(RankedSuggestion::quality)
-                .thenByDescending { ranked -> ranked.suggestion.count ?: Int.MIN_VALUE }
-                .thenBy(RankedSuggestion::originalIndex),
-        )
-        .take(limit)
-        .map(RankedSuggestion::suggestion)
-}
+): List<TagSuggestion> = rankSuggestions(
+    suggestions = suggestions,
+    limit = limit,
+    qualityOf = { suggestion -> if (prefix.isBlank()) MatchQuality.PREFIX else suggestion.matchQuality(prefix) },
+    identityOf = { suggestion -> normalizeMatchToken(suggestion.text) },
+    countOf = TagSuggestion::count,
+)
 
 /**
  * Interleaves one relevance band at a time so providers with incomparable count scales remain
@@ -74,32 +65,48 @@ fun interleaveTagSuggestions(
     return accepted.take(limit)
 }
 
+/** Same order as [rankTagSuggestions], but matches on the value only and keeps one row per facet and namespace. */
 fun rankFacetedTagSuggestions(
     suggestions: List<FacetedTagSuggestion>,
     prefix: String,
     limit: Int,
 ): List<FacetedTagSuggestion> {
+    val normalizedPrefix = normalizeMatchToken(prefix)
+    return rankSuggestions(
+        suggestions = suggestions,
+        limit = limit,
+        qualityOf = { suggestion -> normalizeMatchToken(suggestion.text).matchQuality(normalizedPrefix) },
+        identityOf = { suggestion ->
+            Triple(suggestion.facet, suggestion.sourceNamespace, normalizeMatchToken(suggestion.text))
+        },
+        countOf = FacetedTagSuggestion::count,
+    )
+}
+
+/**
+ * Drops items with no match, keeps the first of each [identityOf], then orders by match quality, highest
+ * count, and original position. Shared by every suggestion element type.
+ */
+private fun <T, K> rankSuggestions(
+    suggestions: List<T>,
+    limit: Int,
+    qualityOf: (T) -> MatchQuality?,
+    identityOf: (T) -> K,
+    countOf: (T) -> Int?,
+): List<T> {
     if (limit <= 0) return emptyList()
-    val normalized = normalizeMatchToken(prefix)
-    return suggestions.mapIndexedNotNull { index, suggestion ->
-        normalizeMatchToken(suggestion.text).matchQuality(normalized)?.let { quality ->
-            RankedFacetedSuggestion(suggestion, quality, index)
+    return suggestions
+        .mapIndexedNotNull { index, suggestion ->
+            qualityOf(suggestion)?.let { quality -> RankedSuggestion(suggestion, quality, index) }
         }
-    }
-        .distinctBy { ranked ->
-            Triple(
-                ranked.suggestion.facet,
-                ranked.suggestion.sourceNamespace,
-                normalizeMatchToken(ranked.suggestion.text),
-            )
-        }
+        .distinctBy { ranked -> identityOf(ranked.suggestion) }
         .sortedWith(
-            compareBy<RankedFacetedSuggestion>(RankedFacetedSuggestion::quality)
-                .thenByDescending { ranked -> ranked.suggestion.count ?: Int.MIN_VALUE }
-                .thenBy(RankedFacetedSuggestion::originalIndex),
+            compareBy<RankedSuggestion<T>> { ranked -> ranked.quality }
+                .thenByDescending { ranked -> countOf(ranked.suggestion) ?: Int.MIN_VALUE }
+                .thenBy { ranked -> ranked.originalIndex },
         )
         .take(limit)
-        .map(RankedFacetedSuggestion::suggestion)
+        .map { ranked -> ranked.suggestion }
 }
 
 /**
@@ -112,7 +119,7 @@ fun rankSearchedTags(
     sources: Set<SourceKey>,
     prefix: String,
     limit: Int,
-    accepts: (SearchTerm) -> Boolean = { true },
+    accepts: (SearchTerm) -> Boolean,
 ): List<SearchTerm> {
     val normalizedPrefix = normalizeMatchToken(prefix)
     if (limit <= 0 || normalizedPrefix.isBlank()) return emptyList()
@@ -155,14 +162,8 @@ private enum class MatchQuality {
     CONTAINS,
 }
 
-private data class RankedSuggestion(
-    val suggestion: TagSuggestion,
-    val quality: MatchQuality,
-    val originalIndex: Int,
-)
-
-private data class RankedFacetedSuggestion(
-    val suggestion: FacetedTagSuggestion,
+private data class RankedSuggestion<T>(
+    val suggestion: T,
     val quality: MatchQuality,
     val originalIndex: Int,
 )

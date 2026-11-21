@@ -1,6 +1,6 @@
 package com.theoriacodex.app.recommend
 
-import com.theoriacodex.app.feed.settleFeedContinuations
+import com.theoriacodex.app.feed.FeedCursor
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.domain.model.Post
@@ -23,24 +23,12 @@ data class ForYouFeedRequest(
     val additionalSection: Boolean = false,
 )
 
-data class ForYouContinuation(
-    val query: Query,
-    val queriesBySource: Map<SourceKey, Query>,
-    val weights: Map<SourceKey, Double>,
-    val pageTokens: Map<SourceKey, String?>,
-) {
-    fun accept(page: UnifiedSearchResult, attempted: Set<SourceKey>): ForYouContinuation = copy(
-        queriesBySource = queriesBySource + page.queriesBySource,
-        pageTokens = settleFeedContinuations(pageTokens, attempted, page.nextPageTokens, page.statuses),
-    )
-}
-
 data class ForYouFeedResult(
     val seed: Map<SourceKey, List<String>>,
     val seedId: String,
     val likesCount: Int,
     val page: UnifiedSearchResult,
-    val continuation: ForYouContinuation?,
+    val continuation: FeedCursor?,
 ) {
     companion object {
         fun empty(seedId: String, likesCount: Int): ForYouFeedResult = ForYouFeedResult(
@@ -56,7 +44,7 @@ interface ForYouRouteEngine {
     suspend fun pinSection(section: ForYouSection, pinned: Boolean): String? = error("Section pins unavailable")
     fun availableSources(settings: AppSettings): List<SourceKey>
     suspend fun execute(request: ForYouFeedRequest): ForYouFeedResult
-    suspend fun loadPage(continuation: ForYouContinuation, sources: Set<SourceKey>): UnifiedSearchResult
+    suspend fun loadPage(continuation: FeedCursor, sources: Set<SourceKey>): UnifiedSearchResult
     suspend fun updateBlacklist(profileId: String, entries: List<ForYouBlacklistEntry>, hidden: Boolean): ForYouBlacklistChange
     suspend fun recordAccepted(result: ForYouFeedResult)
     suspend fun resolvePost(postId: PostId): Post?

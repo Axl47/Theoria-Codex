@@ -25,7 +25,7 @@ class SearchExecutionBookkeepingTest {
         val root = owner.executeInitial(query, SearchSourceScope.GlobalUnified) as SearchExecutionResult.Success
         gelbooru.failure = IllegalStateException("offline")
         val page = owner.executePage(root.continuation) as SearchPageResult.Success
-        assertEquals("next", page.continuation.unifiedPageTokens[SourceKey.GELBOORU])
+        assertEquals("next", page.continuation.cursor.pageTokens[SourceKey.GELBOORU])
         assertFalse(page.continuation.canLoadMore)
         val failedCalls = gelbooru.searchedTags.size
         owner.executePage(page.continuation)

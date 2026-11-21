@@ -32,6 +32,8 @@ class TestRegistry(adapters: List<SourceAdapter>) : SourceAdapterRegistry {
 class TestAdapter(
     override val sourceKey: SourceKey,
     searchTermLimit: SearchTermLimit? = null,
+    /** Like the real Gelbooru preset, the Gelbooru stand-in matches only exactly spelled tags. */
+    requiresExactTags: Boolean = sourceKey == SourceKey.GELBOORU,
 ) : SourceAdapter {
     var failure: Throwable? = null
     var autocompleteFailure: Throwable? = null
@@ -53,6 +55,7 @@ class TestAdapter(
         supportsSortRandom = true,
         supportsExcludeTagsServerSide = true,
         searchTermLimit = searchTermLimit,
+        requiresExactTags = requiresExactTags,
     )
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> {

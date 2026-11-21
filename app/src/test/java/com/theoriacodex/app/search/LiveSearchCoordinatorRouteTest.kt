@@ -144,9 +144,8 @@ internal class LiveSearchCoordinatorRouteTest : LiveSearchCoordinatorRouteTestFi
                 sourceScope = run.sourceScope,
                 selectedScope = FacetedSearchScope.All,
                 input = scopedPrefix,
-                trending = emptyList(),
             )
-            if (autocomplete.autocomplete.isEmpty()) {
+            if (autocomplete.autocomplete.isEmpty() && autocomplete.facetedAutocomplete.isEmpty()) {
                 issues += "${probeCase.source.id}: ${autocompleteProbe.checkName} returned no tags for prefix $scopedPrefix"
             }
             val expectedFacet = autocompleteProbe.facet

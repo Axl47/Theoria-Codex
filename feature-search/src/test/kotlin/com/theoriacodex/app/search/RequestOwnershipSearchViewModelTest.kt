@@ -29,6 +29,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
@@ -114,15 +115,11 @@ internal class RequestOwnershipSearchViewModelTest : SearchViewModelTestFixture(
                 rootRequestTimeoutMs = 100L,
                 executionService = { coordinator ->
                     object : SearchExecutionService by coordinator {
-                        override suspend fun executeInitialProgressively(
-                            query: Query,
-                            sourceScope: SearchSourceScope,
-                            onPartial: suspend (SearchExecutionResult.Success) -> Unit,
-                        ): SearchExecutionResult = executeInitial(query, sourceScope)
-
                         override suspend fun executeInitial(
                             query: Query,
                             sourceScope: SearchSourceScope,
+                            sources: SearchSources,
+                            onPartial: (suspend (SearchExecutionResult.Success) -> Unit)?,
                         ): SearchExecutionResult = kotlinx.coroutines.awaitCancellation()
                     }
                 },
@@ -288,6 +285,23 @@ internal class RequestOwnershipSearchViewModelTest : SearchViewModelTestFixture(
             assertEquals(SearchSourceScope.GlobalUnified, query.appliedSourceScope)
             assertEquals(QueryMode.Unified, query.draft.mode)
             assertTrue(viewModel.state.value.hasPendingChanges)
+        }
+
+    @Test
+    fun `Multi-Search keeps the notice that it dropped source terms while autocomplete refreshes`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val viewModel = viewModel(
+                adapter = ViewModelSearchAdapter(SourceKey.PIXIV),
+                additionalAdapters = listOf(ViewModelSearchAdapter(SourceKey.GELBOORU)),
+            )
+            restore(viewModel)
+            viewModel.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
+            viewModel.onAction(SearchAction.AddIncludeTerm(SearchTerm("najar", SearchFacet.ARTIST, "artist")))
+
+            viewModel.onAction(SearchAction.ToggleTemporarySource(SourceKey.GELBOORU))
+            advanceUntilIdle()
+
+            assertEquals(UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE, viewModel.state.value.validationMessage)
         }
 
     @Test

@@ -198,7 +198,7 @@ class SearchComposerModelTest {
             query = SearchQueryUiState(
                 draft = emptySearchQuery(QueryMode.Source(SourceKey.NHENTAI)),
                 selectedScope = scope,
-                supportedScopes = supported,
+                scopesBySource = mapOf(SourceKey.NHENTAI to supported),
             ),
             suggestions = SearchSuggestionsUiState(input = input, searchedTags = searched),
         ),

@@ -1,5 +1,7 @@
 package com.theoriacodex.app.search.state
 
+import com.theoriacodex.app.search.SearchInitialization
+import com.theoriacodex.app.search.UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.adapter.FacetedSearchScope
@@ -23,6 +25,25 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SearchStateContractTest {
+    @Test
+    fun `restoring keeps the notice that stored source terms were removed`() {
+        val query = emptySearchQuery().withIncludeTermsAsRequired(listOf(SearchTerm("landscape")))
+        val initialization = SearchInitialization(
+            query = query,
+            sourceScope = SearchSourceScope.GlobalUnified,
+            appliedByMode = emptyMap(),
+            availableSources = listOf(SourceKey.PIXIV),
+            hasExecutedSearch = true,
+            validationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE,
+        )
+
+        val restored = SearchStateReducer.restore(initialization, "hash")
+
+        assertEquals(UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE, restored.query.validationMessage)
+        assertEquals(query, restored.query.draft)
+        assertEquals(query, restored.query.applied)
+    }
+
     @Test
     fun `reset availability follows clearable draft content rather than pending edits`() {
         val empty = emptySearchQuery(QueryMode.Source(SourceKey.PIXIV))

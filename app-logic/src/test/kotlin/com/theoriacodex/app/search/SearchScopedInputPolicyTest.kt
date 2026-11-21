@@ -69,12 +69,12 @@ class SearchScopedInputPolicyTest {
         val unified = state(QueryMode.Unified)
         val unifiedRejected = SearchDraftReducer.commitInput(unified, "artist:najar")
         assertFalse(unifiedRejected.accepted)
-        assertEquals(UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE, unifiedRejected.state.query.validationMessage)
+        assertEquals(UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE, unifiedRejected.state.validationMessage)
 
         val hitomi = state(QueryMode.Source(SourceKey.HITOMI), listOf(FacetedSearchScope.All))
         val unsupported = SearchDraftReducer.commitInput(hitomi, "artist:najar")
         assertFalse(unsupported.accepted)
-        assertEquals(UNSUPPORTED_SEARCH_SCOPE_MESSAGE, unsupported.state.query.validationMessage)
+        assertEquals(UNSUPPORTED_SEARCH_SCOPE_MESSAGE, unsupported.state.validationMessage)
 
         val sourceOwned = state(QueryMode.Source(SourceKey.HITOMI)).let { current ->
             current.copy(
@@ -85,11 +85,7 @@ class SearchScopedInputPolicyTest {
                 ),
             )
         }
-        val switched = SearchDraftReducer.selectMode(
-            sourceOwned,
-            QueryMode.Unified,
-            com.theoriacodex.app.search.state.SearchDraftContext(SourceKey.builtIns.toSet(), emptyMap()),
-        ) { emptyList() }
+        val switched = SearchDraftReducer.selectMode(sourceOwned, QueryMode.Unified)
         assertEquals(UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE, switched.state.query.validationMessage)
     }
 
@@ -112,8 +108,7 @@ class SearchScopedInputPolicyTest {
                 draftSourceScope = SearchSourceScope.fromQuery(query),
                 appliedSourceScope = SearchSourceScope.fromQuery(query),
                 availableSources = SourceKey.builtIns,
-                modeOptions = listOf(QueryMode.Unified) + SourceKey.builtIns.map(QueryMode::Source),
-                supportedScopes = scopes,
+                scopesBySource = (mode as? QueryMode.Source)?.let { mapOf(it.source to scopes) }.orEmpty(),
             ),
         )
     }

@@ -266,6 +266,7 @@ internal fun CodexDetailDestinationStateBoundary(
     sortMode: CodexSortMode,
     data: DataDependencies,
     sources: SourceDependencies,
+    features: com.theoriacodex.app.di.FeatureDependencies,
     fabRestoreState: com.theoriacodex.data.repository.FeedFabRestoreState,
     durationStates: MediaDurationStates = MediaDurationStates.EMPTY,
     content: @Composable (CodexDetailDestinationState) -> Unit,
@@ -276,7 +277,7 @@ internal fun CodexDetailDestinationStateBoundary(
             metadata.likedPostIds else emptySet()))
     }
     if (codexId == com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID) {
-        SavedSearchesCodexBoundary(data, sources, metadata.settings, fabRestoreState, sortMode, durationStates, render)
+        SavedSearchesCodexBoundary(data, sources, features, metadata.settings, fabRestoreState, sortMode, durationStates, render)
         return
     }
     if (codexId == com.theoriacodex.app.codex.FOLLOWED_CODEX_ID) {

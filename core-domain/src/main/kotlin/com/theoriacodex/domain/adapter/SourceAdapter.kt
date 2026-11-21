@@ -215,4 +215,9 @@ data class SourceCapabilities(
     val supportsGroupedIncludeTagsServerSide: Boolean = false,
     /** Null when the provider accepts any number of terms per request. */
     val searchTermLimit: SearchTermLimit? = null,
+    /**
+     * The provider matches only tags spelled as it lists them, so Search adds a typed tag only once autocomplete or
+     * search history confirms it, and Unified looks up the provider's spelling before searching.
+     */
+    val requiresExactTags: Boolean = false,
 )

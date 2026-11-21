@@ -205,7 +205,7 @@ class TagSuggestionStoreTest {
             ),
         )
 
-        val saved = store.getFaceted(SourceKey.NHENTAI, limit = 10)
+        val saved = store.getFaceted(SourceKey.NHENTAI, limit = 10, scope = FacetedSearchScope.All)
         assertEquals(3, saved.size)
         assertEquals(
             listOf(
@@ -241,7 +241,7 @@ class TagSuggestionStoreTest {
         assertEquals(listOf("general"), store.get(SourceKey.NHENTAI, limit = 10).map(TagSuggestion::text))
         assertEquals(
             listOf(SearchFacet.TAG, SearchFacet.ARTIST, SearchFacet.SERIES),
-            store.getFaceted(SourceKey.NHENTAI, limit = 10).map(FacetedTagSuggestion::facet),
+            store.getFaceted(SourceKey.NHENTAI, limit = 10, scope = FacetedSearchScope.All).map(FacetedTagSuggestion::facet),
         )
         store.close()
     }
@@ -329,7 +329,7 @@ class TagSuggestionStoreTest {
 
         val store = FileBackedTagSuggestionStore(storeFile = storeFile)
         store.awaitLoaded()
-        val saved = store.getFaceted(SourceKey.GELBOORU, limit = 10).single()
+        val saved = store.getFaceted(SourceKey.GELBOORU, limit = 10, scope = FacetedSearchScope.All).single()
 
         assertEquals("legacy tag", saved.text)
         assertEquals(SearchFacet.TAG, saved.facet)

@@ -1,14 +1,16 @@
 package com.theoriacodex.app.search
 
 import com.theoriacodex.app.media.recoverRemoteMedia
-import com.theoriacodex.app.feed.settleFeedContinuations
+import com.theoriacodex.app.feed.FeedCursor
+import com.theoriacodex.app.feed.mergeFeedStatuses
+import com.theoriacodex.app.feed.nextPage
+import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.post.FileMirrorIndex
 import com.theoriacodex.app.source.PostResolutionFlights
 import com.theoriacodex.app.search.state.modeKey
 import com.theoriacodex.app.search.state.queryMode
 import com.theoriacodex.app.source.inPresentationOrder
-import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.QueryRepository
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.SearchFirstPageStore
@@ -29,6 +31,7 @@ import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.normalizedForMode
@@ -39,14 +42,12 @@ import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
-import com.theoriacodex.domain.orchestration.SourceWeightNormalization
-import com.theoriacodex.domain.query.QueryHash
+import com.theoriacodex.domain.orchestration.UnifiedSearchResult
 import com.theoriacodex.domain.query.SearchTermLimit
 import com.theoriacodex.domain.tags.pixivSearchToken
 import com.theoriacodex.domain.tags.normalizeFavoriteTagForStorage
 import com.theoriacodex.domain.tags.sourceAutocompletePrefix
 import com.theoriacodex.domain.tags.normalizeMatchToken
-import com.theoriacodex.domain.tags.sourceTagsMatch
 import java.util.LinkedHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -66,6 +67,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Application execution service for Search.
@@ -106,14 +108,12 @@ class SearchCoordinator(
         seenTags.record(posts)
         fileMirrors.learn(posts)
     }
-    @Volatile private var runtimeSettings = AppSettings()
-    private var availableSourcesSnapshot = registry.availableSources()
-    private val suggestionCoordinator = SearchSuggestionCoordinator(
+    /** Tag autocomplete and trending tags for the Search composer. */
+    val suggestions = SearchSuggestionCoordinator(
         registry = registry,
         tagSuggestionStore = tagSuggestionStore,
         clock = clock,
         supportedSearchScopes = ::supportedSearchScopes,
-        effectiveEnabledSources = ::effectiveEnabledSources,
         searchCounts = searchCounts::value,
     )
     private val tagCounts = TagCountCoordinator(registry, tagSuggestionStore, ::autocompletePrefixForSource,
@@ -122,26 +122,19 @@ class SearchCoordinator(
     private val resolvedPostsByExecution = linkedMapOf<String, LinkedHashMap<PostId, Post>>()
     private val resolveFailuresByExecution = mutableMapOf<String, MutableMap<PostId, ResolveFailureRecord>>()
     private val queryPreparation = UnifiedQueryPreparation(
-        isKnownTag = { tag -> tagSuggestionStore.getCount(SourceKey.GELBOORU, tag) != null },
+        isKnownTag = { source, tag -> tagSuggestionStore.getCount(source, tag) != null },
         clock = clock,
     )
     private val appliedPersistenceMutex = Mutex()
     private val scrollPersistenceMutex = Mutex()
     private val persistedScrollStateByQuery = mutableMapOf<String, SearchScrollState>()
 
-    @Volatile
-    private var initialized = false
-
     val availableSources: List<SourceKey>
         get() = registry.availableSources().inPresentationOrder()
 
-    val isInitialized: Boolean
-        get() = initialized
-
     suspend fun initializeRoute(): SearchInitialization {
         tagSuggestionStore.awaitLoaded()
-        runtimeSettings = settingsRepository.observeSettings().first()
-        availableSourcesSnapshot = registry.availableSources()
+        val settings = settingsRepository.observeSettings().first()
         val modes = listOf(QueryMode.Unified) + availableSources.map(QueryMode::Source)
         val storedByMode = modes.mapNotNull { mode ->
             queryRepository.observeAppliedQuery(modeKey(mode)).first()
@@ -157,8 +150,7 @@ class SearchCoordinator(
         }
         val sanitized = restored.normalizedForMode(restored.mode)
         val sourceScope = SearchSourceScope.fromQuery(sanitized.query)
-        val key = executionKey(sanitized.query, sourceScope)
-        initialized = true
+        val key = searchExecutionKey(sanitized.query, sourceScope)
         return SearchInitialization(
             query = sanitized.query,
             sourceScope = sourceScope,
@@ -168,21 +160,32 @@ class SearchCoordinator(
                 uiRestoreRepository.getSearchScrollState(key) != null,
             validationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
                 .takeIf { sanitized.removedSourceOwnedTerms },
+            runtime = settings.runtime,
+            scopesBySource = searchScopesBySource(),
+            exactTagSources = exactTagSources(),
         )
     }
 
-    fun updateEnvironment(settings: AppSettings): SearchEnvironmentChange {
-        val settingsChanged = runtimeSettings.runtime != settings.runtime
-        runtimeSettings = settings
-        val current = registry.availableSources()
-        val sourcesChanged = current != availableSourcesSnapshot
-        availableSourcesSnapshot = current
-        return SearchEnvironmentChange(settingsChanged, sourcesChanged, current.inPresentationOrder(), sourceTermLimits())
+    /** The available sources that match only exactly spelled tags, each with its name for the input error. */
+    fun exactTagSources(): Map<SourceKey, String> = registry.availableSources()
+        .filter { source -> registry.adapterFor(source)?.capabilities?.requiresExactTags == true }
+        .associateWith { source -> source.displayName() }
+
+    /** Spells [query]'s tags as [source] lists them when it matches only exact tags; other sources run it as is. */
+    private suspend fun prepareExactTags(source: SourceKey, query: Query): Query {
+        val adapter = registry.adapterFor(source)?.takeIf { it.capabilities.requiresExactTags } ?: return query
+        return queryPreparation.prepareExactTags(adapter, query)
     }
 
-    private fun sourceTermLimits(): Map<SourceKey, SearchTermLimit> = registry.availableSources().mapNotNull { source ->
+    /** Per-request term caps of the available sources that have one. */
+    fun sourceTermLimits(): Map<SourceKey, SearchTermLimit> = registry.availableSources().mapNotNull { source ->
         registry.adapterFor(source)?.capabilities?.searchTermLimit?.let { source to it }
     }.toMap()
+
+    /** The faceted search scopes each available source offers, for those that offer any. */
+    fun searchScopesBySource(): Map<SourceKey, List<FacetedSearchScope>> = availableSources
+        .associateWith { source -> supportedSearchScopes(QueryMode.Source(source)) }
+        .filterValues { it.isNotEmpty() }
 
     fun supportedSearchScopes(mode: QueryMode): List<FacetedSearchScope> {
         val source = (mode as? QueryMode.Source)?.source ?: return emptyList()
@@ -190,26 +193,15 @@ class SearchCoordinator(
         return adapter.supportedSearchScopes.sortedWith(SEARCH_SCOPE_COMPARATOR)
     }
 
-    override fun executionKeyFor(query: Query, sourceScope: SearchSourceScope): String {
-        return executionKey(query.normalizedForMode(sourceScope.queryMode()).query, sourceScope)
-    }
-
     override suspend fun executeInitial(
         query: Query,
         sourceScope: SearchSourceScope,
-    ): SearchExecutionResult = executeRoot(query, sourceScope, onPartial = null)
+        sources: SearchSources,
+        onPartial: (suspend (SearchExecutionResult.Success) -> Unit)?,
+    ): SearchExecutionResult = executeRoot(query, sourceScope, sources, onPartial)
 
-    override suspend fun executeInitialProgressively(
-        query: Query,
-        sourceScope: SearchSourceScope,
-        onPartial: suspend (SearchExecutionResult.Success) -> Unit,
-    ): SearchExecutionResult = executeRoot(query, sourceScope, onPartial)
-
-    /** The key doesn't cover the enabled sources, so a source turned off or removed since is dropped here. */
-    override suspend fun cachedFirstPage(executionKey: String, sourceScope: SearchSourceScope): List<Post> {
-        val sources = effectiveEnabledSources(sourceScope)
-        return firstPageStore?.load(executionKey).orEmpty().filter { it.id.source in sources }.also(fileMirrors::learn)
-    }
+    override suspend fun cachedFirstPage(executionKey: String, sources: Set<SourceKey>): List<Post> =
+        firstPageStore?.load(executionKey).orEmpty().filter { it.id.source in sources }.also(fileMirrors::learn)
 
     override suspend fun rememberFirstPage(executionKey: String, posts: List<Post>) {
         firstPageStore?.save(executionKey, posts)
@@ -218,124 +210,76 @@ class SearchCoordinator(
     private suspend fun executeRoot(
         query: Query,
         sourceScope: SearchSourceScope,
+        sources: SearchSources,
         onPartial: (suspend (SearchExecutionResult.Success) -> Unit)?,
     ): SearchExecutionResult {
         currentCoroutineContext().ensureActive()
         val sanitized = query.normalizedForMode(sourceScope.queryMode()).query
-        val enabled = effectiveEnabledSources(sourceScope)
-        val available = availableSources
-        val weights = effectiveWeights(enabled)
-        val key = executionKey(sanitized, sourceScope)
+        val base = firstPage(sanitized, sourceScope, sources)
         return try {
             when (val mode = sanitized.mode) {
-                QueryMode.Unified -> executeUnifiedInitial(
-                    query = sanitized,
-                    sourceScope = sourceScope,
-                    executionKey = key,
-                    enabledSources = enabled,
-                    availableSources = available,
-                    weights = weights,
-                    onPartial = onPartial,
-                )
-                is QueryMode.Source -> executeSourceInitial(
-                    query = sanitized,
-                    sourceScope = sourceScope,
-                    executionKey = key,
-                    mode = mode,
-                    enabledSources = enabled,
-                    availableSources = available,
-                    weights = weights,
-                )
+                QueryMode.Unified -> executeUnifiedInitial(base, onPartial)
+                is QueryMode.Source -> executeSourceInitial(base, mode)
             }
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
             SearchExecutionResult.Failure(
-                executionKey = key,
+                executionKey = base.executionKey,
                 query = sanitized,
                 sourceScope = sourceScope,
-                statuses = (sanitized.mode as? QueryMode.Source)?.let { mode ->
-                    listOf(SourceRunStatus(mode.source, SourceRunState.FAILED,
-                        failureReason = (error as? SourceAdapterException)?.reason ?: SourceFailureReason.UNKNOWN,
-                        errorMessage = error.message))
-                }.orEmpty(),
-                message = if (isPixivUnknownError(error, sanitized)) {
-                    PIXIV_UNKNOWN_RETRY_MESSAGE
-                } else error.message ?: "Unknown error",
+                statuses = thrownStatuses(error, sanitized),
+                message = thrownMessage(error, sanitized, fallback = "Unknown error"),
             )
         }
     }
 
+    /** The continuation before a search's first page: its sources, weights and no tokens yet. */
+    private fun firstPage(query: Query, scope: SearchSourceScope, sources: SearchSources) = SearchContinuation(
+        executionKey = searchExecutionKey(query, scope),
+        sourceScope = scope,
+        enabledSources = sources.enabled.intersect(registry.availableSources()),
+        availableSources = availableSources,
+        cursor = FeedCursor(query, weights = sources.weights),
+    )
+
     private suspend fun executeUnifiedInitial(
-        query: Query,
-        sourceScope: SearchSourceScope,
-        executionKey: String,
-        enabledSources: Set<SourceKey>,
-        availableSources: List<SourceKey>,
-        weights: Map<SourceKey, Double>,
+        base: SearchContinuation,
         onPartial: (suspend (SearchExecutionResult.Success) -> Unit)?,
     ): SearchExecutionResult {
-        val excluded = excludedStatuses(sourceScope, availableSources, enabledSources)
-        if (enabledSources.isEmpty()) {
-            val continuation = continuation(
-                executionKey, query, sourceScope, enabledSources, availableSources, weights,
-            )
-            return SearchExecutionResult.Success(
-                executionKey, query, sourceScope, emptyList(), excluded, continuation,
-            )
-        }
-        val overrides = buildUnifiedQueryOverrides(query, enabledSources)
+        val enabled = base.enabledSources
+        val excluded = excludedStatuses(base.sourceScope, base.availableSources, enabled)
+        if (enabled.isEmpty()) return base.found(emptyList(), excluded)
+        val overrides = buildUnifiedQueryOverrides(base.query, enabled)
         currentCoroutineContext().ensureActive()
         val result = registry.unifiedOrchestrator().search(
-            query = query,
-            enabledSources = enabledSources,
+            query = base.query,
+            enabledSources = enabled,
             pageTokens = emptyMap(),
-            weights = weights,
+            weights = base.cursor.weights,
             queryOverridesBySource = overrides,
-            prepareQuery = { source, sourceQuery ->
-                if (source == SourceKey.GELBOORU) {
-                    queryPreparation.prepareGelbooru(requireNotNull(registry.adapterFor(source)), sourceQuery)
-                } else sourceQuery
-            },
+            prepareQuery = ::prepareExactTags,
             onPartial = onPartial?.let { publish ->
                 { partial ->
                     fileMirrors.learn(partial.items)
-                    publish(
-                        SearchExecutionResult.Success(
-                            executionKey, query, sourceScope, partial.items, mergeStatuses(excluded, partial.statuses),
-                            continuation(executionKey, query, sourceScope, enabledSources, availableSources, weights),
-                        ),
-                    )
+                    publish(base.found(partial.items, mergeFeedStatuses(excluded, partial.statuses)))
                 }
             },
         )
         currentCoroutineContext().ensureActive()
-        val statuses = mergeStatuses(excluded, result.statuses)
-        val next = continuation(executionKey, query, sourceScope, enabledSources, availableSources, weights,
-            unifiedPageTokens = result.nextPageTokens, unifiedQueryOverrides = result.queriesBySource)
-            .copy(failedSources = statuses.filter { it.state == SourceRunState.FAILED }.mapTo(mutableSetOf()) { it.source })
+        val statuses = mergeFeedStatuses(excluded, result.statuses)
+        val next = base.accept(result, enabled)
         if (statuses.none { it.state == SourceRunState.SUCCESS }) {
-            return SearchExecutionResult.Failure(executionKey, query, sourceScope, statuses,
+            return SearchExecutionResult.Failure(base.executionKey, base.query, base.sourceScope, statuses,
                 unifiedFailureMessage(result.items, statuses), next)
         }
         listed(result.items)
-        return SearchExecutionResult.Success(executionKey, query, sourceScope, result.items, statuses, next)
+        return base.found(result.items, statuses, next)
     }
 
-    private suspend fun executeSourceInitial(
-        query: Query,
-        sourceScope: SearchSourceScope,
-        executionKey: String,
-        mode: QueryMode.Source,
-        enabledSources: Set<SourceKey>,
-        availableSources: List<SourceKey>,
-        weights: Map<SourceKey, Double>,
-    ): SearchExecutionResult {
+    private suspend fun executeSourceInitial(base: SearchContinuation, mode: QueryMode.Source): SearchExecutionResult {
         if (!isModeAvailable(mode)) {
-            return SearchExecutionResult.Success(
-                executionKey = executionKey,
-                query = query,
-                sourceScope = sourceScope,
+            return base.found(
                 posts = emptyList(),
                 statuses = listOf(
                     SourceRunStatus(
@@ -344,90 +288,64 @@ class SearchCoordinator(
                         errorMessage = "Source not available in this build",
                     ),
                 ),
-                continuation = continuation(
-                    executionKey, query, sourceScope, enabledSources, availableSources, weights,
-                ),
             )
         }
-        val adapter = requireNotNull(registry.adapterFor(mode.source)) { "No adapter for ${mode.source}" }
         // Every route into a single-source search passes here, so this is where its term cap is enforced.
-        searchTermLimitNotices(query, listOf(mode.source), sourceTermLimits()).firstOrNull()?.let { notice ->
-            return SearchExecutionResult.Failure(executionKey, query, sourceScope, emptyList(), notice.message())
+        searchTermLimitNotices(base.query, listOf(mode.source), sourceTermLimits()).firstOrNull()?.let { notice ->
+            return SearchExecutionResult.Failure(base.executionKey, base.query, base.sourceScope, emptyList(), notice.message())
         }
-        val page = registry.unifiedOrchestrator().searchSource(adapter, query, null)
-        currentCoroutineContext().ensureActive()
-        listed(page.items)
-        return SearchExecutionResult.Success(
-            executionKey = executionKey,
-            query = query,
-            sourceScope = sourceScope,
-            posts = page.items,
-            statuses = listOf(SourceRunStatus(mode.source, SourceRunState.SUCCESS)),
-            continuation = continuation(
-                executionKey, query, sourceScope, enabledSources, availableSources, weights,
-                sourcePageToken = page.nextPageToken,
-            ),
-        )
+        val page = fetchSource(base, mode.source)
+        return base.found(page.items, page.statuses, base.accept(page, setOf(mode.source)))
     }
 
-    /** Retries only the failed provider at its exact page, retaining every other continuation. */
-    suspend fun retrySource(
+    override suspend fun retrySource(
         query: Query,
         scope: SearchSourceScope,
+        sources: SearchSources,
         previous: SearchContinuation?,
         source: SourceKey,
     ): SearchPageResult {
-        val enabled = effectiveEnabledSources(scope)
-        val base = previous ?: continuation(
-            executionKey(query, scope), query, scope, enabled, availableSources, effectiveWeights(enabled),
-        )
+        val base = previous ?: firstPage(query, scope, sources)
+        val enabled = sources.enabled.intersect(registry.availableSources())
         if (source !in enabled) return SearchPageResult.Failure(
             base.executionKey, emptyList(), "Source is no longer available",
         )
         if (query.mode is QueryMode.Source) return retrySingleSource(base, source)
-        val token = base.unifiedPageTokens[source]
-        val overrides = base.unifiedQueryOverrides.ifEmpty { buildUnifiedQueryOverrides(query, enabled) }
+        val ran = base.cursor.queriesBySource
+        val overrides = ran.ifEmpty { buildUnifiedQueryOverrides(query, enabled) }
         val result = registry.unifiedOrchestrator().search(
             query = query,
             enabledSources = setOf(source),
-            pageTokens = mapOf(source to token),
+            pageTokens = mapOf(source to base.cursor.pageTokens[source]),
             weights = mapOf(source to 1.0),
             queryOverridesBySource = overrides.filterKeys { it == source },
-            prepareQuery = { key, prepared ->
-                if (key == SourceKey.GELBOORU && key !in base.unifiedQueryOverrides) {
-                    queryPreparation.prepareGelbooru(requireNotNull(registry.adapterFor(key)), prepared)
-                } else prepared
-            },
+            prepareQuery = { key, prepared -> if (key in ran) prepared else prepareExactTags(key, prepared) },
         )
         currentCoroutineContext().ensureActive()
         if (result.statuses.none { it.state == SourceRunState.SUCCESS }) {
             return SearchPageResult.Failure(
-                base.executionKey, result.statuses, buildSourceFailureMessage(result.statuses)
-                    ?: buildSourceAuthErrorMessage(result.statuses) ?: "Source could not be retried",
+                base.executionKey, result.statuses, sourceFailureMessage(result.statuses, fallback = "Source could not be retried"),
             )
         }
         listed(result.items)
-        val updated = base.copy(
-            unifiedPageTokens = base.unifiedPageTokens + result.nextPageTokens,
-            unifiedQueryOverrides = base.unifiedQueryOverrides + result.queriesBySource,
-            failedSources = base.failedSources - source,
-        )
-        return SearchPageResult.Success(base.executionKey, result.items, result.statuses, updated)
+        return SearchPageResult.Success(base.executionKey, result.items, result.statuses, base.accept(result, setOf(source)))
     }
 
     private suspend fun retrySingleSource(base: SearchContinuation, source: SourceKey): SearchPageResult = try {
-        val adapter = requireNotNull(registry.adapterFor(source))
-        val page = kotlinx.coroutines.withTimeoutOrNull(15_000L) {
-            registry.unifiedOrchestrator().searchSource(adapter, base.query, base.sourcePageToken)
-        } ?: throw SourceAdapterException(SourceFailureReason.NETWORK, "Source timed out")
-        listed(page.items)
-        SearchPageResult.Success(base.executionKey, page.items, listOf(SourceRunStatus(source, SourceRunState.SUCCESS)),
-            base.copy(sourcePageToken = page.nextPageToken))
+        val page = fetchSource(base, source, timeoutMs = SINGLE_SOURCE_RETRY_TIMEOUT_MS)
+        SearchPageResult.Success(base.executionKey, page.items, page.statuses, base.accept(page, setOf(source)))
     } catch (error: CancellationException) { throw error }
     catch (error: Exception) {
         SearchPageResult.Failure(base.executionKey, listOf(sourceFailureStatus(source, error)),
             error.message ?: "Could not retry source")
     }
+
+    /** A thrown request failure is the query's one source's failure; Unified reports its sources' failures as statuses. */
+    private fun thrownStatuses(error: Throwable, query: Query): List<SourceRunStatus> =
+        (query.mode as? QueryMode.Source)?.let { mode -> listOf(sourceFailureStatus(mode.source, error)) }.orEmpty()
+
+    private fun thrownMessage(error: Throwable, query: Query, fallback: String): String =
+        if (isPixivUnknownError(error, query)) PIXIV_UNKNOWN_RETRY_MESSAGE else error.message ?: fallback
 
     private fun sourceFailureStatus(source: SourceKey, error: Throwable): SourceRunStatus {
         val reason = (error as? SourceAdapterException)?.reason ?: SourceFailureReason.UNKNOWN
@@ -440,18 +358,15 @@ class SearchCoordinator(
         return try {
             when (val mode = continuation.query.mode) {
                 QueryMode.Unified -> executeUnifiedPage(continuation)
-                is QueryMode.Source -> executeSourcePage(continuation, mode)
+                is QueryMode.Source -> executeSourcePage(continuation, mode.source)
             }
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
             SearchPageResult.Failure(
                 executionKey = continuation.executionKey,
-                statuses = (continuation.query.mode as? QueryMode.Source)
-                    ?.let { listOf(sourceFailureStatus(it.source, error)) }.orEmpty(),
-                message = if (isPixivUnknownError(error, continuation.query)) {
-                    PIXIV_UNKNOWN_RETRY_MESSAGE
-                } else error.message ?: "Could not load more results",
+                statuses = thrownStatuses(error, continuation.query),
+                message = thrownMessage(error, continuation.query, fallback = "Could not load more results"),
             )
         }
     }
@@ -463,64 +378,56 @@ class SearchCoordinator(
             continuation.enabledSources,
         )
         val pageable = continuation.enabledSources.filterTo(mutableSetOf()) { source ->
-            source !in continuation.failedSources && !continuation.unifiedPageTokens[source].isNullOrBlank()
+            source !in continuation.failedSources && !continuation.cursor.pageTokens[source].isNullOrBlank()
         }
-        if (pageable.isEmpty()) {
-            return SearchPageResult.Success(
-                continuation.executionKey,
-                emptyList(),
-                excluded,
-                continuation.copy(unifiedPageTokens = emptyMap()),
-            )
-        }
-        val result = registry.unifiedOrchestrator().search(
-            query = continuation.query,
-            enabledSources = pageable,
-            pageTokens = continuation.unifiedPageTokens.filterKeys { it in pageable },
-            weights = SourceWeightNormalization.normalize(pageable, continuation.weights),
-            queryOverridesBySource = continuation.unifiedQueryOverrides.filterKeys { it in pageable },
-        )
+        if (pageable.isEmpty()) return SearchPageResult.Success(continuation.executionKey, emptyList(), excluded, continuation.ended())
+        val result = registry.unifiedOrchestrator().nextPage(continuation.cursor, pageable)
         currentCoroutineContext().ensureActive()
-        val statuses = mergeStatuses(excluded, result.statuses)
+        val statuses = mergeFeedStatuses(excluded, result.statuses)
         if (statuses.none { it.state == SourceRunState.SUCCESS }) {
             return SearchPageResult.Failure(continuation.executionKey, statuses, unifiedFailureMessage(result.items, statuses))
         }
         listed(result.items)
-        val nextTokens = settleFeedContinuations(continuation.unifiedPageTokens, pageable, result.nextPageTokens, statuses)
-            .minus(pageable - registry.availableSources())
-        val failed = statuses.filter { it.state == SourceRunState.FAILED }.mapTo(mutableSetOf()) { it.source }
-        return SearchPageResult.Success(
-            continuation.executionKey,
-            result.items,
-            statuses,
-            continuation.copy(unifiedPageTokens = nextTokens, failedSources = continuation.failedSources + failed),
-        )
+        val next = continuation.accept(result, pageable)
+        // A source removed since the last page answers nothing; dropping its token lets paging end.
+        val gone = pageable - registry.availableSources()
+        return SearchPageResult.Success(continuation.executionKey, result.items, statuses,
+            next.copy(cursor = next.cursor.copy(pageTokens = next.cursor.pageTokens - gone)))
     }
 
-    private suspend fun executeSourcePage(
-        continuation: SearchContinuation,
-        mode: QueryMode.Source,
-    ): SearchPageResult {
-        val token = continuation.sourcePageToken
-        if (token.isNullOrBlank()) {
-            return SearchPageResult.Success(
-                continuation.executionKey,
-                emptyList(),
-                emptyList(),
-                continuation.copy(sourcePageToken = null),
-            )
+    private suspend fun executeSourcePage(continuation: SearchContinuation, source: SourceKey): SearchPageResult {
+        if (continuation.cursor.pageTokens[source].isNullOrBlank()) {
+            return SearchPageResult.Success(continuation.executionKey, emptyList(), emptyList(), continuation.ended())
         }
-        val adapter = requireNotNull(registry.adapterFor(mode.source)) { "No adapter for ${mode.source}" }
-        val page = registry.unifiedOrchestrator().searchSource(adapter, continuation.query, token)
+        val page = fetchSource(continuation, source)
+        return SearchPageResult.Success(continuation.executionKey, page.items, page.statuses, continuation.accept(page, setOf(source)))
+    }
+
+    /** One page from a single [source] at the continuation's token for it, as a one-source feed page. */
+    private suspend fun fetchSource(
+        continuation: SearchContinuation,
+        source: SourceKey,
+        timeoutMs: Long? = null,
+    ): UnifiedSearchResult {
+        val adapter = requireNotNull(registry.adapterFor(source)) { "No adapter for $source" }
+        val token = continuation.cursor.pageTokens[source]
+        val fetch: suspend () -> Page<Post> = { registry.unifiedOrchestrator().searchSource(adapter, continuation.query, token) }
+        val page = if (timeoutMs == null) fetch() else {
+            withTimeoutOrNull(timeoutMs) { fetch() } ?: throw SourceAdapterException(SourceFailureReason.NETWORK, "Source timed out")
+        }
         currentCoroutineContext().ensureActive()
         listed(page.items)
-        return SearchPageResult.Success(
-            continuation.executionKey,
-            page.items,
-            listOf(SourceRunStatus(mode.source, SourceRunState.SUCCESS)),
-            continuation.copy(sourcePageToken = page.nextPageToken),
-        )
+        return UnifiedSearchResult(page.items, mapOf(source to page.nextPageToken), listOf(SourceRunStatus(source, SourceRunState.SUCCESS)))
     }
+
+    private fun SearchContinuation.found(
+        posts: List<Post>,
+        statuses: List<SourceRunStatus>,
+        next: SearchContinuation = this,
+    ) = SearchExecutionResult.Success(executionKey, query, sourceScope, posts, statuses, next)
+
+    /** Nothing more to page: every token is spent, so a retry starts its source over. */
+    private fun SearchContinuation.ended() = copy(cursor = cursor.copy(pageTokens = emptyMap()))
 
     override suspend fun persistAppliedSearch(
         query: Query,
@@ -563,77 +470,12 @@ class SearchCoordinator(
         }
     }
 
-    suspend fun fetchAutocomplete(
-        query: Query,
-        sourceScope: SearchSourceScope,
-        selectedScope: FacetedSearchScope,
-        input: String,
-        trending: List<TagSuggestion>,
-        onUpdate: suspend (SearchAutocompleteResult) -> Unit = {},
-    ): SearchAutocompleteResult = suggestionCoordinator.fetchAutocomplete(
-        query,
-        sourceScope,
-        selectedScope,
-        input,
-        trending,
-        onUpdate,
-    )
+    /** The post count the tag store knows for [tag] on [source]; counts are only ever matched per source. */
+    fun tagVideoCount(source: SourceKey, tag: String): Int? =
+        tag.trim().takeIf(String::isNotBlank)?.let { tagSuggestionStore.getCount(source, it) }
 
-    fun cachedAutocomplete(
-        query: Query,
-        sourceScope: SearchSourceScope,
-        selectedScope: FacetedSearchScope,
-        input: String,
-        trending: List<TagSuggestion>,
-    ): SearchAutocompleteResult = suggestionCoordinator.cachedAutocomplete(
-        query,
-        sourceScope,
-        selectedScope,
-        input,
-        trending,
-    )
-
-    suspend fun fetchTrending(
-        query: Query,
-        sourceScope: SearchSourceScope,
-        forceRefresh: Boolean = false,
-    ): List<TagSuggestion> = suggestionCoordinator.fetchTrending(query, sourceScope, forceRefresh)
-
-    fun cachedTrending(
-        query: Query,
-        sourceScope: SearchSourceScope,
-    ): List<TagSuggestion> = suggestionCoordinator.cachedTrending(query, sourceScope)
-
-    fun tagVideoCount(
-        source: SourceKey,
-        tag: String,
-        autocomplete: List<TagSuggestion>,
-        trending: List<TagSuggestion>,
-    ): Int? {
-        val normalized = tag.trim()
-        if (normalized.isBlank()) return null
-        return tagSuggestionStore.getCount(source, normalized)
-            ?: autocomplete.firstOrNull { sourceTagsMatch(source, it.text, normalized) }?.count
-            ?: trending.firstOrNull { sourceTagsMatch(source, it.text, normalized) }?.count
-    }
-
-    fun tagVideoCount(source: SourceKey, tag: String): Int? {
-        return tagVideoCount(source, tag, emptyList(), emptyList())
-    }
-
-    suspend fun fetchTagVideoCounts(
-        source: SourceKey,
-        tags: List<String>,
-        autocomplete: List<TagSuggestion>,
-        trending: List<TagSuggestion>,
-    ): Map<String, Int?> {
-        val supplemental = tags.associateWith { tagVideoCount(source, it, autocomplete, trending) }
-        return tagCounts.fetch(source, tags, supplemental)
-    }
-
-    suspend fun fetchTagVideoCounts(source: SourceKey, tags: List<String>): Map<String, Int?> {
-        return fetchTagVideoCounts(source, tags, emptyList(), emptyList())
-    }
+    suspend fun fetchTagVideoCounts(source: SourceKey, tags: List<String>): Map<String, Int?> =
+        tagCounts.fetch(source, tags)
 
     suspend fun fetchSearchTermCounts(source: SourceKey, terms: List<SearchTerm>): Map<SearchTerm, Int?> =
         searchTermCounts.fetch(source, terms)
@@ -759,18 +601,6 @@ class SearchCoordinator(
         return record.reason == SourceFailureReason.RATE_LIMITED && clock() < record.backoffUntilMs
     }
 
-    private fun effectiveEnabledSources(scope: SearchSourceScope): Set<SourceKey> {
-        val available = registry.availableSources()
-        return when (scope) {
-            SearchSourceScope.GlobalUnified -> runtimeSettings.runtime.enabledSources.intersect(available)
-            is SearchSourceScope.Single -> setOf(scope.source).intersect(available)
-            is SearchSourceScope.Temporary -> scope.sources.toSet().intersect(available)
-        }
-    }
-
-    private fun effectiveWeights(sources: Set<SourceKey>): Map<SourceKey, Double> =
-        com.theoriacodex.data.repository.SourceWeightSettings.weightsFor(runtimeSettings.runtime, sources)
-
     private fun excludedStatuses(
         scope: SearchSourceScope,
         available: List<SourceKey>,
@@ -782,15 +612,9 @@ class SearchCoordinator(
         }
     }
 
-    private fun mergeStatuses(
-        first: List<SourceRunStatus>,
-        second: List<SourceRunStatus>,
-    ): List<SourceRunStatus> = (first + second).associateBy { it.source }.values.sortedBy { it.source.id }
-
     private fun unifiedFailureMessage(posts: List<Post>, statuses: List<SourceRunStatus>): String =
         if (isPixivUnknownFailure(posts, statuses)) PIXIV_UNKNOWN_RETRY_MESSAGE else
-            buildSourceFailureMessage(statuses) ?: buildSourceAuthErrorMessage(statuses)
-                ?: "These search options are not supported by the selected sources."
+            sourceFailureMessage(statuses, fallback = "These search options are not supported by the selected sources.")
 
     private fun isPixivUnknownFailure(posts: List<Post>, statuses: List<SourceRunStatus>): Boolean =
         posts.isEmpty() && statuses.any { status ->
@@ -799,48 +623,16 @@ class SearchCoordinator(
                     status.errorMessage?.contains("PIXIV_UNKNOWN", ignoreCase = true) == true)
         }
 
+    /** Unified answers per-source failures as statuses, so only a Pixiv search throws Pixiv's own error. */
     private fun isPixivUnknownError(error: Throwable, query: Query): Boolean {
         if (error is SourceAdapterException && error.reason == SourceFailureReason.UNKNOWN) {
-            return query.mode == QueryMode.Unified || query.mode == QueryMode.Source(SourceKey.PIXIV)
+            return query.mode == QueryMode.Source(SourceKey.PIXIV)
         }
         return error.message.orEmpty().contains("PIXIV_UNKNOWN", ignoreCase = true)
     }
 
-    private fun executionKey(query: Query, scope: SearchSourceScope): String {
-        val queryHash = QueryHash.from(query)
-        val temporary = scope as? SearchSourceScope.Temporary ?: return queryHash
-        return "$queryHash|temporary-sources:${temporary.sources.joinToString(",") { it.id }}"
-    }
-
-    private fun continuation(
-        executionKey: String,
-        query: Query,
-        scope: SearchSourceScope,
-        enabled: Set<SourceKey>,
-        available: List<SourceKey>,
-        weights: Map<SourceKey, Double>,
-        unifiedPageTokens: Map<SourceKey, String?> = emptyMap(),
-        unifiedQueryOverrides: Map<SourceKey, Query> = emptyMap(),
-        sourcePageToken: String? = null,
-    ) = SearchContinuation(
-        executionKey,
-        query,
-        scope,
-        enabled,
-        available,
-        weights,
-        unifiedPageTokens,
-        unifiedQueryOverrides,
-        sourcePageToken,
-    )
-
     private fun isModeAvailable(mode: QueryMode): Boolean = when (mode) {
         QueryMode.Unified -> true
         is QueryMode.Source -> mode.source in registry.availableSources()
-    }
-
-    private fun autocompletePrefixForSource(source: SourceKey, input: String): String {
-        val normalized = parseScopedInput(input).value
-        return sourceAutocompletePrefix(source, normalized)
     }
 }

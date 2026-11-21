@@ -53,6 +53,10 @@ data class SearchUiState(
         get() = query.draft != query.applied ||
             query.draftSourceScope != query.appliedSourceScope
 
+    /** What the search field shows: an error in the typed input, else a notice about the draft. */
+    val validationMessage: String?
+        get() = suggestions.inputError ?: query.validationMessage
+
     /** Reset clears the current draft, including restored searches and uncommitted input. */
     val canResetDraft: Boolean
         get() = query.draft != emptySearchQuery(query.draft.mode) || suggestions.input.isNotEmpty()
@@ -104,21 +108,42 @@ sealed interface SearchSourceScope {
     }
 }
 
+/** The sources this scope searches among [available]: its own, or for Unified the [unified] ones. */
+fun SearchSourceScope.sources(unified: Set<SourceKey>, available: Set<SourceKey>): Set<SourceKey> = when (this) {
+    SearchSourceScope.GlobalUnified -> unified
+    else -> explicitSources.toSet()
+}.intersect(available)
+
+/** This scope without the sources missing from [available]; a scope left with none becomes Unified. */
+fun SearchSourceScope.reconciledWith(available: Set<SourceKey>): SearchSourceScope = when (this) {
+    SearchSourceScope.GlobalUnified -> this
+    is SearchSourceScope.Single -> SearchSourceScope.fromSources(listOf(source).filter { it in available })
+    is SearchSourceScope.Temporary -> SearchSourceScope.fromSources(sources.filter { it in available })
+}
+
+/** This query in [scope]'s mode; a Unified scope keeps only the terms every source understands. */
+fun Query.reconciledWith(scope: SearchSourceScope): Query = when (val mode = scope.queryMode()) {
+    QueryMode.Unified -> withIncludeTermGroups(effectiveIncludeTermGroups.filter(SearchTermGroup::isPortableGeneralTagGroup))
+        .copy(mode = mode, excludeTerms = excludeTerms.filter(SearchTerm::isPortableGeneralTag))
+    is QueryMode.Source -> copy(mode = mode)
+}
+
 data class SearchQueryUiState(
     val draft: Query = emptySearchQuery(),
     val applied: Query = emptySearchQuery(),
     val draftSourceScope: SearchSourceScope = SearchSourceScope.GlobalUnified,
     val appliedSourceScope: SearchSourceScope = SearchSourceScope.GlobalUnified,
     val appliedQueryHash: String = "",
+    /** Every source Search can use, in the order it lists them. */
     val availableSources: List<SourceKey> = emptyList(),
-    val modeOptions: List<QueryMode> = listOf(QueryMode.Unified),
-    val enabledSourceCount: Int = 0,
     val unifiedSources: Set<SourceKey> = emptySet(),
-    val supportedScopes: List<FacetedSearchScope> = emptyList(),
+    /** The faceted search scopes each available source offers, for those that offer any. */
+    val scopesBySource: Map<SourceKey, List<FacetedSearchScope>> = emptyMap(),
+    /** Sources whose searches match only exactly spelled tags, each with its name for the input error. */
+    val exactTagSources: Map<SourceKey, String> = emptyMap(),
     val selectedScope: FacetedSearchScope = FacetedSearchScope.All,
+    /** A notice about the draft itself, such as terms a source change removed; typing leaves it. */
     val validationMessage: String? = null,
-    val nhentaiLanguageFilter: NhentaiLanguageFilter = NhentaiLanguageFilter.ANY,
-    val nhentaiFullColorFilter: Boolean = false,
     /** Per-request term caps of the available sources that have one. */
     val sourceTermLimits: Map<SourceKey, SearchTermLimit> = emptyMap(),
     /** The last search run in each mode, by [modeKey]; picking a mode starts from it. Multi-Search runs are not kept. */
@@ -126,13 +151,27 @@ data class SearchQueryUiState(
 ) {
     /** Sources the draft would search: the picked source, a temporary mix, or every Unified source. */
     val draftSources: Set<SourceKey>
-        get() = when (val scope = draftSourceScope) {
-            SearchSourceScope.GlobalUnified -> unifiedSources
-            else -> scope.explicitSources.toSet()
-        }
+        get() = draftSourceScope.sources(unifiedSources, availableSources.toSet())
 
     val termLimitNotices: List<SearchTermLimitNotice>
         get() = searchTermLimitNotices(draft, draftSources.sorted(), sourceTermLimits)
+
+    /** The faceted scopes the draft's source offers; Unified offers none. */
+    val supportedScopes: List<FacetedSearchScope>
+        get() = scopesFor(draft.mode)
+
+    val nhentaiLanguageFilter: NhentaiLanguageFilter
+        get() = draft.nhentaiLanguageFilter()
+
+    val nhentaiFullColorFilter: Boolean
+        get() = draft.nhentaiFullColorFilter()
+
+    fun scopesFor(mode: QueryMode): List<FacetedSearchScope> =
+        (mode as? QueryMode.Source)?.let { scopesBySource[it.source] }.orEmpty()
+
+    /** The draft's source when it matches only exactly spelled tags, so a typed tag must come from suggestions. */
+    val draftExactTagSource: SourceKey?
+        get() = (draft.mode as? QueryMode.Source)?.source?.takeIf { it in exactTagSources }
 }
 
 data class SearchContentUiState(
@@ -146,12 +185,13 @@ data class SearchContentUiState(
 
 data class SearchSuggestionsUiState(
     val input: String = "",
-    val trending: List<TagSuggestion> = emptyList(),
     val autocomplete: List<TagSuggestion> = emptyList(),
     val facetedAutocomplete: List<FacetedTagSuggestion> = emptyList(),
     /** Terms the user searched before that match [input] and its scope, shown ahead of [autocomplete]. */
     val searchedTags: List<SearchTerm> = emptyList(),
     val canCommitInput: Boolean = false,
+    /** Why [input] cannot be searched as typed; replaced with each new answer for the input. */
+    val inputError: String? = null,
 )
 
 data class SearchExecutionUiState(
@@ -264,8 +304,6 @@ sealed interface SearchAction {
     data class SelectSuggestionScope(val scope: FacetedSearchScope) : SearchAction
     data class AutocompleteChanged(val input: String) : SearchAction
     data object RefreshAutocomplete : SearchAction
-    data class IncludeSuggestion(val suggestion: FacetedTagSuggestion) : DraftEdit
-    data class ExcludeSuggestion(val suggestion: FacetedTagSuggestion) : DraftEdit
     data object ClearAutocomplete : SearchAction
     data object UndoSearch : SearchAction
     data object ApplyDraft : SearchAction
@@ -279,13 +317,11 @@ sealed interface SearchAction {
         val excludeTerms: List<SearchTerm> = emptyList(),
         val mode: QueryMode = QueryMode.Unified,
     ) : SearchAction
-    data object ResetDraft : DraftEdit
     data object ClearDraft : DraftEdit
     data class RetrySource(val source: SourceKey) : SearchAction
     data object Retry : SearchAction
     data object LoadNextPage : SearchAction
     data object CancelActiveRequest : SearchAction
-    data object DismissValidation : SearchAction
     data object Restore : SearchAction
     data object Resume : SearchAction
     data class CommitTagInput(val input: String) : SearchAction
@@ -294,7 +330,6 @@ sealed interface SearchAction {
     data class AddPostIncludeAlternative(val post: Post, val groupIndex: Int, val term: SearchTerm) : DraftEdit
     data class SetNhentaiLanguage(val filter: NhentaiLanguageFilter) : DraftEdit
     data class SetNhentaiFullColor(val enabled: Boolean) : DraftEdit
-    data object ResetFilters : DraftEdit
     data class RememberResolvedPost(val post: Post) : SearchAction
     data class RelatedLikeCommitted(
         val post: Post,

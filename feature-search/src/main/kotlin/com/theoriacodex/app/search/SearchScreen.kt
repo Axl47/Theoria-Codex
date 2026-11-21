@@ -50,7 +50,6 @@ import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
 import com.theoriacodex.app.ui.components.rememberFeedScrollSignal
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.FeedFabRestoreState
-import com.theoriacodex.app.ui.components.NameEntryDialog
 import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.app.search.state.SearchSourceScope
@@ -237,7 +236,7 @@ private fun SearchChromeLayout(
         onExpand = { chrome.composerOpen = true },
         sourcePicker = sourcePicker,
         horizontalPadding = 16.dp,
-        modifier = Modifier.then(inputFocus.rootModifier).fillMaxSize().padding(padding)
+        modifier = Modifier.fillMaxSize().padding(padding)
             .padding(top = if (oldSearchBar) 6.dp else 0.dp, bottom = 8.dp),
         inputField = { SearchChromeInput(state, feed, fabRestoreState, chrome, oldSearchBar, sourcePicker, applyDraft) },
     ) {
@@ -275,7 +274,6 @@ private class SearchChromeState(composerOpen: MutableState<Boolean>, searchBarDi
     fun applyDraft(inputFocus: SearchInputFocus, onAction: (SearchAction) -> Unit) {
         inputFocus.clear(force = true)
         onAction(SearchAction.ApplyDraft)
-        onAction(SearchAction.ClearAutocomplete)
         composerOpen = false
         searchBarDismissedByScroll = false
     }
@@ -304,13 +302,11 @@ private fun SearchComposerDialog(
         state, onAction, sourcePicker, applyDraft,
         onReset = {
             onAction(SearchAction.ClearDraft)
-            onAction(SearchAction.ClearAutocomplete)
             chrome.showFilterSheet = false
             resetScroll()
         },
         onUndo = {
             onAction(SearchAction.UndoSearch)
-            onAction(SearchAction.ClearAutocomplete)
             chrome.showFilterSheet = false
         },
         onManageSavedTags = { chrome.showFavoriteTagSheet = true },
@@ -339,8 +335,7 @@ private fun SearchScreenSourcePicker(
 ) {
     SearchSourcePicker(
         draftSourceScope = state.query.draftSourceScope,
-        options = state.query.modeOptions,
-        unifiedSourceCount = state.query.unifiedSources.size,
+        sources = state.query.availableSources,
         unifiedSources = state.query.unifiedSources,
         onOpen = { inputFocus.clear() },
         onModeSelected = { mode ->
@@ -366,7 +361,7 @@ private fun SearchChromeInput(
 ) {
     SearchSummaryBar(
         summary = collapsedSearchContextSummary(state.query.draft, activeSearchFilterCount(state, feed, fabRestoreState)),
-        validationMessage = state.query.validationMessage,
+        validationMessage = state.validationMessage,
         showSearchAction = state.hasPendingChanges && !chrome.composerOpen,
         onOpen = { chrome.composerOpen = true },
         onSearch = applyDraft,
@@ -551,10 +546,6 @@ private suspend fun resetSearchScroll(
     onAction(SearchAction.ScrollChanged(0, 0))
 }
 
-/** The sources in the order Search lists them. */
-private fun SearchUiState.sourceDisplayOrder(): List<SourceKey> =
-    query.modeOptions.mapNotNull { mode -> (mode as? QueryMode.Source)?.source }
-
 /**
  * Where a tag saved from the composer goes. Saved tags belong to a source, so a search across
  * several saves under the first one it covers; every saved tag shows while searching them all.
@@ -599,7 +590,7 @@ private fun composerSavedSearches(
 private fun savedTagSource(state: SearchUiState): SourceKey? =
     (state.query.draft.mode as? QueryMode.Source)?.source
         ?: state.query.draftSourceScope.explicitSources.firstOrNull()
-        ?: state.sourceDisplayOrder().firstOrNull()
+        ?: state.query.availableSources.firstOrNull()
 
 /** The favorite tags that apply to the draft's source, grouped per source when searching all of them. */
 @Composable
@@ -607,12 +598,11 @@ private fun rememberFavoriteTagSections(
     state: SearchUiState,
     favoriteTags: List<FavoriteTagEntry>,
 ): List<FavoriteTagSection> {
-    val sourceDisplayOrder = remember(state.query.modeOptions) { state.sourceDisplayOrder() }
-    return remember(state.query.draft.mode, favoriteTags, sourceDisplayOrder) {
+    return remember(state.query.draft.mode, favoriteTags, state.query.availableSources) {
         favoriteTagSections(
             mode = state.query.draft.mode,
             favoriteTags = favoriteTags,
-            sourceDisplayOrder = sourceDisplayOrder,
+            sourceDisplayOrder = state.query.availableSources,
         )
     }
 }
@@ -650,17 +640,10 @@ private fun SearchFavoriteTags(
         onDismiss = onDismiss,
     )
     renaming?.let { entry ->
-        NameEntryDialog(
-            title = "Name “or” group",
-            initialName = entry.name.orEmpty(),
-            optional = true,
-            hint = "Leave blank to show it as ${entry.alternativesText}.",
-            onDismiss = { renaming = null },
-            onSave = { name ->
-                onRenameFavoriteTag(entry.source, entry.tags, name)
-                renaming = null
-            },
-        )
+        OrGroupNameDialog(entry, onDismiss = { renaming = null }) { name ->
+            onRenameFavoriteTag(entry.source, entry.tags, name)
+            renaming = null
+        }
     }
 }
 

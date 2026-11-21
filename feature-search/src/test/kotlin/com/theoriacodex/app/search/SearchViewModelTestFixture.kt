@@ -155,22 +155,13 @@ internal class MismatchedExecutionService(
 ) : SearchExecutionService by delegate {
     var persistCalls = 0
 
-    override suspend fun executeInitialProgressively(
-
-        query: Query,
-
-        sourceScope: SearchSourceScope,
-
-        onPartial: suspend (SearchExecutionResult.Success) -> Unit,
-
-    ): SearchExecutionResult = executeInitial(query, sourceScope)
-
-
     override suspend fun executeInitial(
         query: Query,
         sourceScope: SearchSourceScope,
+        sources: SearchSources,
+        onPartial: (suspend (SearchExecutionResult.Success) -> Unit)?,
     ): SearchExecutionResult {
-        return when (val result = delegate.executeInitial(query, sourceScope)) {
+        return when (val result = delegate.executeInitial(query, sourceScope, sources)) {
             is SearchExecutionResult.Failure -> result.copy(executionKey = "mismatched-key")
             is SearchExecutionResult.Success -> result.copy(
                 executionKey = "mismatched-key",

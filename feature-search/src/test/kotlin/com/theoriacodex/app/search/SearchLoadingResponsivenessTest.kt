@@ -52,13 +52,14 @@ internal class SearchLoadingResponsivenessTest : SearchViewModelTestFixture() {
         val lateSourcesDone = CompletableDeferred<Unit>()
         val owner = viewModel(ViewModelSearchAdapter(), executionService = { coordinator ->
             object : SearchExecutionService by coordinator {
-                override suspend fun executeInitialProgressively(
+                override suspend fun executeInitial(
                     query: Query,
                     sourceScope: SearchSourceScope,
-                    onPartial: suspend (SearchExecutionResult.Success) -> Unit,
+                    sources: SearchSources,
+                    onPartial: (suspend (SearchExecutionResult.Success) -> Unit)?,
                 ): SearchExecutionResult {
-                    val complete = coordinator.executeInitial(query, sourceScope)
-                    onPartial(complete as SearchExecutionResult.Success)
+                    val complete = coordinator.executeInitial(query, sourceScope, sources)
+                    onPartial?.invoke(complete as SearchExecutionResult.Success)
                     lateSourcesDone.await()
                     return complete
                 }
@@ -126,7 +127,7 @@ internal class SearchLoadingResponsivenessTest : SearchViewModelTestFixture() {
         advanceUntilIdle()
         return viewModel(ViewModelSearchAdapter(), queryRepository = queries, executionService = { coordinator ->
             object : SearchExecutionService by coordinator {
-                override suspend fun cachedFirstPage(executionKey: String, sourceScope: SearchSourceScope) = listOf(
+                override suspend fun cachedFirstPage(executionKey: String, sources: Set<SourceKey>) = listOf(
                     Post(
                         id = PostId(SourceKey.PIXIV, "cached"),
                         preview = ImageRef(url = "https://example.test/cached.jpg", localPath = null, mime = "image/jpeg"),
@@ -141,13 +142,14 @@ internal class SearchLoadingResponsivenessTest : SearchViewModelTestFixture() {
                     ),
                 )
 
-                override suspend fun executeInitialProgressively(
+                override suspend fun executeInitial(
                     query: Query,
                     sourceScope: SearchSourceScope,
-                    onPartial: suspend (SearchExecutionResult.Success) -> Unit,
+                    sources: SearchSources,
+                    onPartial: (suspend (SearchExecutionResult.Success) -> Unit)?,
                 ): SearchExecutionResult {
                     refresh.await()
-                    return coordinator.executeInitial(query, sourceScope)
+                    return coordinator.executeInitial(query, sourceScope, sources)
                 }
             }
         })
@@ -159,15 +161,14 @@ internal class SearchLoadingResponsivenessTest : SearchViewModelTestFixture() {
         var hold = false
         val owner = viewModel(ViewModelSearchAdapter(), executionService = { coordinator ->
             object : SearchExecutionService by coordinator {
-                override suspend fun executeInitialProgressively(
+                override suspend fun executeInitial(
                     query: Query,
                     sourceScope: SearchSourceScope,
-                    onPartial: suspend (SearchExecutionResult.Success) -> Unit,
-                ): SearchExecutionResult = executeInitial(query, sourceScope)
-
-                override suspend fun executeInitial(query: Query, sourceScope: SearchSourceScope): SearchExecutionResult {
+                    sources: SearchSources,
+                    onPartial: (suspend (SearchExecutionResult.Success) -> Unit)?,
+                ): SearchExecutionResult {
                     if (hold) held.await()
-                    return coordinator.executeInitial(query, sourceScope)
+                    return coordinator.executeInitial(query, sourceScope, sources)
                 }
             }
         })

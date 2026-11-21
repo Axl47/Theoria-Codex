@@ -1,10 +1,10 @@
 package com.theoriacodex.app.search
 
-import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.data.repository.SearchedTagKey
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
+import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -13,7 +13,6 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.domain.tags.sourceAutocompletePrefix
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import java.util.LinkedHashMap
 import kotlinx.coroutines.CancellationException
@@ -27,13 +26,15 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withTimeout
 
-/** Local-first tag suggestion, provider refresh, and trending orchestration for Search. */
-internal class SearchSuggestionCoordinator(
+/**
+ * Local-first tag suggestion, provider refresh, and trending orchestration for Search. A cached answer and a fetched
+ * one resolve the request the same way and assemble from the same steps; a fetch only adds what providers return.
+ */
+class SearchSuggestionCoordinator internal constructor(
     private val registry: SourceAdapterRegistry,
     private val tagSuggestionStore: TagSuggestionStore,
     private val clock: () -> Long,
     private val supportedSearchScopes: (QueryMode) -> List<FacetedSearchScope>,
-    private val effectiveEnabledSources: (SearchSourceScope) -> Set<SourceKey>,
     /** Current per-tag search counts from Statistics, read on every keystroke. */
     private val searchCounts: () -> Map<SearchedTagKey, Long> = { emptyMap() },
 ) {
@@ -42,345 +43,238 @@ internal class SearchSuggestionCoordinator(
     private val lastAutocompleteRefreshAtByKey =
         LinkedHashMap<AutocompleteFetchKey, Long>(32, 0.75f, true)
 
-    internal suspend fun fetchAutocomplete(
+    suspend fun fetchAutocomplete(
         query: Query,
-        sourceScope: SearchSourceScope,
+        sources: Set<SourceKey>,
         selectedScope: FacetedSearchScope,
         input: String,
-        trending: List<TagSuggestion>,
         onUpdate: suspend (SearchAutocompleteResult) -> Unit = {},
-    ): SearchAutocompleteResult {
-        val request = resolveAutocompleteRequest(query, selectedScope, input)
-        request.validationMessage?.let { message ->
-            return SearchAutocompleteResult(input, request.scope, message)
+    ): SearchAutocompleteResult = when (val request = resolve(query, selectedScope, input)) {
+        is AutocompleteRequest.Answered -> request.result
+        is AutocompleteRequest.Featured -> featured(input, request, fetchFeatured(request))
+        is AutocompleteRequest.Typed -> {
+            val searched = searchedTags(request, sources)
+            when (request) {
+                is AutocompleteRequest.UnifiedTags -> fetchUnified(input, request, sources) { update ->
+                    onUpdate(update.copy(searchedTags = searched))
+                }
+                is AutocompleteRequest.SourceFacets -> facetMatches(
+                    input,
+                    request,
+                    request.facetScope?.let { scope ->
+                        fetchFaceted(request.source, request.adapter, request.prefix, scope)
+                    }.orEmpty(),
+                )
+                is AutocompleteRequest.SourceTags -> tagMatches(
+                    input,
+                    request,
+                    fetchTags(request.source, request.adapter, autocompletePrefixForSource(request.source, request.prefix), 20),
+                )
+            }.copy(searchedTags = searched)
         }
-        if (request.prefix.isBlank()) return fetchFeaturedAutocomplete(query, request.scope, input)
-        val searched = searchedTags(query.mode, sourceScope, request.scope, request.prefix)
-        return when (val mode = query.mode) {
-            QueryMode.Unified -> fetchUnifiedAutocomplete(sourceScope, request.scope, input, request.prefix) { update ->
-                onUpdate(update.copy(searchedTags = searched))
-            }
-            is QueryMode.Source -> fetchSourceAutocomplete(mode, request.scope, input, request.prefix, trending)
-        }.copy(searchedTags = searched)
     }
 
     /** Returns only local knowledge so the route can publish before its network debounce. */
-    internal fun cachedAutocomplete(
+    fun cachedAutocomplete(
         query: Query,
-        sourceScope: SearchSourceScope,
+        sources: Set<SourceKey>,
         selectedScope: FacetedSearchScope,
         input: String,
-        trending: List<TagSuggestion>,
-    ): SearchAutocompleteResult {
-        val request = resolveAutocompleteRequest(query, selectedScope, input)
-        request.validationMessage?.let { message ->
-            return SearchAutocompleteResult(input, request.scope, message)
-        }
-        if (request.prefix.isBlank()) {
-            return cachedFeaturedAutocomplete(query, request.scope, input)
-        }
-        return when (val mode = query.mode) {
-            QueryMode.Unified -> cachedUnifiedAutocomplete(sourceScope, request.scope, input, request.prefix)
-            is QueryMode.Source -> cachedSourceAutocomplete(mode, request.scope, input, request.prefix, trending)
-        }.copy(searchedTags = searchedTags(query.mode, sourceScope, request.scope, request.prefix))
+    ): SearchAutocompleteResult = when (val request = resolve(query, selectedScope, input)) {
+        is AutocompleteRequest.Answered -> request.result
+        is AutocompleteRequest.Featured -> featured(input, request, fetched = emptyList())
+        is AutocompleteRequest.Typed -> when (request) {
+            is AutocompleteRequest.UnifiedTags -> unifiedMatches(input, request, sources, fetched = emptyMap())
+            is AutocompleteRequest.SourceFacets -> facetMatches(input, request, fetched = emptyList())
+            is AutocompleteRequest.SourceTags -> tagMatches(input, request, fetched = emptyList())
+        }.copy(searchedTags = searchedTags(request, sources))
     }
 
-    /** History for the input's resolved [scope]; Unified runs only portable general tags, so it offers only those. */
-    private fun searchedTags(
-        mode: QueryMode,
-        sourceScope: SearchSourceScope,
-        scope: FacetedSearchScope,
-        prefix: String,
-    ): List<SearchTerm> = when (mode) {
-        QueryMode.Unified -> rankSearchedTags(searchCounts(), effectiveEnabledSources(sourceScope), prefix,
-            SEARCHED_TAG_SUGGESTION_LIMIT, SearchTerm::isPortableGeneralTag)
-        is QueryMode.Source -> rankSearchedTags(searchCounts(), setOf(mode.source), prefix,
-            SEARCHED_TAG_SUGGESTION_LIMIT, scope::accepts)
-    }
+    /** History for the input's resolved scope; Unified runs only portable general tags, so it offers only those. */
+    private fun searchedTags(request: AutocompleteRequest.Typed, sources: Set<SourceKey>): List<SearchTerm> =
+        when (request) {
+            is AutocompleteRequest.UnifiedTags -> rankSearchedTags(searchCounts(), sources, request.prefix,
+                SEARCHED_TAG_SUGGESTION_LIMIT, SearchTerm::isPortableGeneralTag)
+            is AutocompleteRequest.SourceRequest -> rankSearchedTags(searchCounts(), setOf(request.source), request.prefix,
+                SEARCHED_TAG_SUGGESTION_LIMIT, request.scope::accepts)
+        }
 
-    private fun resolveAutocompleteRequest(
-        query: Query,
-        selectedScope: FacetedSearchScope,
-        input: String,
-    ): ResolvedAutocompleteRequest {
+    /** Resolves the input's scope against what the draft's source supports, and what kind of answer it needs. */
+    private fun resolve(query: Query, selectedScope: FacetedSearchScope, input: String): AutocompleteRequest {
         val parsed = parseScopedInput(input)
         val supported = supportedSearchScopes(query.mode)
         var scope = selectedScope.takeIf { it in supported } ?: FacetedSearchScope.All
         parsed.explicitScope?.let { explicit ->
             if (query.mode == QueryMode.Unified) {
-                return ResolvedAutocompleteRequest(
-                    scope = scope,
-                    prefix = parsed.value,
-                    validationMessage = UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE,
-                )
+                return AutocompleteRequest.Answered(SearchAutocompleteResult(input, scope, UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE))
             }
             scope = resolveSupportedScope(explicit, supported)
-                ?: return ResolvedAutocompleteRequest(
-                    scope = scope,
-                    prefix = parsed.value,
-                    validationMessage = UNSUPPORTED_SEARCH_SCOPE_MESSAGE,
-                )
+                ?: return AutocompleteRequest.Answered(SearchAutocompleteResult(input, scope, UNSUPPORTED_SEARCH_SCOPE_MESSAGE))
         }
-        return ResolvedAutocompleteRequest(scope = scope, prefix = parsed.value)
+        val prefix = parsed.value
+        val source = (query.mode as? QueryMode.Source)?.source
+        if (prefix.isBlank()) {
+            val adapter = source?.let { registry.adapterFor(it) as? FacetedSearchSourceAdapter }
+            val featuredScope = scope.takeIf { !it.isAll && it in supported }
+            return if (source == null || adapter == null || featuredScope == null) {
+                AutocompleteRequest.Answered(SearchAutocompleteResult(input, scope))
+            } else {
+                AutocompleteRequest.Featured(source, adapter, featuredScope)
+            }
+        }
+        if (source == null) return AutocompleteRequest.UnifiedTags(scope, prefix)
+        return when (val adapter = registry.adapterFor(source)) {
+            is FacetedSearchSourceAdapter -> AutocompleteRequest.SourceFacets(
+                scope, prefix, source, adapter,
+                facetScope = scope.takeIf { it in supported } ?: FacetedSearchScope.All.takeIf { it in supported },
+            )
+            else -> AutocompleteRequest.SourceTags(scope, prefix, source, adapter)
+        }
     }
 
-    private suspend fun fetchUnifiedAutocomplete(
-        sourceScope: SearchSourceScope,
-        selectedScope: FacetedSearchScope,
+    private fun featured(
         input: String,
-        prefix: String,
+        request: AutocompleteRequest.Featured,
+        fetched: List<FacetedTagSuggestion>,
+    ) = SearchAutocompleteResult(
+        input,
+        request.scope,
+        facetedAutocomplete = rankFacetedTagSuggestions(
+            fetched + tagSuggestionStore.getFaceted(request.source, Int.MAX_VALUE, request.scope),
+            prefix = "",
+            limit = FACETED_AUTOCOMPLETE_LIMIT,
+        ),
+    )
+
+    private fun unifiedMatches(
+        input: String,
+        request: AutocompleteRequest.UnifiedTags,
+        sources: Set<SourceKey>,
+        fetched: Map<SourceKey, List<TagSuggestion>>,
+    ) = SearchAutocompleteResult(
+        input = input,
+        selectedScope = request.scope,
+        autocomplete = rankUnifiedTagSuggestions(
+            sources.map { source ->
+                source to (fetched[source].orEmpty() + cachedUnifiedSuggestionsForSource(source, request.prefix))
+            },
+            request.prefix,
+            AUTOCOMPLETE_RESULT_LIMIT,
+        ),
+    )
+
+    private fun facetMatches(
+        input: String,
+        request: AutocompleteRequest.SourceFacets,
+        fetched: List<FacetedTagSuggestion>,
+    ): SearchAutocompleteResult {
+        val scope = request.facetScope
+            ?: return SearchAutocompleteResult(input, request.scope, UNSUPPORTED_SEARCH_SCOPE_MESSAGE)
+        val cached = tagSuggestionStore.findFaceted(request.source, request.prefix, FACETED_AUTOCOMPLETE_CACHE_LIMIT, scope)
+        return SearchAutocompleteResult(
+            input,
+            scope,
+            facetedAutocomplete = rankFacetedTagSuggestions(fetched + cached, request.prefix, FACETED_AUTOCOMPLETE_LIMIT),
+        )
+    }
+
+    private fun tagMatches(
+        input: String,
+        request: AutocompleteRequest.SourceTags,
+        fetched: List<TagSuggestion>,
+    ): SearchAutocompleteResult {
+        val cached = tagSuggestionStore.find(request.source, request.prefix, AUTOCOMPLETE_CACHE_MATCH_LIMIT)
+        val candidates = fetched + cached + trendingMatches(request.source, request.prefix)
+        return SearchAutocompleteResult(
+            input,
+            request.scope,
+            autocomplete = rankTagSuggestions(candidates, request.prefix, AUTOCOMPLETE_RESULT_LIMIT),
+        )
+    }
+
+    /** Ranks the cached matches again as each source answers, publishing every update, and returns the last. */
+    private suspend fun fetchUnified(
+        input: String,
+        request: AutocompleteRequest.UnifiedTags,
+        sources: Set<SourceKey>,
         onUpdate: suspend (SearchAutocompleteResult) -> Unit,
     ): SearchAutocompleteResult = coroutineScope {
-        val enabled = effectiveEnabledSources(sourceScope)
         val updates = Mutex()
         val fetched = mutableMapOf<SourceKey, List<TagSuggestion>>()
-        var result = cachedUnifiedAutocomplete(sourceScope, selectedScope, input, prefix)
-        enabled.map { source -> async {
-            val suggestions = fetchUnifiedSuggestionsForSource(source, prefix)
+        var result = unifiedMatches(input, request, sources, fetched = emptyMap())
+        sources.map { source -> async {
+            val suggestions = fetchUnifiedSuggestionsForSource(source, request.prefix)
             updates.withLock {
                 fetched[source] = suggestions
-                result = SearchAutocompleteResult(
-                    input = input,
-                    selectedScope = selectedScope,
-                    autocomplete = rankUnifiedTagSuggestions(
-                        enabled.map { key -> key to (fetched[key].orEmpty() + cachedUnifiedSuggestionsForSource(key, prefix)) },
-                        prefix, AUTOCOMPLETE_RESULT_LIMIT,
-                    ),
-                )
+                result = unifiedMatches(input, request, sources, fetched)
                 onUpdate(result)
             }
         } }.awaitAll()
         result
     }
 
-    private fun cachedUnifiedAutocomplete(
-        sourceScope: SearchSourceScope,
-        selectedScope: FacetedSearchScope,
-        input: String,
-        prefix: String,
-    ): SearchAutocompleteResult {
-        val candidates = effectiveEnabledSources(sourceScope).map { source ->
-            source to cachedUnifiedSuggestionsForSource(source, prefix)
-        }
-        return SearchAutocompleteResult(
-            input = input,
-            selectedScope = selectedScope,
-            autocomplete = rankUnifiedTagSuggestions(candidates, prefix, AUTOCOMPLETE_RESULT_LIMIT),
-        )
-    }
-
-    private fun cachedUnifiedSuggestionsForSource(
-        source: SourceKey,
-        prefix: String,
-    ): List<TagSuggestion> {
+    private fun cachedUnifiedSuggestionsForSource(source: SourceKey, prefix: String): List<TagSuggestion> {
         val adapter = registry.adapterFor(source)
         if (adapter !is FacetedSearchSourceAdapter) {
             return tagSuggestionStore.find(source, prefix, AUTOCOMPLETE_CACHE_MATCH_LIMIT)
                 .filter(TagSuggestion::isPortableTagSuggestion)
         }
-        val all = FacetedSearchScope.All.takeIf { it in adapter.supportedSearchScopes }
-            ?: adapter.supportedSearchScopes.firstOrNull {
-                it.facet == SearchFacet.TAG && it.sourceNamespace in setOf(null, "tag")
-            }
-            ?: return emptyList()
+        val all = adapter.generalTagScope() ?: return emptyList()
         return tagSuggestionStore.findFaceted(source, prefix, AUTOCOMPLETE_CACHE_MATCH_LIMIT, all)
             .filter(FacetedTagSuggestion::isPortableTagSuggestion)
             .map(FacetedTagSuggestion::toPortableLegacySuggestion)
     }
 
-    private suspend fun fetchUnifiedSuggestionsForSource(
-        source: SourceKey,
-        prefix: String,
-    ): List<TagSuggestion> {
+    private suspend fun fetchUnifiedSuggestionsForSource(source: SourceKey, prefix: String): List<TagSuggestion> {
         val adapter = registry.adapterFor(source)
         val sourcePrefix = autocompletePrefixForSource(source, prefix)
         if (adapter !is FacetedSearchSourceAdapter) {
-            val suggestions = fetchProviderAutocomplete(
-                key = AutocompleteFetchKey(source, normalizeMatchToken(sourcePrefix), FacetedSearchScope.All),
-            ) {
-                adapter?.autocompleteTags(sourcePrefix, 10).orEmpty()
-            }
-            if (suggestions.isNotEmpty()) {
-                tagSuggestionStore.put(source, suggestions, TagSuggestionOrigin.AUTOCOMPLETE)
-            }
-            return suggestions.filter(TagSuggestion::isPortableTagSuggestion)
+            return fetchTags(source, adapter, sourcePrefix, 10).filter(TagSuggestion::isPortableTagSuggestion)
         }
-        val all = FacetedSearchScope.All.takeIf { it in adapter.supportedSearchScopes }
-            ?: adapter.supportedSearchScopes.firstOrNull {
-                it.facet == SearchFacet.TAG && it.sourceNamespace in setOf(null, "tag")
-            }
-            ?: return emptyList()
-        val suggestions = fetchProviderAutocomplete(
-            key = AutocompleteFetchKey(source, normalizeMatchToken(sourcePrefix), all),
-        ) {
-            adapter.autocompleteFaceted(sourcePrefix, all, FACETED_AUTOCOMPLETE_LIMIT)
-        }
-        if (suggestions.isNotEmpty()) {
-            tagSuggestionStore.putFaceted(source, suggestions, TagSuggestionOrigin.AUTOCOMPLETE)
-        }
-        return suggestions.filter(FacetedTagSuggestion::isPortableTagSuggestion)
+        val all = adapter.generalTagScope() ?: return emptyList()
+        return fetchFaceted(source, adapter, sourcePrefix, all)
+            .filter(FacetedTagSuggestion::isPortableTagSuggestion)
             .map(FacetedTagSuggestion::toPortableLegacySuggestion)
     }
 
-    /** The selected scope if the source supports it, else everything, else nothing. */
-    private fun autocompleteScope(mode: QueryMode.Source, selectedScope: FacetedSearchScope): FacetedSearchScope? {
-        val supported = supportedSearchScopes(mode)
-        return selectedScope.takeIf { it in supported } ?: FacetedSearchScope.All.takeIf { it in supported }
+    /** Where Unified reads a faceted source's general tags: everything, or its plain tag scope. */
+    private fun FacetedSearchSourceAdapter.generalTagScope(): FacetedSearchScope? =
+        FacetedSearchScope.All.takeIf { it in this.supportedSearchScopes }
+            ?: this.supportedSearchScopes.firstOrNull { it.facet == SearchFacet.TAG && it.sourceNamespace in setOf(null, "tag") }
+
+    /** A source's tags for [prefix] from its provider, kept in the tag store; empty while a recent answer is fresh. */
+    private suspend fun fetchTags(source: SourceKey, adapter: SourceAdapter?, prefix: String, limit: Int): List<TagSuggestion> {
+        val fetched = fetchProviderAutocomplete(AutocompleteFetchKey(source, normalizeMatchToken(prefix), FacetedSearchScope.All)) {
+            adapter?.autocompleteTags(prefix, limit).orEmpty()
+        }
+        if (fetched.isNotEmpty()) tagSuggestionStore.put(source, fetched, TagSuggestionOrigin.AUTOCOMPLETE)
+        return fetched
     }
 
-    private suspend fun fetchSourceAutocomplete(
-        mode: QueryMode.Source,
-        selectedScope: FacetedSearchScope,
-        input: String,
+    /** A faceted source's suggestions in [scope] from its provider, kept in the tag store; empty while fresh. */
+    private suspend fun fetchFaceted(
+        source: SourceKey,
+        adapter: FacetedSearchSourceAdapter,
         prefix: String,
-        trending: List<TagSuggestion>,
-    ): SearchAutocompleteResult {
-        val adapter = registry.adapterFor(mode.source)
-        if (adapter is FacetedSearchSourceAdapter) {
-            val scope = autocompleteScope(mode, selectedScope)
-                ?: return SearchAutocompleteResult(input, selectedScope, UNSUPPORTED_SEARCH_SCOPE_MESSAGE)
-            val fetched = fetchProviderAutocomplete(
-                key = AutocompleteFetchKey(mode.source, normalizeMatchToken(prefix), scope),
-            ) {
-                adapter.autocompleteFaceted(prefix, scope, FACETED_AUTOCOMPLETE_LIMIT)
-            }
-            if (fetched.isNotEmpty()) {
-                tagSuggestionStore.putFaceted(mode.source, fetched, TagSuggestionOrigin.AUTOCOMPLETE)
-            }
-            val candidates = fetched + tagSuggestionStore.findFaceted(
-                mode.source,
-                prefix,
-                FACETED_AUTOCOMPLETE_CACHE_LIMIT,
-                scope,
-            )
-            val ranked = rankFacetedTagSuggestions(candidates, prefix, FACETED_AUTOCOMPLETE_LIMIT)
-            return SearchAutocompleteResult(
-                input,
-                scope,
-                autocomplete = ranked.map(FacetedTagSuggestion::toLegacySuggestion),
-                facetedAutocomplete = ranked,
-            )
+        scope: FacetedSearchScope,
+    ): List<FacetedTagSuggestion> {
+        val fetched = fetchProviderAutocomplete(AutocompleteFetchKey(source, normalizeMatchToken(prefix), scope)) {
+            adapter.autocompleteFaceted(prefix, scope, FACETED_AUTOCOMPLETE_LIMIT)
         }
-        val sourcePrefix = autocompletePrefixForSource(mode.source, prefix)
-        val fetched = fetchProviderAutocomplete(
-            key = AutocompleteFetchKey(
-                mode.source,
-                normalizeMatchToken(sourcePrefix),
-                FacetedSearchScope.All,
-            ),
-        ) {
-            adapter?.autocompleteTags(sourcePrefix, 20).orEmpty()
-        }
-        if (fetched.isNotEmpty()) {
-            tagSuggestionStore.put(mode.source, fetched, TagSuggestionOrigin.AUTOCOMPLETE)
-        }
-        val cached = tagSuggestionStore.find(mode.source, prefix, AUTOCOMPLETE_CACHE_MATCH_LIMIT)
-        val candidates = fetched + cached + trending.filter { suggestion ->
-            tagSuggestionMatches(suggestion, prefix)
-        }
-        return SearchAutocompleteResult(
-            input,
-            selectedScope,
-            autocomplete = rankTagSuggestions(candidates, prefix, AUTOCOMPLETE_RESULT_LIMIT),
-        )
+        if (fetched.isNotEmpty()) tagSuggestionStore.putFaceted(source, fetched, TagSuggestionOrigin.AUTOCOMPLETE)
+        return fetched
     }
 
-    private fun cachedSourceAutocomplete(
-        mode: QueryMode.Source,
-        selectedScope: FacetedSearchScope,
-        input: String,
-        prefix: String,
-        trending: List<TagSuggestion>,
-    ): SearchAutocompleteResult {
-        val adapter = registry.adapterFor(mode.source)
-        if (adapter is FacetedSearchSourceAdapter) {
-            val scope = autocompleteScope(mode, selectedScope)
-                ?: return SearchAutocompleteResult(input, selectedScope, UNSUPPORTED_SEARCH_SCOPE_MESSAGE)
-            val ranked = rankFacetedTagSuggestions(
-                tagSuggestionStore.findFaceted(
-                    mode.source,
-                    prefix,
-                    FACETED_AUTOCOMPLETE_CACHE_LIMIT,
-                    scope,
-                ),
-                prefix,
-                FACETED_AUTOCOMPLETE_LIMIT,
-            )
-            return SearchAutocompleteResult(
-                input,
-                scope,
-                autocomplete = ranked.map(FacetedTagSuggestion::toLegacySuggestion),
-                facetedAutocomplete = ranked,
-            )
-        }
-        val candidates = tagSuggestionStore.find(
-            mode.source,
-            prefix,
-            AUTOCOMPLETE_CACHE_MATCH_LIMIT,
-        ) + trending.filter { suggestion -> tagSuggestionMatches(suggestion, prefix) }
-        return SearchAutocompleteResult(
-            input,
-            selectedScope,
-            autocomplete = rankTagSuggestions(candidates, prefix, AUTOCOMPLETE_RESULT_LIMIT),
-        )
-    }
-
-    private suspend fun fetchFeaturedAutocomplete(
-        query: Query,
-        selectedScope: FacetedSearchScope,
-        input: String,
-    ): SearchAutocompleteResult {
-        val mode = query.mode as? QueryMode.Source
-        val adapter = mode?.let { registry.adapterFor(it.source) as? FacetedSearchSourceAdapter }
-        val scope = selectedScope.takeIf { !it.isAll && it in supportedSearchScopes(query.mode) }
-        if (mode == null || adapter == null || scope == null) {
-            return SearchAutocompleteResult(input, selectedScope)
-        }
+    private suspend fun fetchFeatured(request: AutocompleteRequest.Featured): List<FacetedTagSuggestion> {
         val featured = try {
-            adapter.featuredFacetedSuggestions(scope, FACETED_AUTOCOMPLETE_LIMIT)
+            request.adapter.featuredFacetedSuggestions(request.scope, FACETED_AUTOCOMPLETE_LIMIT)
         } catch (error: CancellationException) {
             throw error
         } catch (_: Throwable) {
             emptyList()
         }
-        if (featured.isNotEmpty()) {
-            tagSuggestionStore.putFaceted(mode.source, featured, TagSuggestionOrigin.FEATURED)
-        }
-        val suggestions = rankFacetedTagSuggestions(
-            featured + tagSuggestionStore.getFaceted(mode.source, Int.MAX_VALUE, scope),
-            prefix = "",
-            limit = FACETED_AUTOCOMPLETE_LIMIT,
-        )
-        return SearchAutocompleteResult(
-            input,
-            scope,
-            autocomplete = suggestions.map(FacetedTagSuggestion::toLegacySuggestion),
-            facetedAutocomplete = suggestions,
-        )
-    }
-
-    private fun cachedFeaturedAutocomplete(
-        query: Query,
-        selectedScope: FacetedSearchScope,
-        input: String,
-    ): SearchAutocompleteResult {
-        val mode = query.mode as? QueryMode.Source
-        val adapter = mode?.let { registry.adapterFor(it.source) as? FacetedSearchSourceAdapter }
-        val scope = selectedScope.takeIf { !it.isAll && it in supportedSearchScopes(query.mode) }
-        if (mode == null || adapter == null || scope == null) {
-            return SearchAutocompleteResult(input, selectedScope)
-        }
-        val suggestions = rankFacetedTagSuggestions(
-            tagSuggestionStore.getFaceted(mode.source, Int.MAX_VALUE, scope),
-            prefix = "",
-            limit = FACETED_AUTOCOMPLETE_LIMIT,
-        )
-        return SearchAutocompleteResult(
-            input,
-            scope,
-            autocomplete = suggestions.map(FacetedTagSuggestion::toLegacySuggestion),
-            facetedAutocomplete = suggestions,
-        )
+        if (featured.isNotEmpty()) tagSuggestionStore.putFaceted(request.source, featured, TagSuggestionOrigin.FEATURED)
+        return featured
     }
 
     private suspend fun <T> fetchProviderAutocomplete(
@@ -421,56 +315,45 @@ internal class SearchSuggestionCoordinator(
         }
     }
 
-    internal suspend fun fetchTrending(
+    /** Refreshes stale sources' trending tags in the tag store, then answers like [cachedTrending]. */
+    suspend fun fetchTrending(
         query: Query,
-        sourceScope: SearchSourceScope,
+        sources: Set<SourceKey>,
         forceRefresh: Boolean = false,
     ): List<TagSuggestion> = coroutineScope {
         val now = clock()
         when (val mode = query.mode) {
             QueryMode.Unified -> {
-                val enabled = effectiveEnabledSources(sourceScope)
-                if (enabled.isEmpty()) return@coroutineScope emptyList()
-                val cached = enabled.associateWith {
-                    rankedTrending(it, TRENDING_PER_SOURCE_CACHE_LIMIT)
-                }
-                enabled.filter { source ->
-                    shouldRefreshTrending(source, now, forceRefresh, cached[source].orEmpty())
+                if (sources.isEmpty()) return@coroutineScope emptyList()
+                sources.filter { source ->
+                    shouldRefreshTrending(source, now, forceRefresh, rankedTrending(source, TRENDING_PER_SOURCE_CACHE_LIMIT))
                 }.map { source ->
                     async { fetchTrendingForSource(source, TRENDING_FETCH_PER_SOURCE_LIMIT) }
                 }.awaitAll()
-                interleaveTagSuggestions(
-                    enabled.map { source ->
-                        source to rankedTrending(source, TRENDING_PER_SOURCE_CACHE_LIMIT)
-                    },
-                    UNIFIED_TRENDING_LIMIT,
-                )
             }
             is QueryMode.Source -> {
-                val cached = rankedTrending(mode.source, SOURCE_TRENDING_LIMIT)
-                if (shouldRefreshTrending(mode.source, now, forceRefresh, cached)) {
+                if (shouldRefreshTrending(mode.source, now, forceRefresh, rankedTrending(mode.source, SOURCE_TRENDING_LIMIT))) {
                     fetchTrendingForSource(mode.source, SOURCE_TRENDING_LIMIT)
                 }
-                rankedTrending(mode.source, SOURCE_TRENDING_LIMIT)
             }
         }
+        cachedTrending(query, sources)
     }
 
-    internal fun cachedTrending(
+    fun cachedTrending(
         query: Query,
-        sourceScope: SearchSourceScope,
+        sources: Set<SourceKey>,
     ): List<TagSuggestion> = when (val mode = query.mode) {
-        QueryMode.Unified -> {
-            val enabled = effectiveEnabledSources(sourceScope)
-            interleaveTagSuggestions(
-                enabled.map { source ->
-                    source to rankedTrending(source, TRENDING_PER_SOURCE_CACHE_LIMIT)
-                },
-                UNIFIED_TRENDING_LIMIT,
-            )
-        }
+        QueryMode.Unified -> interleaveTagSuggestions(
+            sources.map { source -> source to rankedTrending(source, TRENDING_PER_SOURCE_CACHE_LIMIT) },
+            UNIFIED_TRENDING_LIMIT,
+        )
         is QueryMode.Source -> rankedTrending(mode.source, SOURCE_TRENDING_LIMIT)
     }
+
+    /** The source's current trending tags that match [prefix], offered alongside its autocomplete. */
+    private fun trendingMatches(source: SourceKey, prefix: String): List<TagSuggestion> =
+        rankedTrending(source, SOURCE_TRENDING_LIMIT).filter { suggestion -> tagSuggestionMatches(suggestion, prefix) }
 
     private fun rankedTrending(source: SourceKey, limit: Int): List<TagSuggestion> =
         rankTagSuggestions(tagSuggestionStore.getTrending(source, Int.MAX_VALUE), prefix = "", limit = limit)
@@ -491,9 +374,46 @@ internal class SearchSuggestionCoordinator(
         if (fetched.isNotEmpty()) tagSuggestionStore.replaceTrending(source, fetched)
         return fetched
     }
+}
 
-    private fun autocompletePrefixForSource(source: SourceKey, input: String): String {
-        val normalized = parseScopedInput(input).value
-        return sourceAutocompletePrefix(source, normalized)
+/** What an autocomplete request needs, resolved once for both its cached and its fetched answer. */
+private sealed interface AutocompleteRequest {
+    /** Needs no suggestions: an input error, or a blank input with nothing featured. */
+    data class Answered(val result: SearchAutocompleteResult) : AutocompleteRequest
+
+    /** A blank input in a faceted source's picked scope: that scope's featured tags. */
+    data class Featured(
+        val source: SourceKey,
+        val adapter: FacetedSearchSourceAdapter,
+        val scope: FacetedSearchScope,
+    ) : AutocompleteRequest
+
+    /** Typed input; [scope] is the input's resolved scope and [prefix] the text to match. */
+    sealed interface Typed : AutocompleteRequest {
+        val scope: FacetedSearchScope
+        val prefix: String
     }
+
+    data class UnifiedTags(override val scope: FacetedSearchScope, override val prefix: String) : Typed
+
+    /** Typed input for the draft's one source. */
+    sealed interface SourceRequest : Typed {
+        val source: SourceKey
+    }
+
+    /** [facetScope] is where the source's suggestions come from, or null when it offers neither [scope] nor All. */
+    data class SourceFacets(
+        override val scope: FacetedSearchScope,
+        override val prefix: String,
+        override val source: SourceKey,
+        val adapter: FacetedSearchSourceAdapter,
+        val facetScope: FacetedSearchScope?,
+    ) : SourceRequest
+
+    data class SourceTags(
+        override val scope: FacetedSearchScope,
+        override val prefix: String,
+        override val source: SourceKey,
+        val adapter: SourceAdapter?,
+    ) : SourceRequest
 }

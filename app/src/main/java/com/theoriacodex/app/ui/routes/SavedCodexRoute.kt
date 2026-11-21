@@ -39,7 +39,7 @@ import com.theoriacodex.app.codex.savedCollectionFilters
 import com.theoriacodex.app.codex.savedCodexChildren
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.di.SourceDependencies
-import com.theoriacodex.app.media.MediaDurationCoordinator
+import com.theoriacodex.app.di.FeatureDependencies
 import com.theoriacodex.app.codex.usesDuration
 import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
@@ -65,7 +65,7 @@ import com.theoriacodex.domain.model.PostId
 internal fun SavedCodexRoute(
     data: DataDependencies,
     sources: SourceDependencies,
-    durations: MediaDurationCoordinator,
+    features: FeatureDependencies,
     restoreRegistry: FeedFabRestoreRegistry,
     onBack: () -> Unit,
     onOpenCodex: (String) -> Unit,
@@ -99,9 +99,9 @@ internal fun SavedCodexRoute(
                         ?: CodexSortMode.NEWEST_SAVED
                     // Owned above the boundary so its known lengths reach the length sorts.
                     val owner = viewModel<MediaDurationRouteViewModel>(key = "saved-duration:${child.codexId}",
-                        factory = MediaDurationRouteViewModel.factory(durations, "saved:${child.codexId}"))
+                        factory = MediaDurationRouteViewModel.factory(features.mediaDurationCoordinator, "saved:${child.codexId}"))
                     val durationStates by owner.states.collectAsStateWithLifecycle()
-                    CodexDetailDestinationStateBoundary(child.codexId, sort, data, sources, restore, durationStates) { state ->
+                    CodexDetailDestinationStateBoundary(child.codexId, sort, data, sources, features, restore, durationStates) { state ->
                         SavedCodexSection(state, child.codexId, child.name, counts[index], restore, sort,
                             owner, durationStates, sources, { scroll.isScrollInProgress },
                             { onOpenCodex(child.codexId) },

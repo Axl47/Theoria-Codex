@@ -601,12 +601,7 @@ internal fun imageCountBadgeLabel(count: Int, viewedMediaNumber: Int?): String {
 
 fun postMediaCount(post: Post): Int {
     post.mediaCount?.takeIf { it > 0 }?.let { return it }
-    val explicitCount = post.media.count { !it.url.isNullOrBlank() || !it.localPath.isNullOrBlank() }
-    return when {
-        explicitCount > 0 -> explicitCount
-        post.full != null -> 1
-        else -> 1
-    }
+    return post.media.count { !it.url.isNullOrBlank() || !it.localPath.isNullOrBlank() }.coerceAtLeast(1)
 }
 
 private fun resolveCardVideoRef(post: Post): ImageRef? {

@@ -8,6 +8,7 @@ import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.tags.legacyTagType
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import com.theoriacodex.domain.tags.sourceTagKey
 import java.io.File
@@ -48,7 +49,6 @@ class FileBackedTagSuggestionStore(
     /** Immutable count index published under [lock], so Compose-driven [getCount] reads never wait on merges. */
     @Volatile private var countsBySource: Map<SourceKey, Map<String, Int>> =
         inMemory.mapValues { (source, entries) -> indexCounts(source, entries) }
-    private val entryWeights: MutableMap<SourceKey, MutableList<Int>> = mutableMapOf()
     private var estimatedTotalUtf8Bytes = SNAPSHOT_ESTIMATED_OVERHEAD_BYTES
     private var mutationVersion = 0L
     private var persistedVersion = 0L
@@ -64,7 +64,7 @@ class FileBackedTagSuggestionStore(
         }
         require(persistenceDebounceMs >= 0L) { "persistenceDebounceMs must not be negative" }
         recoveryRegistry.registerStore("Search suggestions", storeFile)
-        rebuildWeightsLocked()
+        rebuildByteEstimateLocked()
         enforceTotalByteBudgetLocked()
         loadJob = scope.async {
             if (loadFromDisk()) {
@@ -375,12 +375,9 @@ class FileBackedTagSuggestionStore(
                 ?.key
                 ?: break
             val suggestions = inMemory.getValue(sourceToTrim)
-            val weights = entryWeights.getValue(sourceToTrim)
-            suggestions.removeAt(suggestions.lastIndex)
-            estimatedTotalUtf8Bytes -= weights.removeAt(weights.lastIndex)
+            estimatedTotalUtf8Bytes -= suggestions.removeAt(suggestions.lastIndex).estimatedBytes
             if (suggestions.isEmpty()) {
                 inMemory.remove(sourceToTrim)
-                entryWeights.remove(sourceToTrim)
                 estimatedTotalUtf8Bytes -= sourceEstimatedOverhead(sourceToTrim)
             }
             trimmedSources += sourceToTrim
@@ -404,10 +401,10 @@ class FileBackedTagSuggestionStore(
         return TagStoreSnapshot(sources = sources)
     }
 
-    private fun rebuildWeightsLocked() {
+    /** Recomputes the byte estimate from scratch for whatever seeded [inMemory], so a seed past the budget gets trimmed. */
+    private fun rebuildByteEstimateLocked() {
         val seeded = inMemory.mapValues { (_, suggestions) -> suggestions.toList() }
         inMemory.clear()
-        entryWeights.clear()
         estimatedTotalUtf8Bytes = SNAPSHOT_ESTIMATED_OVERHEAD_BYTES
         seeded.forEach { (source, suggestions) ->
             replaceSourceLocked(source, suggestions)
@@ -416,36 +413,19 @@ class FileBackedTagSuggestionStore(
 
     private fun replaceSourceLocked(source: SourceKey, suggestions: List<CachedSuggestion>) {
         val previousSuggestions = inMemory[source].orEmpty()
-        val previousWeights = entryWeights[source].orEmpty()
         if (previousSuggestions.isNotEmpty()) {
-            estimatedTotalUtf8Bytes -= sourceEstimatedOverhead(source) + previousWeights.sum()
+            estimatedTotalUtf8Bytes -= sourceEstimatedOverhead(source) + previousSuggestions.sumOf(CachedSuggestion::estimatedBytes)
         }
 
         if (suggestions.isEmpty()) {
             inMemory.remove(source)
             countsBySource = countsBySource - source
-            entryWeights.remove(source)
             return
         }
 
-        val previousByIdentity = previousSuggestions.mapIndexed { index, suggestion ->
-            suggestion.identity() to (suggestion to previousWeights.getOrNull(index))
-        }.toMap()
-        val replacementWeights: List<Int> = suggestions.map { suggestion ->
-            val retainedWeight = previousByIdentity[suggestion.identity()]
-                ?.takeIf { (previous, weight) -> previous == suggestion && weight != null }
-                ?.second
-            retainedWeight ?: estimatedEntryBytes(suggestion)
-        }
         inMemory[source] = suggestions.toMutableList()
         countsBySource = countsBySource + (source to indexCounts(source, suggestions))
-        entryWeights[source] = replacementWeights.toMutableList()
-        estimatedTotalUtf8Bytes += sourceEstimatedOverhead(source) + replacementWeights.sum()
-    }
-
-    private fun estimatedEntryBytes(suggestion: CachedSuggestion): Int {
-        return DurableJson.encodeToString(TagStoreEntry.serializer(), suggestion.toStoreEntry()).toByteArray().size +
-            ENTRY_ESTIMATED_FORMATTING_OVERHEAD_BYTES
+        estimatedTotalUtf8Bytes += sourceEstimatedOverhead(source) + suggestions.sumOf(CachedSuggestion::estimatedBytes)
     }
 
     private fun sourceEstimatedOverhead(source: SourceKey): Int {
@@ -489,6 +469,12 @@ private data class CachedSuggestion(
 ) {
     val normalizedText = normalizeMatchToken(text)
     val normalizedAlternate = alternateText?.let(::normalizeMatchToken)
+
+    /** Approximate persisted size, charged against the store's byte budget. Never persisted; fixed per instance, so [copy] recomputes it. */
+    val estimatedBytes: Int by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        DurableJson.encodeToString(TagStoreEntry.serializer(), toStoreEntry()).toByteArray().size +
+            ENTRY_ESTIMATED_FORMATTING_OVERHEAD_BYTES
+    }
 
     val isRecommendationTag: Boolean
         get() = facet == SearchFacet.TAG
@@ -619,7 +605,7 @@ private data class CachedSuggestion(
 
 private fun legacySuggestionTaxonomy(source: SourceKey, type: String?): Pair<SearchFacet, String?> {
     if (source != SourceKey.NHENTAI) return SearchFacet.TAG to null
-    val namespace = type?.trim()?.lowercase(Locale.ROOT)
+    val namespace = legacyTagType(type)
     return when (namespace) {
         "artist" -> SearchFacet.ARTIST to "artist"
         "character" -> SearchFacet.CHARACTER to "character"
@@ -681,7 +667,7 @@ private fun preferredSuggestionType(primary: String?, secondary: String?): Strin
 }
 
 private fun suggestionTypeRank(type: String?): Int {
-    return when (type?.trim()?.lowercase()) {
+    return when (legacyTagType(type)) {
         "tag_count_lookup" -> 5
         "trending" -> 4
         "tag" -> 3
@@ -694,7 +680,7 @@ private fun suggestionTypeRank(type: String?): Int {
 }
 
 private fun inferredOrigin(type: String?): TagSuggestionOrigin {
-    return when (type?.trim()?.lowercase(Locale.ROOT)) {
+    return when (legacyTagType(type)) {
         "trending" -> TagSuggestionOrigin.TRENDING
         "seen" -> TagSuggestionOrigin.SEEN
         "seed", "pixiv_tags_page" -> TagSuggestionOrigin.SEED

@@ -97,6 +97,7 @@ private class GelbooruFamilyAdapter(
         supportsSortRandom = false,
         supportsExcludeTagsServerSide = true,
         supportsGroupedIncludeTagsServerSide = site.orGroup != null,
+        requiresExactTags = site.exactTags,
     )
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> = sourceCall {

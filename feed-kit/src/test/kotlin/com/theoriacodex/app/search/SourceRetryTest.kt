@@ -10,6 +10,7 @@ import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.domain.adapter.Page
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
@@ -45,6 +46,37 @@ import org.junit.Test
 
 class SourceRetryTest {
     @Test
+    fun `another source's unknown error is not reported as Pixiv's`() = runTest {
+        val registry = TestRegistry(listOf(TestAdapter(SourceKey.GELBOORU)))
+        val failing = object : SourceAdapterRegistry by registry {
+            override fun unifiedOrchestrator(): UnifiedSearchOrchestrator =
+                throw SourceAdapterException(SourceFailureReason.UNKNOWN, "Gelbooru broke")
+        }
+        val owner = testSearchCoordinator(failing)
+
+        val result = owner.executeInitial(unifiedQuery("tag"), SearchSourceScope.GlobalUnified)
+
+        assertEquals("Gelbooru broke", (result as SearchExecutionResult.Failure).message)
+    }
+
+    @Test
+    fun `a single-source first page failure reaches Diagnostics`() = runTest {
+        val pixiv = TestAdapter(SourceKey.PIXIV).apply {
+            failure = SourceAdapterException(SourceFailureReason.AUTH_REQUIRED, "credentials required")
+        }
+        val reports = mutableListOf<String>()
+        Diagnostics.install { area, message, _ -> reports += "$area: $message" }
+        try {
+            val owner = testSearchCoordinator(TestRegistry(listOf(pixiv)))
+            owner.executeInitial(query(SourceKey.PIXIV, "tag"), SearchSourceScope.Single(SourceKey.PIXIV))
+        } finally {
+            Diagnostics.install { _, _, _ -> }
+        }
+
+        assertEquals(listOf("source: ${SourceKey.PIXIV.id} failed: AUTH_REQUIRED"), reports)
+    }
+
+    @Test
     fun `retry source preserves other continuation and retries exact failed page`() = runTest {
         val pixiv = TestAdapter(SourceKey.PIXIV)
         val gelbooru = TestAdapter(SourceKey.GELBOORU)
@@ -54,8 +86,8 @@ class SourceRetryTest {
         val initial = owner.executeInitial(query, SearchSourceScope.GlobalUnified) as SearchExecutionResult.Success
         gelbooru.failure = SourceAdapterException(SourceFailureReason.NETWORK, "offline")
         val page = owner.executePage(initial.continuation) as SearchPageResult.Success
-        assertEquals("next", page.continuation.unifiedPageTokens[SourceKey.GELBOORU])
-        assertEquals(null, page.continuation.unifiedPageTokens[SourceKey.PIXIV])
+        assertEquals("next", page.continuation.cursor.pageTokens[SourceKey.GELBOORU])
+        assertEquals(null, page.continuation.cursor.pageTokens[SourceKey.PIXIV])
         val successfulCalls = pixiv.searchedTags.size
         gelbooru.failure = null
         val retry = owner.retrySource(query, SearchSourceScope.GlobalUnified, page.continuation,
@@ -79,8 +111,8 @@ class SourceRetryTest {
         gelbooru.failure = null
         val result = owner.retrySource(query, SearchSourceScope.GlobalUnified, initial.continuation,
             SourceKey.GELBOORU) as SearchPageResult.Success
-        assertEquals("next", result.continuation.unifiedPageTokens[SourceKey.PIXIV])
-        assertEquals("next", result.continuation.unifiedPageTokens[SourceKey.GELBOORU])
+        assertEquals("next", result.continuation.cursor.pageTokens[SourceKey.PIXIV])
+        assertEquals("next", result.continuation.cursor.pageTokens[SourceKey.GELBOORU])
         assertEquals(1, pixiv.searchedTags.size)
         assertEquals(listOf("retry-0"), result.posts.map { it.id.sourcePostId })
     }
@@ -94,6 +126,6 @@ class SourceRetryTest {
         val result = owner.retrySource(query, SearchSourceScope.Single(SourceKey.NHENTAI), null,
             SourceKey.NHENTAI) as SearchPageResult.Success
         assertEquals(query, adapter.searchedQueries.single())
-        assertEquals("next", result.continuation.sourcePageToken)
+        assertEquals("next", result.continuation.cursor.pageTokens[SourceKey.NHENTAI])
     }
 }
