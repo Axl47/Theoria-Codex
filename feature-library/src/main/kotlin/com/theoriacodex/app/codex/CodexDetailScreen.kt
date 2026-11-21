@@ -47,7 +47,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.theoriacodex.app.ui.components.LoadingState
 import androidx.compose.ui.Alignment
@@ -121,8 +120,6 @@ fun CodexDetailScreen(
 ) {
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var showFilterSheet by remember { mutableStateOf(false) }
-    // Transient: a quick look inside this Codex, so it is neither a saved filter nor part of the restore record.
-    var tagKey by rememberSaveable(codexId) { mutableStateOf<String?>(null) }
     var editSelection by rememberCodexEditSelection(posts)
     val gridState = rememberRetainedFeedGridState("codex-detail:$codexId")
     val sourceOptions = remember(posts, availableSources) { codexSearchSourceOptions(posts, availableSources).map(CodexSearchSourceOption::source) }
@@ -130,7 +127,7 @@ fun CodexDetailScreen(
     val supportsFullColor = remember(sourceOptions) { supportsCodexFullColorFilter(sourceOptions.toSet()) }
     val filters = remember(fabRestoreState) { fabRestoreState.savedCollectionFilters() }
     val tags = remember(posts) { codexTopTags(posts) }
-    LaunchedEffect(tags) { if (tags.none { it.key == tagKey }) tagKey = null }
+    var tagKey by rememberCodexTagFilter(codexId, tags)
     val feed = rememberCodexDetailFeed(codexId, posts, filters, durations, related, sortMode, tagKey)
     val applyFilters = { updated: CodexCollectionFilters -> onFabRestoreStateChange(fabRestoreState.withCollectionFilters(updated)) }
     CodexFilterReconciliationEffect(filters, sourceOptions, supportsLanguage, supportsFullColor, applyFilters)

@@ -14,6 +14,9 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,6 +37,17 @@ internal class CodexDetailChips(
     val onSelectTag: (String?) -> Unit,
     val onTriage: (() -> Unit)?,
 )
+
+/**
+ * The match key of the tag filtering Codex [codexId], cleared when [tags] no longer offer it. Transient: a quick look
+ * inside this Codex, so it is neither a saved filter nor part of the restore record.
+ */
+@Composable
+internal fun rememberCodexTagFilter(codexId: String, tags: List<CodexTagCount>): MutableState<String?> {
+    val key = rememberSaveable(codexId) { mutableStateOf<String?>(null) }
+    LaunchedEffect(tags) { if (tags.none { it.key == key.value }) key.value = null }
+    return key
+}
 
 /** The sorts a collection offers: length sorts mean nothing without animations, unless one is already chosen. */
 internal fun codexSortModes(hasAnimatedPosts: Boolean, current: CodexSortMode): List<CodexSortMode> =
