@@ -94,7 +94,7 @@ internal class HitomiNozomiReader(
                 throw hitomiParseFailure("Hitomi global index exceeded the bounded gallery limit")
             }
             ordered.sortedDistinctCopy()
-        } ?: readWholeNozomi(index.url, maxGalleryIds, kind = "random")
+        } ?: readWholeNozomi(index.url, maxGalleryIds, WholeIndex.RANDOM)
         return HitomiNozomiSnapshot(ids = ids, fingerprint = ids.hitomiSha256Hex())
     }
 
@@ -125,7 +125,7 @@ internal class HitomiNozomiReader(
         val url = index.url
         membershipCache.get(url)?.let { return it }
         val membership = index.inlineIds?.sortedDistinctCopy()
-            ?: readWholeNozomi(url, MAX_SECONDARY_MEMBERSHIP_IDS, kind = "secondary")
+            ?: readWholeNozomi(url, MAX_SECONDARY_MEMBERSHIP_IDS, WholeIndex.SECONDARY)
         membershipCache.put(url, membership)
         return membership
     }
@@ -134,7 +134,7 @@ internal class HitomiNozomiReader(
      * Reads a whole index from byte zero as sorted distinct IDs. A missing index (404/416) is empty; a partial
      * response must cover the complete declared body, and no index may hold more than [maxIds].
      */
-    private suspend fun readWholeNozomi(url: String, maxIds: Int, kind: String): IntArray {
+    private suspend fun readWholeNozomi(url: String, maxIds: Int, index: WholeIndex): IntArray {
         val response = requestNozomi(
             url = url,
             firstIdIndex = 0L,
@@ -146,21 +146,21 @@ internal class HitomiNozomiReader(
             200 -> response.body
             206 -> {
                 val contentRange = response.validatedContentRange()
-                    ?: throw hitomiParseFailure("Hitomi $kind index omitted its byte range")
+                    ?: throw hitomiParseFailure(index.rangeMissing)
                 if (contentRange.startByte != 0L) {
-                    throw hitomiParseFailure("Hitomi $kind index did not start at byte zero")
+                    throw hitomiParseFailure(index.notFromZero)
                 }
                 val totalBytes = contentRange.totalBytes
-                    ?: throw hitomiParseFailure("Hitomi $kind index omitted its total length")
+                    ?: throw hitomiParseFailure(index.totalMissing)
                 if (bytesToIdCount(totalBytes) > maxIds) {
-                    throw hitomiParseFailure("Hitomi $kind index exceeded its bounded ID limit")
+                    throw hitomiParseFailure(index.overLimit)
                 }
                 if (response.body.size.toLong() != totalBytes) {
-                    throw hitomiParseFailure("Hitomi $kind index response was incomplete")
+                    throw hitomiParseFailure(index.incomplete)
                 }
                 response.body
             }
-            else -> throw hitomiHttpFailure("$kind Nozomi", response.statusCode)
+            else -> throw hitomiHttpFailure(index.httpStep, response.statusCode)
         }
         return HitomiNozomi.decodeGalleryIds(body, maxIds).sortDistinctOwned()
     }
@@ -304,3 +304,30 @@ internal data class HitomiIndexScan(
 
 internal fun matchesHitomiMemberships(id: Int, includes: List<IntArray>, exclusions: List<IntArray>): Boolean =
     includes.all { it.binarySearch(id) >= 0 } && exclusions.none { it.binarySearch(id) >= 0 }
+
+/** The indexes read whole from byte zero, with the failure messages each has always reported. */
+private enum class WholeIndex(
+    val rangeMissing: String,
+    val notFromZero: String,
+    val totalMissing: String,
+    val overLimit: String,
+    val incomplete: String,
+    val httpStep: String,
+) {
+    RANDOM(
+        rangeMissing = "Hitomi random index omitted its byte range",
+        notFromZero = "Hitomi random index returned only part of its declared snapshot",
+        totalMissing = "Hitomi random index omitted its total size",
+        overLimit = "Hitomi random index exceeded the bounded gallery limit",
+        incomplete = "Hitomi random index returned only part of its declared snapshot",
+        httpStep = "random Nozomi",
+    ),
+    SECONDARY(
+        rangeMissing = "Hitomi secondary index did not report a complete byte range",
+        notFromZero = "Hitomi secondary index did not start at byte zero",
+        totalMissing = "Hitomi secondary index omitted its total length",
+        overLimit = "Hitomi secondary index exceeded the bounded membership limit",
+        incomplete = "Hitomi secondary index response was incomplete",
+        httpStep = "Nozomi membership",
+    ),
+}
