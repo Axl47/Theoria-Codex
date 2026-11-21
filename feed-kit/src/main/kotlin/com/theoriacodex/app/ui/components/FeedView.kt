@@ -11,6 +11,7 @@ import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.search.markInputs
 import com.theoriacodex.app.search.rememberCarriedFilter
 import com.theoriacodex.app.viewer.retainPostsUntilViewerCloses
+import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
@@ -35,6 +36,9 @@ data class FeedMarks(
  */
 fun interface FeedPostFilter {
     fun filter(posts: List<Post>, knownDurationMsByPostId: Map<PostId, Long>): List<Post>
+
+    /** This filter with [range] as its date range; a feed's own filter, which reads none, stays as it is. */
+    fun withDateRange(range: DateRange?): FeedPostFilter = this
 }
 
 /** Search's filters with the marks they read; the filter every feed uses unless it has its own. */
@@ -49,6 +53,8 @@ private data class VisibilityPostFilter(
         posts, filters, liked, saved, watched,
         knownDurationMsByPostId = knownDurationMsByPostId, retainedLikedPostIds = retained,
     )
+
+    override fun withDateRange(range: DateRange?): FeedPostFilter = copy(filters = filters.copy(dateRange = range))
 }
 
 /**

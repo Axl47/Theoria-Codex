@@ -3,14 +3,18 @@ package com.theoriacodex.app.triage
 import com.theoriacodex.app.codex.SaveSuggestion
 import com.theoriacodex.app.ui.components.FeedView
 import com.theoriacodex.app.ui.navigation.TriageSeed
+import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 
-/** The posts a deck works through so far, and whether its origin feed has more. */
-data class TriageFeedSnapshot(val posts: List<Post>, val canLoadMore: Boolean)
+/**
+ * The posts a deck works through so far, and whether its origin feed has more. [loaded] counts the posts the origin
+ * feed has loaded before the grid's filters, so it grows with every page, even one none of whose posts pass them.
+ */
+data class TriageFeedSnapshot(val posts: List<Post>, val canLoadMore: Boolean, val loaded: Int = posts.size)
 
 /** Where a deck's posts come from: a live feed that pages, or a fixed list. */
 interface TriageFeed {
@@ -30,7 +34,16 @@ interface TriageFeed {
 }
 
 /** What Triage, tapped now, takes over from this grid: what it shows and how it filters. */
-fun FeedView.triageSeed(): TriageSeed = TriageSeed(visiblePosts, filters, durationFilterActive, postFilter::filter)
+fun FeedView.triageSeed(): TriageSeed = TriageSeed(visiblePosts, filters, durationFilterActive) { posts, dateRange, lengths ->
+    (if (dateRange == filters.dateRange) postFilter else postFilter.withDateRange(dateRange)).filter(posts, lengths)
+}
+
+/**
+ * This seed once Search's pending filters have applied: it filters, and its Viewer filters, by the settled query's
+ * [dateRange]; when the query changed ([sameQuery] false) it takes none of the old grid's posts.
+ */
+fun TriageSeed.settled(sameQuery: Boolean, dateRange: DateRange?): TriageSeed =
+    copy(posts = if (sameQuery) posts else emptyList(), filters = filters.copy(dateRange = dateRange))
 
 /** A single-tag entry of the active profile's For You hide list. */
 data class HiddenTag(val source: SourceKey, val tag: String)
