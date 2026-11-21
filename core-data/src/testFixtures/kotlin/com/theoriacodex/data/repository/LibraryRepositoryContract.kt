@@ -26,6 +26,9 @@ abstract class LibraryRepositoryContract {
     /** The transactions over [repository]'s data. */
     protected abstract fun transactionsFor(repository: CodexRepository): CodexLikesTransactions
 
+    /** The Likes [transactions] write, read back through the repository interface. */
+    protected abstract fun likesFor(transactions: CodexLikesTransactions): LikesRepository
+
     /** A Recents repository keeping at most [watchedLimit] watched rows and [searchLimit] searches, the app's limits by default. */
     protected abstract fun createRecentsRepository(
         clock: () -> Long,
@@ -535,6 +538,62 @@ abstract class LibraryRepositoryContract {
         val names = repository.observeCodices().first().associate { codex -> codex.codexId to codex.name }
         assertEquals("Trips", names[replacement.codexId])
         assertEquals("Trips 2", names[original.codexId])
+    }
+
+    @Test
+    fun `a like is profile scoped, normalizes its tags and moves its system codex membership with it`() = runTest {
+        val repository = createCodexRepository()
+        val transactions = transactionsFor(repository)
+        val likes = likesFor(transactions)
+        val post = repositoryTestPost("liked")
+        suspend fun toggle(profileId: String, tags: List<String> = emptyList()) =
+            transactions.toggleLikeAndSyncSystemCodex(profileId, "system_likes_codex", "Likes", post, tags)
+
+        assertEquals(CodexLikeSyncResult(nowLiked = false, membershipChanged = false), toggle("  "))
+        assertTrue(repository.observeCodices().first().isEmpty())
+
+        assertEquals(CodexLikeSyncResult(nowLiked = true, membershipChanged = true), toggle(" main ", listOf(" Tag ", "tag", "Other")))
+        assertEquals(listOf("Tag", "Other"), likes.observeLikes("main").first().single().tags)
+        assertEquals(setOf(post.id), likes.observeLikedPostIds("main").first())
+        assertTrue(likes.observeLikedPostIds("other").first().isEmpty())
+        assertEquals(listOf(post), repository.observeCodexPosts("system_likes_codex", CodexSortMode.NEWEST_SAVED).first())
+
+        assertEquals(CodexLikeSyncResult(nowLiked = false, membershipChanged = true), toggle("main"))
+        assertTrue(likes.observeLikes("main").first().isEmpty())
+        assertTrue(repository.observeCodexItems("system_likes_codex").first().isEmpty())
+        assertNull(repository.getPost(post.id))
+    }
+
+    @Test
+    fun `clearing likes removes only liked memberships of that profile and can be undone`() = runTest {
+        val repository = createCodexRepository()
+        val transactions = transactionsFor(repository)
+        val likes = likesFor(transactions)
+        val liked = repositoryTestPost("liked")
+        val saved = repositoryTestPost("saved")
+        val others = repositoryTestPost("others")
+        transactions.toggleLikeAndSyncSystemCodex("main", "system_likes_codex", "Likes", liked, emptyList())
+        transactions.toggleLikeAndSyncSystemCodex("other", "system_likes_other", "Likes other", others, emptyList())
+        repository.addItem("system_likes_codex", saved)
+
+        val cleared = transactions.clearLikesAndLikedMemberships("main", "system_likes_codex")
+
+        assertEquals(1, cleared.clearedLikes)
+        assertEquals(1, cleared.removedMemberships)
+        assertTrue(likes.observeLikedPostIds("main").first().isEmpty())
+        assertEquals(setOf(others.id), likes.observeLikedPostIds("other").first())
+        assertEquals(listOf(saved.id), repository.observeCodexItems("system_likes_codex").first().map { it.postId })
+        assertNull(repository.getPost(liked.id))
+
+        transactions.restoreClearedLikes(checkNotNull(cleared.undo))
+
+        assertEquals(setOf(liked.id), likes.observeLikedPostIds("main").first())
+        assertEquals(
+            setOf(liked.id, saved.id),
+            repository.observeCodexItems("system_likes_codex").first().mapTo(mutableSetOf()) { it.postId },
+        )
+        assertEquals(liked, repository.getPost(liked.id))
+        assertNull(transactions.clearLikesAndLikedMemberships("nobody", "system_likes_codex").undo)
     }
 
     private fun sampleQuery(includeTags: List<String> = listOf("landscape")): Query {
