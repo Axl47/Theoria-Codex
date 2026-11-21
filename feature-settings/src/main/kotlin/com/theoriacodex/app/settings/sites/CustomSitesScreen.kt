@@ -12,7 +12,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -35,6 +34,10 @@ import com.theoriacodex.app.settings.SettingsHeader
 import com.theoriacodex.app.settings.SettingsPageColumn
 import com.theoriacodex.app.settings.SettingsRow
 import com.theoriacodex.app.settings.SettingsRowDivider
+import com.theoriacodex.app.ui.components.EmptyState
+import com.theoriacodex.app.ui.undo.UndoAnchor
+import com.theoriacodex.app.ui.undo.UndoLeaveEffect
+import com.theoriacodex.app.ui.undo.UndoRow
 
 /** The pages above anything opened from the Sites list. */
 internal val SITES_PATH = SETTINGS_PATH + SettingDestinations.Sites.title
@@ -47,6 +50,8 @@ fun CustomSitesScreen(
     onAction: (CustomSitesAction) -> Unit,
     onBack: () -> Unit,
 ) {
+    // Leaving Sites completes a removal still offered for Undo.
+    UndoLeaveEffect(SITES_UNDO_SCOPE)
     BackHandler(enabled = state.form != null) { onAction(CustomSitesAction.CloseForm) }
     BackHandler(enabled = state.form == null && state.openBuiltIn != null) { onAction(CustomSitesAction.CloseBuiltIn) }
     state.verification?.let { verification ->
@@ -61,7 +66,6 @@ fun CustomSitesScreen(
             EditSitePage(form, site, state.retests[site.sourceId], site.sourceId in state.workingSiteIds, onAction)
         }
     }
-    RemoveSiteDialog(state, onAction)
     ReconnectDialog(state.form, onAction)
 }
 
@@ -98,18 +102,16 @@ private fun SitesListPage(
             }
         }
         if (state.sites.isEmpty()) {
-            Text(
-                "Add a booru by its address, like safebooru.org. Theoria checks which kind of site it is " +
-                    "and adds it as a source.",
-                modifier = Modifier.padding(horizontal = 4.dp),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Button(onClick = { onAction(CustomSitesAction.StartAdd) }) { Text("Add site") }
+            EmptyState("No added sites", actionLabel = "Add site", onAction = { onAction(CustomSitesAction.StartAdd) })
         } else {
             SettingsGroup("Added", action = testAll.takeIf { state.builtInSites.isEmpty() }) {
                 state.sites.forEachIndexed { index, site ->
                     if (index > 0) SettingsRowDivider()
-                    SiteRow(site, state.retests[site.sourceId], site.sourceId in state.workingSiteIds, onAction)
+                    if (site.sourceId in state.removingSiteIds) {
+                        UndoRow(UndoAnchor(SITES_UNDO_SCOPE, site.sourceId))
+                    } else {
+                        SiteRow(site, state.retests[site.sourceId], site.sourceId in state.workingSiteIds, onAction)
+                    }
                 }
             }
         }
@@ -190,26 +192,6 @@ internal fun WorkingMark() {
         contentDescription = "Working",
         modifier = Modifier.size(24.dp).semantics { liveRegion = LiveRegionMode.Polite },
         tint = MaterialTheme.colorScheme.primary,
-    )
-}
-
-@Composable
-private fun RemoveSiteDialog(state: CustomSitesUiState, onAction: (CustomSitesAction) -> Unit) {
-    val site = state.removeTarget ?: return
-    AlertDialog(
-        onDismissRequest = { onAction(CustomSitesAction.DismissRemove) },
-        title = { Text("Remove site?") },
-        text = { Text(removeConfirmationText(site.label)) },
-        dismissButton = {
-            TextButton(onClick = { onAction(CustomSitesAction.DismissRemove) }, enabled = !state.removing) {
-                Text("Cancel")
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onAction(CustomSitesAction.ConfirmRemove) }, enabled = !state.removing) {
-                Text("Remove", color = MaterialTheme.colorScheme.error)
-            }
-        },
     )
 }
 

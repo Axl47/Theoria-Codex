@@ -4,7 +4,11 @@ import com.theoriacodex.app.customsites.BuiltInSiteSummary
 import com.theoriacodex.app.customsites.BuiltInTestResult
 import com.theoriacodex.app.customsites.CredentialEdit
 import com.theoriacodex.app.customsites.CustomSiteAvailability
+import com.theoriacodex.app.customsites.CustomSiteEdit
 import com.theoriacodex.app.customsites.CustomSiteMutation
+import com.theoriacodex.app.ui.undo.DEFAULT_UNDO_DURATION
+import com.theoriacodex.app.ui.undo.UndoAnchor
+import com.theoriacodex.app.ui.undo.UndoSlot
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.ProbeFailure
 import com.theoriacodex.domain.source.ProtocolFamily
@@ -15,6 +19,7 @@ import com.theoriacodex.domain.source.SiteProbeResult
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -26,8 +31,9 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class CustomSitesViewModelTest {
     private val controller = FakeCustomSitesController()
+    private val undo = UndoSlot()
 
-    private fun TestScope.owner() = CustomSitesViewModel(controller, backgroundScope).also { runCurrent() }
+    private fun TestScope.owner() = CustomSitesViewModel(controller, backgroundScope, undo).also { runCurrent() }
 
     private fun TestScope.probeAddress(owner: CustomSitesViewModel, input: String = "safebooru.org") {
         owner.onAction(CustomSitesAction.StartAdd)
@@ -250,7 +256,7 @@ class CustomSitesViewModelTest {
         )
     }
 
-    @Test fun `edit prefills the site and sends label, keys, headers and opt-in`() = runTest {
+    @Test fun `edit saves the opt-in at once, the name once typing pauses, and only what changed`() = runTest {
         controller.sites.value = listOf(site(headers = SiteHeaders(referer = "https://safebooru.org/"), hasCredentials = true))
         val owner = owner()
         owner.onAction(CustomSitesAction.StartEdit("custom_safebooru_org"))
@@ -258,17 +264,31 @@ class CustomSitesViewModelTest {
         assertEquals("Safebooru", form.fields.label)
         assertEquals("https://safebooru.org/", form.fields.referer)
 
-        owner.onAction(CustomSitesAction.SetLabel("Safe"))
         owner.onAction(CustomSitesAction.SetIncludeInUnifiedAndForYou(true))
-        owner.onAction(CustomSitesAction.SetReferer(""))
-        owner.onAction(CustomSitesAction.SaveEdit)
         runCurrent()
-        val (id, edit) = controller.edits.single()
+        assertEquals(CustomSiteEdit(includeInUnifiedAndForYou = true), controller.edits.single().second)
+
+        owner.onAction(CustomSitesAction.SetLabel("Saf"))
+        owner.onAction(CustomSitesAction.SetLabel("Safe"))
+        owner.onAction(CustomSitesAction.SetReferer(""))
+        advanceTimeBy(TYPING_SAVE_DELAY.inWholeMilliseconds - 1)
+        assertEquals(1, controller.edits.size)
+        advanceTimeBy(2)
+        val (id, edit) = controller.edits.last()
         assertEquals("custom_safebooru_org", id)
-        assertEquals("Safe", edit.label)
-        assertEquals(CredentialEdit.Keep, edit.credentials)
-        assertEquals(SiteHeaders(), edit.headers)
-        assertEquals(true, edit.includeInUnifiedAndForYou)
+        assertEquals(CustomSiteEdit("Safe", CredentialEdit.Keep, SiteHeaders(), includeInUnifiedAndForYou = true), edit)
+        assertEquals(2, controller.edits.size)
+        assertTrue(owner.state.value.form is SiteForm.Edit)
+    }
+
+    @Test fun `closing the edit page saves a name still waiting`() = runTest {
+        controller.sites.value = listOf(site())
+        val owner = owner()
+        owner.onAction(CustomSitesAction.StartEdit("custom_safebooru_org"))
+        owner.onAction(CustomSitesAction.SetLabel("Safer"))
+        owner.onAction(CustomSitesAction.CloseForm)
+        runCurrent()
+        assertEquals(CustomSiteEdit(label = "Safer"), controller.edits.single().second)
         assertNull(owner.state.value.form)
     }
 
@@ -292,21 +312,35 @@ class CustomSitesViewModelTest {
         )
     }
 
-    @Test fun `remove asks first and a failure shows a notice`() = runTest {
+    @Test fun `remove hides the site at once and Undo brings it back without removing anything`() = runTest {
         controller.sites.value = listOf(site(), site("custom_other_example", "Other", "other.example"))
         val owner = owner()
-        owner.onAction(CustomSitesAction.RequestRemove("custom_safebooru_org"))
-        assertEquals("Safebooru", owner.state.value.removeTarget?.label)
-        owner.onAction(CustomSitesAction.ConfirmRemove)
+        owner.onAction(CustomSitesAction.Remove("custom_safebooru_org"))
+        assertEquals(listOf("Other"), owner.state.value.shownSites.map { it.label })
+        val offer = checkNotNull(undo.offer.value)
+        assertEquals("Removed Safebooru", offer.label)
+        assertEquals(UndoAnchor(SITES_UNDO_SCOPE, "custom_safebooru_org"), offer.anchor)
+
+        undo.act(offer)
         runCurrent()
+        assertEquals(listOf("Safebooru", "Other"), owner.state.value.shownSites.map { it.label })
+        assertEquals(emptyList<String>(), controller.removals)
+    }
+
+    @Test fun `a removal happens when its offer expires, and a failure brings the site back with a notice`() = runTest {
+        controller.sites.value = listOf(site(), site("custom_other_example", "Other", "other.example"))
+        val owner = owner()
+        owner.onAction(CustomSitesAction.Remove("custom_safebooru_org"))
+        advanceTimeBy(DEFAULT_UNDO_DURATION.inWholeMilliseconds + 1)
+        assertEquals(listOf("custom_safebooru_org"), controller.removals)
         assertEquals(listOf("Other"), owner.state.value.sites.map { it.label })
-        assertNull(owner.state.value.removeTarget)
 
         controller.onRemove = { CustomSiteMutation.NotFound }
-        owner.onAction(CustomSitesAction.RequestRemove("custom_other_example"))
-        owner.onAction(CustomSitesAction.ConfirmRemove)
+        owner.onAction(CustomSitesAction.Remove("custom_other_example"))
+        undo.expire(SITES_UNDO_SCOPE)
         runCurrent()
         assertEquals("This site is no longer in your list.", owner.state.value.notice)
+        assertEquals(listOf("Other"), owner.state.value.shownSites.map { it.label })
     }
 
     @Test fun `a pasted key snippet in either field fills both`() = runTest {

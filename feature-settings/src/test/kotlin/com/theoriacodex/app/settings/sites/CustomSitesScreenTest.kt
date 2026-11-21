@@ -21,6 +21,8 @@ import com.theoriacodex.app.customsites.BuiltInSiteSummary
 import com.theoriacodex.app.customsites.BuiltInTestResult
 import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.settings.BuiltInAccounts
+import com.theoriacodex.app.ui.undo.ProvideUndoSlot
+import com.theoriacodex.app.ui.undo.UndoSlot
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.ProbeFailure
 import com.theoriacodex.domain.source.ProtocolFamily
@@ -38,11 +40,12 @@ class CustomSitesScreenTest {
     @get:Rule val compose = createComposeRule()
 
     private fun show(controller: FakeCustomSitesController, accountControls: @Composable (SourceKey) -> Unit = {}) {
-        val owner = CustomSitesViewModel(controller)
+        val undo = UndoSlot()
+        val owner = CustomSitesViewModel(controller, undo = undo)
         val accounts = BuiltInAccounts(summary = { null }, controls = accountControls)
         compose.setContent {
             val state by owner.state.collectAsStateWithLifecycle()
-            MaterialTheme { CustomSitesScreen(state, accounts, owner::onAction, onBack = {}) }
+            ProvideUndoSlot(undo) { MaterialTheme { CustomSitesScreen(state, accounts, owner::onAction, onBack = {}) } }
         }
     }
 
@@ -52,7 +55,7 @@ class CustomSitesScreenTest {
             onProbe = { supported("danbooru.example", ProtocolFamily.DANBOORU, label = "Example Booru") }
         }
         show(controller)
-        compose.onNodeWithText("Add a booru by its address", substring = true).assertExists()
+        compose.onNodeWithText("No added sites").assertExists()
         compose.onNode(hasText("Add site") and hasClickAction()).performClick()
 
         compose.onNodeWithText("Site address").performTextInput("https://danbooru.example/posts?tags=cat")
@@ -83,21 +86,17 @@ class CustomSitesScreenTest {
     }
 
     @Test
-    fun `removing a site explains that library data stays`() {
+    fun `removing a site hides it at once with Undo in its row`() {
         val controller = FakeCustomSitesController(listOf(site()))
         show(controller)
         compose.onNodeWithText("Safebooru").performClick()
         compose.onNodeWithText("Remove site").performScrollTo().performClick()
 
-        compose.onNodeWithText(removeConfirmationText("Safebooru")).assertExists()
-        compose.onNodeWithText(
-            "Likes, Codex items and history from this site stay in your library",
-            substring = true,
-        ).assertExists()
-        compose.onNodeWithText("Remove").performClick()
+        compose.onNodeWithText("Removed Safebooru").assertExists()
+        compose.onNodeWithText("Undo").performClick()
 
-        compose.onNodeWithText("Safebooru").assertDoesNotExist()
-        assertEquals(listOf("custom_safebooru_org"), controller.removals)
+        compose.onNodeWithText("Safebooru").assertExists()
+        assertEquals(emptyList<String>(), controller.removals)
     }
 
     @Test
