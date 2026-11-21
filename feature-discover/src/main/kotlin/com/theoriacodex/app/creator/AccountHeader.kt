@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -123,10 +124,10 @@ internal fun AccountHeader(
     }
 }
 
-/** The bio, clipped to three lines until tapped. */
+/** The bio, clipped to three lines until tapped; stays open across a Viewer round trip, closes for a new bio. */
 @Composable
 internal fun AccountBio(bio: String) {
-    var expanded by remember(bio) { mutableStateOf(false) }
+    var expanded by rememberSaveable(bio) { mutableStateOf(false) }
     Text(
         bio,
         style = MaterialTheme.typography.bodyMedium,

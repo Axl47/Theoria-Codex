@@ -30,7 +30,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,7 +53,9 @@ internal fun CollapsingSearchChrome(
     horizontalPadding: Dp = 0.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    var toolbarHeight by remember { mutableIntStateOf(0) }
+    // Saved so the first frame back from the Viewer reserves the measured height instead of sliding the
+    // results down by it while the Viewer's media lands on its card.
+    var toolbarHeight by rememberSaveable { mutableIntStateOf(0) }
     val height = with(LocalDensity.current) { toolbarHeight.toDp() }
     // Include the toolbar gap so removing the spacer cannot snap the grid upward.
     val reservedHeight by animateDpAsState(if (legacy || expanded) height + 6.dp else 0.dp, label = "Search toolbar space")

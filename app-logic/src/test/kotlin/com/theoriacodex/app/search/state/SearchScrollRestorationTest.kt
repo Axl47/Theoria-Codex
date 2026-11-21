@@ -39,6 +39,12 @@ class SearchScrollRestorationTest {
         assertTrue(pending.copy(scrollState = null).allowsScrollPersistence)
     }
 
+    @Test fun `only a request still owed a move has an open id`() {
+        assertEquals(1L, pending.openScrollRequestId)
+        assertEquals(null, pending.copy(scrollState = null).openScrollRequestId)
+        assertEquals(null, SearchRestorationUiState.Restoring.openScrollRequestId)
+    }
+
     // A search with 40 posts loaded, more pages available, and an open request for post 22 at 17 px.
     private fun ready(
         request: SearchRestorationUiState = pending,

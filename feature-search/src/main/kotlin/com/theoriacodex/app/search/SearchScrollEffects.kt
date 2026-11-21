@@ -15,8 +15,13 @@ import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchRestorationUiState
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.search.state.allowsScrollPersistence
+import com.theoriacodex.app.search.state.openScrollRequestId
 import com.theoriacodex.app.search.state.scrollStep
 import com.theoriacodex.app.search.state.scrollStepAfterJump
+import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
+import com.theoriacodex.app.ui.TopLevelDestination
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
 
@@ -41,9 +46,7 @@ internal fun SearchScrollRestorationEffect(
     // A deliberate drag supersedes restoration; scrollToItem emits no DragInteraction.
     LaunchedEffect(gridState) {
         gridState.interactionSource.interactions.filterIsInstance<DragInteraction.Start>().collect {
-            currentRestoration?.takeIf { it.scrollState != null }?.let {
-                dispatch(SearchAction.ScrollRestorationApplied(it.scrollRequestId))
-            }
+            currentRestoration?.let { supersedeScrollRequest(it, dispatch) }
         }
     }
     // Only the state rules wait, so the grid facts passed here cannot change whether a step is ready.
@@ -97,4 +100,42 @@ internal fun SearchScrollPersistenceEffect(
                 }
             }
     }
+}
+
+/**
+ * Closes an open scroll request before a deliberate move (drag, Reset, tab reselect), so the posts it waits for
+ * do not later jump the grid back to the old place.
+ */
+internal fun supersedeScrollRequest(restoration: SearchRestorationUiState, onAction: (SearchAction) -> Unit) {
+    restoration.openScrollRequestId?.let { onAction(SearchAction.ScrollRestorationApplied(it)) }
+}
+
+/** Tapping the Search tab again scrolls to the top, which supersedes an open request like a drag does. */
+@Composable
+internal fun SearchTabReselectEffect(
+    restoration: SearchRestorationUiState,
+    gridState: LazyStaggeredGridState,
+    onAction: (SearchAction) -> Unit,
+) {
+    ScrollToTopOnTabReselect(TopLevelDestination.Search) {
+        supersedeScrollRequest(restoration, onAction)
+        gridState.animateScrollToItem(0)
+    }
+}
+
+/** The composer's Reset: moves the grid to the top and saves that as the query's place. */
+internal suspend fun resetSearchScroll(
+    visibleResults: List<Post>,
+    gridState: LazyStaggeredGridState,
+    restoration: SearchRestorationUiState,
+    onAction: (SearchAction) -> Unit,
+) {
+    // Closed first: an open request blocks persistence, which would drop the ScrollChanged below.
+    supersedeScrollRequest(restoration, onAction)
+    if (visibleResults.isNotEmpty()) {
+        runCatchingPreservingCancellation {
+            gridState.scrollToItem(index = 0, scrollOffset = 0)
+        }
+    }
+    onAction(SearchAction.ScrollChanged(0, 0))
 }

@@ -11,6 +11,9 @@
 - Past about 1,000 posts Gelbooru refuses to return more results, which Search reported as "Gelbooru returned malformed JSON". It now says "Gelbooru won't load results past this point".
 - Coming back to Search while its results were still loading could leave the list at the top, or slightly above where you left it, instead of at your saved place. Search now returns to the exact place once the posts it needs have loaded.
 - If the system closed the app in the background and you switched away and back while Search was reloading, your saved place in the results was lost. It is now kept.
+- Resetting a search, tapping the Search tab again, or opening a post from a related shelf while Search was still returning to your saved place could be undone a moment later, when the list jumped back to the old place. The list now stays where you sent it.
+- Coming back from a post to Search with the search bar open made the results slide down for a moment. They now appear in place.
+- A creator's bio that you had expanded collapsed again after you opened one of their posts and came back. It now stays expanded.
 
 ## [1.9.2] - 2026-11-18
 

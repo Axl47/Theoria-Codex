@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -357,6 +358,26 @@ internal class ScrollPersistenceSearchViewModelTest : SearchViewModelTestFixture
             owner.onAction(SearchAction.Resume)
 
             assertEquals(startup, owner.state.value.restoration)
+        }
+
+    @Test
+    fun `reset closes an open restore first so the top is saved as the place`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val saved = SavedStateHandle(mapOf(
+                SearchSavedStateKeys.SCROLL_INDEX to 22,
+                SearchSavedStateKeys.SCROLL_OFFSET to 17,
+            ))
+            val uiRestore = RecordingUiRestoreRepository()
+            val owner = viewModel(ViewModelSearchAdapter(), savedState = saved, uiRestoreRepository = uiRestore)
+            restore(owner)
+            assertNotNull((owner.state.value.restoration as SearchRestorationUiState.Restored).scrollState)
+
+            resetSearchScroll(emptyList(), LazyStaggeredGridState(), owner.state.value.restoration, owner::onAction)
+            advanceUntilIdle()
+
+            assertEquals(null, (owner.state.value.restoration as SearchRestorationUiState.Restored).scrollState)
+            assertEquals(0, saved.get<Int>(SearchSavedStateKeys.SCROLL_INDEX))
+            assertEquals(listOf(SearchScrollState(0, 0)), uiRestore.writeSnapshot().map { it.second })
         }
 
     private fun SearchViewModel.acknowledgeScroll() {

@@ -17,6 +17,7 @@ import com.theoriacodex.app.search.state.SearchStateChange
 import com.theoriacodex.app.search.state.SearchStateReducer
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.search.state.allowsScrollPersistence
+import com.theoriacodex.app.search.state.openScrollRequestId
 import com.theoriacodex.app.search.state.withResolvedPosts
 import com.theoriacodex.app.search.state.withSuggestionInput
 import com.theoriacodex.app.search.state.SearchSourceScope
@@ -398,6 +399,10 @@ class SearchViewModel(
                 liveSearchBinding = false,
             )
         )
+        // Like opening a result, this takes over the grid: a pending restore must not jump it on return.
+        mutableState.value.restoration.openScrollRequestId?.let { requestId ->
+            reduce(SearchStateChange.ScrollRestorationApplied(requestId))
+        }
     }
 
     fun synchronizeEnvironment(settings: AppSettings) {
