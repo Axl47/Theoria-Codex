@@ -307,6 +307,8 @@ class ForYouViewModel(
 
     override fun loadNextPage() = onAction(ForYouAction.LoadNextPage)
 
+    override fun retryPage() = onAction(ForYouAction.RetrySources(mutableState.value.retryableSources))
+
     override fun rememberResolvedPost(post: Post) {
         val current = mutableState.value
         mutableState.value = current.copy(results = current.results.replacingPostSnapshot(post))
@@ -467,5 +469,6 @@ private fun ForYouUiState.viewerFeed() = ViewerFeedSnapshot(
     results = results,
     canLoadMore = canLoadMore,
     loadingMore = isPaging,
+    pageFailed = !isPaging && retryableSources.isNotEmpty(),
     relatedPosts = relatedPosts,
 )

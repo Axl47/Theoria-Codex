@@ -26,6 +26,12 @@ interface ViewerFeedOwner {
 
     fun loadNextPage()
 
+    /**
+     * Asks again for the page that just failed ([ViewerFeedSnapshot.pageFailed]), which [loadNextPage] may refuse
+     * until the user retries; owners whose [loadNextPage] already repeats a failed page need not override it.
+     */
+    fun retryPage() = loadNextPage()
+
     /** Replaces the feed's copy of [post] with the fuller one the Viewer resolved. */
     fun rememberResolvedPost(post: Post)
 }
@@ -36,6 +42,8 @@ data class ViewerFeedSnapshot(
     val results: List<Post> = emptyList(),
     val canLoadMore: Boolean = false,
     val loadingMore: Boolean = false,
+    /** The last page request failed and no request is running; the posts already loaded are kept. */
+    val pageFailed: Boolean = false,
     val retainedLikedPostIds: Set<PostId> = emptySet(),
     val relatedPosts: RelatedPostsUiState = RelatedPostsUiState.Idle,
 )

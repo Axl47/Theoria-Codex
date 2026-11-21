@@ -14,8 +14,15 @@ import kotlinx.coroutines.flow.flowOf
 /**
  * The posts a deck works through so far, and whether its origin feed has more. [loaded] counts the posts the origin
  * feed has loaded before the grid's filters, so it grows with every page, even one none of whose posts pass them.
+ * [loadingMore] is true while a page request runs and [pageFailed] after one failed; the posts already loaded stay.
  */
-data class TriageFeedSnapshot(val posts: List<Post>, val canLoadMore: Boolean, val loaded: Int = posts.size)
+data class TriageFeedSnapshot(
+    val posts: List<Post>,
+    val canLoadMore: Boolean,
+    val loaded: Int = posts.size,
+    val loadingMore: Boolean = false,
+    val pageFailed: Boolean = false,
+)
 
 /** Where a deck's posts come from: a live feed that pages, or a fixed list. */
 interface TriageFeed {
@@ -25,11 +32,15 @@ interface TriageFeed {
     /** Asks the feed for its next page; the result arrives through [snapshots]. */
     fun loadNextPage()
 
+    /** Asks again for the page that failed, which [loadNextPage] may refuse. */
+    fun retryPage()
+
     companion object {
         /** A list that never grows, such as a Codex. */
         fun fixed(posts: List<Post>): TriageFeed = object : TriageFeed {
             override val snapshots = flowOf(TriageFeedSnapshot(posts, canLoadMore = false))
             override fun loadNextPage() = Unit
+            override fun retryPage() = Unit
         }
     }
 }
@@ -115,6 +126,8 @@ data class TriageDeckState(
     val index: Int = 0,
     val canLoadMore: Boolean = false,
     val loaded: Boolean = false,
+    /** The origin feed's last page request failed, so no more cards will come until it is retried. */
+    val pageFailed: Boolean = false,
     /** The decision Undo reverses; null when there is nothing to undo. */
     val last: TriageDecision? = null,
     val notice: TriageNotice? = null,
@@ -127,7 +140,10 @@ data class TriageDeckState(
     val next: Post? get() = posts.getOrNull(shownFrom(index + 1))
 
     /** Every post is decided and the origin feed has no more. */
-    val finished: Boolean get() = loaded && index >= posts.size && !canLoadMore
+    val finished: Boolean get() = loaded && index >= posts.size && !canLoadMore && !pageFailed
+
+    /** Every post is decided and the feed's next page failed: the deck offers a retry instead of a spinner. */
+    val needsRetry: Boolean get() = loaded && index >= posts.size && pageFailed
 
     /**
      * The posts a tap on the current card opens the Viewer on, less those taken out of the deck's Codex, and the

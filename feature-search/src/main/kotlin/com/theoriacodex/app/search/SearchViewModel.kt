@@ -409,6 +409,8 @@ class SearchViewModel(
         if (current.content.canLoadMore && current.execution.continuation != null) launchPage()
     }
 
+    override fun retryPage() = onAction(SearchAction.Retry)
+
     override fun rememberResolvedPost(post: Post) = onAction(SearchAction.RememberResolvedPost(post))
 
     private fun openRelatedResult(action: SearchAction.OpenRelatedResult) {
@@ -875,6 +877,7 @@ private fun SearchUiState.viewerFeed() = ViewerFeedSnapshot(
     results = content.results,
     canLoadMore = content.canLoadMore,
     loadingMore = loadingMore,
+    pageFailed = !loadingMore && content.error?.requestKind == SearchRequestKind.PAGE,
     retainedLikedPostIds = relatedPosts.retainedLikedPostIds,
     relatedPosts = relatedPosts,
 )
