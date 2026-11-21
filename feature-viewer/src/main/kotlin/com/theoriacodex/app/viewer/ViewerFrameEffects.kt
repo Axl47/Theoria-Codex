@@ -216,8 +216,8 @@ private fun ViewerNavigationEffects(
             postPagerState.scrollToPage(currentPostIndex)
         }
     }
+    // Selecting another page already closes the overview in the reducer; a feed page arriving must not.
     LaunchedEffect(uiState.currentPageIndex, posts.size, postPagerState) {
-        controls.setOverviewVisible(false)
         controls.markPassiveInteraction()
     }
     LaunchedEffect(frame.selection.post.id, currentPostIndex, uiState.currentPage?.pendingMediaIndex) {
