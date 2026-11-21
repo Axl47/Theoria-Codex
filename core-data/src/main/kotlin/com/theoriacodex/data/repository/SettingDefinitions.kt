@@ -60,7 +60,7 @@ object SettingToggles {
         write = { settings, on -> settings.copy(viewer = settings.viewer.copy(invertMultiImageScrollDirection = on)) },
     )
     val AutoRotateVideos = SettingToggle(
-        "auto-rotate", "Auto-Rotate Videos", listOf("rotate", "orientation"), "Rotate to fit the video you open.",
+        "auto-rotate", "Auto-Rotate Videos", listOf("rotate", "orientation"),
         read = { it.viewer.autoRotateVideos }, write = { settings, on -> settings.copy(viewer = settings.viewer.copy(autoRotateVideos = on)) },
     )
     val DownloadsOverMetered = SettingToggle(
@@ -112,14 +112,15 @@ object SettingDestinations {
     val HiddenTags = SettingDestination("hidden-tags", "Hidden tags", listOf("blacklist", "blocked", "mute"))
     val SourceMix = SettingDestination("source-mix", "Source mix", listOf("weights", "sources"))
     val Sites = SettingDestination("sites", "Sites", listOf("sources", "accounts", "sign in", "log in"))
-    val Playback = SettingDestination("playback", "Playback & downloads", listOf("video", "quality"))
+    val Downloads = SettingDestination("downloads", "Downloads", listOf("download", "quality", "metered", "roaming"))
     val Controls = SettingDestination("controls", "Controls", listOf("gestures", "swipes"))
     val Storage = SettingDestination("storage", "Storage & caching", listOf("cache", "space", "clear"))
+    val Backup = SettingDestination("backup", "Backup", listOf("restore", "export", "import"))
     val WhatsNew = SettingDestination("whats-new", "What's new", listOf("changelog", "release notes", "version"))
     val Diagnostics = SettingDestination("diagnostics", "Diagnostics report", listOf("diagnostics", "logs", "errors"))
 
     val all: List<SettingDestination> = listOf(
-        Stats, ShareStats, CompareStats, HiddenTags, SourceMix, Sites, Playback, Controls, Storage, WhatsNew, Diagnostics,
+        Stats, ShareStats, CompareStats, HiddenTags, SourceMix, Sites, Downloads, Controls, Storage, Backup, WhatsNew, Diagnostics,
     )
 }
 

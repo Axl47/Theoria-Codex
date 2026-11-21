@@ -308,6 +308,7 @@ private fun rememberViewerScreenHost(
             viewerOwner.onAction(action)
             if (action is ViewerAction.SetPlaybackMode) callbacks.onPlaybackModeSelected(action.mode)
         },
+        onVideoQualitySelected = callbacks.onVideoQualitySelected,
         onGoToSearch = {
             viewerOwner.clearSession(retainPresentation = true)
             latestDependencies.value.sessionRetentionOwner.clear()

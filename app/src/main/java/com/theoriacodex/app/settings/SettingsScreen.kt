@@ -14,12 +14,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NewReleases
-import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.BugReport
@@ -28,7 +29,6 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -63,7 +63,7 @@ import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.launch
 
-private enum class SettingsSheet { PROFILE, SOURCE_MIX, PLAYBACK, CONTROLS }
+private enum class SettingsSheet { PROFILE, SOURCE_MIX, DOWNLOADS, CONTROLS }
 
 private val STORAGE_TOGGLES = listOf(SettingToggles.KeepMediaOffline, SettingToggles.FindAnimationDurations)
 
@@ -79,6 +79,7 @@ fun SettingsScreen(
     searchSources: Set<SourceKey> = emptySet(),
     storageSummary: String? = null,
     sites: SettingsSitesEntry? = null,
+    backup: SettingsBackupEntry? = null,
     statsActions: StatsActions = StatsActions(),
     diagnostics: SettingsDiagnosticsEntry? = null,
     storageTools: (@Composable () -> Unit)? = null,
@@ -98,7 +99,7 @@ fun SettingsScreen(
         label = "Settings page",
     ) { page ->
         when (page) {
-            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, searchSources, storageSummary, sites, diagnostics != null, onClose) {
+            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, searchSources, storageSummary, sites, backup, diagnostics != null, onClose) {
                 chooseStatsFile.launch(arrayOf("application/json", "application/octet-stream", "text/plain"))
             }
             SettingsPage.SITES -> sites?.page?.invoke(
@@ -109,6 +110,7 @@ fun SettingsScreen(
                 ),
             )
             SettingsPage.STORAGE -> StoragePage(state, onAction, storageTools, openHome)
+            SettingsPage.BACKUP -> backup?.let { BackupPage(it, openHome) }
             SettingsPage.STATS -> StatsScreen(statistics, openPost, openHome)
             SettingsPage.STATS_SHARE -> StatsSharePreview(
                 statistics.profiles, statistics.shareOverall(), state.activeProfile.profileId, statsActions, openPost, openHome,
@@ -135,6 +137,7 @@ private fun SettingsHome(
     searchSources: Set<SourceKey>,
     storageSummary: String?,
     sites: SettingsSitesEntry?,
+    backup: SettingsBackupEntry?,
     showDiagnostics: Boolean,
     onClose: () -> Unit,
     onCompareStats: () -> Unit,
@@ -151,13 +154,13 @@ private fun SettingsHome(
                 open(SettingsPage.STATS)
             })
             SettingsRowDivider()
-            SettingsRow(SettingDestinations.ShareStats.title, "Choose what to include and send it as a file", Icons.Default.Share, onClick = {
+            SettingsRow(SettingDestinations.ShareStats.title, icon = Icons.Default.Share, onClick = {
                 open(SettingsPage.STATS_SHARE)
             })
             SettingsRowDivider()
             SettingsRow(SettingDestinations.CompareStats.title, "Open a stats file someone sent you", Icons.AutoMirrored.Filled.CompareArrows, onClick = onCompareStats)
         }
-        SettingsHomeGroups(state, onAction, searchSources, storageSummary, sites, showDiagnostics, { sheet = it }, open)
+        SettingsHomeGroups(state, onAction, searchSources, storageSummary, sites, backup, showDiagnostics, { sheet = it }, open)
         if (state.showDeveloperScenarios) DeveloperScenarios(state, onAction)
     }
     if (showAddProfile) {
@@ -194,6 +197,7 @@ private fun SettingsHomeGroups(
     searchSources: Set<SourceKey>,
     storageSummary: String?,
     sites: SettingsSitesEntry?,
+    backup: SettingsBackupEntry?,
     showDiagnostics: Boolean,
     onSheet: (SettingsSheet) -> Unit,
     open: (SettingsPage) -> Unit,
@@ -214,10 +218,6 @@ private fun SettingsHomeGroups(
         OpenLinksRow()
     }
     SettingsGroup("Viewing") {
-        SettingsRow(SettingDestinations.Playback.title, playbackSummary(state), Icons.Default.PlayCircle, onClick = {
-            onSheet(SettingsSheet.PLAYBACK)
-        })
-        SettingsRowDivider()
         SettingsRow(SettingDestinations.Controls.title, "Search bar, seeking, swipes, rotation", Icons.Default.TouchApp, onClick = {
             onSheet(SettingsSheet.CONTROLS)
         })
@@ -230,23 +230,30 @@ private fun SettingsHomeGroups(
             onClick = { open(SettingsPage.STORAGE) },
         )
         SettingsRowDivider()
+        SettingsRow(SettingDestinations.Downloads.title, downloadsSummary(state), Icons.Default.Download, onClick = {
+            onSheet(SettingsSheet.DOWNLOADS)
+        })
+        backup?.let {
+            SettingsRowDivider()
+            SettingsRow(
+                SettingDestinations.Backup.title, it.summary?.text, Icons.Default.Backup,
+                summaryIsError = it.summary?.failed == true,
+                onClick = { open(SettingsPage.BACKUP) },
+            )
+        }
+        SettingsRowDivider()
         AppLockRow()
         SettingsRowDivider()
         SettingsRow(
             SettingDestinations.WhatsNew.title,
-            if (state.changelogLoading) "Loading release history..." else "Changelog for available pre-releases",
+            "Loading release history…".takeIf { state.changelogLoading },
             Icons.Default.NewReleases,
             enabled = !state.changelogLoading,
             onClick = { onAction(SettingsAction.OpenChangelog) },
         )
         if (showDiagnostics) {
             SettingsRowDivider()
-            SettingsRow(
-                SettingDestinations.Diagnostics.title,
-                "Share recent errors to help fix a problem",
-                Icons.Default.BugReport,
-                onClick = { open(SettingsPage.DIAGNOSTICS) },
-            )
+            SettingsRow(SettingDestinations.Diagnostics.title, icon = Icons.Default.BugReport, onClick = { open(SettingsPage.DIAGNOSTICS) })
         }
     }
 }
@@ -279,7 +286,7 @@ private fun SettingsHomeSheet(
             SettingsSheet.SOURCE_MIX -> UnifiedSourceSettings(searchSources, state.settings.runtime) {
                 onAction(SettingsAction.SetSourceWeights(searchSources, it))
             }
-            SettingsSheet.PLAYBACK -> MediaPreferencesSection(state, onAction)
+            SettingsSheet.DOWNLOADS -> DownloadPreferencesSection(state, onAction)
             SettingsSheet.CONTROLS -> PreferencesSection(state, onAction)
         }
     }
@@ -364,15 +371,22 @@ private fun StoragePage(
     }
 }
 
+@Composable
+private fun BackupPage(backup: SettingsBackupEntry, onBack: () -> Unit) {
+    SettingsPageColumn {
+        SettingsHeader(SettingDestinations.Backup.title, onBack, SETTINGS_PATH)
+        SettingsGroup(null) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { backup.controls() }
+        }
+    }
+}
+
 /** Only reached when the library transfer tools, which include cache controls, are absent. */
 @Composable
 private fun FallbackCacheControls(state: SettingsUiState, onAction: (SettingsAction) -> Unit) {
     Text("Thumbnails: ${state.cacheSnapshot.thumbnailCount}")
     Text("Full images: ${state.cacheSnapshot.fullImageCount}")
-    Button(onClick = { onAction(SettingsAction.ToggleClearCacheOptions) }) {
-        Text(if (state.showClearCacheOptions) "Clear cache ▲" else "Clear cache ▼")
-    }
-    if (state.showClearCacheOptions) {
+    ExpandableSection("Clear cache", initiallyExpanded = false) {
         TextButton(
             modifier = Modifier.fillMaxWidth(),
             onClick = { onAction(SettingsAction.ClearThumbnailCache) },
@@ -468,6 +482,5 @@ internal fun sourceMixSummary(state: SettingsUiState, sources: Set<SourceKey>): 
     }
 }
 
-internal fun playbackSummary(state: SettingsUiState): String =
-    "Video ${videoQualityLabel(state.settings.viewer.videoQuality)} · " +
-        "Downloads ${videoQualityLabel(state.settings.cache.downloadQuality)}"
+internal fun downloadsSummary(state: SettingsUiState): String =
+    "${videoQualityLabel(state.settings.cache.downloadQuality)} quality"

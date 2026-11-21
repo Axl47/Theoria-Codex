@@ -23,11 +23,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.backup.AndroidBackupDocuments
-import com.theoriacodex.app.backup.AutoBackupControls
 import com.theoriacodex.app.backup.AutoBackupWorkflow
 import com.theoriacodex.app.backup.adoptAutoBackupFolder
 import com.theoriacodex.app.backup.releaseAutoBackupFolder
-import com.theoriacodex.app.backup.BackupControls
 import com.theoriacodex.app.backup.BackupDialogs
 import com.theoriacodex.app.backup.BackupViewModel
 import com.theoriacodex.app.backup.ProfileBackupActions
@@ -131,7 +129,7 @@ private fun AutoBackupFailureEffect(autoBackup: AutoBackupWorkflow?, onMessage: 
     val currentMessage by rememberUpdatedState(onMessage)
     LaunchedEffect(autoBackup) {
         autoBackup?.status?.map { it.failure }?.distinctUntilChanged()?.collect { failure ->
-            if (failure != null) currentMessage("Automatic backup failed. See Settings > Storage & app.")
+            if (failure != null) currentMessage("Automatic backup failed. See Settings > Backup.")
         }
     }
 }
@@ -158,12 +156,6 @@ internal fun LibraryTransferSettings(tools: LibraryTransferTools) {
             onClick = { tools.showDownloads = true },
             modifier = Modifier.weight(1f),
         )
-    }
-    val backupState by tools.backup.state.collectAsStateWithLifecycle()
-    BackupControls(backupState, tools.backup::showExportOptions, tools.chooseBackup)
-    tools.autoBackup?.let { owner ->
-        val status by owner.status.collectAsStateWithLifecycle()
-        AutoBackupControls(status, tools.chooseAutoBackupFolder, { owner.backUpNow() }, tools.turnOffAutoBackup)
     }
 }
 
@@ -209,7 +201,5 @@ internal fun LibraryTransferDialogs(tools: LibraryTransferTools, onOpenPost: sus
     }
     val backup = tools.backup
     val backupState by backup.state.collectAsStateWithLifecycle()
-    BackupDialogs(backupState, backup::dismissDialog, backup::includeRecents, backup::applyPreferences,
-        onExport = { backup.dismissDialog(); tools.chooseBackupDestination() }, onRestore = backup::restore,
-    )
+    BackupDialogs(backupState, backup::dismissDialog, backup::applyPreferences, backup::restore)
 }

@@ -293,17 +293,12 @@ class SettingsViewModel(
 
     private fun handleStorageAndUpdateAction(action: SettingsAction): Boolean {
         when (action) {
-            SettingsAction.ToggleClearCacheOptions -> updateState {
-                copy(showClearCacheOptions = !showClearCacheOptions)
-            }
             SettingsAction.ClearThumbnailCache -> launchMutation {
                 dependencies.cacheRepository.clearThumbnailCache()
-                updateState { copy(showClearCacheOptions = false) }
                 effectChannel.send(SettingsEffect.ThumbnailCacheCleared)
             }
             SettingsAction.ClearFullImageCache -> launchMutation {
                 dependencies.cacheRepository.clearFullImageCache()
-                updateState { copy(showClearCacheOptions = false) }
             }
             SettingsAction.OpenChangelog -> {
                 if (!state.value.changelogLoading) {

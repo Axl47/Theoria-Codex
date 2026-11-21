@@ -70,6 +70,7 @@ private fun destinationCommands(shell: TheoriaShell, hiddenTags: HiddenTagsOpene
     SettingDestinations.Sites to { shell.openSettings(SettingsPage.SITES) },
     SettingDestinations.HiddenTags to hiddenTags::openHiddenTags,
     SettingDestinations.Storage to { shell.openSettings(SettingsPage.STORAGE) },
+    SettingDestinations.Backup to { shell.openSettings(SettingsPage.BACKUP) },
     SettingDestinations.Stats to { shell.openSettings(SettingsPage.STATS) },
     (SettingDestinations.Diagnostics to { shell.openSettings(SettingsPage.DIAGNOSTICS) }).takeIf { shell.diagnosticsEntry != null },
     SettingDestinations.WhatsNew to { shell.owners.settings.onAction(SettingsAction.OpenChangelog) },

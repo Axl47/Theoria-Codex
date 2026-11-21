@@ -11,6 +11,9 @@ import com.theoriacodex.app.customsites.CustomSiteSummary
 import com.theoriacodex.app.customsites.CustomSitesController
 import com.theoriacodex.app.customsites.SitesRequest
 import com.theoriacodex.app.sourceauth.parseCredentialSnippet
+import com.theoriacodex.app.ui.undo.UndoAnchor
+import com.theoriacodex.app.ui.undo.UndoOffer
+import com.theoriacodex.app.ui.undo.UndoSlot
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.source.ProbeFailure
 import com.theoriacodex.domain.source.SiteCredentials
@@ -26,16 +29,23 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.time.Duration
 
 /**
  * Owner of Settings → Sites (plan C9). Turns [CustomSitesController] results into form stages and
  * plain messages; it never persists anything itself. Removing a site never touches library data.
+ * A removal is offered in [undo] and only happens when the offer expires, in [removalScope], which must
+ * outlive this owner so leaving Settings still completes it.
  */
 class CustomSitesViewModel(
     private val controller: CustomSitesController,
     coroutineScope: CoroutineScope? = null,
+    private val undo: UndoSlot = UndoSlot(),
+    removalScope: CoroutineScope? = null,
 ) : ViewModel() {
     private val scope = coroutineScope ?: viewModelScope
+    private val removalScope = removalScope ?: scope
+    private val liveEdits = SiteLiveEdits(scope, ::saveLive)
     private val mutableState = MutableStateFlow(
         CustomSitesUiState(sites = controller.sites.value, builtInSites = controller.builtInSites.value),
     )
@@ -108,13 +118,13 @@ class CustomSitesViewModel(
             is CustomSitesAction.OpenBuiltIn -> mutableState.update { it.copy(openBuiltIn = action.source, notice = null) }
             CustomSitesAction.CloseBuiltIn -> mutableState.update { it.copy(openBuiltIn = null) }
             is CustomSitesAction.SetAddress -> setAddress(action.value)
-            is CustomSitesAction.SetLabel -> setFields(ProbeReset.NEVER) { copy(label = action.value) }
+            is CustomSitesAction.SetLabel -> editField(ProbeReset.NEVER, TYPING_SAVE_DELAY) { copy(label = action.value) }
             is CustomSitesAction.SetUser -> setCredentialField(action.value) { copy(user = it) }
             is CustomSitesAction.SetApiKey -> setCredentialField(action.value) { copy(apiKey = it) }
-            is CustomSitesAction.SetUserAgent -> setFields(ProbeReset.ALWAYS) { copy(userAgent = action.value) }
-            is CustomSitesAction.SetReferer -> setFields(ProbeReset.ALWAYS) { copy(referer = action.value) }
+            is CustomSitesAction.SetUserAgent -> editField(ProbeReset.ALWAYS, TYPING_SAVE_DELAY) { copy(userAgent = action.value) }
+            is CustomSitesAction.SetReferer -> editField(ProbeReset.ALWAYS, TYPING_SAVE_DELAY) { copy(referer = action.value) }
             is CustomSitesAction.SetIncludeInUnifiedAndForYou ->
-                setFields(ProbeReset.NEVER) { copy(includeInUnifiedAndForYou = action.value) }
+                editField(ProbeReset.NEVER, Duration.ZERO) { copy(includeInUnifiedAndForYou = action.value) }
             CustomSitesAction.ShowCredentials -> updateAdd { copy(showCredentials = true) }
             is CustomSitesAction.SetClearCredentials -> updateEdit { copy(clearCredentials = action.value, message = null) }
             CustomSitesAction.Probe -> probe()
@@ -124,9 +134,7 @@ class CustomSitesViewModel(
             CustomSitesAction.SaveEdit -> saveEdit()
             is CustomSitesAction.Retest -> retest(action.sourceId)
             CustomSitesAction.TestAll -> testAll()
-            is CustomSitesAction.RequestRemove -> mutableState.update { it.copy(removeTargetId = action.sourceId, notice = null) }
-            CustomSitesAction.DismissRemove -> mutableState.update { if (it.removing) it else it.copy(removeTargetId = null) }
-            CustomSitesAction.ConfirmRemove -> confirmRemove()
+            is CustomSitesAction.Remove -> remove(action.sourceId)
             CustomSitesAction.DismissNotice -> mutableState.update { it.copy(notice = null) }
             is CustomSitesAction.StartVerification -> startVerification(action.host, action.afterRefusal)
             CustomSitesAction.CancelVerification -> endVerification()
@@ -285,6 +293,7 @@ class CustomSitesViewModel(
     }
 
     private fun openForm(form: SiteForm) {
+        liveEdits.flush()
         endVerification()
         formJob?.cancel()
         mutableState.update { it.copy(form = form, notice = null) }
@@ -308,6 +317,7 @@ class CustomSitesViewModel(
     }
 
     private fun closeForm() {
+        liveEdits.flush()
         endVerification()
         formJob?.cancel()
         mutableState.update { it.copy(form = null) }
@@ -332,6 +342,31 @@ class CustomSitesViewModel(
                 null -> null
             }
             current.copy(form = form)
+        }
+    }
+
+    /** Changes a field; on the Edit page the change is saved after [wait] (typing restarts the wait). */
+    private fun editField(reset: ProbeReset, wait: Duration, transform: SiteFields.() -> SiteFields) {
+        setFields(reset, transform)
+        val form = state.value.form as? SiteForm.Edit ?: return
+        if (form.saving) return
+        val site = state.value.sites.firstOrNull { it.sourceId == form.sourceId } ?: return
+        val headers = (form.fields.headers() as? FormInput.Ok)?.value
+        if (headers == null) updateEdit { copy(message = HEADER_ERROR_MESSAGE) }
+        liveEdit(site, form.fields, headers)?.let { liveEdits.schedule(form.sourceId, it, wait) }
+    }
+
+    /** Saves a live edit; a failure shows on the Edit page, or above the list once the page has closed. */
+    private suspend fun saveLive(sourceId: String, edit: CustomSiteEdit) {
+        val result = runCatchingPreservingCancellation { controller.update(sourceId, edit) }.getOrNull()
+        val message = if (result == null) UNEXPECTED_FAILURE_MESSAGE else mutationMessage(result)
+        mutableState.update { current ->
+            val editing = (current.form as? SiteForm.Edit)?.takeIf { it.sourceId == sourceId }
+            when {
+                editing != null -> current.copy(form = editing.copy(message = message))
+                message != null -> current.copy(notice = message)
+                else -> current
+            }
         }
     }
 
@@ -428,6 +463,7 @@ class CustomSitesViewModel(
         (stage as? AddStage.Reconnect)?.let { copy(stage = AddStage.Confirm(it.probe)) } ?: this
     }
 
+    /** Saves the API key section: new keys (checked right after) or clearing the saved ones. */
     private fun saveEdit() {
         val form = state.value.form as? SiteForm.Edit ?: return
         if (form.saving) return
@@ -437,18 +473,11 @@ class CustomSitesViewModel(
                 is FormInput.Invalid -> entered
             }
         }
-        val headers = form.fields.headers()
-        if (credentials !is FormInput.Ok || headers !is FormInput.Ok) {
-            val message = (credentials as? FormInput.Invalid ?: headers as? FormInput.Invalid)?.message
-            updateEdit { copy(message = message) }
+        if (credentials !is FormInput.Ok) {
+            updateEdit { copy(message = (credentials as FormInput.Invalid).message) }
             return
         }
-        val edit = CustomSiteEdit(
-            label = form.fields.label.trim(),
-            credentials = credentials.value,
-            headers = headers.value,
-            includeInUnifiedAndForYou = form.fields.includeInUnifiedAndForYou,
-        )
+        val edit = CustomSiteEdit(credentials = credentials.value)
         updateEdit { copy(saving = true, message = null) }
         scope.launch {
             val result = runCatchingPreservingCancellation { controller.update(form.sourceId, edit) }.getOrNull()
@@ -487,7 +516,7 @@ class CustomSitesViewModel(
     private fun testAll() {
         if (testAllJob?.isActive == true) return
         val builtIns = state.value.builtInSites
-        val added = state.value.sites
+        val added = state.value.shownSites
         val total = builtIns.size + added.size
         testAllJob = scope.launch {
             val builtInResults = builtIns.mapIndexed { index, site ->
@@ -516,22 +545,29 @@ class CustomSitesViewModel(
         mutableState.update { it.copy(retests = it.retests + (site.source.id to status)) }
     }
 
-    private fun confirmRemove() {
-        val target = state.value.removeTargetId ?: return
-        if (state.value.removing) return
-        mutableState.update { it.copy(removing = true) }
-        scope.launch {
-            val result = runCatchingPreservingCancellation { controller.remove(target) }.getOrNull()
-            mutableState.update { current ->
-                val removed = result == CustomSiteMutation.Success
-                val editingTarget = (current.form as? SiteForm.Edit)?.sourceId == target
-                current.copy(
-                    removeTargetId = null,
-                    removing = false,
-                    form = if (removed && editingTarget) null else current.form,
-                    notice = if (removed) null else result?.let(::mutationMessage) ?: UNEXPECTED_FAILURE_MESSAGE,
-                )
-            }
+    /**
+     * Hides the site at once and offers Undo in its row; the site and its keys are removed only when the
+     * offer expires, so Undo never has to write secrets back from memory.
+     */
+    private fun remove(sourceId: String) {
+        val site = state.value.sites.firstOrNull { it.sourceId == sourceId } ?: return
+        if ((state.value.form as? SiteForm.Edit)?.sourceId == sourceId) closeForm()
+        mutableState.update { it.copy(removingSiteIds = it.removingSiteIds + sourceId, notice = null) }
+        undo.offer(
+            removalScope,
+            UndoOffer(
+                label = "Removed ${site.label}",
+                anchor = UndoAnchor(SITES_UNDO_SCOPE, sourceId),
+                onExpire = { commitRemoval(sourceId) },
+            ) { mutableState.update { it.copy(removingSiteIds = it.removingSiteIds - sourceId) } },
+        )
+    }
+
+    private suspend fun commitRemoval(sourceId: String) {
+        val result = runCatchingPreservingCancellation { controller.remove(sourceId) }.getOrNull()
+        val failure = if (result == null) UNEXPECTED_FAILURE_MESSAGE else mutationMessage(result)
+        mutableState.update { current ->
+            current.copy(removingSiteIds = current.removingSiteIds - sourceId, notice = failure ?: current.notice)
         }
     }
 

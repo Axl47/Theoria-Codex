@@ -48,6 +48,7 @@ import com.theoriacodex.app.search.SearchViewModel
 import com.theoriacodex.app.settings.SettingsPage
 import com.theoriacodex.app.settings.SettingsScreen
 import com.theoriacodex.app.settings.SettingsDiagnosticsEntry
+import com.theoriacodex.app.settings.SettingsBackupEntry
 import com.theoriacodex.app.settings.SettingsSitesEntry
 import com.theoriacodex.app.settings.StatsActions
 import com.theoriacodex.app.settings.SettingsViewModel
@@ -408,6 +409,7 @@ internal fun SettingsDestinationStateBoundary(
     searchOwner: SearchViewModel?,
     storageSummary: String? = null,
     sites: SettingsSitesEntry? = null,
+    backup: SettingsBackupEntry? = null,
     statsActions: StatsActions = StatsActions(),
     diagnostics: SettingsDiagnosticsEntry? = null,
     storageTools: (@Composable () -> Unit)? = null,
@@ -424,7 +426,7 @@ internal fun SettingsDestinationStateBoundary(
         SettingsScreen(
             state = it, onAction = owner::onAction, statistics = statistics.value,
             searchSources = selectedSources.intersect(it.availableSources.toSet()),
-            storageSummary = storageSummary, sites = sites, statsActions = statsActions, diagnostics = diagnostics,
+            storageSummary = storageSummary, sites = sites, backup = backup, statsActions = statsActions, diagnostics = diagnostics,
             storageTools = storageTools, onClose = onClose, closesFrom = closesFrom,
         )
     }

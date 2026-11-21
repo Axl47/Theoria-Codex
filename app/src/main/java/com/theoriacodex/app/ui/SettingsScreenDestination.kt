@@ -8,6 +8,7 @@ import androidx.compose.runtime.snapshotFlow
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsPage
 import com.theoriacodex.app.settings.StatsActions
+import com.theoriacodex.app.settings.rememberSettingsBackupEntry
 import com.theoriacodex.app.settings.sites.rememberCustomSitesEntry
 import com.theoriacodex.app.ui.routes.SettingsDestinationStateBoundary
 import kotlinx.coroutines.flow.first
@@ -24,7 +25,8 @@ internal fun SettingsScreenDestination(shell: TheoriaShell) {
     LaunchedEffect(owner) { owner.onAction(SettingsAction.SettingsEntered) }
     SettingsDestinationStateBoundary(
         owner, shell.routes.search.current, libraryStorageSummary(shell.transfers),
-        sites = rememberCustomSitesEntry(shell.container),
+        sites = rememberCustomSitesEntry(shell.container, shell.scope),
+        backup = rememberSettingsBackupEntry(shell.transfers),
         statsActions = remember(shell) {
             StatsActions(shell::openStatisticsPost, shell::shareStats, shell::readStatsFile, shell::previewStatisticsPost, shell::downloadStats)
         },

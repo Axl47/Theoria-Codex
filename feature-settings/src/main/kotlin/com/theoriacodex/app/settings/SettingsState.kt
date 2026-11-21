@@ -1,6 +1,7 @@
 package com.theoriacodex.app.settings
 
 import androidx.compose.runtime.Composable
+import com.theoriacodex.app.backup.AutoBackupSummary
 import com.theoriacodex.app.diagnostics.DiagnosticSection
 import com.theoriacodex.app.statistics.StatsShareFile
 import com.theoriacodex.data.repository.AppSettings
@@ -16,7 +17,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 
 /** Pages inside Settings; held by the owner so other screens can open Settings at a page. */
-enum class SettingsPage { HOME, SITES, STORAGE, STATS, STATS_SHARE, STATS_COMPARE, DIAGNOSTICS }
+enum class SettingsPage { HOME, SITES, STORAGE, BACKUP, STATS, STATS_SHARE, STATS_COMPARE, DIAGNOSTICS }
 
 /**
  * What Sites shows of the accounts Settings owns: a built-in source's status line (null when it has no
@@ -46,6 +47,9 @@ class SettingsDiagnosticsEntry(
 )
 
 class SettingsSitesEntry(val summary: String, val page: @Composable (onBack: () -> Unit, accounts: BuiltInAccounts) -> Unit)
+
+/** The Settings home row and page for backups; [summary] is null when this build has no daily backup. */
+class SettingsBackupEntry(val summary: AutoBackupSummary?, val controls: @Composable () -> Unit)
 
 data class SettingsAccountUiState(
     val pixivStatusLabel: String = "Not connected",
@@ -77,7 +81,6 @@ data class SettingsUiState(
     val page: SettingsPage = SettingsPage.HOME,
     val accounts: SettingsAccountUiState = SettingsAccountUiState(),
     val profileDeleteTargetId: String? = null,
-    val showClearCacheOptions: Boolean = false,
     val changelogLoading: Boolean = false,
     val recoveredStores: List<CorruptionRecovery> = emptyList(),
     /** Someone else's stats file while it is being compared; deliberately never written to storage. */
@@ -106,7 +109,6 @@ sealed interface SettingsAction {
     data class SetCommentOrder(val order: com.theoriacodex.domain.model.CommentOrder) : SettingsAction
     data class SetViewerPlaybackMode(val mode: com.theoriacodex.domain.model.ViewerPlaybackMode) : SettingsAction
     data class SetScenarioPreset(val preset: ScenarioPreset) : SettingsAction
-    data object ToggleClearCacheOptions : SettingsAction
     data object ClearThumbnailCache : SettingsAction
     data object ClearFullImageCache : SettingsAction
     data object OpenChangelog : SettingsAction

@@ -21,15 +21,19 @@ data class CustomSitesUiState(
     val testProgress: SitesTestProgress? = null,
     /** The last finished Test all run's result line. */
     val testSummary: String? = null,
-    val removeTargetId: String? = null,
-    val removing: Boolean = false,
+    /** Sites removed but still offered for Undo; hidden from the list until the offer expires. */
+    val removingSiteIds: Set<String> = emptySet(),
     /** A short failure message shown above the list until the next action. */
     val notice: String? = null,
     /** The in-app browser check that is open, if any. */
     val verification: SiteVerification? = null,
 ) {
-    val removeTarget: CustomSiteSummary? get() = removeTargetId?.let { id -> sites.firstOrNull { it.sourceId == id } }
+    /** The added sites as the list shows them, without those waiting to be removed. */
+    val shownSites: List<CustomSiteSummary> get() = sites.filterNot { it.sourceId in removingSiteIds }
 }
+
+/** The undo scope of Settings → Sites; a removed site's offer is anchored at its row. */
+internal const val SITES_UNDO_SCOPE = "sites"
 
 /** Test all is on the [position]th of [total] sites, named [label]. */
 data class SitesTestProgress(val label: String, val position: Int, val total: Int)
@@ -138,9 +142,8 @@ sealed interface CustomSitesAction {
 
     data class Retest(val sourceId: String) : CustomSitesAction
     data object TestAll : CustomSitesAction
-    data class RequestRemove(val sourceId: String) : CustomSitesAction
-    data object DismissRemove : CustomSitesAction
-    data object ConfirmRemove : CustomSitesAction
+    /** Removes a site with Undo in its row; see [SITES_UNDO_SCOPE]. */
+    data class Remove(val sourceId: String) : CustomSitesAction
     data object DismissNotice : CustomSitesAction
 
     /**
