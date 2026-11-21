@@ -84,6 +84,7 @@ internal fun noticeLabel(notice: TriageNotice): String? = when (val decision = n
     is TriageDecision.Saved -> if (notice.failed) "Couldn't save" else "Saved to ${decision.codexName}"
     is TriageDecision.Hid -> if (notice.failed) "Couldn't hide" else "Hid ${tagLabel(decision.tag)}"
     is TriageDecision.Removed -> if (notice.failed) "Couldn't remove" else "Removed"
+    is TriageDecision.Kept -> "Kept"
     is TriageDecision.Skipped -> null
 }
 
@@ -91,7 +92,7 @@ internal fun noticeLabel(notice: TriageNotice): String? = when (val decision = n
 internal fun tagLabel(tag: String): String = tag.replace('_', ' ')
 
 private fun noticeAlignment(decision: TriageDecision): Alignment = when (decision) {
-    is TriageDecision.Liked -> Alignment.CenterEnd
+    is TriageDecision.Liked, is TriageDecision.Kept -> Alignment.CenterEnd
     is TriageDecision.Saved -> Alignment.TopCenter
     is TriageDecision.Hid -> Alignment.BottomCenter
     is TriageDecision.Skipped, is TriageDecision.Removed -> Alignment.CenterStart

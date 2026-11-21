@@ -52,11 +52,12 @@ class TriageDeckPresentationTest {
         assertEquals("60 / 60+", progressLabel(TriageDeckState(posts = posts, index = 60, canLoadMore = true)))
     }
 
-    @Test fun `likes, saves and hides are confirmed in place with display tags and a skip is not`() {
+    @Test fun `likes, saves, hides and keeps are confirmed in place with display tags and a skip is not`() {
         assertEquals("Liked", noticeLabel(TriageNotice(TriageDecision.Liked(post), failed = false)))
         assertEquals("Saved to Skies", noticeLabel(TriageNotice(TriageDecision.Saved(post, "Skies"), failed = false)))
         assertEquals("Hid wolf girl", noticeLabel(TriageNotice(TriageDecision.Hid(post, "wolf_girl"), failed = false)))
         assertNull(noticeLabel(TriageNotice(TriageDecision.Skipped(post), failed = false)))
+        assertEquals("Kept", noticeLabel(TriageNotice(TriageDecision.Kept(post), failed = false)))
     }
 
     @Test fun `a failed decision says so in the same place`() {

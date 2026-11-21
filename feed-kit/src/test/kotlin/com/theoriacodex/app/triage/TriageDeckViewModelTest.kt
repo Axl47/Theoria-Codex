@@ -221,10 +221,24 @@ class TriageDeckViewModelTest {
         assertEquals(listOf(posts[0].id), removal.restored)
     }
 
-    @Test fun `left removes only in a deck that removes`() {
+    @Test fun `on a Codex, keep writes nothing, says Kept at once, and undo brings the card back`() = runTest {
+        val removal = FakeRemoval()
+        val deck = removingDeck(removal)
+        deck.decideCurrent(TriageChoice.Keep)
+        assertEquals(1, deck.state.value.index)
+        assertEquals(TriageNotice(TriageDecision.Kept(posts[0]), failed = false), deck.state.value.notice)
+        deck.undo()
+        assertEquals(0, deck.state.value.index)
+        assertNull(deck.state.value.notice)
+        assertTrue(removal.removed.isEmpty() && removal.restored.isEmpty())
+        assertTrue(actions.liked.isEmpty() && actions.unliked.isEmpty() && quickSave.saved.isEmpty())
+    }
+
+    @Test fun `a deck that removes keeps on right and removes on left, others like and skip`() {
         assertEquals(TriageChoice.Remove, choiceFor(SwipeDirection.Left, saveTarget = null, hideTag = null, removes = true))
+        assertEquals(TriageChoice.Keep, choiceFor(SwipeDirection.Right, saveTarget = null, hideTag = null, removes = true))
         assertEquals(TriageChoice.Skip, choiceFor(SwipeDirection.Left, saveTarget = null, hideTag = null))
-        assertEquals(TriageChoice.Like, choiceFor(SwipeDirection.Right, saveTarget = null, hideTag = null, removes = true))
+        assertEquals(TriageChoice.Like, choiceFor(SwipeDirection.Right, saveTarget = null, hideTag = null))
     }
 
     @Test fun `the deck asks a live feed for its next page near the end, once per page loaded`() = runTest {
