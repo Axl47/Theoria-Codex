@@ -7,6 +7,7 @@ import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,6 +31,9 @@ class TriageDeckViewModel(
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(TriageDeckState())
     val state: StateFlow<TriageDeckState> = mutableState.asStateFlow()
+
+    /** The active profile's hidden tags, which the deck does not offer to hide again. */
+    val hiddenTags: Flow<Set<HiddenTag>> get() = actions.hiddenTags
 
     private var pagedAtSize = -1
 

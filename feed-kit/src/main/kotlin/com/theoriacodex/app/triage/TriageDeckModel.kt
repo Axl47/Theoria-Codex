@@ -1,6 +1,7 @@
 package com.theoriacodex.app.triage
 
 import com.theoriacodex.app.codex.QuickSaveRecord
+import com.theoriacodex.app.codex.SaveSuggestion
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
@@ -96,4 +97,16 @@ data class TriageDeckState(
 
     /** Every post is decided and the origin feed has no more. */
     val finished: Boolean get() = loaded && index >= posts.size && !canLoadMore
+}
+
+/**
+ * What a committed swipe in [direction] asks for, given the Codex it would save to and the tag it would hide.
+ * Null when it asks for a save and there is no Codex to save to, which the screen answers by opening the picker.
+ * A downward swipe on a post with nothing to hide is a skip.
+ */
+internal fun choiceFor(direction: SwipeDirection, saveTarget: SaveSuggestion?, hideTag: String?): TriageChoice? = when (direction) {
+    SwipeDirection.Right -> TriageChoice.Like
+    SwipeDirection.Left -> TriageChoice.Skip
+    SwipeDirection.Up -> saveTarget?.let { TriageChoice.Save(it.codexId, it.name) }
+    SwipeDirection.Down -> hideTag?.let(TriageChoice::Hide) ?: TriageChoice.Skip
 }
