@@ -1,6 +1,7 @@
 package com.theoriacodex.app.media
 
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.ui.undo.UndoSlot
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.InMemoryCodexRepository
@@ -32,7 +33,7 @@ class OfflineStorageViewModelTest {
 
     @After fun tearDown() { scope.cancel() }
 
-    @Test fun `removal requires confirmation and preserves bytes retained by another collection`() = runBlocking {
+    @Test fun `removal hides the row until undo or expiry and preserves bytes retained by another Codex`() = runBlocking {
         withTimeout(10_000) {
             codices.ensureCodex("a", "First")
             codices.ensureCodex("b", "Second")
@@ -46,20 +47,23 @@ class OfflineStorageViewModelTest {
             assertEquals(1, initial.offline.postCount)
             assertEquals(1, initial.offline.mediaCount)
 
-            owner.requestRemove("codex:a")
-            owner.state.first { it.pendingRemoval != null }
-            assertNotNull(coordinator.find(post.id))
-            owner.dismissRemoval()
-            owner.state.first { it.pendingRemoval == null }
+            val undo = UndoSlot()
+            owner.remove("codex:a", undo)
+            owner.state.first { it.owners.map(OfflineStorageOwner::id) == listOf("codex:b") }
+            assertEquals(offlineOwnerUndoAnchor("codex:a"), undo.offer.value?.anchor)
+            undo.act(checkNotNull(undo.offer.value))
+            owner.state.first { it.owners.size == 2 }
             assertEquals(setOf("codex:a", "codex:b"), coordinator.store.snapshot.value.postsByOwner.keys)
-            owner.requestRemove("codex:a")
-            owner.confirmRemoval()
-            owner.state.first { !it.working && it.owners.map(OfflineStorageOwner::id) == listOf("codex:b") }
+
+            owner.remove("codex:a", undo)
+            undo.expire(LIBRARY_TRANSFERS_UNDO_SCOPE)
+            owner.state.first { it.hiddenOwners.isEmpty() && it.owners.map(OfflineStorageOwner::id) == listOf("codex:b") }
+            assertEquals(setOf("codex:b"), coordinator.store.snapshot.value.postsByOwner.keys)
             assertNotNull(coordinator.find(post.id))
 
-            owner.requestClearOffline()
-            owner.confirmRemoval()
-            owner.state.first { !it.working && it.offline.postCount == 0 }
+            owner.removeAll(undo)
+            undo.expire(LIBRARY_TRANSFERS_UNDO_SCOPE)
+            owner.state.first { !it.working && it.hiddenOwners.isEmpty() && it.offline.postCount == 0 }
             assertNull(coordinator.find(post.id))
         }
     }
@@ -87,7 +91,7 @@ class OfflineStorageViewModelTest {
         }
     }
 
-    @Test fun `collection preparation survives sheet dismissal and publishes coordinator progress`() = runBlocking {
+    @Test fun `Codex preparation publishes coordinator progress and the ring state without opening a sheet`() = runBlocking {
         withTimeout(10_000) {
             codices.ensureCodex("a", "First")
             codices.addItems("a", listOf(post()))
@@ -106,12 +110,12 @@ class OfflineStorageViewModelTest {
             started.await()
             val preparing = owner.state.first { it.owners.any(OfflineStorageOwner::preparing) }
             assertEquals("First", preparing.owners.single().name)
-            owner.dismiss()
             release.complete(Unit)
             val completed = owner.state.first { it.owners.singleOrNull()?.job?.isRunning == false && it.offline.postCount == 1 }
             assertEquals(1, completed.offline.postCount)
             assertEquals(1, completed.owners.single().job?.completedPosts)
             assertTrue(!completed.isOpen)
+            assertEquals(CodexOfflineState(fraction = 1f), owner.state.first { "a" in it.codexStates }.codexStates["a"])
         }
     }
 
@@ -135,10 +139,12 @@ class OfflineStorageViewModelTest {
             val owner = owner(coordinator, repository)
             owner.makeAvailableOffline("a")
             started.await()
-            owner.requestClearOffline()
-            owner.confirmRemoval()
+            owner.state.first { it.owners.any(OfflineStorageOwner::preparing) }
+            val undo = UndoSlot()
+            owner.removeAll(undo)
+            undo.expire(LIBRARY_TRANSFERS_UNDO_SCOPE)
             cancelled.await()
-            owner.state.first { !it.working && it.message == "Offline copies removed." }
+            owner.state.first { !it.working && it.hiddenOwners.isEmpty() }
             release.complete(Unit)
             assertTrue(coordinator.jobs.value.isEmpty())
             assertTrue(owner.state.value.preparingOwners.isEmpty())

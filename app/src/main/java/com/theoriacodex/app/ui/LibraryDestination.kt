@@ -55,7 +55,10 @@ internal fun LibraryDestination(shell: TheoriaShell) {
     val section by store.section.collectAsStateWithLifecycle()
     val marked = if (rememberSavedNewPosts(shell.data).isEmpty()) emptySet() else setOf(LibrarySection.Saved)
     val header: LibrarySectionHeader = { actions ->
-        LibraryHeader(section, store::select, onOpenSettings = { shell.openSettings() }, marked = marked, actions = actions)
+        LibraryHeader(
+            section, store::select, onOpenSettings = { shell.openSettings() }, marked = marked,
+            transfers = { LibraryTransfersHeaderButton(shell.transfers) }, actions = actions,
+        )
     }
     Box(Modifier.fillMaxSize()) {
         when (section) {
