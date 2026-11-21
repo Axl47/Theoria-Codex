@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.unit.Velocity
@@ -55,14 +56,49 @@ internal class TriageDrag {
     }
 }
 
+/** What a swipe must travel or reach to commit, and how far a vertical pull must go before its targets show. */
+internal class SwipeThresholds(val commitPx: Float, val flingPx: Float, val cuePx: Float)
+
 /**
- * Lets a finger drag [drag] around inside this node and reports its release velocity. [windowOrigin] is this
- * node's top-left in the window, which turns the node's pointer positions into window coordinates.
+ * What a finished drag does. Released ([velocity] non-null) in a direction [choose] gives a choice for, the card
+ * flies off and [onDecide] commits it; released toward a save with nowhere to save, it springs back and
+ * [onNothingToSaveTo] runs. Anything else springs back, and so does every cancelled drag ([velocity] null), however
+ * far it went: only a release commits. [choose] may wait, and the card stays where it was let go meanwhile.
+ */
+internal suspend fun TriageDrag.release(
+    velocity: Velocity?,
+    thresholds: SwipeThresholds,
+    area: Size,
+    choose: suspend (SwipeDirection) -> TriageChoice?,
+    onDecide: (TriageChoice) -> Unit,
+    onNothingToSaveTo: () -> Unit,
+) {
+    val direction = velocity?.let { swipeDirection(offset.x, offset.y, it.x, it.y, thresholds.commitPx, thresholds.flingPx) }
+    val choice = direction?.let { choose(it) }
+    if (direction == null || choice == null) {
+        if (direction != null) onNothingToSaveTo()
+        moveTo(Offset.Zero, fly = false)
+        return
+    }
+    val exit = when (direction) {
+        SwipeDirection.Right -> Offset(area.width, offset.y)
+        SwipeDirection.Left -> Offset(-area.width, offset.y)
+        SwipeDirection.Up -> Offset(offset.x, -area.height)
+        SwipeDirection.Down -> Offset(offset.x, area.height)
+    }
+    moveTo(exit, fly = true)
+    onDecide(choice)
+}
+
+/**
+ * Lets a finger drag [drag] around inside this node and reports how it ended: the release velocity, or null when
+ * the gesture was cancelled. [windowOrigin] is this node's top-left in the window, which turns the node's pointer
+ * positions into window coordinates.
  */
 internal fun Modifier.triageSwipe(
     drag: TriageDrag,
     windowOrigin: () -> Offset,
-    onRelease: (Velocity) -> Unit,
+    onEnd: (Velocity?) -> Unit,
 ): Modifier = pointerInput(drag) {
     val tracker = VelocityTracker()
     detectDragGestures(
@@ -76,11 +112,11 @@ internal fun Modifier.triageSwipe(
         },
         onDragEnd = {
             drag.lift()
-            onRelease(tracker.calculateVelocity())
+            onEnd(tracker.calculateVelocity())
         },
         onDragCancel = {
             drag.lift()
-            onRelease(Velocity.Zero)
+            onEnd(null)
         },
     )
 }

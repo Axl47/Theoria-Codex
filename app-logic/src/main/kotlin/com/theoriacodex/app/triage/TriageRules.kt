@@ -1,8 +1,9 @@
 package com.theoriacodex.app.triage
 
 import com.theoriacodex.app.recommend.LikedTagCounts
-import com.theoriacodex.app.recommend.postTagSignals
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostTaxonomyTerm
+import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import kotlin.math.abs
 
@@ -41,9 +42,10 @@ fun swipeDirection(
 }
 
 /**
- * The tags the deck offers to hide for [post], the ones the profile's Likes show least interest in first, at most
- * [limit]. [excluded] holds tags that must not be offered (the deck's own query and tags already hidden), in any
- * spelling.
+ * The tags the deck offers to hide for [post], at most [limit]: the ones the profile's Likes carry least first.
+ * Among equals, which on an unfamiliar post is every tag, a content tag comes before one the post's taxonomy marks
+ * as an artist, character, series, group, type, language, meta or rating tag, and then the post's own order holds.
+ * [excluded] holds tags that must not be offered (the deck's own query and tags already hidden), in any spelling.
  */
 fun hideCandidates(
     post: Post,
@@ -52,13 +54,28 @@ fun hideCandidates(
     limit: Int = HIDE_CANDIDATE_LIMIT,
 ): List<String> {
     val skipped = excluded.mapTo(mutableSetOf(), ::normalizeMatchToken)
-    return postTagSignals(post, likedTagCounts).asReversed()
-        .map { signal -> signal.tag }
+    val nonContent = post.taxonomy.filterNot(PostTaxonomyTerm::isContentTag).mapTo(mutableSetOf()) { normalizeMatchToken(it.value) }
+    return post.canonicalTags.ifEmpty { post.rawTags }
+        .filter(String::isNotBlank)
+        .distinctBy(::normalizeMatchToken)
         .filter { tag -> normalizeMatchToken(tag) !in skipped }
+        .sortedWith(compareBy({ likedTagCounts.counts[normalizeMatchToken(it)] ?: 0 }, { normalizeMatchToken(it) in nonContent }))
         .take(limit)
 }
 
+/** A general tag about what the post shows, rather than who made it, what it is from, or how it is filed. */
+private fun PostTaxonomyTerm.isContentTag(): Boolean =
+    facet == SearchFacet.TAG && sourceNamespace?.lowercase() !in NON_CONTENT_NAMESPACES
+
+/** Tag namespaces sources use for tags that say nothing about the content. */
+private val NON_CONTENT_NAMESPACES =
+    setOf("artist", "character", "copyright", "parody", "group", "language", "category", "meta", "rating")
+
 const val HIDE_CANDIDATE_LIMIT = 3
+
+/** Whether [this] post carries one of [tokens], which are spelled as [normalizeMatchToken] spells them. */
+fun Post.carriesAnyTag(tokens: Set<String>): Boolean =
+    tokens.isNotEmpty() && (canonicalTags + rawTags).any { tag -> normalizeMatchToken(tag) in tokens }
 
 /** A drag's speed counts as this much extra travel per px/s when picking its axis. */
 private const val VELOCITY_REACH_SECONDS = 0.1f

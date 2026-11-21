@@ -63,6 +63,20 @@ class QuickSaveViewModelTest {
         assertEquals(listOf(kept.id), codices.observeCodexItems("target").first().map { it.postId })
     }
 
+    @Test fun `undoing an earlier record removes only its post and keeps the newer save as the last`() = runTest(dispatcher) {
+        codices.ensureCodex("target", "Skies")
+        val later = testPost(sourcePostId = "later")
+        val owner = owner()
+        val first = requireNotNull(owner.quickSave(post, "target", fromForYou = false))
+        val second = requireNotNull(owner.quickSave(later, "target", fromForYou = false))
+
+        owner.undoQuickSave(first)
+        advanceUntilIdle()
+
+        assertEquals(second, owner.lastQuickSave.value)
+        assertEquals(listOf(later.id), codices.observeCodexItems("target").first().map { it.postId })
+    }
+
     @Test fun `a save that added nothing cannot be undone`() = runTest(dispatcher) {
         codices.ensureCodex("target", "Skies")
         codices.addItem("target", post)
