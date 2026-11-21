@@ -202,9 +202,13 @@ class OfflineStorageViewModel(
         removals.remove(owner, "Removed ${row.name}", lifetime)
     }
 
-    /** Removes every offline copy as deferred destruction, like [removeDeferred]. */
+    /**
+     * Removes every offline copy as deferred destruction, like [removeDeferred]. It takes over the single removals
+     * still waiting, so its one Undo puts every copy back and no single Undo is left to outlive the copies it names.
+     */
     fun removeAll() {
         if (state.value.owners.isEmpty() && state.value.offline.bytes == 0L) return
+        removals.pending.value.keys.forEach(removals::undo)
         removals.remove(OFFLINE_ALL_REMOVAL, "Removed all offline copies")
     }
 

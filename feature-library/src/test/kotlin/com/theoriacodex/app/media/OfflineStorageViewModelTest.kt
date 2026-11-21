@@ -162,6 +162,29 @@ class OfflineStorageViewModelTest {
         }
     }
 
+    @Test fun `Remove all takes over a waiting single removal so one Undo puts every copy back`() = runBlocking {
+        withTimeout(10_000) {
+            codices.ensureCodex("a", "First")
+            codices.ensureCodex("b", "Second")
+            val coordinator = coordinator()
+            val first = post("first")
+            val second = post("second")
+            coordinator.store.save(first, first.media, "codex:a") { _, file -> file.writeText("media") }
+            coordinator.store.save(second, second.media, "codex:b") { _, file -> file.writeText("media") }
+            val owner = owner(coordinator)
+            owner.state.first { it.owners.size == 2 }
+
+            owner.removeDeferred("codex:a", UndoLifetime.UntilLeft)
+            owner.state.first { it.owners.size == 1 }
+            owner.removeAll()
+            assertEquals(setOf(OFFLINE_ALL_REMOVAL), owner.state.first { it.owners.isEmpty() }.pendingRemovals.keys)
+            owner.actOnRemoval(OFFLINE_ALL_REMOVAL)
+            val restored = owner.state.first { it.owners.size == 2 }
+            assertTrue(restored.pendingRemovals.isEmpty())
+            assertEquals(setOf("codex:a", "codex:b"), coordinator.store.snapshot.value.postsByOwner.keys)
+        }
+    }
+
     @Test fun `making an empty Codex available offline reports why it could not start`() = runBlocking {
         withTimeout(10_000) {
             codices.ensureCodex("a", "First")
