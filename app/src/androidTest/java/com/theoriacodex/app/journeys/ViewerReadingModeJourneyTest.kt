@@ -47,7 +47,8 @@ class ViewerReadingModeJourneyTest : AppJourneyFixture() {
         coldGraphRelaunch()
         showGallery()
         compose.waitUntil(10_000) { stripPageShown() }
-        compose.onRoot().performTouchInput { swipeLeft() }
+        // Starts inside the screen: a swipe from the edge is the system's Back gesture, which the Viewer leaves alone.
+        compose.onRoot().performTouchInput { swipeLeft(startX = width * 0.8f, endX = width * 0.2f) }
         compose.waitUntil(10_000) { !stripPageShown() }
     }
 
