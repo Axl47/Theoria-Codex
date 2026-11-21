@@ -9,12 +9,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.feed.FeedPageDemandInput
-import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.ui.components.DismissibleFailure
 import com.theoriacodex.app.ui.components.FeedContinueLoading
+import com.theoriacodex.app.ui.components.FeedView
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.app.ui.components.rememberFeedPageDemand
 import com.theoriacodex.domain.model.Post
@@ -25,36 +24,31 @@ internal fun LiveCodexHeader(
     contextKey: String,
     owner: LiveCodexFeedOwner,
     labels: Map<String, String>,
-    visiblePosts: List<Post>,
+    feed: FeedView,
     posts: List<Post>,
-    filters: CodexCollectionFilters,
-    durationsBlockPaging: Boolean,
     gridState: LazyStaggeredGridState,
     onBack: () -> Unit,
     manageLabel: String,
     onManage: () -> Unit,
 ) {
     val state = owner.state.collectAsStateWithLifecycle().value
-    SecondaryScreenAppBar(title = title, subtitle = "${visiblePosts.size} posts", onBack = onBack,
+    SecondaryScreenAppBar(title = title, subtitle = "${feed.visiblePosts.size} posts", onBack = onBack,
         onTitleLongPress = onManage) {
         TextButton(onClick = onManage) { Text(manageLabel) }
         IconButton(enabled = !state.loading, onClick = owner::refresh) {
             Icon(Icons.Default.Refresh, contentDescription = "Refresh $title")
         }
     }
-    val canonicalIndices = remember(posts, visiblePosts) {
-        val byId = posts.mapIndexed { index, post -> post.id to index }.toMap()
-        visiblePosts.map { byId.getValue(it.id) }
-    }
+    // The grid shows the feed's projection, which places an open related shelf among the posts.
     val demand = rememberFeedPageDemand(
         input = FeedPageDemandInput(
             contextKey = contextKey, completedGeneration = state.generation,
-            canonicalCount = posts.size, visibleCount = visiblePosts.size,
-            canLoadMore = state.canLoadMore, paging = state.loading, durationsBlockPaging = durationsBlockPaging,
+            canonicalCount = posts.size, visibleCount = feed.visiblePosts.size,
+            canLoadMore = state.canLoadMore, paging = state.loading, durationsBlockPaging = feed.durations.blocksPaging,
         ),
-        filters = SearchVisibilityFilters(animatedOnly = filters.animatedOnly, animatedDurationRange = filters.animatedDurationRange),
+        filters = feed.filters,
         gridState = gridState,
-        canonicalIndexForVisibleItems = { indices -> indices.mapNotNull(canonicalIndices::getOrNull).maxOrNull() },
+        projection = feed.related.projection,
         onLoadNextPage = owner::loadMore,
     )
     LiveCodexFailures(state.errors, labels, title, manageLabel, retryEnabled = !state.loading, onRetry = owner::retry)

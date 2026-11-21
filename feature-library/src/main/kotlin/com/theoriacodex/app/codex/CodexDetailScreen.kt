@@ -112,7 +112,7 @@ fun CodexDetailScreen(
     onDeleteCodex: () -> Unit,
     isLikesCodex: Boolean,
     onTitleLongPress: (() -> Unit)? = null,
-    customHeader: (@Composable (List<Post>, CodexCollectionFilters, Boolean, LazyStaggeredGridState) -> Unit)? = null,
+    customHeader: (@Composable (FeedView, LazyStaggeredGridState) -> Unit)? = null,
     customFilters: (@Composable (() -> Unit) -> Unit)? = null,
     customFiltersActive: Boolean = false,
     emptyMessage: String? = null,
@@ -201,7 +201,7 @@ private fun CodexDetailBody(
     feed: FeedView,
     related: RelatedShelfBinding?,
     filters: CodexCollectionFilters,
-    customHeader: (@Composable (List<Post>, CodexCollectionFilters, Boolean, LazyStaggeredGridState) -> Unit)?,
+    customHeader: (@Composable (FeedView, LazyStaggeredGridState) -> Unit)?,
     customFiltersActive: Boolean,
     editSelection: CodexEditSelection,
     onEditSelectionChange: (CodexEditSelection) -> Unit,
@@ -227,7 +227,7 @@ private fun CodexDetailBody(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (customHeader != null) {
-            customHeader(feed.visiblePosts, filters, feed.durations.blocksPaging, gridState)
+            customHeader(feed, gridState)
         } else CodexEditableHeader(
             codexName, posts, feed.visiblePosts, filters.isActive || customFiltersActive, editSelection, isLikesCodex,
             onEditSelectionChange, onTitleLongPress, onBack, onAddPostsToAnotherCodex, onRemovePosts, onDeleteCodex,
