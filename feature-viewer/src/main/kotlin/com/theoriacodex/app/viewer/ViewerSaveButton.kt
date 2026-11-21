@@ -68,6 +68,7 @@ import com.theoriacodex.app.ui.components.CollectTargets
 import com.theoriacodex.app.ui.components.CollectTargetsLayout
 import com.theoriacodex.app.ui.components.CollectTargetsState
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
+import com.theoriacodex.app.ui.navigation.LocalNewCodexOpener
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import kotlinx.coroutines.delay
@@ -88,11 +89,13 @@ internal class ViewerSaveFanState {
 
 /**
  * The dock's Save button for [post]. Tap saves to the top suggested Codex and then offers Undo for a few seconds; hold
- * opens [fan], where sliding onto a Codex saves there and releasing anywhere else opens the full picker ([onOpenPicker]).
+ * opens [fan], where sliding onto a Codex saves there, New names a new Codex, and releasing anywhere else opens the full
+ * picker ([onOpenPicker]). With no Codex at all, a tap names a new one.
  */
 @Composable
 internal fun ViewerSaveButton(post: Post, context: ViewerSaveContext, fan: ViewerSaveFanState, onOpenPicker: () -> Unit) {
     val quickSave = LocalQuickSave.current
+    val newCodex = LocalNewCodexOpener.current
     val suggestions = rememberSettledSaveSuggestions(quickSave, post, context.query)
     val lastSave by quickSave.lastQuickSave.collectAsStateWithLifecycle()
     val state = viewerSaveButtonState(post.id, suggestions, lastSave, rememberSavedUndoClock(lastSave))
@@ -105,6 +108,7 @@ internal fun ViewerSaveButton(post: Post, context: ViewerSaveContext, fan: Viewe
             }
             ViewerSaveCommand.Undo -> quickSave.undoLastQuickSave()
             ViewerSaveCommand.OpenPicker -> onOpenPicker()
+            ViewerSaveCommand.NewCodex -> newCodex.openNewCodex(post)
         }
     }
     val haptics = LocalHapticFeedback.current

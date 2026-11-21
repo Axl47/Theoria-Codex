@@ -45,15 +45,17 @@ class ViewerSaveButtonModelTest {
     }
 
     @Test
-    fun `with no Codex to suggest, or none loaded yet, a tap opens the picker`() {
+    fun `with no Codex at all a tap names a new one, and with none to suggest or none loaded it opens the picker`() {
         val noCodices = viewerSaveButtonState(art.id, SaveSuggestions.Empty, null, 0L)
         assertEquals(ViewerSaveButtonState.NoTarget(inAnyCodex = false), noCodices)
-        assertEquals(ViewerSaveCommand.OpenPicker, noCodices.tapCommand())
+        assertEquals(ViewerSaveCommand.NewCodex, noCodices.tapCommand())
+        val inEveryCodex = viewerSaveButtonState(art.id, SaveSuggestions(emptyList(), inAnyCodex = true), null, 0L)
+        assertEquals(ViewerSaveCommand.OpenPicker, inEveryCodex.tapCommand())
         assertEquals(ViewerSaveCommand.OpenPicker, viewerSaveButtonState(art.id, null, null, 0L).tapCommand())
     }
 
     @Test
-    fun `the fan holds the next three suggestions then New, and only a Codex target quick-saves`() {
+    fun `the fan holds the next three suggestions then New, and releasing on New names a new Codex`() {
         val fan = viewerSaveFanTargets(suggestions("a", "b", "c", "d", "e"))
         assertEquals(
             listOf("b", "c", "d").map { ViewerSaveFanTarget.Codex(suggestion(it)) } + ViewerSaveFanTarget.New,
@@ -61,7 +63,7 @@ class ViewerSaveButtonModelTest {
         )
         assertEquals(listOf(ViewerSaveFanTarget.New), viewerSaveFanTargets(null))
         assertEquals(ViewerSaveCommand.QuickSave("b"), viewerSaveFanRelease(fan.first()))
-        assertEquals(ViewerSaveCommand.OpenPicker, viewerSaveFanRelease(ViewerSaveFanTarget.New))
+        assertEquals(ViewerSaveCommand.NewCodex, viewerSaveFanRelease(ViewerSaveFanTarget.New))
         assertEquals(ViewerSaveCommand.OpenPicker, viewerSaveFanRelease(null))
     }
 }

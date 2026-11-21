@@ -28,8 +28,11 @@ internal sealed interface ViewerSaveCommand {
     data class QuickSave(val codexId: String) : ViewerSaveCommand
     data object Undo : ViewerSaveCommand
 
-    /** The full Save-to-Codex picker, which also creates Codices. */
+    /** The full Save-to-Codex picker. */
     data object OpenPicker : ViewerSaveCommand
+
+    /** Names a new Codex and saves the post into it. */
+    data object NewCodex : ViewerSaveCommand
 }
 
 /** A target in the Save button's hold fan: one more suggestion, or a new Codex. */
@@ -61,17 +64,20 @@ internal fun viewerSaveButtonState(
 internal fun ViewerSaveButtonState.tapCommand(): ViewerSaveCommand = when (this) {
     is ViewerSaveButtonState.Suggest -> ViewerSaveCommand.QuickSave(target.codexId)
     is ViewerSaveButtonState.Saved -> if (record.undoable) ViewerSaveCommand.Undo else ViewerSaveCommand.OpenPicker
-    ViewerSaveButtonState.Loading, is ViewerSaveButtonState.NoTarget -> ViewerSaveCommand.OpenPicker
+    ViewerSaveButtonState.Loading -> ViewerSaveCommand.OpenPicker
+    // Suggestions never include Likes, so with none and the post in no Codex, the profile has no Codex yet.
+    is ViewerSaveButtonState.NoTarget -> if (inAnyCodex) ViewerSaveCommand.OpenPicker else ViewerSaveCommand.NewCodex
 }
 
 /** The hold fan: the suggestions after the top one (at most three), then New. */
 internal fun viewerSaveFanTargets(suggestions: SaveSuggestions?): List<ViewerSaveFanTarget> =
     suggestions?.targets.orEmpty().drop(1).take(VIEWER_SAVE_FAN_CODICES).map(ViewerSaveFanTarget::Codex) + ViewerSaveFanTarget.New
 
-/** Releasing the fan on [target] saves there; on New or off every target it opens the full picker. */
+/** Releasing the fan on [target] saves there, or on New names a new Codex; off every target it opens the full picker. */
 internal fun viewerSaveFanRelease(target: ViewerSaveFanTarget?): ViewerSaveCommand = when (target) {
     is ViewerSaveFanTarget.Codex -> ViewerSaveCommand.QuickSave(target.suggestion.codexId)
-    ViewerSaveFanTarget.New, null -> ViewerSaveCommand.OpenPicker
+    ViewerSaveFanTarget.New -> ViewerSaveCommand.NewCodex
+    null -> ViewerSaveCommand.OpenPicker
 }
 
 private const val VIEWER_SAVE_FAN_CODICES = 3
