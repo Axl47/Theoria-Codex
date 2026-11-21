@@ -4,6 +4,8 @@ import com.theoriacodex.app.recommend.LikedTagCounts
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.PostTaxonomyTerm
+import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -40,8 +42,20 @@ class TriageRulesTest {
 
     private val counts = LikedTagCounts(mapOf("cat" to 6, "sky" to 3), likes = 20)
 
-    @Test fun `hide candidates start with the tag the Likes show least interest in`() {
-        assertEquals(listOf("dog", "tree", "sky"), hideCandidates(post("cat", "sky", "tree", "dog"), counts, emptyList()))
+    @Test fun `hide candidates start with the tags the Likes carry least, in the post's order among equals`() {
+        assertEquals(listOf("tree", "dog", "sky"), hideCandidates(post("cat", "sky", "tree", "dog"), counts, emptyList()))
+    }
+
+    @Test fun `among equals a content tag beats artist, meta and rating tags`() {
+        val tagged = post("artist_name", "highres", "rating_e", "wolf").copy(
+            taxonomy = listOf(
+                PostTaxonomyTerm("artist_name", SearchFacet.ARTIST),
+                PostTaxonomyTerm("highres", SearchFacet.TAG, "meta"),
+                PostTaxonomyTerm("rating_e", SearchFacet.TAG, "rating"),
+                PostTaxonomyTerm("wolf", SearchFacet.TAG, "general"),
+            ),
+        )
+        assertEquals(listOf("wolf", "artist_name", "highres"), hideCandidates(tagged, counts, emptyList()))
     }
 
     @Test fun `hide candidates skip query tags and hidden tags in any spelling`() {
