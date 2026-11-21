@@ -315,11 +315,6 @@ private fun ViewerVideoCommands(state: ViewerVideoState, controls: ViewerRendere
             state.setPlaying(controls.isActive && controls.isPlaying)
         }
     }
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-    LaunchedEffect(state.player, controls.isActive, controls.isPlaying, state.failed) {
-        state.setPlaying(controls.isActive && controls.isPlaying && !state.failed &&
-            lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
-    }
     ViewerSeekJumps(controls.seekJumpSerial, controls.seekJumpDeltaMs, { controls.isActive && !state.failed && !state.scrubbing }, state::jump)
 }
 
@@ -328,6 +323,9 @@ private fun ViewerVideoLifecycle(state: ViewerVideoState, controls: ViewerRender
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
     DisposableEffect(owner, state.player, controls.isActive, controls.isPlaying, state.failed) {
+        // Applies a command at once; adding the observer replays ON_START/ON_RESUME only while the host is started.
+        state.setPlaying(controls.isActive && controls.isPlaying && !state.failed &&
+            owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_START, Lifecycle.Event.ON_RESUME -> state.setPlaying(controls.isActive && controls.isPlaying && !state.failed)

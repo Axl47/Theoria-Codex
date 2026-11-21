@@ -37,9 +37,6 @@ import kotlinx.coroutines.delay
 import coil.request.repeatCount
 import coil.request.onAnimationEnd
 
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 @Composable
 internal fun ViewerGifPlayer(
     sourceKey: SourceKey,
@@ -105,7 +102,8 @@ private fun ViewerGifFallbackImage(
 ) {
     val context = LocalContext.current
     var drawable by remember(location, controls.restartRequest) { mutableStateOf<android.graphics.drawable.Animatable?>(null) }
-    ViewerGifFallbackLifecycle(drawable, controls)
+    val shown = drawable
+    ViewerPlayWhileStarted(shown, controls.isActive && controls.isPlaying, { shown?.start() }, { shown?.stop() })
     AsyncImage(
         model = MediaRequestFactory.imageRequest(context, location, source, crossfade = false).newBuilder(context)
             .repeatCount(if (controls.loopPlayback) -1 else 0)
@@ -120,21 +118,6 @@ private fun ViewerGifFallbackImage(
             else { state.failed = true; events.onError("Could not play GIF") }
         },
     )
-}
-
-@Composable
-private fun ViewerGifFallbackLifecycle(drawable: android.graphics.drawable.Animatable?, controls: ViewerRendererControls) {
-    val owner = LocalLifecycleOwner.current
-    DisposableEffect(drawable, owner, controls.isActive, controls.isPlaying) {
-        fun sync() {
-            if (controls.isActive && controls.isPlaying && owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) drawable?.start()
-            else drawable?.stop()
-        }
-        val observer = LifecycleEventObserver { _, _ -> sync() }
-        owner.lifecycle.addObserver(observer)
-        sync()
-        onDispose { owner.lifecycle.removeObserver(observer); drawable?.stop() }
-    }
 }
 
 @Composable
