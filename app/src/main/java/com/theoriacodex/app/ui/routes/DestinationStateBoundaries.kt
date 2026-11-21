@@ -68,6 +68,7 @@ import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.GalleryReadingMode
 import kotlinx.coroutines.flow.StateFlow
 
 internal data class BrowsingDestinationState(
@@ -80,6 +81,7 @@ internal data class BrowsingDestinationState(
     val favoriteTags: List<FavoriteTagEntry>,
     val savedPostIds: Set<PostId>,
     val watchedPostIds: Set<PostId>,
+    val galleryReadingModes: Map<PostId, GalleryReadingMode> = emptyMap(),
 ) {
     /** The one place a feed's liked, saved and watched marks come from, plus this profile's likes still being written. */
     fun feedMarks(pendingLikes: Set<PostId> = emptySet()) = FeedMarks(likedPostIds, savedPostIds, watchedPostIds, pendingLikes)
@@ -173,6 +175,7 @@ internal fun BrowsingDestinationStateBoundary(
         },
         savedPostIds = metadata.savedPostIds,
         watchedPostIds = metadata.watchedPostIds,
+        galleryReadingModes = metadata.galleryReadingModes,
     ))
 }
 
@@ -196,7 +199,8 @@ internal fun browsingMetadataOwner(data: DataDependencies): BrowsingMetadataView
         ?: checkNotNull(LocalViewModelStoreOwner.current),
     key = "browsing-metadata",
 ) {
-    BrowsingMetadataViewModel(data.settingsRepository, data.likesRepository, data.codexRepository, data.recentsRepository, mirrors = data.fileMirrors)
+    BrowsingMetadataViewModel(data.settingsRepository, data.likesRepository, data.codexRepository, data.recentsRepository, mirrors = data.fileMirrors,
+        galleryReadingModes = data.galleryReadingModes)
 }
 
 @Composable

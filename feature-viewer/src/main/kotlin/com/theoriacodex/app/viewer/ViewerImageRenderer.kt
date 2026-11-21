@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
@@ -57,6 +58,8 @@ internal fun ViewerImageRenderer(
     events: ViewerRendererEvents,
     imageSession: ViewerImageSession,
     onRequestMediaRecovery: ((Post, ImageRef) -> Unit)?,
+    /** Hears each painted image's own size, for layouts that size the page to its image. */
+    onPainted: ((Size) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val generation = controls.loadGeneration
@@ -92,7 +95,11 @@ internal fun ViewerImageRenderer(
                     model = model, contentDescription = post.title ?: post.id.sourcePostId,
                     modifier = Modifier.fillMaxSize().then(mediaModifier), contentScale = ContentScale.Fit,
                     onLoading = { state.loading = true },
-                    onSuccess = { painted.value = it.result.memoryCacheKey; onReady() },
+                    onSuccess = {
+                        painted.value = it.result.memoryCacheKey
+                        onPainted?.invoke(it.painter.intrinsicSize)
+                        onReady()
+                    },
                     onError = { onError(it.result.throwable) },
                 )
                 if (state.loading && !state.visible) CircularProgressIndicator()

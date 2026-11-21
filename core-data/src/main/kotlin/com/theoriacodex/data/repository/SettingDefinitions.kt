@@ -55,7 +55,7 @@ object SettingToggles {
         read = { it.viewer.instantSeek }, write = { settings, on -> settings.copy(viewer = settings.viewer.copy(instantSeek = on)) },
     )
     val InvertScrollDirection = SettingToggle(
-        "invert-scroll", "Invert Scroll Direction", listOf("reverse", "swipe"), "Reverse swipes within multi-media posts.",
+        "invert-scroll", "Invert Scroll Direction", listOf("reverse", "swipe"), "Reverse swipes in multi-media posts, except galleries given their own reading mode.",
         read = { it.viewer.invertMultiImageScrollDirection },
         write = { settings, on -> settings.copy(viewer = settings.viewer.copy(invertMultiImageScrollDirection = on)) },
     )

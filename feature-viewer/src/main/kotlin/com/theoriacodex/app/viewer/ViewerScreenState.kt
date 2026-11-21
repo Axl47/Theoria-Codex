@@ -28,6 +28,10 @@ internal enum class InfoSheetTarget { Top, Comments }
 internal class ViewerScreenState {
     val imageSession = ViewerImageSession()
     val mediaPagers = mutableMapOf<PostId, PagerState>()
+    /** Galleries shown as one vertical column, by post; observed, so the screen's gestures follow a new one at once. */
+    val verticalGalleries = mutableStateMapOf<PostId, ViewerVerticalGalleryState>()
+    /** Each vertical gallery's scroll and zoom, kept while its column leaves composition (the page overview replaces it). */
+    val verticalGalleryPositions = mutableMapOf<PostId, ViewerVerticalGalleryState>()
     val pendingMediaJumpByPost = mutableStateMapOf<PostId, Int>()
     var interactionSerial by mutableIntStateOf(0)
     var timelineInteractionActive by mutableStateOf(false)

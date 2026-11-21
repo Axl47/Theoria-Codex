@@ -52,13 +52,6 @@ internal fun viewerHorizontalSwipeTarget(
     return ViewerHorizontalSwipeTarget(postIndex, targetMediaIndex.coerceAtLeast(0))
 }
 
-internal fun viewerMediaPagerReverseLayout(
-    mediaCount: Int,
-    invertMultiImageScrollDirection: Boolean,
-): Boolean {
-    return invertMultiImageScrollDirection && mediaCount > 1
-}
-
 internal fun PagerState.viewerPageExtent(): Float = (layoutInfo.pageSize + layoutInfo.pageSpacing).toFloat()
 
 /** A release this fast counts as a fling whatever distance it covered. */

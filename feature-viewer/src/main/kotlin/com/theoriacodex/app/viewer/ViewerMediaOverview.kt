@@ -12,7 +12,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
+import com.theoriacodex.app.ui.motion.TheoriaMotion
+import com.theoriacodex.domain.model.GalleryReadingMode
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
@@ -47,6 +58,17 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.delay
 
+/** The reading modes a gallery offers, the one it uses, and where a new choice goes. */
+internal class ViewerReadingModeChoice(
+    val selected: GalleryReadingMode,
+    val available: List<GalleryReadingMode>,
+    val onSelect: (GalleryReadingMode) -> Unit,
+)
+
+/**
+ * The gallery's page grid. With [readingModes], a mode switch sits above the pages: shown when the grid opens, it
+ * slides away while the grid scrolls down and returns when it scrolls back up.
+ */
 @Composable
 internal fun ViewerMediaOverviewGrid(
     post: Post,
@@ -54,19 +76,55 @@ internal fun ViewerMediaOverviewGrid(
     selectedMediaIndex: Int,
     onMediaSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    readingModes: ViewerReadingModeChoice? = null,
 ) {
     val selected = remember(items, selectedMediaIndex) { items.indexOfFirst { it.mediaIndex == selectedMediaIndex }.coerceAtLeast(0) }
     val grid = rememberLazyGridState(initialFirstVisibleItemIndex = selected)
-    com.theoriacodex.app.ui.components.AdaptiveMediaGrid(
-        state = grid, modifier = modifier.background(Color.Black).padding(horizontal = 10.dp),
-        contentPadding = PaddingValues(top = 64.dp, bottom = 24.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
+    var switchShown by remember { mutableStateOf(true) }
+    val quickReturn = rememberQuickReturn { switchShown = it }
+    Box(modifier.background(Color.Black).nestedScroll(quickReturn)) {
+        com.theoriacodex.app.ui.components.AdaptiveMediaGrid(
+            state = grid, modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp),
+            contentPadding = PaddingValues(top = if (readingModes != null) 64.dp + OVERVIEW_SWITCH_HEIGHT else 64.dp, bottom = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(items, key = { it.mediaIndex }) { item ->
+                ViewerOverviewCell(post.id.source, item, item.mediaIndex == selectedMediaIndex) { onMediaSelected(item.mediaIndex) }
+            }
+        }
+        readingModes?.let { ViewerReadingModeSwitch(it, switchShown) }
+    }
+}
+
+@Composable
+private fun ViewerReadingModeSwitch(choice: ViewerReadingModeChoice, shown: Boolean) {
+    val reveal by animateFloatAsState(if (shown) 1f else 0f, tween(TheoriaMotion.SHORT_MS), label = "Reading mode switch")
+    val height = with(LocalDensity.current) { OVERVIEW_SWITCH_HEIGHT.toPx() }
+    SingleChoiceSegmentedButtonRow(
+        Modifier.fillMaxWidth().padding(top = 64.dp).height(OVERVIEW_SWITCH_HEIGHT).padding(horizontal = 10.dp, vertical = 4.dp)
+            .graphicsLayer { translationY = -height * (1f - reveal); alpha = reveal },
     ) {
-        items(items, key = { it.mediaIndex }) { item ->
-            ViewerOverviewCell(post.id.source, item, item.mediaIndex == selectedMediaIndex) { onMediaSelected(item.mediaIndex) }
+        choice.available.forEachIndexed { index, mode ->
+            SegmentedButton(
+                selected = mode == choice.selected,
+                onClick = { choice.onSelect(mode) },
+                enabled = shown,
+                shape = SegmentedButtonDefaults.itemShape(index, choice.available.size),
+                icon = {},
+                label = { Text(mode.label, maxLines = 1) },
+            )
         }
     }
 }
+
+private val GalleryReadingMode.label: String
+    get() = when (this) {
+        GalleryReadingMode.LEFT_TO_RIGHT -> "Left to right"
+        GalleryReadingMode.RIGHT_TO_LEFT -> "Right to left"
+        GalleryReadingMode.VERTICAL -> "Vertical"
+    }
+
+private val OVERVIEW_SWITCH_HEIGHT = 48.dp
 
 @Composable
 private fun ViewerOverviewCell(source: SourceKey, item: ViewerMediaOverviewItem, selected: Boolean, onSelect: () -> Unit) {

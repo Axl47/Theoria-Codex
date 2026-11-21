@@ -1,5 +1,10 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.data.repository.GalleryReadingModeRepository
+import com.theoriacodex.data.repository.InMemoryGalleryReadingModeRepository
+import com.theoriacodex.domain.model.GalleryReadingMode
+import kotlinx.coroutines.flow.combine
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theoriacodex.data.repository.AppSettings
@@ -42,6 +47,8 @@ internal data class BrowsingMetadata(
     val savedPostIds: Set<PostId>,
     val watchedPostIds: Set<PostId>,
     val codexPostIds: Set<PostId>,
+    /** The reading mode chosen for each gallery that has one. */
+    val galleryReadingModes: Map<PostId, GalleryReadingMode> = emptyMap(),
 )
 
 /**
@@ -57,6 +64,7 @@ internal class BrowsingMetadataViewModel(
     scopeOverride: CoroutineScope? = null,
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val mirrors: FileMirrorIndex = FileMirrorIndex(),
+    galleryReadingModes: GalleryReadingModeRepository = InMemoryGalleryReadingModeRepository(),
 ) : ViewModel() {
     private val scope = scopeOverride ?: viewModelScope
     private val started = SharingStarted.WhileSubscribed(5_000L)
@@ -96,7 +104,7 @@ internal class BrowsingMetadataViewModel(
             current, mirrors.withCopies(membership.ids), mirrors.withCopies(savedIds.all), mirrors.withCopies(watchedIds),
             mirrors.withCopies(savedIds.inMadeCodices),
         )
-    }.filterNotNull().flowOn(dispatcher).stateIn(scope, started, null)
+    }.combine(galleryReadingModes.observe()) { metadata, modes -> metadata?.copy(galleryReadingModes = modes) }.filterNotNull().flowOn(dispatcher).stateIn(scope, started, null)
 
     val recents = combine(
         recentsRepository.observeWatchedPosts(),
