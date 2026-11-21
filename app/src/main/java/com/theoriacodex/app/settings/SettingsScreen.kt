@@ -35,6 +35,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,8 +61,6 @@ import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.data.storage.CorruptionRecovery
 import kotlinx.coroutines.launch
 
-private enum class SettingsSheet { PROFILE, DOWNLOADS, CONTROLS }
-
 private val STORAGE_TOGGLES = listOf(SettingToggles.KeepMediaOffline, SettingToggles.FindAnimationDurations)
 
 /**
@@ -83,20 +83,17 @@ fun SettingsScreen(
 ) {
     val openHome = { if (state.page == closesFrom) onClose() else onAction(SettingsAction.OpenPage(SettingsPage.HOME)) }
     val openPost = rememberPostOpener(statsActions.openPost)
-    val scope = rememberCoroutineScope()
-    val chooseStatsFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) scope.launch { statsActions.readFile(uri.toString())?.let { onAction(SettingsAction.SetStatsComparison(it)) } }
-    }
+    val choosingStatsFile = state.page == SettingsPage.STATS_COMPARE && state.statsComparison == null
+    StatsFilePicker(choosingStatsFile, statsActions, onAction, openHome)
     BackHandler(enabled = state.page != SettingsPage.HOME, onBack = openHome)
     AnimatedContent(
-        targetState = state.page,
+        // Home stays behind the file picker, which covers it until a file is chosen.
+        targetState = if (choosingStatsFile) SettingsPage.HOME else state.page,
         transitionSpec = { depthTransform(forward = targetState != SettingsPage.HOME) },
         label = "Settings page",
     ) { page ->
         when (page) {
-            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, storageSummary, sites, backup, diagnostics != null, onClose) {
-                chooseStatsFile.launch(arrayOf("application/json", "application/octet-stream", "text/plain"))
-            }
+            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, storageSummary, sites, backup, diagnostics != null, onClose)
             SettingsPage.SITES -> sites?.page?.invoke(
                 openHome,
                 BuiltInAccounts(
@@ -111,7 +108,10 @@ fun SettingsScreen(
                 statistics.profiles, statistics.shareOverall(), state.activeProfile.profileId, statsActions, openPost, openHome,
             )
             SettingsPage.STATS_COMPARE -> state.statsComparison?.let { theirs ->
-                val close = { onAction(SettingsAction.SetStatsComparison(null)) }
+                val close = {
+                    onAction(SettingsAction.SetStatsComparison(null))
+                    if (closesFrom == SettingsPage.STATS_COMPARE) onClose()
+                }
                 BackHandler(onBack = close)
                 StatsComparisonScreen(
                     allProfileCodices(statistics.profiles), statistics.shareOverall(), theirs, state.availableSources,
@@ -134,15 +134,14 @@ private fun SettingsHome(
     backup: SettingsBackupEntry?,
     showDiagnostics: Boolean,
     onClose: () -> Unit,
-    onCompareStats: () -> Unit,
 ) {
-    var sheet by rememberSaveable { mutableStateOf<SettingsSheet?>(null) }
+    var profileMenu by rememberSaveable { mutableStateOf(false) }
     var showAddProfile by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<RecommendationProfile?>(null) }
     val open = { page: SettingsPage -> onAction(SettingsAction.OpenPage(page)) }
     SettingsPageColumn {
         SettingsHeader(SettingDestinations.Home.title, onBack = onClose)
-        ProfileCard(state, onAction, onAdd = { showAddProfile = true }, onMenu = { sheet = SettingsSheet.PROFILE })
+        ProfileCard(state, onAction, onAdd = { showAddProfile = true }, onMenu = { profileMenu = true })
         SettingsGroup("Stats") {
             SettingsRow(SettingDestinations.Stats.title, statsSummary(statistics), Icons.Default.BarChart, onClick = {
                 open(SettingsPage.STATS)
@@ -152,9 +151,11 @@ private fun SettingsHome(
                 open(SettingsPage.STATS_SHARE)
             })
             SettingsRowDivider()
-            SettingsRow(SettingDestinations.CompareStats.title, "Open a stats file someone sent you", Icons.AutoMirrored.Filled.CompareArrows, onClick = onCompareStats)
+            SettingsRow(SettingDestinations.CompareStats.title, "Open a stats file someone sent you", Icons.AutoMirrored.Filled.CompareArrows, onClick = {
+                open(SettingsPage.STATS_COMPARE)
+            })
         }
-        SettingsHomeGroups(state, onAction, storageSummary, sites, backup, showDiagnostics, { sheet = it }, open)
+        SettingsHomeGroups(state, onAction, storageSummary, sites, backup, showDiagnostics) { sheet -> onAction(SettingsAction.OpenPage(SettingsPage.HOME, sheet)) }
         if (state.showDeveloperScenarios) DeveloperScenarios(state, onAction)
     }
     if (showAddProfile) {
@@ -179,8 +180,14 @@ private fun SettingsHome(
             },
         )
     }
-    sheet?.let {
-        SettingsHomeSheet(it, state, onAction, { renameTarget = state.activeProfile }) { sheet = null }
+    if (profileMenu) ProfileMenuSheet(state, onAction, { renameTarget = state.activeProfile }) { profileMenu = false }
+    state.sheet?.let { sheet ->
+        ActionMenuSheet({ onAction(SettingsAction.OpenPage(SettingsPage.HOME)) }) {
+            when (sheet) {
+                SettingsSheet.DOWNLOADS -> DownloadPreferencesSection(state, onAction)
+                SettingsSheet.CONTROLS -> PreferencesSection(state, onAction)
+            }
+        }
     }
 }
 
@@ -193,8 +200,8 @@ private fun SettingsHomeGroups(
     backup: SettingsBackupEntry?,
     showDiagnostics: Boolean,
     onSheet: (SettingsSheet) -> Unit,
-    open: (SettingsPage) -> Unit,
 ) {
+    val open = { page: SettingsPage -> onAction(SettingsAction.OpenPage(page)) }
     SettingsGroup("Sources") {
         if (sites != null) {
             SettingsRow(
@@ -206,7 +213,7 @@ private fun SettingsHomeGroups(
         OpenLinksRow()
     }
     SettingsGroup("Viewing") {
-        SettingsRow(SettingDestinations.Controls.title, "Search bar, seeking, swipes, rotation", Icons.Default.TouchApp, onClick = {
+        SettingsRow(SettingDestinations.Controls.title, "Search bar, seeking, swipes, rotation, quality", Icons.Default.TouchApp, onClick = {
             onSheet(SettingsSheet.CONTROLS)
         })
     }
@@ -247,31 +254,48 @@ private fun SettingsHomeGroups(
 }
 
 @Composable
-private fun SettingsHomeSheet(
-    sheet: SettingsSheet,
+private fun ProfileMenuSheet(
     state: SettingsUiState,
     onAction: (SettingsAction) -> Unit,
     onRenameProfile: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     ActionMenuSheet(onDismiss) {
-        when (sheet) {
-            SettingsSheet.PROFILE -> {
-                ActionMenuRow(Icons.Default.Edit, "Rename ${state.activeProfile.name}") {
-                    onDismiss()
-                    onRenameProfile()
-                }
-                ActionMenuRow(
-                    Icons.Default.Delete, "Delete ${state.activeProfile.name}",
-                    enabled = state.settings.recommendationProfiles.size > 1,
-                    tint = MaterialTheme.colorScheme.error,
-                ) {
-                    onDismiss()
-                    onAction(SettingsAction.RequestRemoveProfile(state.activeProfile.profileId))
-                }
-            }
-            SettingsSheet.DOWNLOADS -> DownloadPreferencesSection(state, onAction)
-            SettingsSheet.CONTROLS -> PreferencesSection(state, onAction)
+        ActionMenuRow(Icons.Default.Edit, "Rename ${state.activeProfile.name}") {
+            onDismiss()
+            onRenameProfile()
+        }
+        ActionMenuRow(
+            Icons.Default.Delete, "Delete ${state.activeProfile.name}",
+            enabled = state.settings.recommendationProfiles.size > 1,
+            tint = MaterialTheme.colorScheme.error,
+        ) {
+            onDismiss()
+            onAction(SettingsAction.RequestRemoveProfile(state.activeProfile.profileId))
+        }
+    }
+}
+
+/**
+ * Opens the system file picker once each time [choosing] turns on (the Compare page without a file);
+ * a readable stats file opens the comparison, anything else goes back through [onBack].
+ */
+@Composable
+private fun StatsFilePicker(choosing: Boolean, statsActions: StatsActions, onAction: (SettingsAction) -> Unit, onBack: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val currentOnBack by rememberUpdatedState(onBack)
+    var launched by rememberSaveable { mutableStateOf(false) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        launched = false
+        scope.launch {
+            val file = uri?.let { statsActions.readFile(it.toString()) }
+            if (file != null) onAction(SettingsAction.SetStatsComparison(file)) else currentOnBack()
+        }
+    }
+    LaunchedEffect(choosing) {
+        if (choosing && !launched) {
+            launched = true
+            picker.launch(arrayOf("application/json", "application/octet-stream", "text/plain"))
         }
     }
 }

@@ -7,36 +7,25 @@ import com.theoriacodex.app.codex.markSavedSearchesSeen
 import com.theoriacodex.app.recents.recentSearchPresentation
 import com.theoriacodex.app.search.omnibox.OmniboxEntry
 import com.theoriacodex.app.search.omnibox.OmniboxKind
-import com.theoriacodex.app.settings.SettingsAction
-import com.theoriacodex.app.settings.SettingsPage
 import com.theoriacodex.app.source.displayName
-import com.theoriacodex.app.ui.navigation.HiddenTagsOpener
 import com.theoriacodex.app.ui.navigation.LocalHiddenTagsOpener
 import com.theoriacodex.app.ui.routes.BrowsingDestinationState
 import com.theoriacodex.app.ui.routes.rememberRetained
-import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.data.repository.SettingDestinations
-import com.theoriacodex.data.repository.SettingToggles
 import com.theoriacodex.domain.model.CreatorProfile
 import kotlinx.coroutines.launch
-
-/** Every setting switch as it stands in [settings]; switching one sends its Settings action to [dispatch]. */
-internal fun searchToggleEntries(settings: AppSettings, dispatch: (SettingsAction) -> Unit): List<OmniboxEntry.Toggle> =
-    SettingToggles.all.map { toggle ->
-        OmniboxEntry.Toggle(toggle.title, toggle.read(settings), toggle.keywords) { checked -> dispatch(SettingsAction.SetToggle(toggle, checked)) }
-    }
 
 /** Creators of recently watched posts the one box offers after the followed ones. */
 private const val RECENT_CREATOR_LIMIT = 20
 
 /**
  * Everything besides tags that Search's composer matches typed text against: the active profile's Codices,
- * followed creators and those of recently watched posts, saved and recent searches, and commands, each bound to
- * what picking it does.
+ * followed creators and those of recently watched posts, saved and recent searches, and every setting definition
+ * (see [SETTING_BINDINGS]), each bound to what picking it does.
  */
 @Composable
 internal fun rememberSearchOmniboxEntries(shell: TheoriaShell, state: BrowsingDestinationState): List<OmniboxEntry> {
@@ -66,8 +55,10 @@ internal fun rememberSearchOmniboxEntries(shell: TheoriaShell, state: BrowsingDe
                 val presentation = recentSearchPresentation(entry)
                 OmniboxEntry.Action(OmniboxKind.RECENT_SEARCH, presentation.title, presentation.subtitle) { shell.openSearchEntry(entry) }
             }
-            addAll(searchToggleEntries(state.settings, shell.owners.settings::onAction))
-            addAll(destinationCommands(shell, hiddenTags))
+            val hidden = setOfNotNull(SettingDestinations.Diagnostics.id.takeIf { shell.diagnosticsEntry == null })
+            addAll(searchSettingEntries(state.settings, hidden, shell.owners.settings::onAction) { binding ->
+                shell.openSettingBinding(binding, hiddenTags::openHiddenTags)
+            })
         }
     }
 }
@@ -85,20 +76,6 @@ internal fun recentCreators(
         .filter { seen.add(it.key()) }
         .take(limit)
         .toList()
-}
-
-/** The setting destinations the one box opens, each bound to what opens it here. */
-private fun destinationCommands(shell: TheoriaShell, hiddenTags: HiddenTagsOpener): List<OmniboxEntry> = listOfNotNull(
-    SettingDestinations.Home to { shell.openSettings(SettingsPage.HOME) },
-    SettingDestinations.Sites to { shell.openSettings(SettingsPage.SITES) },
-    SettingDestinations.HiddenTags to hiddenTags::openHiddenTags,
-    SettingDestinations.Storage to { shell.openSettings(SettingsPage.STORAGE) },
-    SettingDestinations.Backup to { shell.openSettings(SettingsPage.BACKUP) },
-    SettingDestinations.Stats to { shell.openSettings(SettingsPage.STATS) },
-    (SettingDestinations.Diagnostics to { shell.openSettings(SettingsPage.DIAGNOSTICS) }).takeIf { shell.diagnosticsEntry != null },
-    SettingDestinations.WhatsNew to { shell.owners.settings.onAction(SettingsAction.OpenChangelog) },
-).map { (destination, open) ->
-    OmniboxEntry.Action(OmniboxKind.COMMAND, destination.title, keywords = destination.keywords, run = open)
 }
 
 /** Runs a saved or recent search where it belongs: For You searches in For You, the rest in Search. */
