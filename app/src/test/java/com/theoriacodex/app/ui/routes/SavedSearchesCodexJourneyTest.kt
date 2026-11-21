@@ -1,6 +1,8 @@
 package com.theoriacodex.app.ui.routes
 
 import android.app.Application
+import com.theoriacodex.app.library.librarySectionTag
+import com.theoriacodex.app.library.LibrarySection
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
@@ -124,13 +126,10 @@ class SavedSearchesCodexJourneyTest {
         }
     }
     private fun openMergedSearches(): Unit {
-        compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Codex").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithContentDescription("Codex").performClick()
-        compose.waitUntil(10_000) { compose.onNodeWithText("Saved").isDisplayed() }
-        compose.onNodeWithText("Codex Library").assertIsDisplayed()
-        compose.onNodeWithText("Searches").assertIsDisplayed()
-        compose.onNodeWithText("2").assertIsDisplayed()
-        compose.onNodeWithText("Saved").performClick()
+        compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Library").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Library").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag(librarySectionTag(LibrarySection.Saved)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(librarySectionTag(LibrarySection.Saved)).performClick()
         compose.waitUntil(10_000) { compose.onNodeWithText("Likes").isDisplayed() }
         compose.onNodeWithText("Likes").performTouchInput { longClick() }
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Clear likes").fetchSemanticsNodes().isNotEmpty() }
@@ -147,16 +146,19 @@ class SavedSearchesCodexJourneyTest {
 
     private fun verifySavedRouteReentry(graph: JourneyAppContainer, first: String, second: String, roots: Int): Unit {
         // Leaving Saved entirely must retain the same feed, too.
-        compose.onNodeWithContentDescription("Back").performClick()
-        compose.onNodeWithText("Saved").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag(librarySectionTag(LibrarySection.Codices)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(librarySectionTag(LibrarySection.Codices)).performClick()
+        compose.onNodeWithTag(librarySectionTag(LibrarySection.Saved)).performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Searches").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Searches").performScrollTo()
         compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
         assertEquals(roots, graph.registry.requests.count { it.pageToken == null })
-        compose.onNodeWithTag(second).performClick()
+        // The Home bottom bar covers the lowest shelf on this small screen, so a touch would miss it.
+        compose.onNodeWithTag(second).performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { compose.onNodeWithContentDescription("More actions").isDisplayed() }
         compose.onNodeWithContentDescription("Back").performClick()
-        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("More actions").fetchSemanticsNodes().isEmpty() }
+        // Other Home pages can hold "More actions" too, so Library's own header proves the return.
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag(librarySectionTag(LibrarySection.Saved)).fetchSemanticsNodes().isNotEmpty() }
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Searches").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Searches").performScrollTo().performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }

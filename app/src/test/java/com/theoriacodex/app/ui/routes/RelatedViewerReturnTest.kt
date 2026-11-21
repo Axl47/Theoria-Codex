@@ -1,6 +1,8 @@
 package com.theoriacodex.app.ui.routes
 
 import android.app.Application
+import com.theoriacodex.app.library.librarySectionTag
+import com.theoriacodex.app.library.LibrarySection
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.SideEffect
 import androidx.lifecycle.ViewModelStoreOwner
@@ -85,8 +87,10 @@ class RelatedViewerReturnTest {
                 SideEffect { viewModelOwner = owner }
                 if (showApp.value) TheoriaAppContent(graph, viewModel<ViewerSessionRetentionViewModel>(), viewModel<AppShellViewModel>())
             }
-            compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Recents").fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithContentDescription("Recents").performClick()
+            compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Library").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithContentDescription("Library").performClick()
+            compose.waitUntil(10_000) { compose.onAllNodesWithTag(librarySectionTag(LibrarySection.History)).fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithTag(librarySectionTag(LibrarySection.History)).performClick()
             compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Filter Recents by section").isDisplayed() }
             compose.onNodeWithContentDescription("Filter Recents by section").performClick()
             compose.onNodeWithText("Searches").performClick()

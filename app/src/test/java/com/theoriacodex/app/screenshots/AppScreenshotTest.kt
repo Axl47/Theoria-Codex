@@ -128,7 +128,7 @@ class AppScreenshotTest {
 
     @Test fun `settings`() {
         compose.onNodeWithContentDescription("Library").performClick()
-        compose.waitForIdle()
+        waitFor { compose.onAllNodesWithTag(LIBRARY_SETTINGS_TAG).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag(LIBRARY_SETTINGS_TAG).performClick()
         // Stats load after the screen; the Codex's posts count as saved.
         waitFor { compose.onAllNodesWithText("${posts.size} saved", substring = true).fetchSemanticsNodes().isNotEmpty() }
@@ -137,7 +137,7 @@ class AppScreenshotTest {
 
     private fun openLibrary(section: LibrarySection) {
         compose.onNodeWithContentDescription("Library").performClick()
-        compose.waitForIdle()
+        waitFor { compose.onAllNodesWithTag(librarySectionTag(section)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag(librarySectionTag(section)).performClick()
     }
 
