@@ -4,12 +4,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.recommend.HiddenTagsSheet
-import com.theoriacodex.app.settings.SettingsAction
+import com.theoriacodex.app.recommend.HiddenTagsUndoAnchor
 import com.theoriacodex.app.ui.navigation.HiddenTagsOpener
 import com.theoriacodex.app.ui.navigation.LocalHiddenTagsOpener
+import com.theoriacodex.app.ui.undo.LocalUndoSlot
+import com.theoriacodex.app.ui.undo.UndoOffer
+import com.theoriacodex.data.repository.AppSettings
+import kotlinx.coroutines.launch
 
 /** Whether the hidden tags sheet is open; provided as [LocalHiddenTagsOpener] by [ShellCompositionLocals]. */
 @Stable
@@ -21,16 +26,35 @@ internal class HiddenTagsRequests : HiddenTagsOpener {
     }
 }
 
-/** The hidden tags sheet, mounted once above the navigation host, for the active profile. */
+/**
+ * The hidden tags sheet, mounted once above the navigation host, for the active profile. Removing an entry
+ * applies at once and offers Undo in the sheet, which puts the entry back for the profile it was removed from.
+ */
 @Composable
 internal fun ShellHiddenTagsSheet(shell: TheoriaShell) {
     val requests = LocalHiddenTagsOpener.current as? HiddenTagsRequests ?: return
     if (!requests.open) return
-    val settings = shell.owners.settings
-    val state by settings.state.collectAsStateWithLifecycle()
+    val repository = shell.data.settingsRepository
+    val settings by repository.observeSettings().collectAsStateWithLifecycle(null)
+    val profileId = settings?.activeProfileId
+    val undo = LocalUndoSlot.current
+    val scope = rememberCoroutineScope()
     HiddenTagsSheet(
-        entries = state.activeProfileBlacklist,
-        onRemove = { entry -> settings.onAction(SettingsAction.RemoveBlacklistEntry(entry.source, entry.tags)) },
+        entries = settings?.activeHiddenTags().orEmpty(),
+        onRemove = { entry ->
+            profileId?.let { profile ->
+                scope.launch {
+                    if (!repository.removeForYouBlacklistEntry(profile, entry.source, entry.tags)) return@launch
+                    undo.offer(scope, UndoOffer("Unhid ${entry.tags.joinToString(" + ")}", HiddenTagsUndoAnchor) {
+                        repository.addForYouBlacklistEntry(profile, entry.source, entry.tags)
+                    })
+                }
+            }
+        },
         onDismiss = { requests.open = false },
     )
 }
+
+/** The active profile's hidden entries in a stable order. */
+private fun AppSettings.activeHiddenTags() = forYouBlacklistByProfile[activeProfileId].orEmpty()
+    .sortedWith(compareBy({ it.source.id }, { it.tags.joinToString(" ") }))

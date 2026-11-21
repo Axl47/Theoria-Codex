@@ -8,6 +8,7 @@ import com.theoriacodex.data.repository.SourceRuntimeSettings
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
+import com.theoriacodex.app.ui.undo.UndoAnchor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -44,7 +45,7 @@ internal class ForYouHomeController(
     private var appendJob: Job? = null
     private var blacklistUpdates = 0
     val isUpdatingBlacklist: Boolean get() = blacklistUpdates > 0
-    private val dismissed = mutableMapOf<String, DismissedSection>()
+    private val hidden = mutableListOf<HiddenShelves>()
 
     fun synchronize() {
         if (!state().home.visible) return
@@ -54,7 +55,7 @@ internal class ForYouHomeController(
         context = next
         if (previous != null && isUpdatingBlacklist && previous.copy(blacklist = next.blacklist) == next) return
         appendJob?.cancel()
-        dismissed.clear()
+        hidden.clear()
         val scopeChanged = previous?.profileId != next.profileId || previous.source != next.source ||
             previous.sources != next.sources || previous.runtime != next.runtime || previous.blacklist != next.blacklist
         val home = state().home
@@ -87,6 +88,7 @@ internal class ForYouHomeController(
             is ForYouAction.SaveSection -> remove(action.id, save = true)
             ForYouAction.NewSection -> appendSearch()
             is ForYouAction.ReorderSections -> reorder(action.ids)
+            is ForYouAction.HideTag -> hideTag(ForYouBlacklistEntry(action.source, listOf(action.tag)))
             is ForYouAction.UndoSeedBlacklist -> return restore(action)
             else -> return false
         }
@@ -102,52 +104,95 @@ internal class ForYouHomeController(
         }, activeSection = home.activeSection?.let {
             if (it.id == section.id) it.copy(savedSearchId = savedId) else it
         }))
-        emit(ForYouEffect.ShowMessage(if (savedId == null) "Search removed from Saved" else "Search saved"))
     }
 
+    /** Dismiss hides the shelf's tags; Move to Saved also saves it first, and its Undo unsaves it again. */
     private fun remove(id: String, save: Boolean) = mutate(id) { section, isCurrent ->
-        val profile = state().activeProfileId
-        val index = state().home.sections.indexOfFirst { it.id == id }
-        if (save && !section.pinned) engine.pinSection(section, true)
+        val savedId = if (save && !section.pinned) engine.pinSection(section, true) else null
+        val entries = section.feed.seed.map { (source, tags) -> ForYouBlacklistEntry(source, tags) }
+        val label = if (save) "Moved to Saved" else "Hid ${section.title}"
+        hide(state().activeProfileId, entries, isCurrent, label, ForYouUndoAnchor, savedId?.let { section.copy(savedSearchId = it) })
+    }
+
+    private fun hideTag(entry: ForYouBlacklistEntry) {
+        val expected = generation
+        launchGuarded(expected) {
+            hide(state().activeProfileId, listOf(entry), { expected == generation }, hiddenLabel(listOf(entry)), ForYouWhyUndoAnchor)
+        }
+    }
+
+    /**
+     * Hides [entries] for [profile], drops every shelf the profile's new hidden list hides (the subset rule can
+     * take several), and offers Undo at [anchor]. [saved] is a search saved on the way, which Undo removes.
+     */
+    private suspend fun hide(
+        profile: String,
+        entries: List<ForYouBlacklistEntry>,
+        isCurrent: () -> Boolean,
+        label: String,
+        anchor: UndoAnchor,
+        saved: ForYouSection? = null,
+    ) = writingBlacklist {
+        val changed = engine.updateBlacklist(profile, entries, true)
+        if (!isCurrent()) return@writingBlacklist
+        val blocked = changed.settings.forYouBlacklistByProfile[profile].orEmpty()
+        val home = state().home
+        val removed = home.sections.withIndex().filter { (_, section) -> blocked.hidesAny(section.feed.seed) }
+        val removedIds = removed.mapTo(mutableSetOf()) { it.value.id }
+        // The drilled-in feed keeps its interest until its why panel closes; see ForYouWhyTarget.afterClose.
+        update(home.copy(sections = home.sections.filterNot { it.id in removedIds },
+            activeSection = home.activeSection?.takeUnless { home.visible && it.id in removedIds }))
+        if (changed.entries.isNotEmpty() || saved != null) {
+            hidden += HiddenShelves(profile, changed.entries, removed, saved)
+            emit(ForYouEffect.SeedHidden(profile, changed.entries, label, anchor))
+        }
+        settingsChanged(changed.settings)
+    }
+
+    private fun restore(action: ForYouAction.UndoSeedBlacklist): Boolean {
+        val record = hidden.lastOrNull { it.profile == action.profileId && it.entries == action.entries } ?: return false
+        hidden.remove(record)
+        if (record.profile != state().activeProfileId) return true
+        val expected = generation
+        launchGuarded(expected) {
+            writingBlacklist {
+                val changed = engine.updateBlacklist(record.profile, record.entries, false)
+                record.saved?.let { engine.pinSection(it, false) }
+                if (expected != generation) return@writingBlacklist
+                val blocked = changed.settings.forYouBlacklistByProfile[record.profile].orEmpty()
+                val rows = state().home.sections.toMutableList()
+                record.removed.filterNot { (_, section) -> blocked.hidesAny(section.feed.seed) || rows.any { it.id == section.id } }
+                    .forEach { (index, section) -> rows.add(index.coerceAtMost(rows.size), section) }
+                update(state().home.copy(sections = rows))
+                settingsChanged(changed.settings)
+            }
+        }
+        return true
+    }
+
+    /** Marks a blacklist write in flight, so the settings it produces do not reload the shelves it already updated. */
+    private suspend fun writingBlacklist(operation: suspend () -> Unit) {
         blacklistUpdates++
         try {
-            val entries = section.feed.seed.map { (source, tags) -> ForYouBlacklistEntry(source, tags) }
-            val changed = engine.updateBlacklist(profile, entries, true)
-            if (!isCurrent()) return@mutate
-            val home = state().home
-            update(home.copy(sections = home.sections.filterNot { it.id == id },
-                activeSection = home.activeSection?.takeUnless { it.id == id }))
-            if (save) {
-                emit(ForYouEffect.ShowMessage("Search saved to Codex"))
-            } else if (changed.entries.isNotEmpty()) {
-                dismissed[id] = DismissedSection(profile, index, section, changed.entries)
-                emit(ForYouEffect.SeedHidden(profile, changed.entries))
-            }
-            settingsChanged(changed.settings)
+            operation()
         } finally {
             blacklistUpdates--
         }
     }
 
-    private fun restore(action: ForYouAction.UndoSeedBlacklist): Boolean {
-        val removed = dismissed.values.firstOrNull { it.profile == action.profileId && it.entries == action.entries }
-            ?: return false
-        if (removed.profile != state().activeProfileId) return true
-        mutateSection(removed.section) { _, isCurrent ->
-            blacklistUpdates++
+    /** Runs a shelf change started in [expected] generation; a failure in the same generation shows its message. */
+    private fun launchGuarded(expected: Long, onDone: () -> Unit = {}, operation: suspend () -> Unit) {
+        scope.launch {
             try {
-                val changed = engine.updateBlacklist(removed.profile, removed.entries, false)
-                if (!isCurrent()) return@mutateSection
-                val rows = state().home.sections.toMutableList()
-                if (rows.none { it.id == removed.section.id }) rows.add(removed.index.coerceAtMost(rows.size), removed.section)
-                update(state().home.copy(sections = rows))
-                dismissed.remove(removed.section.id)
-                settingsChanged(changed.settings)
+                operation()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                if (expected == generation) emit(ForYouEffect.ShowMessage(error.message ?: "Could not update section"))
             } finally {
-                blacklistUpdates--
+                onDone()
             }
         }
-        return true
     }
 
     private fun reorder(ids: List<String>) {
@@ -228,7 +273,9 @@ internal class ForYouHomeController(
         if (generation != expected) return
         val home = state().home
         val order = home.sections.map { it.id }
-        val ordered = sections.sortedBy { order.indexOf(it.id).takeIf { index -> index >= 0 } ?: Int.MAX_VALUE }
+        // A tag struck while these loaded must not bring back the shelves it hides.
+        val blocked = state().blacklistEntries
+        val ordered = sections.filterNot { blocked.hidesAny(it.feed.seed) }.sortedBy { order.indexOf(it.id).takeIf { index -> index >= 0 } ?: Int.MAX_VALUE }
         update(home.copy(sections = ordered, loading = false, mixedLoading = false,
             mixedFeed = mixed ?: home.mixedFeed))
         if (mixed != null && home.activeSection == null) admit(mixed)
@@ -236,25 +283,12 @@ internal class ForYouHomeController(
 
     private fun mutate(id: String, operation: suspend (ForYouSection, () -> Boolean) -> Unit) {
         val section = state().home.sections.firstOrNull { it.id == id } ?: return
-        mutateSection(section, operation)
-    }
-
-    private fun mutateSection(section: ForYouSection, operation: suspend (ForYouSection, () -> Boolean) -> Unit) {
-        val id = section.id
         if (id in state().home.pendingSectionIds || state().home.loading) return
         val expected = generation
         update(state().home.copy(pendingSectionIds = state().home.pendingSectionIds + id))
-        scope.launch {
-            try {
-                operation(section) { expected == generation }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Throwable) {
-                if (expected == generation) emit(ForYouEffect.ShowMessage(error.message ?: "Could not update section"))
-            } finally {
-                if (expected == generation) update(state().home.copy(pendingSectionIds = state().home.pendingSectionIds - id))
-            }
-        }
+        launchGuarded(expected, onDone = {
+            if (expected == generation) update(state().home.copy(pendingSectionIds = state().home.pendingSectionIds - id))
+        }) { operation(section) { expected == generation } }
     }
 }
 
@@ -273,9 +307,10 @@ private data class ForYouHomeContext(
     )
 }
 
-private data class DismissedSection(
+/** What one hide removed, so its Undo can put it back: the shelves at their old positions, and a search saved on the way. */
+private data class HiddenShelves(
     val profile: String,
-    val index: Int,
-    val section: ForYouSection,
     val entries: List<ForYouBlacklistEntry>,
+    val removed: List<IndexedValue<ForYouSection>>,
+    val saved: ForYouSection?,
 )

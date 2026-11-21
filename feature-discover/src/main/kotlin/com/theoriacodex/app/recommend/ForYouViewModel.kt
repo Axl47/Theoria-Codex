@@ -375,7 +375,7 @@ class ForYouViewModel(
         launchRequest(identity) {
             val changed = engine.updateBlacklist(profileId, entries, hidden)
             if (hidden) effectChannel.trySend(
-                if (changed.entries.isEmpty()) ForYouEffect.ShowMessage("Current recommendation is already hidden")
+                if (changed.entries.isEmpty()) ForYouEffect.ShowMessage("Already hidden")
                 else ForYouEffect.SeedHidden(profileId, changed.entries)
             )
             if (mutableState.value.activeRequest != identity) return@launchRequest

@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recommend.state.ForYouUiState
+import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchResult
 import org.junit.Assert.assertEquals
@@ -28,12 +29,16 @@ import org.robolectric.annotation.Config
 class ForYouHomeScreenTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun `section title save dismiss new search and refresh expose the matching actions`() {
+    @Test fun `section heading why save dismiss new search and refresh expose the matching actions`() {
         val actions = mutableListOf<ForYouAction>()
+        val why = mutableListOf<ForYouWhyTarget>()
         val section = emptySection()
-        render(ForYouHomeState(visible = true, sections = listOf(section)), actions)
-        // The first "forest" is the jump chip; the second is the shelf heading.
+        render(ForYouHomeState(visible = true, sections = listOf(section)), actions, onOpenWhy = { why += it })
+        // The first "forest" is the jump chip; the second is the shelf title, which opens why.
         compose.onAllNodesWithText("forest")[1].performClick()
+        compose.runOnIdle { assertEquals(listOf(section.whyTarget()), why) }
+        // The first "See all" belongs to Your mix.
+        compose.onAllNodesWithText("See all")[1].performClick()
         compose.onNodeWithText("Save search").assertDoesNotExist()
         fun inMenu(label: String) {
             compose.onNodeWithContentDescription("Actions for forest").performClick()
@@ -41,7 +46,7 @@ class ForYouHomeScreenTest {
         }
         inMenu("Save search")
         inMenu("Dismiss")
-        inMenu("Save and hide here")
+        inMenu("Move to Saved")
         compose.onNodeWithContentDescription("For You actions").performClick()
         compose.onNodeWithText("New search").performClick()
         compose.onNodeWithContentDescription("Refresh For You").performClick()
@@ -92,13 +97,35 @@ class ForYouHomeScreenTest {
         compose.onNodeWithText("Pixiv").assertDoesNotExist()
     }
 
-    private fun render(home: ForYouHomeState, actions: MutableList<ForYouAction>) {
+    @Test fun `profile chip shows only with several profiles and selects another`() {
+        val selected = mutableListOf<String>()
+        val profiles = listOf(RecommendationProfile("main", "Main"), RecommendationProfile("alt", "Night"))
+        render(ForYouHomeState(visible = true), mutableListOf(), ForYouUiState(profiles = profiles, activeProfileId = "main"),
+            onSelectProfile = { selected += it })
+        compose.onNodeWithText("Main").performClick()
+        compose.onNodeWithText("Night").performClick()
+        compose.runOnIdle { assertEquals(listOf("alt"), selected) }
+    }
+
+    @Test fun `a single profile draws no profile chip`() {
+        render(ForYouHomeState(visible = true), mutableListOf(),
+            ForYouUiState(profiles = listOf(RecommendationProfile("main", "Main")), activeProfileId = "main"))
+        compose.onNodeWithText("Main").assertDoesNotExist()
+    }
+
+    private fun render(
+        home: ForYouHomeState,
+        actions: MutableList<ForYouAction>,
+        base: ForYouUiState = ForYouUiState(),
+        onOpenWhy: (ForYouWhyTarget) -> Unit = {},
+        onSelectProfile: (String) -> Unit = {},
+    ) {
         compose.setContent {
             MaterialTheme {
                 val cards = rememberFeedCardEnvironment(null, emptySet(), emptyMap(), FeedDurations.NONE, {})
-                ForYouHomeScreen(ForYouUiState(home = home), cards, { it }, {},
+                ForYouHomeScreen(base.copy(home = home), cards, { it }, {},
                     onAction = { actions += it }, onShowFilters = {}, filterLabels = emptyList(), onClearFilters = { {} },
-                    onOpenPreview = { _, _, _ -> })
+                    onOpenPreview = { _, _, _ -> }, onOpenWhy = onOpenWhy, onSelectProfile = onSelectProfile)
             }
         }
     }

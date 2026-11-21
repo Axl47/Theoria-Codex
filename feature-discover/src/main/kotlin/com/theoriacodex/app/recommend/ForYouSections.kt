@@ -113,6 +113,4 @@ private fun sectionSeedId(tags: Map<SourceKey, List<String>>): String =
 
 private fun allowedSection(tags: Map<SourceKey, List<String>>, request: ForYouFeedRequest,
     blocked: List<com.theoriacodex.data.repository.ForYouBlacklistEntry>): Boolean =
-    sectionSeedId(tags) !in request.excludedSectionIds && tags.none { (source, values) ->
-        blocked.hidesSeed(source, values)
-    }
+    sectionSeedId(tags) !in request.excludedSectionIds && !blocked.hidesAny(tags)

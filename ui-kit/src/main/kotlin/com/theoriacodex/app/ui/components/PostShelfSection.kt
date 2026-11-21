@@ -4,7 +4,10 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -39,20 +42,22 @@ fun PostShelfSection(
     onMore: (() -> Unit)? = null,
     showSeeAll: Boolean = onMore != null,
     highlight: String? = null,
+    titleAction: ShelfTitleAction? = null,
     content: @Composable () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
-                .combinedClickable(onClick = onOpen, onLongClick = onLongPress,
-                    role = Role.Button, onLongClickLabel = "Actions for $title")
+                // A title with its own action leaves this row's merged text, so the row names the shelf it opens.
+                .combinedClickable(onClick = onOpen, onLongClick = onLongPress, role = Role.Button,
+                    onClickLabel = titleAction?.let { "Open $title" }, onLongClickLabel = "Actions for $title")
                 .heightIn(min = 48.dp)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (showSeeAll) {
-                ManagedShelfHeading(title, listOfNotNull(count?.toString(), countSuffix).joinToString(" "), icon, highlight, onMore)
+                ManagedShelfHeading(title, listOfNotNull(count?.toString(), countSuffix).joinToString(" "), icon, highlight, onMore, titleAction)
             } else {
                 Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -73,6 +78,12 @@ fun PostShelfSection(
 }
 
 /**
+ * Makes a managed shelf's title its own control, apart from the heading that opens the shelf: For You's title
+ * opens why the shelf was picked. [disclosure] adds a chevron where the title alone does not suggest more.
+ */
+data class ShelfTitleAction(val label: String, val disclosure: Boolean = false, val onClick: () -> Unit)
+
+/**
  * A shelf heading that identifies its collection and shows where See all and its actions are; a
  * [highlight] such as "3 new" follows the [count] in the accent color.
  */
@@ -83,9 +94,16 @@ private fun RowScope.ManagedShelfHeading(
     icon: ImageVector?,
     highlight: String?,
     onMore: (() -> Unit)?,
+    titleAction: ShelfTitleAction?,
 ) {
     icon?.let { Icon(it, null, Modifier.padding(end = 8.dp), tint = MaterialTheme.colorScheme.primary) }
-    Text(title, style = MaterialTheme.typography.titleMedium)
+    Row(
+        titleAction?.let { Modifier.clickable(onClickLabel = it.label, role = Role.Button, onClick = it.onClick) } ?: Modifier,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        if (titleAction?.disclosure == true) Icon(Icons.Default.ArrowDropDown, null, Modifier.size(20.dp))
+    }
     Row(Modifier.padding(start = 8.dp).weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(count, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         highlight?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, maxLines = 1) }
