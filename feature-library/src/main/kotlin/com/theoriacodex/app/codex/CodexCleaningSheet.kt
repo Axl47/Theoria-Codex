@@ -20,17 +20,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.ui.navigation.LocalTriageOpener
+import com.theoriacodex.app.ui.navigation.TriageMode
+import com.theoriacodex.app.ui.navigation.TriageOpener
+import com.theoriacodex.app.ui.navigation.TriageRequest
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.PostId
 
 /**
  * The opened collection is the target; comparison collections are read-only inputs. [matches] holds, per
- * comparison, the target's posts it also holds; empty until known, when rows show no counts.
+ * comparison, the target's posts it also holds; empty until known, when rows show no counts. [onReview], when
+ * given, walks through those posts in the triage deck instead of removing them all.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,6 +47,7 @@ internal fun CodexCleaningSheet(
     matches: Map<String, Set<PostId>>,
     onDismiss: () -> Unit,
     onClean: (Set<String>) -> Unit,
+    onReview: ((Set<String>) -> Unit)? = null,
 ) {
     var selected by remember(target.codexId) { mutableStateOf(emptySet<String>()) }
     val comparisons = codexCleaningComparisons(target, codices)
@@ -80,12 +87,35 @@ internal fun CodexCleaningSheet(
                     }
                 }
             }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+                // The sheet dismisses itself, so the second action is Review rather than Cancel.
+                if (onReview == null) {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                } else {
+                    TextButton(enabled = (removing ?: 0) > 0, onClick = { onReview(selectedExisting) }) { Text("Review") }
+                }
                 Button(enabled = selectedExisting.isNotEmpty() && removing != 0, onClick = { onClean(selectedExisting) }) {
                     Text(removing?.let(::codexPostCount)?.let { "Remove $it" } ?: "Clean Codex")
                 }
             }
+        }
+    }
+}
+
+/**
+ * Review for cleaning Codex [codexId]: closes the sheet with [onOpen] and opens the triage deck on the posts the
+ * chosen comparisons also hold, where left removes. Null for no Codex (Likes, whose removal would unlike) or when the
+ * app provides no deck.
+ */
+@Composable
+internal fun rememberCleaningReview(codexId: String?, onOpen: () -> Unit): ((Set<String>) -> Unit)? {
+    val triage = LocalTriageOpener.current
+    val open by rememberUpdatedState(onOpen)
+    return remember(codexId, triage) {
+        if (codexId == null || triage === TriageOpener.None) return@remember null
+        { comparisonIds: Set<String> ->
+            open()
+            triage.openTriage(TriageRequest.codex(codexId, TriageMode.RemoveFromCodex(comparisonIds)))
         }
     }
 }
