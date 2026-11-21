@@ -315,9 +315,8 @@ class ViewerViewModel(
     }
 
     /**
-     * Resolves the current page once: at once when it has nothing to show, otherwise after the session's first media
-     * is up (see [awaitFirstMediaShown]), so known media mounts before its refresh. A recoverable failure retries only
-     * when the user returns to the page, or through Retry; nothing retries it on its own.
+     * Resolves the current page once, as soon as it becomes current. A recoverable failure retries only when the user
+     * returns to the page, or through Retry; nothing retries it on its own.
      */
     private fun requestCurrentPageResolution(current: ViewerUiState) {
         val page = current.currentPage ?: return
@@ -327,19 +326,7 @@ class ViewerViewModel(
         val status = page.resolution.status
         val wanted = status == ViewerResolutionStatus.IDLE ||
             (returning && status == ViewerResolutionStatus.FAILED && page.resolution.recoverable)
-        if (!wanted) return
-        if (page.media.isEmpty() || firstMediaShown.value) {
-            onAction(ViewerAction.RequestPageResolution(postId))
-            return
-        }
-        // Shares the page's resolution key, so leaving the page cancels the wait and a request replaces it.
-        launchSessionJob(ViewerWorkKey.Resolution(postId)) {
-            awaitFirstMediaShown()
-            val now = state.value.currentPage
-            if (now?.post?.id == postId && now.resolution.status == status) {
-                onAction(ViewerAction.RequestPageResolution(postId))
-            }
-        }
+        if (wanted) onAction(ViewerAction.RequestPageResolution(postId))
     }
 
     private fun launchResolution(effect: ViewerEffect.ResolvePost) {

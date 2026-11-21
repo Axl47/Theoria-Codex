@@ -198,7 +198,7 @@ class ViewerViewModelTest {
         runCurrent()
         owner.onAction(ViewerAction.SelectPage(3))
         runCurrent()
-        assertEquals(listOf(posts[1].id), cancelled)
+        assertEquals(listOf(posts[0].id, posts[1].id), cancelled)
         assertNull(owner.state.value.mediaError)
         assertEquals(ViewerResolutionStatus.IDLE, owner.state.value.pages[1].resolution.status)
         owner.clearSession()
@@ -565,7 +565,7 @@ class ViewerViewModelTest {
     }
 
     @Test
-    fun `known stale media mounts before route owned provider refresh starts`() = runTest {
+    fun `known stale media stays mounted while its provider refresh runs`() = runTest {
         val refreshStarted = CompletableDeferred<Unit>()
         val stale = post(
             id = "stale-video",
@@ -587,15 +587,9 @@ class ViewerViewModelTest {
         owner.replaceSession(codexSession)
         runCurrent()
 
-        assertFalse(refreshStarted.isCompleted)
-        assertEquals("stale-video", owner.state.value.currentPage?.post?.id?.sourcePostId)
-        assertEquals(ViewerResolutionStatus.IDLE, owner.state.value.currentPage?.resolution?.status)
-        assertTrue(owner.state.value.currentMedia?.displayLocation?.endsWith("stale-video.mp4") == true)
-
-        owner.onAction(ViewerAction.RequestCurrentPageResolution)
-        runCurrent()
-
         assertTrue(refreshStarted.isCompleted)
+        assertEquals("stale-video", owner.state.value.currentPage?.post?.id?.sourcePostId)
+        assertTrue(owner.state.value.currentMedia?.displayLocation?.endsWith("stale-video.mp4") == true)
         owner.clearSession()
     }
 }
