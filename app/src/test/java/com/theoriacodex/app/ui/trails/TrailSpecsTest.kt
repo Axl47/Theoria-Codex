@@ -5,7 +5,11 @@ import com.theoriacodex.app.ui.trails.TrailTestData.post
 import com.theoriacodex.app.ui.trails.TrailTestData.related
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.Page
+import com.theoriacodex.app.media.AnimatedDurationRange
+import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.domain.model.CreatorProfile
+import com.theoriacodex.domain.model.DateRange
+import com.theoriacodex.domain.model.MediaFilter
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
@@ -63,6 +67,36 @@ class TrailSpecsTest {
 
         val local = trailTagQuery("dog", SourceKey.DANBOORU, context = null)
         assertEquals(QueryMode.Source(SourceKey.DANBOORU) to SortMode.NEWEST, local.mode to local.sort)
+    }
+
+    @Test
+    fun `a tag trail keeps its level's media, dates and same-place exclusions`() {
+        val dates = DateRange(1L, 2L)
+        val level = Query(QueryMode.Source(SourceKey.DANBOORU), listOf("cat"), listOf("comic", "dog"), SortMode.TOP, dates, null)
+            .copy(media = MediaFilter.ANIMATED)
+
+        val fork = trailTagQuery("dog", SourceKey.DANBOORU, level)
+        assertEquals(listOf("dog"), fork.includeTags)
+        assertEquals(listOf("comic"), fork.excludeTags)
+        assertEquals(Triple(MediaFilter.ANIMATED, dates, SortMode.TOP), Triple(fork.media, fork.dateRange, fork.sort))
+
+        // A post from another source searches its own source, where the level's exclusions may not mean the same.
+        assertEquals(emptyList<String>(), trailTagQuery("fox", SourceKey.GELBOORU, level).excludeTags)
+    }
+
+    @Test
+    fun `a fork keeps its level's phone filters, with its own query's media and dates`() {
+        val parent = SearchVisibilityFilters(
+            animatedOnly = false, hideWatched = true, dateRange = DateRange(1L, 2L),
+            animatedDurationRange = AnimatedDurationRange(minBucket = 3, maxBucket = 9),
+        )
+        val tagQuery = trailTagQuery("dog", SourceKey.DANBOORU, null).copy(media = MediaFilter.ANIMATED)
+
+        assertEquals(
+            SearchVisibilityFilters(animatedOnly = true, hideWatched = true),
+            trailVisibilityFilters(parent, tagQuery),
+        )
+        assertEquals(SearchVisibilityFilters(hideWatched = true), trailVisibilityFilters(parent, query = null))
     }
 
     @Test
