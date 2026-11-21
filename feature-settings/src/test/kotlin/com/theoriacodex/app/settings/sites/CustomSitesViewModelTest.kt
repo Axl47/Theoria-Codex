@@ -277,7 +277,7 @@ class CustomSitesViewModelTest {
         advanceTimeBy(2)
         val (id, edit) = controller.edits.last()
         assertEquals("custom_safebooru_org", id)
-        assertEquals(CustomSiteEdit("Safe", CredentialEdit.Keep, SiteHeaders(), includeInUnifiedAndForYou = true), edit)
+        assertEquals(CustomSiteEdit("Safe", CredentialEdit.Keep, SiteHeaders()), edit)
         assertEquals(2, controller.edits.size)
         assertTrue(owner.state.value.form is SiteForm.Edit)
     }

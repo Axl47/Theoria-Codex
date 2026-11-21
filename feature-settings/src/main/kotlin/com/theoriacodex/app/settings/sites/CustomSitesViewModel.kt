@@ -33,8 +33,8 @@ import kotlin.time.Duration
  * Owner of Settings → Sites (plan C9). Turns [CustomSitesController] results into form stages and
  * plain messages; it never persists anything itself. Removing a site never touches library data.
  * A removal is held back for Undo ([DeferredRemovals]) and commits in [removalScope], which must outlive this
- * owner so leaving Settings, or clearing this owner, still completes it; an Edit page change still waiting to
- * save when this owner is cleared is saved there too.
+ * owner so leaving Settings, or clearing this owner, still completes it. Edit page changes are written there too,
+ * one at a time ([SiteLiveEdits]), including one still waiting when this owner is cleared.
  */
 class CustomSitesViewModel(
     private val controller: CustomSitesController,
@@ -44,7 +44,12 @@ class CustomSitesViewModel(
     private val scope = coroutineScope ?: viewModelScope
     private val removalScope = removalScope ?: scope
     private val removals = DeferredRemovals<String>(this.removalScope, ::commitRemoval)
-    private val liveEdits = SiteLiveEdits(scope, ::saveLive)
+    private val liveEdits = SiteLiveEdits(
+        timerScope = scope,
+        writeScope = this.removalScope,
+        savedSite = { sourceId -> controller.sites.value.firstOrNull { it.sourceId == sourceId } },
+        save = ::saveLive,
+    )
     private val mutableState = MutableStateFlow(
         CustomSitesUiState(sites = controller.sites.value, builtInSites = controller.builtInSites.value),
     )
@@ -293,7 +298,7 @@ class CustomSitesViewModel(
     }
 
     override fun onCleared() {
-        liveEdits.flush(into = removalScope)
+        liveEdits.flush()
         removals.commitAll()
     }
 
@@ -359,14 +364,13 @@ class CustomSitesViewModel(
         setFields(reset, transform)
         val form = state.value.form as? SiteForm.Edit ?: return
         if (form.saving) return
-        val site = state.value.sites.firstOrNull { it.sourceId == form.sourceId } ?: return
         val headers = (form.fields.headers() as? FormInput.Ok)?.value
         if (headers == null) updateEdit { copy(message = HEADER_ERROR_MESSAGE) }
-        liveEdits.schedule(form.sourceId, liveEdit(site, form.fields, headers), wait)
+        liveEdits.schedule(form.sourceId, LiveFields(form.fields.label, form.fields.includeInUnifiedAndForYou, headers), wait)
     }
 
-    /** Saves a live edit; a failure shows on the Edit page, or above the list once the page has closed. */
-    private suspend fun saveLive(sourceId: String, edit: CustomSiteEdit) {
+    /** Saves a live edit; a failure shows on the Edit page, or above the list once the page has closed. True once saved. */
+    private suspend fun saveLive(sourceId: String, edit: CustomSiteEdit): Boolean {
         val result = runCatchingPreservingCancellation { controller.update(sourceId, edit) }.getOrNull()
         val message = if (result == null) UNEXPECTED_FAILURE_MESSAGE else mutationMessage(result)
         mutableState.update { current ->
@@ -377,6 +381,7 @@ class CustomSitesViewModel(
                 else -> current
             }
         }
+        return result == CustomSiteMutation.Success
     }
 
     /** A pasted snippet (`user_id=…&api_key=…` or `login=…&api_key=…`) in either field fills both. */
