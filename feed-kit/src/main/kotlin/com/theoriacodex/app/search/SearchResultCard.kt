@@ -109,10 +109,8 @@ fun SearchResultCard(
     val viewerReturnShelf = LocalViewerReturnShelf.current
     val mediaGeometry = remember(post.id) { SearchCardMediaGeometry() }
     var isInViewport by remember(post.id) { mutableStateOf(false) }
-    val playbackActive = shouldFeedMediaPlay(
-        isInViewport = isInViewport,
-        isLifecycleStarted = rememberLifecycleStarted(),
-    )
+    val lifecycleStarted = rememberLifecycleStarted()
+    val playbackActive = isInViewport && lifecycleStarted
     val resolution = remember(post.id) { SearchCardResolution(post.id) }
     DisposableEffect(post.id) {
         onDispose {
@@ -154,8 +152,7 @@ fun SearchResultCard(
                         mediaGeometry.corners(cardShape, layoutDirection, cardDensity),
                     )
                 }
-                val visible = coordinates.isAttached &&
-                    isVisibleFeedBounds(coordinates.boundsInWindow(clipBounds = true))
+                val visible = coordinates.isAttached && !coordinates.boundsInWindow(clipBounds = true).isEmpty
                 if (isInViewport != visible) {
                     isInViewport = visible
                     onViewportChanged(visible)

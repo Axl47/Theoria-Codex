@@ -16,7 +16,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -88,10 +87,7 @@ internal fun SearchVideoPreview(
         // Viewer's closing animation. Cards show their posters, then all start together when it lands.
         if (viewerClosing) return@LaunchedEffect
         delay(FEED_PLAYER_ACTIVATION_DELAY_MS)
-        shouldLeasePlayer = shouldAcquireFeedPlayerLease(
-            isActive = isActive,
-            stableVisibilityElapsed = true,
-        )
+        shouldLeasePlayer = true
     }
     if (!shouldLeasePlayer) {
         UnpreparedSearchVideoPreview(
@@ -106,8 +102,7 @@ internal fun SearchVideoPreview(
         mediaKey = ViewerMediaKey(postId, mediaIndex),
         location = location,
         sourceKey = sourceKey,
-        leased = shouldLeasePlayer,
-        isActive = shouldLeasePlayer && isActive,
+        isActive = isActive,
         onPlaybackError = onPlaybackError,
         onDurationKnown = onDurationKnown,
     )
@@ -116,7 +111,6 @@ internal fun SearchVideoPreview(
         postId = postId,
         previewModel = previewModel,
         playbackDiagnosticsEnabled = playbackDiagnosticsEnabled,
-        isActive = shouldLeasePlayer,
         modifier = modifier,
     )
 }
@@ -145,7 +139,6 @@ private fun rememberFeedPreviewPlayerState(
     mediaKey: ViewerMediaKey,
     location: String,
     sourceKey: SourceKey,
-    leased: Boolean,
     isActive: Boolean,
     onPlaybackError: () -> Unit,
     onDurationKnown: (Long) -> Unit,
@@ -156,8 +149,7 @@ private fun rememberFeedPreviewPlayerState(
     val latestOnDurationKnown by rememberUpdatedState(onDurationKnown)
     val latestIsActive by rememberUpdatedState(isActive)
 
-    DisposableEffect(mediaKey, location, sourceKey, leased) {
-        if (!leased) return@DisposableEffect onDispose {}
+    DisposableEffect(mediaKey, location, sourceKey) {
         state.reset()
         state.presentation.begin()
         val pool = context.videoPlaybackInfrastructure().feedPreviewPlayerPool
@@ -285,7 +277,6 @@ private fun PreparedSearchVideoPreview(
     postId: PostId,
     previewModel: Any?,
     playbackDiagnosticsEnabled: Boolean,
-    isActive: Boolean,
     modifier: Modifier,
 ) {
     Box(
@@ -341,7 +332,7 @@ private fun PreparedSearchVideoPreview(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
-                isActive = isActive,
+                isActive = true,
             )
         }
     }
@@ -393,10 +384,6 @@ fun buildFeedImageRequest(
         targetWidthPx = decodeSize.widthPx,
         targetHeightPx = decodeSize.heightPx,
     ).newBuilder().placeholderMemoryCacheKey(placeholderMemoryCacheKey).build()
-}
-
-internal fun isVisibleFeedBounds(bounds: Rect): Boolean {
-    return hasVisibleFeedArea(bounds.width, bounds.height)
 }
 
 @Composable
