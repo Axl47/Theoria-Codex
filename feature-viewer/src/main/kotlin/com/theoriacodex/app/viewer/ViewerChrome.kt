@@ -16,37 +16,19 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import com.theoriacodex.app.ui.motion.LikedHeartColor
-import com.theoriacodex.app.ui.motion.likePop
-import com.theoriacodex.app.ui.motion.rememberLikeFeedback
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Collections
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
-import androidx.compose.material.icons.outlined.ChatBubbleOutline
-import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.minimumInteractiveComponentSize
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import com.theoriacodex.app.comments.CommentCount
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -82,66 +64,16 @@ internal fun closestViewerPlaybackRate(rate: Float): ViewerPlaybackRate {
     return ViewerPlaybackRate.entries.minBy { option -> abs(option.speed - rate) }
 }
 
+/** The Viewer's top bar: Back, the source and the page index, with [below] (the trail row) under it. */
 @Composable
 internal fun ViewerChrome(
     source: String,
     indexLabel: String?,
     onBack: () -> Unit,
-    liked: Boolean,
-    actionsMenuExpanded: Boolean,
-    onActionsMenuExpandedChange: (Boolean) -> Unit,
-    playbackSettingsExpanded: Boolean,
-    onPlaybackSettingsExpandedChange: (Boolean) -> Unit,
-    playbackSettingsEnabled: Boolean,
-    playbackRate: ViewerPlaybackRate,
-    onPlaybackRateSelected: (ViewerPlaybackRate) -> Unit,
-    mediaOverviewAvailable: Boolean,
-    mediaOverviewVisible: Boolean,
-    onToggleMediaOverview: () -> Unit,
-    onInfo: () -> Unit,
     modifier: Modifier = Modifier,
-    playbackRateEnabled: Boolean = true,
-    onToggleLike: (() -> Unit)? = null,
-    onPictureInPicture: (() -> Unit)? = null,
-    quality: com.theoriacodex.domain.model.VideoQuality = com.theoriacodex.domain.model.VideoQuality.AUTO,
-    playbackMode: com.theoriacodex.app.viewer.state.ViewerPlaybackMode = com.theoriacodex.app.viewer.state.ViewerPlaybackMode.LOOP,
-    onPlaybackModeSelected: (com.theoriacodex.app.viewer.state.ViewerPlaybackMode) -> Unit = {},
-    qualityHeight: Int? = null,
-    videoVariants: List<com.theoriacodex.domain.model.VideoVariant> = emptyList(),
-    onQualitySelected: (com.theoriacodex.domain.model.VideoQuality, Int?) -> Unit = { _, _ -> },
-    commentCount: CommentCount? = null,
-    onComments: () -> Unit = {},
+    below: @Composable () -> Unit = {},
 ) {
-    ViewerTopBar(source, indexLabel, onBack, modifier) {
-        ViewerLikeAction(
-            liked = liked,
-            onToggleLike = onToggleLike,
-        )
-        if (commentCount != null) ViewerCommentsAction(commentCount, onComments)
-        ViewerOverviewAction(
-            mediaOverviewAvailable = mediaOverviewAvailable,
-            mediaOverviewVisible = mediaOverviewVisible,
-            onToggleMediaOverview = onToggleMediaOverview,
-        )
-        if (playbackSettingsEnabled) {
-            PlaybackSettingsMenu(
-                expanded = playbackSettingsExpanded,
-                onExpandedChange = onPlaybackSettingsExpandedChange,
-                playbackRate = playbackRate,
-                playbackRateEnabled = playbackRateEnabled,
-                onPlaybackRateSelected = onPlaybackRateSelected,
-                playbackMode = playbackMode, onPlaybackModeSelected = onPlaybackModeSelected,
-                quality = quality, qualityHeight = qualityHeight, videoVariants = videoVariants,
-                onQualitySelected = onQualitySelected,
-            )
-        }
-        ViewerActionsMenu(
-            expanded = actionsMenuExpanded,
-            onExpandedChange = onActionsMenuExpandedChange,
-            onInfo = onInfo,
-            onPictureInPicture = onPictureInPicture,
-        )
-    }
+    ViewerTopBar(source, indexLabel, onBack, modifier, below)
 }
 
 /** Floats over the media on a scrim, unlike the solid bars of secondary screens. */
@@ -151,95 +83,38 @@ private fun ViewerTopBar(
     indexLabel: String?,
     onBack: () -> Unit,
     modifier: Modifier,
-    actions: @Composable RowScope.() -> Unit,
+    below: @Composable () -> Unit,
 ) {
     Box(modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth().height(VIEWER_TOP_SCRIM_HEIGHT).background(ViewerVeil.TopScrim))
         CompositionLocalProvider(LocalContentColor provides Color.White) {
-            Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-                Text(
-                    text = buildAnnotatedString {
-                        append(source)
-                        if (indexLabel != null) {
-                            withStyle(SpanStyle(color = Color.White.copy(alpha = ViewerVeil.SECONDARY_TEXT_ALPHA), fontWeight = FontWeight.Normal, fontSize = 14.sp, fontFeatureSettings = "tnum")) {
-                                append("  $indexLabel")
+            Column(Modifier.fillMaxWidth()) {
+                Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                    Text(
+                        text = buildAnnotatedString {
+                            append(source)
+                            if (indexLabel != null) {
+                                withStyle(SpanStyle(color = Color.White.copy(alpha = ViewerVeil.SECONDARY_TEXT_ALPHA), fontWeight = FontWeight.Normal, fontSize = 14.sp, fontFeatureSettings = "tnum")) {
+                                    append("  $indexLabel")
+                                }
                             }
-                        }
-                    },
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                actions()
+                        },
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                below()
             }
         }
     }
 }
 
 private val VIEWER_TOP_SCRIM_HEIGHT = 170.dp
-
-@Composable
-private fun ViewerLikeAction(
-    liked: Boolean,
-    onToggleLike: (() -> Unit)?,
-) {
-    if (onToggleLike == null) return
-    val feedback = rememberLikeFeedback()
-    IconButton(onClick = {
-        feedback.tapped(liked)
-        onToggleLike()
-    }) {
-        Icon(
-            imageVector = if (liked) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
-            contentDescription = if (liked) "Unlike post" else "Like post",
-            tint = if (liked) LikedHeartColor else Color.White,
-            modifier = Modifier.likePop(feedback),
-        )
-    }
-}
-
-/** Shows that the post has comments, with their count when known, and opens them in the info sheet. */
-@Composable
-private fun ViewerCommentsAction(count: CommentCount, onClick: () -> Unit) {
-    val label = count.label
-    Row(
-        modifier = Modifier
-            .minimumInteractiveComponentSize()
-            .clip(CircleShape)
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 8.dp)
-            .clearAndSetSemantics { contentDescription = count.description(unknown = "Comments") },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null, tint = Color.White)
-        if (label != null) Text(label, style = MaterialTheme.typography.labelLarge, color = Color.White, maxLines = 1)
-    }
-}
-
-@Composable
-private fun ViewerOverviewAction(
-    mediaOverviewAvailable: Boolean,
-    mediaOverviewVisible: Boolean,
-    onToggleMediaOverview: () -> Unit,
-) {
-    if (!mediaOverviewAvailable) return
-    IconButton(onClick = onToggleMediaOverview) {
-        Icon(
-            imageVector = Icons.Default.Collections,
-            contentDescription = if (mediaOverviewVisible) {
-                "Close media overview"
-            } else {
-                "Open media overview"
-            },
-            tint = if (mediaOverviewVisible) LocalViewerAccent.current else Color.White,
-        )
-    }
-}
 
 @Composable
 internal fun PlaybackSettingsMenu(
@@ -287,41 +162,6 @@ internal fun PlaybackSettingsMenu(
                 interact(); onQualitySelected(selected, height)
             })
             if (playbackRateEnabled) PlaybackRateSlider(playbackRate) { interact(); onPlaybackRateSelected(it) }
-        }
-    }
-}
-
-@Composable
-private fun ViewerActionsMenu(
-    onPictureInPicture: (() -> Unit)?,
-    expanded: Boolean,
-    onExpandedChange: (Boolean) -> Unit,
-    onInfo: () -> Unit,
-) {
-    Box {
-        IconButton(onClick = { onExpandedChange(!expanded) }) {
-            Icon(Icons.Default.MoreVert, contentDescription = "More actions")
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) }) {
-            DropdownMenuItem(
-                text = { Text("Info") },
-                onClick = {
-                    onExpandedChange(false)
-                    onInfo()
-                },
-                leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) },
-            )
-            if (onPictureInPicture != null) {
-                DropdownMenuItem(
-                    text = { Text("Picture-in-picture") },
-                    onClick = {
-                        onExpandedChange(false)
-                        onPictureInPicture()
-                    },
-                    leadingIcon = { Icon(Icons.Default.PictureInPictureAlt, contentDescription = null) },
-                )
-            }
-
         }
     }
 }

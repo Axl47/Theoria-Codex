@@ -53,7 +53,12 @@ import com.theoriacodex.app.ui.routes.ViewerRouteDependencies
 import com.theoriacodex.app.ui.routes.ViewerRouteEffectCallbacks
 import com.theoriacodex.app.ui.routes.ViewerRouteLiveSourceState
 import com.theoriacodex.app.ui.routes.virtualCodexUi
+import com.theoriacodex.app.ui.trails.forLevel
+import com.theoriacodex.app.ui.trails.rememberViewerLevel
+import com.theoriacodex.app.ui.trails.viewerForkFadeIn
+import com.theoriacodex.app.ui.trails.viewerForkFadeOut
 import com.theoriacodex.app.viewer.ViewerReturnLifetime
+import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.ViewerScreenCallbacks
 import com.theoriacodex.app.viewer.ViewerScreenConfig
 import com.theoriacodex.app.viewer.viewerMediaPrefetcher
@@ -81,12 +86,14 @@ internal fun NavGraphBuilder.theoriaDestinations(shell: TheoriaShell, sharedScop
     composable(AppRoute.CreatorProfile) { CreatorDestination(shell) }
     composable(
         AppRoute.Viewer,
-        // Media owns the expansion/shrink; navigation retains both destinations.
-        enterTransition = { EnterTransition.None },
-        popExitTransition = { ExitTransition.None },
-    ) {
+        // Media owns the expansion/shrink; navigation retains both destinations. A trail fork fades over the Viewer it covers.
+        enterTransition = { if (initialState.destination.route == AppRoute.Viewer) viewerForkFadeIn() else EnterTransition.None },
+        exitTransition = { if (targetState.destination.route == AppRoute.Viewer) viewerForkFadeOut() else null },
+        popEnterTransition = { if (initialState.destination.route == AppRoute.Viewer) viewerForkFadeIn() else null },
+        popExitTransition = { if (targetState.destination.route == AppRoute.Viewer) viewerForkFadeOut() else ExitTransition.None },
+    ) { entry ->
         ViewerReturnLifetime(this)
-        ViewerDestination(shell)
+        ViewerDestination(shell, entry)
     }
     composable(AppRoute.Settings) { SettingsScreenDestination(shell) }
     composable(AppRoute.Triage, arguments = triageArguments) { entry -> TriageDestination(shell, entry.triageRequest()) }
@@ -260,15 +267,21 @@ private fun CreatorDestination(shell: TheoriaShell) {
 }
 
 @Composable
-private fun ViewerDestination(shell: TheoriaShell) {
+private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
     val routes = shell.routes
-    // Built once per shell, so a Search, For You or Creator state change leaves the Viewer's controls as they are.
-    val effectCallbacks = remember(shell) { viewerEffectCallbacks(shell) }
+    val level = rememberViewerLevel(shell.navController, entry, shell.viewerSessions.session.value?.sessionId)
+    // Built once per shell and trail level, so a Search, For You or Creator state change leaves the Viewer's controls as they are.
+    val effectCallbacks = remember(shell, level.isFork, level.feed) { viewerEffectCallbacks(shell).forLevel(level) { shell.navController.popBackStack() } }
     val screenCallbacks = remember(shell) { viewerScreenCallbacks(shell) }
+    // Viewer entries stack in a trail: each withdraws only its own owner, never the one now on top of or under it.
+    val onOwnerChanged = remember<(ViewerViewModel?) -> Unit>(routes.viewer) {
+        var published: ViewerViewModel? = null
+        { owner -> if (owner != null) routes.viewer.publish(owner.also { published = it }) else published?.let(routes.viewer::withdraw) }
+    }
     ViewerDestinationStateBoundary(
         data = shell.data,
         sources = shell.sources,
-        feedOwners = routes.feeds,
+        feedOwners = routes.feeds + listOfNotNull(level.feed),
     ) { state ->
         ViewerRoute(
             dependencies = ViewerRouteDependencies(
@@ -300,7 +313,8 @@ private fun ViewerDestination(shell: TheoriaShell) {
             liveSourceState = viewerLiveSourceState(state, shell.pendingLikePostIds[state.browsing.activeProfile.profileId].orEmpty()),
             effectCallbacks = effectCallbacks,
             screenCallbacks = screenCallbacks,
-            onOwnerChanged = { owner -> if (owner == null) routes.viewer.clear() else routes.viewer.publish(owner) },
+            onOwnerChanged = onOwnerChanged,
+            level = level,
         )
     }
 }

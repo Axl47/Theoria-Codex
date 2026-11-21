@@ -11,12 +11,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.percentOffset
 import androidx.compose.ui.test.performTouchInput
-import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.domain.model.Post
-import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
-import com.theoriacodex.domain.model.SortMode
-import com.theoriacodex.domain.model.SourceKey
 import org.junit.Test
 
 class ViewerMultiPageJourneyTest : AppJourneyFixture() {
@@ -34,7 +29,7 @@ class ViewerMultiPageJourneyTest : AppJourneyFixture() {
 
     @Test
     fun aPageDragTurnsThePageAndTheStripKeepsTheNextPostInReach() {
-        openPost(MULTI_PAGE_POST)
+        openSearchPost(MULTI_PAGE_POST, RECENT_SEARCH)
         val scrubber = compose.onNodeWithTag("viewer-page-scrubber")
         compose.waitUntil(10_000) { scrubber.isDisplayed() }
 
@@ -60,21 +55,6 @@ class ViewerMultiPageJourneyTest : AppJourneyFixture() {
         scrubber.assertDoesNotExist()
     }
 
-    private fun openPost(index: Int) {
-        io {
-            container.data.recentsRepository.recordSearch(
-                Query(QueryMode.Source(SourceKey.PIXIV), listOf("multi"), emptyList(), SortMode.POPULAR, null, null),
-                RECENT_SEARCH,
-            )
-        }
-        launch()
-        tab("Recents")
-        openRecentsSection("Searches")
-        activate(compose.onNodeWithTag("Recent search:$RECENT_SEARCH"))
-        val card = compose.onNodeWithTag(searchCardTestTag(posts.getValue(SourceKey.PIXIV)[index].id))
-        compose.waitUntil(10_000) { card.isDisplayed() }
-        activate(card)
-    }
 
     private fun hasStateDescription(expected: String) = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, expected)
 

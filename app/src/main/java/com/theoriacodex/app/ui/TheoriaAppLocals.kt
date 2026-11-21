@@ -22,7 +22,7 @@ import com.theoriacodex.app.ui.navigation.LiftController
 import com.theoriacodex.app.ui.navigation.LocalLiftController
 import com.theoriacodex.app.ui.navigation.LocalTrailOpener
 import com.theoriacodex.app.ui.navigation.LocalTriageOpener
-import com.theoriacodex.app.ui.navigation.TrailOpener
+import com.theoriacodex.app.ui.trails.rememberTrailOpener
 import com.theoriacodex.app.ui.routes.browsingMetadataOwner
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
 import com.theoriacodex.app.viewer.ViewerReturnTransition
@@ -41,7 +41,7 @@ internal fun ShellCompositionLocals(shell: TheoriaShell, content: @Composable ()
     val viewerReturnTransition = remember { ViewerReturnTransition() }
     val relatedPostsSupport = remember(shell) { shell.features.relatedPosts::supports }
     CompositionLocalProvider(
-        LocalTrailOpener provides TrailOpener.None,
+        LocalTrailOpener provides rememberTrailOpener(shell),
         LocalCodexPostIds provides rememberCodexPostIds(shell),
         LocalPostWatchPresentation provides watchPresentation,
         LocalCodexSaveRelevanceLoader provides saveRelevanceLoader,
