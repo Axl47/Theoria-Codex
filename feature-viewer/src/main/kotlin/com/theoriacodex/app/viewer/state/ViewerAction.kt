@@ -77,21 +77,11 @@ sealed interface ViewerAction {
         val recoverable: Boolean,
     ) : ViewerAction
 
-    /** [decodeKeys]: images among [mediaKeys] close enough to the current media to keep decoded in memory. */
-    data class QueuePrefetch(
-        val mediaKeys: List<ViewerMediaKey>,
-        val decodeKeys: Set<ViewerMediaKey> = emptySet(),
-    ) : ViewerAction
-    data class PrefetchStarted(
-        val session: ViewerSessionIdentity,
-        val mediaKey: ViewerMediaKey,
-    ) : ViewerAction
-
-    data class PrefetchCompleted(
-        val session: ViewerSessionIdentity,
-        val mediaKey: ViewerMediaKey,
-        val result: ViewerPrefetchResult,
-    ) : ViewerAction
+    /**
+     * The media the Viewer wants warm now, most wanted first; anything else in flight is cancelled. The ViewModel
+     * runs it and keeps its progress to itself, so prefetching never changes [ViewerUiState].
+     */
+    data class QueuePrefetch(val requests: List<ViewerPrefetchRequest>) : ViewerAction
 
     data class MediaFailed(
         val session: ViewerSessionIdentity,
@@ -118,17 +108,15 @@ sealed interface ViewerAction {
     data object Dismiss : ViewerAction
 }
 
+/** One media item to warm, [distance] media items from the one on screen; [decode] keeps an image decoded in memory. */
+data class ViewerPrefetchRequest(val key: ViewerMediaKey, val distance: Int, val decode: Boolean)
+
 sealed interface ViewerEffect {
     val session: ViewerSessionIdentity
 
     data class ResolvePost(
         override val session: ViewerSessionIdentity,
         val postId: PostId,
-    ) : ViewerEffect
-
-    data class PrefetchMedia(
-        override val session: ViewerSessionIdentity,
-        val mediaKeys: List<ViewerMediaKey>,
     ) : ViewerEffect
 
     data class SavePost(

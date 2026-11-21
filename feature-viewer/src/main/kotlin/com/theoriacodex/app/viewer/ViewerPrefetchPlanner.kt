@@ -4,6 +4,7 @@ import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerMediaKind
 import com.theoriacodex.app.viewer.state.ViewerPageState
+import com.theoriacodex.app.viewer.state.ViewerPrefetchRequest
 import kotlin.math.abs
 
 internal const val VIEWER_PREFETCH_LEFT_COUNT = 3
@@ -54,26 +55,16 @@ fun viewerPrefetchAction(
     current: ViewerMediaKey?,
     swipeTarget: ViewerMediaKey?,
 ): ViewerAction.QueuePrefetch {
-    val keys = (listOfNotNull(swipeTarget) + planAdjacentViewerPrefetch(pages, current)).distinct()
-    val images = pages.asSequence().flatMap { page -> page.media.asSequence() }
-        .filter { media -> media.kind == ViewerMediaKind.IMAGE }
-        .mapTo(hashSetOf()) { media -> media.key }
-    val decodeKeys = keys.filterTo(hashSetOf()) { key ->
-        key in images && (viewerPrefetchDistance(pages, current, key) ?: Int.MAX_VALUE) <= VIEWER_MEMORY_PREFETCH_DISTANCE
-    }
-    return ViewerAction.QueuePrefetch(keys, decodeKeys)
-}
-
-/** Media-item distance between [current] and [target] in the flattened Viewer stream; null when either is absent. */
-internal fun viewerPrefetchDistance(
-    pages: List<ViewerPageState>,
-    current: ViewerMediaKey?,
-    target: ViewerMediaKey,
-): Int? {
-    if (current == null) return null
     val flattened = pages.flatMap(ViewerPageState::media)
-    val currentIndex = flattened.indexOfFirst { media -> media.key == current }
-    val targetIndex = flattened.indexOfFirst { media -> media.key == target }
-    if (currentIndex < 0 || targetIndex < 0) return null
-    return abs(targetIndex - currentIndex)
+    val currentIndex = current?.let { key -> flattened.indexOfFirst { media -> media.key == key } } ?: -1
+    val keys = (listOfNotNull(swipeTarget) + planAdjacentViewerPrefetch(pages, current)).distinct()
+    return ViewerAction.QueuePrefetch(
+        keys.map { key ->
+            val index = flattened.indexOfFirst { media -> media.key == key }
+            // Media-item distance in the flattened stream; unknown when either end is absent.
+            val distance = if (currentIndex < 0 || index < 0) Int.MAX_VALUE else abs(index - currentIndex)
+            val image = flattened.getOrNull(index)?.kind == ViewerMediaKind.IMAGE
+            ViewerPrefetchRequest(key, distance, decode = image && distance <= VIEWER_MEMORY_PREFETCH_DISTANCE)
+        },
+    )
 }

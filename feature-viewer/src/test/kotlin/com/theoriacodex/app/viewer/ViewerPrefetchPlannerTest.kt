@@ -95,8 +95,9 @@ class ViewerPrefetchPlannerTest {
 
         val action = viewerPrefetchAction(pages, current = flattened[3], swipeTarget = null)
 
-        assertEquals(listOf(flattened[4], flattened[5], flattened[2], flattened[1], flattened[0]), action.mediaKeys)
-        assertEquals(setOf(flattened[2]), action.decodeKeys)
+        assertEquals(listOf(flattened[4], flattened[5], flattened[2], flattened[1], flattened[0]), action.requests.map { it.key })
+        assertEquals(listOf(flattened[2]), action.requests.filter { it.decode }.map { it.key })
+        assertEquals(listOf(1, 2, 1, 2, 3), action.requests.map { it.distance })
     }
 
     private fun pages(

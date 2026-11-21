@@ -19,6 +19,7 @@ import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerMediaState
 import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.app.viewer.state.ViewerPrefetchOutcome
+import com.theoriacodex.app.viewer.state.ViewerPrefetchRequest
 import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
 import com.theoriacodex.app.viewer.state.ViewerResolutionStatus
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
@@ -80,6 +81,7 @@ class ViewerViewModel(
     private val recordedVisiblePosts = mutableSetOf<PostId>()
     private val prefetchSemaphore = Semaphore(VIEWER_PREFETCH_MAX_CONCURRENCY)
     private var desiredPrefetchKeys = emptySet<ViewerMediaKey>()
+    private val prefetchLedger = ViewerPrefetchLedger()
     /** Whether this session has shown its first media; speculative loads wait for it (see [awaitFirstMediaShown]). */
     private val firstMediaShown = MutableStateFlow(false)
     /** The page the last lookahead saw as current; a different one means the user arrived on a page. */
@@ -118,6 +120,10 @@ class ViewerViewModel(
         }
 
     override fun onAction(action: ViewerAction) {
+        if (action is ViewerAction.QueuePrefetch) {
+            queuePrefetch(action.requests)
+            return
+        }
         val reduction = synchronized(lock) {
             if (action is ViewerAction.ReplaceSession) resetSessionWork(action)
             val restoresSavedSelection = action is ViewerAction.ReplaceSession &&
@@ -229,8 +235,12 @@ class ViewerViewModel(
         if (mutableSession.value == null) return
         val listed = state.value.pages.firstOrNull { page -> page.post.id == resolved.id }?.post ?: return
         val post = resolved.keepingListingDataOf(listed)
-        sessionJobs.keys.filterIsInstance<ViewerWorkKey.Prefetch>().filter { it.mediaKey.postId == post.id }
-            .forEach { key -> sessionJobs.remove(key)?.cancel() }
+        synchronized(lock) {
+            sessionJobs.keys.filterIsInstance<ViewerWorkKey.Prefetch>().filter { it.mediaKey.postId == post.id }
+                .forEach { key -> sessionJobs.remove(key)?.cancel() }
+            // The resolved post's media may differ, so what was warmed for the listed one no longer counts.
+            prefetchLedger.forget(post.id)
+        }
         state.value.session?.let { identity ->
             onAction(ViewerAction.ResolutionCompleted(identity, post))
         }
@@ -308,15 +318,6 @@ class ViewerViewModel(
                     effectChannel.trySend(effect)
                 } else {
                     launchResolution(effect, resolver)
-                }
-            }
-
-            is ViewerEffect.PrefetchMedia -> {
-                val prefetcher = mediaPrefetcher
-                if (prefetcher == null) {
-                    effectChannel.trySend(effect)
-                } else {
-                    reconcilePrefetch(effect.session, effect.mediaKeys, prefetcher)
                 }
             }
 
@@ -417,47 +418,42 @@ class ViewerViewModel(
 
     private fun launchPrefetch(
         session: ViewerSessionIdentity,
-        mediaKey: ViewerMediaKey,
+        request: ViewerPrefetchRequest,
+        media: ViewerMediaState,
         prefetcher: ViewerMediaPrefetcher,
     ) {
-        val media = state.value.pages
-            .asSequence()
-            .flatMap { page -> page.media.asSequence() }
-            .firstOrNull { candidate -> candidate.key == mediaKey }
-            ?: return
-        val distance = viewerPrefetchDistance(state.value.pages, state.value.currentMedia?.key, mediaKey) ?: Int.MAX_VALUE
         // Decoding an image that is already downloaded reads the disk, so it never holds a download slot.
-        val downloaded = mediaKey in state.value.prefetch.warmed
-        launchSessionJob(ViewerWorkKey.Prefetch(mediaKey)) {
+        val downloaded = prefetchLedger.isDownloaded(request.key)
+        launchSessionJob(ViewerWorkKey.Prefetch(request.key)) {
             awaitFirstMediaShown()
             if (downloaded) {
-                runPrefetch(session, mediaKey, media, distance, prefetcher)
+                runPrefetch(session, request, media, prefetcher)
             } else {
-                prefetchSemaphore.withPermit { runPrefetch(session, mediaKey, media, distance, prefetcher) }
+                prefetchSemaphore.withPermit { runPrefetch(session, request, media, prefetcher) }
             }
         }
     }
 
     private suspend fun runPrefetch(
         session: ViewerSessionIdentity,
-        mediaKey: ViewerMediaKey,
+        request: ViewerPrefetchRequest,
         media: ViewerMediaState,
-        distance: Int,
         prefetcher: ViewerMediaPrefetcher,
     ) {
         currentCoroutineContext().ensureActive()
         synchronized(lock) {
-            if (mediaKey !in desiredPrefetchKeys) throw CancellationException("Prefetch superseded")
+            if (request.key !in desiredPrefetchKeys) throw CancellationException("Prefetch superseded")
         }
-        onAction(ViewerAction.PrefetchStarted(session, mediaKey))
         val result = try {
-            prefetcher.prefetch(session, media, distance).also { currentCoroutineContext().ensureActive() }
+            prefetcher.prefetch(session, media, request.distance).also { currentCoroutineContext().ensureActive() }
         } catch (error: CancellationException) {
             throw error
         } catch (_: Throwable) {
             ViewerPrefetchResult(ViewerPrefetchOutcome.FAILED)
         }
-        onAction(ViewerAction.PrefetchCompleted(session, mediaKey, result))
+        synchronized(lock) {
+            if (state.value.session == session) prefetchLedger.record(request.key, result)
+        }
     }
 
     /**
@@ -470,23 +466,29 @@ class ViewerViewModel(
         withTimeoutOrNull(VIEWER_PREFETCH_READY_WAIT_MS) { firstMediaShown.first { shown -> shown } }
     }
 
-    private fun reconcilePrefetch(
-        session: ViewerSessionIdentity,
-        requested: List<ViewerMediaKey>,
-        prefetcher: ViewerMediaPrefetcher,
-    ) {
-        val desired = requested.toSet()
+    /**
+     * Warms the [requests] this session's media still needs, most wanted first, and cancels prefetch work no longer
+     * requested. Runs on the main thread for every selection, so it looks up only the few requested keys.
+     */
+    private fun queuePrefetch(requests: List<ViewerPrefetchRequest>) {
+        val prefetcher = mediaPrefetcher ?: return
         synchronized(lock) {
-            desiredPrefetchKeys = desired
+            val current = state.value
+            val session = current.session ?: return
+            fun mediaFor(key: ViewerMediaKey) = current.pages.firstOrNull { page -> page.post.id == key.postId }
+                ?.media?.getOrNull(key.mediaIndex)?.takeIf { media -> media.key == key }
+            val wanted = requests.asSequence()
+                .filterNot(prefetchLedger::isDone)
+                .distinctBy(ViewerPrefetchRequest::key)
+                .mapNotNull { request -> mediaFor(request.key)?.let { media -> request to media } }
+                .toList()
+            desiredPrefetchKeys = wanted.mapTo(mutableSetOf()) { (request, _) -> request.key }
             sessionJobs.keys
                 .filterIsInstance<ViewerWorkKey.Prefetch>()
-                .filterNot { key -> key.mediaKey in desired }
+                .filterNot { key -> key.mediaKey in desiredPrefetchKeys }
                 .forEach { key -> sessionJobs.remove(key)?.cancel() }
-            requested.forEach { mediaKey ->
-                val workKey = ViewerWorkKey.Prefetch(mediaKey)
-                if (workKey !in sessionJobs) {
-                    launchPrefetch(session, mediaKey, prefetcher)
-                }
+            wanted.forEach { (request, media) ->
+                if (ViewerWorkKey.Prefetch(request.key) !in sessionJobs) launchPrefetch(session, request, media, prefetcher)
             }
         }
     }
@@ -507,6 +509,7 @@ class ViewerViewModel(
 
     private fun cancelSessionJobs() {
         desiredPrefetchKeys = emptySet()
+        prefetchLedger.clear()
         sessionJobs.values.toList().forEach(Job::cancel)
         sessionJobs.clear()
     }
@@ -584,6 +587,35 @@ class ViewerViewModel(
     private sealed interface ViewerWorkKey {
         data class Resolution(val postId: PostId) : ViewerWorkKey
         data class Prefetch(val mediaKey: ViewerMediaKey) : ViewerWorkKey
+    }
+}
+
+/** What this session's prefetch has finished, kept out of UI state so prefetch progress recomposes nothing. */
+private class ViewerPrefetchLedger {
+    private val downloaded = mutableSetOf<ViewerMediaKey>()
+    private val decoded = mutableSetOf<ViewerMediaKey>()
+    private val settled = mutableSetOf<ViewerMediaKey>()
+
+    fun isDownloaded(key: ViewerMediaKey) = key in downloaded
+
+    /** Skipped and failed media stay done; a downloaded image is done unless it now wants decoding and is not decoded. */
+    fun isDone(request: ViewerPrefetchRequest) = request.key in settled ||
+        (request.key in downloaded && !(request.decode && request.key !in decoded))
+
+    fun record(key: ViewerMediaKey, result: ViewerPrefetchResult) {
+        when (result.outcome) {
+            ViewerPrefetchOutcome.WARMED -> downloaded += key
+            ViewerPrefetchOutcome.SKIPPED, ViewerPrefetchOutcome.FAILED -> settled += key
+        }
+        if (result.decoded) decoded += key
+    }
+
+    fun forget(postId: PostId) {
+        listOf(downloaded, decoded, settled).forEach { keys -> keys.removeAll { key -> key.postId == postId } }
+    }
+
+    fun clear() {
+        listOf(downloaded, decoded, settled).forEach(MutableSet<ViewerMediaKey>::clear)
     }
 }
 

@@ -128,9 +128,8 @@ fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReducti
         is ViewerAction.ResolutionStarted,
         is ViewerAction.ResolutionCompleted,
         is ViewerAction.ResolutionFailed -> state.reduceResolution(action)
-        is ViewerAction.QueuePrefetch -> state.queuePrefetch(session, action.mediaKeys, action.decodeKeys)
-        is ViewerAction.PrefetchStarted -> state.reducePrefetchStarted(action)
-        is ViewerAction.PrefetchCompleted -> state.reducePrefetchCompleted(action)
+        // The ViewModel runs prefetch outside state; see ViewerViewModel.queuePrefetch.
+        is ViewerAction.QueuePrefetch -> ViewerReduction(state)
         is ViewerAction.MediaFailed -> state.reduceMediaFailed(action)
         is ViewerAction.MediaReady -> state.reduceMediaReady(action)
         ViewerAction.ClearMediaError -> ViewerReduction(state.copy(mediaError = null))
@@ -255,36 +254,6 @@ private fun ViewerUiState.reduceResolutionStarted(action: ViewerAction.Resolutio
                 message = null,
             )
         }
-    }
-
-private fun ViewerUiState.reducePrefetchStarted(action: ViewerAction.PrefetchStarted): ViewerReduction =
-    this.ifCurrentSession(action.session) {
-        copy(
-            prefetch = prefetch.copy(
-                queued = prefetch.queued - action.mediaKey,
-                inFlight = prefetch.inFlight + action.mediaKey,
-            ),
-        )
-    }
-
-private fun ViewerUiState.reducePrefetchCompleted(action: ViewerAction.PrefetchCompleted): ViewerReduction =
-    this.ifCurrentSession(action.session) {
-        copy(
-            prefetch = prefetch.copy(
-                queued = prefetch.queued - action.mediaKey,
-                inFlight = prefetch.inFlight - action.mediaKey,
-                warmed = if (action.result.outcome == ViewerPrefetchOutcome.WARMED) {
-                    prefetch.warmed + (action.mediaKey to action.result.bytesCached)
-                } else prefetch.warmed,
-                decoded = if (action.result.decoded) prefetch.decoded + action.mediaKey else prefetch.decoded,
-                skipped = if (action.result.outcome == ViewerPrefetchOutcome.SKIPPED) {
-                    prefetch.skipped + action.mediaKey
-                } else prefetch.skipped,
-                failed = if (action.result.outcome == ViewerPrefetchOutcome.FAILED) {
-                    prefetch.failed + action.mediaKey
-                } else prefetch.failed,
-            ),
-        )
     }
 
 private fun ViewerUiState.reduceMediaFailed(action: ViewerAction.MediaFailed): ViewerReduction =
@@ -487,18 +456,9 @@ private fun ViewerUiState.replaceResolvedPost(post: Post): ViewerUiState {
         ),
     )
     val updatedPages = pages.toMutableList().also { values -> values[pageIndex] = replacement }
-    val invalidatedPrefetch = prefetch.copy(
-        queued = prefetch.queued.filterNotTo(mutableSetOf()) { it.postId == post.id },
-        inFlight = prefetch.inFlight.filterNotTo(mutableSetOf()) { it.postId == post.id },
-        warmed = prefetch.warmed.filterKeys { it.postId != post.id },
-        decoded = prefetch.decoded.filterNotTo(mutableSetOf()) { it.postId == post.id },
-        skipped = prefetch.skipped.filterNotTo(mutableSetOf()) { it.postId == post.id },
-        failed = prefetch.failed.filterNotTo(mutableSetOf()) { it.postId == post.id },
-    )
-    if (pageIndex != currentPageIndex) return copy(pages = updatedPages, prefetch = invalidatedPrefetch)
+    if (pageIndex != currentPageIndex) return copy(pages = updatedPages)
     return copy(
         pages = updatedPages,
-        prefetch = invalidatedPrefetch,
         controls = controls.copy(
             playback = playbackControlsFor(
                 media = replacement.selectedMedia,
@@ -561,36 +521,6 @@ private fun ViewerUiState.updateResolution(
     val page = updatedPages[pageIndex]
     updatedPages[pageIndex] = page.copy(resolution = update(page.resolution))
     return copy(pages = updatedPages)
-}
-
-/**
- * A warmed image is done unless it has come close enough to be decoded and only its download is warm.
- * Runs on the main thread for every prefetch action, so it checks only the few requested keys instead of
- * building sets of every page's media or every finished key, which grow with the session.
- */
-private fun ViewerUiState.queuePrefetch(
-    session: ViewerSessionIdentity,
-    requested: List<ViewerMediaKey>,
-    decodeKeys: Set<ViewerMediaKey>,
-): ViewerReduction {
-    fun isKnown(key: ViewerMediaKey) =
-        pages.any { page -> page.post.id == key.postId && page.media.getOrNull(key.mediaIndex)?.key == key }
-    fun isTerminal(key: ViewerMediaKey) = key in prefetch.skipped || key in prefetch.failed ||
-        (key in prefetch.warmed && !(key in decodeKeys && key !in prefetch.decoded))
-    val desired = requested.asSequence()
-        .filter(::isKnown)
-        .filterNot(::isTerminal)
-        .distinct()
-        .toList()
-    return ViewerReduction(
-        state = copy(
-            prefetch = prefetch.copy(
-                queued = desired.toSet() - prefetch.inFlight,
-                inFlight = prefetch.inFlight.intersect(desired.toSet()),
-            ),
-        ),
-        effects = listOf(ViewerEffect.PrefetchMedia(session, desired)),
-    )
 }
 
 private fun ViewerUiState.retryMedia(session: ViewerSessionIdentity): ViewerReduction {

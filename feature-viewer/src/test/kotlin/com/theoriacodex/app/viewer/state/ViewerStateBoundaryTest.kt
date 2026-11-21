@@ -223,19 +223,12 @@ class ViewerStateBoundaryTest {
     }
 
     @Test
-    fun `a resolved post keeps the requested position and only its own page and prefetch state change`() {
+    fun `a resolved post keeps the requested position and only its own page changes`() {
         val a = post("a", listOf(ref("image/jpeg", "1.jpg"), ref("image/jpeg", "2.jpg")))
         val b = post("b", listOf(ref("image/jpeg", "b1.jpg")))
-        fun keys(post: Post) = (0..1).map { ViewerMediaKey(post.id, it) }
-        val (a0, a1) = keys(a)
-        val (b0, b1) = keys(b)
-        val prefetch = ViewerPrefetchState(
-            queued = setOf(a0, b0), inFlight = setOf(a1, b1), warmed = mapOf(a0 to 1L, b0 to 2L),
-            decoded = setOf(a0, b0), skipped = setOf(a1, b1), failed = setOf(a0, b1),
-        )
         val loading = createViewerUiState(
             session, listOf(a, b), requiresResolution = { true }, initialMediaIndices = mapOf(a.id to 3),
-        ).let { it.copy(prefetch = prefetch, mediaError = ViewerMediaError.Fatal(null, "old")) }
+        ).let { it.copy(mediaError = ViewerMediaError.Fatal(null, "old")) }
             .act(ViewerAction.ToggleOverview)
         assertEquals(3, loading.pages[0].pendingMediaIndex)
         val resolvedB = loading.act(ViewerAction.ResolutionCompleted(session, b.copy(media = b.media + b.media)))
@@ -243,12 +236,6 @@ class ViewerStateBoundaryTest {
         assertEquals(loading.pages[0], resolvedB.pages[0])
         assertEquals(loading.controls, resolvedB.controls)
         assertEquals(loading.mediaError, resolvedB.mediaError)
-        assertEquals(setOf(a0), resolvedB.prefetch.queued)
-        assertEquals(setOf(a1), resolvedB.prefetch.inFlight)
-        assertEquals(mapOf(a0 to 1L), resolvedB.prefetch.warmed)
-        assertEquals(setOf(a0), resolvedB.prefetch.decoded)
-        assertEquals(setOf(a1), resolvedB.prefetch.skipped)
-        assertEquals(setOf(a0), resolvedB.prefetch.failed)
         val grown = a.copy(media = a.media + ref("image/jpeg", "3.jpg") + ref("video/mp4", "4.mp4"))
         val resolvedA = loading.act(ViewerAction.ResolutionCompleted(session, grown))
         assertEquals(3, resolvedA.currentPage?.selectedMediaIndex)
@@ -295,20 +282,6 @@ class ViewerStateBoundaryTest {
         assertEquals(listOf(ViewerEffect.RetryMedia(session, second)), retried.effects)
         assertEquals(listOf(0L, 1L), retried.state.pages[0].media.map { it.loadGeneration })
         assertFalse(retried.state.controls.playback.playing)
-    }
-
-    @Test
-    fun `prefetch requests drop unknown and duplicate keys and keep a download that is still wanted`() {
-        val gallery = post("g", (1..3).map { ref("image/jpeg", "$it.jpg") })
-        val (k0, k1, k2) = (0..2).map { ViewerMediaKey(gallery.id, it) }
-        val state = createViewerUiState(session, listOf(gallery))
-            .copy(prefetch = ViewerPrefetchState(inFlight = setOf(k1)))
-        val unknownPost = ViewerMediaKey(PostId(SourceKey.PIXIV, "gone"), 0)
-        val unknownIndex = ViewerMediaKey(gallery.id, 7)
-        val queued = reduceViewerState(state, ViewerAction.QueuePrefetch(listOf(k0, unknownPost, k0, k1, unknownIndex, k2)))
-        assertEquals(listOf(ViewerEffect.PrefetchMedia(session, listOf(k0, k1, k2))), queued.effects)
-        assertEquals(setOf(k0, k2), queued.state.prefetch.queued)
-        assertEquals(emptySet<ViewerMediaKey>(), reduceViewerState(queued.state, ViewerAction.QueuePrefetch(listOf(k0))).state.prefetch.inFlight)
     }
 
     @Test

@@ -618,9 +618,7 @@ private suspend fun handleViewerEffect(
             callbacks.onDismiss()
             currentState.currentPage?.post?.id?.let { viewerReturn?.begin(it) }
         }
-        is ViewerEffect.ResolvePost,
-        is ViewerEffect.PrefetchMedia,
-        -> Unit
+        is ViewerEffect.ResolvePost -> Unit
     }
 }
 

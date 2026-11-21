@@ -90,16 +90,6 @@ data class ViewerOverviewState(
     val available: Boolean = false,
 )
 
-/** [decoded] is the subset of [warmed] images that were decoded into memory rather than only downloaded. */
-data class ViewerPrefetchState(
-    val queued: Set<ViewerMediaKey> = emptySet(),
-    val inFlight: Set<ViewerMediaKey> = emptySet(),
-    val warmed: Map<ViewerMediaKey, Long> = emptyMap(),
-    val decoded: Set<ViewerMediaKey> = emptySet(),
-    val skipped: Set<ViewerMediaKey> = emptySet(),
-    val failed: Set<ViewerMediaKey> = emptySet(),
-)
-
 sealed interface ViewerMediaError {
     val mediaKey: ViewerMediaKey?
     val message: String
@@ -133,7 +123,6 @@ data class ViewerUiState(
     val currentPageIndex: Int = 0,
     val controls: ViewerControlsState = ViewerControlsState(),
     val overview: ViewerOverviewState = ViewerOverviewState(),
-    val prefetch: ViewerPrefetchState = ViewerPrefetchState(),
     val mediaError: ViewerMediaError? = null,
     val related: ViewerRelatedBranch = ViewerRelatedBranch(),
 ) {

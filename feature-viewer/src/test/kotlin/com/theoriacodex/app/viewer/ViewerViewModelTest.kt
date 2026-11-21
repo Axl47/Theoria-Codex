@@ -6,6 +6,7 @@ import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerEffect
 import com.theoriacodex.app.viewer.state.ViewerMediaError
 import com.theoriacodex.app.viewer.state.ViewerPrefetchOutcome
+import com.theoriacodex.app.viewer.state.ViewerPrefetchRequest
 import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
 import com.theoriacodex.app.viewer.state.ViewerResolutionStatus
 import com.theoriacodex.app.viewer.state.ViewerUiState
@@ -139,7 +140,7 @@ class ViewerViewModelTest {
         assertEquals(listOf(posts[2].id, posts[0].id), started)
         val state = owner.state.value
         val previousKey = requireNotNull(state.pages[0].media.firstOrNull()).key
-        assertTrue(previousKey in viewerPrefetchAction(state.pages, state.currentMedia?.key, null).mediaKeys)
+        assertTrue(previousKey in viewerPrefetchAction(state.pages, state.currentMedia?.key, null).requests.map { it.key })
         owner.clearSession()
     }
 
@@ -235,7 +236,6 @@ class ViewerViewModelTest {
         assertEquals(replacement.toViewerSessionIdentity(), owner.state.value.session)
         assertEquals("new", owner.state.value.currentPage?.post?.id?.sourcePostId)
         assertNull(owner.state.value.mediaError)
-        assertTrue(owner.state.value.prefetch.warmed.isEmpty())
         assertEquals("new", handle[AppRouteSavedStateKeys.VIEWER_SESSION_ID])
     }
 
@@ -408,10 +408,12 @@ class ViewerViewModelTest {
     @Test
     fun `actions emit buffered host effects while resolution and prefetch stay route owned`() = runTest {
         val resolved = post("lazy", source = SourceKey.HITOMI, title = "Resolved")
+        val warmed = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
         val owner = ViewerViewModel(
             savedStateHandle = SavedStateHandle(),
             postResolver = ViewerPostResolver { _, _ -> resolved },
-            mediaPrefetcher = ViewerMediaPrefetcher { _, _, _ ->
+            mediaPrefetcher = ViewerMediaPrefetcher { _, media, _ ->
+                warmed += media.key
                 ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED)
             },
             scopeOverride = this,
@@ -429,9 +431,9 @@ class ViewerViewModelTest {
         assertEquals("Resolved", owner.state.value.currentPage?.post?.title)
 
         val mediaKey = requireNotNull(owner.state.value.currentMedia?.key)
-        owner.onAction(ViewerAction.QueuePrefetch(listOf(mediaKey)))
+        owner.onAction(queue(mediaKey))
         advanceUntilIdle()
-        assertTrue(mediaKey in owner.state.value.prefetch.warmed)
+        assertEquals(listOf(mediaKey), warmed)
 
         owner.onAction(ViewerAction.Save)
         val effect = owner.effects.first()
@@ -600,7 +602,7 @@ class ViewerViewModelTest {
         owner.replaceSession(session("prefetch-gate", listOf(post("gallery", media = (0..3).map { image("$it.jpg") }))))
         val keys = owner.state.value.currentPage?.media.orEmpty().map { media -> media.key }
 
-        owner.onAction(ViewerAction.QueuePrefetch(listOf(keys[1])))
+        owner.onAction(queue(keys[1]))
         runCurrent()
         assertTrue(started.isEmpty())
         owner.onAction(ViewerAction.MediaReady(requireNotNull(owner.state.value.session), keys[0], 0L))
@@ -608,13 +610,13 @@ class ViewerViewModelTest {
         assertEquals(listOf(keys[1]), started)
         // Later pages do not wait for the page on screen.
         owner.onAction(ViewerAction.SelectMedia(2))
-        owner.onAction(ViewerAction.QueuePrefetch(listOf(keys[3])))
+        owner.onAction(queue(keys[3]))
         runCurrent()
         assertEquals(listOf(keys[1], keys[3]), started)
 
         owner.replaceSession(session("prefetch-gate-slow", listOf(post("slow", media = (0..1).map { image("slow-$it.jpg") }))))
         val slow = owner.state.value.currentPage?.media.orEmpty().last().key
-        owner.onAction(ViewerAction.QueuePrefetch(listOf(slow)))
+        owner.onAction(queue(slow))
         advanceTimeBy(VIEWER_PREFETCH_READY_WAIT_MS - 1)
         runCurrent()
         assertTrue(slow !in started)
@@ -624,13 +626,13 @@ class ViewerViewModelTest {
     }
 
     @Test
-    fun `decoding a downloaded image does not wait for a download slot`() = runTest {
+    fun `decoding a downloaded image does not wait for a download slot, and happens once`() = runTest {
         val started = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
         val owner = ViewerViewModel(
             savedStateHandle = SavedStateHandle(),
-            mediaPrefetcher = ViewerMediaPrefetcher { _, media, _ ->
+            mediaPrefetcher = ViewerMediaPrefetcher { _, media, distance ->
                 started += media.key
-                if (media.key.mediaIndex == 3) ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED, decoded = true) else awaitCancellation()
+                if (media.key.mediaIndex == 3) ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED, decoded = distance <= 1) else awaitCancellation()
             },
             scopeOverride = this,
         )
@@ -638,15 +640,55 @@ class ViewerViewModelTest {
         val session = requireNotNull(owner.state.value.session)
         val keys = owner.state.value.currentPage?.media.orEmpty().map { media -> media.key }
         owner.onAction(ViewerAction.MediaReady(session, keys[0], 0L))
-        owner.onAction(ViewerAction.PrefetchCompleted(session, keys[3], ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED)))
-
-        owner.onAction(ViewerAction.QueuePrefetch(listOf(keys[1], keys[2], keys[3]), decodeKeys = setOf(keys[3])))
+        owner.onAction(queue(keys[3], distance = 3))
         runCurrent()
+        // Downloaded while far away, it is done until it comes close enough to decode.
+        owner.onAction(queue(keys[3], distance = 3))
+        runCurrent()
+        assertEquals(listOf(keys[3]), started)
 
-        assertEquals(listOf(keys[1], keys[2], keys[3]), started)
-        assertTrue(keys[3] in owner.state.value.prefetch.decoded)
+        val close = ViewerPrefetchRequest(keys[3], distance = 1, decode = true)
+        owner.onAction(ViewerAction.QueuePrefetch(listOf(request(keys[1]), request(keys[2]), close)))
+        runCurrent()
+        assertEquals(listOf(keys[3], keys[1], keys[2], keys[3]), started)
+
+        owner.onAction(ViewerAction.QueuePrefetch(listOf(close)))
+        runCurrent()
+        assertEquals(4, started.size)
         owner.onAction(ViewerAction.QueuePrefetch(emptyList()))
         runCurrent()
+    }
+
+    @Test
+    fun `prefetch skips unknown, repeated and settled media and forgets what a resolution replaced`() = runTest {
+        val started = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
+        val owner = ViewerViewModel(
+            savedStateHandle = SavedStateHandle(),
+            mediaPrefetcher = ViewerMediaPrefetcher { _, media, _ ->
+                started += media.key
+                ViewerPrefetchResult(if (media.key.mediaIndex == 1) ViewerPrefetchOutcome.SKIPPED else ViewerPrefetchOutcome.FAILED)
+            },
+            scopeOverride = this,
+        )
+        val gallery = post("gallery", media = (0..2).map { image("$it.jpg") })
+        owner.replaceSession(session("ledger", listOf(gallery)))
+        val session = requireNotNull(owner.state.value.session)
+        val (k0, k1, k2) = owner.state.value.currentPage?.media.orEmpty().map { media -> media.key }
+        owner.onAction(ViewerAction.MediaReady(session, k0, 0L))
+        val unknownPost = com.theoriacodex.app.viewer.state.ViewerMediaKey(PostId(SourceKey.PIXIV, "gone"), 0)
+        val unknownIndex = com.theoriacodex.app.viewer.state.ViewerMediaKey(gallery.id, 7)
+
+        owner.onAction(queue(k1, unknownPost, k1, k2, unknownIndex))
+        advanceUntilIdle()
+        assertEquals(listOf(k1, k2), started)
+        owner.onAction(queue(k1, k2))
+        advanceUntilIdle()
+        assertEquals(listOf(k1, k2), started)
+
+        owner.applyResolvedPost(gallery.copy(title = "Resolved"))
+        owner.onAction(queue(k1))
+        advanceUntilIdle()
+        assertEquals(listOf(k1, k2, k1), started)
     }
 
     @Test
@@ -679,7 +721,7 @@ class ViewerViewModelTest {
         val keys = owner.state.value.currentPage?.media.orEmpty().map { media -> media.key }
         owner.onAction(ViewerAction.MediaReady(requireNotNull(owner.state.value.session), keys.first(), 0L))
 
-        owner.onAction(ViewerAction.QueuePrefetch(keys))
+        owner.onAction(queue(*keys.toTypedArray()))
         runCurrent()
 
         assertEquals(VIEWER_PREFETCH_MAX_CONCURRENCY, active.get())
@@ -687,20 +729,23 @@ class ViewerViewModelTest {
         assertEquals(keys.take(2).toSet(), synchronized(startedKeys) { startedKeys.toSet() })
 
         val replacementNeighbor = keys.last()
-        owner.onAction(ViewerAction.QueuePrefetch(listOf(replacementNeighbor)))
+        owner.onAction(queue(replacementNeighbor))
         runCurrent()
 
         assertEquals(1, active.get())
-        assertEquals(setOf(replacementNeighbor), owner.state.value.prefetch.inFlight)
+        assertEquals(replacementNeighbor, synchronized(startedKeys) { startedKeys.last() })
         assertTrue(keys.take(2).all { key -> key in synchronized(cancelledKeys) { cancelledKeys.toSet() } })
-        assertTrue(owner.state.value.prefetch.warmed.isEmpty())
-        assertTrue(owner.state.value.prefetch.failed.isEmpty())
 
         owner.onAction(ViewerAction.QueuePrefetch(emptyList()))
         runCurrent()
         assertEquals(0, active.get())
-        assertTrue(owner.state.value.prefetch.inFlight.isEmpty())
     }
+
+    private fun request(key: com.theoriacodex.app.viewer.state.ViewerMediaKey, distance: Int = 2) =
+        ViewerPrefetchRequest(key, distance, decode = false)
+
+    private fun queue(vararg keys: com.theoriacodex.app.viewer.state.ViewerMediaKey, distance: Int = 2) =
+        ViewerAction.QueuePrefetch(keys.map { key -> request(key, distance) })
 
     private fun session(id: String, posts: List<Post>, startIndex: Int = 0) = ViewerSession(
         posts = posts,
