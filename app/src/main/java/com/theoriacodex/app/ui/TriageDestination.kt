@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NamedNavArgument
 import androidx.navigation.NavBackStackEntry
@@ -55,7 +56,7 @@ internal fun NavBackStackEntry.triageRequest(): TriageRequest {
 /**
  * Holds what the tapped grid handed over for the deck its [TriageRequest] opens, until the next Triage tap replaces
  * it. Activity-scoped, so a deck that rotation recreates finds it again; after process death it is empty and the deck
- * closes, back to its origin feed.
+ * closes, back to its origin feed. Its scope runs each deck's writes, so they finish after the deck closes.
  */
 internal class TriageHandOffViewModel : ViewModel() {
     private var handed: Pair<TriageRequest, TriageSeed>? = null
@@ -109,7 +110,8 @@ private suspend fun TheoriaShell.openTriage(request: TriageRequest, seed: Triage
  */
 @Composable
 internal fun TriageDestination(shell: TheoriaShell, request: TriageRequest) {
-    val seed = rememberTriageHandOff().seedFor(request)
+    val handOff = rememberTriageHandOff()
+    val seed = handOff.seedFor(request)
     // The deck's owner keeps the feed it was built with; a rebuilt one only supplies the posts to resolve lengths for.
     val feed = remember(request, seed) { seed?.let { shell.triageFeed(request, it) } }
     if (seed == null || feed == null) {
@@ -120,7 +122,9 @@ internal fun TriageDestination(shell: TheoriaShell, request: TriageRequest) {
     val query = shell.triageQuery(request)
     val quickSave = LocalQuickSave.current
     val owner = viewModel<TriageDeckViewModel> {
-        TriageDeckViewModel(feed, ShellTriageActions(shell), quickSave, query, request.source == ViewerStreamSource.FOR_YOU)
+        TriageDeckViewModel(
+            feed, ShellTriageActions(shell), quickSave, query, request.source == ViewerStreamSource.FOR_YOU, handOff.viewModelScope,
+        )
     }
     val deck by owner.state.collectAsStateWithLifecycle()
     // While the grid filters by length, the deck resolves the lengths of the owner's posts it has yet to show.

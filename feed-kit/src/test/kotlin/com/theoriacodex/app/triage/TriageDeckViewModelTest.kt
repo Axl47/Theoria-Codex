@@ -1,5 +1,9 @@
 package com.theoriacodex.app.triage
 
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.app.codex.QuickSave
 import com.theoriacodex.app.codex.QuickSaveRecord
 import com.theoriacodex.app.codex.SaveSuggestions
@@ -9,6 +13,9 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -36,9 +43,16 @@ class TriageDeckViewModelTest {
 
     @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
 
-    @After fun tearDown() = Dispatchers.resetMain()
+    /** Outlives every deck, as the activity's scope does. */
+    private val writeScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    private fun deck(source: TriageFeed = feed) = TriageDeckViewModel(source, actions, quickSave, query = null, fromForYou = false)
+    @After fun tearDown() {
+        writeScope.cancel()
+        Dispatchers.resetMain()
+    }
+
+    private fun deck(source: TriageFeed = feed) =
+        TriageDeckViewModel(source, actions, quickSave, query = null, fromForYou = false, writeScope = writeScope)
 
     @Test fun `like moves on, likes the post once and confirms once committed`() = runTest {
         val deck = deck()
@@ -78,7 +92,7 @@ class TriageDeckViewModelTest {
 
     @Test fun `save goes to the chosen Codex with the feed's query and undo removes exactly that save`() = runTest {
         val query = Query.newest(SourceKey.PIXIV)
-        val deck = TriageDeckViewModel(feed, actions, quickSave, query, fromForYou = true)
+        val deck = TriageDeckViewModel(feed, actions, quickSave, query, fromForYou = true, writeScope = writeScope)
         deck.decideCurrent(TriageChoice.Save("codex-1", "Skies"))
         assertEquals(listOf(Triple(posts[0].id, "codex-1", query)), quickSave.saved)
         assertTrue(quickSave.fromForYou)
@@ -229,6 +243,18 @@ class TriageDeckViewModelTest {
         removal.complete(Unit)
         assertEquals(listOf("codex-1", "codex-2"), quickSave.saved.map { it.second })
         assertEquals(listOf(quickSave.records.first()), quickSave.undone)
+    }
+
+    @Test fun `closing the deck still runs a pending save and then the undo asked for it`() = runTest {
+        quickSave.hold = CompletableDeferred()
+        val store = ViewModelStore()
+        val deck = ViewModelProvider.create(store, viewModelFactory { initializer { deck() } })[TriageDeckViewModel::class]
+        deck.decideCurrent(TriageChoice.Save("codex-1", "Skies"))
+        deck.undo()
+        store.clear()
+        quickSave.hold!!.complete(Unit)
+        assertEquals(1, quickSave.records.size)
+        assertEquals(quickSave.records, quickSave.undone)
     }
 
     /** Decides for whichever card is current, as a swipe that finishes on its own card does. */
