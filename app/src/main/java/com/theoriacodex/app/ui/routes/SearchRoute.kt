@@ -381,8 +381,6 @@ private fun SearchRouteContent(
         onAction = owner::onAction,
         resolvePostById = resolvePostById,
         recoverPostMedia = coordinator::recoverPostMedia,
-        tagVideoCountProvider = coordinator::tagVideoCount,
-        fetchTagVideoCounts = coordinator::fetchTagVideoCounts,
         pixivUgoiraClient = pixivUgoiraClient,
         likedPostIds = config.likedPostIds,
         pendingLikePostIds = config.pendingLikePostIds,

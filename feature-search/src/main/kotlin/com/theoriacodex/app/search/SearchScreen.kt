@@ -76,8 +76,6 @@ fun SearchScreen(
     onAction: (SearchAction) -> Unit,
     resolvePostById: suspend (PostId) -> Post?,
     recoverPostMedia: suspend (Post, ImageRef) -> Post?,
-    tagVideoCountProvider: (SourceKey, String) -> Int?,
-    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     likedPostIds: Set<PostId> = emptySet(),
     pendingLikePostIds: Set<PostId> = emptySet(),
@@ -142,7 +140,7 @@ fun SearchScreen(
     }
     actionPost.post?.let { post ->
         SearchPostSheet(
-            post, actionPost, state, creatorBrowsingSources, tagVideoCountProvider, fetchTagVideoCounts, onAction, onSaveToDevice,
+            post, actionPost, state, creatorBrowsingSources, onAction, onSaveToDevice,
             onRequestSaveToCodex, onOpenCreatorProfile, onOpenLegacyCreatorProfile, onAddFavoriteTag, applyDraft,
             liked = post.id in likedPostIds, onToggleLike = onToggleLike,
         )
@@ -153,7 +151,7 @@ fun SearchScreen(
             favoriteTags, onAddFavoriteTag, onRemoveFavoriteTag, onRenameFavoriteTag)
     }
     if (chrome.showFavoriteTagSheet) {
-        SearchFavoriteTags(state, favoriteTags, tagVideoCountProvider, fetchTagVideoCounts, onAction, onRemoveFavoriteTag, onRenameFavoriteTag) { chrome.showFavoriteTagSheet = false }
+        SearchFavoriteTags(state, favoriteTags, onAction, onRemoveFavoriteTag, onRenameFavoriteTag) { chrome.showFavoriteTagSheet = false }
     }
     if (chrome.showFilterSheet) {
         SearchFilterSheet(state, feed, fabRestoreState, onAction, onFabRestoreStateChange, filterActions::resetFilterDraft) {
@@ -360,8 +358,6 @@ private fun SearchPostSheet(
     actionPost: SearchActionPostState,
     state: SearchUiState,
     creatorBrowsingSources: Set<SourceKey>,
-    tagVideoCountProvider: (SourceKey, String) -> Int?,
-    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?>,
     onAction: (SearchAction) -> Unit,
     onSaveToDevice: (Post) -> Unit,
     onRequestSaveToCodex: (Post) -> Unit,
@@ -389,8 +385,6 @@ private fun SearchPostSheet(
                 draftQuery = state.query.draft,
                 loading = actionPost.resolving && !post.hasActionableTags(),
                 post = post,
-                tagVideoCountProvider = tagVideoCountProvider,
-                fetchTagVideoCounts = fetchTagVideoCounts,
                 onAddIncludeTerm = { term ->
                     onAction(SearchAction.AddPostIncludeTerm(post, term))
                     true
@@ -583,8 +577,6 @@ private fun rememberFavoriteTagSections(
 private fun SearchFavoriteTags(
     state: SearchUiState,
     favoriteTags: List<FavoriteTagEntry>,
-    tagVideoCountProvider: (SourceKey, String) -> Int?,
-    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?>,
     onAction: (SearchAction) -> Unit,
     onRemoveFavoriteTag: (SourceKey, List<String>) -> Unit,
     onRenameFavoriteTag: (SourceKey, List<String>, String) -> Unit,
@@ -600,8 +592,6 @@ private fun SearchFavoriteTags(
     }
     FavoriteTagSheet(
         sections = sections,
-        tagVideoCountProvider = tagVideoCountProvider,
-        fetchTagVideoCounts = fetchTagVideoCounts,
         emptyMessage = emptyMessage,
         onAddTag = { entry ->
             val terms = entry.terms

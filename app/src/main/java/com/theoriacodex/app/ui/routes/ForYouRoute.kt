@@ -26,7 +26,6 @@ import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import java.io.Closeable
 import kotlinx.coroutines.flow.StateFlow
@@ -53,11 +52,6 @@ internal data class ForYouRouteCallbacks(
     val onSaveToDevice: (Post) -> Unit,
     val onOpenCreatorProfile: (CreatorProfile) -> Unit,
     val onOpenLegacyCreatorProfile: (Post) -> Unit,
-    val onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
-    val onAddExcludeTerm: (Post, SearchTerm) -> Boolean,
-    val onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
-    val onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
-    val onFavoriteTagLongPress: (SourceKey, String) -> Unit,
     val onGoToSearch: () -> Unit,
 )
 
@@ -177,11 +171,6 @@ private fun ForYouRouteContent(
         onOpenCreatorProfile = callbacks.onOpenCreatorProfile,
         onOpenLegacyCreatorProfile = callbacks.onOpenLegacyCreatorProfile,
         onOpenSourceAccounts = callbacks.onOpenSourceAccounts,
-        onAddIncludeTerm = callbacks.onAddIncludeTerm,
-        onAddExcludeTerm = callbacks.onAddExcludeTerm,
-        onRemoveIncludeTerm = callbacks.onRemoveIncludeTerm,
-        onRemoveExcludeTerm = callbacks.onRemoveExcludeTerm,
-        onFavoriteTagLongPress = callbacks.onFavoriteTagLongPress,
         onGoToSearch = callbacks.onGoToSearch,
         fabRestoreState = fabRestoreState,
         onFabRestoreStateChange = onFabRestoreStateChange,

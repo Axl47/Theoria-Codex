@@ -22,7 +22,6 @@ import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import java.io.Closeable
@@ -48,10 +47,6 @@ internal data class CreatorRouteCallbacks(
     val onSaveToDevice: (Post) -> Unit,
     val onToggleFollow: (CreatorProfile, List<Post>) -> Unit = { _, _ -> },
     val onOpenUrl: (String) -> Unit,
-    val onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
-    val onAddExcludeTerm: (Post, SearchTerm) -> Boolean,
-    val onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
-    val onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
 )
 
 /** Non-owning access used by Viewer while the Creator back-stack entry owns the ViewModel. */
@@ -167,10 +162,6 @@ private fun CreatorRouteContent(
         onRequestSaveToCodex = callbacks.onRequestSaveToCodex,
         onSaveToDevice = callbacks.onSaveToDevice,
         onOpenUrl = callbacks.onOpenUrl,
-        onAddIncludeTerm = callbacks.onAddIncludeTerm,
-        onAddExcludeTerm = callbacks.onAddExcludeTerm,
-        onRemoveIncludeTerm = callbacks.onRemoveIncludeTerm,
-        onRemoveExcludeTerm = callbacks.onRemoveExcludeTerm,
         fabRestoreState = fabRestoreState,
         onFabRestoreStateChange = onFabRestoreStateChange,
     )

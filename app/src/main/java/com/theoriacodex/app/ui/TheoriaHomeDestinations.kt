@@ -183,11 +183,6 @@ private fun ForYouDestination(shell: TheoriaShell) {
                 onSaveToDevice = shell::requestSaveToDevice,
                 onOpenCreatorProfile = shell::launchOpenCreator,
                 onOpenLegacyCreatorProfile = shell::launchOpenCreator,
-                onAddIncludeTerm = routes.addSearchIncludeTerm,
-                onAddExcludeTerm = routes.addSearchExcludeTerm,
-                onRemoveIncludeTerm = routes.removeSearchIncludeTerm,
-                onRemoveExcludeTerm = routes.removeSearchExcludeTerm,
-                onFavoriteTagLongPress = shell.addFavoriteTag,
                 onGoToSearch = {
                     navigation.homeTabRoute = TopLevelDestination.Search.route
                     shell.scope.launch { navigation.showTab(TopLevelDestination.Search) }
@@ -297,8 +292,6 @@ private fun RecentsDestination(shell: TheoriaShell) {
             durations = durationOwner.feedDurations(MediaDurationStates.EMPTY, resolveInBackground = false),
             likedPostIds = state.likedPostIds,
             creatorBrowsingSources = shell.sources.registry.creatorBrowsingSources(),
-            tagVideoCountProvider = shell.features.search::tagVideoCount,
-            fetchTagVideoCounts = shell.features.search::fetchTagVideoCounts,
             onToggleLike = { post ->
                 shell.toggleLikeAndSyncCodex(post) { outcome -> relatedOwner.related.onLikeCommitted(post, outcome) }
             },
@@ -306,11 +299,6 @@ private fun RecentsDestination(shell: TheoriaShell) {
             onSaveToDevice = shell::requestSaveToDevice,
             onOpenCreatorProfile = shell::launchOpenCreator,
             onOpenLegacyCreatorProfile = shell::launchOpenCreator,
-            onAddIncludeTerm = routes.addSearchIncludeTerm,
-            onAddExcludeTerm = routes.addSearchExcludeTerm,
-            onRemoveIncludeTerm = routes.removeSearchIncludeTerm,
-            onRemoveExcludeTerm = routes.removeSearchExcludeTerm,
-            onFavoriteTagLongPress = shell.addFavoriteTag,
             onGoToSearch = {
                 shell.navigation.homeTabRoute = TopLevelDestination.Search.route
                 shell.scope.launch { shell.navigation.pagerState.scrollToPage(TopLevelDestination.entries.indexOf(TopLevelDestination.Search)) }

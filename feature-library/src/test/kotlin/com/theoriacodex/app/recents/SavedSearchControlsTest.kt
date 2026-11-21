@@ -148,8 +148,8 @@ class SavedSearchControlsTest {
             fypSearches = fyp, activity = activity,
             onSaveSearch = onSave,
             onRequestSaveToCodex = {}, onSaveToDevice = {}, onOpenCreatorProfile = {},
-            onOpenLegacyCreatorProfile = {}, onAddIncludeTerm = { _, _ -> false }, onAddExcludeTerm = { _, _ -> false },
-            onRemoveIncludeTerm = { _, _ -> }, onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
+            onOpenLegacyCreatorProfile = {},
+            onGoToSearch = {},
             onOpenWatchedPost = onOpenPost, onOpenCodexPost = { _, _ -> }, onOpenSearch = onOpen, onOpenFypSearch = onOpenFyp, onClear = {},
         )
     }

@@ -222,8 +222,7 @@ class ViewerRouteRestorationUiTest {
                             onDismiss = onDismiss, onRestorationUnavailable = {},
                         ),
                         screenCallbacks = ViewerScreenCallbacks(
-                            onRemoveIncludeTerm = { _, _ -> },
-                            onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = onGoToSearch,
+                            onGoToSearch = onGoToSearch,
                             onRemoveFromCodex = onRemoveFromCodex,
                         ),
                         onOwnerChanged = onOwner,

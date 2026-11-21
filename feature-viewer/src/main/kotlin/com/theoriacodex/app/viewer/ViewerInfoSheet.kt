@@ -170,8 +170,6 @@ internal fun ViewerInfoSheet(
                 )
             },
             post = post,
-            tagVideoCountProvider = config.tagVideoCountProvider,
-            fetchTagVideoCounts = config.fetchTagVideoCounts,
             onAddIncludeTerm = { term ->
                 onAction(ViewerAction.IncludeTag(PostTaxonomyTerm(term.value, term.facet, term.sourceNamespace)))
                 true
@@ -180,9 +178,6 @@ internal fun ViewerInfoSheet(
                 onAction(ViewerAction.ExcludeTag(PostTaxonomyTerm(term.value, term.facet, term.sourceNamespace)))
                 true
             },
-            onRemoveIncludeTerm = { term -> host.onRemoveIncludeTerm(post, term) },
-            onRemoveExcludeTerm = { term -> host.onRemoveExcludeTerm(post, term) },
-            onFavoriteTagLongPress = host.onFavoriteTagLongPress,
             onSearch = {
                 searchActions.applyDraft()
                 controls.setPlaybackEnabled(false)

@@ -198,8 +198,6 @@ private fun CodexDetailContent(
         creatorBrowsingSources = state.creatorBrowsingSources,
         pixivUgoiraClient = shell.sources.pixivUgoiraClient,
         durations = durationOwner.feedDurations(durationStates, state.resolveUnknownAnimatedDurations),
-        tagVideoCountProvider = { source, tag -> shell.features.search.tagVideoCount(source, tag) },
-        fetchTagVideoCounts = { source, tags -> shell.features.search.fetchTagVideoCounts(source, tags) },
         resolvePostById = { postId -> shell.viewerRouteWorkflow.resolvePost(postId, ViewerStreamSource.CODEX) },
         onOpenViewer = { posts, index -> shell.openCodexViewer(codexId, posts, index) },
         onRemovePosts = { posts -> commands.remove(codexId, state.items, posts) },
@@ -210,11 +208,6 @@ private fun CodexDetailContent(
         },
         onOpenCreatorProfile = shell::launchOpenCreator,
         onOpenLegacyCreatorProfile = shell::launchOpenCreator,
-        onAddIncludeTerm = routes.addSearchIncludeTerm,
-        onAddExcludeTerm = routes.addSearchExcludeTerm,
-        onRemoveIncludeTerm = routes.removeSearchIncludeTerm,
-        onRemoveExcludeTerm = routes.removeSearchExcludeTerm,
-        onFavoriteTagLongPress = shell.addFavoriteTag,
         onGoToSearch = { shell.navigation.goToSearch() },
         onBack = { shell.navController.popBackStack() },
         onDeleteCodex = { commands.delete(codexId, state.activeProfile.profileId) },
@@ -275,10 +268,6 @@ private fun CreatorDestination(shell: TheoriaShell) {
                 onRequestSaveToCodex = { post -> shell.requestSaveToCodex(post) },
                 onSaveToDevice = shell::requestSaveToDevice,
                 onOpenUrl = { url -> openInBrowser(shell.appContext, url) },
-                onAddIncludeTerm = routes.addSearchIncludeTerm,
-                onAddExcludeTerm = routes.addSearchExcludeTerm,
-                onRemoveIncludeTerm = routes.removeSearchIncludeTerm,
-                onRemoveExcludeTerm = routes.removeSearchExcludeTerm,
             ),
             onOwnerAvailable = routes.creatorBinding::publish,
         )
@@ -317,8 +306,6 @@ private fun ViewerDestination(shell: TheoriaShell) {
                 playbackMode = state.browsing.settings.viewer.playbackMode,
                 videoQuality = state.browsing.settings.viewer.videoQuality,
                 pixivUgoiraClient = shell.sources.pixivUgoiraClient,
-                tagVideoCountProvider = shell.features.search::tagVideoCount,
-                fetchTagVideoCounts = shell.features.search::fetchTagVideoCounts,
                 invertMultiImageScrollDirection = state.browsing.settings.viewer.invertMultiImageScrollDirection,
                 instantSeek = state.browsing.settings.viewer.instantSeek,
                 autoRotateVideos = state.browsing.settings.viewer.autoRotateVideos,
@@ -408,9 +395,9 @@ private fun viewerEffectCallbacks(shell: TheoriaShell) = ViewerRouteEffectCallba
     onOpenCreatorProfile = { creator -> shell.openCreatorProfile(creator) },
     onApplyTag = { post, term, excluded ->
         if (excluded) {
-            shell.routes.addSearchExcludeTerm(post, term.toSearchTerm())
+            shell.routes.postTagSearchActions.addExclude(post, term.toSearchTerm())
         } else {
-            shell.routes.addSearchIncludeTerm(post, term.toSearchTerm())
+            shell.routes.postTagSearchActions.addInclude(post, term.toSearchTerm())
         }
     },
     onRecoverMedia = shell.viewerRouteWorkflow::recoverMedia,
@@ -440,9 +427,6 @@ private fun viewerScreenCallbacks(shell: TheoriaShell) = ViewerScreenCallbacks(
         shell.viewerRouteWorkflow.recordVisibleMediaProgress(post, viewedMediaNumber, session)
     },
     onOpenUrl = { url -> openInBrowser(shell.appContext, url) },
-    onRemoveIncludeTerm = shell.routes.removeSearchIncludeTerm,
-    onRemoveExcludeTerm = shell.routes.removeSearchExcludeTerm,
-    onFavoriteTagLongPress = shell.addFavoriteTag,
     onGoToSearch = {
         shell.scope.launch { shell.features.search.setViewerLaunchContext(null) }
         shell.navigation.goToSearch()

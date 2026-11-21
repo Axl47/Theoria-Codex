@@ -163,8 +163,6 @@ class SearchApplyScrollTest {
                     onAction = onAction,
                     resolvePostById = { null },
                     recoverPostMedia = { _, _ -> null },
-                    tagVideoCountProvider = { _, _ -> null },
-                    fetchTagVideoCounts = { _, _ -> emptyMap() },
                     onOpenCreatorProfile = {},
                     onOpenLegacyCreatorProfile = {},
                     onRequestSaveToCodex = {},

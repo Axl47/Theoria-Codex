@@ -77,7 +77,6 @@ import com.theoriacodex.data.repository.MAX_SAVED_SEARCH_NAME_LENGTH
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.app.search.rememberPostWatchEntry
 import com.theoriacodex.app.search.relativeTimeLabel
@@ -94,17 +93,10 @@ fun RecentsScreen(
     likedPostIds: Set<PostId> = emptySet(),
     onToggleLike: ((Post) -> Unit)? = null,
     creatorBrowsingSources: Set<SourceKey> = emptySet(),
-    tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
-    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
     onOpenCreatorProfile: (CreatorProfile) -> Unit,
     onOpenLegacyCreatorProfile: (Post) -> Unit,
-    onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
-    onAddExcludeTerm: (Post, SearchTerm) -> Boolean,
-    onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
-    onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
-    onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
     onGoToSearch: () -> Unit,
     onOpenWatchedPost: (List<RecentPostEntry>, Int) -> Unit,
     onOpenCodexPost: (List<RecentPostEntry>, Int) -> Unit,
@@ -161,8 +153,7 @@ fun RecentsScreen(
     selectedActionPost?.let { post ->
         FeedPostActionSheet(
             post, creatorBrowsingSources, { selectedActionPost = null }, onSaveToDevice, onRequestSaveToCodex, onOpenCreatorProfile,
-            onOpenLegacyCreatorProfile, onGoToSearch, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm,
-            onRemoveExcludeTerm, onFavoriteTagLongPress, tagVideoCountProvider, fetchTagVideoCounts,
+            onOpenLegacyCreatorProfile, onGoToSearch,
             onStartOver = {
                 onStartOver(post, selectedActionSection)
                 selectedActionPost = null

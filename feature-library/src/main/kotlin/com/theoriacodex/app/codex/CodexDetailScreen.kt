@@ -75,7 +75,6 @@ import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 
 /** Not answered yet is not the same as gone; saying so would flash on every first open. */
@@ -111,13 +110,6 @@ fun CodexDetailScreen(
     onSavePostToDevice: (Post) -> Unit,
     onOpenCreatorProfile: (CreatorProfile) -> Unit,
     onOpenLegacyCreatorProfile: (Post) -> Unit,
-    tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
-    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
-    onAddIncludeTerm: (Post, SearchTerm) -> Boolean = { _, _ -> false },
-    onAddExcludeTerm: (Post, SearchTerm) -> Boolean = { _, _ -> false },
-    onRemoveIncludeTerm: (Post, SearchTerm) -> Unit = { _, _ -> },
-    onRemoveExcludeTerm: (Post, SearchTerm) -> Unit = { _, _ -> },
-    onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
     onGoToSearch: (() -> Unit)? = null,
     onBack: () -> Unit,
     onDeleteCodex: () -> Unit,
@@ -179,8 +171,7 @@ fun CodexDetailScreen(
     selectedActionPost?.let { post ->
         FeedPostActionSheet(
             post, creatorBrowsingSources, { selectedActionPost = null }, onSavePostToDevice, { onAddPostsToAnotherCodex(listOf(it)) },
-            onOpenCreatorProfile, onOpenLegacyCreatorProfile, onGoToSearch, onAddIncludeTerm, onAddExcludeTerm,
-            onRemoveIncludeTerm, onRemoveExcludeTerm, onFavoriteTagLongPress, tagVideoCountProvider, fetchTagVideoCounts,
+            onOpenCreatorProfile, onOpenLegacyCreatorProfile, onGoToSearch,
             saveToCodexLabel = "Add to another Codex",
             onRemoveFromCodex = if (customHeader == null) ({ onRemovePosts(listOf(post)) }) else null,
             onShowRelated = related?.let { shelf -> { shelf.controller.show(post) } },

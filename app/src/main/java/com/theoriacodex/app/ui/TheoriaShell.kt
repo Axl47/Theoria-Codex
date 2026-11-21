@@ -108,8 +108,6 @@ import com.theoriacodex.app.tags.PostTagSearchActions
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
-import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -162,19 +160,11 @@ internal class RouteOwners {
     fun dispatchOrQueue(action: ForYouAction): Boolean =
         pendingForYouActions.dispatchOrEnqueue(action) { queuedAction -> forYouOwner?.dispatch(queuedAction) == true }
 
-    val addSearchIncludeTerm: (Post, SearchTerm) -> Boolean = { post, term ->
-        dispatchOrQueue(SearchAction.AddPostIncludeTerm(post, term))
-    }
-    val addSearchExcludeTerm: (Post, SearchTerm) -> Boolean = { post, term ->
-        dispatchOrQueue(SearchAction.AddPostExcludeTerm(post, term))
-    }
-    val removeSearchIncludeTerm: (Post, SearchTerm) -> Unit = { _, term ->
-        dispatchOrQueue(SearchAction.RemoveIncludeTerm(term))
-    }
-    val removeSearchExcludeTerm: (Post, SearchTerm) -> Unit = { _, term ->
-        dispatchOrQueue(SearchAction.RemoveExcludeTerm(term))
-    }
     val postTagSearchActions = PostTagSearchActions(
+        addInclude = { post, term -> dispatchOrQueue(SearchAction.AddPostIncludeTerm(post, term)) },
+        addExclude = { post, term -> dispatchOrQueue(SearchAction.AddPostExcludeTerm(post, term)) },
+        removeInclude = { _, term -> dispatchOrQueue(SearchAction.RemoveIncludeTerm(term)) },
+        removeExclude = { _, term -> dispatchOrQueue(SearchAction.RemoveExcludeTerm(term)) },
         addAlternative = { post, groupIndex, term ->
             dispatchOrQueue(SearchAction.AddPostIncludeAlternative(post, groupIndex, term))
         },

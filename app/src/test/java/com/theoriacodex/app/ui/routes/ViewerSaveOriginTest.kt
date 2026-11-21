@@ -69,8 +69,7 @@ class ViewerSaveOriginTest {
                             onDismiss = {}, onRestorationUnavailable = {},
                         ),
                         screenCallbacks = ViewerScreenCallbacks(
-                            onRemoveIncludeTerm = { _, _ -> },
-                            onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
+                            onGoToSearch = {},
                         ),
                     )
                 }
@@ -126,8 +125,7 @@ class ViewerSaveOriginTest {
                             onLoadMore = {}, onDismiss = {}, onRestorationUnavailable = {},
                         ),
                         screenCallbacks = ViewerScreenCallbacks(
-                            onRemoveIncludeTerm = { _, _ -> },
-                            onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
+                            onGoToSearch = {},
                         ),
                         onOwnerChanged = { owner = it },
                     )

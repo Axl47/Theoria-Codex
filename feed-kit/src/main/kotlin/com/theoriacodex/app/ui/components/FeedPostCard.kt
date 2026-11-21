@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.components
 
+import com.theoriacodex.app.tags.PostTagActionSection
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
@@ -11,13 +12,11 @@ import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.tags.LocalPostTagSearchActions
-import com.theoriacodex.app.tags.PostBoundTagSection
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
 
@@ -155,13 +154,6 @@ fun FeedPostActionSheet(
     onOpenCreatorProfile: (CreatorProfile) -> Unit,
     onOpenLegacyCreatorProfile: (Post) -> Unit,
     onGoToSearch: (() -> Unit)?,
-    onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
-    onAddExcludeTerm: (Post, SearchTerm) -> Boolean,
-    onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
-    onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
-    onFavoriteTagLongPress: ((SourceKey, String) -> Unit)?,
-    tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
-    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
     saveToCodexLabel: String = "Save to Codex",
     onRemoveFromCodex: (() -> Unit)? = null,
     onStartOver: (() -> Unit)? = null,
@@ -183,9 +175,8 @@ fun FeedPostActionSheet(
         onStartOver = onStartOver,
         onShowRelated = onShowRelated,
     ) {
-        PostBoundTagSection(
-            post, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm,
-            onFavoriteTagLongPress, tagVideoCountProvider, fetchTagVideoCounts,
+        PostTagActionSection(
+            post,
             onSearch = onGoToSearch?.let { goToSearch ->
                 {
                     searchActions.applyDraft()

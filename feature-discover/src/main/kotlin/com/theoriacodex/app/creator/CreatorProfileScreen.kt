@@ -1,5 +1,6 @@
 package com.theoriacodex.app.creator
 
+import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.ui.components.FeedGrid
 import com.theoriacodex.app.ui.components.rememberFeedView
 import com.theoriacodex.app.ui.components.FeedMarks
@@ -58,7 +59,6 @@ import com.theoriacodex.app.media.copyTextToClipboard
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.source.displayName
-import com.theoriacodex.app.tags.PostBoundTagSection
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.DismissibleFailure
 import com.theoriacodex.app.ui.components.FeedFailureTile
@@ -81,7 +81,6 @@ import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.SearchTerm
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -100,10 +99,6 @@ fun CreatorProfileScreen(
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
     onOpenUrl: (String) -> Unit,
-    onAddIncludeTerm: (Post, SearchTerm) -> Boolean = { _, _ -> false },
-    onAddExcludeTerm: (Post, SearchTerm) -> Boolean = { _, _ -> false },
-    onRemoveIncludeTerm: (Post, SearchTerm) -> Unit = { _, _ -> },
-    onRemoveExcludeTerm: (Post, SearchTerm) -> Unit = { _, _ -> },
     fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
 ) {
@@ -162,7 +157,7 @@ fun CreatorProfileScreen(
             liked = post.id in likedPostIds, onToggleLike = { onToggleLike(post) },
             onSaveToCodex = { onRequestSaveToCodex(post) },
             onShowRelated = { onAction(CreatorAction.ShowRelatedPosts(post)) },
-        ) { PostBoundTagSection(post, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm) }
+        ) { PostTagActionSection(post) }
     }
 }
 

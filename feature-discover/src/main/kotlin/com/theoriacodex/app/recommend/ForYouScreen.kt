@@ -82,7 +82,6 @@ import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 
@@ -101,11 +100,6 @@ fun ForYouScreen(
     onSaveToDevice: (Post) -> Unit,
     onOpenCreatorProfile: (CreatorProfile) -> Unit,
     onOpenLegacyCreatorProfile: (Post) -> Unit,
-    onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
-    onAddExcludeTerm: (Post, SearchTerm) -> Boolean,
-    onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
-    onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
-    onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
     onGoToSearch: () -> Unit,
     onOpenSourceAccounts: () -> Unit = {},
     fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
@@ -158,8 +152,7 @@ fun ForYouScreen(
     selectedActionPost?.let { post ->
         FeedPostActionSheet(
             post, creatorBrowsingSources, { selectedActionPost = null }, onSaveToDevice, onRequestSaveToCodex, onOpenCreatorProfile,
-            onOpenLegacyCreatorProfile, onGoToSearch, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm,
-            onRemoveExcludeTerm, onFavoriteTagLongPress, liked = post.id in likedPostIds, onToggleLike = onToggleLike,
+            onOpenLegacyCreatorProfile, onGoToSearch, liked = post.id in likedPostIds, onToggleLike = onToggleLike,
             onShowRelated = { onAction(ForYouAction.ShowRelatedPosts(post)) },
         )
     }
