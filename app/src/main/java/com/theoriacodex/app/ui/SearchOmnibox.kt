@@ -48,8 +48,9 @@ internal fun searchToggleEntries(settings: AppSettings, dispatch: (SettingsActio
         OmniboxEntry.Toggle(command.title, command.read(settings), command.keywords) { checked -> dispatch(command.write(checked)) }
     }
 
-/** Settings pages the one box opens; titles match their Settings rows. */
+/** Settings and the pages of it the one box opens; page titles match their Settings rows. */
 private enum class SettingsPageCommand(val title: String, val keywords: List<String>, val page: SettingsPage) {
+    HOME("Settings", listOf("preferences", "options"), SettingsPage.HOME),
     SITES("Sites", listOf("sources", "accounts", "sign in", "log in"), SettingsPage.SITES),
     HIDDEN_TAGS("Hidden tags", listOf("blacklist", "blocked", "mute"), SettingsPage.HIDDEN_TAGS),
     STORAGE("Storage & caching", listOf("cache", "space", "clear"), SettingsPage.STORAGE),
