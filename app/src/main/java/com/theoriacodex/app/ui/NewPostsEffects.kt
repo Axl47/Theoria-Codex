@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -16,6 +17,7 @@ import com.theoriacodex.app.codex.SavedSearchNewPostsChecker
 import com.theoriacodex.app.codex.markSavedSearchPostsSeen
 import com.theoriacodex.app.codex.savedNewPosts
 import com.theoriacodex.app.di.DataDependencies
+import com.theoriacodex.app.ui.components.FeedView
 import com.theoriacodex.data.repository.CreatorFollowsRepository
 import com.theoriacodex.data.repository.markKey
 import com.theoriacodex.domain.model.Post
@@ -62,16 +64,25 @@ private fun savedSearchChecker(shell: TheoriaShell): SavedSearchNewPostsChecker 
 }
 
 /**
- * Once the Followed or Searches feed has drawn its first page, those posts are seen. A check that
- * lands later, or posts the feed never showed (offline, a failed load), stay new.
+ * Wraps a live collection's [header] so that once its feed has drawn its first page, the posts that page
+ * showed (after the grid's display filters) are seen. A check that lands later, posts the filters hid,
+ * posts only in later pages, and posts the feed never showed (offline, a failed load) stay new.
  */
-@Composable
-internal fun MarkNewPostsSeenEffect(shell: TheoriaShell, codexId: String, loading: Boolean, posts: List<Post>) {
-    val rendered = !loading && posts.isNotEmpty() && codexId in newPostCodexIds
-    LaunchedEffect(codexId, rendered) {
-        if (!rendered) return@LaunchedEffect
-        withFrameNanos {}
-        shell.data.markNewPostsSeen(codexId, posts.mapTo(mutableSetOf()) { it.id.markKey() })
+internal fun markingNewPostsSeen(
+    shell: TheoriaShell,
+    codexId: String,
+    loading: Boolean,
+    header: (@Composable (FeedView, LazyStaggeredGridState) -> Unit)?,
+): (@Composable (FeedView, LazyStaggeredGridState) -> Unit)? = header?.let { drawHeader ->
+    { feed, grid ->
+        drawHeader(feed, grid)
+        val shown = feed.visiblePosts
+        val rendered = !loading && shown.isNotEmpty() && codexId in newPostCodexIds
+        LaunchedEffect(codexId, rendered) {
+            if (!rendered) return@LaunchedEffect
+            withFrameNanos {}
+            shell.data.markNewPostsSeen(codexId, shown.mapTo(mutableSetOf()) { it.id.markKey() })
+        }
     }
 }
 
@@ -86,11 +97,12 @@ private suspend fun DataDependencies.markNewPostsSeen(codexId: String, shown: Se
 }
 
 /**
- * Opens the Viewer on a Saved shelf's posts. Opening them there shows them, so the shelf's new
- * posts are seen without the full Followed or Searches collection being opened.
+ * Opens the Viewer on a Saved shelf's posts. Only the tapped post opens, so only it is seen; the
+ * rest of the shelf stays new until the Viewer or the full collection shows it.
  */
 internal fun TheoriaShell.openSavedShelfViewer(codexId: String, posts: List<Post>, index: Int) {
-    if (codexId in newPostCodexIds) scope.launch { data.markNewPostsSeen(codexId, posts.mapTo(mutableSetOf()) { it.id.markKey() }) }
+    val opened = posts.getOrNull(index)
+    if (opened != null && codexId in newPostCodexIds) scope.launch { data.markNewPostsSeen(codexId, setOf(opened.id.markKey())) }
     openCodexViewer(codexId, posts, index)
 }
 

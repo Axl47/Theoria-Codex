@@ -196,12 +196,11 @@ private fun CodexDetailContent(
         shell.owners.savedSearches::rename, shell.owners.savedSearches::remove,
     )
     val liveOwner = state.followedOwner ?: state.savedSearchOwner
-    MarkNewPostsSeenEffect(shell, codexId, state.loading, state.posts)
     CodexDetailScreen(
         codexId = codexId,
         codexName = state.codex?.name,
         onTitleLongPress = { shell.overlays.codexActionTargetId = codexId },
-        customHeader = virtualUi?.header,
+        customHeader = markingNewPostsSeen(shell, codexId, state.loading, virtualUi?.header),
         likedPostIds = state.likedPostIds,
         onToggleLike = liveOwner?.let { owner ->
             { post -> shell.toggleLikeAndSyncCodex(post) { outcome -> owner.related.onLikeCommitted(post, outcome) } }
