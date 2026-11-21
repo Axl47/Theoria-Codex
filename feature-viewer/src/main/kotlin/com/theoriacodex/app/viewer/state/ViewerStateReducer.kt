@@ -169,7 +169,7 @@ private fun ViewerUiState.replaceSession(action: ViewerAction.ReplaceSession): V
             initialPageIndex = action.initialPageIndex,
             requiresResolution = { post -> post.id in action.resolutionRequiredPostIds },
             initialMediaIndices = action.initialMediaIndices + if (session == action.session) {
-                pages.associate { it.post.id to (it.pendingMediaIndex ?: it.selectedMediaIndex) }
+                pages.associate { it.post.id to it.targetMediaIndex }
             } else {
                 emptyMap()
             },
@@ -463,7 +463,7 @@ private fun ViewerUiState.replaceResolvedPost(post: Post): ViewerUiState {
     if (pageIndex < 0) return this
     val previous = pages[pageIndex]
     val replacement = post.toViewerPageState(
-        selectedMediaIndex = previous.pendingMediaIndex ?: previous.selectedMediaIndex,
+        selectedMediaIndex = previous.targetMediaIndex,
         resolution = previous.resolution.copy(
             status = ViewerResolutionStatus.RESOLVED,
             message = null,

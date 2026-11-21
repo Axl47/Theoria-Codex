@@ -57,6 +57,10 @@ data class ViewerPageState(
 ) {
     val selectedMedia: ViewerMediaState?
         get() = media.getOrNull(selectedMediaIndex)
+
+    /** The media this page shows, or the one it will show once a pending gallery index loads. */
+    val targetMediaIndex: Int
+        get() = pendingMediaIndex ?: selectedMediaIndex
 }
 
 data class ViewerPlaybackControlsState(

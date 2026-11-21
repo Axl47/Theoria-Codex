@@ -491,7 +491,7 @@ class ViewerViewModel(
         saveIfChanged(AppRouteSavedStateKeys.VIEWER_SESSION_ID, session.value)
         saveIfChanged(ViewerSavedStateKeys.QUERY_HASH, session.queryHash)
         saveIfChanged(ViewerSavedStateKeys.STREAM_KEY, session.streamKey)
-        val mediaIndex = current.currentPage?.let { it.pendingMediaIndex ?: it.selectedMediaIndex } ?: 0
+        val mediaIndex = current.currentPage?.targetMediaIndex ?: 0
         saveIfChanged(ViewerSavedStateKeys.MEDIA_INDEX, mediaIndex)
         current.currentPage?.let { page ->
             saveIfChanged(ViewerSavedStateKeys.SELECTED_POST, encodeViewerPostId(page.post.id))

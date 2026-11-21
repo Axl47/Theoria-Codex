@@ -185,6 +185,3 @@ internal class ViewerFrame(
     // Media pages drop the portrait top gap in landscape and in PiP, where it would frame the media in black bars.
     val mediaEdgeToEdge = isLandscape || inPictureInPicture
 }
-
-internal fun targetMediaIndex(page: ViewerPageState?) = page?.let { it.pendingMediaIndex ?: it.selectedMediaIndex } ?: 0
-

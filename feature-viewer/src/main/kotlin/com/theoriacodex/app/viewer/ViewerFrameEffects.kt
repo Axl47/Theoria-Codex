@@ -55,7 +55,7 @@ internal fun rememberViewerSwipe(
                     targetPostMediaCount = pages.getOrNull(neighbor)?.media?.size ?: 0,
                     direction = direction,
                     galleryMediaPending = it.hasPendingGalleryMedia(),
-                    targetMediaIndex = targetMediaIndex(pages.getOrNull(neighbor)),
+                    targetMediaIndex = pages.getOrNull(neighbor)?.targetMediaIndex ?: 0,
                 )
             }
         },
@@ -257,7 +257,7 @@ private fun advanceToPendingPost(
         return
     }
     if (screen.pendingDismiss || frame.returning) return
-    swipe.navigateTo(ViewerHorizontalSwipeTarget(index, targetMediaIndex(frame.navigation.pages[index])))
+    swipe.navigateTo(ViewerHorizontalSwipeTarget(index, frame.navigation.pages[index].targetMediaIndex))
 }
 
 private val VIEWER_BACK_DISTANCE = 48.dp
