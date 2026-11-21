@@ -354,6 +354,7 @@ internal class DefaultTheoriaAppContainer(
         pendingStore = OfflinePendingJobStore(File(storageDirectory, "offline_jobs.json")),
         ownerExists = { owner -> owner == com.theoriacodex.app.media.AUTOMATIC_OFFLINE_OWNER ||
             owner.startsWith("codex:") && contentRepository.observeCodex(owner.removePrefix("codex:")).first() != null },
+        awaitSources = sourceReadiness::await,
     )
     private val cacheRepository = OfflineAwareCacheRepository(FileBackedCacheRepository(storageDirectory), offlineMedia)
     private val readingPositions = FileBackedReadingPositionRepository(storageDirectory)
@@ -556,12 +557,9 @@ internal class DefaultTheoriaAppContainer(
         profileBackup.recoverPendingRestore()
         profileDeletion.recoverPendingDeletion()
         offlineCatalogReady.await()
+        // Registers the saved offline queue before any screen can add to it; its jobs wait on sourceReadiness.
+        offlineMedia.recoverPendingJobs()
         sourceReadiness.open()
-        // Restored offline jobs resolve posts too, so they resume once every source is ready, off the startup path.
-        durableStoreScope.launch {
-            sourceReadiness.await()
-            runCatchingPreservingCancellation { offlineMedia.recoverPendingJobs() }
-        }
         // Off the startup path: searched-tag suggestions start from what Recents remembers.
         durableStoreScope.launch {
             runCatchingPreservingCancellation {

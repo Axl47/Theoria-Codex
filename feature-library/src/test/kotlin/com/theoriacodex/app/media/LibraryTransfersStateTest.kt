@@ -21,9 +21,11 @@ class LibraryTransfersStateTest {
             OfflineStorageOwner("codex:failed", "Failed", 1, job = OfflineMediaJob(2, 1, failedPosts = setOf(c), isRunning = false)),
             OfflineStorageOwner("codex:shrunk", "Shrunk", 1),
             OfflineStorageOwner("codex:unknown", "Unknown", 1),
+            OfflineStorageOwner("codex:stopped", "Stopped", 0, job = OfflineMediaJob(2, isRunning = false, isCancelled = true)),
             OfflineStorageOwner(AUTOMATIC_OFFLINE_OWNER, "Saved posts", 9),
         )
-        val members = mapOf("full" to setOf(a, b), "half" to setOf(a, d), "failed" to setOf(a, c), "shrunk" to setOf(d))
+        val members = mapOf("full" to setOf(a, b), "half" to setOf(a, d), "failed" to setOf(a, c), "shrunk" to setOf(d),
+            "stopped" to setOf(c, d))
         val states = codexOfflineStates(owners, members, available = setOf(a, b))
         assertEquals(
             mapOf(

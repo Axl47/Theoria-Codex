@@ -24,7 +24,12 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** Application-owned jobs survive collection navigation. Only completed galleries count as available. */
+/**
+ * Application-owned jobs survive collection navigation. Only completed galleries count as available.
+ *
+ * A job is registered and saved to the pending queue at once, then waits for [awaitSources] before it resolves
+ * its first post, so [recoverPendingJobs] can run during startup, before sources are ready, without failing posts.
+ */
 class OfflineMediaCoordinator(
     val store: OfflineMediaStore,
     private val scope: CoroutineScope,
@@ -34,6 +39,7 @@ class OfflineMediaCoordinator(
     private val postTimeoutMs: Long = OFFLINE_POST_TIMEOUT_MS,
     private val pendingStore: OfflinePendingJobStore? = null,
     private val ownerExists: suspend (String) -> Boolean = { true },
+    private val awaitSources: suspend () -> Unit = {},
 ) {
     private val slots = Semaphore(2)
     private val postLocks = List(16) { Mutex() }
@@ -140,6 +146,7 @@ class OfflineMediaCoordinator(
                 synchronized(lock) { update(owner, OfflineMediaJob(totalPosts = requests[owner].orEmpty().size)) }
                 val result = com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation {
                     checkpoint()
+                    awaitSources()
                     download(owner)
                 }
                 if (result.isFailure) update(owner, OfflineMediaJob(requests[owner].orEmpty().size,
