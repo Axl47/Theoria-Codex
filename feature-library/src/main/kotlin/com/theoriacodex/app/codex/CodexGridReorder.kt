@@ -91,10 +91,15 @@ internal class CodexGridReorderState(private val grid: LazyGridState, private va
 
     /**
      * A commit of [failed] did not land, so the grid would keep showing an order that was never saved: drop the
-     * pending order while it is still that one. A newer drag, or a newer order waiting on its own commit, stays.
+     * pending order while it is still that one. A newer order waiting on its own commit stays. A drag in progress
+     * keeps its order, but if it was lifted from [failed] it falls back to the presented order when it ends unchanged.
      */
     fun commitFailed(failed: List<String>) {
-        if (!dragging && order == failed) order = null
+        if (dragging) {
+            if (pickedOrder == failed) pickedOrder = shown
+        } else if (order == failed) {
+            order = null
+        }
     }
 
     /** Where tile [key] is drawn relative to its cell. */
@@ -138,7 +143,7 @@ internal class CodexGridReorderState(private val grid: LazyGridState, private va
         dragging = false
         val next = order
         // Committing even an order equal to the presented one overrides a commit of the previous drag still in flight.
-        if (swapped && next != null && next != pickedOrder) commit(next) else if (next == shown) order = null
+        if (swapped && next != null && next != pickedOrder) commit(next) else order = pickedOrder.takeUnless { it == shown }
         settle(scope, from)
         return key.takeIf { !swapped && travel <= touchSlop }
     }
