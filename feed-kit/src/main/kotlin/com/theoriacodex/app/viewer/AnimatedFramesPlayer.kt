@@ -39,10 +39,10 @@ fun rememberAnimatedFrames(
     rewindWhenInactive: Boolean = false,
 ): AnimatedFrames {
     val frames = remember(*keys, durationMs) { AnimatedFrames(durationMs) }
-    LaunchedEffect(frames) {
-        events.onDurationKnown(durationMs)
-        events.onReady()
-    }
+    LaunchedEffect(frames) { events.onDurationKnown(durationMs) }
+    // The Viewer counts readiness only for its current media, so frames decoded while preloading report again once
+    // this media becomes active.
+    LaunchedEffect(frames, controls.isActive) { events.onReady() }
     AnimatePlayback(
         frames.playback, controls.isActive && controls.isPlaying, controls.playbackRate,
         controls.loopPlayback, events.onPlaybackCompleted, availableUntilMs,

@@ -2,6 +2,8 @@ package com.theoriacodex.app.viewer
 
 import android.app.Application
 import android.graphics.Bitmap
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import com.theoriacodex.app.testing.testPost
@@ -19,6 +21,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -33,25 +36,43 @@ class ViewerUgoiraReadyTest {
     @get:Rule val temporaryFolder = TemporaryFolder()
 
     @Test fun `an ugoira reports ready once its frames are available`() {
+        var ready = 0
+        showUgoira(active = mutableStateOf(true)) { ready += 1 }
+        compose.waitUntil(timeoutMillis = 10_000L) { ready > 0 }
+    }
+
+    @Test fun `an ugoira that loaded while preloading reports ready again once it becomes active`() {
+        var ready = 0
+        val active = mutableStateOf(false)
+        // Paused, so the active animation does not keep Compose from going idle.
+        showUgoira(active, playing = false) { ready += 1 }
+        compose.waitUntil(timeoutMillis = 10_000L) { ready > 0 }
+        val whilePreloading = ready
+
+        active.value = true
+        compose.waitForIdle()
+        assertTrue(ready > whilePreloading)
+    }
+
+    private fun showUgoira(active: State<Boolean>, playing: Boolean = true, onReady: () -> Unit) {
         val media = ImageRef(url = null, localPath = null, mime = PIXIV_UGOIRA_MIME)
         val post = testPost(sourcePostId = "77").copy(full = media, media = listOf(media))
-        var ready = 0
         val events = ViewerRendererEvents(
-            onPlaybackCompleted = {}, onError = {}, onReady = { ready += 1 }, onDurationKnown = {},
+            onPlaybackCompleted = {}, onError = {}, onReady = onReady, onDurationKnown = {},
             onTogglePlayback = {}, onRestartPlayback = {}, onPlaybackIntentChanged = {}, onTimelineInteractionActiveChanged = {},
         )
+        val client = client()
         compose.setContent {
             ViewerMediaContent(
                 post, media, ViewerMediaKey(post.id, 0), ViewerMediaKind.UGOIRA,
                 ViewerRendererControls(
-                    isActive = true, isPlaying = true, showControls = true, loopPlayback = true,
-                    playbackRate = 1f, restartRequest = 0L, loadGeneration = 0L,
+                    isActive = active.value, isPlaying = playing, showControls = true, loopPlayback = true,
+                    playbackRate = 1f, restartRequest = 0L, loadGeneration = 0L, isPreloading = !active.value,
                 ),
                 events, ViewerVideoOptions(VideoQuality.AUTO, null, null, false), ViewerVideoPositions(),
-                ViewerImageSession(), client(), Modifier, onRequestMediaRecovery = null,
+                ViewerImageSession(), client, Modifier, onRequestMediaRecovery = null,
             )
         }
-        compose.waitUntil(timeoutMillis = 10_000L) { ready > 0 }
     }
 
     private fun client() = PixivUgoiraClient(
