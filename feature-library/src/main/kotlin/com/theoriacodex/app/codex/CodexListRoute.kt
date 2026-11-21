@@ -13,10 +13,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.data.repository.CodexLibrarySort
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
 @Composable
@@ -43,6 +45,7 @@ fun CodexListScreen(
     librarySort: CodexLibrarySort = CodexLibrarySort.MANUAL,
     onLibrarySortChange: (CodexLibrarySort) -> Unit = {},
     libraryUsage: Map<String, CodexUsage>? = null,
+    observeCleaningMatches: (String, List<String>) -> Flow<Map<String, Set<PostId>>> = { _, _ -> flowOf(emptyMap()) },
     header: LibrarySectionHeader = BareSectionHeader,
 ) {
     val state = remember {
@@ -63,6 +66,7 @@ fun CodexListScreen(
         librarySort = librarySort,
         libraryUsage = libraryUsage,
         searchTerms = options.options.searchTerms,
+        observeCleaningMatches = observeCleaningMatches,
     )
     val actions = CodexListActions(
         onOpenCodex, onImportCodex, onDownloadCodex, onShareCodex, onSearchFromCodex,

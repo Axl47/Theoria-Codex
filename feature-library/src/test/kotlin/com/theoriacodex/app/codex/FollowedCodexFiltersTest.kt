@@ -11,7 +11,6 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.semantics.SemanticsProperties
-import com.theoriacodex.data.repository.CodexSortMode
 import org.junit.Assert.assertTrue
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -47,7 +46,7 @@ class FollowedCodexFiltersTest {
                 CodexFilterSheet(
                     filters = CodexCollectionFilters(), sourceOptions = listOf(SourceKey.PIXIV),
                     supportsLanguage = false, supportsFullColor = false,
-                    sortMode = CodexSortMode.NEWEST_SAVED, onFiltersChange = {}, onSortChange = {},
+                    onFiltersChange = {},
                     onReset = {}, onDismiss = {},
                     followedFilters = { FollowedCodexFilters(follows, FeedFabRestoreState(), {}, {}) },
                 )
@@ -56,9 +55,9 @@ class FollowedCodexFiltersTest {
         compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange))
             .assertCountEquals(1)
         compose.onNodeWithText("Source").performScrollTo()
-        val sort = compose.onNodeWithText("Sort").fetchSemanticsNode().boundsInRoot
+        val show = compose.onNodeWithText("Show").fetchSemanticsNode().boundsInRoot
         val source = compose.onNodeWithText("Source").fetchSemanticsNode().boundsInRoot
-        assertTrue(sort.top < source.top)
+        assertTrue(show.top < source.top)
         compose.onNodeWithTag("followed-author:PIXIV:1").performScrollTo()
         val first = compose.onNodeWithTag("followed-author:PIXIV:1").fetchSemanticsNode().boundsInRoot
         val second = compose.onNodeWithTag("followed-author:PIXIV:2").fetchSemanticsNode().boundsInRoot

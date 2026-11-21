@@ -1,11 +1,12 @@
 package com.theoriacodex.app.codex
 
 import com.theoriacodex.app.library.LibrarySectionHeader
-
+import com.theoriacodex.app.ui.undo.UndoLeaveEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,7 +25,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.OfflinePin
 import androidx.compose.material.icons.filled.FileOpen
-import androidx.compose.material.icons.filled.Reorder
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
@@ -32,30 +32,21 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.source.SourceIcon
-import com.theoriacodex.app.source.displayName
-import com.theoriacodex.app.ui.components.ActionMenuContentRow
 import com.theoriacodex.app.ui.components.ActionMenuDetailText
 import com.theoriacodex.app.ui.components.ActionMenuDivider
 import com.theoriacodex.app.ui.components.ActionMenuFollowUpRow
@@ -69,10 +60,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.SideEffect
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.ui.zIndex
-import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
-import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.app.ui.components.ReorderAutoScrollEffect
 import com.theoriacodex.app.ui.components.reorderRowPlacement
 
@@ -89,25 +77,31 @@ internal fun CodexListContent(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        header { CodexListHeaderActions(presentation.libraryCodices, state, actions) }
+        header { CodexListHeaderActions(presentation, state, actions) }
+        // A deleted Codex's Undo lives until the Library is left; leaving commits the deletion's loss.
+        UndoLeaveEffect(CodexUndoAnchors.LIBRARY_SCOPE)
 
         CodexListBody(presentation, state, actions)
     }
 }
 
-/** Import, Reorder and Create, placed in the Library header while Codices shows. */
+/**
+ * Import, Sort and Create, placed in the Library header while Codices shows. Choosing Manual in the sort menu
+ * opens the reorder list, whose Done replaces these until it commits.
+ */
 @Composable
 private fun CodexListHeaderActions(
-    codices: List<Codex>,
+    presentation: CodexListPresentation,
     state: CodexListUiState,
     actions: CodexListActions,
 ) {
+    val reorder = { state.ordering.toggle(presentation.libraryCodices, actions.commitReorder) }
+    if (state.ordering.reorderMode) return CodexActionIcon(Icons.Default.Check, "Done reordering Codices", onClick = reorder)
     CodexActionIcon(Icons.Default.FileOpen, "Import Codex", onClick = actions.importCodex)
-    CodexActionIcon(
-        icon = if (state.ordering.reorderMode) Icons.Default.Check else Icons.Default.Reorder,
-        description = if (state.ordering.reorderMode) "Done reordering Codices" else "Reorder Codices",
-        onClick = { state.ordering.toggle(codices, actions.commitReorder) },
-    )
+    CodexLibrarySortMenu(presentation.librarySort) { sort ->
+        actions.setLibrarySort(sort)
+        if (sort == CodexLibrarySort.MANUAL) reorder()
+    }
     CodexActionIcon(Icons.Default.Add, "Create Codex") { state.showCreateDialog = true }
 }
 
@@ -118,8 +112,8 @@ private fun CodexListBody(
     actions: CodexListActions,
 ) {
     when {
-        state.ordering.reorderMode -> CodexReorderList(presentation, state, actions.setLibrarySort)
-        else -> CodexGrid(presentation, state, actions.openCodex)
+        state.ordering.reorderMode -> CodexReorderList(presentation, state)
+        else -> CodexGrid(presentation, state, actions)
     }
 }
 
@@ -127,28 +121,21 @@ private fun CodexListBody(
 private fun CodexReorderList(
     presentation: CodexListPresentation,
     state: CodexListUiState,
-    onSortChange: (CodexLibrarySort) -> Unit,
 ) {
-    // The draft stays in manual order underneath an automatic sort, so Done can always commit it.
-    val rows = sortCodicesForLibrary(
-        state.ordering.reorderDraft, presentation.librarySort, presentation.itemCounts, presentation.likesCodexId,
-        presentation.libraryUsage.orEmpty(),
-    )
+    // Reordering is only opened from Manual, so the rows are the draft itself.
+    val rows = state.ordering.reorderDraft
     val list = rememberLazyListState()
     val rowSpacing = with(LocalDensity.current) { 8.dp.toPx() }
     SideEffect { state.ordering.itemSpacingPx = rowSpacing }
     ReorderAutoScrollEffect(state.ordering, list)
-    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        CodexLibrarySortSelector(presentation.librarySort, onSortChange)
-        LazyColumn(
-            state = list,
-            modifier = Modifier.fillMaxWidth().weight(1f),
-            userScrollEnabled = state.ordering.draggingId == null,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            itemsIndexed(rows, key = { _, codex -> codex.codexId }) { index, codex ->
-                CodexReorderRow(codex, index, presentation, state, Modifier.reorderRowPlacement(this, state.ordering.draggingId == codex.codexId))
-            }
+    LazyColumn(
+        state = list,
+        modifier = Modifier.fillMaxSize(),
+        userScrollEnabled = state.ordering.draggingId == null,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        itemsIndexed(rows, key = { _, codex -> codex.codexId }) { index, codex ->
+            CodexReorderRow(codex, index, presentation, state, Modifier.reorderRowPlacement(this, state.ordering.draggingId == codex.codexId))
         }
     }
 }
@@ -182,7 +169,7 @@ private fun CodexReorderRow(
         ) {
             CodexReorderCover(codex, presentation.coverCandidates[codex.codexId].orEmpty())
             CodexReorderMetadata(codex, presentation.itemCounts[codex.codexId] ?: 0, Modifier.weight(1f))
-            if (presentation.librarySort == CodexLibrarySort.MANUAL) CodexReorderHandle(codex, index, state)
+            CodexReorderHandle(codex, index, state)
         }
     }
 }
@@ -208,63 +195,10 @@ private fun CodexReorderMetadata(codex: Codex, itemCount: Int, modifier: Modifie
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            "$itemCount items", style = MaterialTheme.typography.bodySmall,
+            codexPostCount(itemCount), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
-}
-
-@Composable
-private fun CodexGrid(
-    presentation: CodexListPresentation,
-    state: CodexListUiState,
-    onOpenCodex: (String) -> Unit,
-) {
-    val codices = presentation.libraryCodices
-    // A first frame in manual order would move the restored scroll anchor to the wrong Codex.
-    val awaitingCounts = presentation.librarySort.usesItemCounts && codices.any { it.codexId !in presentation.itemCounts }
-    val awaitingUsage = presentation.librarySort.usesUsage && presentation.libraryUsage == null
-    if (awaitingCounts || awaitingUsage) return
-    if (codices.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No Codices", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        return
-    }
-    val sorted = sortCodicesForLibrary(
-        codices, presentation.librarySort, presentation.itemCounts, presentation.likesCodexId,
-        presentation.libraryUsage.orEmpty(),
-    )
-    val gridState = rememberLazyGridState()
-    ScrollToTopOnTabReselect(TopLevelDestination.Library) { gridState.animateScrollToItem(0) }
-    com.theoriacodex.app.ui.components.AdaptiveMediaGrid(
-        modifier = Modifier.fillMaxSize(),
-        state = gridState,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        sorted.forEach { codex ->
-            item(key = codex.codexId) { CodexLibraryTile(codex, presentation, state, onOpenCodex) }
-        }
-    }
-}
-
-@Composable
-private fun CodexLibraryTile(
-    codex: Codex,
-    presentation: CodexListPresentation,
-    state: CodexListUiState,
-    onOpenCodex: (String) -> Unit,
-) {
-    CodexCoverTile(
-        codexId = codex.codexId,
-        name = codex.name,
-        itemCount = presentation.itemCounts[codex.codexId] ?: 0,
-        covers = presentation.coverCandidates[codex.codexId].orEmpty(),
-        onOpen = { onOpenCodex(codex.codexId) },
-        onOpenActions = { state.actionTarget = codex },
-        modifier = Modifier.fillMaxWidth().height(168.dp),
-    )
 }
 
 @Composable
@@ -274,18 +208,7 @@ internal fun CodexListOverlays(
     actions: CodexListActions,
 ) {
     val codices = presentation.codices
-    codices.firstOrNull { it.codexId == state.cleaningTargetId }?.let { target ->
-        CodexCleaningSheet(
-            target = target,
-            codices = codices,
-            isLikesCodex = target.codexId == presentation.likesCodexId,
-            onDismiss = { state.cleaningTargetId = null },
-            onClean = { comparisonIds ->
-                state.cleaningTargetId = null
-                actions.cleanCodex(target.codexId, comparisonIds)
-            },
-        )
-    }
+    CodexCleaningOverlay(presentation, state, actions)
     CodexNameOverlays(state, actions)
     CodexDeleteConfirmation(state, presentation.likesCodexId, actions.deleteCodex)
 
@@ -310,6 +233,27 @@ internal fun CodexListOverlays(
             },
         )
     }
+}
+
+@Composable
+private fun CodexCleaningOverlay(presentation: CodexListPresentation, state: CodexListUiState, actions: CodexListActions) {
+    val codices = presentation.codices
+    val target = codices.firstOrNull { it.codexId == state.cleaningTargetId } ?: return
+    val comparisonIds = remember(target, codices) { codexCleaningComparisons(target, codices).map(Codex::codexId) }
+    val matches by remember(target.codexId, comparisonIds, presentation.observeCleaningMatches) {
+        presentation.observeCleaningMatches(target.codexId, comparisonIds)
+    }.collectAsStateWithLifecycle(emptyMap())
+    CodexCleaningSheet(
+        target = target,
+        codices = codices,
+        isLikesCodex = target.codexId == presentation.likesCodexId,
+        matches = matches,
+        onDismiss = { state.cleaningTargetId = null },
+        onClean = { comparisonIds ->
+            state.cleaningTargetId = null
+            actions.cleanCodex(target.codexId, comparisonIds)
+        },
+    )
 }
 
 @Composable
@@ -359,6 +303,7 @@ private fun CodexNameOverlays(state: CodexListUiState, actions: CodexListActions
     }
 }
 
+/** Only clearing Likes is confirmed: it also unlikes every post. Deleting a Codex acts at once and offers Undo. */
 @Composable
 private fun CodexDeleteConfirmation(
     state: CodexListUiState,
@@ -366,25 +311,17 @@ private fun CodexDeleteConfirmation(
     onDeleteCodex: (String) -> Unit,
 ) {
     val codex = state.deleteTarget ?: return
-    val clearsLikes = codex.codexId == likesCodexId
+    if (codex.codexId != likesCodexId) return
     AlertDialog(
         onDismissRequest = { state.deleteTarget = null },
-        title = { Text(if (clearsLikes) "Clear Likes?" else "Delete Codex?") },
-        text = {
-            Text(
-                if (clearsLikes) {
-                    "Clear all liked posts from this recommendation profile? The Likes Codex will remain."
-                } else {
-                    "Delete \"${codex.name}\" and all saved items in it?"
-                },
-            )
-        },
+        title = { Text("Clear likes?") },
+        text = { Text("Every post liked in this profile is unliked.") },
         dismissButton = { TextButton(onClick = { state.deleteTarget = null }) { Text("Cancel") } },
         confirmButton = {
             TextButton(onClick = {
                 onDeleteCodex(codex.codexId)
                 state.deleteTarget = null
-            }) { Text(if (clearsLikes) "Clear" else "Delete") }
+            }) { Text("Clear") }
         },
     )
 }
@@ -427,7 +364,7 @@ private fun CodexActionHeader(codex: Codex, presentation: CodexListPresentation)
                 Icon(Icons.Default.Image, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
-        details = { ActionMenuDetailText("$itemCount ${if (itemCount == 1) "post" else "posts"}") },
+        details = { ActionMenuDetailText(codexPostCount(itemCount)) },
     )
 }
 
@@ -458,7 +395,10 @@ private fun CodexActionRows(
         icon = Icons.Default.Delete,
         label = if (isLikesCodex) "Clear likes" else "Delete Codex",
         tint = MaterialTheme.colorScheme.error,
-    ) { state.deleteTarget = codex; close() }
+    ) {
+        close()
+        if (isLikesCodex) state.deleteTarget = codex else actions.deleteCodex(codex.codexId)
+    }
 }
 
 @Composable

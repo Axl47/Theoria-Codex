@@ -24,6 +24,19 @@ import org.junit.rules.TemporaryFolder
 class CodexCollectionSourceTest {
     @get:Rule val folder = TemporaryFolder()
 
+    @Test fun `cleaning matches are the target's posts each comparison also holds`() = runTest {
+        val repository = InMemoryCodexRepository()
+        listOf("target", "a", "b").forEach { repository.ensureCodex(it, it) }
+        val shared = testPost(sourcePostId = "shared")
+        repository.addItem("target", shared)
+        repository.addItem("target", testPost(sourcePostId = "only-target"))
+        repository.addItem("a", shared)
+        repository.addItem("b", testPost(sourcePostId = "only-b"))
+        val source = CodexCollectionSource(repository, folder.root, InMemoryCacheRepository(), StandardTestDispatcher(testScheduler))
+        val matches = source.observeCleaningMatches("target", listOf("a", "b")).first()
+        assertEquals(mapOf("a" to setOf(shared.id), "b" to emptySet()), matches)
+    }
+
     @Test fun `save membership matches full identities and updates with the entire selection`() = runTest {
         val repository = InMemoryCodexRepository()
         repository.ensureCodex("target", "Target")

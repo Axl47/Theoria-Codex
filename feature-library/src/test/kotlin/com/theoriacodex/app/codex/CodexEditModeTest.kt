@@ -36,17 +36,17 @@ class CodexEditModeTest {
                     codexName = "Mine", posts = listOf(post), sortMode = CodexSortMode.NEWEST_SAVED,
                     availableSources = emptySet(), creatorBrowsingSources = emptySet(),
                     onOpenViewer = { _, _ -> }, onAddPostsToAnotherCodex = {}, onRemovePosts = {}, onSavePostToDevice = {},
- onBack = {}, onDeleteCodex = {}, isLikesCodex = false,
+                    onBack = {},
                 )
             }
         }
-        compose.onNodeWithContentDescription("Edit Codex").performClick()
+        compose.onNodeWithContentDescription("Select posts").performClick()
         compose.onNodeWithContentDescription("Not selected").performClick()
         compose.onNodeWithContentDescription("Selected").assertExists()
         compose.onNodeWithText("1/1").assertExists()
 
         compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
-        compose.onNodeWithContentDescription("Edit Codex").assertExists()
+        compose.onNodeWithContentDescription("Select posts").assertExists()
         compose.runOnIdle { assertEquals(0, destinationBacks) }
 
         compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }

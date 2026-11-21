@@ -16,7 +16,7 @@ import com.theoriacodex.app.ui.undo.LocalUndoSlot
 fun CodexCommandHost(owner: CodexCommandViewModel, snackbar: SnackbarHostState, onDeleted: (String) -> Unit) {
     val undo = LocalUndoSlot.current
     val feedback by owner.feedback.collectAsStateWithLifecycle()
-    val notice = feedback.lastOrNull { it.action == null }
+    val notice = feedback.lastOrNull { it.action == null && !it.quiet }
     LaunchedEffect(feedback) {
         // Deliver navigation before handing off; the notice still showing keeps its own delivery below.
         feedback.filter { it.id != notice?.id }.forEach { item ->

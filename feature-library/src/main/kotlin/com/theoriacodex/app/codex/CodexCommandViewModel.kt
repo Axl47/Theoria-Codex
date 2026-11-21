@@ -9,6 +9,7 @@ import com.theoriacodex.data.repository.CodexCleaningSnapshot
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.app.ui.undo.UndoAction
 import com.theoriacodex.app.ui.undo.UndoAnchor
+import com.theoriacodex.app.ui.undo.UndoLifetime
 import com.theoriacodex.app.ui.undo.UndoOffer
 import com.theoriacodex.app.ui.undo.UndoSlot
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -39,15 +40,19 @@ sealed interface CodexCommand {
     data class Restore(val items: List<CodexItem>, val posts: List<Post>) : CodexCommand
 }
 
-/** Where Codex offers are drawn: one Codex's detail screen, or the Library's Codices section. */
+/**
+ * Where Codex offers are drawn: one Codex's detail screen, the Library's Codices section, or the Library tile
+ * cell a deleted Codex vacated.
+ */
 object CodexUndoAnchors {
     const val DETAIL_SCOPE = "codex-detail"
     const val LIBRARY_SCOPE = "library-codices"
     val Library = UndoAnchor(LIBRARY_SCOPE)
     fun detail(codexId: String) = UndoAnchor(DETAIL_SCOPE, codexId)
+    fun tile(codexId: String) = UndoAnchor(LIBRARY_SCOPE, codexId)
 }
 
-/** The outcome of one command; [anchor] is where its Undo or Retry is offered. */
+/** The outcome of one command; [anchor] is where the command was given and where its Undo or Retry is offered. */
 data class CodexCommandFeedback(
     val id: Long,
     val command: CodexCommand,
@@ -57,6 +62,17 @@ data class CodexCommandFeedback(
     val anchor: UndoAnchor = CodexUndoAnchors.Library,
 ) {
     val action: CodexCommand? get() = if (succeeded) undo else command
+    private val deleted: Boolean get() = succeeded && command is CodexCommand.Delete
+
+    /**
+     * A deleted Codex's Undo takes the Library tile cell it vacated and stays until the Library is left: its
+     * restore snapshot lives only in memory, and a mistap can cost hundreds of posts.
+     */
+    val offerAnchor: UndoAnchor get() = if (command is CodexCommand.Delete && deleted) CodexUndoAnchors.tile(command.id) else anchor
+    val lifetime: UndoLifetime get() = if (deleted) UndoLifetime.UntilLeft else UndoLifetime.Timed()
+
+    /** A rename shows in the name it changed, so its success needs no notice. */
+    val quiet: Boolean get() = succeeded && command is CodexCommand.Rename
     val undoAction: UndoAction? get() = if (!succeeded) UndoAction.Retry else if (undo != null) UndoAction.Undo else null
     val message: String get() = when (command) {
         is CodexCommand.Clean -> when {
@@ -68,7 +84,8 @@ data class CodexCommandFeedback(
         is CodexCommand.Create -> if (succeeded) "Codex created" else "Could not create Codex"
         is CodexCommand.Rename -> if (succeeded) "Codex renamed" else "Could not rename Codex"
         is CodexCommand.AutomaticTag -> if (succeeded) "Automatic tag updated" else "Could not update automatic tag"
-        is CodexCommand.Delete -> if (succeeded) "Codex deleted" else "Could not delete Codex"
+        is CodexCommand.Delete -> (undo as? CodexCommand.RestoreDeleted)?.let { "Deleted ${it.snapshot.codex.name}" }
+            ?: if (succeeded) "Codex deleted" else "Could not delete Codex"
         is CodexCommand.RestoreDeleted -> if (succeeded) "Codex restored" else "Could not restore Codex"
         is CodexCommand.ClearLikes -> if (succeeded) "Likes cleared" else "Could not clear Likes"
         is CodexCommand.RestoreLikes -> if (succeeded) "Likes restored" else "Could not restore Likes"
@@ -135,7 +152,7 @@ class CodexCommandViewModel(
         val item = take(id) ?: return
         val action = item.action ?: return
         val label = item.undoAction ?: return
-        undo.offer(scope, UndoOffer(item.message, item.anchor, label) { submit(action, item.anchor) })
+        undo.offer(scope, UndoOffer(item.message, item.offerAnchor, label, item.lifetime) { submit(action, item.anchor) })
     }
 
     private fun take(id: Long): CodexCommandFeedback? {

@@ -27,8 +27,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.codex.CodexDetailScreen
+import com.theoriacodex.app.codex.CodexHeaderActions
+import com.theoriacodex.app.codex.CodexUndoAnchors
 import com.theoriacodex.app.codex.SAVED_CODEX_ID
-import com.theoriacodex.app.codex.likesCodexIdForProfile
 import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.related.RelatedPostsRouteController
@@ -188,7 +189,11 @@ private fun CodexDetailContent(
     CodexDetailScreen(
         codexId = codexId,
         codexName = state.codex?.name,
-        onTitleLongPress = { shell.overlays.codexActionTargetId = codexId },
+        headerActions = CodexHeaderActions(
+            onRename = { name -> commands.rename(codexId, name, CodexUndoAnchors.detail(codexId)) },
+            onOpenActions = { shell.overlays.codexActionTargetId = codexId },
+            onTopUpOffline = { shell.transfers.offline.makeAvailableOffline(codexId) },
+        ),
         customHeader = virtualUi?.header,
         likedPostIds = state.likedPostIds,
         onToggleLike = liveOwner?.let { owner ->
@@ -215,8 +220,6 @@ private fun CodexDetailContent(
         },
         onGoToSearch = { shell.navigation.goToTab(TopLevelDestination.Search) },
         onBack = { shell.navController.popBackStack() },
-        onDeleteCodex = { commands.delete(codexId, state.activeProfile.profileId) },
-        isLikesCodex = codexId == likesCodexIdForProfile(state.activeProfile.profileId),
         fabRestoreState = fabRestoreState,
         onFabRestoreStateChange = { updated -> shell.feedFabRestoreRegistry.update(fabContext, updated) },
     )

@@ -116,7 +116,6 @@ private fun ColumnScope.CodexTagSearchEditor(
     var targetTerm by remember(source) { mutableStateOf<SearchTerm?>(null) }
     var filter by remember(source) { mutableStateOf("") }
     var drawAmount by rememberSaveable { mutableIntStateOf(DEFAULT_DRAW_AMOUNT) }
-    var drawnFrom by remember(source) { mutableStateOf<String?>(null) }
     val groups = query.effectiveIncludeTermGroups
     val targetGroup = groups.indexOfFirst { targetTerm in it.terms }.takeIf { it >= 0 }
     val normalizedFilter = filter.normalizedTagFilterText()
@@ -134,19 +133,8 @@ private fun ColumnScope.CodexTagSearchEditor(
             drawCodexTerms(terms.posts, drawAmount)?.let { draw ->
                 query = emptySearchQuery(QueryMode.Source(source)).withIncludeTermsAsRequired(draw.terms)
                 targetTerm = null
-                drawnFrom = draw.sourcePostId
             }
         }
-    }
-    drawnFrom?.let { postId ->
-        Text(
-            "Drawn from saved post $postId",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp),
-        )
     }
     CodexTermList(
         sections = sections,
@@ -155,7 +143,6 @@ private fun ColumnScope.CodexTagSearchEditor(
     ) { option ->
         CodexTermChip(option, source, query, targetGroup) {
             query = query.withTagTap(source, option.term, targetGroup)
-            drawnFrom = null
         }
     }
     QueryTray(

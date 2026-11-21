@@ -102,6 +102,7 @@ internal data class CodexDestinationState(
     val itemCounts: Map<String, Int>,
     val coverCandidates: Map<String, List<CodexCoverCandidate>>,
     val observeActionOptions: (String) -> Flow<CodexActionOptions>,
+    val observeCleaningMatches: (String, List<String>) -> Flow<Map<String, Set<PostId>>>,
     val librarySort: com.theoriacodex.data.repository.CodexLibrarySort,
     val libraryUsage: Map<String, CodexUsage>?,
 )
@@ -245,6 +246,7 @@ internal fun CodexDestinationStateBoundary(
                     (com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID to savedSearches.size),
                 coverCandidates = collection.coverCandidates,
                 observeActionOptions = observeActions,
+                observeCleaningMatches = source::observeCleaningMatches,
                 librarySort = settings.codexLibrarySort,
                 libraryUsage = libraryUsage,
             ),
