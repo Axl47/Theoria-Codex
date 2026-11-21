@@ -26,10 +26,17 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -42,6 +49,7 @@ import com.theoriacodex.app.ui.undo.UndoRow
 import com.theoriacodex.data.repository.FollowedCreator
 import com.theoriacodex.data.repository.followKey
 import com.theoriacodex.domain.model.CreatorProfile
+import kotlinx.coroutines.delay
 
 /**
  * Followed creators with their new-post counts. Opening it checks for new posts when the last check is stale;
@@ -89,14 +97,29 @@ fun FollowedCreatorsSheet(owner: CreatorFollowsViewModel, onDismiss: () -> Unit,
     }
 }
 
-/** Checks every followed creator for new posts; spins while a check runs. */
+/**
+ * Checks every followed creator for new posts; spins while a check runs, for at least [CHECK_MIN_SPIN_MS] so a
+ * check that finds nothing new at once is still seen to run. New posts then show on their creators' rows.
+ */
 @Composable
-private fun CheckButton(refreshing: Boolean, onCheck: () -> Unit) {
+internal fun CheckButton(refreshing: Boolean, onCheck: () -> Unit) {
+    var holding by remember { mutableStateOf(false) }
+    SideEffect { if (refreshing) holding = true }
+    LaunchedEffect(holding) { if (holding) { delay(CHECK_MIN_SPIN_MS); holding = false } }
     Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-        if (refreshing) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-        else IconButton(onClick = onCheck) { Icon(Icons.Default.Refresh, contentDescription = "Check for new posts") }
+        if (refreshing || holding) {
+            CircularProgressIndicator(
+                Modifier.size(24.dp).semantics {
+                    contentDescription = "Checking for new posts"
+                    liveRegion = LiveRegionMode.Polite
+                },
+                strokeWidth = 2.dp,
+            )
+        } else IconButton(onClick = onCheck) { Icon(Icons.Default.Refresh, contentDescription = "Check for new posts") }
     }
 }
+
+private const val CHECK_MIN_SPIN_MS = 800L
 
 @Composable
 private fun FollowedCreatorCard(

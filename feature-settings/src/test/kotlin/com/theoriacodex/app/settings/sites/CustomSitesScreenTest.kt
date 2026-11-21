@@ -53,12 +53,12 @@ class CustomSitesScreenTest {
         }
         show(controller)
         compose.onNodeWithText("No added sites").assertExists()
-        compose.onNode(hasText("Add site") and hasClickAction()).performClick()
+        compose.onNodeWithContentDescription("Add site").performClick()
 
         compose.onNodeWithText("Site address").performTextInput("https://danbooru.example/posts?tags=cat")
         compose.onNodeWithText("Check site").performClick()
 
-        compose.onNodeWithText("Found a Danbooru site. Name it and add it.").assertExists()
+        compose.onNodeWithText("Found a Danbooru site.").assertExists()
         compose.onNodeWithText("Example Booru").assertExists()
         compose.onNode(isToggleable()).assertIsOff()
         compose.onNode(hasText("Add site") and hasClickAction()).performClick()

@@ -4,6 +4,9 @@ import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.FollowedCreator
 import com.theoriacodex.data.repository.RemovedFollow
 import com.theoriacodex.domain.model.CreatorProfile
+import com.theoriacodex.domain.model.GENERAL_TAG_NAMESPACE
+import com.theoriacodex.domain.model.PostTaxonomyTerm
+import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -43,8 +46,21 @@ class CreatorNewPostsPolicyTest {
             testPost(sourcePostId = "2", canonicalTags = listOf("sea", "boat")),
             testPost(sourcePostId = "3", canonicalTags = listOf("sea", "fog")),
         )
-        val tags = creatorTopTags(tagged)
+        val tags = creatorTopTags(creator, tagged)
         assertEquals(listOf("sea" to 3, "fog" to 2), tags.map { it.tag to it.count })
         assertEquals("1", tags.first().from.id.sourcePostId)
+    }
+
+    @Test fun `common tags leave out the creator's own tag and tags typed as another kind`() {
+        val artist = CreatorProfile(SourceKey.DANBOORU, "ink wash", "ink_wash", uploadsQuery = "ink_wash")
+        val typed = listOf(
+            PostTaxonomyTerm("sea"),
+            PostTaxonomyTerm("highres", sourceNamespace = "meta"),
+            PostTaxonomyTerm("ink wash", SearchFacet.ARTIST),
+            PostTaxonomyTerm("fog", sourceNamespace = GENERAL_TAG_NAMESPACE),
+        )
+        val tagged = List(2) { testPost(sourcePostId = "$it", canonicalTags = listOf("ink_wash")).copy(taxonomy = typed) } +
+            List(2) { testPost(sourcePostId = "u$it", canonicalTags = listOf("Ink_Wash", "boat")) }
+        assertEquals(listOf("sea", "fog", "boat"), creatorTopTags(artist, tagged).map { it.tag })
     }
 }

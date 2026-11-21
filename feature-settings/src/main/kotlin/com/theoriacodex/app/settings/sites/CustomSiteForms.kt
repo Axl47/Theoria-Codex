@@ -106,7 +106,7 @@ private fun ConfirmSection(
     saving: Boolean,
     onAction: (CustomSitesAction) -> Unit,
 ) {
-    AnnouncedText("Found a ${family.displayName} site. Name it and add it.")
+    AnnouncedText("Found a ${family.displayName} site.")
     LabelField(form.fields.label, !saving, onAction)
     IncludeSwitch(form.fields.includeInUnifiedAndForYou, !saving, onAction)
     message?.let { AnnouncedText(it, error = true) }
