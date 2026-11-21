@@ -108,13 +108,11 @@ private fun List<SectionSeed>.roundRobinSources(): List<SectionSeed> {
     return (0 until (groups.maxOfOrNull { it.size } ?: 0)).flatMap { index -> groups.mapNotNull { it.getOrNull(index) } }
 }
 
-private fun seedKey(tags: List<String>) = tags.map(String::lowercase).sorted().joinToString("+")
-
 private fun sectionSeedId(tags: Map<SourceKey, List<String>>): String =
     buildForYouSeedId(tags.mapValues { (_, values) -> values.sorted() })
 
 private fun allowedSection(tags: Map<SourceKey, List<String>>, request: ForYouFeedRequest,
     blocked: List<com.theoriacodex.data.repository.ForYouBlacklistEntry>): Boolean =
     sectionSeedId(tags) !in request.excludedSectionIds && tags.none { (source, values) ->
-        blocked.any { it.source == source && seedKey(it.tags) == seedKey(values) }
+        blocked.hidesSeed(source, values)
     }
