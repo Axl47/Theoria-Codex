@@ -132,6 +132,11 @@ class SearchViewModel(
 
     override fun onAction(action: SearchAction) {
         when (action) {
+            SearchAction.ClearDraft -> {
+                suggestionRefresh.cancelAutocomplete()
+                applyDraftAction(SearchAction.ClearDraft)
+            }
+
             is SearchAction.DraftEdit -> applyDraftAction(action)
 
             is SearchAction.SelectMode -> selectMode(action.mode)
@@ -144,15 +149,17 @@ class SearchViewModel(
 
             SearchAction.RefreshAutocomplete -> suggestionRefresh.refreshAutocomplete(mutableState.value.suggestions.input)
 
-            SearchAction.ClearAutocomplete -> {
-                suggestionRefresh.cancelAutocomplete()
+            SearchAction.ClearAutocomplete -> clearSuggestionState()
+
+            SearchAction.UndoSearch -> {
+                undoSearch()
                 clearSuggestionState()
             }
 
-            SearchAction.UndoSearch -> mutableState.value.takeIf { it.canUndoSearch }?.searchHistory?.lastOrNull()?.let {
-                applyHistoricalQuery(it.query, it.sourceScope, undo = true)
+            SearchAction.ApplyDraft -> {
+                applyDraft()
+                clearSuggestionState()
             }
-            SearchAction.ApplyDraft -> applyDraft()
 
             is SearchAction.ApplyHistoricalQuery -> runAfterRestoration {
                 applyHistoricalQuery(action.query, action.sourceScope)
@@ -217,47 +224,15 @@ class SearchViewModel(
         }
     }
 
-    private fun applyDraftAction(action: SearchAction.DraftEdit) {
-        mutateDraft {
-            when (action) {
-                is SearchAction.SelectSort -> SearchDraftReducer.mutateQuery(it) { query -> query.copy(sort = action.sort) }.state
-                is SearchAction.SetDateRange -> SearchDraftReducer.mutateQuery(it) { query -> query.copy(dateRange = action.range) }.state
-                is SearchAction.SetDateRangePreset -> {
-                    val range = action.preset.rangeEndingAt(System.currentTimeMillis())
-                    SearchDraftReducer.mutateQuery(it) { query -> query.copy(dateRange = range) }.state
-                }
-                is SearchAction.AddIncludeTerm -> SearchDraftReducer.addTerm(it, action.term, excluded = false).state
-                is SearchAction.AddExcludeTerm -> SearchDraftReducer.addTerm(it, action.term, excluded = true).state
-                is SearchAction.RemoveIncludeTerm -> SearchDraftReducer.removeTerm(it, action.term, excluded = false).state
-                is SearchAction.RemoveExcludeTerm -> SearchDraftReducer.removeTerm(it, action.term, excluded = true).state
-                is SearchAction.AddIncludeAlternative -> SearchDraftReducer.addIncludeAlternative(it, action.groupIndex, action.term).state
-                is SearchAction.SplitIncludeAlternative -> SearchDraftReducer.splitIncludeAlternative(it, action.groupIndex, action.term).state
-                is SearchAction.RemoveIncludeGroup -> SearchDraftReducer.removeIncludeGroup(it, action.groupIndex).state
-                is SearchAction.AddSavedTagGroup -> SearchDraftReducer.addIncludeGroup(it, action.terms).state
-                is SearchAction.RestoreDraftTerms -> SearchDraftReducer.restoreTerms(it, action.includeTermGroups, action.excludeTerms).state
-                is SearchAction.IncludeSuggestion -> SearchDraftReducer.addTerm(it, action.suggestion.toSearchTerm(), excluded = false).state
-                is SearchAction.ExcludeSuggestion -> SearchDraftReducer.addTerm(it, action.suggestion.toSearchTerm(), excluded = true).state
-                SearchAction.ResetDraft -> SearchDraftReducer.resetDraft(it).state
-                SearchAction.ClearDraft -> SearchDraftReducer.clearDraft(it).state
-                is SearchAction.AddPostIncludeTerm -> {
-                    SearchDraftReducer.addPostTerm(it, action.post, action.term, excluded = false).state
-                }
-                is SearchAction.AddPostExcludeTerm -> {
-                    SearchDraftReducer.addPostTerm(it, action.post, action.term, excluded = true).state
-                }
-                is SearchAction.AddPostIncludeAlternative ->
-                    SearchDraftReducer.addKnownIncludeAlternative(it, action.post.id.source, action.groupIndex, action.term).state
-                is SearchAction.AddSavedTagAlternative ->
-                    SearchDraftReducer.addKnownIncludeAlternative(it, action.source, action.groupIndex, action.term).state
-                is SearchAction.SetNhentaiLanguage -> SearchDraftReducer.setNhentaiLanguage(it, action.filter).state
-                is SearchAction.SetNhentaiFullColor -> SearchDraftReducer.setNhentaiFullColor(it, action.enabled).state
-                SearchAction.ResetFilters -> {
-                    SearchDraftReducer.mutateQuery(it) { query ->
-                        query.copy(sort = com.theoriacodex.domain.model.SortMode.NEWEST, dateRange = null)
-                    }.state
-                }
-            }
+    /** Runs the search before the last one again, when there is one. */
+    private fun undoSearch() {
+        mutableState.value.takeIf { it.canUndoSearch }?.searchHistory?.lastOrNull()?.let {
+            applyHistoricalQuery(it.query, it.sourceScope, undo = true)
         }
+    }
+
+    private fun applyDraftAction(action: SearchAction.DraftEdit) {
+        mutateDraft { SearchDraftReducer.edit(it, action, System.currentTimeMillis()) }
     }
 
     /**

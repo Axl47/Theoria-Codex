@@ -145,12 +145,8 @@ internal fun composerSuggestions(
         val rows = faceted
             .filter { anchor == null || (it.facet == anchor.facet && it.sourceNamespace == anchor.sourceNamespace) }
             .map { suggestion ->
-                val add = when {
-                    alternative != null -> SearchAction.AddIncludeAlternative(alternative.index, suggestion.toSearchTerm())
-                    target == ComposerAddTarget.Excluded -> SearchAction.ExcludeSuggestion(suggestion)
-                    else -> SearchAction.IncludeSuggestion(suggestion)
-                }
-                ComposerSuggestion(suggestion.text, facetedSuggestionMetaLabel(suggestion), add, suggestion.toSearchTerm())
+                val term = suggestion.toSearchTerm()
+                ComposerSuggestion(suggestion.text, facetedSuggestionMetaLabel(suggestion), target.add(term), term)
             }
         return ComposerSuggestions(rows, faceted.size - rows.size)
     }
@@ -186,9 +182,13 @@ internal fun composerSuggestions(
         .withSavedTags(target, state.suggestions.input, savedTags.filter { it.terms.all(inScope) }, draft)
 }
 
-/** Adds [term] to [this] target; an alternative group gives it the group's spelling of their shared type. */
-private fun ComposerAddTarget.add(term: SearchTerm): SearchAction = when (this) {
-    is ComposerAddTarget.Alternative -> SearchAction.AddIncludeAlternative(index, group.terms.first().copy(value = term.value))
+/**
+ * Adds [term] to [this] target; an alternative group gives it the group's spelling of their shared type. A saved
+ * tag names the source it was saved [savedFrom], which already validated it, so it joins a group directly.
+ */
+private fun ComposerAddTarget.add(term: SearchTerm, savedFrom: SourceKey? = null): SearchAction = when (this) {
+    is ComposerAddTarget.Alternative -> savedFrom?.let { SearchAction.AddSavedTagAlternative(it, index, term) }
+        ?: SearchAction.AddIncludeAlternative(index, group.terms.first().copy(value = term.value))
     ComposerAddTarget.Excluded -> SearchAction.AddExcludeTerm(term)
     ComposerAddTarget.Required -> SearchAction.AddIncludeTerm(term)
 }
@@ -251,19 +251,13 @@ internal fun ComposerSuggestions.withSavedTags(
     val merged = matches.map { tag -> tag to rows.firstOrNull { row -> row.isGeneralFormOf(tag) } }
     val savedRows = merged.map { (tag, row) ->
         val term = tag.terms.single()
-        row?.copy(saved = true) ?: ComposerSuggestion(term.value, "", tag.addAction(target, term), term, saved = true)
+        row?.copy(saved = true) ?: ComposerSuggestion(term.value, "", target.add(term, savedFrom = tag.source), term, saved = true)
     }
     return copy(rows = savedRows + (rows - merged.mapNotNull { it.second }.toSet()))
 }
 
 private fun ComposerSuggestion.isGeneralFormOf(tag: FavoriteTagEntry): Boolean =
     term.isGeneralTag && sourceTagKey(tag.source, term.value) == sourceTagKey(tag.source, tag.tags.single())
-
-private fun FavoriteTagEntry.addAction(target: ComposerAddTarget, term: SearchTerm): SearchAction = when (target) {
-    is ComposerAddTarget.Alternative -> SearchAction.AddSavedTagAlternative(source, target.index, term)
-    ComposerAddTarget.Excluded -> SearchAction.AddExcludeTerm(term)
-    ComposerAddTarget.Required -> SearchAction.AddIncludeTerm(term)
-}
 
 /** Explains matches hidden from an alternative group, naming the type that group accepts. */
 internal fun composerHiddenSuggestionsNote(hiddenCount: Int, group: SearchTermGroup): String {

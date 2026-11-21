@@ -30,16 +30,14 @@ class SearchDraftReducerTest {
     private val scopes = listOf(FacetedSearchScope.All, tag, female, artist, character, series)
 
     @Test
-    fun `draft edits reset to applied state and clear keeps the current mode`() {
+    fun `clearing the draft keeps the current mode`() {
         val applied = query(QueryMode.Source(SourceKey.PIXIV), listOf(SearchTerm("applied")))
         val edited = state(applied).copy(
             query = state(applied).query.copy(draft = applied.withIncludeTermsAsRequired(applied.includeTerms + SearchTerm("draft"))),
         )
 
-        val reset = SearchDraftReducer.resetDraft(edited).state
-        val cleared = SearchDraftReducer.clearDraft(reset).state
+        val cleared = SearchDraftReducer.clearDraft(edited).state
 
-        assertEquals(applied, reset.query.draft)
         assertEquals(QueryMode.Source(SourceKey.PIXIV), cleared.query.draft.mode)
         assertTrue(cleared.query.draft.includeTerms.isEmpty())
     }

@@ -7,6 +7,7 @@ import com.theoriacodex.app.search.UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE
 import com.theoriacodex.app.search.UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
 import com.theoriacodex.app.search.UNSUPPORTED_SEARCH_SCOPE_MESSAGE
 import com.theoriacodex.app.search.parseScopedInput
+import com.theoriacodex.app.search.rangeEndingAt
 import com.theoriacodex.app.search.resolveSupportedScope
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
@@ -30,6 +31,30 @@ data class SearchDraftReduction(
 
 /** Pure route-input reducer. SearchViewModel is the only holder of the returned state. */
 object SearchDraftReducer {
+    /** Applies one draft edit; [nowEpochMs] anchors a date-range preset. A rejected edit returns its reduction's state. */
+    fun edit(state: SearchUiState, edit: SearchAction.DraftEdit, nowEpochMs: Long): SearchUiState = when (edit) {
+        is SearchAction.SelectSort -> mutateQuery(state) { it.copy(sort = edit.sort) }
+        is SearchAction.SetDateRange -> mutateQuery(state) { it.copy(dateRange = edit.range) }
+        is SearchAction.SetDateRangePreset -> mutateQuery(state) { it.copy(dateRange = edit.preset.rangeEndingAt(nowEpochMs)) }
+        is SearchAction.AddIncludeTerm -> addTerm(state, edit.term, excluded = false)
+        is SearchAction.AddExcludeTerm -> addTerm(state, edit.term, excluded = true)
+        is SearchAction.RemoveIncludeTerm -> removeTerm(state, edit.term, excluded = false)
+        is SearchAction.RemoveExcludeTerm -> removeTerm(state, edit.term, excluded = true)
+        is SearchAction.AddIncludeAlternative -> addIncludeAlternative(state, edit.groupIndex, edit.term)
+        is SearchAction.SplitIncludeAlternative -> splitIncludeAlternative(state, edit.groupIndex, edit.term)
+        is SearchAction.RemoveIncludeGroup -> removeIncludeGroup(state, edit.groupIndex)
+        is SearchAction.AddSavedTagGroup -> addIncludeGroup(state, edit.terms)
+        is SearchAction.RestoreDraftTerms -> restoreTerms(state, edit.includeTermGroups, edit.excludeTerms)
+        SearchAction.ClearDraft -> clearDraft(state)
+        is SearchAction.AddPostIncludeTerm -> addPostTerm(state, edit.post, edit.term, excluded = false)
+        is SearchAction.AddPostExcludeTerm -> addPostTerm(state, edit.post, edit.term, excluded = true)
+        is SearchAction.AddPostIncludeAlternative ->
+            addKnownIncludeAlternative(state, edit.post.id.source, edit.groupIndex, edit.term)
+        is SearchAction.AddSavedTagAlternative -> addKnownIncludeAlternative(state, edit.source, edit.groupIndex, edit.term)
+        is SearchAction.SetNhentaiLanguage -> setNhentaiLanguage(state, edit.filter)
+        is SearchAction.SetNhentaiFullColor -> setNhentaiFullColor(state, edit.enabled)
+    }.state
+
     fun selectMode(state: SearchUiState, mode: QueryMode): SearchDraftReduction {
         val hadSourceOwnedTerms = state.query.draft.hasSourceOwnedTerms()
         val resolvedMode = mode.takeIf { it.isAvailable(state.query.availableSources) } ?: QueryMode.Unified
@@ -355,9 +380,6 @@ object SearchDraftReducer {
             ),
         )
     }
-
-    fun resetDraft(state: SearchUiState): SearchDraftReduction =
-        SearchDraftReduction(state.switchDraft(state.query.applied, state.query.appliedSourceScope))
 
     fun clearDraft(state: SearchUiState): SearchDraftReduction {
         val scope = state.query.draftSourceScope

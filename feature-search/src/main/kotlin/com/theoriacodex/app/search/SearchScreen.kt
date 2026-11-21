@@ -275,7 +275,6 @@ private class SearchChromeState(composerOpen: MutableState<Boolean>, searchBarDi
     fun applyDraft(inputFocus: SearchInputFocus, onAction: (SearchAction) -> Unit) {
         inputFocus.clear(force = true)
         onAction(SearchAction.ApplyDraft)
-        onAction(SearchAction.ClearAutocomplete)
         composerOpen = false
         searchBarDismissedByScroll = false
     }
@@ -304,13 +303,11 @@ private fun SearchComposerDialog(
         state, onAction, sourcePicker, applyDraft,
         onReset = {
             onAction(SearchAction.ClearDraft)
-            onAction(SearchAction.ClearAutocomplete)
             chrome.showFilterSheet = false
             resetScroll()
         },
         onUndo = {
             onAction(SearchAction.UndoSearch)
-            onAction(SearchAction.ClearAutocomplete)
             chrome.showFilterSheet = false
         },
         onManageSavedTags = { chrome.showFavoriteTagSheet = true },

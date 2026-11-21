@@ -298,8 +298,6 @@ sealed interface SearchAction {
     data class SelectSuggestionScope(val scope: FacetedSearchScope) : SearchAction
     data class AutocompleteChanged(val input: String) : SearchAction
     data object RefreshAutocomplete : SearchAction
-    data class IncludeSuggestion(val suggestion: FacetedTagSuggestion) : DraftEdit
-    data class ExcludeSuggestion(val suggestion: FacetedTagSuggestion) : DraftEdit
     data object ClearAutocomplete : SearchAction
     data object UndoSearch : SearchAction
     data object ApplyDraft : SearchAction
@@ -313,7 +311,6 @@ sealed interface SearchAction {
         val excludeTerms: List<SearchTerm> = emptyList(),
         val mode: QueryMode = QueryMode.Unified,
     ) : SearchAction
-    data object ResetDraft : DraftEdit
     data object ClearDraft : DraftEdit
     data class RetrySource(val source: SourceKey) : SearchAction
     data object Retry : SearchAction
@@ -327,7 +324,6 @@ sealed interface SearchAction {
     data class AddPostIncludeAlternative(val post: Post, val groupIndex: Int, val term: SearchTerm) : DraftEdit
     data class SetNhentaiLanguage(val filter: NhentaiLanguageFilter) : DraftEdit
     data class SetNhentaiFullColor(val enabled: Boolean) : DraftEdit
-    data object ResetFilters : DraftEdit
     data class RememberResolvedPost(val post: Post) : SearchAction
     data class RelatedLikeCommitted(
         val post: Post,
