@@ -5,6 +5,8 @@ import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchSection
 import com.theoriacodex.data.repository.RecentsRepository
+import com.theoriacodex.app.ui.undo.UndoAction
+import com.theoriacodex.app.ui.undo.UndoAnchor
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 
 enum class RecentsClearTarget(
@@ -18,6 +20,13 @@ enum class RecentsClearTarget(
     ALL("All history cleared", "all history"),
 }
 
+/** Where History draws its offers. */
+val RecentsUndoAnchor = UndoAnchor("history")
+
+/**
+ * Clears a part of History, then offers Undo (and Retry after a failure) through [clear]'s
+ * `showActionableFeedback`, which returns true when the user took the action.
+ */
 class RecentsClearWorkflow(
     private val repository: RecentsRepository,
 ) {
@@ -27,7 +36,7 @@ class RecentsClearWorkflow(
         codexPosts: List<RecentPostEntry>,
         searches: List<RecentSearchEntry>,
         fypSearches: List<RecentSearchEntry>,
-        showActionableFeedback: suspend (message: String, actionLabel: String) -> Boolean,
+        showActionableFeedback: suspend (message: String, action: UndoAction) -> Boolean,
     ) {
         var removedSearches: List<RecentSearchEntry>
         while (true) {
@@ -36,10 +45,10 @@ class RecentsClearWorkflow(
                 removedSearches = cleared.getOrThrow()
                 break
             }
-            if (!showActionableFeedback("Could not clear ${target.failureSubject}", "Retry")) return
+            if (!showActionableFeedback("Could not clear ${target.failureSubject}", UndoAction.Retry)) return
         }
 
-        if (!showActionableFeedback(target.clearedMessage, "Undo")) return
+        if (!showActionableFeedback(target.clearedMessage, UndoAction.Undo)) return
         val watchedSnapshot = when (target) {
             RecentsClearTarget.WATCHED -> watchedPosts
             RecentsClearTarget.CODEX -> codexPosts
@@ -57,7 +66,7 @@ class RecentsClearWorkflow(
                 repository.restoreEntries(watchedSnapshot, searchSnapshot)
             }.isSuccess
             if (restored) return
-            if (!showActionableFeedback("Could not restore ${target.failureSubject}", "Retry")) return
+            if (!showActionableFeedback("Could not restore ${target.failureSubject}", UndoAction.Retry)) return
         }
     }
 

@@ -90,6 +90,29 @@ class OfflineQueueRecoveryTest {
         } finally { scope.cancel(); directory.deleteRecursively() }
     }
 
+    @Test fun `restored jobs wait for sources and a save made meanwhile keeps every owner queued`() = runTest {
+        val directory = Files.createTempDirectory("offline-source-gate").toFile()
+        val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
+        try {
+            val pending = OfflinePendingJobStore(directory.resolve("queue.json"))
+            pending.save(mapOf("codex:first" to listOf(post("a").id), "codex:second" to listOf(post("b").id)))
+            val sources = CompletableDeferred<Unit>()
+            var waiting = 0
+            val resolved = mutableListOf<String>()
+            val owner = OfflineMediaCoordinator(OfflineMediaStore(directory.resolve("media")), scope,
+                { resolved += it.id.sourcePostId; awaitCancellation() }, { it.media }, { _, _, _ -> error("Not acquired") },
+                pendingStore = pending, awaitSources = { waiting++; sources.await() })
+            owner.recoverPendingJobs()
+            owner.saveOnCollectionSave(post("c"))
+            // Every job has saved the queue once it waits for sources.
+            while (waiting < 3 && resolved.isEmpty()) kotlinx.coroutines.yield()
+            assertEquals(setOf("codex:first", "codex:second", AUTOMATIC_OFFLINE_OWNER), pending.loadNow().keys)
+            assertEquals(emptyList<String>(), resolved)
+            sources.complete(Unit)
+            while (resolved.size < 2) kotlinx.coroutines.yield()
+        } finally { scope.cancel(); directory.deleteRecursively() }
+    }
+
     @Test fun `a failed removal checkpoint preserves completed offline copies`() = runTest {
         for (clearAll in listOf(false, true)) {
             val directory = Files.createTempDirectory("offline-remove-intent").toFile()

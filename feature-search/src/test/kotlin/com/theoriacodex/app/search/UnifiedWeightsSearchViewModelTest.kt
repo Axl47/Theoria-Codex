@@ -7,16 +7,18 @@ import com.theoriacodex.data.repository.SourceWeightSettings
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 internal class UnifiedWeightsSearchViewModelTest : SearchViewModelTestFixture() {
     @Test
-    fun `returning with changed weights applies pending unified selection exactly once`() = runTest(mainDispatcherRule.dispatcher) {
+    fun `changed weights apply a pending unified selection exactly once`() = runTest(mainDispatcherRule.dispatcher) {
         val pixiv = ViewModelSearchAdapter(SourceKey.PIXIV)
         val gelbooru = ViewModelSearchAdapter(SourceKey.GELBOORU)
         val owner = viewModel(pixiv, additionalAdapters = listOf(gelbooru))
@@ -62,6 +64,33 @@ internal class UnifiedWeightsSearchViewModelTest : SearchViewModelTestFixture() 
         owner.synchronizeEnvironment(original.copy(runtime = SourceWeightSettings.updateWeights(
             original.runtime, group, mapOf(SourceKey.PIXIV to 0.1, SourceKey.GELBOORU to 0.9),
         )))
+        advanceUntilIdle()
+        assertEquals(before + 1, pixiv.searchCount)
+        assertEquals(before + 1, gelbooru.searchCount)
+    }
+
+    @Test
+    fun `a run of mix changes waits out the live pause and searches once`() = runTest(mainDispatcherRule.dispatcher) {
+        val pixiv = ViewModelSearchAdapter(SourceKey.PIXIV)
+        val gelbooru = ViewModelSearchAdapter(SourceKey.GELBOORU)
+        val owner = viewModel(pixiv, additionalAdapters = listOf(gelbooru))
+        restore(owner)
+        val original = AppSettings()
+        owner.synchronizeEnvironment(original)
+        owner.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
+        owner.onAction(SearchAction.ToggleTemporarySource(SourceKey.GELBOORU))
+        owner.onAction(SearchAction.ApplyDraft)
+        advanceUntilIdle()
+        val before = pixiv.searchCount
+        val group = setOf(SourceKey.PIXIV, SourceKey.GELBOORU)
+        listOf(0.3, 0.4, 0.5).forEach { share ->
+            owner.synchronizeEnvironment(original.copy(runtime = SourceWeightSettings.updateWeights(
+                original.runtime, group, mapOf(SourceKey.PIXIV to share, SourceKey.GELBOORU to 1 - share),
+            )))
+            advanceTimeBy(LiveSearchDelays().multiSourceMs - 1)
+        }
+        assertEquals(before, pixiv.searchCount)
+        assertTrue(owner.state.value.execution.liveSearchWaiting)
         advanceUntilIdle()
         assertEquals(before + 1, pixiv.searchCount)
         assertEquals(before + 1, gelbooru.searchCount)

@@ -11,6 +11,7 @@ import com.theoriacodex.app.search.sortModeLabel
 import com.theoriacodex.app.ui.components.FilterChoiceChip
 import com.theoriacodex.app.ui.components.FilterSection
 import com.theoriacodex.app.ui.components.rememberFeedScrollSignal
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -105,19 +106,18 @@ fun ForYouScreen(
     onSaveToDevice: (Post) -> Unit,
     onGoToSearch: () -> Unit,
     onOpenSourceAccounts: () -> Unit = {},
+    onSelectProfile: (String) -> Unit = {},
     fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
 ) {
     BackHandler(enabled = !state.home.visible) { onAction(ForYouAction.ShowHome) }
     val savedStates = rememberSaveableStateHolder()
     val gridState = rememberRetainedFeedGridState("for-you")
-    ScrollToTopOnTabReselect(TopLevelDestination.ForYou) {
-        if (!state.home.visible) gridState.animateScrollToItem(0)
-    }
-    ForYouSeedPositionEffect(state.seedId, gridState)
+    ForYouGridPositionEffect(state, gridState)
     var showSortSheet by remember { mutableStateOf(false) }
     var showSourceMenu by remember { mutableStateOf(false) }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
+    var why by remember { mutableStateOf<ForYouWhyTarget?>(null) }
     val feed = rememberForYouFeed(state, related.state, fabRestoreState, durations)
     LaunchedEffect(feed.durationFilterActive) { durations.onFilterChanged(feed.durationFilterActive) }
     DurationRouteEnvironmentEffect(gridState, durations.onEnvironmentChanged)
@@ -131,24 +131,27 @@ fun ForYouScreen(
         pixivUgoiraClient, likedPostIds, feed.durations.knownDurationMsByPostId, durations, onToggleLike, resolvePostById,
     )
 
-    AnimatedContent(
-        targetState = state.home.visible,
-        transitionSpec = { depthTransform(forward = !targetState) },
-        label = "For You view",
-    ) { homeVisible ->
-        if (homeVisible) {
-            savedStates.SaveableStateProvider("overview") {
-                ForYouHomeScreen(state, cards, feed::filterHomePosts,
-                    { selectedActionPost = it }, onAction, { showSortSheet = true }, filterLabels, clearFilters,
-                    onOpenPreview = { id, posts, index -> onAction(ForYouAction.OpenSectionResult(id, index, posts, feed.filters)) })
+    ForYouWhyHost(why, state, onAction, onClose = { why = null }) {
+        AnimatedContent(
+            targetState = state.home.visible,
+            transitionSpec = { depthTransform(forward = !targetState) },
+            label = "For You view",
+        ) { homeVisible ->
+            if (homeVisible) {
+                savedStates.SaveableStateProvider("overview") {
+                    ForYouHomeScreen(state, cards, feed::filterHomePosts,
+                        { selectedActionPost = it }, onAction, { showSortSheet = true }, filterLabels, clearFilters,
+                        onOpenPreview = { id, posts, index -> onAction(ForYouAction.OpenSectionResult(id, index, posts, feed.filters)) },
+                        onOpenWhy = { why = it }, onSelectProfile = onSelectProfile)
+                }
+            } else {
+                ForYouResults(
+                    state, related, feed, cards, gridState, pageDemand, filterScroll, filterLabels, clearFilters, showSourceMenu,
+                    onSourceMenuChange = { showSourceMenu = it }, onShowFilters = { showSortSheet = true },
+                    onOpenSourceAccounts = onOpenSourceAccounts, onOpenWhy = { why = it },
+                    onAction = onAction, onLongPress = { selectedActionPost = it },
+                )
             }
-        } else {
-            ForYouResults(
-                state, related, feed, cards, gridState, pageDemand, filterScroll, filterLabels, clearFilters, showSourceMenu,
-                onSourceMenuChange = { showSourceMenu = it }, onShowFilters = { showSortSheet = true },
-                onOpenSourceAccounts = onOpenSourceAccounts,
-                onAction = onAction, onLongPress = { selectedActionPost = it },
-            )
         }
     }
 
@@ -171,9 +174,16 @@ fun ForYouScreen(
     }
 }
 
-/** A new seed starts from the top; the position saved with the current seed survives recreation. */
+/**
+ * A new seed starts from the top, as does reselecting the tab over the grid; the position saved with the
+ * current seed survives recreation.
+ */
 @Composable
-private fun ForYouSeedPositionEffect(seedId: String, gridState: LazyStaggeredGridState) {
+private fun ForYouGridPositionEffect(state: ForYouUiState, gridState: LazyStaggeredGridState) {
+    ScrollToTopOnTabReselect(TopLevelDestination.ForYou) {
+        if (!state.home.visible) gridState.animateScrollToItem(0)
+    }
+    val seedId = state.seedId
     var positionedSeed by rememberSaveable { mutableStateOf(seedId) }
     LaunchedEffect(seedId) {
         if (positionedSeed != seedId) {
@@ -204,6 +214,7 @@ private fun ForYouResults(
     onSourceMenuChange: (Boolean) -> Unit,
     onShowFilters: () -> Unit,
     onOpenSourceAccounts: () -> Unit,
+    onOpenWhy: (ForYouWhyTarget) -> Unit,
     onAction: (ForYouAction) -> Unit,
     onLongPress: (Post) -> Unit,
 ) {
@@ -240,7 +251,7 @@ private fun ForYouResults(
                     onAction(ForYouAction.SelectSource(source))
                 },
             )
-            ForYouSeedSummary(state)
+            ForYouSeedSummary(state, onOpenWhy)
             com.theoriacodex.app.search.StatusRow(
                 statuses = state.actionableStatuses,
                 retryEnabled = !state.isRefreshing && !state.isPaging,
@@ -358,7 +369,7 @@ private fun ForYouResultsHeader(state: ForYouUiState, onAction: (ForYouAction) -
             ) {
                 Icon(
                     imageVector = Icons.Default.Delete,
-                    contentDescription = "Blacklist current recommendation tags",
+                    contentDescription = "Hide these tags",
                 )
             }
             IconButton(
@@ -374,12 +385,15 @@ private fun ForYouResultsHeader(state: ForYouUiState, onAction: (ForYouAction) -
     }
 }
 
+/** The drilled-in feed's tags per source; a tap opens the same why panel as a shelf's title. */
 @Composable
-private fun ForYouSeedSummary(state: ForYouUiState) {
+private fun ForYouSeedSummary(state: ForYouUiState, onOpenWhy: (ForYouWhyTarget) -> Unit) {
     if (state.seedSummaryBySource.isEmpty()) return
+    val section = state.home.activeSection
+    val target = ForYouWhyTarget(section?.title ?: "Your mix", state.seedSummaryBySource, section?.id, section?.pinned == true)
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(state.seedSummaryBySource.entries.toList()) { (source, tags) ->
-            Card {
+            Card(Modifier.clickable(onClickLabel = "Show tags") { onOpenWhy(target) }) {
                 Text(
                     text = "${source.displayName()}: ${tags.joinToString(" + ")}",
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -460,7 +474,7 @@ private fun ForYouFeedBody(
 }
 
 @Composable
-private fun ForYouNoLikes(onAction: (ForYouAction) -> Unit) {
+internal fun ForYouNoLikes(onAction: (ForYouAction) -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
@@ -484,7 +498,7 @@ private fun ForYouNoLikes(onAction: (ForYouAction) -> Unit) {
 private fun forYouEmptyMessage(state: ForYouUiState, feed: FeedView): String = when {
     feed.durations.readiness.isResolving -> "Resolving durations…"
     !(feed.filters.animatedOnly || feed.durationFilterActive) || state.results.isEmpty() ->
-        "No recommendations yet. Tap Refresh to try a broader seed."
+        "No recommendations yet"
     !feed.filters.animatedDurationRange.isFullRange ->
         "No animated media found in the selected duration range."
     else -> "No animated media found for this feed yet."

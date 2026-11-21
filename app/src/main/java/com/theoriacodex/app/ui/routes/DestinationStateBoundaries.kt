@@ -44,10 +44,10 @@ import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.di.SourceDependencies
 import com.theoriacodex.app.related.ViewerFeedOwner
 import com.theoriacodex.app.related.ViewerFeedSnapshot
-import com.theoriacodex.app.search.SearchViewModel
 import com.theoriacodex.app.settings.SettingsPage
 import com.theoriacodex.app.settings.SettingsScreen
 import com.theoriacodex.app.settings.SettingsDiagnosticsEntry
+import com.theoriacodex.app.settings.SettingsBackupEntry
 import com.theoriacodex.app.settings.SettingsSitesEntry
 import com.theoriacodex.app.settings.StatsActions
 import com.theoriacodex.app.settings.SettingsViewModel
@@ -68,7 +68,6 @@ import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 internal data class BrowsingDestinationState(
@@ -102,6 +101,7 @@ internal data class CodexDestinationState(
     val itemCounts: Map<String, Int>,
     val coverCandidates: Map<String, List<CodexCoverCandidate>>,
     val observeActionOptions: (String) -> Flow<CodexActionOptions>,
+    val observeCleaningMatches: (String, List<String>) -> Flow<Map<String, Set<PostId>>>,
     val librarySort: com.theoriacodex.data.repository.CodexLibrarySort,
     val libraryUsage: Map<String, CodexUsage>?,
 )
@@ -179,9 +179,10 @@ internal fun BrowsingDestinationStateBoundary(
 @Composable
 internal fun RecentsDestinationStateBoundary(
     data: DataDependencies,
+    loading: @Composable () -> Unit = {},
     content: @Composable (RecentsDestinationState) -> Unit,
 ) {
-    val recentState = browsingMetadataOwner(data).recents.collectAsStateWithLifecycle().value ?: return
+    val recentState = browsingMetadataOwner(data).recents.collectAsStateWithLifecycle().value ?: return loading()
     content(recentState)
 }
 
@@ -245,6 +246,7 @@ internal fun CodexDestinationStateBoundary(
                     (com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID to savedSearches.size),
                 coverCandidates = collection.coverCandidates,
                 observeActionOptions = observeActions,
+                observeCleaningMatches = source::observeCleaningMatches,
                 librarySort = settings.codexLibrarySort,
                 libraryUsage = libraryUsage,
             ),
@@ -403,9 +405,9 @@ internal fun SaveToCodexDestinationStateBoundary(
 @Composable
 internal fun SettingsDestinationStateBoundary(
     owner: SettingsViewModel,
-    searchOwner: SearchViewModel?,
     storageSummary: String? = null,
     sites: SettingsSitesEntry? = null,
+    backup: SettingsBackupEntry? = null,
     statsActions: StatsActions = StatsActions(),
     diagnostics: SettingsDiagnosticsEntry? = null,
     storageTools: (@Composable () -> Unit)? = null,
@@ -413,16 +415,12 @@ internal fun SettingsDestinationStateBoundary(
     closesFrom: SettingsPage = SettingsPage.HOME,
 ) {
     val state = owner.state.collectAsStateWithLifecycle()
-    val emptySearch = remember { MutableStateFlow(com.theoriacodex.app.search.state.SearchUiState()) }
-    val searchState = (searchOwner?.state ?: emptySearch).collectAsStateWithLifecycle()
-    val selectedSources = if (searchOwner == null) emptySet() else searchState.value.query.draftSources
     // Subscribing here keeps statistics collection scoped to a visible Settings destination.
     val statistics = owner.statistics.collectAsStateWithLifecycle()
     DestinationStateBoundary(state) {
         SettingsScreen(
             state = it, onAction = owner::onAction, statistics = statistics.value,
-            searchSources = selectedSources.intersect(it.availableSources.toSet()),
-            storageSummary = storageSummary, sites = sites, statsActions = statsActions, diagnostics = diagnostics,
+            storageSummary = storageSummary, sites = sites, backup = backup, statsActions = statsActions, diagnostics = diagnostics,
             storageTools = storageTools, onClose = onClose, closesFrom = closesFrom,
         )
     }

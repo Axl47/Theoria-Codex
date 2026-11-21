@@ -1,5 +1,6 @@
 package com.theoriacodex.app.settings
 
+import com.theoriacodex.data.repository.SettingDestinations
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -16,7 +17,10 @@ import com.theoriacodex.data.repository.SourceRuntimeSettings
 import com.theoriacodex.data.repository.SourceWeightSettings
 import com.theoriacodex.domain.model.SourceKey
 
-/** Source mix sheet content. Search owns membership; this only edits the group's relative weights. */
+/**
+ * The Source mix sheet's content, which Search's source picker opens for a Unified search: the relative weights of
+ * [sources], each change sent to [onWeightsChanged]. The picker owns which sources are in the group.
+ */
 @Composable
 fun UnifiedSourceSettings(
     sources: Set<SourceKey>,
@@ -25,12 +29,10 @@ fun UnifiedSourceSettings(
 ) {
     // Keep the entire slider group responsive while repository writes complete asynchronously.
     var weights by remember(sources) { mutableStateOf(SourceWeightSettings.weightsFor(runtime, sources)) }
-    Text("Source mix", style = MaterialTheme.typography.titleMedium)
-    Text(
-        "Share of results in Unified mode. Hold sources in Search to choose them.",
-        style = MaterialTheme.typography.bodySmall,
-    )
-    if (sources.size > 1) {
+    Text(SettingDestinations.SourceMix.title, style = MaterialTheme.typography.titleMedium)
+    if (sources.size < 2) {
+        Text("Hold a source in the picker to add it.", style = MaterialTheme.typography.bodySmall)
+    } else {
         sources.sorted().forEach { source ->
             val weight = weights.getValue(source).toFloat()
             Text(source.displayName())

@@ -27,13 +27,18 @@ internal fun virtualCodexUi(
     onRemoveSearch: (String) -> Unit,
 ): VirtualCodexUi? {
     state.followedOwner?.let { owner ->
+        val filtersActive = restore.followedSources.isNotEmpty() || restore.followedAuthors.isNotEmpty()
         return VirtualCodexUi(
             header = { feed, grid ->
                 FollowedCodexHeader(owner, state.follows, feed, state.posts, grid, onBack, onManageFollowed)
             },
             filters = { dismiss -> FollowedCodexFilters(state.follows, restore, onChange, { dismiss(); onManageFollowed() }) },
-            filtersActive = restore.followedSources.isNotEmpty() || restore.followedAuthors.isNotEmpty(),
-            emptyMessage = "Follow a creator or adjust your filters",
+            filtersActive = filtersActive,
+            emptyMessage = when {
+                state.follows.isEmpty() -> "No followed creators"
+                filtersActive -> "Adjust your filters"
+                else -> "No posts"
+            },
         )
     }
     state.savedSearchOwner?.let { owner ->

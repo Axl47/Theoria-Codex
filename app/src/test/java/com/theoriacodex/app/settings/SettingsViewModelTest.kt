@@ -1,5 +1,8 @@
 package com.theoriacodex.app.settings
 
+import com.theoriacodex.data.repository.SettingChoices
+import com.theoriacodex.data.repository.SettingToggles
+import com.theoriacodex.domain.model.VideoQuality
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.sourceauth.CredentialStoreRecoveryState
 import com.theoriacodex.data.repository.CodexRepository
@@ -20,6 +23,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -57,18 +61,33 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun `a sheet opens only over home and opening any page closes it`() = runTest {
+        val owner = settingsOwner()
+        runCurrent()
+
+        owner.onAction(SettingsAction.OpenPage(SettingsPage.HOME, SettingsSheet.DOWNLOADS))
+        assertEquals(SettingsSheet.DOWNLOADS, owner.state.value.sheet)
+        owner.onAction(SettingsAction.OpenPage(SettingsPage.STORAGE))
+        assertNull(owner.state.value.sheet)
+        owner.onAction(SettingsAction.OpenPage(SettingsPage.STATS, SettingsSheet.CONTROLS))
+        assertNull(owner.state.value.sheet)
+    }
+
+    @Test
     fun `preference actions mutate repositories and return through owner state`() = runTest {
         val settingsRepository = InMemorySettingsRepository()
         val owner = settingsOwner(settingsRepository = settingsRepository)
         runCurrent()
 
-        owner.onAction(SettingsAction.SetCacheFullImageOnSave(true))
-        owner.onAction(SettingsAction.SetResolveUnknownAnimatedDurations(false))
+        owner.onAction(SettingsAction.SetToggle(SettingToggles.KeepMediaOffline, true))
+        owner.onAction(SettingsAction.SetToggle(SettingToggles.FindAnimationDurations, false))
+        owner.onAction(SettingsAction.SetChoice(SettingChoices.DownloadQuality, VideoQuality.DATA_SAVER))
         owner.onAction(SettingsAction.SetEnabledSources(setOf(SourceKey.PIXIV, SourceKey.IWARA)))
         runCurrent()
 
         assertTrue(owner.state.value.settings.cache.cacheFullImageOnSave)
         assertFalse(owner.state.value.settings.contentFilters.resolveUnknownAnimatedDurations)
+        assertEquals(VideoQuality.DATA_SAVER, owner.state.value.settings.cache.downloadQuality)
         assertEquals(setOf(SourceKey.PIXIV), owner.state.value.settings.runtime.enabledSources)
     }
 

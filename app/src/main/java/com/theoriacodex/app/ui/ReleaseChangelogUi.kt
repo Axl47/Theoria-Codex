@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.data.repository.SettingDestinations
 import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -77,7 +78,7 @@ internal fun PostInstallChangelogDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onDismiss) { Text("Got it") } },
-        title = { Text("What's new") },
+        title = { Text(SettingDestinations.WhatsNew.title) },
         text = { ReleaseChangelogList(releases, installedVersionCode, 320.dp, 14.dp) },
     )
 }

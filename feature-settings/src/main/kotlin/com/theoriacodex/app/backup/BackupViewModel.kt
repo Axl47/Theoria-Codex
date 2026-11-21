@@ -36,10 +36,9 @@ enum class BackupOperation { EXPORT, READ, RESTORE }
 
 data class BackupUiState(
     val operation: BackupOperation? = null,
-    val showExportOptions: Boolean = false,
-    val includeRecents: Boolean = true,
     val preview: ProfileBackupPreview? = null,
     val applyPreferences: Boolean = false,
+    val includeRecents: Boolean = true,
 ) {
     val busy: Boolean get() = operation != null
 }
@@ -56,28 +55,26 @@ class BackupViewModel(
     val effects = messages.receiveAsFlow()
     private var selectedBytes: ByteArray? = null
 
-    fun showExportOptions() {
-        if (!state.value.busy) mutableState.update { it.copy(showExportOptions = true) }
-    }
-
-    fun includeRecents(include: Boolean) {
-        if (!state.value.busy) mutableState.update { it.copy(includeRecents = include) }
-    }
-
     fun applyPreferences(apply: Boolean) {
         if (!state.value.busy) mutableState.update { it.copy(applyPreferences = apply) }
+    }
+
+    /** Whether the next manual backup carries Recents, reading positions and statistics. */
+    fun includeRecents(include: Boolean) {
+        if (!state.value.busy) mutableState.update { it.copy(includeRecents = include) }
     }
 
     fun dismissDialog() {
         if (state.value.busy) return
         selectedBytes = null
-        mutableState.update { it.copy(showExportOptions = false, preview = null, applyPreferences = false) }
+        mutableState.update { it.copy(preview = null, applyPreferences = false) }
     }
 
+    /** Writes a backup to [document] (null when picking was cancelled), with Recents and statistics if chosen. */
     fun export(document: String?) {
         if (document == null || state.value.busy) return
         val includeRecents = state.value.includeRecents
-        mutableState.update { it.copy(operation = BackupOperation.EXPORT, showExportOptions = false) }
+        mutableState.update { it.copy(operation = BackupOperation.EXPORT) }
         viewModelScope.launch {
             val result = runCatchingPreservingCancellation {
                 withContext(ioDispatcher) { writeExport(document, includeRecents) }
@@ -94,7 +91,7 @@ class BackupViewModel(
         if (document == null || state.value.busy) return
         selectedBytes = null
         mutableState.update {
-            it.copy(operation = BackupOperation.READ, showExportOptions = false, preview = null, applyPreferences = false)
+            it.copy(operation = BackupOperation.READ, preview = null, applyPreferences = false)
         }
         viewModelScope.launch {
             val result = runCatchingPreservingCancellation {
@@ -156,13 +153,14 @@ class BackupViewModel(
 }
 
 private fun ProfileRestoreResult.message(): String {
-    val restored = if (profilesAdded == 0 && collectionsAdded == 0) "Backup restored into your existing collections."
-    else "Backup restored: ${countLabel(profilesAdded, "profile")} and ${countLabel(collectionsAdded, "collection")} added."
+    val restored = if (profilesAdded == 0 && collectionsAdded == 0) "Backup restored into your existing Codices."
+    else "Backup restored: ${countLabel(profilesAdded, "profile")} and ${countLabel(collectionsAdded, "Codex", "Codices")} added."
     val kept = keptExistingSites.mapNotNull { id -> SourceKey.parse(id)?.displayName() }
     return if (kept.isEmpty()) restored else "$restored Kept this device's settings for ${kept.joinToString()}."
 }
 
-private fun countLabel(count: Int, noun: String) = "$count ${if (count == 1) noun else "${noun}s"}"
+/** "1 profile", "2 profiles": [count] with [noun] or [plural]; used by the restore preview and its messages. */
+internal fun countLabel(count: Int, noun: String, plural: String = "${noun}s") = "$count ${if (count == 1) noun else plural}"
 
 private fun Throwable.backupMessage(fallback: String): String =
     when (this) {

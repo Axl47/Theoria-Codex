@@ -138,6 +138,7 @@ class ForYouViewModel(
         admit = ::admitPreview,
         emit = { effectChannel.trySend(it) },
         settingsChanged = { settings -> synchronizeEnvironment(settings, mutableState.value.activeProfileLikesCount) },
+        dispatch = { action -> onAction(action) },
     )
 
     /** Waits out any request begun offline, which may still be failing, so its outcome gets this retry too. */
@@ -375,7 +376,7 @@ class ForYouViewModel(
         launchRequest(identity) {
             val changed = engine.updateBlacklist(profileId, entries, hidden)
             if (hidden) effectChannel.trySend(
-                if (changed.entries.isEmpty()) ForYouEffect.ShowMessage("Current recommendation is already hidden")
+                if (changed.entries.isEmpty()) ForYouEffect.ShowMessage("Already hidden")
                 else ForYouEffect.SeedHidden(profileId, changed.entries)
             )
             if (mutableState.value.activeRequest != identity) return@launchRequest

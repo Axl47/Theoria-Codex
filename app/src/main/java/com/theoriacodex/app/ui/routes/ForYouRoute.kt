@@ -8,6 +8,8 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.recommend.ForYouCoordinator
@@ -21,7 +23,8 @@ import com.theoriacodex.app.recommend.state.ForYouEffect
 import com.theoriacodex.app.recommend.state.ForYouUiState
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.AppSettings
-import com.theoriacodex.data.repository.ForYouBlacklistEntry
+import com.theoriacodex.app.ui.undo.LocalUndoSlot
+import com.theoriacodex.app.ui.undo.UndoAnchor
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -43,7 +46,10 @@ internal data class ForYouRouteCallbacks(
     val onNavigateToSearch: suspend () -> Unit,
     val onOpenSourceAccounts: () -> Unit = {},
     val onShowMessage: (String) -> Unit,
-    val onSeedHidden: suspend (profileId: String, entries: List<ForYouBlacklistEntry>) -> Boolean,
+    /** Offers Undo labelled `label` where `anchor` draws it; true when the user took it. */
+    val onOfferUndo: suspend (label: String, anchor: UndoAnchor) -> Boolean,
+    /** Makes a profile the active one in settings; For You switches to it first. */
+    val onSelectProfile: (profileId: String) -> Unit,
     val onToggleLike: (Post) -> Unit,
     val onRequestSaveToCodex: (Post) -> Unit,
     val onSaveToDevice: (Post) -> Unit,
@@ -102,8 +108,10 @@ internal fun ForYouRoute(
         owner.onSourceAvailabilityChanged()
     }
 
+    // The slot's Activity-retained scope: a rotation must not drop a hidden tag's Undo.
+    val undoScope = LocalUndoSlot.current.scope
     CollectRouteEffects(owner.effects) { effect ->
-        handleForYouRouteEffect(effect, callbacks, owner)
+        handleForYouRouteEffect(effect, callbacks, owner, undoScope)
     }
 
     ForYouRouteContent(state, owner, duration, pixivUgoiraClient, config, fabRestoreState, onFabRestoreStateChange, callbacks)
@@ -136,6 +144,10 @@ private fun ForYouRouteContent(
         onRequestSaveToCodex = callbacks.onRequestSaveToCodex,
         onSaveToDevice = callbacks.onSaveToDevice,
         onOpenSourceAccounts = callbacks.onOpenSourceAccounts,
+        onSelectProfile = { profileId ->
+            owner.onAction(ForYouAction.SelectProfile(profileId))
+            callbacks.onSelectProfile(profileId)
+        },
         onGoToSearch = callbacks.onGoToSearch,
         fabRestoreState = fabRestoreState,
         onFabRestoreStateChange = onFabRestoreStateChange,
@@ -148,13 +160,15 @@ private suspend fun handleForYouRouteEffect(
     effect: ForYouEffect,
     callbacks: ForYouRouteCallbacks,
     owner: ForYouViewModel,
+    undoScope: CoroutineScope,
 ) {
     when (effect) {
         is ForYouEffect.OpenViewer -> callbacks.onOpenViewer(effect)
         ForYouEffect.NavigateToSearch -> callbacks.onNavigateToSearch()
         is ForYouEffect.ShowMessage -> callbacks.onShowMessage(effect.message)
-        is ForYouEffect.SeedHidden -> {
-            if (callbacks.onSeedHidden(effect.profileId, effect.entries)) {
+        // Waiting on the offer must not hold back later effects, such as the next hide replacing this offer.
+        is ForYouEffect.SeedHidden -> undoScope.launch {
+            if (callbacks.onOfferUndo(effect.label, effect.anchor)) {
                 owner.onAction(ForYouAction.UndoSeedBlacklist(effect.profileId, effect.entries))
             }
         }

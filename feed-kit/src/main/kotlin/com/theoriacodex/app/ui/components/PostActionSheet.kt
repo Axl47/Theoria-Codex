@@ -48,7 +48,8 @@ import com.theoriacodex.domain.model.SourceKey
  * The product's post long-press menu: labeled actions, with search-term selection in its own sheet.
  *
  * Callers supply the actions available on their route and the route-specific [tagContent], which
- * stays open while terms are toggled. Every other action closes the menu before it runs.
+ * stays open while terms are toggled. Every other action closes the menu before it runs. [onRemoveFromCodex]
+ * adds a destructive row at the end, named [removeLabel] for routes that remove the post from something else.
  */
 @Composable
 fun PostActionSheet(
@@ -62,6 +63,7 @@ fun PostActionSheet(
     saveToCodexQuery: Query? = null,
     saveToCodexLabel: String = "Save to Codex",
     onRemoveFromCodex: (() -> Unit)? = null,
+    removeLabel: String = "Remove from Codex",
     onOpenCreatorProfile: ((CreatorProfile) -> Unit)? = null,
     onOpenLegacyCreatorProfile: (() -> Unit)? = null,
     onGoToSearch: (() -> Unit)? = null,
@@ -129,7 +131,7 @@ fun PostActionSheet(
             ActionMenuDivider()
             ActionMenuRow(
                 icon = Icons.Default.Delete,
-                label = "Remove from Codex",
+                label = removeLabel,
                 tint = MaterialTheme.colorScheme.error,
             ) { dismissThen(remove) }
         }

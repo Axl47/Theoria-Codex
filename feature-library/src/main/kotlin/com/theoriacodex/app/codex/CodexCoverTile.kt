@@ -1,7 +1,10 @@
 package com.theoriacodex.app.codex
 
 import com.theoriacodex.app.ui.codexMorph
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
@@ -16,6 +19,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material3.MaterialTheme
@@ -41,7 +46,12 @@ fun savedCodexCountSuffix(codexId: String, count: Int): String? = when (codexId)
     else -> null
 }
 
-/** Every Codex in the library: name and count over its cover, with actions on long press. */
+/**
+ * Every Codex in the library: name and count over its cover, with actions on long press, and the offline ring in
+ * the corner while the Codex is kept offline (status only: a tap anywhere opens the Codex). Without
+ * [longPressOpensActions] the grid owns the long-press gesture (Manual sort's drag) and only accessibility services
+ * open the actions here.
+ */
 @Composable
 internal fun CodexCoverTile(
     codexId: String,
@@ -51,16 +61,20 @@ internal fun CodexCoverTile(
     onOpen: () -> Unit,
     onOpenActions: () -> Unit,
     modifier: Modifier,
+    longPressOpensActions: Boolean = true,
 ) {
     val onCover = covers.isNotEmpty()
+    val actionsLabel = "Actions for $name"
     val textColor = if (onCover) Color.White else MaterialTheme.colorScheme.onSurface
     Box(
         modifier.codexMorph(codexId).clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .combinedClickable(
-                onClick = onOpen,
-                onLongClick = onOpenActions,
-                onLongClickLabel = "Actions for $name",
+            .then(
+                if (longPressOpensActions) {
+                    Modifier.combinedClickable(onClick = onOpen, onLongClick = onOpenActions, onLongClickLabel = actionsLabel)
+                } else {
+                    Modifier.clickable(onClick = onOpen).semantics { onLongClick(actionsLabel) { onOpenActions(); true } }
+                },
             ),
     ) {
         if (onCover) {
@@ -72,6 +86,11 @@ internal fun CodexCoverTile(
                 ),
             )
         }
+        CodexOfflineStatusFor(
+            codexId,
+            Modifier.align(Alignment.TopEnd).padding(4.dp).size(36.dp)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), CircleShape),
+        )
         Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(

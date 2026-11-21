@@ -17,6 +17,8 @@ import com.theoriacodex.app.ui.components.NameEntryDialog
 import com.theoriacodex.app.ui.navigation.LocalLiftController
 import com.theoriacodex.app.ui.navigation.LocalNewCodexOpener
 import com.theoriacodex.app.ui.navigation.NewCodexOpener
+import com.theoriacodex.app.ui.undo.LocalUndoSlot
+import com.theoriacodex.app.ui.undo.UndoAnchor
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.launch
@@ -39,13 +41,14 @@ internal class NewCodexRequests : NewCodexOpener {
 /**
  * The lift overlay and the Create Codex dialog, mounted once above the navigation host. The lift draws the
  * [LiftSession] that [ShellCompositionLocals] provides and is cancelled on Back or when the app leaves the
- * foreground; Back also stops a Similar lookup it started. A save it makes is confirmed in the shell's snackbar
- * with Undo. The dialog names a Codex and saves the post that the lift's New target, or the Viewer dock, passed
- * to [LocalNewCodexOpener].
+ * foreground; Back also stops a Similar lookup it started. A save it makes offers Undo in the app's undo pill.
+ * The dialog names a Codex and saves the post that the lift's New target, or the Viewer dock, passed to
+ * [LocalNewCodexOpener].
  */
 @Composable
 internal fun ShellLiftOverlay(shell: TheoriaShell) {
     val newCodex = LocalNewCodexOpener.current
+    val undo = LocalUndoSlot.current
     (LocalLiftController.current as? LiftSession)?.let { session ->
         BackHandler(enabled = session.phase is LiftPhase.Lifted || session.pending != null, onBack = session::cancel)
         LifecycleEventEffect(Lifecycle.Event.ON_STOP) { session.cancel() }
@@ -53,7 +56,7 @@ internal fun ShellLiftOverlay(shell: TheoriaShell) {
             session,
             onNewCodex = newCodex::openNewCodex,
             onFailure = shell::toast,
-            onSaved = { record -> shell.showActionableFeedback("Saved to ${record.codexName}", "Undo") },
+            onSaved = { record -> undo.awaitAction("Saved to ${record.codexName}", UndoAnchor.App) },
         )
     }
     (newCodex as? NewCodexRequests)?.let { requests ->

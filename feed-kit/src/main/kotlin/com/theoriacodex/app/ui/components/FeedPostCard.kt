@@ -7,6 +7,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.Modifier
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.related.RelatedPostsUiState
@@ -67,6 +68,7 @@ fun rememberFeedCardEnvironment(
  * Every feed tile, in grids and shelves alike, showing the best duration known so far and reporting events against its
  * post. Long-press lifts the post onto collect targets where the shell provides a lift, and opens [onLongPress] when
  * released in place; a null [onLongPress] leaves long-press unhandled. [likeEnabled] hides the like button while another gesture owns taps (Codex selection).
+ * [modifier] goes on the card's clickable node, so semantics added there (custom actions) reach the node TalkBack focuses.
  */
 @Composable
 fun FeedPostCard(
@@ -84,6 +86,7 @@ fun FeedPostCard(
     refreshOnPreviewError: Boolean = false,
     resolvePostById: (suspend (PostId) -> Post?)? = null,
     recoverPostMedia: (suspend (Post, ImageRef) -> Post?)? = null,
+    modifier: Modifier = Modifier,
 ) {
     val observedDurationMs = observedMediaDurationMs(post, environment.durationStateForPost)
     val acquiredDurationMs by remember(post.id, environment.acquiredDurations) {
@@ -111,6 +114,7 @@ fun FeedPostCard(
         onLongPress = onLongPress,
         onViewportChanged = { visible -> environment.onViewportChanged(post, visible) },
         onAuthoritativeDurationKnown = { durationMs -> environment.onAuthoritativeDurationKnown(post, durationMs) },
+        modifier = modifier,
     )
 }
 
@@ -179,6 +183,7 @@ fun FeedPostActionSheet(
     onGoToSearch: (() -> Unit)?,
     saveToCodexLabel: String = "Save to Codex",
     onRemoveFromCodex: (() -> Unit)? = null,
+    removeLabel: String = "Remove from Codex",
     onStartOver: (() -> Unit)? = null,
     onShowRelated: (() -> Unit)? = null,
     liked: Boolean = false,
@@ -193,6 +198,7 @@ fun FeedPostActionSheet(
         onSaveToCodex = { onSaveToCodex(post) },
         saveToCodexLabel = saveToCodexLabel,
         onRemoveFromCodex = onRemoveFromCodex,
+        removeLabel = removeLabel,
         onOpenCreatorProfile = menuActions.openCreator,
         onOpenLegacyCreatorProfile = { menuActions.openPostCreator(post) },
         onGoToSearch = onGoToSearch,

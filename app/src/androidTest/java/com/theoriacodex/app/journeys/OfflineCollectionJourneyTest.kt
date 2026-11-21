@@ -4,20 +4,18 @@ import com.theoriacodex.app.library.LibrarySection
 import android.graphics.Color
 import android.graphics.BitmapFactory
 import android.view.View
-import androidx.compose.ui.test.performScrollToIndex
-import androidx.compose.ui.test.performScrollToNode
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.isDisplayed
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import com.theoriacodex.app.codex.profileScopedCodexId
+import com.theoriacodex.app.media.MediaCacheMaintenance
+import androidx.test.platform.app.InstrumentationRegistry
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.domain.model.ImageRef
@@ -52,10 +50,9 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
         activate(compose.onNodeWithText("Make available offline"))
         val offline = requireNotNull(container.features.offlineMedia)
         compose.waitUntil(10_000) { offline.store.snapshot.value.postCount == 2 }
-        // The storage sheet is still opening, and its owner rows sit below its fold.
-        val storage = compose.onNodeWithTag("offline-storage-list")
-        storage.performScrollToNode(hasText("2 posts available offline"))
-        compose.waitUntil(10_000) { compose.onNodeWithText("2 posts available offline").isDisplayed() }
+        // The Library header's entry opens the offline sheet, whose row reports what is kept.
+        activate(compose.onNodeWithContentDescription("Offline and downloads", substring = true))
+        compose.waitUntil(10_000) { compose.onNodeWithText("2 posts offline").isDisplayed() }
         val localPaths = io { sourcePosts.map { requireNotNull(offline.find(it.id)?.full?.localPath) } }
         assertTrue(localPaths.all { File(it).isFile })
         localPaths.forEach { path ->
@@ -73,15 +70,13 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
                 assertTrue(File(path).delete())
             }
         }
-        storage.performScrollToNode(hasText("Clear disposable cache"))
-        activate(compose.onNodeWithText("Clear disposable cache"))
-        storage.performScrollToIndex(0)
-        compose.waitUntil(10_000) {
-            compose.onAllNodesWithText("Disposable cache cleared. Offline copies are still available.")
-                .fetchSemanticsNodes().isNotEmpty()
+        // The same clearing Settings' Storage sheet runs; offline copies are not disposable cache.
+        io {
+            MediaCacheMaintenance(InstrumentationRegistry.getInstrumentation().targetContext, container.data.cacheRepository,
+                container.sources.pixivUgoiraClient).clear()
         }
         assertTrue(localPaths.all { File(it).isFile })
-        // Closing the Activity is the cold-start boundary, including an open storage sheet.
+        // Closing the Activity is the cold-start boundary, including an open offline sheet.
         coldGraphRelaunch()
         library(LibrarySection.Codices)
         activate(compose.onNodeWithText("Offline collection"))

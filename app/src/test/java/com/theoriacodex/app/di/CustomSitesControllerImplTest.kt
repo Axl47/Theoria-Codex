@@ -9,6 +9,7 @@ import com.theoriacodex.app.customsites.CredentialEdit
 import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.customsites.CustomSiteDraft
 import com.theoriacodex.app.customsites.CustomSiteEdit
+import com.theoriacodex.app.customsites.HeaderEdit
 import com.theoriacodex.app.customsites.CustomSiteMutation
 import com.theoriacodex.app.customsites.FakeBrowserCookieStore
 import com.theoriacodex.app.customsites.SiteCookieBridge
@@ -292,6 +293,17 @@ class CustomSitesControllerImplTest {
         assertTrue(outages.outages.value.isEmpty())
         assertEquals(1, cookieStore.flushes)
         assertNull("completing makes no request", family.probedWith)
+    }
+
+    @Test
+    fun `an edit to one header keeps the other as stored`() = runTest {
+        val graph = graph()
+        graph.controller.add(draft().copy(headers = SiteHeaders(userAgent = "Old/1", referer = "https://ref.example/")))
+        graph.controller.completeVerification(SITE.id, "WebView/2", working = true)
+
+        graph.controller.update(SITE.id, CustomSiteEdit(referer = HeaderEdit.Replace(null)))
+
+        assertEquals(SiteHeaders(userAgent = "WebView/2"), graph.controller.sites.value.single().headers)
     }
 
     @Test

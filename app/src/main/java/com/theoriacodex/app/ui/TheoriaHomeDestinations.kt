@@ -1,11 +1,16 @@
 package com.theoriacodex.app.ui
 
 import android.widget.Toast
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import com.theoriacodex.app.recommend.ForYouUndoAnchor
 import com.theoriacodex.app.recommend.state.ForYouEffect
+import com.theoriacodex.app.ui.undo.LocalUndoSlot
+import com.theoriacodex.app.ui.undo.UndoPill
 import com.theoriacodex.app.search.state.SearchEffect
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.source.creatorBrowsingSources
@@ -61,6 +66,7 @@ private fun SearchDestination(shell: TheoriaShell) {
                 onSaveSearch = shell.owners.savedSearches::save,
                 onManageSavedSearches = { shell.overlays.showSavedSearchManagement = true },
                 onOpenSourceAccounts = { shell.owners.settings.onAction(SettingsAction.OpenCustomSites) },
+                onSetSourceWeights = { sources, weights -> shell.owners.settings.onAction(SettingsAction.SetSourceWeights(sources, weights)) },
                 onOpenViewer = { effect -> shell.openSearchViewer(effect) },
                 onShowMessage = { message -> Toast.makeText(shell.appContext, message, Toast.LENGTH_SHORT).show() },
                 onToggleLike = { post -> shell.feedLikeAction(ViewerStreamSource.SEARCH)(post) },
@@ -104,36 +110,41 @@ private suspend fun TheoriaShell.openSearchViewer(effect: SearchEffect.OpenViewe
 private fun ForYouDestination(shell: TheoriaShell) {
     val routes = shell.routes
     val navigation = shell.navigation
-    BrowsingDestinationStateBoundary(shell.data, shell.sources) { state ->
-        val fabRestoreState = shell.feedFabRestoreRegistry.state(FOR_YOU_FEED_FAB_CONTEXT) ?: return@BrowsingDestinationStateBoundary
-        ForYouRoute(
-            coordinator = shell.features.forYou,
-            relatedPostsLoader = shell.features.relatedPosts,
-            mediaDurationCoordinator = shell.features.mediaDurationCoordinator,
-            pixivUgoiraClient = shell.sources.pixivUgoiraClient,
-            config = ForYouRouteConfig(
-                settings = state.settings,
-                activeProfileLikesCount = state.activeProfileLikesCount,
-                availableSources = state.availableSources,
-                creatorBrowsingSources = state.creatorBrowsingSources,
-                likedPostIds = state.likedPostIds,
-                resolveUnknownAnimatedDurations = state.settings.contentFilters.resolveUnknownAnimatedDurations,
-            ),
-            fabRestoreState = fabRestoreState,
-            onFabRestoreStateChange = { updated -> shell.feedFabRestoreRegistry.update(FOR_YOU_FEED_FAB_CONTEXT, updated) },
-            callbacks = ForYouRouteCallbacks(
-                onOpenViewer = { effect -> shell.openForYouViewer(effect) },
-                onNavigateToSearch = { navigation.showTab(TopLevelDestination.Search) },
-                onOpenSourceAccounts = { shell.owners.settings.onAction(SettingsAction.OpenCustomSites) },
-                onShowMessage = { message -> Toast.makeText(shell.appContext, message, Toast.LENGTH_SHORT).show() },
-                onSeedHidden = { _, _ -> shell.showActionableFeedback("Seed hidden", "Undo") },
-                onToggleLike = { post -> shell.feedLikeAction(ViewerStreamSource.FOR_YOU)(post) },
-                onRequestSaveToCodex = { post -> shell.requestSaveToCodex(post, fromForYou = true) },
-                onSaveToDevice = shell::requestSaveToDevice,
-                onGoToSearch = { navigation.showTab(TopLevelDestination.Search) },
-            ),
-            onOwnerAvailable = routes::publishForYou,
-        )
+    val undo = LocalUndoSlot.current
+    Box(Modifier.fillMaxSize()) {
+        BrowsingDestinationStateBoundary(shell.data, shell.sources) { state ->
+            val fabRestoreState = shell.feedFabRestoreRegistry.state(FOR_YOU_FEED_FAB_CONTEXT) ?: return@BrowsingDestinationStateBoundary
+            ForYouRoute(
+                coordinator = shell.features.forYou,
+                relatedPostsLoader = shell.features.relatedPosts,
+                mediaDurationCoordinator = shell.features.mediaDurationCoordinator,
+                pixivUgoiraClient = shell.sources.pixivUgoiraClient,
+                config = ForYouRouteConfig(
+                    settings = state.settings,
+                    activeProfileLikesCount = state.activeProfileLikesCount,
+                    availableSources = state.availableSources,
+                    creatorBrowsingSources = state.creatorBrowsingSources,
+                    likedPostIds = state.likedPostIds,
+                    resolveUnknownAnimatedDurations = state.settings.contentFilters.resolveUnknownAnimatedDurations,
+                ),
+                fabRestoreState = fabRestoreState,
+                onFabRestoreStateChange = { updated -> shell.feedFabRestoreRegistry.update(FOR_YOU_FEED_FAB_CONTEXT, updated) },
+                callbacks = ForYouRouteCallbacks(
+                    onOpenViewer = { effect -> shell.openForYouViewer(effect) },
+                    onNavigateToSearch = { navigation.showTab(TopLevelDestination.Search) },
+                    onOpenSourceAccounts = { shell.owners.settings.onAction(SettingsAction.OpenCustomSites) },
+                    onShowMessage = { message -> Toast.makeText(shell.appContext, message, Toast.LENGTH_SHORT).show() },
+                    onOfferUndo = { label, anchor -> undo.awaitAction(label, anchor) },
+                    onSelectProfile = { id -> shell.owners.settings.onAction(SettingsAction.SetActiveProfile(id)) },
+                    onToggleLike = { post -> shell.feedLikeAction(ViewerStreamSource.FOR_YOU)(post) },
+                    onRequestSaveToCodex = { post -> shell.requestSaveToCodex(post, fromForYou = true) },
+                    onSaveToDevice = shell::requestSaveToDevice,
+                    onGoToSearch = { navigation.showTab(TopLevelDestination.Search) },
+                ),
+                onOwnerAvailable = routes::publishForYou,
+            )
+        }
+        UndoPill(ForYouUndoAnchor, Modifier.align(Alignment.BottomCenter))
     }
 }
 

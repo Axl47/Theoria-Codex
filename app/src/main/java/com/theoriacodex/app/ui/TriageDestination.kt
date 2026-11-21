@@ -24,6 +24,7 @@ import com.theoriacodex.app.triage.TriageDeckScreen
 import com.theoriacodex.app.triage.TriageDeckViewModel
 import com.theoriacodex.app.ui.components.feedDurations
 import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
+import com.theoriacodex.app.ui.navigation.TriageMode
 import com.theoriacodex.app.ui.navigation.TriageOpener
 import com.theoriacodex.app.ui.navigation.TriageRequest
 import com.theoriacodex.app.ui.navigation.TriageSeed
@@ -42,14 +43,18 @@ import kotlinx.coroutines.launch
 internal val triageArguments: List<NamedNavArgument> = listOf(
     navArgument("source") { type = NavType.StringType },
     navArgument("feedKey") { type = NavType.StringType; defaultValue = "" },
+    navArgument("removes") { type = NavType.BoolType; defaultValue = false },
+    navArgument("alsoIn") { type = NavType.StringType; defaultValue = "" },
 )
 
 /** The [TriageRequest] this back stack entry was opened with; an unknown source reads as Search. */
 internal fun NavBackStackEntry.triageRequest(): TriageRequest {
     val source = arguments?.getString("source")
+    val alsoIn = arguments?.getString("alsoIn").orEmpty().split(AppRoute.TRIAGE_ID_SEPARATOR).filter(String::isNotBlank)
     return TriageRequest(
         source = ViewerStreamSource.entries.firstOrNull { it.name == source } ?: ViewerStreamSource.SEARCH,
         feedKey = arguments?.getString("feedKey").orEmpty(),
+        mode = if (arguments?.getBoolean("removes") == true) TriageMode.RemoveFromCodex(alsoIn.toSet()) else TriageMode.Browse,
     )
 }
 
@@ -121,8 +126,9 @@ internal fun TriageDestination(shell: TheoriaShell, request: TriageRequest) {
     val query = shell.triageQuery(request)
     val quickSave = LocalQuickSave.current
     val owner = viewModel<TriageDeckViewModel> {
+        val fromForYou = request.source == ViewerStreamSource.FOR_YOU
         TriageDeckViewModel(
-            feed, ShellTriageActions(shell), quickSave, query, request.source == ViewerStreamSource.FOR_YOU, handOff.viewModelScope,
+            feed, ShellTriageActions(shell), quickSave, query, fromForYou, handOff.viewModelScope, shell.triageRemoval(request),
         )
     }
     val deck by owner.state.collectAsStateWithLifecycle()
@@ -184,7 +190,7 @@ private fun TheoriaShell.triageQuery(request: TriageRequest): Query? =
  * the deck and in the Viewer share one feed.
  */
 private fun TheoriaShell.openTriagePost(request: TriageRequest, seed: TriageSeed, query: Query?, posts: List<Post>, index: Int) {
-    request.codexId()?.let { codexId -> return openCodexViewer(codexId, posts, index) }
+    request.codexId?.let { codexId -> return openCodexViewer(codexId, posts, index) }
     val context = ViewerLaunchContext(request.feedKey, index, request.source, scrollOffsetHint = 0)
     scope.launch {
         openFeedViewer(

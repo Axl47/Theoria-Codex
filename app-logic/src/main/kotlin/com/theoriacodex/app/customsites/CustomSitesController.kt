@@ -159,13 +159,23 @@ data class CustomSiteDraft(
     val linkAfterSetup: String? = null,
 )
 
-/** Null fields keep their current value. */
+/** Null fields keep their current value; each header is applied on its own to the stored headers. */
 data class CustomSiteEdit(
     val label: String? = null,
     val credentials: CredentialEdit = CredentialEdit.Keep,
-    val headers: SiteHeaders? = null,
+    val userAgent: HeaderEdit = HeaderEdit.Keep,
+    val referer: HeaderEdit = HeaderEdit.Keep,
     val includeInUnifiedAndForYou: Boolean? = null,
 )
+
+/** One request header in a [CustomSiteEdit]: [Keep] leaves the stored value, [Replace] with null removes it. */
+sealed interface HeaderEdit {
+    data object Keep : HeaderEdit
+    data class Replace(val value: String?) : HeaderEdit
+
+    /** The header once this edit is applied to [current]. */
+    fun applyTo(current: String?): String? = if (this is Replace) value else current
+}
 
 sealed interface CredentialEdit {
     data object Keep : CredentialEdit

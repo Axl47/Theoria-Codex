@@ -162,6 +162,18 @@ class RoomRecentsRepository(
         }
     }
 
+    override suspend fun removeWatchedPost(postId: PostId, section: RecentPostSection) {
+        database.withTransaction {
+            val removed = dao.watched(postId.source.id, postId.sourcePostId, section.name) ?: return@withTransaction
+            dao.deleteWatchedEntry(removed.source, removed.sourcePostId, removed.section)
+            cleanupWatchedPostsInside(listOf(removed))
+        }
+    }
+
+    override suspend fun removeSearch(queryHash: String) {
+        database.withTransaction { dao.deleteSearchesByHashes(listOf(queryHash.trim())) }
+    }
+
     override suspend fun clearWatchedPosts(section: RecentPostSection) {
         database.withTransaction {
             val removed = dao.watched().filter { it.section == section.name }

@@ -178,10 +178,6 @@ fun customSitesSummary(sites: List<CustomSiteSummary>): String {
     return if (needingKeys == 0) count else "$count · $needingKeys need an API key"
 }
 
-internal fun removeConfirmationText(label: String): String =
-    "Remove $label? Likes, Codex items and history from this site stay in your library, " +
-        "but can't be opened or refreshed until you add the site again."
-
 internal fun reconnectConfirmationText(hostLabel: String): String =
     "Reconnect your existing likes and history from $hostLabel? Only do this if it is the same site."
 

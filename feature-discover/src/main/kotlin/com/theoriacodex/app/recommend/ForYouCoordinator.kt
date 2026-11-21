@@ -72,7 +72,7 @@ class ForYouCoordinator(
         }
         val likes = likesRepository.observeLikes(request.settings.activeProfileId).first()
         if (enabledSources.isEmpty()) return ForYouFeedResult.empty("empty-enabled", likes.size)
-        val blocked = blacklistedSeedKeysBySource(request.settings)
+        val blocked = request.settings.forYouBlacklistByProfile[request.settings.activeProfileId].orEmpty()
         val personalized = buildSeedBySource(likes, enabledSources, request.shuffle, blocked)
         val initialSeed = personalized.ifEmpty { buildTrendingSeed(enabledSources, blocked) }
         if (initialSeed.isEmpty()) return ForYouFeedResult.empty("empty-seed", likes.size)
@@ -146,7 +146,7 @@ class ForYouCoordinator(
         likes: List<LikedPost>,
         enabledSources: Set<SourceKey>,
         shuffle: Boolean,
-        blacklistedSeedKeys: Map<SourceKey, Set<String>>,
+        blocked: List<ForYouBlacklistEntry>,
     ): Map<SourceKey, List<String>> {
         val random = if (shuffle) {
             Random(seedSource())
@@ -172,7 +172,7 @@ class ForYouCoordinator(
                     prepared = prepared,
                     fallbackCandidates = fallbackTags,
                     random = random,
-                    blockedKeys = blacklistedSeedKeys[source].orEmpty(),
+                    isHidden = { tags -> blocked.hidesSeed(source, tags) },
                 )
                 includeTags.takeIf { it.isNotEmpty() }?.let { tags -> source to tags }
             }
@@ -181,7 +181,7 @@ class ForYouCoordinator(
 
     private suspend fun buildTrendingSeed(
         enabledSources: Set<SourceKey>,
-        blacklistedSeedKeys: Map<SourceKey, Set<String>>,
+        blocked: List<ForYouBlacklistEntry>,
     ): Map<SourceKey, List<String>> {
         return enabledSources
             .inPresentationOrder()
@@ -191,7 +191,7 @@ class ForYouCoordinator(
                     prepared = ForYouTagSetGenerator.prepare(source, emptyList()),
                     fallbackCandidates = fallbackTags,
                     random = Random(source.id.hashCode()),
-                    blockedKeys = blacklistedSeedKeys[source].orEmpty(),
+                    isHidden = { tags -> blocked.hidesSeed(source, tags) },
                 )
                 includeTags.takeIf { it.isNotEmpty() }?.let { tags -> source to tags }
             }
@@ -202,7 +202,7 @@ class ForYouCoordinator(
         prepared: ForYouTagSetGenerator.Prepared,
         fallbackCandidates: List<String>,
         random: Random,
-        blockedKeys: Set<String>,
+        isHidden: (List<String>) -> Boolean,
     ): List<String> = withContext(computationDispatcher) {
         repeat(FOR_YOU_SEED_ATTEMPTS) {
             val includeTags = prepared.sample(
@@ -212,7 +212,7 @@ class ForYouCoordinator(
             if (includeTags.isEmpty()) {
                 return@withContext emptyList()
             }
-            if (seedKey(includeTags) !in blockedKeys) {
+            if (!isHidden(includeTags)) {
                 return@withContext includeTags
             }
         }
@@ -241,30 +241,6 @@ class ForYouCoordinator(
         return fallback
             .filter(TagSuggestion::isRecommendationTagSuggestion)
             .map { suggestion -> suggestion.text }
-    }
-
-    private fun blacklistedSeedKeysBySource(settings: AppSettings): Map<SourceKey, Set<String>> {
-        return settings
-            .forYouBlacklistByProfile[settings.activeProfileId]
-            .orEmpty()
-            .groupBy { entry -> entry.source }
-            .mapValues { (_, entries) ->
-                entries
-                    .asSequence()
-                    .map { entry -> seedKey(entry.tags) }
-                    .filter { key -> key.isNotBlank() }
-                    .toSet()
-            }
-    }
-
-    private fun seedKey(tags: List<String>): String {
-        return tags
-            .asSequence()
-            .map { tag -> tag.trim().lowercase() }
-            .filter { tag -> tag.isNotBlank() }
-            .distinct()
-            .sorted()
-            .joinToString(separator = "+")
     }
 }
 

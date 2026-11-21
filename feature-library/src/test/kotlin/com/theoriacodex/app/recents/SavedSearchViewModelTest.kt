@@ -93,6 +93,52 @@ class SavedSearchViewModelTest {
     }
 
     @Test
+    fun `saving in place confirms only after the save commits, then the confirmation lapses`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val gated = object : SavedSearchRepository by repository {
+            override suspend fun save(name: String, search: RecentSearchEntry): SavedSearchEntry {
+                gate.await()
+                return repository.save(name, search)
+            }
+        }
+        val owner = owner(gated)
+        owner.saveInPlace("Evening", search())
+        runCurrent()
+        assertEquals(null, owner.justSavedId.value)
+
+        gate.complete(Unit)
+        runCurrent()
+        assertEquals(repository.observeSavedSearches().first().single().id, owner.justSavedId.value)
+        advanceUntilIdle()
+        assertEquals(null, owner.justSavedId.value)
+    }
+
+    @Test
+    fun `a failed save in place reports the failure and never confirms`() = runTest {
+        val full = object : SavedSearchRepository by repository {
+            override suspend fun save(name: String, search: RecentSearchEntry): SavedSearchEntry =
+                throw IllegalArgumentException("You can pin up to 200 searches. Remove one before adding another.")
+        }
+        val owner = owner(full)
+        owner.saveInPlace("Evening", search())
+        runCurrent()
+
+        assertEquals(null, owner.justSavedId.value)
+        assertEquals("You can pin up to 200 searches. Remove one before adding another.", owner.effects.first())
+    }
+
+    @Test
+    fun `saving in place leaves an already saved search and its name alone`() = runTest {
+        val pin = repository.save("Chosen name", search())
+        val owner = owner()
+        owner.saveInPlace("night -comic", search().copy(searchedAtEpochMs = 200))
+        advanceUntilIdle()
+
+        assertEquals(listOf(pin), repository.observeSavedSearches().first())
+        assertEquals(null, owner.justSavedId.value)
+    }
+
+    @Test
     fun `saved search remains replayable after rolling history prunes it and clear removes all recent activity`() = runTest {
         val recents = InMemoryRecentsRepository(searchLimit = 1)
         val original = search()

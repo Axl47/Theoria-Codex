@@ -52,13 +52,13 @@ class CustomSitesScreenTest {
             onProbe = { supported("danbooru.example", ProtocolFamily.DANBOORU, label = "Example Booru") }
         }
         show(controller)
-        compose.onNodeWithText("Add a booru by its address", substring = true).assertExists()
-        compose.onNode(hasText("Add site") and hasClickAction()).performClick()
+        compose.onNodeWithText("No added sites").assertExists()
+        compose.onNodeWithContentDescription("Add site").performClick()
 
         compose.onNodeWithText("Site address").performTextInput("https://danbooru.example/posts?tags=cat")
         compose.onNodeWithText("Check site").performClick()
 
-        compose.onNodeWithText("Found a Danbooru site. Name it and add it.").assertExists()
+        compose.onNodeWithText("Found a Danbooru site.").assertExists()
         compose.onNodeWithText("Example Booru").assertExists()
         compose.onNode(isToggleable()).assertIsOff()
         compose.onNode(hasText("Add site") and hasClickAction()).performClick()
@@ -83,21 +83,17 @@ class CustomSitesScreenTest {
     }
 
     @Test
-    fun `removing a site explains that library data stays`() {
+    fun `removing a site hides it at once with Undo in its row`() {
         val controller = FakeCustomSitesController(listOf(site()))
         show(controller)
         compose.onNodeWithText("Safebooru").performClick()
         compose.onNodeWithText("Remove site").performScrollTo().performClick()
 
-        compose.onNodeWithText(removeConfirmationText("Safebooru")).assertExists()
-        compose.onNodeWithText(
-            "Likes, Codex items and history from this site stay in your library",
-            substring = true,
-        ).assertExists()
-        compose.onNodeWithText("Remove").performClick()
+        compose.onNodeWithText("Removed Safebooru").assertExists()
+        compose.onNodeWithText("Undo").performClick()
 
-        compose.onNodeWithText("Safebooru").assertDoesNotExist()
-        assertEquals(listOf("custom_safebooru_org"), controller.removals)
+        compose.onNodeWithText("Safebooru").assertExists()
+        assertEquals(emptyList<String>(), controller.removals)
     }
 
     @Test

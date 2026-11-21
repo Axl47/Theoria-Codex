@@ -6,31 +6,30 @@ import androidx.compose.runtime.setValue
 import com.theoriacodex.data.repository.CodexLibrarySort
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
-import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.app.ui.undo.PendingRemoval
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flowOf
 
-internal class CodexListUiState(initialCodices: List<Codex>) {
+internal class CodexListUiState {
     var cleaningTargetId by mutableStateOf<String?>(null)
     var showCreateDialog by mutableStateOf(false)
     var renameTarget by mutableStateOf<Codex?>(null)
     var deleteTarget by mutableStateOf<Codex?>(null)
     var actionTarget by mutableStateOf<Codex?>(null)
     var autoSaveTarget by mutableStateOf<Codex?>(null)
-    var searchTarget by mutableStateOf<Codex?>(null)
-    val ordering = com.theoriacodex.app.ui.components.ReorderListState(initialCodices, Codex::codexId)
 
     fun synchronizeCodices(codices: List<Codex>) {
         if (codices.none { it.codexId == cleaningTargetId }) cleaningTargetId = null
-        ordering.synchronize(codices)
     }
-
 }
 
 internal data class CodexListPresentation(
     val codices: List<Codex>,
     val itemCounts: Map<String, Int>,
     val coverCandidates: Map<String, List<CodexCoverCandidate>>,
-    val searchSourceOptions: Map<String, List<CodexSearchSourceOption>>,
     val searchTagOptions: Map<String, Map<SourceKey, List<CodexSearchTagOption>>>,
     val likesCodexId: String,
     val actionLoading: Boolean = false,
@@ -39,10 +38,23 @@ internal data class CodexListPresentation(
     val librarySort: CodexLibrarySort = CodexLibrarySort.MANUAL,
     /** Null until statistics first answer, or while no sort needs them. */
     val libraryUsage: Map<String, CodexUsage>? = null,
-    val searchTerms: Map<SourceKey, CodexSearchTerms> = emptyMap(),
+    /** For a cleaning target and its comparisons, the target's posts each comparison also holds. */
+    val observeCleaningMatches: (String, List<String>) -> Flow<Map<String, Set<PostId>>> = { _, _ -> flowOf(emptyMap()) },
+    /** Codices waiting to be deleted, by id; each keeps its tile's cell, drawn as its Undo. */
+    val pendingDeletes: Map<String, PendingRemoval> = emptyMap(),
+    /** Orders whose write failed; the grid drops the matching optimistic order. */
+    val reorderFailures: Flow<List<String>> = emptyFlow(),
+    /** The menu was opened from a screen whose title renames in place, so it shows no Rename row. */
+    val renameInPlace: Boolean = false,
 ) {
-    /** What the grid and reordering show: Likes lives in Library's Saved section instead. */
+    /** What the grid shows: Likes lives in Library's Saved section instead. */
     val libraryCodices: List<Codex> get() = codices.filterNot { it.codexId == likesCodexId }
+
+    /** Whether the sort still waits for counts or usage; a first frame in manual order would move the restored scroll anchor. */
+    val awaitingSortInputs: Boolean get() {
+        val awaitingCounts = librarySort.usesItemCounts && libraryCodices.any { it.codexId !in itemCounts }
+        return awaitingCounts || librarySort.usesUsage && libraryUsage == null
+    }
 }
 
 internal data class CodexListActions(
@@ -50,7 +62,8 @@ internal data class CodexListActions(
     val importCodex: () -> Unit,
     val downloadCodex: (String) -> Unit,
     val shareCodex: (String) -> Unit,
-    val searchFromCodex: (String, SourceKey, Query) -> Unit,
+    /** Opens the Codex filtered by tag, with its tag sheet showing. */
+    val filterByTag: (String) -> Unit,
     val commitReorder: (List<String>) -> Unit,
     val createCodex: (String) -> Unit,
     val renameCodex: (String, String) -> Unit,
@@ -59,9 +72,8 @@ internal data class CodexListActions(
     val cleanCodex: (String, Set<String>) -> Unit,
     val makeAvailableOffline: ((String) -> Unit)? = null,
     val setLibrarySort: (CodexLibrarySort) -> Unit = {},
+    /** A deleted Codex tile's Undo, or its Retry after the deletion failed. */
+    val actOnDelete: (String) -> Unit = {},
+    /** The Library was left: commits the Codices waiting to be deleted. */
+    val leaveLibrary: () -> Unit = {},
 )
-
-internal fun moveCodex(codices: List<Codex>, fromIndex: Int, toIndex: Int): List<Codex> {
-    if (fromIndex == toIndex || fromIndex !in codices.indices || toIndex !in codices.indices) return codices
-    return codices.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
-}

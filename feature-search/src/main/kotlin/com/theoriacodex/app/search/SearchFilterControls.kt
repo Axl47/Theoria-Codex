@@ -17,7 +17,11 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.theoriacodex.app.ui.components.ExpandedBottomSheet
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Tune
 import com.theoriacodex.app.ui.components.SourceIconMenu
+import com.theoriacodex.app.ui.components.SourceMenuAction
+import com.theoriacodex.data.repository.SettingDestinations
 import com.theoriacodex.app.ui.components.SourceScopeIndicator
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.domain.model.QueryMode
@@ -141,7 +145,10 @@ internal fun DateRangeFilterSection(range: DateRange?, onPreset: (DateRangePrese
     }
 }
 
-/** The current scope stays visible; holding menu sources edits the Unified source group. */
+/**
+ * The current scope stays visible; holding menu sources edits the Unified source group. [onOpenSourceMix], given
+ * while the search is Unified, adds a Source mix chip after the sources.
+ */
 @Composable
 internal fun SearchSourcePicker(
     draftSourceScope: SearchSourceScope,
@@ -150,6 +157,7 @@ internal fun SearchSourcePicker(
     onOpen: () -> Unit = {},
     onModeSelected: (QueryMode) -> Unit,
     onTemporarySourceToggled: (SourceKey) -> Unit,
+    onOpenSourceMix: (() -> Unit)? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val highlightedSources = if (draftSourceScope == SearchSourceScope.GlobalUnified) {
@@ -189,6 +197,7 @@ internal fun SearchSourcePicker(
                 onModeSelected(source?.let(QueryMode::Source) ?: QueryMode.Unified)
             },
             onLongPress = onTemporarySourceToggled,
+            action = onOpenSourceMix?.let { SourceMenuAction(SettingDestinations.SourceMix.title, Icons.Default.Tune, it) },
         )
     }
 }

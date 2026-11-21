@@ -3,6 +3,8 @@ package com.theoriacodex.app.codex
 import com.theoriacodex.data.repository.CacheRepository
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.CodexSortMode
+import com.theoriacodex.domain.model.CodexItem
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
@@ -22,9 +24,7 @@ data class CodexCollectionPresentation(
 )
 
 data class CodexActionOptions(
-    val sources: List<CodexSearchSourceOption> = emptyList(),
     val tags: Map<SourceKey, List<CodexSearchTagOption>> = emptyMap(),
-    val searchTerms: Map<SourceKey, CodexSearchTerms> = emptyMap(),
 )
 
 /** Summary queries decode bounded covers; full tag projections exist only while choosing post actions or a save target. */
@@ -92,10 +92,29 @@ class CodexCollectionSource(
     fun observeActionOptions(codexId: String, availableSources: Set<SourceKey>): Flow<CodexActionOptions> =
         repository.observeCodexPosts(codexId, CodexSortMode.NEWEST_SAVED).map { posts ->
             val sources = codexSearchSourceOptions(posts, availableSources)
-            CodexActionOptions(
-                sources,
-                sources.associate { it.source to codexSearchTagOptions(posts, it.source) },
-                sources.associate { it.source to codexSearchTerms(posts, it.source) },
-            )
+            CodexActionOptions(sources.associate { it.source to codexSearchTagOptions(posts, it.source) })
         }.flowOn(Dispatchers.Default)
+
+    /** For each Codex in [comparisonIds], the posts of [targetId] it also holds: what cleaning against it removes. */
+    fun observeCleaningMatches(targetId: String, comparisonIds: List<String>): Flow<Map<String, Set<PostId>>> {
+        if (comparisonIds.isEmpty()) return flowOf(emptyMap())
+        return combine((listOf(targetId) + comparisonIds).map(repository::observeCodexItems)) { lists ->
+            codexCleaningMatches(lists.first(), comparisonIds.zip(lists.drop(1)).toMap())
+        }.flowOn(dispatcher).catch { emit(emptyMap()) }
+    }
+}
+
+/** The posts of [target] each comparison Codex in [comparisons] also holds. */
+internal fun codexCleaningMatches(target: List<CodexItem>, comparisons: Map<String, List<CodexItem>>): Map<String, Set<PostId>> {
+    val targetIds = target.mapTo(hashSetOf(), CodexItem::postId)
+    return comparisons.mapValues { (_, items) -> items.mapTo(hashSetOf(), CodexItem::postId).apply { retainAll(targetIds) } }
+}
+
+/**
+ * The posts of [target] that any of [comparisons] also holds, in [target]'s order: what cleaning against them would
+ * remove, which the triage deck walks through one at a time.
+ */
+fun codexCleaningReviewPosts(target: List<Post>, comparisons: List<List<CodexItem>>): List<Post> {
+    val held = comparisons.flatMapTo(hashSetOf()) { items -> items.map(CodexItem::postId) }
+    return target.filter { it.id in held }
 }

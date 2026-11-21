@@ -436,8 +436,19 @@ class SearchViewModel(
             com.theoriacodex.data.repository.SourceWeightSettings.weightsFor(previous.runtime, selectedSources) !=
             com.theoriacodex.data.repository.SourceWeightSettings.weightsFor(settings.runtime, selectedSources)
         reconcileEnvironment(settings, scheduleRetry = !weightsChanged)
-        // Returning from Settings applies the group whose weights were edited, including a pending selection.
-        if (weightsChanged) applyDraft()
+        if (weightsChanged) scheduleMixedSearch()
+    }
+
+    /**
+     * The source mix changed under the search on screen: it runs again after the live-query pause, a newer change
+     * restarting the wait and the request in flight dropped, so a slider drag ends in one search. Before any search
+     * has run, the mix only prepares the next one.
+     */
+    private fun scheduleMixedSearch() {
+        val current = mutableState.value
+        if (!current.hasCommittedSearch) return
+        if (current.execution.request?.isPage == false) cancelActiveRequest()
+        liveSearch.schedule(singleSource = false)
     }
 
     private fun reconcileEnvironment(settings: AppSettings, scheduleRetry: Boolean): Boolean {

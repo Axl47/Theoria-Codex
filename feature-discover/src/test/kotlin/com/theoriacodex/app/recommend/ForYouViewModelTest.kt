@@ -316,7 +316,7 @@ class ForYouViewModelTest {
         val feedback = async { owner.effects.first() }
         owner.onAction(ForYouAction.BlacklistCurrentSeed)
         advanceUntilIdle()
-        assertTrue((feedback.await() as ForYouEffect.ShowMessage).message.contains("already hidden"))
+        assertTrue((feedback.await() as ForYouEffect.ShowMessage).message == "Already hidden")
     }
 }
 
