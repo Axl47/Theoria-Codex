@@ -16,6 +16,8 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import com.theoriacodex.data.repository.ProfileLibraryIds
 import com.theoriacodex.domain.model.Codex
+import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -72,6 +74,7 @@ class CodexCleaningUiTest {
                 target = likes,
                 codices = listOf(likes, Codex("a", "Source A", 2)),
                 isLikesCodex = true,
+                matches = mapOf("a" to setOf(PostId(SourceKey.PIXIV, "1"), PostId(SourceKey.PIXIV, "2"))),
                 onDismiss = {},
                 onClean = { submitted = it },
             )
@@ -81,7 +84,15 @@ class CodexCleaningUiTest {
         compose.onNode(hasText("Likes") and isToggleable()).assertDoesNotExist()
         compose.onNodeWithText("Clean Codex").assertIsNotEnabled()
         compose.onNode(hasText("Source A") and isToggleable()).performClick()
-        compose.onNodeWithText("Clean Codex").assertIsEnabled().performClick()
+        compose.onNodeWithText("Remove 2 posts").assertIsEnabled().performClick()
         compose.runOnIdle { assertEquals(setOf("a"), submitted) }
+    }
+
+    @Test fun `the removal count counts a post held by several comparisons once`() {
+        val shared = PostId(SourceKey.PIXIV, "1")
+        val matches = mapOf("a" to setOf(shared), "b" to setOf(shared, PostId(SourceKey.PIXIV, "2")))
+        assertEquals(2, codexCleaningRemovalCount(setOf("a", "b"), matches))
+        assertEquals(null, codexCleaningRemovalCount(setOf("a", "c"), matches))
+        assertEquals(null, codexCleaningRemovalCount(emptySet(), matches))
     }
 }

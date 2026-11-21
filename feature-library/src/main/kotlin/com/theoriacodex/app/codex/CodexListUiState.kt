@@ -6,8 +6,11 @@ import androidx.compose.runtime.setValue
 import com.theoriacodex.data.repository.CodexLibrarySort
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 
 internal class CodexListUiState(initialCodices: List<Codex>) {
     var cleaningTargetId by mutableStateOf<String?>(null)
@@ -40,6 +43,8 @@ internal data class CodexListPresentation(
     /** Null until statistics first answer, or while no sort needs them. */
     val libraryUsage: Map<String, CodexUsage>? = null,
     val searchTerms: Map<SourceKey, CodexSearchTerms> = emptyMap(),
+    /** For a cleaning target and its comparisons, the target's posts each comparison also holds. */
+    val observeCleaningMatches: (String, List<String>) -> Flow<Map<String, Set<PostId>>> = { _, _ -> flowOf(emptyMap()) },
 ) {
     /** What the grid and reordering show: Likes lives in Library's Saved section instead. */
     val libraryCodices: List<Codex> get() = codices.filterNot { it.codexId == likesCodexId }

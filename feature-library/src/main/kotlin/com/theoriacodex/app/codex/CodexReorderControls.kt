@@ -1,24 +1,15 @@
 package com.theoriacodex.app.codex
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.ListReorderHandle
 import com.theoriacodex.app.ui.components.SingleChoiceMenu
 import com.theoriacodex.data.repository.CodexLibrarySort
@@ -29,36 +20,21 @@ internal fun CodexReorderHandle(codex: Codex, index: Int, state: CodexListUiStat
     ListReorderHandle(codex.codexId, codex.name, index, state.ordering)
 }
 
-/** Selects the shared Library sort; dragging is only offered while the sort is Manual. */
+/** The Library header's sort menu for Codices; choosing Manual also opens reordering (see the header). */
 @Composable
-internal fun CodexLibrarySortSelector(sort: CodexLibrarySort, onChange: (CodexLibrarySort) -> Unit) {
+internal fun CodexLibrarySortMenu(sort: CodexLibrarySort, onChange: (CodexLibrarySort) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    Column {
-        Box {
-            TextButton(onClick = { expanded = true }) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = null, Modifier.size(18.dp))
-                    Text("Sort: ${sort.label}")
-                }
-            }
-            SingleChoiceMenu(
-                expanded = expanded,
-                onDismiss = { expanded = false },
-                options = CodexLibrarySort.entries,
-                selected = sort,
-                label = { it.label },
-                onSelect = onChange,
-            )
+    Box {
+        IconButton(onClick = { expanded = true }) {
+            Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort Codices")
         }
-        if (sort != CodexLibrarySort.MANUAL) {
-            Text(
-                "Choose Manual to drag Codices into your own order.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        SingleChoiceMenu(
+            expanded = expanded,
+            onDismiss = { expanded = false },
+            options = CodexLibrarySort.entries,
+            selected = sort,
+            label = { it.label },
+            onSelect = onChange,
+        )
     }
 }

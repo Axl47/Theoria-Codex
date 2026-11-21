@@ -211,6 +211,7 @@ internal fun CodexLibraryDestination(
             likesCodexId = likesCodexIdForProfile(state.activeProfile.profileId),
             librarySort = state.librarySort,
             libraryUsage = state.libraryUsage,
+            observeCleaningMatches = state.observeCleaningMatches,
             onLibrarySortChange = { sort ->
                 shell.scope.launch { shell.data.settingsRepository.updateSettings { it.copy(codexLibrarySort = sort) } }
             },

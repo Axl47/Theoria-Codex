@@ -6,15 +6,23 @@ import org.junit.Test
 class CodexDetailPresentationTest {
     @Test
     fun `item summary exposes visible count only while filters are active`() {
-        assertEquals("8 items", codexItemSummary(8, 8, filtersActive = false))
-        assertEquals("3 of 8 items", codexItemSummary(3, 8, filtersActive = true))
-        assertEquals("0 of 8 items", codexItemSummary(0, 8, filtersActive = true))
+        assertEquals("1 post", codexItemSummary(1, 1, filtersActive = false))
+        assertEquals("8 posts", codexItemSummary(8, 8, filtersActive = false))
+        assertEquals("3 of 8 posts", codexItemSummary(3, 8, filtersActive = true))
+        assertEquals("0 of 8 posts", codexItemSummary(0, 8, filtersActive = true))
     }
 
     @Test
     fun `item summary exposes selected over total while bulk editing`() {
         assertEquals("0/8", codexItemSummary(3, 8, filtersActive = true, selectedCount = 0))
         assertEquals("3/8", codexItemSummary(8, 8, filtersActive = false, selectedCount = 3))
+    }
+
+    @Test
+    fun `a rename commits a trimmed changed name only`() {
+        assertEquals("Skies", renamedCodexName("Sky", "  Skies "))
+        assertEquals(null, renamedCodexName("Sky", " Sky "))
+        assertEquals(null, renamedCodexName("Sky", "   "))
     }
 
     @Test

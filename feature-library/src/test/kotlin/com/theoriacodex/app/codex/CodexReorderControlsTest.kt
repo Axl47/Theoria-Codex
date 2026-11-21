@@ -54,8 +54,8 @@ class CodexReorderControlsTest {
         }
     }
 
-    @Test fun `automatic sort hides handles and Done keeps the manual order underneath`() {
-        val sort = mutableStateOf(CodexLibrarySort.MANUAL)
+    @Test fun `choosing Manual in the sort menu opens reordering and Done commits the draft`() {
+        val sort = mutableStateOf(CodexLibrarySort.NAME_ASCENDING)
         var committed = emptyList<String>()
         val manual = listOf(Codex("z", "Zoo", 1), Codex("a", "Art", 2))
         compose.setContent { MaterialTheme {
@@ -66,16 +66,19 @@ class CodexReorderControlsTest {
                 onCleanCodex = { _, _ -> }, librarySort = sort.value, onLibrarySortChange = { sort.value = it },
             )
         } }
-        compose.onNodeWithContentDescription("Reorder Codices").performClick()
-        compose.onNodeWithContentDescription("Reorder Zoo").assertExists()
-        compose.onNodeWithText("Sort: Manual").performClick()
-        compose.onNodeWithText("Name (A–Z)").performClick()
-        compose.onNodeWithText("Sort: Name (A–Z)").assertExists()
+        val bounds = { name: String -> compose.onNodeWithText(name).fetchSemanticsNode().boundsInRoot }
+        // The grid lays the sorted tiles out side by side; the reorder list stacks the manual order.
+        assertTrue(bounds("Art").left < bounds("Zoo").left)
         compose.onNodeWithContentDescription("Reorder Zoo").assertDoesNotExist()
-        val top = { name: String -> compose.onNodeWithText(name).fetchSemanticsNode().boundsInRoot.top }
-        assertTrue(top("Art") < top("Zoo"))
+        compose.onNodeWithContentDescription("Sort Codices").performClick()
+        compose.onNodeWithText("Manual").performClick()
+        compose.runOnIdle { assertEquals(CodexLibrarySort.MANUAL, sort.value) }
+        compose.onNodeWithContentDescription("Reorder Zoo").assertExists()
+        assertTrue(bounds("Zoo").top < bounds("Art").top)
+        compose.onNodeWithContentDescription("Sort Codices").assertDoesNotExist()
         compose.onNodeWithContentDescription("Done reordering Codices").performClick()
         compose.runOnIdle { assertEquals(listOf("z", "a"), committed) }
+        compose.onNodeWithContentDescription("Sort Codices").assertExists()
     }
 
     private fun actions(name: String) = compose.onNodeWithContentDescription("Reorder $name")

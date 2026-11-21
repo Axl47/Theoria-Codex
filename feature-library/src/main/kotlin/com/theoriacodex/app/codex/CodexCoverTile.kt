@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material3.MaterialTheme
@@ -40,7 +42,10 @@ fun savedCodexCountSuffix(codexId: String): String? = when (codexId) {
     else -> null
 }
 
-/** Every Codex in the library: name and count over its cover, with actions on long press. */
+/**
+ * Every Codex in the library: name and count over its cover, with actions on long press, and the offline ring in
+ * the corner while the Codex is kept offline ([onTopUpOffline] tops an incomplete copy up).
+ */
 @Composable
 internal fun CodexCoverTile(
     codexId: String,
@@ -50,6 +55,7 @@ internal fun CodexCoverTile(
     onOpen: () -> Unit,
     onOpenActions: () -> Unit,
     modifier: Modifier,
+    onTopUpOffline: (() -> Unit)? = null,
 ) {
     val onCover = covers.isNotEmpty()
     val textColor = if (onCover) Color.White else MaterialTheme.colorScheme.onSurface
@@ -71,6 +77,11 @@ internal fun CodexCoverTile(
                 ),
             )
         }
+        CodexOfflineRingFor(
+            codexId, onTopUpOffline,
+            Modifier.align(Alignment.TopEnd).padding(4.dp).size(36.dp)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), CircleShape),
+        )
         Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(

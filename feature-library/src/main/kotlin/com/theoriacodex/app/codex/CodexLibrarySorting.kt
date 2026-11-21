@@ -15,8 +15,8 @@ internal val CodexLibrarySort.label: String
         CodexLibrarySort.NAME_DESCENDING -> "Name (Z–A)"
         CodexLibrarySort.NEWEST -> "Recently added"
         CodexLibrarySort.OLDEST -> "Oldest first"
-        CodexLibrarySort.MOST_ITEMS -> "Most items"
-        CodexLibrarySort.FEWEST_ITEMS -> "Fewest items"
+        CodexLibrarySort.MOST_ITEMS -> "Most posts"
+        CodexLibrarySort.FEWEST_ITEMS -> "Fewest posts"
         CodexLibrarySort.MOST_WATCHED -> "Most watched"
         CodexLibrarySort.MOST_OPENED -> "Most opened"
     }

@@ -33,7 +33,7 @@ class CodexLikeControlsTest {
                     codexName = "Searches", posts = listOf(post), sortMode = CodexSortMode.NEWEST_SAVED,
                     availableSources = emptySet(), creatorBrowsingSources = emptySet(),
                     onOpenViewer = { _, _ -> }, onAddPostsToAnotherCodex = {}, onRemovePosts = {}, onSavePostToDevice = {},
- onBack = {}, onDeleteCodex = {}, isLikesCodex = false,
+                    onBack = {},
                     likedPostIds = if (liked.value) setOf(post.id) else emptySet(),
                     onToggleLike = { assertEquals(post.id, it.id); toggles++; liked.value = !liked.value },
                 )

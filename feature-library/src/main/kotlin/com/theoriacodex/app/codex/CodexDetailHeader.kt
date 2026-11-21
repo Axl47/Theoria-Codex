@@ -1,185 +1,198 @@
 package com.theoriacodex.app.codex
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.domain.model.Post
+
+/** What Codex detail's own header can do beyond selection; null entries hide their control. */
+class CodexHeaderActions(
+    /** Commits a new name typed into the title. */
+    val onRename: ((String) -> Unit)?,
+    /** Opens the Codex's action list, the same one its Library tile opens. */
+    val onOpenActions: (() -> Unit)?,
+    /** Re-runs making this Codex available offline, for the offline ring. */
+    val onTopUpOffline: (() -> Unit)?,
+)
 
 /** The standard header, for collections whose membership the user can edit. */
 @Composable
 internal fun CodexEditableHeader(
+    codexId: String,
     codexName: String,
     posts: List<Post>,
     visiblePosts: List<Post>,
     filtersActive: Boolean,
     editSelection: CodexEditSelection,
-    isLikesCodex: Boolean,
+    headerActions: CodexHeaderActions,
     onEditSelectionChange: (CodexEditSelection) -> Unit,
-    onTitleLongPress: (() -> Unit)?,
     onBack: () -> Unit,
     onAddPostsToAnotherCodex: (List<Post>) -> Unit,
     onRemovePosts: (List<Post>) -> Unit,
-    onDeleteCodex: () -> Unit,
 ) {
-    CodexDetailHeader(
+    val selected = { posts.filter { it.id in editSelection.selectedPostIds } }
+    CodexTitleBar(
         codexName = codexName,
-        onTitleLongPress = onTitleLongPress,
-        itemSummary = codexItemSummary(
+        summary = codexItemSummary(
             visibleCount = visiblePosts.size,
             totalCount = posts.size,
             filtersActive = filtersActive,
             selectedCount = editSelection.selectedPostIds.size.takeIf { editSelection.active },
         ),
-        itemCount = posts.size,
-        editSelection = editSelection,
-        onBack = onBack,
-        onBeginEdit = { onEditSelectionChange(editSelection.begin()) },
-        onCancelEdit = { onEditSelectionChange(editSelection.exit()) },
-        onAddSelected = {
-            val selected = posts.filter { it.id in editSelection.selectedPostIds }
-            onEditSelectionChange(editSelection.exit())
-            onAddPostsToAnotherCodex(selected)
-        },
-        onRemoveSelected = {
-            val selected = posts.filter { it.id in editSelection.selectedPostIds }
-            onEditSelectionChange(editSelection.exit())
-            onRemovePosts(selected)
-        },
-        onDeleteCodex = onDeleteCodex,
-        isLikesCodex = isLikesCodex,
-    )
-}
-
-@Composable
-internal fun CodexDeleteConfirmationDialog(
-    visible: Boolean,
-    codexName: String,
-    isLikesCodex: Boolean,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit,
-) {
-    if (!visible) return
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (isLikesCodex) "Clear Likes?" else "Delete Codex?") },
-        text = {
-            Text(
-                if (isLikesCodex) {
-                    "Clear all liked posts from this recommendation profile? The Likes Codex will remain."
-                } else {
-                    "Delete \"$codexName\" and all saved items in it?"
-                },
-            )
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(if (isLikesCodex) "Clear" else "Delete")
-            }
-        },
-    )
-}
-
-@Composable
-private fun CodexDetailHeader(
-    codexName: String,
-    onTitleLongPress: (() -> Unit)?,
-    itemSummary: String,
-    itemCount: Int,
-    editSelection: CodexEditSelection,
-    onBack: () -> Unit,
-    onBeginEdit: () -> Unit,
-    onCancelEdit: () -> Unit,
-    onAddSelected: () -> Unit,
-    onRemoveSelected: () -> Unit,
-    onDeleteCodex: () -> Unit,
-    isLikesCodex: Boolean,
-) {
-    SecondaryScreenAppBar(
-        title = codexName,
-        onTitleLongPress = onTitleLongPress,
-        subtitle = itemSummary,
+        onRename = headerActions.onRename.takeUnless { editSelection.active },
         onBack = onBack,
     ) {
-        CodexDetailHeaderActions(
-            hasPosts = itemCount > 0,
-            editSelection = editSelection,
-            onBeginEdit = onBeginEdit,
-            onCancelEdit = onCancelEdit,
-            onAddSelected = onAddSelected,
-            onRemoveSelected = onRemoveSelected,
-            onDeleteCodex = onDeleteCodex,
-            isLikesCodex = isLikesCodex,
-        )
+        if (editSelection.active) {
+            CodexSelectionActions(
+                editSelection,
+                onCancel = { onEditSelectionChange(editSelection.exit()) },
+                onAdd = { selected().also { onEditSelectionChange(editSelection.exit()) }.let(onAddPostsToAnotherCodex) },
+                onRemove = { selected().also { onEditSelectionChange(editSelection.exit()) }.let(onRemovePosts) },
+            )
+        } else {
+            CodexOfflineRingFor(codexId, headerActions.onTopUpOffline)
+            IconButton(enabled = posts.isNotEmpty(), onClick = { onEditSelectionChange(editSelection.begin()) }) {
+                Icon(Icons.Default.Checklist, contentDescription = "Select posts")
+            }
+            headerActions.onOpenActions?.let { open ->
+                IconButton(onClick = open) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
+            }
+        }
+    }
+}
+
+/**
+ * Back, the Codex's name and post count, and [actions]. With [onRename], tapping the name turns it into a text
+ * field in place: keyboard Done commits a changed name, Back or an empty name leaves it as it was.
+ */
+@Composable
+private fun CodexTitleBar(
+    codexName: String,
+    summary: String,
+    onRename: ((String) -> Unit)?,
+    onBack: () -> Unit,
+    actions: @Composable RowScope.() -> Unit,
+) {
+    var renaming by rememberSaveable { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+        if (renaming && onRename != null) {
+            CodexNameField(codexName, Modifier.weight(1f)) { name ->
+                renaming = false
+                name?.let(onRename)
+            }
+        } else {
+            CodexTitle(codexName, summary, Modifier.weight(1f), onRename?.let { { renaming = true } })
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                content = actions,
+            )
+        }
     }
 }
 
 @Composable
-private fun CodexDetailHeaderActions(
-    hasPosts: Boolean,
+private fun CodexTitle(codexName: String, summary: String, modifier: Modifier, onRename: (() -> Unit)?) {
+    Column(
+        modifier = modifier.then(
+            if (onRename != null) Modifier.clickable(onClickLabel = "Rename", onClick = onRename) else Modifier,
+        ),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
+        Text(codexName, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(
+            summary,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/** The title being renamed; [onDone] gets the new name, or null when nothing should change. */
+@Composable
+private fun CodexNameField(codexName: String, modifier: Modifier, onDone: (String?) -> Unit) {
+    var value by remember { mutableStateOf(TextFieldValue(codexName, TextRange(0, codexName.length))) }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    BackHandler { onDone(null) }
+    OutlinedTextField(
+        value = value,
+        onValueChange = { value = it },
+        singleLine = true,
+        textStyle = MaterialTheme.typography.titleMedium,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { onDone(renamedCodexName(codexName, value.text)) }),
+        modifier = modifier.padding(end = 8.dp).focusRequester(focus).testTag("codex-name-field"),
+    )
+}
+
+/** The name a rename commits: trimmed, or null when it is empty or unchanged. */
+internal fun renamedCodexName(current: String, typed: String): String? =
+    typed.trim().takeIf { it.isNotEmpty() && it != current }
+
+@Composable
+private fun CodexSelectionActions(
     editSelection: CodexEditSelection,
-    onBeginEdit: () -> Unit,
-    onCancelEdit: () -> Unit,
-    onAddSelected: () -> Unit,
-    onRemoveSelected: () -> Unit,
-    onDeleteCodex: () -> Unit,
-    isLikesCodex: Boolean,
+    onCancel: () -> Unit,
+    onAdd: () -> Unit,
+    onRemove: () -> Unit,
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (editSelection.active) {
-            TextButton(onClick = onCancelEdit) { Text("Cancel") }
-            IconButton(
-                enabled = editSelection.selectedPostIds.isNotEmpty(),
-                onClick = onAddSelected,
-            ) {
-                val selectedCount = editSelection.selectedPostIds.size
-                Icon(
-                    imageVector = Icons.Default.BookmarkAdd,
-                    contentDescription = codexSelectedPostActionDescription(
-                        action = "Add",
-                        selectedCount = selectedCount,
-                        destination = "to another Codex",
-                    ),
-                )
-            }
-            IconButton(
-                enabled = editSelection.selectedPostIds.isNotEmpty(),
-                onClick = onRemoveSelected,
-            ) {
-                val selectedCount = editSelection.selectedPostIds.size
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = codexSelectedPostActionDescription(
-                        action = "Remove",
-                        selectedCount = selectedCount,
-                        destination = "from this Codex",
-                    ),
-                )
-            }
-        } else {
-            IconButton(enabled = hasPosts, onClick = onBeginEdit) {
-                Icon(Icons.Default.Edit, contentDescription = "Edit Codex")
-            }
-            IconButton(onClick = onDeleteCodex) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = if (isLikesCodex) "Clear Likes" else "Delete Codex",
-                )
-            }
-        }
+    val selectedCount = editSelection.selectedPostIds.size
+    TextButton(onClick = onCancel) { Text("Cancel") }
+    IconButton(enabled = selectedCount > 0, onClick = onAdd) {
+        Icon(
+            Icons.Default.BookmarkAdd,
+            contentDescription = codexSelectedPostActionDescription("Add", selectedCount, "to another Codex"),
+        )
+    }
+    IconButton(enabled = selectedCount > 0, onClick = onRemove) {
+        Icon(
+            Icons.Default.Delete,
+            contentDescription = codexSelectedPostActionDescription("Remove", selectedCount, "from this Codex"),
+        )
     }
 }
 
@@ -190,8 +203,11 @@ internal fun codexItemSummary(
     selectedCount: Int? = null,
 ): String {
     if (selectedCount != null) return "$selectedCount/$totalCount"
-    return if (filtersActive) "$visibleCount of $totalCount items" else "$totalCount items"
+    return if (filtersActive) "$visibleCount of $totalCount posts" else codexPostCount(totalCount)
 }
+
+/** "1 post", "3 posts": the one word the Codex screens use for what they hold. */
+internal fun codexPostCount(count: Int): String = "$count ${if (count == 1) "post" else "posts"}"
 
 internal fun codexSelectedPostActionDescription(
     action: String,
