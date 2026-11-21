@@ -42,6 +42,9 @@ class SearchStateContractTest {
         assertEquals(UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE, restored.query.validationMessage)
         assertEquals(query, restored.query.draft)
         assertEquals(query, restored.query.applied)
+        // The route then restores the draft it just saved, which must not clear the notice.
+        val redrafted = SearchDraftReducer.restoreDraft(restored, restored.query.draft).state
+        assertEquals(UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE, redrafted.query.validationMessage)
     }
 
     @Test

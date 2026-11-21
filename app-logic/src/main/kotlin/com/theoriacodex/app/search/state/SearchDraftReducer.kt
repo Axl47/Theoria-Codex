@@ -374,12 +374,14 @@ object SearchDraftReducer {
             return SearchDraftReduction(state, accepted = false)
         }
         val sanitized = query.normalizedForMode(query.mode)
+        val validationMessage = when {
+            sanitized.removedSourceOwnedTerms -> UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
+            // Restoring the draft already on screen (the route re-reads the one it saved) keeps its notice.
+            sanitized.query == state.query.draft -> state.query.validationMessage
+            else -> null
+        }
         return SearchDraftReduction(
-            state.switchDraft(
-                sanitized.query,
-                validationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE.takeIf { sanitized.removedSourceOwnedTerms },
-                selectedScope = FacetedSearchScope.All,
-            ),
+            state.switchDraft(sanitized.query, validationMessage = validationMessage, selectedScope = FacetedSearchScope.All),
         )
     }
 
