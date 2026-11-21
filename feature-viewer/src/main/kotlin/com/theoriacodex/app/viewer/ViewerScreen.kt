@@ -1,5 +1,7 @@
 package com.theoriacodex.app.viewer
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import android.content.res.Configuration
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -17,13 +19,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +53,7 @@ fun ViewerScreen(
     host: ViewerScreenHost,
     config: ViewerScreenConfig = ViewerScreenConfig(),
     saveToCodexQuery: Query? = null,
+    saveFromForYou: Boolean = false,
     canLoadMoreFromSource: Boolean = false,
     loadingMoreFromSource: Boolean = false,
     contextActions: ViewerContextActions = ViewerContextActions(),
@@ -82,7 +83,7 @@ fun ViewerScreen(
     ) {
         ViewerLoadedScreen(
             uiState, navigation, posts, returnProgress, returning, opening, dismissDrag, activity, quality, qualityHeight, pendingPostId,
-            videoPositions, host, config, saveToCodexQuery, canLoadMoreFromSource, loadingMoreFromSource, contextActions,
+            videoPositions, host, config, ViewerSaveContext(saveToCodexQuery, saveFromForYou), canLoadMoreFromSource, loadingMoreFromSource, contextActions,
             relatedShelf, comments,
         )
     }
@@ -105,7 +106,7 @@ private fun ViewerLoadedScreen(
     videoPositions: ViewerVideoPositions,
     host: ViewerScreenHost,
     config: ViewerScreenConfig,
-    saveToCodexQuery: Query?,
+    saveContext: ViewerSaveContext,
     canLoadMoreFromSource: Boolean,
     loadingMoreFromSource: Boolean,
     contextActions: ViewerContextActions,
@@ -145,7 +146,7 @@ private fun ViewerLoadedScreen(
     )
     val viewerAccent = rememberViewerAccent(selection.post, enabled = !opening && !returning)
     CompositionLocalProvider(
-        LocalViewerPostStripInset provides if (chromeVisible && !frame.mediaOverviewVisible) VIEWER_POST_STRIP_HEIGHT else 0.dp,
+        LocalViewerTimelineInset provides if (chromeVisible) viewerDockInset() else 0.dp,
         LocalViewerAccent provides viewerAccent,
         LocalViewerHoldScrub provides holdScrub,
     ) {
@@ -160,12 +161,12 @@ private fun ViewerLoadedScreen(
             }
             ViewerChromeOverlays(
                 frame, postPagerState, screen, controls, swipe, activity, quality, qualityHeight, pendingPostId, host, config,
-                loadMoreFromStrip, relatedShelf, comments,
+                loadMoreFromStrip, relatedShelf, comments, saveContext,
             )
         }
     }
     if (uiState.controls.panel == ViewerPanel.INFO && !inPictureInPicture) {
-        ViewerInfoSheet(selection, controls, host, config, saveToCodexQuery, contextActions, comments)
+        ViewerInfoSheet(selection, controls, host, config, saveContext.query, contextActions, comments)
     }
 }
 

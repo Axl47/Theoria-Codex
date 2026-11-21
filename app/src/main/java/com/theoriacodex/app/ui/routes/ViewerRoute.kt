@@ -217,6 +217,7 @@ internal fun ViewerRoute(
         host = rememberViewerScreenHost(viewerOwner, durationOwner, screenCallbacks, latestDependencies, latestEffectCallbacks, routeScope),
         config = config,
         saveToCodexQuery = activeSession?.saveQuery,
+        saveFromForYou = activeSession?.context?.streamSource == ViewerStreamSource.FOR_YOU,
         canLoadMoreFromSource = activeSession?.liveSearchBinding == true && sourceState?.canLoadMore == true,
         loadingMoreFromSource = sourceState?.loadingMore == true,
         contextActions = rememberViewerContextActions(related.source, activeSession?.context, latestScreenCallbacks),

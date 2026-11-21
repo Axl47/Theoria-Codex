@@ -16,44 +16,47 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
-class ViewerCommentsButtonTest {
+class ViewerDockTest {
     @get:Rule val compose = createComposeRule()
 
     private var opened = 0
 
-    private fun showChrome(count: CommentCount?) = compose.setContent {
-        ViewerChrome(
-            source = "Pixiv", indexLabel = null, onBack = {}, liked = false,
-            actionsMenuExpanded = false, onActionsMenuExpandedChange = {},
-            playbackSettingsExpanded = false, onPlaybackSettingsExpandedChange = {}, playbackSettingsEnabled = false,
-            playbackRate = ViewerPlaybackRate.Normal, onPlaybackRateSelected = {},
-            mediaOverviewAvailable = false, mediaOverviewVisible = false, onToggleMediaOverview = {}, onInfo = {},
-            commentCount = count, onComments = { opened++ },
-        )
+    private fun showDock(count: CommentCount?) = compose.setContent {
+        ViewerDock(
+            ViewerDockActions(
+                liked = false, onToggleLike = {}, commentCount = count, onInfo = { opened++ },
+                moreExpanded = false, onMoreExpandedChange = {}, moreItems = emptyList(), overview = null, playbackSettings = null,
+            ),
+        ) {}
     }
 
     @Test
-    fun `the button names the count and opens the comments`() {
-        showChrome(CommentCount.Exact(12))
-        compose.onNode(hasContentDescription("12 comments")).performClick()
+    fun `Info carries the comment count and opens the info sheet`() {
+        showDock(CommentCount.Exact(12))
+        compose.onNode(hasContentDescription("Info, 12 comments")).performClick()
         assertEquals(1, opened)
     }
 
     @Test
-    fun `a post known only to have comments is labelled just Comments`() {
-        showChrome(CommentCount.Some)
-        compose.onNode(hasContentDescription("Comments")).assertExists()
+    fun `a post known only to have comments says so without a number`() {
+        showDock(CommentCount.Some)
+        compose.onNode(hasContentDescription("Info, comments")).assertExists()
     }
 
     @Test
-    fun `no button without comments`() {
-        showChrome(null)
-        compose.onNode(hasContentDescription("Comments")).assertDoesNotExist()
-        compose.onNode(hasContentDescription("0 comments")).assertDoesNotExist()
+    fun `Info without comments is just Info`() {
+        showDock(null)
+        compose.onNode(hasContentDescription("Info")).assertExists()
     }
 
     @Test
-    fun `only the comments button opens the info sheet at the comments, and closing resets it`() {
+    fun `More always offers the full picker and offers picture-in-picture only when the media allows it`() {
+        assertEquals(listOf("Save to…"), viewerMoreItems({}, null, emptyList()).map { it.label })
+        assertEquals(listOf("Save to…", "Picture-in-picture"), viewerMoreItems({}, {}, emptyList()).map { it.label })
+    }
+
+    @Test
+    fun `a focused comment opens the info sheet at the comments, and closing resets it`() {
         val actions = mutableListOf<ViewerAction>()
         val controls = ViewerControls({ actions += it }, ViewerScreenState(), false, true, false, false)
 

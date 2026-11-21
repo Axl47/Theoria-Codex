@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
@@ -15,6 +16,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -63,23 +65,25 @@ fun ViewerTimelineVeil(timeline: @Composable () -> Unit) {
 }
 
 /**
- * Everything under the media that belongs to the screen rather than the player. Pages with a timeline
- * bring their own scrim, so only a faint one is added behind the strip to carry it through loading.
- * [pageBar] takes the timeline's slot on pages without one, and stays lit while [fadesWhileScrubbing] dims the strip.
+ * Everything under the media that belongs to the screen rather than the player: the post strip, with [pageBar] in the
+ * timeline's slot below it on pages without one. [lift] raises both clear of what sits underneath (the dock, and the
+ * player's timeline when [timelinePresent]). Pages with a timeline bring their own scrim, so only a faint one is added
+ * behind the strip to carry it through loading. [pageBar] stays lit while [fadesWhileScrubbing] dims the strip.
  */
 @Composable
 fun ViewerBottomChrome(
     timelinePresent: Boolean,
     fadesWhileScrubbing: Modifier,
+    lift: Dp,
     modifier: Modifier = Modifier,
     pageBar: @Composable () -> Unit,
     strip: @Composable () -> Unit,
 ) {
     Box(modifier.fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
         if (timelinePresent) Box(Modifier.matchParentSize().then(fadesWhileScrubbing).background(ViewerVeil.StripOnlyScrim)) else ViewerBottomScrim()
-        Column(Modifier.fillMaxWidth()) {
-            if (!timelinePresent) pageBar()
+        Column(Modifier.fillMaxWidth().padding(bottom = lift)) {
             Box(fadesWhileScrubbing) { strip() }
+            if (!timelinePresent) pageBar()
         }
     }
 }
