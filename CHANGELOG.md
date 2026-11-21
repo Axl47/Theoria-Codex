@@ -47,6 +47,7 @@
 - With a related shelf open and a filter on, creator pages loaded their next page before you reached the end.
 - In the Followed and Saved searches collections, an open related shelf made the next page load slightly early.
 - Cards in Codex collections and Recents waited for their own images as you scrolled. On unmetered networks they now load ahead, as in other feeds.
+- Undo search, and reopening the app, could leave Search at the top when your saved place was far down the results, because loading stopped after three pages. Search now keeps loading until it reaches the saved place.
 
 ## [1.9.2] - 2026-11-18
 
