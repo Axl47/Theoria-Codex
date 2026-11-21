@@ -19,6 +19,9 @@ import com.theoriacodex.domain.model.SourceKey
 /** Pages inside Settings; held by the owner so other screens can open Settings at a page. */
 enum class SettingsPage { HOME, SITES, STORAGE, BACKUP, STATS, STATS_SHARE, STATS_COMPARE, DIAGNOSTICS }
 
+/** Sheets over Settings' home; held by the owner, like [SettingsPage], so the search box can open one. */
+enum class SettingsSheet { DOWNLOADS, CONTROLS }
+
 /**
  * What Sites shows of the accounts Settings owns: a built-in source's status line (null when it has no
  * accounts) and its controls.
@@ -79,6 +82,8 @@ data class SettingsUiState(
     val cacheSnapshot: CacheSnapshot = CacheSnapshot(thumbnailCount = 0, fullImageCount = 0),
     val showDeveloperScenarios: Boolean = false,
     val page: SettingsPage = SettingsPage.HOME,
+    /** The sheet open over home; opening any page closes it. */
+    val sheet: SettingsSheet? = null,
     val accounts: SettingsAccountUiState = SettingsAccountUiState(),
     val profileDeleteTargetId: String? = null,
     val changelogLoading: Boolean = false,
@@ -88,7 +93,8 @@ data class SettingsUiState(
 )
 
 sealed interface SettingsAction {
-    data class OpenPage(val page: SettingsPage) : SettingsAction
+    /** Opens [page], with [sheet] over it when the page is home; `OpenPage(HOME)` closes an open sheet. */
+    data class OpenPage(val page: SettingsPage, val sheet: SettingsSheet? = null) : SettingsAction
     data class SetStatsComparison(val file: StatsShareFile?) : SettingsAction
     data class SetActiveProfile(val profileId: String) : SettingsAction
     data class AddProfile(val name: String) : SettingsAction

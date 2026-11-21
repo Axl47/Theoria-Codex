@@ -23,6 +23,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -57,6 +58,19 @@ class SettingsViewModelTest {
 
         assertEquals(SettingsPage.SITES, owner.state.value.page)
         assertEquals(SettingsEffect.NavigateToSettings, owner.effects.first())
+    }
+
+    @Test
+    fun `a sheet opens only over home and opening any page closes it`() = runTest {
+        val owner = settingsOwner()
+        runCurrent()
+
+        owner.onAction(SettingsAction.OpenPage(SettingsPage.HOME, SettingsSheet.DOWNLOADS))
+        assertEquals(SettingsSheet.DOWNLOADS, owner.state.value.sheet)
+        owner.onAction(SettingsAction.OpenPage(SettingsPage.STORAGE))
+        assertNull(owner.state.value.sheet)
+        owner.onAction(SettingsAction.OpenPage(SettingsPage.STATS, SettingsSheet.CONTROLS))
+        assertNull(owner.state.value.sheet)
     }
 
     @Test

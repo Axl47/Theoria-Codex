@@ -231,9 +231,9 @@ class SettingsViewModel(
 
     private fun handleProfileAction(action: SettingsAction): Boolean {
         when (action) {
-            is SettingsAction.OpenPage -> updateState { copy(page = action.page) }
+            is SettingsAction.OpenPage -> updateState { copy(page = action.page, sheet = action.sheet.takeIf { action.page == SettingsPage.HOME }) }
             is SettingsAction.SetStatsComparison -> updateState {
-                copy(statsComparison = action.file, page = if (action.file != null) SettingsPage.STATS_COMPARE else SettingsPage.HOME)
+                copy(statsComparison = action.file, page = if (action.file != null) SettingsPage.STATS_COMPARE else SettingsPage.HOME, sheet = null)
             }
             is SettingsAction.SetActiveProfile -> launchMutation {
                 check(!dependencies.profileMutations.isRemoving(action.profileId)) { "This profile is being removed" }
@@ -337,7 +337,7 @@ class SettingsViewModel(
             SettingsAction.DismissCredentialRecovery -> updateAccounts { copy(showRecoveryDialog = false) }
             SettingsAction.ResetCredentialStore -> resetCredentialStore()
             SettingsAction.OpenCustomSites -> {
-                updateState { copy(page = SettingsPage.SITES) }
+                updateState { copy(page = SettingsPage.SITES, sheet = null) }
                 effectChannel.trySend(SettingsEffect.NavigateToSettings)
             }
             SettingsAction.SettingsEntered -> {

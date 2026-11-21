@@ -3,12 +3,12 @@ package com.theoriacodex.app.settings
 import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import com.theoriacodex.app.applock.DeviceOwnerCheck
 import com.theoriacodex.app.applock.appLockViewModel
 import com.theoriacodex.app.applock.confirmDeviceOwner
+import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.app.ui.findActivity
 
 /** Switching the lock on or off asks for the same proof the lock asks for, so it cannot lock its owner out. */
@@ -30,10 +30,9 @@ internal fun AppLockRow() {
             }
         }
     }
-    SettingsRow(
-        "App lock", "Fingerprint, face or screen lock to open", Icons.Default.Lock,
-        onClick = toggle,
-        // The app's content, this row included, only shows once the stored choice is known.
-        trailing = { Switch(lock.enabled == true, onCheckedChange = { toggle() }) },
+    // The app's content, this row included, only shows once the stored choice is known.
+    SwitchRow(
+        "App lock", lock.enabled == true, description = "Fingerprint, face or screen lock to open", icon = Icons.Default.Lock,
+        onCheckedChange = { toggle() },
     )
 }

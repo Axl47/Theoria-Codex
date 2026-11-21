@@ -1,10 +1,15 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.app.media.videoQualityLabel
 import com.theoriacodex.app.search.omnibox.OmniboxEntry
 import com.theoriacodex.app.search.omnibox.matchOmnibox
 import com.theoriacodex.app.settings.SettingsAction
+import com.theoriacodex.data.repository.ALL_SETTING_DEFINITIONS
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.RecentPostEntry
+import com.theoriacodex.data.repository.SettingChoices
+import com.theoriacodex.data.repository.SettingDestinations
+import com.theoriacodex.data.repository.SettingToggle
 import com.theoriacodex.data.repository.SettingToggles
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.CreatorProfile
@@ -12,7 +17,11 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.VideoQuality
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SearchOmniboxCommandsTest {
@@ -24,7 +33,7 @@ class SearchOmniboxCommandsTest {
             cache = defaults.cache.copy(downloadsOverMetered = false, downloadsOverRoaming = true),
         )
         val written = mutableListOf<SettingsAction>()
-        val toggles = searchToggleEntries(settings, written::add)
+        val toggles = searchSettingEntries(settings, dispatch = written::add, open = {}).filterIsInstance<OmniboxEntry.Toggle>()
 
         assertEquals(SettingToggles.all.map { it.title }, toggles.map { it.title })
         assertEquals(SettingToggles.all.map { it.read(settings) }, toggles.map { it.checked })
@@ -33,11 +42,41 @@ class SearchOmniboxCommandsTest {
     }
 
     @Test fun `the search box finds a toggle by its title and by a keyword`() {
-        val toggles = searchToggleEntries(AppSettings()) {}
+        val toggles = searchSettingEntries(AppSettings(), dispatch = {}, open = {})
 
         assertEquals("Instant Seek", (matchOmnibox(toggles, "instant").first() as OmniboxEntry.Toggle).title)
         assertEquals("Download while roaming", (matchOmnibox(toggles, "roaming").first() as OmniboxEntry.Toggle).title)
         assertEquals("Auto-Rotate Videos", (matchOmnibox(toggles, "orientation").single() as OmniboxEntry.Toggle).title)
+    }
+
+    @Test fun `every setting definition is bound, and only toggles switch in place`() {
+        ALL_SETTING_DEFINITIONS.forEach { definition ->
+            val binding = SETTING_BINDINGS[definition.id]
+            assertNotNull("${definition.id} has no search binding", binding)
+            assertEquals(definition.id, definition is SettingToggle, binding == SettingBinding.Switch)
+        }
+    }
+
+    @Test fun `a choice shows its current value and opens where it is picked`() {
+        val defaults = AppSettings()
+        val settings = defaults.copy(viewer = defaults.viewer.copy(videoQuality = VideoQuality.DATA_SAVER))
+        val opened = mutableListOf<SettingBinding>()
+        val entries = searchSettingEntries(settings, dispatch = {}, open = opened::add)
+        val choice = SettingChoices.DefaultVideoQuality
+
+        val entry = entries.filterIsInstance<OmniboxEntry.Action>().single { it.title == choice.title }
+        assertEquals(videoQualityLabel(VideoQuality.DATA_SAVER), entry.detail)
+        entry.run()
+        assertEquals(listOf(SETTING_BINDINGS.getValue(choice.id)), opened)
+        SettingChoices.all.forEach { assertNotNull(it.id, settingValueLabel(it.read(settings))) }
+    }
+
+    @Test fun `hidden and Search-owned definitions are left out`() {
+        val titles = searchSettingEntries(AppSettings(), setOf(SettingDestinations.Diagnostics.id), {}, {}).map { it.title }
+
+        assertFalse(SettingDestinations.Diagnostics.title in titles)
+        assertFalse(SettingDestinations.SourceMix.title in titles)
+        assertTrue(SettingDestinations.Controls.title in titles)
     }
 
     @Test fun `recent creators come latest first, once each, after the followed ones`() {
