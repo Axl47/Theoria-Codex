@@ -69,7 +69,7 @@ class ViewerVerticalGalleryTest {
     @Test fun `scrolling a vertical gallery selects the page in view`() {
         show()
         compose.onNodeWithContentDescription("Page 1").assertIsDisplayed()
-        repeat(3) { compose.onRoot().performTouchInput { swipeUp(startY = centerY + height / 4f, endY = centerY - height / 4f) } }
+        repeat(3) { compose.onRoot().performTouchInput { swipeUp(startY = centerY, endY = top) } }
         compose.waitForIdle()
         assertEquals(0, state.value.currentPageIndex)
         assertTrue("selected page ${state.value.currentPage?.selectedMediaIndex}", (state.value.currentPage?.selectedMediaIndex ?: 0) > 0)
@@ -123,7 +123,7 @@ class ViewerVerticalGalleryTest {
 
     @Test fun `opening and closing the overview keeps a vertical gallery's scroll position`() {
         show()
-        repeat(2) { compose.onRoot().performTouchInput { swipeUp(startY = centerY + height / 4f, endY = centerY - height / 4f) } }
+        repeat(2) { compose.onRoot().performTouchInput { swipeUp(startY = centerY, endY = top) } }
         compose.waitForIdle()
         val before = pagePosition()
         assertTrue("scrolled past page 1: $before", before.first > 1)
