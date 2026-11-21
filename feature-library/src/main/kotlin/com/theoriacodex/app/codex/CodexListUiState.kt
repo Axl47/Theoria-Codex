@@ -12,7 +12,7 @@ import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 
-internal class CodexListUiState(initialCodices: List<Codex>) {
+internal class CodexListUiState {
     var cleaningTargetId by mutableStateOf<String?>(null)
     var showCreateDialog by mutableStateOf(false)
     var renameTarget by mutableStateOf<Codex?>(null)
@@ -20,13 +20,10 @@ internal class CodexListUiState(initialCodices: List<Codex>) {
     var actionTarget by mutableStateOf<Codex?>(null)
     var autoSaveTarget by mutableStateOf<Codex?>(null)
     var searchTarget by mutableStateOf<Codex?>(null)
-    val ordering = com.theoriacodex.app.ui.components.ReorderListState(initialCodices, Codex::codexId)
 
     fun synchronizeCodices(codices: List<Codex>) {
         if (codices.none { it.codexId == cleaningTargetId }) cleaningTargetId = null
-        ordering.synchronize(codices)
     }
-
 }
 
 internal data class CodexListPresentation(
@@ -46,8 +43,14 @@ internal data class CodexListPresentation(
     /** For a cleaning target and its comparisons, the target's posts each comparison also holds. */
     val observeCleaningMatches: (String, List<String>) -> Flow<Map<String, Set<PostId>>> = { _, _ -> flowOf(emptyMap()) },
 ) {
-    /** What the grid and reordering show: Likes lives in Library's Saved section instead. */
+    /** What the grid shows: Likes lives in Library's Saved section instead. */
     val libraryCodices: List<Codex> get() = codices.filterNot { it.codexId == likesCodexId }
+
+    /** Whether the sort still waits for counts or usage; a first frame in manual order would move the restored scroll anchor. */
+    val awaitingSortInputs: Boolean get() {
+        val awaitingCounts = librarySort.usesItemCounts && libraryCodices.any { it.codexId !in itemCounts }
+        return awaitingCounts || librarySort.usesUsage && libraryUsage == null
+    }
 }
 
 internal data class CodexListActions(
@@ -65,8 +68,3 @@ internal data class CodexListActions(
     val makeAvailableOffline: ((String) -> Unit)? = null,
     val setLibrarySort: (CodexLibrarySort) -> Unit = {},
 )
-
-internal fun moveCodex(codices: List<Codex>, fromIndex: Int, toIndex: Int): List<Codex> {
-    if (fromIndex == toIndex || fromIndex !in codices.indices || toIndex !in codices.indices) return codices
-    return codices.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
-}

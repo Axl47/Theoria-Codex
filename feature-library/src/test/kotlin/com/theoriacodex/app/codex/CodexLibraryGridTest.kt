@@ -18,4 +18,11 @@ class CodexLibraryGridTest {
         assertEquals(2, vacatedTileIndex(shown, listOf("b", "c"), "d"))
         assertEquals(0, vacatedTileIndex(shown, listOf("a"), "unknown"))
     }
+
+    @Test fun `the vacated cell joins the keys only while its Codex is gone`() {
+        val shown = listOf("a", "b", "c")
+        assertEquals(listOf("a", "vacated:b", "c"), presentedTileKeys(shown, listOf("a", "c"), "b"))
+        assertEquals(shown, presentedTileKeys(shown, shown, "b"))
+        assertEquals(shown, presentedTileKeys(shown, shown, null))
+    }
 }

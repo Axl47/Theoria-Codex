@@ -37,6 +37,24 @@ class CodexRemovalWorkflowTest {
         assertEquals(1, orders.size)
     }
 
+    @Test fun `a reorder's Undo restores the previous order once, without an Undo of its own`() = runTest {
+        val repository = InMemoryCodexRepository()
+        val first = repository.createCodex("First").codexId
+        val second = repository.createCodex("Second").codexId
+        val orders = mutableListOf<List<String>>()
+        val owner = CodexCommandViewModel(repository, { null }, {}, { orders += it }, CodexCleaningService(InMemoryCodexLikesTransactions()), this)
+        owner.reorder(listOf(second, first))
+        runCurrent()
+        val reordered = owner.feedback.value.single()
+        assertEquals(UndoAction.Undo, reordered.undoAction)
+        owner.acknowledge(reordered.id, performAction = true)
+        runCurrent()
+        assertEquals(listOf(listOf(second, first), listOf(first, second)), orders)
+        val restored = owner.feedback.value.single()
+        assertEquals(null, restored.undoAction)
+        assertTrue(restored.quiet)
+    }
+
     @Test
     fun `detached removal retry and Undo preserve exact memberships and unselected posts`() = runTest {
         val stored = InMemoryCodexRepository()

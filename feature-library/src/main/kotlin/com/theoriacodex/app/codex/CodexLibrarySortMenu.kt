@@ -10,17 +10,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import com.theoriacodex.app.ui.components.ListReorderHandle
 import com.theoriacodex.app.ui.components.SingleChoiceMenu
 import com.theoriacodex.data.repository.CodexLibrarySort
-import com.theoriacodex.domain.model.Codex
 
-@Composable
-internal fun CodexReorderHandle(codex: Codex, index: Int, state: CodexListUiState) {
-    ListReorderHandle(codex.codexId, codex.name, index, state.ordering)
-}
-
-/** The Library header's sort menu for Codices; choosing Manual also opens reordering (see the header). */
+/** The Library header's sort menu for Codices; under Manual the grid itself reorders by drag. */
 @Composable
 internal fun CodexLibrarySortMenu(sort: CodexLibrarySort, onChange: (CodexLibrarySort) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
