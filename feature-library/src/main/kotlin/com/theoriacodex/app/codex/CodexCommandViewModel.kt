@@ -13,6 +13,7 @@ import com.theoriacodex.app.ui.undo.UndoLifetime
 import com.theoriacodex.app.ui.undo.UndoOffer
 import com.theoriacodex.app.ui.undo.UndoSlot
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.Post
@@ -35,7 +36,8 @@ sealed interface CodexCommand {
     data class RestoreDeleted(val snapshot: DeletedCodexSnapshot) : CodexCommand
     data class ClearLikes(val profileId: String) : CodexCommand
     data class RestoreLikes(val snapshot: ClearedLikesSnapshot) : CodexCommand
-    data class Reorder(val visibleIds: List<String>) : CodexCommand
+    /** [restoring] marks the Undo of a reorder, which offers no Undo of its own. */
+    data class Reorder(val visibleIds: List<String>, val restoring: Boolean = false) : CodexCommand
     data class Remove(val id: String, val items: List<CodexItem>, val posts: List<Post>) : CodexCommand
     data class Restore(val items: List<CodexItem>, val posts: List<Post>) : CodexCommand
 }
@@ -71,8 +73,8 @@ data class CodexCommandFeedback(
     val offerAnchor: UndoAnchor get() = if (command is CodexCommand.Delete && deleted) CodexUndoAnchors.tile(command.id) else anchor
     val lifetime: UndoLifetime get() = if (deleted) UndoLifetime.UntilLeft else UndoLifetime.Timed()
 
-    /** A rename shows in the name it changed, so its success needs no notice. */
-    val quiet: Boolean get() = succeeded && command is CodexCommand.Rename
+    /** A rename or a restored order shows in the Library itself, so its success needs no notice. */
+    val quiet: Boolean get() = succeeded && (command is CodexCommand.Rename || command is CodexCommand.Reorder)
     val undoAction: UndoAction? get() = if (!succeeded) UndoAction.Retry else if (undo != null) UndoAction.Undo else null
     val message: String get() = when (command) {
         is CodexCommand.Clean -> when {
@@ -89,7 +91,10 @@ data class CodexCommandFeedback(
         is CodexCommand.RestoreDeleted -> if (succeeded) "Codex restored" else "Could not restore Codex"
         is CodexCommand.ClearLikes -> if (succeeded) "Likes cleared" else "Could not clear Likes"
         is CodexCommand.RestoreLikes -> if (succeeded) "Likes restored" else "Could not restore Likes"
-        is CodexCommand.Reorder -> if (succeeded) "Codices reordered" else "Could not reorder Codices"
+        is CodexCommand.Reorder -> when {
+            command.restoring -> if (succeeded) "Order restored" else "Could not restore order"
+            else -> if (succeeded) "Codices reordered" else "Could not reorder Codices"
+        }
         is CodexCommand.Remove -> if (succeeded) "${command.items.size} ${if (command.items.size == 1) "post" else "posts"} removed" else "Could not remove posts"
         is CodexCommand.Restore -> if (succeeded) "Posts restored" else "Could not restore posts"
     }
@@ -174,6 +179,15 @@ class CodexCommandViewModel(
         }
     }
 
+    /** Commits [command]'s order and returns the command that puts the previous order back, if it changed. */
+    private suspend fun reorder(command: CodexCommand.Reorder): CodexCommand? {
+        val moved = command.visibleIds.toSet()
+        val previous = repository.observeCodices().first().map(Codex::codexId).filter { it in moved }
+        commitReorder(command.visibleIds)
+        val restorable = !command.restoring && previous.size == moved.size && previous != command.visibleIds
+        return CodexCommand.Reorder(previous, restoring = true).takeIf { restorable }
+    }
+
     private data class Outcome(val undo: CodexCommand? = null, val removedCount: Int = 0)
 
     private suspend fun execute(command: CodexCommand): Outcome {
@@ -193,7 +207,7 @@ class CodexCommandViewModel(
             is CodexCommand.RestoreDeleted -> repository.restoreDeletedCodex(command.snapshot)
             is CodexCommand.ClearLikes -> return Outcome(clearLikes(command.profileId)?.let(CodexCommand::RestoreLikes))
             is CodexCommand.RestoreLikes -> restoreLikes(command.snapshot)
-            is CodexCommand.Reorder -> commitReorder(command.visibleIds)
+            is CodexCommand.Reorder -> return Outcome(reorder(command))
             is CodexCommand.Remove -> {
                 repository.removeItems(command.id, command.items.mapTo(linkedSetOf()) { it.postId })
                 return Outcome(CodexCommand.Restore(command.items, command.posts))
