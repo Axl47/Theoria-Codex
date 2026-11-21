@@ -128,16 +128,7 @@ class OfflineMediaCoordinator(
         synchronized(lock) {
             if (clearing > 0 || owner in removing) return null
             if (active[owner]?.let { !it.isCompleted && !it.isCancelled } == true) {
-                // A running job takes the new posts at its tail; repeating its own posts changes nothing.
-                val merged = (requests[owner].orEmpty() + posts).distinctBy(Post::id)
-                if (merged.size == requests[owner]?.size) return null
-                if (owner == AUTOMATIC_OFFLINE_OWNER) check(merged.size <= MAX_AUTOMATIC_OFFLINE_POSTS) { "The offline save queue is full" }
-                requests[owner] = merged
-                mutableJobs.update { jobs ->
-                    val current = jobs[owner] ?: return@update jobs
-                    jobs + (owner to current.copy(totalPosts = merged.size))
-                }
-                checkpointInBackground(owner)
+                appendToRunningJob(owner, posts)
                 return null
             }
             val unique = posts.distinctBy(Post::id)
@@ -159,6 +150,19 @@ class OfflineMediaCoordinator(
             if (start) job.start()
             return job
         }
+    }
+
+    /** A running job takes [posts] at its tail; repeating its own posts changes nothing. Called holding the lock. */
+    private fun appendToRunningJob(owner: String, posts: List<Post>) {
+        val merged = (requests[owner].orEmpty() + posts).distinctBy(Post::id)
+        if (merged.size == requests[owner]?.size) return
+        if (owner == AUTOMATIC_OFFLINE_OWNER) check(merged.size <= MAX_AUTOMATIC_OFFLINE_POSTS) { "The offline save queue is full" }
+        requests[owner] = merged
+        mutableJobs.update { jobs ->
+            val current = jobs[owner] ?: return@update jobs
+            jobs + (owner to current.copy(totalPosts = merged.size))
+        }
+        checkpointInBackground(owner)
     }
 
     fun retry(owner: String) {
