@@ -557,13 +557,12 @@ private fun ViewerUiState.retryMedia(session: ViewerSessionIdentity): ViewerRedu
         mediaError = null,
         controls = controls.copy(playback = controls.playback.copy(playing = controls.playback.available)),
     )
-    val retry = ViewerEffect.RetryMedia(session, recoverable.mediaKey)
-    // The error may be the post's failed lookup, which nothing re-requests on its own (see ViewerViewModel).
-    if (page.resolution.status != ViewerResolutionStatus.FAILED || !page.resolution.recoverable) {
-        return ViewerReduction(retried, listOf(retry))
+    // Retry repeats what failed. A failed lookup, which nothing re-requests on its own (see ViewerViewModel), runs
+    // again alone: it brings fresh media too, and media recovery beside it could land either result over the other.
+    if (page.resolution.status == ViewerResolutionStatus.FAILED && page.resolution.recoverable) {
+        return retried.requestResolution(session, page.post.id)
     }
-    val resolving = retried.requestResolution(session, page.post.id)
-    return ViewerReduction(resolving.state, listOf(retry) + resolving.effects)
+    return ViewerReduction(retried, listOf(ViewerEffect.RetryMedia(session, recoverable.mediaKey)))
 }
 
 private inline fun ViewerUiState.currentPageEffect(
