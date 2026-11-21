@@ -15,8 +15,9 @@ internal val TYPING_SAVE_DELAY = 600.milliseconds
 
 /**
  * Saves the Edit page's name, opt-in and headers shortly after each change, so only keys need a Save.
- * Only the latest change waits: a newer one replaces it. [flush] saves a waiting change at once, for
- * leaving the page; [save] runs in [scope].
+ * Only the latest change waits: a newer one replaces it, and a change back to the saved values (a null
+ * edit) clears it. [flush] saves a waiting change at once, for leaving the page; [save] runs in [scope]
+ * unless [flush] is given a scope that outlives it.
  */
 internal class SiteLiveEdits(
     private val scope: CoroutineScope,
@@ -25,18 +26,19 @@ internal class SiteLiveEdits(
     private var waiting: Pair<String, CustomSiteEdit>? = null
     private var timer: Job? = null
 
-    fun schedule(sourceId: String, edit: CustomSiteEdit, wait: Duration) {
+    fun schedule(sourceId: String, edit: CustomSiteEdit?, wait: Duration) {
         timer?.cancel()
-        waiting = sourceId to edit
+        waiting = edit?.let { sourceId to it }
+        if (edit == null) return
         timer = scope.launch {
             delay(wait)
             saveWaiting()
         }
     }
 
-    fun flush() {
+    fun flush(into: CoroutineScope = scope) {
         timer?.cancel()
-        if (waiting != null) scope.launch { saveWaiting() }
+        if (waiting != null) into.launch { saveWaiting() }
     }
 
     private suspend fun saveWaiting() {

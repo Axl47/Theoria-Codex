@@ -1,5 +1,6 @@
 package com.theoriacodex.app.settings.sites
 
+import androidx.lifecycle.ViewModelStore
 import com.theoriacodex.app.customsites.BuiltInSiteSummary
 import com.theoriacodex.app.customsites.BuiltInTestResult
 import com.theoriacodex.app.customsites.CredentialEdit
@@ -17,7 +18,10 @@ import com.theoriacodex.domain.source.SiteCredentials
 import com.theoriacodex.domain.source.SiteHeaders
 import com.theoriacodex.domain.source.SiteProbeResult
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -290,6 +294,32 @@ class CustomSitesViewModelTest {
         runCurrent()
         assertEquals(CustomSiteEdit(label = "Safer"), controller.edits.single().second)
         assertNull(owner.state.value.form)
+    }
+
+    @Test fun `changing a field back to its saved value drops the waiting save`() = runTest {
+        controller.sites.value = listOf(site())
+        val owner = owner()
+        owner.onAction(CustomSitesAction.StartEdit("custom_safebooru_org"))
+        owner.onAction(CustomSitesAction.SetLabel("Safer"))
+        owner.onAction(CustomSitesAction.SetLabel("Safebooru"))
+        owner.onAction(CustomSitesAction.CloseForm)
+        advanceTimeBy(TYPING_SAVE_DELAY.inWholeMilliseconds + 1)
+        assertTrue(controller.edits.isEmpty())
+    }
+
+    @Test fun `a change still waiting when the owner is cleared is saved in the scope that outlives it`() = runTest {
+        controller.sites.value = listOf(site())
+        val ownerScope = CoroutineScope(backgroundScope.coroutineContext + Job())
+        val store = ViewModelStore()
+        val owner = CustomSitesViewModel(controller, ownerScope, undo, removalScope = backgroundScope)
+        store.put("sites", owner)
+        runCurrent()
+        owner.onAction(CustomSitesAction.StartEdit("custom_safebooru_org"))
+        owner.onAction(CustomSitesAction.SetLabel("Safer"))
+        ownerScope.cancel()
+        store.clear()
+        runCurrent()
+        assertEquals(CustomSiteEdit(label = "Safer"), controller.edits.single().second)
     }
 
     @Test fun `edit replaces keys and checks them, or clears them`() = runTest {

@@ -35,7 +35,8 @@ import kotlin.time.Duration
  * Owner of Settings → Sites (plan C9). Turns [CustomSitesController] results into form stages and
  * plain messages; it never persists anything itself. Removing a site never touches library data.
  * A removal is offered in [undo] and only happens when the offer expires, in [removalScope], which must
- * outlive this owner so leaving Settings still completes it.
+ * outlive this owner so leaving Settings still completes it; an Edit page change still waiting to save
+ * when this owner is cleared is saved there too.
  */
 class CustomSitesViewModel(
     private val controller: CustomSitesController,
@@ -288,6 +289,10 @@ class CustomSitesViewModel(
         }
     }
 
+    override fun onCleared() {
+        liveEdits.flush(into = removalScope)
+    }
+
     private fun updateVerification(transform: SiteVerification.() -> SiteVerification) = mutableState.update { current ->
         current.copy(verification = current.verification?.transform())
     }
@@ -353,7 +358,7 @@ class CustomSitesViewModel(
         val site = state.value.sites.firstOrNull { it.sourceId == form.sourceId } ?: return
         val headers = (form.fields.headers() as? FormInput.Ok)?.value
         if (headers == null) updateEdit { copy(message = HEADER_ERROR_MESSAGE) }
-        liveEdit(site, form.fields, headers)?.let { liveEdits.schedule(form.sourceId, it, wait) }
+        liveEdits.schedule(form.sourceId, liveEdit(site, form.fields, headers), wait)
     }
 
     /** Saves a live edit; a failure shows on the Edit page, or above the list once the page has closed. */
