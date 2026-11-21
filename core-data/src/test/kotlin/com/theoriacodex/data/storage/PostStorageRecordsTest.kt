@@ -27,6 +27,15 @@ class PostStorageRecordsTest {
     }
 
     @Test
+    fun `a gallery of unknown length keeps its flag, and other records stay as they were`() {
+        val gallery = samplePost().copy(galleryLengthUnknown = true)
+        val stored = DurableJson.decodeFromString<PostStorageRecord>(DurableJson.encodeToString(PostStorageCodec.encode(gallery)))
+
+        assertEquals(gallery, PostStorageCodec.decode(stored))
+        assertTrue("galleryLengthUnknown" !in DurableJson.encodeToString(PostStorageCodec.encode(samplePost())))
+    }
+
+    @Test
     fun `nhentai and hitomi records saved before fallback urls keep their copies as fallbacks`() {
         fun legacyRecord(source: String) = DurableJson.decodeFromString<PostStorageRecord>(
             """

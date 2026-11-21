@@ -13,7 +13,7 @@ internal fun ViewerPageState.hasPendingGalleryMedia(): Boolean {
     if (resolution.status == ViewerResolutionStatus.RESOLVED ||
         resolution.status == ViewerResolutionStatus.NOT_REQUIRED
     ) return false
-    return post.galleryLengthUnknown || (post.mediaCount ?: 0) > media.size
+    return (post.galleryLengthUnknown && post.media.isEmpty() && post.full == null) || (post.mediaCount ?: 0) > media.size
 }
 
 internal fun ViewerPageState.swipeMediaCount(): Int {

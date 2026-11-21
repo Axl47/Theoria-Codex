@@ -81,6 +81,9 @@ data class PostStorageRecord(
     val durationMs: Long? = null,
     @SerialName("mediaCount")
     val mediaCount: Int? = null,
+    // Written only when set, so records of every other post keep their exact stored form.
+    @SerialName("galleryLengthUnknown")
+    val galleryLengthUnknown: Boolean? = null,
     @SerialName("taxonomy")
     val taxonomy: List<PostTaxonomyTermStorageRecord?>? = null,
     @SerialName("creatorProfiles")
@@ -189,6 +192,7 @@ object PostStorageCodec {
             creatorProfile = post.creatorProfile?.let(::encodeCreatorProfile),
             durationMs = post.durationMs,
             mediaCount = post.mediaCount,
+            galleryLengthUnknown = post.galleryLengthUnknown.takeIf { it },
             taxonomy = post.taxonomy.map(::encodeTaxonomyTerm),
             creatorProfiles = post.creatorProfiles.map(::encodeCreatorProfile),
             contentHash = post.contentHash,
@@ -245,6 +249,7 @@ object PostStorageCodec {
             creatorProfile = creator,
             durationMs = record.durationMs,
             mediaCount = record.mediaCount,
+            galleryLengthUnknown = record.galleryLengthUnknown == true,
             taxonomy = record.taxonomy
                 ?.mapNotNull { stored -> stored?.toDomainOrNull() }
                 ?: canonicalTags.map { value -> PostTaxonomyTerm(value = value) },

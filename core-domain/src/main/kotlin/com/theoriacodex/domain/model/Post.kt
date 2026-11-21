@@ -70,8 +70,7 @@ data class Post(
     val mediaCount: Int? = null,
     /**
      * The listing is a multi-page gallery that names neither its pages nor how many there are; they arrive with the
-     * post's lookup. A listing that knows its length sets [mediaCount] instead. Live listing data only; never
-     * persisted.
+     * post's lookup. A listing that knows its length sets [mediaCount] instead.
      */
     val galleryLengthUnknown: Boolean = false,
     val taxonomy: List<PostTaxonomyTerm> = canonicalTags.map { value ->
