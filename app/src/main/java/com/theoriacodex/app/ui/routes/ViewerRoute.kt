@@ -315,6 +315,7 @@ private fun rememberViewerScreenHost(
             callbacks.onGoToSearch()
         },
         onOpenCreatorFallback = callbacks.onOpenCreatorFallback,
+        onGalleryReadingModeSelected = callbacks.onGalleryReadingModeSelected,
         onRequestMediaRecovery = { post, failedMedia ->
             routeScope.launch {
                 if (viewerOwner.session.value == null) return@launch

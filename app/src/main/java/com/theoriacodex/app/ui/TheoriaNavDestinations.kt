@@ -337,6 +337,7 @@ private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
                     autoRotateVideos = state.browsing.settings.viewer.autoRotateVideos,
                     commentOrder = state.browsing.settings.viewer.commentOrder,
                     likedPostIds = state.browsing.likedPostIds,
+                    galleryReadingModes = state.browsing.galleryReadingModes,
                     creatorBrowsingSources = state.browsing.creatorBrowsingSources,
                     playbackDiagnosticsEnabled = BuildConfig.BENCHMARK_FIXTURES_ENABLED,
                 ),
@@ -439,6 +440,7 @@ private fun viewerScreenCallbacks(shell: TheoriaShell) = ViewerScreenCallbacks(
     onPlaybackModeSelected = { shell.owners.settings.onAction(SettingsAction.SetViewerPlaybackMode(it)) },
     onVideoQualitySelected = { shell.owners.settings.onAction(SettingsAction.SetChoice(SettingChoices.DefaultVideoQuality, it)) },
     onCommentOrderSelected = { shell.owners.settings.onAction(SettingsAction.SetCommentOrder(it)) },
+    onGalleryReadingModeSelected = { postId, mode -> shell.scope.launch { shell.data.galleryReadingModes.set(postId, mode) } },
     onVisiblePostChanged = { post, viewedMediaNumber, session ->
         shell.data.markViewedNewPost(post, session)
         shell.viewerRouteWorkflow.recordVisiblePost(post, viewedMediaNumber, session)

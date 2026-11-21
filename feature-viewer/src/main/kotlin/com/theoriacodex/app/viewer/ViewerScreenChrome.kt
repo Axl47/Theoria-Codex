@@ -102,7 +102,7 @@ private fun ViewerBottomStack(
 ) {
     val selection = frame.selection
     val navigation = frame.navigation
-    val mirrored = viewerMediaPagerReverseLayout(selection.mediaItems.size, config.invertMultiImageScrollDirection)
+    val mirrored = config.readingModeOf(navigation.pages.getOrNull(navigation.currentIndex)).reversed
     val stripIndex = navigation.originalPosts.indexOfFirst { it.id == frame.posts.getOrNull(postPagerState.currentPage)?.id }
         .takeIf { it >= 0 } ?: navigation.stripAnchorIndex
     ViewerBottomChrome(
