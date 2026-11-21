@@ -18,7 +18,15 @@ data class ViewerRendererControls(
     val systemControlsReady: Boolean = true,
     /** The media's length as known before its player loads; timelines show it at 0:00 meanwhile instead of vanishing. */
     val expectedDurationMs: Long? = null,
-)
+) {
+    companion object {
+        /** A feed card's animation: plays and loops while [isActive], with no timeline and no route commands. */
+        fun feedCard(isActive: Boolean) = ViewerRendererControls(
+            isActive = isActive, isPlaying = true, showControls = false, loopPlayback = true,
+            playbackRate = 1f, restartRequest = 0L, loadGeneration = 0L,
+        )
+    }
+}
 
 data class ViewerRendererEvents(
     val onPlaybackCompleted: () -> Unit,
@@ -29,4 +37,15 @@ data class ViewerRendererEvents(
     val onRestartPlayback: () -> Unit,
     val onPlaybackIntentChanged: (Boolean) -> Unit,
     val onTimelineInteractionActiveChanged: (Boolean) -> Unit,
-)
+) {
+    companion object {
+        /** A feed card's events: it reports only the duration it learns. */
+        fun feedCard(onDurationKnown: (Long) -> Unit) = ViewerRendererEvents(
+            onPlaybackCompleted = {}, onError = {}, onReady = {}, onDurationKnown = onDurationKnown,
+            onTogglePlayback = {}, onRestartPlayback = {}, onPlaybackIntentChanged = {}, onTimelineInteractionActiveChanged = {},
+        )
+    }
+}
+
+/** The slowest rate a Viewer clock runs at; playback clocks require a positive rate. */
+const val MIN_VIEWER_PLAYBACK_RATE = 0.1f

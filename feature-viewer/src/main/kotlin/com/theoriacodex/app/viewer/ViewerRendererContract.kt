@@ -25,5 +25,3 @@ internal fun viewerRendererEvents(
     onPlaybackIntentChanged = { onAction(if (it) ViewerAction.Play else ViewerAction.Pause) },
     onTimelineInteractionActiveChanged = onTimelineInteractionActiveChanged,
 )
-
-internal const val MIN_VIEWER_PLAYBACK_RATE = 0.1f

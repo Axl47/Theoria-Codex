@@ -416,50 +416,66 @@ fun ViewerPassiveProgressBar(positionMs: () -> Long, durationMs: Long, modifier:
     }
 }
 
+/** How a seekable [ViewerPlaybackTimeline] moves its player during a drag, and the frame its popup shows. */
+class ViewerTimelineSeek(
+    val onStarted: () -> Unit,
+    val onMoved: (Long) -> Unit,
+    val onFinished: (Long) -> Unit,
+    val onCancelled: () -> Unit,
+    val preview: @Composable (Long) -> Unit,
+)
+
 /**
- * Stands in for a player's timeline while its media loads: the [durationMs] already known, at 0:00 and not yet
- * seekable, so swiping to a post keeps the timeline on screen. [onTogglePlayback] flips the playback intent the
- * player picks up once it loads.
+ * The Viewer's playback timeline in its veiled footer: a play/pause button and [MediaTimelineBar] at [positionMs] of
+ * [durationMs]. Without [seek] the track only shows the time and reports no drags. A play/pause tap sends the route's
+ * toggle, then [onToggled], then a brief interaction so the chrome's hide timer restarts. Callers wrap it in
+ * [ViewerChromeVisibility] on [ViewerRendererControls.showControls].
  */
 @Composable
-internal fun ViewerPendingTimeline(
+fun ViewerPlaybackTimeline(
+    controls: ViewerRendererControls,
+    events: ViewerRendererEvents,
+    positionMs: () -> Long,
     durationMs: Long,
-    visible: Boolean,
-    paused: Boolean,
-    playbackRate: Float,
-    onTogglePlayback: () -> Unit,
-    onInteractionActiveChanged: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
+    seek: ViewerTimelineSeek? = null,
+    onToggled: () -> Unit = {},
 ) {
-    ViewerChromeVisibility(visible, modifier) {
-        ViewerTimelineVeil {
-            ViewerPlaybackFooter {
-                MediaTimelineBar(
-                    positionMs = { 0L }, durationMs = durationMs,
-                    onSeekMoved = {}, onSeekFinished = {}, preview = {},
-                    playbackRate = playbackRate,
-                    leading = {
-                        TimelinePlaybackButton(isPaused = paused, onToggle = {
-                            onTogglePlayback()
-                            onInteractionActiveChanged(true)
-                            onInteractionActiveChanged(false)
-                        })
-                    },
-                    seekable = false,
-                )
-            }
+    ViewerTimelineVeil {
+        ViewerPlaybackFooter {
+            MediaTimelineBar(
+                positionMs = positionMs, durationMs = durationMs,
+                onSeekStarted = seek?.onStarted ?: {},
+                onSeekMoved = seek?.onMoved ?: {},
+                onSeekFinished = seek?.onFinished ?: {},
+                onSeekCancelled = seek?.onCancelled ?: {},
+                preview = seek?.preview ?: {},
+                onInteractionActiveChanged = if (seek != null) events.onTimelineInteractionActiveChanged else ({}),
+                playbackRate = controls.playbackRate,
+                leading = {
+                    TimelinePlaybackButton(isPaused = !controls.isPlaying, onToggle = {
+                        events.onTogglePlayback()
+                        onToggled()
+                        events.onTimelineInteractionActiveChanged(true)
+                        events.onTimelineInteractionActiveChanged(false)
+                    })
+                },
+                seekable = seek != null,
+            )
         }
     }
 }
 
-/** [ViewerPendingTimeline] for a renderer whose [ViewerRendererControls.expectedDurationMs] is known; nothing otherwise. */
+/**
+ * Stands in for a player's timeline while its media loads: the [ViewerRendererControls.expectedDurationMs] already
+ * known, at 0:00 and not yet seekable, so swiping to a post keeps the timeline on screen. Its play/pause flips the
+ * playback intent the player picks up once it loads. Nothing shows while the length is unknown.
+ */
 @Composable
 fun ViewerPendingTimeline(controls: ViewerRendererControls, events: ViewerRendererEvents, modifier: Modifier) {
     val expected = controls.expectedDurationMs?.takeIf { it > 0L && (controls.isActive || controls.isPreloading) } ?: return
-    ViewerPendingTimeline(
-        expected, controls.showControls, !controls.isPlaying, controls.playbackRate,
-        events.onTogglePlayback, events.onTimelineInteractionActiveChanged, modifier,
-    )
+    ViewerChromeVisibility(controls.showControls, modifier) {
+        ViewerPlaybackTimeline(controls, events, { 0L }, expected)
+    }
 }
 
 /**

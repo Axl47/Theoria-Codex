@@ -1,6 +1,5 @@
 package com.theoriacodex.app.viewer
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -33,36 +32,12 @@ internal fun ViewerMediaContent(
     onRequestMediaRecovery: ((Post, ImageRef) -> Unit)?,
 ) {
     when (kind) {
-        ViewerMediaKind.UGOIRA -> if (pixivUgoiraClient != null) Box(
-            Modifier.fillMaxSize(),
-        ) {
-            PixivUgoiraPlayer(
-                postId = post.id.sourcePostId,
-                client = pixivUgoiraClient,
-                contentDescription = post.title ?: post.id.sourcePostId,
-                modifier = Modifier.fillMaxSize(),
-                loopPlayback = controls.loopPlayback,
-                onPlaybackCompleted = events.onPlaybackCompleted,
-                showProgressBar = controls.showControls,
-                showPassiveProgress = controls.showPassiveProgress,
-                mediaModifier = modifier,
-                isActive = controls.isActive,
-                isPreloading = controls.isPreloading,
-                expectedDurationMs = controls.expectedDurationMs,
-                isPlaying = controls.isPlaying,
-                seekJumpSerial = controls.seekJumpSerial,
-                seekJumpDeltaMs = controls.seekJumpDeltaMs,
-                playbackRate = controls.playbackRate,
-                restartRequest = controls.restartRequest,
-                loadGeneration = controls.loadGeneration,
-                onTimelineInteractionActiveChanged = events.onTimelineInteractionActiveChanged,
-                onTogglePlayback = events.onTogglePlayback,
-                onDurationKnown = events.onDurationKnown,
-                onReady = events.onReady,
-                onError = events.onError,
-                loadingPreview = { ViewerLoadingPreview(post, media) },
-            )
-        }
+        ViewerMediaKind.UGOIRA -> if (pixivUgoiraClient != null) PixivUgoiraPlayer(
+            postId = post.id.sourcePostId, client = pixivUgoiraClient, controls = controls, events = events,
+            contentDescription = post.title ?: post.id.sourcePostId,
+            modifier = Modifier.fillMaxSize(), mediaModifier = modifier,
+            loadingPreview = { ViewerLoadingPreview(post, media) },
+        )
         ViewerMediaKind.VIDEO -> ViewerVideoPlayer(
             media = media, postId = post.id, sourceKey = post.id.source,
             quality = videoOptions.quality, qualityHeight = videoOptions.height,

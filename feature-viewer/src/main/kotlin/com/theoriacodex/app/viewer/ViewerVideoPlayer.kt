@@ -399,39 +399,21 @@ private fun ViewerVideoTimelineOverlay(
         return
     }
     ViewerChromeVisibility(controls.showControls, modifier) {
-        ViewerTimelineVeil { ViewerVideoTimeline(state, source, controls, events) }
-    }
-    if (controls.showPassiveProgress) ViewerMediaPassiveProgress({ state.position }, state.duration, aspectRatio)
-}
-
-@Composable
-private fun ViewerVideoTimeline(
-    state: ViewerVideoState,
-    source: SourceKey,
-    controls: ViewerRendererControls,
-    events: ViewerRendererEvents,
-) {
-    val previews = rememberViewerScrubPreviews(state.player, source)
-    ViewerPlaybackFooter {
-        MediaTimelineBar(
-            positionMs = { state.position }, durationMs = state.duration,
-            onSeekStarted = { state.scrubbing = true },
-            onSeekMoved = state::scrubTo,
-            onSeekFinished = { target -> state.release(target, previews) },
-            onSeekCancelled = state::cancelScrub,
-            preview = { target -> previews?.let { ViewerVideoScrubPreview(it, target) } },
-            onInteractionActiveChanged = events.onTimelineInteractionActiveChanged,
-            playbackRate = controls.playbackRate,
-            leading = {
-                TimelinePlaybackButton(isPaused = !controls.isPlaying, onToggle = {
-                    events.onTogglePlayback()
-                    state.setPlaying(!controls.isPlaying && controls.isActive)
-                    events.onTimelineInteractionActiveChanged(true)
-                    events.onTimelineInteractionActiveChanged(false)
-                })
-            },
+        // Inside the visibility, so scrub previews are prepared only while the timeline shows.
+        val previews = rememberViewerScrubPreviews(state.player, source)
+        ViewerPlaybackTimeline(
+            controls, events, { state.position }, state.duration,
+            seek = ViewerTimelineSeek(
+                onStarted = { state.scrubbing = true },
+                onMoved = state::scrubTo,
+                onFinished = { target -> state.release(target, previews) },
+                onCancelled = state::cancelScrub,
+                preview = { target -> previews?.let { ViewerVideoScrubPreview(it, target) } },
+            ),
+            onToggled = { state.setPlaying(!controls.isPlaying && controls.isActive) },
         )
     }
+    if (controls.showPassiveProgress) ViewerMediaPassiveProgress({ state.position }, state.duration, aspectRatio)
 }
 
 @Composable

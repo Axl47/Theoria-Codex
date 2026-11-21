@@ -50,7 +50,7 @@ internal fun ViewerGifPlayer(
     events: ViewerRendererEvents,
 ) {
     val state = remember(locations, controls.loadGeneration) { ViewerGifState(locations) }
-    ViewerGifLoadEffect(state, sourceKey, locations, events)
+    ViewerGifLoadEffect(state, sourceKey, locations)
     val movie = state.movie
     if (movie == null) ViewerGifFallback(state, sourceKey, modifier, mediaModifier, controls, events)
     else ViewerGifMovie(movie, modifier, mediaModifier, controls, events)
@@ -65,7 +65,7 @@ private class ViewerGifState(locations: List<String>) {
 }
 
 @Composable
-private fun ViewerGifLoadEffect(state: ViewerGifState, source: SourceKey, locations: List<String>, events: ViewerRendererEvents) {
+private fun ViewerGifLoadEffect(state: ViewerGifState, source: SourceKey, locations: List<String>) {
     val context = LocalContext.current
     LaunchedEffect(state, source) {
         var movie: Movie? = null
@@ -77,7 +77,6 @@ private fun ViewerGifLoadEffect(state: ViewerGifState, source: SourceKey, locati
         state.fallbackLocations = locations.map { cachedViewerGifLocation(context, source, it) }
         state.movie = movie
         state.loading = false
-        if (movie != null) events.onReady()
     }
 }
 
@@ -144,23 +143,12 @@ private fun ViewerGifMovie(
     controls: ViewerRendererControls, events: ViewerRendererEvents,
 ) {
     val duration = remember(movie) { movie.duration().takeIf { it > 0 }?.toLong() ?: GIF_FALLBACK_DURATION_MS }
-    val animation = remember(movie, duration) { AnimationPlaybackState(duration) }
-    var scrubbing by remember(movie) { mutableStateOf(false) }
-    LaunchedEffect(movie, duration) { events.onDurationKnown(duration) }
-    AnimatePlayback(animation, controls.isActive && controls.isPlaying,
-        controls.playbackRate.coerceAtLeast(MIN_VIEWER_PLAYBACK_RATE), controls.loopPlayback, events.onPlaybackCompleted)
-    LaunchedEffect(controls.restartRequest, animation) { if (controls.restartRequest > 0L) animation.seekTo(0L) }
-    ViewerSeekJumps(controls.seekJumpSerial, controls.seekJumpDeltaMs, { controls.isActive && !scrubbing }) {
-        animation.seekTo(animation.positionMs + it)
-    }
-    Box(modifier, contentAlignment = Alignment.Center) {
-        ViewerGifCanvas(movie, { animation.positionMs }, Modifier.fillMaxSize().then(mediaModifier))
-        ViewerChromeVisibility(controls.showControls, Modifier.align(Alignment.BottomCenter)) {
-            ViewerTimelineVeil { ViewerGifTimeline(movie, animation, duration, controls, events) { scrubbing = it } }
-        }
-        if (controls.showPassiveProgress) {
-            ViewerMediaPassiveProgress({ animation.positionMs }, duration, viewerAspectRatio(movie.width(), movie.height()))
-        }
+    val frames = rememberAnimatedFrames(movie, durationMs = duration, controls = controls, events = events)
+    AnimatedFramesPlayer(
+        frames, controls, events, viewerAspectRatio(movie.width(), movie.height()), modifier,
+        preview = { target -> ViewerGifCanvas(movie, { target.coerceAtMost(duration - 1L) }, Modifier.fillMaxSize()) },
+    ) {
+        ViewerGifCanvas(movie, { frames.positionMs }, Modifier.fillMaxSize().then(mediaModifier))
     }
 }
 
@@ -179,34 +167,6 @@ private fun ViewerGifCanvas(movie: Movie, positionMs: () -> Long, modifier: Modi
             frame,
             dstOffset = IntOffset((size.width.roundToInt() - drawn.width) / 2, (size.height.roundToInt() - drawn.height) / 2),
             dstSize = drawn,
-        )
-    }
-}
-
-@Composable
-private fun ViewerGifTimeline(
-    movie: Movie, animation: AnimationPlaybackState, duration: Long, controls: ViewerRendererControls, events: ViewerRendererEvents,
-    onScrubbing: (Boolean) -> Unit,
-) {
-    ViewerPlaybackFooter {
-        MediaTimelineBar(
-            positionMs = { animation.positionMs }, durationMs = duration,
-            onSeekStarted = { onScrubbing(true) },
-            onSeekMoved = animation::seekTo,
-            onSeekCancelled = { onScrubbing(false) },
-            preview = { target ->
-                ViewerGifCanvas(movie, { target.coerceAtMost(duration - 1L) }, Modifier.fillMaxSize())
-            },
-            onSeekFinished = { animation.seekTo(it); onScrubbing(false) },
-            onInteractionActiveChanged = events.onTimelineInteractionActiveChanged,
-            playbackRate = controls.playbackRate,
-            leading = {
-                TimelinePlaybackButton(isPaused = !controls.isPlaying, onToggle = {
-                    events.onTogglePlayback()
-                    events.onTimelineInteractionActiveChanged(true)
-                    events.onTimelineInteractionActiveChanged(false)
-                })
-            },
         )
     }
 }

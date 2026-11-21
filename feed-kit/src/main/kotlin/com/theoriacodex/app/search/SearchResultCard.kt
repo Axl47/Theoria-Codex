@@ -67,6 +67,8 @@ import com.theoriacodex.app.viewer.LocalViewerReturnTransition
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.PixivUgoiraPlayer
 import com.theoriacodex.app.viewer.UgoiraSizeBucket
+import com.theoriacodex.app.viewer.ViewerRendererControls
+import com.theoriacodex.app.viewer.ViewerRendererEvents
 import com.theoriacodex.app.viewer.ViewerReturnCorners
 import com.theoriacodex.app.viewer.viewerReturnCorners
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -498,12 +500,12 @@ private fun SearchCardMedia(
         isPixivUgoiraPost(post) && pixivUgoiraClient != null -> PixivUgoiraPlayer(
             postId = post.id.sourcePostId,
             client = pixivUgoiraClient,
+            controls = ViewerRendererControls.feedCard(playbackActive),
+            events = remember(onAuthoritativeDurationKnown) { ViewerRendererEvents.feedCard(onAuthoritativeDurationKnown) },
             modifier = Modifier.fillMaxSize(),
             contentDescription = description,
             contentScale = ContentScale.Crop,
             sizeBucket = UgoiraSizeBucket.CARD,
-            isActive = playbackActive,
-            onDurationKnown = onAuthoritativeDurationKnown,
             loadingPreview = { SearchCardAnimationPoster(imageModel, description, progress, lastCandidateIndex) },
         )
         videoRef != null && !videoPlaybackFailed -> SearchVideoPreview(
