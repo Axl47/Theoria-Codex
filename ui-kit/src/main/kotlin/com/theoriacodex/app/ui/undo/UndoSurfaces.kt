@@ -1,0 +1,139 @@
+package com.theoriacodex.app.ui.undo
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalAccessibilityManager
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlin.time.Duration.Companion.milliseconds
+
+/** The app's one [UndoSlot]. The default is a standalone slot, so previews and tests work unprovided. */
+val LocalUndoSlot = staticCompositionLocalOf { UndoSlot() }
+
+/** Provides [slot] to [content] and stretches its timers to what the accessibility services recommend. */
+@Composable
+fun ProvideUndoSlot(slot: UndoSlot, content: @Composable () -> Unit) {
+    val accessibility = LocalAccessibilityManager.current
+    SideEffect {
+        slot.timeout = { duration ->
+            accessibility?.calculateRecommendedTimeoutMillis(
+                duration.inWholeMilliseconds, containsIcons = false, containsText = true, containsControls = true,
+            )?.milliseconds ?: duration
+        }
+    }
+    CompositionLocalProvider(LocalUndoSlot provides slot, content = content)
+}
+
+/** The live offer when it is anchored at [anchor], else null; for surfaces that lay out around an offer. */
+@Composable
+fun rememberUndoOffer(anchor: UndoAnchor): UndoOffer? {
+    val offer by LocalUndoSlot.current.offer.collectAsStateWithLifecycle()
+    return offer?.takeIf { it.anchor == anchor }
+}
+
+/** Expires any offer anchored in [anchorScope] when this leaves composition; place it on "until left" surfaces. */
+@Composable
+fun UndoLeaveEffect(anchorScope: String) {
+    val slot = LocalUndoSlot.current
+    DisposableEffect(slot, anchorScope) { onDispose { slot.expire(anchorScope) } }
+}
+
+/** A floating pill a screen or sheet places (usually bottom-centre); it shows only offers anchored at [anchor]. */
+@Composable
+fun UndoPill(anchor: UndoAnchor, modifier: Modifier = Modifier) {
+    UndoOfferVisibility(anchor, modifier) { offer, act ->
+        Surface(
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.inverseSurface,
+            contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+            shadowElevation = 6.dp,
+            modifier = Modifier.padding(16.dp).semantics { liveRegion = LiveRegionMode.Polite },
+        ) {
+            UndoOfferContent(offer, act, MaterialTheme.colorScheme.inversePrimary, fill = false, Modifier.padding(start = 20.dp, end = 8.dp))
+        }
+    }
+}
+
+/** A row-shaped offer drawn in the place a removed row or tile vacated; it shows only offers anchored at [anchor]. */
+@Composable
+fun UndoRow(anchor: UndoAnchor, modifier: Modifier = Modifier) {
+    UndoOfferVisibility(anchor, modifier.fillMaxWidth()) { offer, act ->
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
+        ) {
+            UndoOfferContent(offer, act, MaterialTheme.colorScheme.primary, fill = true, Modifier.padding(start = 16.dp, end = 4.dp))
+        }
+    }
+}
+
+/** Keeps the last matching offer drawn while it animates out, so the exit does not flash empty. */
+@Composable
+private fun UndoOfferVisibility(
+    anchor: UndoAnchor,
+    modifier: Modifier,
+    content: @Composable (offer: UndoOffer, act: () -> Unit) -> Unit,
+) {
+    val slot = LocalUndoSlot.current
+    val offer = rememberUndoOffer(anchor)
+    val shown = remember { LastOffer() }
+    if (offer != null) shown.value = offer
+    AnimatedVisibility(
+        visible = offer != null,
+        modifier = modifier,
+        enter = fadeIn() + slideInVertically { it / 2 },
+        exit = fadeOut() + slideOutVertically { it / 2 },
+    ) {
+        shown.value?.let { last -> content(last) { slot.act(last) } }
+    }
+}
+
+private class LastOffer(var value: UndoOffer? = null)
+
+@Composable
+private fun UndoOfferContent(offer: UndoOffer, act: () -> Unit, actionColor: Color, fill: Boolean, modifier: Modifier) {
+    Row(
+        modifier = modifier.heightIn(min = 48.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            offer.label,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = fill),
+        )
+        TextButton(onClick = act, colors = ButtonDefaults.textButtonColors(contentColor = actionColor)) {
+            Text(offer.action.label)
+        }
+    }
+}
