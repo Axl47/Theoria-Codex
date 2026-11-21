@@ -69,20 +69,20 @@ suspend fun SearchCoordinator.fetchAutocomplete(
     selectedScope: FacetedSearchScope,
     input: String,
     onUpdate: suspend (SearchAutocompleteResult) -> Unit = {},
-): SearchAutocompleteResult = fetchAutocomplete(query, defaultSources(sourceScope).enabled, selectedScope, input, onUpdate)
+): SearchAutocompleteResult = suggestions.fetchAutocomplete(query, defaultSources(sourceScope).enabled, selectedScope, input, onUpdate)
 
 fun SearchCoordinator.cachedAutocomplete(
     query: Query,
     sourceScope: SearchSourceScope,
     selectedScope: FacetedSearchScope,
     input: String,
-): SearchAutocompleteResult = cachedAutocomplete(query, defaultSources(sourceScope).enabled, selectedScope, input)
+): SearchAutocompleteResult = suggestions.cachedAutocomplete(query, defaultSources(sourceScope).enabled, selectedScope, input)
 
 suspend fun SearchCoordinator.fetchTrending(
     query: Query,
     sourceScope: SearchSourceScope,
     forceRefresh: Boolean = false,
-): List<TagSuggestion> = fetchTrending(query, defaultSources(sourceScope).enabled, forceRefresh)
+): List<TagSuggestion> = suggestions.fetchTrending(query, defaultSources(sourceScope).enabled, forceRefresh)
 
 fun SearchCoordinator.cachedTrending(query: Query, sourceScope: SearchSourceScope): List<TagSuggestion> =
-    cachedTrending(query, defaultSources(sourceScope).enabled)
+    suggestions.cachedTrending(query, defaultSources(sourceScope).enabled)

@@ -37,7 +37,7 @@ internal class SearchSuggestionRefresher(
         val localState = state.value
         autocompleteJob = scope.launch {
             val cached = withContext(dispatcher) {
-                coordinator.cachedAutocomplete(
+                coordinator.suggestions.cachedAutocomplete(
                     localState.query.draft, localState.query.draftSources,
                     localState.query.selectedScope, input,
                 )
@@ -45,7 +45,7 @@ internal class SearchSuggestionRefresher(
             publishAutocompleteIfCurrent(generation, cached)
             if (autocompleteDelayMs > 0) delay(autocompleteDelayMs)
             val result = withContext(dispatcher) {
-                coordinator.fetchAutocomplete(
+                coordinator.suggestions.fetchAutocomplete(
                     localState.query.draft, localState.query.draftSources,
                     localState.query.selectedScope, input,
                     onUpdate = { update ->
@@ -74,7 +74,7 @@ internal class SearchSuggestionRefresher(
         trendingJob?.cancel(CancellationException("Trending refresh superseded"))
         val query = state.value.query
         trendingJob = scope.launch {
-            withContext(dispatcher) { coordinator.fetchTrending(query.draft, query.draftSources) }
+            withContext(dispatcher) { coordinator.suggestions.fetchTrending(query.draft, query.draftSources) }
         }
     }
 }

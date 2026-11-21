@@ -107,7 +107,8 @@ class SearchCoordinator(
         seenTags.record(posts)
         fileMirrors.learn(posts)
     }
-    private val suggestionCoordinator = SearchSuggestionCoordinator(
+    /** Tag autocomplete and trending tags for the Search composer. */
+    val suggestions = SearchSuggestionCoordinator(
         registry = registry,
         tagSuggestionStore = tagSuggestionStore,
         clock = clock,
@@ -475,32 +476,6 @@ class SearchCoordinator(
         }
     }
 
-    suspend fun fetchAutocomplete(
-        query: Query,
-        sources: Set<SourceKey>,
-        selectedScope: FacetedSearchScope,
-        input: String,
-        onUpdate: suspend (SearchAutocompleteResult) -> Unit = {},
-    ): SearchAutocompleteResult = suggestionCoordinator.fetchAutocomplete(query, sources, selectedScope, input, onUpdate)
-
-    fun cachedAutocomplete(
-        query: Query,
-        sources: Set<SourceKey>,
-        selectedScope: FacetedSearchScope,
-        input: String,
-    ): SearchAutocompleteResult = suggestionCoordinator.cachedAutocomplete(query, sources, selectedScope, input)
-
-    suspend fun fetchTrending(
-        query: Query,
-        sources: Set<SourceKey>,
-        forceRefresh: Boolean = false,
-    ): List<TagSuggestion> = suggestionCoordinator.fetchTrending(query, sources, forceRefresh)
-
-    fun cachedTrending(
-        query: Query,
-        sources: Set<SourceKey>,
-    ): List<TagSuggestion> = suggestionCoordinator.cachedTrending(query, sources)
-
     /** The post count the tag store knows for [tag] on [source]; counts are only ever matched per source. */
     fun tagVideoCount(source: SourceKey, tag: String): Int? =
         tag.trim().takeIf(String::isNotBlank)?.let { tagSuggestionStore.getCount(source, it) }
@@ -677,10 +652,5 @@ class SearchCoordinator(
     private fun isModeAvailable(mode: QueryMode): Boolean = when (mode) {
         QueryMode.Unified -> true
         is QueryMode.Source -> mode.source in registry.availableSources()
-    }
-
-    private fun autocompletePrefixForSource(source: SourceKey, input: String): String {
-        val normalized = parseScopedInput(input).value
-        return sourceAutocompletePrefix(source, normalized)
     }
 }

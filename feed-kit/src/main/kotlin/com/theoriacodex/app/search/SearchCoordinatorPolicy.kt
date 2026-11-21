@@ -8,6 +8,8 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SortMode
+import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.tags.sourceAutocompletePrefix
 
 internal fun FacetedSearchScope.scopeOrder(): Int =
     if (sourceNamespace == null || facet == SearchFacet.TAG && sourceNamespace == "tag") 0 else 1
@@ -72,11 +74,9 @@ internal const val RATE_LIMIT_BACKOFF_FIRST_MS = 30_000L
 internal const val RATE_LIMIT_BACKOFF_REPEAT_MS = 2L * 60L * 1000L
 internal const val RATE_LIMIT_REPEAT_WINDOW_MS = 2L * 60L * 1000L
 
-internal data class ResolvedAutocompleteRequest(
-    val scope: FacetedSearchScope,
-    val prefix: String,
-    val validationMessage: String? = null,
-)
+/** The prefix [source]'s provider autocompletes for typed [input], without any scope prefix. */
+internal fun autocompletePrefixForSource(source: SourceKey, input: String): String =
+    sourceAutocompletePrefix(source, parseScopedInput(input).value)
 
 internal data class AutocompleteFetchKey(
     val source: com.theoriacodex.domain.model.SourceKey,
