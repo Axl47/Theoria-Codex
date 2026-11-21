@@ -22,7 +22,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.domain.model.Post
-import com.theoriacodex.domain.model.PostId
 import androidx.compose.runtime.remember
 import com.theoriacodex.app.related.RelatedFeedEntry
 import com.theoriacodex.app.related.RelatedFeedProjection
@@ -38,8 +37,7 @@ fun TwoColumnPostStaggeredGrid(
     footerMessage: String? = null,
     itemContent: @Composable LazyStaggeredGridItemScope.(index: Int, post: Post) -> Unit,
 ) {
-    val postIds = remember(posts) { posts.map { it.id } }
-    AdaptivePostGrid(postIds = postIds, state = state, modifier = modifier) {
+    AdaptivePostGrid(posts = posts, state = state, modifier = modifier) {
         itemsIndexed(
             items = posts,
             key = { _, post -> "${post.id.source.id}:${post.id.sourcePostId}" },
@@ -63,13 +61,11 @@ fun TwoColumnProjectedPostStaggeredGrid(
     shelfContent: @Composable LazyStaggeredGridItemScope.(RelatedFeedEntry.ShelfEntry) -> Unit,
     footerContent: (@Composable () -> Unit)? = null,
 ) {
-    val postIds = remember(projection) { projection.entries.map { (it as? RelatedFeedEntry.PostEntry)?.post?.id } }
     val shelfIds = remember(projection) {
         projection.entries.map { (it as? RelatedFeedEntry.ShelfEntry)?.state?.requestOrNull?.seed?.id?.let(ViewerReturnShelfId::Related) }
     }
     val posts = remember(projection) { projection.entries.map { (it as? RelatedFeedEntry.PostEntry)?.post } }
-    FeedImagePreloadEffect(posts, state)
-    AdaptivePostGrid(postIds = postIds, state = state, modifier = modifier, shelfIds = shelfIds) {
+    AdaptivePostGrid(posts = posts, state = state, modifier = modifier, shelfIds = shelfIds) {
         itemsIndexed(
             items = projection.entries,
             key = { _, entry ->
@@ -105,14 +101,20 @@ fun TwoColumnProjectedPostStaggeredGrid(
     }
 }
 
+/**
+ * Every feed's grid: adaptive columns, Viewer return, and card image preloading. [posts] holds one entry per grid
+ * item, null for items that are not posts (headings, shelves, footers), so both find each post by its grid position.
+ */
 @Composable
 fun AdaptivePostGrid(
-    postIds: List<PostId?>,
+    posts: List<Post?>,
     state: LazyStaggeredGridState,
     modifier: Modifier,
     shelfIds: List<ViewerReturnShelfId?> = emptyList(),
     content: LazyStaggeredGridScope.() -> Unit,
 ) {
+    val postIds = remember(posts) { posts.map { it?.id } }
+    FeedImagePreloadEffect(posts, state)
     val gridId = rememberSaveable { UUID.randomUUID().toString() }
     ViewerReturnGridEffect(gridId, postIds, state, shelfIds)
     FeedLaneJumpLogger(gridId, state)

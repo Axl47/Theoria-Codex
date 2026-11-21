@@ -450,12 +450,12 @@ private fun WatchedGrid(
         recentsGridRows(watchedPosts, now).withRelatedShelf(related?.request, watchedPosts)
     }
     // Headings and the shelf hold a null so Viewer return still finds each post by its grid position.
-    val postIds = remember(rows) { rows.map { (it as? RecentsGridRow.Post)?.entry?.post?.id } }
+    val posts = remember(rows) { rows.map { (it as? RecentsGridRow.Post)?.entry?.post } }
     val shelfIds = remember(rows, related?.request) {
         rows.map { row -> related?.request?.seed?.id?.takeIf { row == RecentsGridRow.RelatedShelf }?.let(ViewerReturnShelfId::Related) }
     }
 
-    AdaptivePostGrid(postIds = postIds, state = gridState, modifier = Modifier.fillMaxSize(), shelfIds = shelfIds) {
+    AdaptivePostGrid(posts = posts, state = gridState, modifier = Modifier.fillMaxSize(), shelfIds = shelfIds) {
         rows.forEach { row ->
             when (row) {
                 RecentsGridRow.RelatedShelf ->
