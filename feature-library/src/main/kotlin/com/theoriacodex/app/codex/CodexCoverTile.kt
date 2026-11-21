@@ -48,7 +48,7 @@ fun savedCodexCountSuffix(codexId: String, count: Int): String? = when (codexId)
 
 /**
  * Every Codex in the library: name and count over its cover, with actions on long press, and the offline ring in
- * the corner while the Codex is kept offline ([onTopUpOffline] tops an incomplete copy up). Without
+ * the corner while the Codex is kept offline (status only: a tap anywhere opens the Codex). Without
  * [longPressOpensActions] the grid owns the long-press gesture (Manual sort's drag) and only accessibility services
  * open the actions here.
  */
@@ -61,7 +61,6 @@ internal fun CodexCoverTile(
     onOpen: () -> Unit,
     onOpenActions: () -> Unit,
     modifier: Modifier,
-    onTopUpOffline: (() -> Unit)? = null,
     longPressOpensActions: Boolean = true,
 ) {
     val onCover = covers.isNotEmpty()
@@ -87,8 +86,8 @@ internal fun CodexCoverTile(
                 ),
             )
         }
-        CodexOfflineRingFor(
-            codexId, onTopUpOffline,
+        CodexOfflineStatusFor(
+            codexId,
             Modifier.align(Alignment.TopEnd).padding(4.dp).size(36.dp)
                 .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), CircleShape),
         )

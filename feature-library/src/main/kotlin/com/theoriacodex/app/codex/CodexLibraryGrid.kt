@@ -126,7 +126,6 @@ private fun CodexLibraryTile(
         onOpen = { actions.openCodex(codex.codexId) },
         onOpenActions = { state.actionTarget = codex },
         modifier = modifier.fillMaxWidth().height(CODEX_TILE_HEIGHT),
-        onTopUpOffline = actions.makeAvailableOffline?.let { topUp -> { topUp(codex.codexId) } },
         longPressOpensActions = !manual,
     )
 }

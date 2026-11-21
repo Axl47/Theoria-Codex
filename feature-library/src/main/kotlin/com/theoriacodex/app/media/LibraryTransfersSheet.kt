@@ -70,9 +70,10 @@ fun LibraryTransfersSheet(
         val content = TransfersSheetContent(offline, batches, hiddenDownloads, liveAnchor)
         val marked = markedCodexId?.let(::codexOfflineOwner)
         val grid = rememberLazyGridState()
-        LaunchedEffect(marked) {
-            val row = offline.owners.indexOfFirst { it.id == marked }
-            if (row >= 0) grid.scrollToItem(content.offlineRowsStart + row)
+        // Owners may still be loading when the sheet opens, so scroll once the marked row exists.
+        val markedRow = offline.owners.indexOfFirst { it.id == marked }
+        LaunchedEffect(marked, markedRow >= 0) {
+            if (markedRow >= 0) grid.scrollToItem(content.offlineRowsStart + markedRow)
         }
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),

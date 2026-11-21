@@ -119,6 +119,33 @@ class OfflineStorageViewModelTest {
         }
     }
 
+    @Test fun `the ring counts only the Codex's current posts`() = runBlocking<Unit> {
+        withTimeout(10_000) {
+            codices.ensureCodex("a", "First")
+            val kept = post()
+            val added = post("added")
+            codices.addItems("a", listOf(kept))
+            val coordinator = coordinator()
+            coordinator.store.save(kept, kept.media, "codex:a") { _, file -> file.writeText("media") }
+            val owner = owner(coordinator)
+            owner.state.first { it.codexStates["a"] == CodexOfflineState(1f) }
+
+            codices.addItems("a", listOf(added))
+            owner.state.first { it.codexStates["a"] == CodexOfflineState(0.5f) }
+            codices.removeItems("a", setOf(kept.id))
+            owner.state.first { it.codexStates["a"] == CodexOfflineState(0f) }
+        }
+    }
+
+    @Test fun `making an empty Codex available offline reports why it could not start`() = runBlocking {
+        withTimeout(10_000) {
+            codices.ensureCodex("a", "First")
+            val owner = owner(coordinator())
+            owner.makeAvailableOffline("a")
+            assertEquals("This Codex has no posts to keep offline.", owner.preparationFailures.first())
+        }
+    }
+
     @Test fun `clearing offline cancels collection preparation before it can start a new download`() = runBlocking {
         withTimeout(10_000) {
             val started = CompletableDeferred<Unit>()
@@ -161,8 +188,8 @@ class OfflineStorageViewModelTest {
         clearDisposable = { true }, scopeOverride = scope,
     )
 
-    private fun post(): Post {
-        val image = ImageRef(url = "https://example.test/full.jpg", localPath = null, mime = "image/jpeg")
-        return testPost(sourcePostId = "offline").copy(full = image, media = listOf(image), mediaCount = 1)
+    private fun post(id: String = "offline"): Post {
+        val image = ImageRef(url = "https://example.test/$id.jpg", localPath = null, mime = "image/jpeg")
+        return testPost(sourcePostId = id).copy(full = image, media = listOf(image), mediaCount = 1)
     }
 }

@@ -1,7 +1,10 @@
 package com.theoriacodex.app.media
 
 import android.app.Application
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -69,6 +72,22 @@ class LibraryTransfersSheetTest {
         assertEquals(listOf("cancel:codex:a", "remove:codex:a"), offlineCalls)
     }
 
+    @Test fun `opened for a Codex it scrolls to that row once the owners have loaded`() {
+        val owners = mutableStateOf(emptyList<OfflineStorageOwner>())
+        show(owners = owners, markedCodexId = "z")
+        compose.onNodeWithTag("offline-owner:codex:z").assertDoesNotExist()
+        owners.value = ('a'..'z').map { OfflineStorageOwner("codex:$it", "Codex $it", 1) }
+        compose.onNodeWithTag("offline-owner:codex:z").assertIsDisplayed()
+    }
+
+    @Test fun `a download without a title is named by its source, never its post id`() {
+        val untitled = item(4, "Search").let { it.copy(request = it.request.copy(post = it.request.post.copy(title = null))) }
+        show(downloads = listOf(untitled))
+        compose.onNodeWithText("Pixiv").assertExists()
+        compose.onNodeWithText("Search").assertExists()
+        compose.onNodeWithText("Post 4", substring = true).assertDoesNotExist()
+    }
+
     @Test fun `an empty sheet says so`() {
         show()
         compose.onNodeWithText("Nothing offline or downloaded").assertExists()
@@ -78,10 +97,17 @@ class LibraryTransfersSheetTest {
         owners: List<OfflineStorageOwner> = emptyList(),
         downloads: List<PostDownloadItem> = emptyList(),
         onOpen: (Long) -> Unit = {},
+    ) = show(mutableStateOf(owners), downloads, onOpen)
+
+    private fun show(
+        owners: State<List<OfflineStorageOwner>>,
+        downloads: List<PostDownloadItem> = emptyList(),
+        onOpen: (Long) -> Unit = {},
+        markedCodexId: String? = null,
     ) {
         compose.setContent { TheoriaNightTheme {
             LibraryTransfersSheet(
-                offline = OfflineStorageUiState(owners = owners),
+                offline = OfflineStorageUiState(owners = owners.value),
                 offlineActions = OfflineRowActions(
                     retry = { offlineCalls += "retry:$it" }, cancel = { offlineCalls += "cancel:$it" },
                     remove = { offlineCalls += "remove:$it" }, removeAll = { offlineCalls += "removeAll" },
@@ -92,7 +118,7 @@ class LibraryTransfersSheetTest {
                     open = { onOpen(it.id) }, cancel = {}, retryFailed = {},
                     remove = { ids, files, anchor -> removals += Triple(ids, files, anchor) }, localFile = { null },
                 ),
-                markedCodexId = null,
+                markedCodexId = markedCodexId,
                 onDismiss = {},
             )
         } }

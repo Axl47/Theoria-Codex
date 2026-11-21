@@ -10,6 +10,7 @@ import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.OfflineMediaSnapshot
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Codex
+import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.app.ui.undo.UndoAnchor
 import com.theoriacodex.app.ui.undo.UndoOffer
 import com.theoriacodex.app.ui.undo.UndoSlot
@@ -20,12 +21,16 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
@@ -88,19 +93,27 @@ class OfflineStorageViewModel(
     private val controls = MutableStateFlow(OfflineStorageUiState())
     private val preparationLock = Any()
     private val preparations = mutableMapOf<String, Job>()
+    private val failures = Channel<String>(Channel.BUFFERED)
+
+    /** Why "Make available offline" could not start, once per attempt; the app shows it when the sheet is closed. */
+    val preparationFailures: Flow<String> = failures.receiveAsFlow()
     private val names = codices.observeCodices().flowOn(dispatcher).catch {
         controls.update { it.copy(message = "Codex names could not be loaded.") }
         emit(emptyList())
     }
+    /** The current posts of every Codex kept offline, by Codex id, for the ring's share of settled posts. */
     @OptIn(ExperimentalCoroutinesApi::class)
-    private val postCounts = combine(offline.store.snapshot, offline.jobs) { snapshot, jobs ->
+    private val members = combine(offline.store.snapshot, offline.jobs) { snapshot, jobs ->
         (snapshot.postsByOwner.keys + jobs.keys).mapNotNullTo(mutableSetOf(), ::codexIdOfOfflineOwner)
     }.distinctUntilChanged().flatMapLatest { ids ->
-        codices.observeCodexSummaries(ids, coverLimit = 0).map { summaries -> summaries.associate { it.codexId to it.itemCount } }
+        if (ids.isEmpty()) return@flatMapLatest flowOf(emptyMap())
+        combine(ids.map { id -> codices.observeCodexItems(id).map { items -> id to items.mapTo(mutableSetOf(), CodexItem::postId) } }) {
+            it.toMap()
+        }
     }.flowOn(dispatcher).catch { emit(emptyMap()) }
-    val state = combine(controls, offline.store.snapshot, offline.jobs, names, postCounts) { ui, snapshot, jobs, collections, counts ->
+    val state = combine(controls, offline.store.snapshot, offline.jobs, names, members) { ui, snapshot, jobs, collections, posts ->
         val owners = offlineStorageOwners(snapshot, jobs, collections, ui)
-        ui.copy(offline = snapshot, owners = owners, codexStates = codexOfflineStates(owners, counts))
+        ui.copy(offline = snapshot, owners = owners, codexStates = codexOfflineStates(owners, posts, snapshot.availablePostIds))
     }.stateIn(scope, SharingStarted.Eagerly, OfflineStorageUiState())
 
     fun open() {
@@ -128,7 +141,10 @@ class OfflineStorageViewModel(
 
     fun dismiss() { controls.update { it.copy(isOpen = false) } }
 
-    /** Keeps [codexId] offline, or tops up its copy: posts already retained are skipped, not downloaded again. */
+    /**
+     * Keeps [codexId] offline, or tops up its copy: posts already retained are skipped, not downloaded again.
+     * When it cannot start, the reason goes to [message] and to [preparationFailures].
+     */
     fun makeAvailableOffline(codexId: String) {
         val owner = codexOfflineOwner(codexId)
         if (controls.value.working || owner in controls.value.preparingOwners || offline.jobs.value[owner]?.isRunning == true) return
@@ -139,8 +155,8 @@ class OfflineStorageViewModel(
             }
             val posts = result.getOrNull()
             when {
-                posts == null -> controls.update { it.copy(message = "The Codex could not be loaded. Try again.") }
-                posts.isEmpty() -> controls.update { it.copy(message = "This Codex has no posts to keep offline.") }
+                posts == null -> preparationFailed("The Codex could not be loaded. Try again.")
+                posts.isEmpty() -> preparationFailed("This Codex has no posts to keep offline.")
                 else -> offline.makeAvailableOffline(owner, posts)
             }
         }
@@ -150,6 +166,11 @@ class OfflineStorageViewModel(
             controls.update { it.copy(preparingOwners = it.preparingOwners - owner) }
         }
         preparation.start()
+    }
+
+    private fun preparationFailed(reason: String) {
+        controls.update { it.copy(message = reason) }
+        failures.trySend(reason)
     }
 
     fun retry(owner: String) {
@@ -164,12 +185,13 @@ class OfflineStorageViewModel(
     }
 
     /**
-     * Removes [owner]'s offline copies as deferred destruction: the row hides at once with Undo in its place,
-     * and the files go only when the offer expires (copies another owner retains stay).
+     * Removes [owner]'s offline copies as deferred destruction: the row and the Codex's ring hide at once with
+     * Undo at [anchor] (the row's place in the Library's sheet by default), and the files go only when the offer
+     * expires (copies another owner retains stay).
      */
-    fun remove(owner: String, undo: UndoSlot) {
-        val row = state.value.owners.firstOrNull { it.id == owner } ?: return
-        removeDeferred(undo, setOf(owner), OfflineRemovalTarget.Owner(owner), offlineOwnerUndoAnchor(owner), "Removed ${row.name}")
+    fun remove(owner: String, undo: UndoSlot, anchor: UndoAnchor = offlineOwnerUndoAnchor(owner)) {
+        if (state.value.owners.none { it.id == owner }) return
+        removeDeferred(undo, setOf(owner), OfflineRemovalTarget.Owner(owner), anchor, "Removed offline copy")
     }
 
     /** Removes every offline copy as deferred destruction, like [remove]. */

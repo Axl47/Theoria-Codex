@@ -78,14 +78,19 @@ class OfflineMediaCoordinator(
     fun makeAvailableOffline(owner: String, posts: List<Post>) { enqueueOffline(owner, posts, start = true) }
 
     /**
-     * Adds [posts] to [owner]'s offline copy when that owner is kept offline (it has copies or a job), so a
-     * Codex kept offline stays complete as posts are saved into it. Joins a running job, or re-runs the
-     * owner's last request plus [posts]; posts already retained are skipped, not downloaded again.
+     * Downloads [posts] (and only them) into [owner]'s offline copy, so a Codex kept offline stays complete as
+     * posts are saved into it. A running job takes them at its tail; an owner with copies starts a job for them
+     * alone. A request the user cancelled stays stopped, adding [posts] to what Retry runs, and an owner with
+     * neither copies nor a running job gets nothing.
      */
     fun keepOffline(owner: String, posts: List<Post>) {
-        if (owner !in store.snapshot.value.postsByOwner && owner !in jobs.value) return
-        val previous = synchronized(lock) { requests[owner].orEmpty() }
-        enqueueOffline(owner, previous + posts, start = true)
+        val job = jobs.value[owner]
+        if (job?.isCancelled == true) {
+            synchronized(lock) { requests[owner] = (requests[owner].orEmpty() + posts).distinctBy(Post::id) }
+            return
+        }
+        if (job?.isRunning != true && owner !in store.snapshot.value.postsByOwner) return
+        enqueueOffline(owner, posts, start = true)
     }
 
     private fun enqueueOffline(owner: String, posts: List<Post>, start: Boolean): Job? {
