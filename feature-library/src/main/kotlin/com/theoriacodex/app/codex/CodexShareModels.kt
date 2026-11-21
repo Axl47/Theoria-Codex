@@ -12,6 +12,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.withInferredGalleryLength
 import com.theoriacodex.domain.tags.withRecoveredPixivTranslations
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -216,7 +217,7 @@ fun codexSharePostSnapshot(post: CodexSharePost): Post? {
         creatorProfiles = creatorProfiles,
         durationMs = snapshot.durationMs?.takeIf { it >= 0L },
         mediaCount = snapshot.mediaCount?.takeIf { it > 0 },
-    ).withRecoveredPixivTranslations())
+    ).withRecoveredPixivTranslations().withInferredGalleryLength())
 }
 
 internal fun selectCodexShareEntries(

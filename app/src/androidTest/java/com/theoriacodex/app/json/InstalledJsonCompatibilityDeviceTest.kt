@@ -94,6 +94,7 @@ class InstalledJsonCompatibilityDeviceTest {
             "creatorProfile",
             "durationMs",
             "mediaCount",
+            "galleryLengthUnknown",
             "taxonomy",
             "creatorProfiles",
             "contentHash",
