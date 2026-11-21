@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.CollectionsBookmark
+import androidx.compose.material.icons.outlined.RemoveCircleOutline
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.CardDefaults
 import androidx.compose.runtime.Composable
@@ -92,7 +93,7 @@ internal fun TriageDeckArea(
         val choose: suspend (SwipeDirection) -> TriageChoice? = { direction ->
             val saveTarget = if (direction != SwipeDirection.Up) null else saveState.hovered?.payload
                 ?: (suggestions[post.id] ?: suggestions.await(post.id))?.targets?.firstOrNull()
-            choiceFor(direction, saveTarget, hideState.hovered?.payload ?: targets.hide.firstOrNull()?.payload)
+            choiceFor(direction, saveTarget, hideState.hovered?.payload ?: targets.hide.firstOrNull()?.payload, viewModel.removes)
         }
         // The gesture outlives recompositions that bring new targets, so it calls through the latest release.
         val release by rememberUpdatedState { velocity: Velocity? ->
@@ -107,12 +108,12 @@ internal fun TriageDeckArea(
                 .fillMaxSize()
                 .onGloballyPositioned { origin = it.positionInWindow() }
                 .triageSwipe(drag, { origin }) { velocity -> release(velocity) }
-                .semantics { customActions = triageActions(targets, onDecide) },
+                .semantics { customActions = triageActions(targets, viewModel.removes, onDecide) },
         ) {
             TriageCards(deck, drag, support, thresholds, ratioFloor) {
                 callbacks.onOpenPost(deck.posts, deck.index)
             }
-            TriageDragOverlays(drag, targets, saveState, hideState, thresholds)
+            TriageDragOverlays(drag, targets, saveState, hideState, thresholds, viewModel.removes)
         }
     }
 }
@@ -221,10 +222,15 @@ private fun TriagePeek(post: Post, aspectRatio: Float) {
     )
 }
 
-/** Lets TalkBack users decide without dragging. */
-private fun triageActions(targets: TriageTargets, onDecide: (TriageChoice) -> Unit): List<CustomAccessibilityAction> = listOfNotNull(
+/** Lets TalkBack users decide without dragging; [removes] names the left swipe Remove instead of Skip. */
+private fun triageActions(
+    targets: TriageTargets,
+    removes: Boolean,
+    onDecide: (TriageChoice) -> Unit,
+): List<CustomAccessibilityAction> = listOfNotNull(
     CustomAccessibilityAction("Like") { onDecide(TriageChoice.Like); true },
-    CustomAccessibilityAction("Skip") { onDecide(TriageChoice.Skip); true },
+    if (removes) CustomAccessibilityAction("Remove") { onDecide(TriageChoice.Remove); true }
+    else CustomAccessibilityAction("Skip") { onDecide(TriageChoice.Skip); true },
     targets.save.firstOrNull()?.payload?.let { target ->
         CustomAccessibilityAction("Save to ${target.name}") { onDecide(TriageChoice.Save(target.codexId, target.name)); true }
     },
@@ -233,7 +239,10 @@ private fun triageActions(targets: TriageTargets, onDecide: (TriageChoice) -> Un
     },
 )
 
-/** Edge targets for a vertical pull, and the like and skip cues for a horizontal one; none of it takes touches. */
+/**
+ * Edge targets for a vertical pull, and the like and skip (or, when the deck [removes], remove) cues for a horizontal
+ * one; none of it takes touches.
+ */
 @Composable
 private fun TriageDragOverlays(
     drag: TriageDrag,
@@ -241,6 +250,7 @@ private fun TriageDragOverlays(
     saveState: CollectTargetsState<SaveSuggestion>,
     hideState: CollectTargetsState<String>,
     thresholds: SwipeThresholds,
+    removes: Boolean,
 ) {
     Box(Modifier.fillMaxSize()) {
         val offset = drag.offset
@@ -249,7 +259,11 @@ private fun TriageDragOverlays(
         val progress = (max(abs(offset.x), abs(offset.y)) / thresholds.commitPx).coerceIn(0f, 1f)
         when {
             !vertical -> TriageEdgeCue(
-                if (offset.x > 0f) Icons.Filled.Favorite else Icons.Filled.Close,
+                when {
+                    offset.x > 0f -> Icons.Filled.Favorite
+                    removes -> Icons.Outlined.RemoveCircleOutline
+                    else -> Icons.Filled.Close
+                },
                 if (offset.x > 0f) Alignment.CenterEnd else Alignment.CenterStart,
                 progress,
             )

@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.navigation.NavBackStackEntry
 import com.theoriacodex.app.library.LibrarySection
 import com.theoriacodex.app.ui.motion.TheoriaMotion
+import com.theoriacodex.app.ui.navigation.TriageMode
 import com.theoriacodex.app.ui.navigation.TriageRequest
 import com.theoriacodex.app.statistics.StatisticsUsageCategory
 import com.theoriacodex.data.repository.StatisticsRepository
@@ -29,14 +30,21 @@ internal object AppRoute {
     const val CodexDetail = "codex/detail/{codexId}"
     const val Settings = "settings-screen"
 
-    /** The triage deck over one feed, named by a [TriageRequest]. Stream T may reshape these arguments. */
-    const val Triage = "triage/{source}?feedKey={feedKey}"
+    /** The triage deck over one feed, named by a [TriageRequest]; [triageArguments] reads it back. */
+    const val Triage = "triage/{source}?feedKey={feedKey}&removes={removes}&alsoIn={alsoIn}"
 
     fun codexDetail(codexId: String): String {
         return "codex/detail/$codexId"
     }
 
-    fun triage(request: TriageRequest): String = "triage/${request.source.name}?feedKey=${Uri.encode(request.feedKey)}"
+    fun triage(request: TriageRequest): String {
+        val removal = request.mode as? TriageMode.RemoveFromCodex
+        val alsoIn = removal?.alsoIn.orEmpty().joinToString(TRIAGE_ID_SEPARATOR)
+        return "triage/${request.source.name}?feedKey=${Uri.encode(request.feedKey)}&removes=${removal != null}&alsoIn=${Uri.encode(alsoIn)}"
+    }
+
+    /** Joins the Codex ids of [TriageMode.RemoveFromCodex.alsoIn]; Codex ids never contain it. */
+    const val TRIAGE_ID_SEPARATOR = ","
 }
 
 /** Slow tab swipes commit as readily as Viewer swipes; the library default needs half the screen. */

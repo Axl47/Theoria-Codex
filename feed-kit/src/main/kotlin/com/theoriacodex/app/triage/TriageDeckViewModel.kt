@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
  * A decision moves the card on at once and its write runs in this owner's scope. [TriageDeckState.notice] confirms
  * it only once the write commits; a failed write brings its card back. Undo works straight away: a reversal waits
  * behind a write still running, and removes exactly what that write added. [query] and [fromForYou] describe the
- * origin feed for save ranking.
+ * origin feed for save ranking. With a [removal], left takes the post out of the deck's Codex instead of skipping it.
  */
 class TriageDeckViewModel(
     private val feed: TriageFeed,
@@ -32,9 +32,13 @@ class TriageDeckViewModel(
     private val quickSave: QuickSave,
     private val query: Query?,
     private val fromForYou: Boolean,
+    private val removal: TriageRemoval? = null,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(TriageDeckState())
     val state: StateFlow<TriageDeckState> = mutableState.asStateFlow()
+
+    /** Whether a left swipe removes the post from the deck's Codex rather than skipping it. */
+    val removes: Boolean get() = removal != null
 
     /** The active profile's hidden tags, which the deck does not offer to hide again. */
     val hiddenTags: Flow<Set<HiddenTag>> get() = actions.hiddenTags
@@ -92,6 +96,7 @@ class TriageDeckViewModel(
     private suspend fun commit(choice: TriageChoice, post: Post): Reversal? = runCatchingPreservingCancellation<Reversal> {
         when (choice) {
             TriageChoice.Skip -> NOTHING
+            TriageChoice.Remove -> checkNotNull(removal) { "This deck does not remove" }.remove(post) ?: NOTHING
             TriageChoice.Like -> if (actions.like(post)) suspend { actions.unlike(post) } else NOTHING
             is TriageChoice.Save -> {
                 val record = quickSave.quickSave(post, choice.codexId, query, fromForYou) ?: error("The save failed")
@@ -141,6 +146,7 @@ private typealias Reversal = suspend () -> Unit
 private fun decisionFor(choice: TriageChoice, post: Post): TriageDecision = when (choice) {
     TriageChoice.Like -> TriageDecision.Liked(post)
     TriageChoice.Skip -> TriageDecision.Skipped(post)
+    TriageChoice.Remove -> TriageDecision.Removed(post)
     is TriageChoice.Save -> TriageDecision.Saved(post, choice.codexName)
     is TriageChoice.Hide -> TriageDecision.Hid(post, choice.tag)
 }

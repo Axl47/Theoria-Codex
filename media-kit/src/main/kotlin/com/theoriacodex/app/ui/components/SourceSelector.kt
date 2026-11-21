@@ -120,10 +120,13 @@ fun SourceScopeIndicator(source: SourceKey?, combinedSourceCount: Int) {
     }
 }
 
+/** One more chip after a [SourceIconMenu]'s sources, such as Search's Source mix: [label] names it for TalkBack. */
+class SourceMenuAction(val label: String, val icon: ImageVector, val onClick: () -> Unit)
+
 /**
  * Source choices as floating icon chips. Groups with a folder label (Rule34, the Danbooru sites) fold
  * into one labeled chip that opens their titled submenu. A null option is the combined view;
- * [onLongPress] enables a secondary action per source.
+ * [onLongPress] enables a secondary action per source. [action] closes the menu and runs.
  */
 @Composable
 fun SourceIconMenu(
@@ -134,6 +137,7 @@ fun SourceIconMenu(
     combinedLabel: String,
     onSelect: (SourceKey?) -> Unit,
     onLongPress: ((SourceKey) -> Unit)? = null,
+    action: SourceMenuAction? = null,
 ) {
     var openFolder by remember(expanded) { mutableStateOf<SourcePresentationGroup?>(null) }
     val folderOpen = openFolder != null
@@ -153,6 +157,7 @@ fun SourceIconMenu(
             SourceMenuChoices(
                 options, highlightedSources, combinedLabel, openFolder, { openFolder = it }, pick, onLongPress, health.issues,
             )
+            SourceMenuActionChip(action.takeUnless { folderOpen }, onDismiss)
         }
     }
 }
@@ -186,6 +191,16 @@ private fun SourceMenuChoices(
     folders.keys.forEach { group ->
         val label = requireNotNull(group.folderLabel)
         SourceFolderChip(label, group.folderIcon, highlightedSources.any { it.presentation().group == group }) { onOpenFolder(group) }
+    }
+}
+
+/** [action]'s chip, styled as a folder; none without one. */
+@Composable
+private fun SourceMenuActionChip(action: SourceMenuAction?, onDismiss: () -> Unit) {
+    if (action == null) return
+    SourceFolderChip(action.label, action.icon, selected = false) {
+        onDismiss()
+        action.onClick()
     }
 }
 

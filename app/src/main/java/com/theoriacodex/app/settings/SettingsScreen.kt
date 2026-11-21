@@ -27,7 +27,6 @@ import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.TouchApp
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -46,7 +45,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.videoQualityLabel
-import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.statistics.StatisticsSummary
 import com.theoriacodex.app.statistics.allProfileCodices
 import com.theoriacodex.app.statistics.shareOverall
@@ -58,12 +56,10 @@ import com.theoriacodex.data.repository.ScenarioPreset
 import com.theoriacodex.data.repository.SettingDestinations
 import com.theoriacodex.data.repository.SettingToggles
 import com.theoriacodex.app.ui.components.SwitchRow
-import com.theoriacodex.data.repository.SourceWeightSettings
 import com.theoriacodex.data.storage.CorruptionRecovery
-import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.launch
 
-private enum class SettingsSheet { PROFILE, SOURCE_MIX, DOWNLOADS, CONTROLS }
+private enum class SettingsSheet { PROFILE, DOWNLOADS, CONTROLS }
 
 private val STORAGE_TOGGLES = listOf(SettingToggles.KeepMediaOffline, SettingToggles.FindAnimationDurations)
 
@@ -76,7 +72,6 @@ fun SettingsScreen(
     state: SettingsUiState,
     onAction: (SettingsAction) -> Unit,
     statistics: StatisticsSummary = StatisticsSummary(),
-    searchSources: Set<SourceKey> = emptySet(),
     storageSummary: String? = null,
     sites: SettingsSitesEntry? = null,
     backup: SettingsBackupEntry? = null,
@@ -99,7 +94,7 @@ fun SettingsScreen(
         label = "Settings page",
     ) { page ->
         when (page) {
-            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, searchSources, storageSummary, sites, backup, diagnostics != null, onClose) {
+            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, storageSummary, sites, backup, diagnostics != null, onClose) {
                 chooseStatsFile.launch(arrayOf("application/json", "application/octet-stream", "text/plain"))
             }
             SettingsPage.SITES -> sites?.page?.invoke(
@@ -134,7 +129,6 @@ private fun SettingsHome(
     state: SettingsUiState,
     statistics: StatisticsSummary,
     onAction: (SettingsAction) -> Unit,
-    searchSources: Set<SourceKey>,
     storageSummary: String?,
     sites: SettingsSitesEntry?,
     backup: SettingsBackupEntry?,
@@ -160,7 +154,7 @@ private fun SettingsHome(
             SettingsRowDivider()
             SettingsRow(SettingDestinations.CompareStats.title, "Open a stats file someone sent you", Icons.AutoMirrored.Filled.CompareArrows, onClick = onCompareStats)
         }
-        SettingsHomeGroups(state, onAction, searchSources, storageSummary, sites, backup, showDiagnostics, { sheet = it }, open)
+        SettingsHomeGroups(state, onAction, storageSummary, sites, backup, showDiagnostics, { sheet = it }, open)
         if (state.showDeveloperScenarios) DeveloperScenarios(state, onAction)
     }
     if (showAddProfile) {
@@ -186,7 +180,7 @@ private fun SettingsHome(
         )
     }
     sheet?.let {
-        SettingsHomeSheet(it, state, onAction, searchSources, { renameTarget = state.activeProfile }) { sheet = null }
+        SettingsHomeSheet(it, state, onAction, { renameTarget = state.activeProfile }) { sheet = null }
     }
 }
 
@@ -194,7 +188,6 @@ private fun SettingsHome(
 private fun SettingsHomeGroups(
     state: SettingsUiState,
     onAction: (SettingsAction) -> Unit,
-    searchSources: Set<SourceKey>,
     storageSummary: String?,
     sites: SettingsSitesEntry?,
     backup: SettingsBackupEntry?,
@@ -202,11 +195,6 @@ private fun SettingsHomeGroups(
     onSheet: (SettingsSheet) -> Unit,
     open: (SettingsPage) -> Unit,
 ) {
-    SettingsGroup("Recommendations") {
-        SettingsRow(SettingDestinations.SourceMix.title, sourceMixSummary(state, searchSources), Icons.Default.Tune, onClick = {
-            onSheet(SettingsSheet.SOURCE_MIX)
-        })
-    }
     SettingsGroup("Sources") {
         if (sites != null) {
             SettingsRow(
@@ -263,7 +251,6 @@ private fun SettingsHomeSheet(
     sheet: SettingsSheet,
     state: SettingsUiState,
     onAction: (SettingsAction) -> Unit,
-    searchSources: Set<SourceKey>,
     onRenameProfile: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -282,9 +269,6 @@ private fun SettingsHomeSheet(
                     onDismiss()
                     onAction(SettingsAction.RequestRemoveProfile(state.activeProfile.profileId))
                 }
-            }
-            SettingsSheet.SOURCE_MIX -> UnifiedSourceSettings(searchSources, state.settings.runtime) {
-                onAction(SettingsAction.SetSourceWeights(searchSources, it))
             }
             SettingsSheet.DOWNLOADS -> DownloadPreferencesSection(state, onAction)
             SettingsSheet.CONTROLS -> PreferencesSection(state, onAction)
@@ -473,14 +457,6 @@ internal fun scenarioLabel(scenario: ScenarioPreset): String = when (scenario) {
 internal fun statsSummary(statistics: StatisticsSummary): String =
     "${formatStatsDuration(statistics.totalForegroundMs)} in app · " +
         "${statistics.watchedPostCount} watched · ${statistics.savedPostCount} saved"
-
-internal fun sourceMixSummary(state: SettingsUiState, sources: Set<SourceKey>): String {
-    if (sources.size < 2) return "Hold sources in Search to combine them"
-    val weights = SourceWeightSettings.weightsFor(state.settings.runtime, sources)
-    return sources.sorted().joinToString(" · ") { source ->
-        "${source.displayName()} ${(weights.getValue(source) * 100).toInt()}%"
-    }
-}
 
 internal fun downloadsSummary(state: SettingsUiState): String =
     "${videoQualityLabel(state.settings.cache.downloadQuality)} quality"

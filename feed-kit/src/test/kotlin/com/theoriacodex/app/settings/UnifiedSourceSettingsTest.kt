@@ -32,7 +32,7 @@ class UnifiedSourceSettingsTest {
                 }
             }
         }
-        composeRule.onNodeWithText("Share of results in Unified mode. Hold sources in Search to choose them.").assertExists()
+        composeRule.onNodeWithText("Hold a source in the picker to add it.").assertExists()
         composeRule.onNodeWithContentDescription("Pixiv weight").assertDoesNotExist()
     }
 

@@ -116,16 +116,18 @@ private fun CodexCleaningOverlay(presentation: CodexListPresentation, state: Cod
     val matches by remember(target.codexId, comparisonIds, presentation.observeCleaningMatches) {
         presentation.observeCleaningMatches(target.codexId, comparisonIds)
     }.collectAsStateWithLifecycle(emptyMap())
+    val isLikesCodex = target.codexId == presentation.likesCodexId
     CodexCleaningSheet(
         target = target,
         codices = codices,
-        isLikesCodex = target.codexId == presentation.likesCodexId,
+        isLikesCodex = isLikesCodex,
         matches = matches,
         onDismiss = { state.cleaningTargetId = null },
         onClean = { comparisonIds ->
             state.cleaningTargetId = null
             actions.cleanCodex(target.codexId, comparisonIds)
         },
+        onReview = rememberCleaningReview(target.codexId.takeUnless { isLikesCodex }) { state.cleaningTargetId = null },
     )
 }
 

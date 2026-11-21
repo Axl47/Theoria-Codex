@@ -123,6 +123,27 @@ class SearchSourcePickerTest {
         composeRule.runOnIdle { assertEquals(listOf(QueryMode.Source(SourceKey.RULE34VIDEO)), clicked) }
     }
 
+    @Test
+    fun aUnifiedSearchOffersSourceMixAfterItsSourcesAndClosesTheMenu() {
+        var opened = 0
+        composeRule.setContent {
+            MaterialTheme {
+                SearchSourcePicker(
+                    draftSourceScope = SearchSourceScope.GlobalUnified,
+                    sources = listOf(SourceKey.PIXIV, SourceKey.GELBOORU),
+                    unifiedSources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU),
+                    onModeSelected = {},
+                    onTemporarySourceToggled = {},
+                    onOpenSourceMix = { opened++ },
+                )
+            }
+        }
+        composeRule.onNodeWithContentDescription("Search source: Unified, 2 sources").performClick()
+        composeRule.onNodeWithContentDescription("Source mix").performClick()
+        composeRule.onNodeWithContentDescription("Pixiv").assertDoesNotExist()
+        composeRule.runOnIdle { assertEquals(1, opened) }
+    }
+
     private fun assertCombinedOwner(node: SemanticsNodeInteraction, hasLongClick: Boolean) {
         val config = node.fetchSemanticsNode().config
         assertEquals(Role.Checkbox, config[SemanticsProperties.Role])
