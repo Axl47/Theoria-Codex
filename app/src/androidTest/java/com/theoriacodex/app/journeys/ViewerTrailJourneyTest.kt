@@ -1,5 +1,6 @@
 package com.theoriacodex.app.journeys
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsNodeInteraction
@@ -7,9 +8,8 @@ import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipe
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.first
@@ -34,7 +34,10 @@ class ViewerTrailJourneyTest : AppJourneyFixture() {
         compose.waitUntil(15_000) { forkCrumb.isDisplayed() }
         val forkStart = selectedPost()
 
-        compose.onRoot().performTouchInput { swipeLeft() }
+        // The active media overlay owns the paging swipe; stay off the system back-gesture edges.
+        compose.onNodeWithContentDescription("Media actions", useUnmergedTree = true).performTouchInput {
+            swipe(start = Offset(width * 0.85f, height * 0.5f), end = Offset(width * 0.15f, height * 0.5f), durationMillis = 400L)
+        }
         compose.waitUntil(10_000) { selectedPost().let { it != null && it != forkStart } }
 
         activate(compose.onNodeWithContentDescription("Back"))
