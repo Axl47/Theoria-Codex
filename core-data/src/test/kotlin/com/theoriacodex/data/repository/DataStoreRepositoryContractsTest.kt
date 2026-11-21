@@ -99,6 +99,7 @@ class DataStoreRepositoryContractsTest(
         )
 
         repository.setLastTab("codex")
+        repository.setLibrarySection("SAVED")
         repository.setSearchScrollState(
             "query",
             SearchScrollState(firstVisibleItemIndex = 5, firstVisibleItemOffsetPx = 17),
@@ -106,6 +107,7 @@ class DataStoreRepositoryContractsTest(
         repository.setViewerLaunchContext(launch)
 
         assertEquals("codex", repository.getLastTab())
+        assertEquals("SAVED", repository.getLibrarySection())
         assertEquals(5, repository.getSearchScrollState("query")?.firstVisibleItemIndex)
         assertEquals(launch, repository.observeViewerLaunchContext().first())
     }

@@ -217,6 +217,14 @@ class DataStoreUiRestoreRepository(
         return dataStore.data.first().toMemoryState().lastTab
     }
 
+    override suspend fun setLibrarySection(section: String) {
+        mutateState { current -> current.copy(librarySection = section) }
+    }
+
+    override suspend fun getLibrarySection(): String? {
+        return dataStore.data.first().toMemoryState().librarySection
+    }
+
     override suspend fun setSearchScrollState(queryHash: String, state: SearchScrollState) {
         val normalizedHash = queryHash.trim()
         if (normalizedHash.isBlank()) return

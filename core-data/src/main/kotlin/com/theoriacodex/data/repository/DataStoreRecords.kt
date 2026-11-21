@@ -133,6 +133,7 @@ internal fun normalizeUiRestoreState(state: PersistedUiRestoreState): PersistedU
     }
     return PersistedUiRestoreState(
         lastTab = state.lastTab?.trim()?.takeIf(String::isNotBlank),
+        librarySection = state.librarySection?.trim()?.takeIf(String::isNotBlank),
         scrollStates = boundedScrollStates,
         feedFabRestoreStates = boundedFabStates,
         viewerLaunchContext = state.viewerLaunchContext,
