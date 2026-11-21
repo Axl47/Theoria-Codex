@@ -72,6 +72,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /** Dependencies whose lifetime is longer than one Viewer destination composition. */
@@ -219,6 +221,7 @@ internal fun ViewerRoute(
     val latestScreenCallbacks = rememberUpdatedState(screenCallbacks)
     val latestOnOwnerChanged = rememberUpdatedState(onOwnerChanged)
     val routeScope = rememberCoroutineScope()
+    val mediaRetries = remember { Mutex() }
     val viewerOwner = rememberViewerOwner(latestDependencies, rememberUpdatedState(config))
     val durationOwner = viewModel<MediaDurationRouteViewModel>(
         key = "viewer-duration-owner",
@@ -237,7 +240,7 @@ internal fun ViewerRoute(
     LaunchedEffect(viewerOwner, restoration.claimedSessionId, restoration.attempt) { restoration.run() }
     ViewerLiveSourceMergeEffect(viewerOwner, session, liveSourceState)
     CollectRouteEffects(viewerOwner.effects) { effect ->
-        handleViewerEffect(effect, viewerOwner, latestEffectCallbacks.value, latestDependencies, viewerReturn, routeScope)
+        handleViewerEffect(effect, viewerOwner, latestEffectCallbacks.value, latestDependencies, viewerReturn, routeScope, mediaRetries)
     }
     ViewerUsageTargetEffect(session?.context, viewerState, dependencies.onCodexUsageTargetChanged)
 
@@ -514,7 +517,8 @@ internal suspend fun appendLiveSourcePosts(
 /**
  * Handles one effect against the state at its delivery, not when it was emitted. Effects run in
  * order because the collector awaits each one; media recovery waits on a provider, so it runs in
- * [routeScope] instead, where it cannot hold a later Dismiss behind it.
+ * [routeScope] instead, where it cannot hold a later Dismiss behind it. [mediaRetries] keeps manual retries in
+ * order, so an older retry cannot finish after a newer one and replace its post.
  */
 private suspend fun handleViewerEffect(
     effect: ViewerEffect.Route,
@@ -523,6 +527,7 @@ private suspend fun handleViewerEffect(
     dependencies: State<ViewerRouteDependencies>,
     viewerReturn: ViewerReturnTransition?,
     routeScope: CoroutineScope,
+    mediaRetries: Mutex,
 ) {
     val currentState = viewerOwner.state.value
     if (!effect.isCurrentFor(currentState)) return
@@ -540,7 +545,12 @@ private suspend fun handleViewerEffect(
         is ViewerEffect.ApplyTag -> post(effect.postId)?.let { selected ->
             callbacks.onApplyTag(selected, effect.term, effect.excluded)
         }
-        is ViewerEffect.RetryMedia -> routeScope.launch { retryViewerMedia(effect, currentState, viewerOwner, callbacks) }
+        is ViewerEffect.RetryMedia -> routeScope.launch {
+            mediaRetries.withLock {
+                val state = viewerOwner.state.value
+                if (effect.isCurrentFor(state)) retryViewerMedia(effect, state, viewerOwner, callbacks)
+            }
+        }
         is ViewerEffect.LoadMore -> viewerOwner.session.value?.context?.streamSource?.let(callbacks.onLoadMore)
         is ViewerEffect.Dismiss -> {
             viewerOwner.clearSession(retainPresentation = true)
