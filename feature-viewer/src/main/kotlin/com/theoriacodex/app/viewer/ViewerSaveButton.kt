@@ -63,7 +63,6 @@ import com.theoriacodex.app.codex.CodexCoverImage
 import com.theoriacodex.app.codex.LocalQuickSave
 import com.theoriacodex.app.codex.QuickSave
 import com.theoriacodex.app.codex.QuickSaveRecord
-import com.theoriacodex.app.codex.SaveSuggestions
 import com.theoriacodex.app.ui.components.CollectTarget
 import com.theoriacodex.app.ui.components.CollectTargetVisual
 import com.theoriacodex.app.ui.components.CollectTargets
@@ -137,7 +136,7 @@ internal fun ViewerSaveButton(
     hold.onStart = onInteraction
     hold.onTap = { run(state.tapCommand()) }
     hold.onRelease = { run(viewerSaveFanRelease(it)) }
-    hold.targets = { viewerSaveFanTargets(suggestions).map { it.collectTarget() } }
+    hold.targets = { viewerSaveFanTargets(post.id, suggestions).map { it.collectTarget() } }
     Row(
         Modifier
             .clip(RoundedCornerShape(50))
@@ -174,11 +173,11 @@ internal fun ViewerSaveFanOverlay(fan: ViewerSaveFanState) {
 
 /** Suggestions for the settled post; the previous post's stay until the new ones arrive, since scoring walks the library. */
 @Composable
-private fun rememberSettledSaveSuggestions(quickSave: QuickSave, post: Post, query: Query?): SaveSuggestions? {
-    var latest by remember(quickSave) { mutableStateOf<SaveSuggestions?>(null) }
+private fun rememberSettledSaveSuggestions(quickSave: QuickSave, post: Post, query: Query?): ViewerPostSuggestions? {
+    var latest by remember(quickSave) { mutableStateOf<ViewerPostSuggestions?>(null) }
     LaunchedEffect(quickSave, post.id, query) {
         delay(SUGGESTION_SETTLE_MS)
-        quickSave.suggestions(post, query).collect { latest = it }
+        quickSave.suggestions(post, query).collect { latest = ViewerPostSuggestions(post.id, it) }
     }
     return latest
 }
