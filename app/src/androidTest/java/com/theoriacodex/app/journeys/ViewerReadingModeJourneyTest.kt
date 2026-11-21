@@ -53,7 +53,7 @@ class ViewerReadingModeJourneyTest : AppJourneyFixture() {
     private fun openGallery() {
         io {
             container.data.recentsRepository.recordSearch(
-                Query(QueryMode.Source(SourceKey.PIXIV), listOf("modes"), emptyList(), SortMode.POPULAR, null, null),
+                Query(QueryMode.Source(SourceKey.PIXIV), listOf("multi"), emptyList(), SortMode.POPULAR, null, null),
                 RECENT_SEARCH,
             )
         }
