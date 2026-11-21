@@ -82,6 +82,27 @@ class ForYouSectionsStateTest {
         assertTrue(owner.state.value.blacklistEntries.isEmpty())
     }
 
+    @Test fun `a refill planned before a second strike never brings back a shelf that strike hides`() = runTest {
+        val planned = CompletableDeferred<Unit>()
+        val engine = SectionsEngine().apply {
+            sectionLoader = { request ->
+                if (request.additionalSection) listOf(section("city")).also { planned.await() }
+                else listOf(section("boats"), section("forest"))
+            }
+        }
+        val owner = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        engine.onSettings = { owner.synchronizeEnvironment(it, 3) }
+        owner.synchronizeEnvironment(AppSettings(), 3)
+        advanceUntilIdle()
+        owner.onAction(ForYouAction.HideTag(SourceKey.PIXIV, "boats"))
+        runCurrent()
+        owner.onAction(ForYouAction.HideTag(SourceKey.PIXIV, "city"))
+        runCurrent()
+        planned.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(listOf("forest"), owner.state.value.home.sections.map { it.title })
+    }
+
     @Test fun `a pinned shelf survives striking one of its tags`() = runTest {
         val pinned = tagged("boats", "sea").copy(title = "Harbors", savedSearchId = "saved")
         val engine = SectionsEngine().apply {
