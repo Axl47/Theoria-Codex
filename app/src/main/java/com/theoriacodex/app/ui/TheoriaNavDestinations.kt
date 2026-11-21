@@ -88,6 +88,8 @@ internal fun NavGraphBuilder.theoriaDestinations(shell: TheoriaShell, sharedScop
         ViewerReturnLifetime(this)
         ViewerDestination(shell)
     }
+    composable(AppRoute.Settings) { SettingsScreenDestination(shell) }
+    composable(AppRoute.Triage, arguments = triageArguments) { entry -> TriageDestination(shell, entry.triageRequest()) }
 }
 
 @Composable
@@ -318,7 +320,7 @@ private fun viewerLiveSourceState(
 private suspend fun TheoriaShell.viewerDownloadOrigin(): String {
     val launch = routes.viewer.current?.session?.value?.context
     return when (launch?.streamSource) {
-        ViewerStreamSource.SEARCH -> "Search"
+        ViewerStreamSource.SEARCH, ViewerStreamSource.TRAIL -> "Search"
         ViewerStreamSource.FOR_YOU -> "FYP"
         ViewerStreamSource.CODEX -> {
             val id = launch.queryHash.removePrefix("codex:")

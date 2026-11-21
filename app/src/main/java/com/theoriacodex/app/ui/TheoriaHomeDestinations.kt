@@ -19,7 +19,6 @@ import com.theoriacodex.app.search.state.SearchEffect
 import com.theoriacodex.app.recents.RecentsRelatedViewModel
 import com.theoriacodex.app.recents.RecentsScreen
 import com.theoriacodex.app.settings.SettingsAction
-import com.theoriacodex.app.settings.sites.rememberCustomSitesEntry
 import com.theoriacodex.app.source.creatorBrowsingSources
 import com.theoriacodex.app.ui.components.FOR_YOU_FEED_FAB_CONTEXT
 import com.theoriacodex.app.ui.components.SEARCH_FEED_FAB_CONTEXT
@@ -35,8 +34,6 @@ import com.theoriacodex.app.ui.routes.RecentsDestinationStateBoundary
 import com.theoriacodex.app.ui.routes.SearchRoute
 import com.theoriacodex.app.ui.routes.SearchRouteCallbacks
 import com.theoriacodex.app.ui.routes.SearchRouteConfig
-import com.theoriacodex.app.settings.StatsActions
-import com.theoriacodex.app.ui.routes.SettingsDestinationStateBoundary
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
@@ -59,18 +56,7 @@ internal fun HomePager(shell: TheoriaShell) {
             TopLevelDestination.ForYou -> ForYouDestination(shell)
             TopLevelDestination.Recents -> RecentsDestination(shell)
             TopLevelDestination.Codex -> CodexLibraryDestination(shell, actionCodexId = null)
-            TopLevelDestination.Settings -> {
-                SettingsDestinationStateBoundary(
-                    shell.owners.settings, shell.routes.search.current, libraryStorageSummary(shell.transfers),
-                    sites = rememberCustomSitesEntry(shell.container),
-                    statsActions = remember(shell) {
-                        StatsActions(shell::openStatisticsPost, shell::shareStats, shell::readStatsFile, shell::previewStatisticsPost, shell::downloadStats)
-                    },
-                    diagnostics = shell.diagnosticsEntry,
-                ) {
-                    LibraryTransferSettings(shell.transfers)
-                }
-            }
+            TopLevelDestination.Settings -> SettingsScreenDestination(shell)
         }
     }
 }

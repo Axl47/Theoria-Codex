@@ -584,6 +584,8 @@ enum class ViewerStreamSource {
     CODEX,
     CREATOR_PROFILE,
     RECENTS,
+    /** A Trail: a Viewer level forked from a post by tag, creator or similarity. Recorded like a search. */
+    TRAIL,
 }
 
 data class ViewerLaunchContext(

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import android.net.Uri
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
@@ -15,6 +16,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.unit.IntOffset
 import androidx.navigation.NavBackStackEntry
 import com.theoriacodex.app.ui.motion.TheoriaMotion
+import com.theoriacodex.app.ui.navigation.TriageRequest
 import com.theoriacodex.app.statistics.StatisticsUsageCategory
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -24,10 +26,16 @@ internal object AppRoute {
     const val CreatorProfile = "creator-profile"
     const val Viewer = "viewer"
     const val CodexDetail = "codex/detail/{codexId}"
+    const val Settings = "settings-screen"
+
+    /** The triage deck over one feed, named by a [TriageRequest]. Stream T may reshape these arguments. */
+    const val Triage = "triage/{source}?feedKey={feedKey}"
 
     fun codexDetail(codexId: String): String {
         return "codex/detail/$codexId"
     }
+
+    fun triage(request: TriageRequest): String = "triage/${request.source.name}?feedKey=${Uri.encode(request.feedKey)}"
 }
 
 /** Slow tab swipes commit as readily as Viewer swipes; the library default needs half the screen. */

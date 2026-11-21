@@ -65,6 +65,13 @@ import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.codex.CodexCollectionSource
 import com.theoriacodex.app.codex.CodexSaveRelevanceLoader
 import com.theoriacodex.app.codex.LocalCodexPostIds
+import com.theoriacodex.app.recommend.LocalLikedTagCounts
+import com.theoriacodex.app.codex.LocalQuickSave
+import com.theoriacodex.app.ui.navigation.LocalTriageOpener
+import com.theoriacodex.app.ui.navigation.LiftController
+import com.theoriacodex.app.ui.navigation.LocalLiftController
+import com.theoriacodex.app.ui.navigation.TrailOpener
+import com.theoriacodex.app.ui.navigation.LocalTrailOpener
 import com.theoriacodex.app.codex.LocalCodexSaveRelevanceLoader
 import com.theoriacodex.app.codex.SaveToCodexSheet
 import com.theoriacodex.app.codex.profileScopedCodexId
@@ -164,16 +171,19 @@ internal fun TheoriaAppContent(
     val sourceHealth = rememberSourceHealth(shell)
     val savedTags = rememberPostTagSavedTags(shell)
     CompositionLocalProvider(
+        LocalTrailOpener provides TrailOpener.None,
         LocalCodexPostIds provides rememberCodexPostIds(shell),
         com.theoriacodex.app.search.LocalPostWatchPresentation provides watchPresentation,
         LocalCodexSaveRelevanceLoader provides saveRelevanceLoader,
-        com.theoriacodex.app.codex.LocalQuickSave provides rememberQuickSave(shell, saveRelevanceLoader),
-        com.theoriacodex.app.recommend.LocalLikedTagCounts provides rememberLikedTagCounts(shell),
+        LocalQuickSave provides rememberQuickSave(shell, saveRelevanceLoader),
+        LocalLikedTagCounts provides rememberLikedTagCounts(shell),
         LocalViewerReturnTransition provides viewerReturnTransition,
         LocalPostMenuActions provides rememberPostMenuActions(shell),
+        LocalLiftController provides LiftController.None,
         LocalNetworkOnline provides shell.sources.networkOnline,
         LocalSourceHealth provides sourceHealth,
         com.theoriacodex.app.related.LocalRelatedPostsSupport provides relatedPostsSupport,
+        LocalTriageOpener provides rememberTriageOpener(shell),
     ) {
         com.theoriacodex.app.codex.SavedCodexSession {
             PostTagContextProvider(
