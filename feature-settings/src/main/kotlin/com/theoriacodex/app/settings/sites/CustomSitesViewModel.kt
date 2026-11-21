@@ -364,9 +364,14 @@ class CustomSitesViewModel(
         setFields(reset, transform)
         val form = state.value.form as? SiteForm.Edit ?: return
         if (form.saving) return
-        val headers = (form.fields.headers() as? FormInput.Ok)?.value
-        if (headers == null) updateEdit { copy(message = HEADER_ERROR_MESSAGE) }
-        val fields = LiveFields(form.fields.label, form.fields.includeInUnifiedAndForYou, headers)
+        // An invalid field waits unsaved (see SiteLiveEdits), so say why.
+        val error = when {
+            form.fields.label.isBlank() -> mutationMessage(CustomSiteMutation.InvalidLabel(SiteProfile.MAX_LABEL_LENGTH))
+            form.fields.headers() is FormInput.Invalid -> HEADER_ERROR_MESSAGE
+            else -> null
+        }
+        if (error != null) updateEdit { copy(message = error) }
+        val fields = form.fields.let { LiveFields(it.label, it.includeInUnifiedAndForYou, it.userAgent, it.referer) }
         liveEdits.schedule(form.sourceId, field, fields, wait)
     }
 
