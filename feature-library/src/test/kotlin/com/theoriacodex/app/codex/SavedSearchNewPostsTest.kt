@@ -86,6 +86,37 @@ class SavedSearchNewPostsTest {
         assertEquals(mapOf("a" to 0), counts())
     }
 
+    /** A saved search "a" with posts 1 and 2 counted as new. */
+    private suspend fun savedSearchWithTwoNew(): SavedSearchEntry {
+        val saved = entry("a", 1)
+        pages = mapOf("a" to listOf("1"))
+        checker.checkIfStale(listOf(saved), 0L)
+        pages = mapOf("a" to listOf("3", "2", "1"))
+        checker.checkIfStale(listOf(saved), 3 * hour)
+        assertEquals(mapOf("a" to 2), counts())
+        return saved
+    }
+
+    @Test fun `opening a saved search keeps its marks until Search shows results for it`() = runTest {
+        val saved = savedSearchWithTwoNew()
+        val opens = SavedSearchOpenMarks(store)
+        opens.opened(saved)
+        // A failed or offline load never reports results, and another query's results are not this search's.
+        opens.resultsShown(saved.search.query.copy(minScore = 5), listOf(testPost(SourceKey.PIXIV, "3")))
+        assertEquals(mapOf("a" to 2), counts())
+    }
+
+    @Test fun `results clear only the posts they showed`() = runTest {
+        val saved = savedSearchWithTwoNew()
+        val opens = SavedSearchOpenMarks(store)
+        opens.opened(saved)
+        opens.resultsShown(saved.search.query, listOf(testPost(SourceKey.PIXIV, "3"), testPost(SourceKey.PIXIV, "1")))
+        assertEquals(mapOf("a" to 1), counts())
+        // Reported once: later reports (a refresh) do not clear what that opening left new.
+        opens.resultsShown(saved.search.query, listOf(testPost(SourceKey.PIXIV, "2")))
+        assertEquals(mapOf("a" to 1), counts())
+    }
+
     private fun entry(id: String, savedAt: Long, sort: SortMode = SortMode.NEWEST) = SavedSearchEntry(id, id, RecentSearchEntry(
         Query(QueryMode.Unified, listOf("tag"), emptyList(), sort, null, null), id, 1,
     ), savedAt)

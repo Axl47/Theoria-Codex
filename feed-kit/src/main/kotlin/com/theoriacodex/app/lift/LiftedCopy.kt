@@ -2,34 +2,30 @@ package com.theoriacodex.app.lift
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.center
 import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
 import androidx.compose.ui.util.lerp
-import com.theoriacodex.app.media.previewMediaDeliveryPlan
-import com.theoriacodex.app.search.FeedAsyncImage
-import com.theoriacodex.app.search.buildFeedImageRequest
-import com.theoriacodex.app.search.feedPreviewDecodeSize
-import com.theoriacodex.app.search.previewAspectRatio
-import com.theoriacodex.domain.model.Post
+import com.theoriacodex.app.search.SearchResultCard
+import com.theoriacodex.app.viewer.PixivUgoiraClient
+
+/** The shell's Pixiv animation client, so a lifted ugoira card plays as its grid card does. */
+val LocalLiftUgoiraClient = staticCompositionLocalOf<PixivUgoiraClient?> { null }
 
 /**
- * The card's still copy under the finger. While lifted it follows [LiftSession.pointer] in layout only; once
+ * The card's copy under the finger. While lifted it follows [LiftSession.pointer] in layout only; once
  * released it shrinks into the target it was dropped on, or returns to its card, as [land] runs from 0 to 1.
  */
 @Composable
@@ -51,8 +47,23 @@ internal fun LiftedCopy(session: LiftSession, lift: LiftedPost, settling: LiftPh
                 shadowElevation = LIFTED_ELEVATION.toPx()
                 this.shape = shape
                 clip = true
-            },
-    ) { LiftedPostStill(lift.post) }
+            }
+            // A picture of the card, not a second one: TalkBack and tests keep finding the original only.
+            .clearAndSetSemantics {},
+    ) { LiftedCard(lift, bounds.width / bounds.height) }
+}
+
+/** The grid's own card, so an animated or video post keeps playing under the finger. */
+@Composable
+internal fun LiftedCard(lift: LiftedPost, aspectRatio: Float) {
+    SearchResultCard(
+        post = lift.post,
+        pixivUgoiraClient = LocalLiftUgoiraClient.current,
+        showTitle = false,
+        mediaAspectRatio = aspectRatio,
+        liked = lift.like?.liked == true,
+        onClick = {},
+    )
 }
 
 /** Where the copy's top-left sits: under the finger while lifted, then easing to where it lands. */
@@ -62,22 +73,6 @@ private fun copyTopLeft(lift: LiftedPost, pointer: Offset, settling: LiftPhase.S
     if (settling == null) return held
     val landing = if (settling.action != null) settling.at - bounds.size.center else bounds.topLeft
     return lerp(held, landing, progress)
-}
-
-/** The post's first preview image, requested as its card does so the memory cache usually has it; never animated. */
-@Composable
-private fun LiftedPostStill(post: Post) {
-    val context = LocalContext.current
-    val windowWidth = LocalWindowInfo.current.containerSize.width
-    val request = remember(post.id, windowWidth) {
-        previewMediaDeliveryPlan(post).candidates.firstOrNull()?.let { candidate ->
-            buildFeedImageRequest(
-                context, candidate.location, post.id.source,
-                feedPreviewDecodeSize(screenWidthPx = windowWidth, aspectRatio = previewAspectRatio(post)),
-            )
-        }
-    }
-    FeedAsyncImage(request, contentDescription = null, contentScale = ContentScale.Crop, isActive = false, modifier = Modifier.fillMaxSize())
 }
 
 private const val LIFTED_SCALE = 1.05f

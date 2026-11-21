@@ -1,10 +1,8 @@
 package com.theoriacodex.app.triage
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -13,7 +11,6 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material.icons.outlined.RemoveCircleOutline
 import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material3.CardDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -25,17 +22,13 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
@@ -46,11 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.codex.SaveSuggestion
 import com.theoriacodex.app.codex.SaveSuggestions
-import com.theoriacodex.app.media.previewMediaDeliveryPlan
 import com.theoriacodex.app.recommend.LocalLikedTagCounts
-import com.theoriacodex.app.search.FeedAsyncImage
-import com.theoriacodex.app.search.buildFeedImageRequest
-import com.theoriacodex.app.search.feedPreviewDecodeSize
 import com.theoriacodex.app.search.previewAspectRatio
 import com.theoriacodex.app.ui.components.CollectTarget
 import com.theoriacodex.app.ui.components.CollectTargetVisual
@@ -150,11 +139,11 @@ private fun rememberTriageTargets(
 }
 
 /**
- * The card, with the next one peeking behind it while the card is away from rest. The peek is a still: only the
- * card on top plays, and the next card's player starts when it becomes the top card.
+ * The card, with the next one behind it while the card is away from rest. The next card is the same feed card, so it
+ * plays like any visible one for as long as it shows; at rest it is not composed, so it holds no player.
  */
 @Composable
-private fun TriageCards(
+internal fun TriageCards(
     deck: TriageDeckState,
     drag: TriageDrag,
     support: TriageCardSupport,
@@ -176,7 +165,16 @@ private fun TriageCards(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            TriagePeek(next, max(previewAspectRatio(next), ratioFloor))
+            FeedPostCard(
+                post = next,
+                environment = support.environment,
+                onClick = {},
+                onLongPress = null,
+                likeEnabled = false,
+                mediaAspectRatio = max(previewAspectRatio(next), ratioFloor),
+                resolvePostById = support.resolvePostById,
+                recoverPostMedia = support.recoverPostMedia,
+            )
         }
     }
     key(current.id) {
@@ -202,28 +200,6 @@ private fun TriageCards(
             )
         }
     }
-}
-
-/** The next card's first preview image at the card's shape, requested as the card does; never animated. */
-@Composable
-private fun TriagePeek(post: Post, aspectRatio: Float) {
-    val context = LocalContext.current
-    val windowWidth = LocalWindowInfo.current.containerSize.width
-    val request = remember(post.id, windowWidth) {
-        previewMediaDeliveryPlan(post).candidates.firstOrNull()?.let { candidate ->
-            buildFeedImageRequest(
-                context, candidate.location, post.id.source,
-                feedPreviewDecodeSize(screenWidthPx = windowWidth, aspectRatio = previewAspectRatio(post)),
-            )
-        }
-    }
-    FeedAsyncImage(
-        request,
-        contentDescription = null,
-        contentScale = ContentScale.Crop,
-        isActive = false,
-        modifier = Modifier.fillMaxWidth().aspectRatio(aspectRatio).clip(CardDefaults.elevatedShape),
-    )
 }
 
 /** Lets TalkBack users decide without dragging; when the deck [removes], right is Keep and left Remove. */

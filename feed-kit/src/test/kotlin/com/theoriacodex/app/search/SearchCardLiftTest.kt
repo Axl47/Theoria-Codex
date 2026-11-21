@@ -7,6 +7,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -21,7 +22,11 @@ import com.theoriacodex.app.lift.LiftPhase
 import com.theoriacodex.app.lift.LiftSession
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.ui.navigation.LiftController
+import com.theoriacodex.app.ui.navigation.LiftLike
 import com.theoriacodex.app.ui.navigation.LocalLiftController
+import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -73,6 +78,22 @@ class SearchCardLiftTest {
     }
 
     @Test
+    fun `a card in a search grid lifts with the grid's applied query`() {
+        val applied = Query.newest(SourceKey.PIXIV)
+        var started: Query? = null
+        val controller = object : LiftController by LiftController.None {
+            override fun start(post: Post, cardBounds: Rect, pointer: Offset, query: Query?, like: LiftLike?): Boolean {
+                started = query
+                return false
+            }
+        }
+        showCard(controller, query = applied)
+        compose.onNodeWithTag(searchCardTestTag(post.id)).performTouchInput { longClick() }
+
+        compose.runOnIdle { assertEquals(applied, started) }
+    }
+
+    @Test
     fun `accessibility services keep a long-click action that opens the menu`() {
         showCard(session)
         val card = compose.onNodeWithTag(searchCardTestTag(post.id))
@@ -82,9 +103,9 @@ class SearchCardLiftTest {
         compose.runOnIdle { assertEquals(1, menus) }
     }
 
-    private fun showCard(controller: LiftController) {
+    private fun showCard(controller: LiftController, query: Query? = null) {
         compose.setContent {
-            CompositionLocalProvider(LocalLiftController provides controller) {
+            CompositionLocalProvider(LocalLiftController provides controller, LocalLiftQuery provides query) {
                 MaterialTheme {
                     Box(Modifier.size(200.dp)) {
                         SearchResultCard(

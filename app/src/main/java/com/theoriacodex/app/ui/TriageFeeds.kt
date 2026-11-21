@@ -46,8 +46,10 @@ internal class SeededTriageFeed(
     override val snapshots: Flow<TriageFeedSnapshot>,
     val candidates: Flow<List<Post>>,
     private val nextPage: () -> Unit,
+    private val retry: () -> Unit = {},
 ) : TriageFeed {
     override fun loadNextPage() = nextPage()
+    override fun retryPage() = retry()
 }
 
 /**
@@ -65,7 +67,7 @@ internal fun TheoriaShell.triageFeed(request: TriageRequest, seed: TriageSeed): 
         val alsoIn = (request.mode as? TriageMode.RemoveFromCodex)?.alsoIn.orEmpty()
         val snapshots = if (alsoIn.isEmpty()) flowOf(TriageFeedSnapshot(seed.posts, canLoadMore = false))
         else cleaningReviewSnapshots(codexId, alsoIn)
-        SeededTriageFeed(snapshots, flowOf(emptyList())) {}
+        SeededTriageFeed(snapshots, flowOf(emptyList()), nextPage = {})
     }
     ViewerStreamSource.RELATED, ViewerStreamSource.RECENTS, ViewerStreamSource.TRAIL -> null
 }
@@ -109,11 +111,17 @@ private fun ViewerFeedOwner.seededTriageFeed(
     val snapshots = combine(feed, if (seed.lengthFilterActive) lengths else flowOf(emptyMap())) { current, decided ->
         if (current == null) return@combine TriageFeedSnapshot(emptyList(), canLoadMore = false)
         val shown = seed.filter(current.results, decidedLengths(current.results, decided))
-        TriageFeedSnapshot(seed.posts + shown, current.canLoadMore, loaded = current.results.size)
+        TriageFeedSnapshot(
+            seed.posts + shown, current.canLoadMore, loaded = current.results.size,
+            loadingMore = current.loadingMore, pageFailed = current.pageFailed,
+        )
     }.distinctUntilChanged().flowOn(Dispatchers.Default)
-    return SeededTriageFeed(snapshots, feed.map { current -> current?.results.orEmpty() }) {
-        if (owner.viewerFeed.queryHash == queryHash) owner.loadNextPage()
-    }
+    return SeededTriageFeed(
+        snapshots,
+        feed.map { current -> current?.results.orEmpty() },
+        nextPage = { if (owner.viewerFeed.queryHash == queryHash) owner.loadNextPage() },
+        retry = { if (owner.viewerFeed.queryHash == queryHash) owner.retryPage() },
+    )
 }
 
 /**

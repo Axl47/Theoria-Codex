@@ -7,6 +7,8 @@ import com.theoriacodex.data.repository.markKey
 import com.theoriacodex.data.repository.newPostsCheckDue
 import com.theoriacodex.domain.coroutines.mapConcurrent
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.normalizedForMode
 import com.theoriacodex.domain.model.SortMode
 import kotlinx.coroutines.flow.first
 
@@ -54,6 +56,30 @@ suspend fun UiRestoreRepository.markSavedSearchesSeen(ids: Set<String>? = null) 
 suspend fun UiRestoreRepository.markSavedSearchPostsSeen(shown: Set<String>) {
     updateSavedSearchNewPosts { state ->
         state.copy(marks = state.marks.mapValues { (_, marks) -> marks.seen { it in shown } })
+    }
+}
+
+/**
+ * Marks a saved search's new posts seen only once Search presents that search's results: [opened] waits for
+ * [resultsShown] to report the same query, so an offline or failed load, or a query changed meanwhile, leaves
+ * the marks alone, and posts the results left out (a popularity or random sort) stay new.
+ */
+class SavedSearchOpenMarks(private val store: UiRestoreRepository) {
+    private var waiting: Pair<String, Query>? = null
+
+    /** Search was asked to run [entry]; its marks wait for results. */
+    fun opened(entry: SavedSearchEntry) {
+        waiting = entry.id to entry.search.query.run { normalizedForMode(mode).query }
+    }
+
+    /** Search finished [applied] without error and shows [posts]; the first such report for the waiting search marks them. */
+    suspend fun resultsShown(applied: Query, posts: List<Post>) {
+        val (id, query) = waiting?.takeIf { it.second == applied } ?: return
+        waiting = null
+        val shown = posts.mapTo(mutableSetOf()) { it.id.markKey() }
+        store.updateSavedSearchNewPosts { state ->
+            state.copy(marks = state.marks.mapValues { (key, marks) -> if (key == id) marks.seen { it in shown } else marks })
+        }
     }
 }
 

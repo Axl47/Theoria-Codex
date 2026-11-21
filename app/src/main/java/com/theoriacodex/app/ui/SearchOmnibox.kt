@@ -83,8 +83,15 @@ internal fun TheoriaShell.openSearchEntry(entry: RecentSearchEntry) {
     if (entry.kind == RecentSearchKind.FYP) openHistoricalForYouSearch(entry) else openHistoricalSearch(entry)
 }
 
-/** Opens a saved search from Search, which shows its latest posts, so its "new posts" count is read. */
+/**
+ * Opens a saved search. Its "new posts" count is read once Search reports the results it showed
+ * ([SavedSearchOpenMarks]); a For You search never reaches Search, so it is read at once.
+ */
 internal fun TheoriaShell.openSavedSearch(entry: SavedSearchEntry) {
     openSearchEntry(entry.search)
-    scope.launch { data.uiRestoreRepository.markSavedSearchesSeen(setOf(entry.id)) }
+    if (entry.search.kind == RecentSearchKind.FYP) {
+        scope.launch { data.uiRestoreRepository.markSavedSearchesSeen(setOf(entry.id)) }
+    } else {
+        savedSearchOpens.opened(entry)
+    }
 }

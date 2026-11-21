@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -157,41 +158,43 @@ private fun SearchResultsGrid(
     val showSourceBadge = state.query.appliedSourceScope !is SearchSourceScope.Single
     // Read at tap time: the filtered list is rebuilt on every like, and cards must not recompose for it.
     val currentFeed by rememberUpdatedState(feed)
-    TwoColumnProjectedPostStaggeredGrid(
-        projection = feed.related.projection,
-        state = gridState,
-        modifier = Modifier.fillMaxSize().testTag("Search results"),
-        showPagingTile = state.loadingMore,
-        footerContent = if (pageDemand.showContinue) {
-            { FeedContinueLoading(pageDemand) }
-        } else {
-            null
-        },
-        footerMessage = searchFooterMessage(state, feed.durationMetadata.readiness.isResolving, feed.visibleResults.isNotEmpty()),
-        postContent = { _, post ->
-            FeedPostCard(
-                post = post,
-                environment = cards,
-                showWatchHistory = true,
-                showSourceBadge = showSourceBadge,
-                resolvePostById = resolvePostById,
-                recoverPostMedia = recoverPostMedia,
-                onClick = {
-                    inputFocus.clear()
-                    onAction(SearchAction.OpenResult(
-                        postId = post.id,
-                        visibleResults = currentFeed.visibleResults,
-                        scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
-                        visibilityFilters = currentFeed.visibilityFilters,
-                    ))
-                },
-                onLongPress = { openPostActions(post) },
-            )
-        },
-        shelfContent = {
-            FeedRelatedPostsShelf(related, feed.related, cards, openPostActions, recoverPostMedia)
-        },
-    )
+    CompositionLocalProvider(LocalLiftQuery provides state.query.applied) {
+        TwoColumnProjectedPostStaggeredGrid(
+            projection = feed.related.projection,
+            state = gridState,
+            modifier = Modifier.fillMaxSize().testTag("Search results"),
+            showPagingTile = state.loadingMore,
+            footerContent = if (pageDemand.showContinue) {
+                { FeedContinueLoading(pageDemand) }
+            } else {
+                null
+            },
+            footerMessage = searchFooterMessage(state, feed.durationMetadata.readiness.isResolving, feed.visibleResults.isNotEmpty()),
+            postContent = { _, post ->
+                FeedPostCard(
+                    post = post,
+                    environment = cards,
+                    showWatchHistory = true,
+                    showSourceBadge = showSourceBadge,
+                    resolvePostById = resolvePostById,
+                    recoverPostMedia = recoverPostMedia,
+                    onClick = {
+                        inputFocus.clear()
+                        onAction(SearchAction.OpenResult(
+                            postId = post.id,
+                            visibleResults = currentFeed.visibleResults,
+                            scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
+                            visibilityFilters = currentFeed.visibilityFilters,
+                        ))
+                    },
+                    onLongPress = { openPostActions(post) },
+                )
+            },
+            shelfContent = {
+                FeedRelatedPostsShelf(related, feed.related, cards, openPostActions, recoverPostMedia)
+            },
+        )
+    }
 }
 
 @Composable

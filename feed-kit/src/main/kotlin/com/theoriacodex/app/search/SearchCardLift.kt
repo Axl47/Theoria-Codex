@@ -6,6 +6,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -21,9 +22,18 @@ import com.theoriacodex.app.ui.navigation.LiftLike
 import com.theoriacodex.app.ui.navigation.LiftRelease
 import com.theoriacodex.app.ui.navigation.LocalLiftController
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.Query
+
+/**
+ * The applied search whose results a grid shows. Cards under it lift with that query, so the lift ranks and
+ * remembers Codex targets as the Viewer's Save does for the same search; null elsewhere.
+ */
+val LocalLiftQuery = staticCompositionLocalOf<Query?> { null }
 
 /** One card's lift in progress through [controller]: where the card is, and the finger's last window position. */
 private class CardLift(private val controller: LiftController) {
+    /** The search the card belongs to, kept current by the composable; see [LocalLiftQuery]. */
+    var query: Query? = null
     var coordinates: LayoutCoordinates? = null
     var lifting = false
         private set
@@ -38,7 +48,7 @@ private class CardLift(private val controller: LiftController) {
     fun start(local: Offset, post: Post, bounds: Rect?, like: LiftLike?): Boolean {
         if (controller.lifting) return false
         val window = toWindow(local)
-        lifting = window != null && bounds != null && controller.start(post, bounds, window, like = like)
+        lifting = window != null && bounds != null && controller.start(post, bounds, window, query, like)
         if (lifting) pointer = requireNotNull(window)
         return !lifting
     }
@@ -88,7 +98,7 @@ internal fun rememberCardLiftModifier(
     val currentBounds by rememberUpdatedState(mediaBounds)
     val currentLike by rememberUpdatedState(onToggleLike?.let { LiftLike(liked, it) })
     val currentLongPress by rememberUpdatedState(onLongPress)
-    val lift = remember(post.id, controller) { CardLift(controller) }
+    val lift = remember(post.id, controller) { CardLift(controller) }.also { it.query = LocalLiftQuery.current }
     // A feed update can dispose the card mid-lift; the overlay must not keep showing it.
     DisposableEffect(lift) { onDispose(lift::cancel) }
     return Modifier

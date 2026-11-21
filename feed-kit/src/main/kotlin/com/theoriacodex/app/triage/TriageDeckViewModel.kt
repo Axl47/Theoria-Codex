@@ -59,6 +59,7 @@ class TriageDeckViewModel(
     /** [TriageFeedSnapshot.loaded] of the latest snapshot, and what it was when the deck last asked for a page. */
     private var loaded = 0
     private var pagedAtLoaded = -1
+    private var feedLoading = false
 
     init {
         // Ends once the deck has closed and the queue has drained, so it holds the deck no longer than its writes.
@@ -68,11 +69,13 @@ class TriageDeckViewModel(
         viewModelScope.launch {
             feed.snapshots.collect { snapshot ->
                 loaded = snapshot.loaded
+                feedLoading = snapshot.loadingMore
                 mutableState.update { deck ->
                     val known = deck.posts.mapTo(HashSet(), { post -> post.id })
                     val grown = deck.copy(
                         posts = deck.posts + snapshot.posts.filter { post -> known.add(post.id) },
                         canLoadMore = snapshot.canLoadMore,
+                        pageFailed = snapshot.pageFailed,
                         loaded = true,
                     )
                     grown.copy(index = grown.shownFrom(grown.index))
@@ -157,9 +160,20 @@ class TriageDeckViewModel(
         writes.close()
     }
 
+    /**
+     * Asks the feed again for the page that failed. Does nothing while the feed is already loading one, since some
+     * feeds start over when asked mid-request.
+     */
+    fun retryPage() {
+        if (feedLoading || !mutableState.value.pageFailed) return
+        pagedAtLoaded = loaded
+        feed.retryPage()
+    }
+
+    /** Asks for a page when few cards remain, once per page loaded and never while the feed is loading one. */
     private fun pageIfNearEnd() {
         val deck = mutableState.value
-        if (!deck.canLoadMore || loaded == pagedAtLoaded || deck.posts.size - deck.index > PAGE_AHEAD) return
+        if (feedLoading || deck.pageFailed || !deck.canLoadMore || loaded == pagedAtLoaded || deck.posts.size - deck.index > PAGE_AHEAD) return
         pagedAtLoaded = loaded
         feed.loadNextPage()
     }

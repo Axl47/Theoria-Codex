@@ -10,6 +10,7 @@ import com.theoriacodex.app.codex.CodexSaveRelevanceLoader
 import com.theoriacodex.app.codex.LocalCodexPostIds
 import com.theoriacodex.app.codex.LocalCodexSaveRelevanceLoader
 import com.theoriacodex.app.codex.LocalQuickSave
+import com.theoriacodex.app.lift.LocalLiftUgoiraClient
 import com.theoriacodex.app.lift.rememberLiftSession
 import com.theoriacodex.app.recommend.LikedTagCounts
 import com.theoriacodex.app.recommend.LocalLikedTagCounts
@@ -52,6 +53,7 @@ internal fun ShellCompositionLocals(shell: TheoriaShell, content: @Composable ()
         LocalViewerReturnTransition provides viewerReturnTransition,
         LocalPostMenuActions provides rememberPostMenuActions(shell),
         LocalLiftController provides rememberLiftSession(),
+        LocalLiftUgoiraClient provides shell.sources.pixivUgoiraClient,
         LocalNetworkOnline provides shell.sources.networkOnline,
         LocalSourceHealth provides rememberSourceHealth(shell),
         LocalRelatedPostsSupport provides relatedPostsSupport,

@@ -269,6 +269,39 @@ class TriageDeckViewModelTest {
         assertTrue(deck.state.value.finished)
     }
 
+    @Test fun `a failed page shows a retry instead of finishing, and Retry asks the feed again`() = runTest {
+        val live = FakeFeed(posts.take(1), canLoadMore = true)
+        val deck = deck(live)
+        deck.decideCurrent(TriageChoice.Skip)
+        assertEquals(1, live.pagesRequested)
+        live.emit(posts.take(1), canLoadMore = true, pageFailed = true)
+        assertTrue(deck.state.value.needsRetry)
+        assertFalse(deck.state.value.finished)
+        assertEquals(1, live.pagesRequested)
+
+        deck.retryPage()
+        assertEquals(1, live.retriesRequested)
+        live.emit(posts.take(1), canLoadMore = true, loadingMore = true)
+        deck.retryPage()
+        assertEquals(1, live.retriesRequested)
+        live.emit(posts.take(3), canLoadMore = false, loaded = 3)
+        assertFalse(deck.state.value.needsRetry)
+        assertEquals(3, deck.state.value.posts.size)
+    }
+
+    @Test fun `the deck never asks for a page while its feed is loading one`() = runTest {
+        val live = FakeFeed(posts.take(7), canLoadMore = true)
+        val deck = deck(live)
+        deck.decideCurrent(TriageChoice.Skip)
+        deck.decideCurrent(TriageChoice.Skip)
+        assertEquals(1, live.pagesRequested)
+        live.emit(posts.take(7), canLoadMore = true, loaded = 20, loadingMore = true)
+        deck.decideCurrent(TriageChoice.Skip)
+        assertEquals(1, live.pagesRequested)
+        live.emit(posts.take(7), canLoadMore = true, loaded = 20)
+        assertEquals(2, live.pagesRequested)
+    }
+
     @Test fun `a repeated snapshot never duplicates posts and the deck ends when the feed has no more`() = runTest {
         val deck = deck()
         feed.emit(posts.take(3), canLoadMore = false)
@@ -355,10 +388,18 @@ class TriageDeckViewModelTest {
     private class FakeFeed(initial: List<Post>, canLoadMore: Boolean) : TriageFeed {
         private val flow = MutableStateFlow(TriageFeedSnapshot(initial, canLoadMore))
         var pagesRequested = 0
+        var retriesRequested = 0
         override val snapshots: Flow<TriageFeedSnapshot> = flow
         override fun loadNextPage() { pagesRequested++ }
-        fun emit(posts: List<Post>, canLoadMore: Boolean, loaded: Int = posts.size) {
-            flow.value = TriageFeedSnapshot(posts, canLoadMore, loaded)
+        override fun retryPage() { retriesRequested++ }
+        fun emit(
+            posts: List<Post>,
+            canLoadMore: Boolean,
+            loaded: Int = posts.size,
+            loadingMore: Boolean = false,
+            pageFailed: Boolean = false,
+        ) {
+            flow.value = TriageFeedSnapshot(posts, canLoadMore, loaded, loadingMore, pageFailed)
         }
     }
 

@@ -187,6 +187,8 @@ class CreatorProfileViewModel(
 
     override fun loadNextPage() = onAction(CreatorAction.LoadNextPage)
 
+    override fun retryPage() = onAction(CreatorAction.RetryPage)
+
     override fun rememberResolvedPost(post: Post) {
         val current = mutableState.value
         mutableState.value = current.copy(results = current.results.replacingPostSnapshot(post))
@@ -294,6 +296,7 @@ private fun CreatorUiState.viewerFeed() = ViewerFeedSnapshot(
     results = results,
     canLoadMore = canLoadMore,
     loadingMore = isPaging,
+    pageFailed = !isPaging && canLoadMore && errorMessage != null,
     retainedLikedPostIds = relatedPosts.retainedLikedPostIds,
     relatedPosts = relatedPosts,
 )

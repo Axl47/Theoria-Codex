@@ -65,6 +65,7 @@ fun TriageDeckScreen(
             when {
                 deck.current != null -> TriageDeckArea(deck, viewModel, query, support, callbacks)
                 deck.finished -> TriageEnd(callbacks.onClose)
+                deck.needsRetry -> TriageRetry(viewModel::retryPage)
                 else -> CircularProgressIndicator(Modifier.align(Alignment.Center))
             }
             TriageConfirmation(deck.notice)
@@ -106,7 +107,20 @@ private fun TriageEnd(onClose: () -> Unit) {
     }
 }
 
+@Composable
+private fun TriageRetry(onRetry: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().testTag(TRIAGE_RETRY_TAG),
+        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("Couldn't load more posts", style = MaterialTheme.typography.titleMedium)
+        Button(onRetry) { Text("Retry") }
+    }
+}
+
 internal const val TRIAGE_CLOSE_TAG = "triage-close"
 internal const val TRIAGE_PROGRESS_TAG = "triage-progress"
 internal const val TRIAGE_UNDO_TAG = "triage-undo"
 internal const val TRIAGE_END_TAG = "triage-end"
+internal const val TRIAGE_RETRY_TAG = "triage-retry"
