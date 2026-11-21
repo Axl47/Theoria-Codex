@@ -53,7 +53,7 @@ internal fun SwipeToRemove(
     val offset = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val remove by rememberUpdatedState(onRemove)
-    val removeAction = Modifier.semantics { customActions = listOf(CustomAccessibilityAction(label) { remove(); true }) }
+    val removeAction = Modifier.removeAction(label) { remove() }
     Box(
         modifier
             .pointerInput(Unit) {
@@ -84,6 +84,10 @@ internal fun SwipeToRemove(
         Box(Modifier.offset { IntOffset(offset.value.roundToInt(), 0) }) { content(removeAction) }
     }
 }
+
+/** TalkBack's custom action [label] running [onRemove], for the clickable node of a removable entry. */
+internal fun Modifier.removeAction(label: String, onRemove: () -> Unit): Modifier =
+    semantics { customActions = listOf(CustomAccessibilityAction(label) { onRemove(); true }) }
 
 /**
  * Waits for a drag past touch slop and claims it only when it heads left more than up or down; returns

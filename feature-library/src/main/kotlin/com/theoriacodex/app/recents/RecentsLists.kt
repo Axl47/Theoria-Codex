@@ -50,8 +50,8 @@ import com.theoriacodex.app.search.relativeTimeLabel
 import com.theoriacodex.app.ui.undo.UndoRow
 
 /**
- * What History's rows can do to their own entry: save a search in place ([saving]), or be swiped away
- * ([onRemoveSearch], [onRemovePost]). [removedSearch] keeps its row in place to show the Undo offer.
+ * What History's rows and tiles can do to their own entry: save a search in place ([saving]), or be removed
+ * ([onRemoveSearch], [onRemovePost]). [removedSearch] keeps its row or tile in place to show the Undo offer.
  */
 internal class RecentsRowActions(
     val saving: RecentSearchSaving?,
@@ -67,7 +67,6 @@ internal fun RecentsTab(
     searchFilter: RecentSearchFilter,
     onSearchFilterChange: (RecentSearchFilter) -> Unit,
     visible: VisibleRecents,
-    sourceEmptyMessage: String?,
     now: Long,
     cards: RecentsPostCards,
     related: RecentsRelatedSlot?,
@@ -82,12 +81,12 @@ internal fun RecentsTab(
         RecentsFilter.WATCHED -> RecentPostsGrid(
             visible.watchedPosts, now, cards, related, openWatchedPost, RecentPostSection.WATCHED, onLongPress, rows.onRemovePost,
             showMediaProgress = true,
-            emptyMessage = sourceEmptyMessage ?: "Posts appear here after you open them in Viewer.",
+            emptyMessage = "No watched posts",
         )
         RecentsFilter.CODEX -> RecentPostsGrid(
             visible.codexPosts, now, cards, related, openCodexPost, RecentPostSection.CODEX, onLongPress, rows.onRemovePost,
             showMediaProgress = false,
-            emptyMessage = sourceEmptyMessage ?: "Posts appear here after you open them from Codex.",
+            emptyMessage = "No Codex activity",
         )
         RecentsFilter.SEARCHES -> SearchHistoryList(
             searches = when (searchFilter) {
@@ -97,22 +96,18 @@ internal fun RecentsTab(
             },
             selectedFilter = searchFilter,
             onFilterSelected = onSearchFilterChange,
-            emptyMessage = sourceEmptyMessage ?: "Searches appear here after you search or For You generates them.",
+            shows = { visible.shows(it) && searchFilter.accepts(it) },
             now = now,
             onOpenSearch = { entry -> if (entry.kind == RecentSearchKind.FYP) onOpenFypSearch(entry) else onOpenSearch(entry) },
             rows = rows,
         )
         RecentsFilter.ALL -> ActivityList(
-            visible.activity, cards, onLongPress, related,
-            emptyMessage = sourceEmptyMessage ?: "Recent posts and applied searches appear here.",
-            watchedPosts = visible.watchedPosts,
-            codexPosts = visible.codexPosts,
+            visible, cards, onLongPress, related,
             now = now,
             onOpenWatchedPost = openWatchedPost,
             onOpenCodexPost = openCodexPost,
-            onOpenSearch = onOpenSearch,
-            onOpenFypSearch = onOpenFypSearch,
-            saving = rows.saving,
+            onOpenSearch = { entry -> if (entry.kind == RecentSearchKind.FYP) onOpenFypSearch(entry) else onOpenSearch(entry) },
+            rows = rows,
         )
     }
 }
@@ -246,7 +241,7 @@ private fun SearchHistoryList(
     now: Long,
     onOpenSearch: (RecentSearchEntry) -> Unit,
     rows: RecentsRowActions,
-    emptyMessage: String,
+    shows: (RecentSearchEntry) -> Boolean,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -259,9 +254,9 @@ private fun SearchHistoryList(
             }
         }
         val removed = rows.removedSearch
-        val shown = remember(searches, removed) { searches.withRemovedInPlace(removed) }
+        val shown = remember(searches, removed, shows) { searches.withRemovedInPlace(removed?.takeIf(shows)) }
         if (shown.isEmpty()) {
-            EmptyRecentState(emptyMessage)
+            EmptyRecentState("No searches")
             return@Column
         }
         val days = remember(shown, now) { shown.groupBy { recentsDay(it.searchedAtEpochMs) } }
@@ -286,24 +281,27 @@ private fun SearchHistoryList(
     }
 }
 
+/**
+ * The All view: each day's searches as a row of tiles above a shelf of its posts. Both rows scroll sideways, so
+ * their entries are removed from the post menu or by TalkBack rather than by a swipe; a removed search keeps its
+ * tile's place for the Undo offer.
+ */
 @Composable
 private fun ActivityList(
-    activity: List<RecentActivityEntry>,
+    visible: VisibleRecents,
     cards: RecentsPostCards,
     onLongPress: (Post, RecentPostSection) -> Unit,
     related: RecentsRelatedSlot?,
-    watchedPosts: List<RecentPostEntry>,
-    codexPosts: List<RecentPostEntry>,
     now: Long,
     onOpenWatchedPost: (Int) -> Unit,
     onOpenCodexPost: (Int) -> Unit,
     onOpenSearch: (RecentSearchEntry) -> Unit,
-    onOpenFypSearch: (RecentSearchEntry) -> Unit,
-    saving: RecentSearchSaving?,
-    emptyMessage: String,
+    rows: RecentsRowActions,
 ) {
+    val removed = rows.removedSearch?.takeIf(visible::shows)
+    val activity = remember(visible, removed) { visible.activity.withRemovedInPlace(removed) }
     if (activity.isEmpty()) {
-        EmptyRecentState(emptyMessage)
+        EmptyRecentState("No history")
         return
     }
     val timeline = remember(activity, now, related?.request) { recentsTimeline(activity, now).withRelatedShelf(related?.request) }
@@ -322,17 +320,19 @@ private fun ActivityList(
                 is RecentsTimelineItem.Day -> RecentsDayHeading(item.label)
                 RecentsTimelineItem.RelatedShelf -> related?.content?.invoke()
                 is RecentsTimelineItem.Posts -> RecentPostsRow(
-                    item.entries, now, cards, onLongPress,
-                    onOpen = { entry -> openRecentPost(entry, watchedPosts, codexPosts, onOpenWatchedPost, onOpenCodexPost) },
+                    item.entries, now, cards, onLongPress, rows.onRemovePost,
+                    onOpen = { entry -> openRecentPost(entry, visible.watchedPosts, visible.codexPosts, onOpenWatchedPost, onOpenCodexPost) },
                 )
                 is RecentsTimelineItem.Searches -> LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(item.entries, key = { entry -> "${entry.kind}:${entry.queryHash}" }) { entry ->
-                        RecentSearchTile(
-                            entry = entry,
-                            now = now,
-                            onClick = { if (entry.kind == RecentSearchKind.FYP) onOpenFypSearch(entry) else onOpenSearch(entry) },
-                            saving = saving,
-                        )
+                        if (entry == removed) {
+                            UndoRow(recentSearchRemovalAnchor(entry), Modifier.width(RECENT_SEARCH_TILE_MAX_WIDTH))
+                        } else {
+                            RecentSearchTile(
+                                entry, now, onClick = { onOpenSearch(entry) }, saving = rows.saving,
+                                modifier = historyRemoval(rows.onRemoveSearch?.let { remove -> { remove(entry) } }),
+                            )
+                        }
                     }
                 }
             }
@@ -348,6 +348,7 @@ private fun RecentPostsRow(
     now: Long,
     cards: RecentsPostCards,
     onLongPress: (Post, RecentPostSection) -> Unit,
+    onRemove: ((RecentPostEntry) -> Unit)?,
     onOpen: (RecentPostEntry) -> Unit,
 ) {
     val row = rememberLazyListState()
@@ -365,7 +366,7 @@ private fun RecentPostsRow(
             items(entries, key = { "${it.section}:${it.post.id.source.id}:${it.post.id.sourcePostId}" }) { entry ->
                 Box(Modifier.width(POST_SHELF_CARD_WIDTH)) {
                     RecentPostCard(
-                        entry, now, cards, Modifier,
+                        entry, now, cards, historyRemoval(onRemove?.let { remove -> { remove(entry) } }),
                         viewedMediaNumber = null,
                         onClick = { onOpen(entry) },
                         onLongPress = { onLongPress(entry.post, entry.section) },
@@ -418,13 +419,28 @@ private fun openRecentPost(
  */
 @Composable
 private fun RemovableEntry(onRemove: (() -> Unit)?, content: @Composable (Modifier) -> Unit) {
-    if (onRemove == null) content(Modifier) else SwipeToRemove("Remove from History", onRemove, content = content)
+    if (onRemove == null) content(Modifier) else SwipeToRemove(REMOVE_FROM_HISTORY, onRemove, content = content)
 }
 
-/** [removed] back in its time order while its row shows the Undo offer, unless it is already restored. */
+/** TalkBack's removal alone, for an entry in a sideways-scrolling row, where a swipe would fight the row's scroll. */
+private fun historyRemoval(onRemove: (() -> Unit)?): Modifier =
+    onRemove?.let { Modifier.removeAction(REMOVE_FROM_HISTORY, it) } ?: Modifier
+
+/**
+ * [removed] back in its time order while its row shows the Undo offer, unless it is already restored. Callers pass
+ * null when the current filters would not show it.
+ */
 internal fun List<RecentSearchEntry>.withRemovedInPlace(removed: RecentSearchEntry?): List<RecentSearchEntry> =
     if (removed == null || any { it.queryHash == removed.queryHash }) this
     else (this + removed).sortedByDescending { it.searchedAtEpochMs }
+
+/** The All view's activity with [removed] back in its time order, as [withRemovedInPlace] does for search lists. */
+@JvmName("activityWithRemovedInPlace")
+internal fun List<RecentActivityEntry>.withRemovedInPlace(removed: RecentSearchEntry?): List<RecentActivityEntry> =
+    if (removed == null || any { it is RecentActivityEntry.Search && it.entry.queryHash == removed.queryHash }) this
+    else (this + RecentActivityEntry.Search(removed)).sortedByDescending { it.occurredAtEpochMs }
+
+internal const val REMOVE_FROM_HISTORY = "Remove from History"
 
 @Composable
 private fun EmptyRecentState(message: String) {
@@ -434,5 +450,11 @@ private fun EmptyRecentState(message: String) {
 internal enum class RecentSearchFilter(val label: String) {
     ALL("All"),
     SEARCH("Search"),
-    FOR_YOU("For You"),
+    FOR_YOU("For You");
+
+    fun accepts(entry: RecentSearchEntry): Boolean = when (this) {
+        ALL -> true
+        SEARCH -> entry.kind != RecentSearchKind.FYP
+        FOR_YOU -> entry.kind == RecentSearchKind.FYP
+    }
 }

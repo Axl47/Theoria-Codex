@@ -65,7 +65,7 @@ internal fun recentSearchQueryText(query: Query, quiet: Color, excluded: Color):
     if (length == 0) withStyle(SpanStyle(color = quiet)) { append("No tags") }
 }
 
-/** One entry of the Searches section: up to two lines of query, its context, and a visible save. */
+/** One entry of the Searches section: up to two lines of query, its context, and a visible save. [modifier] goes on its clickable node. */
 @Composable
 internal fun RecentSearchRow(
     entry: RecentSearchEntry,
@@ -117,19 +117,20 @@ internal fun RecentSearchRow(
     }
 }
 
-/** A compact search in the All view's per-day row, with the same save as rows. */
+/** A compact search in the All view's per-day row, with the same save as rows. [modifier] goes on its clickable node. */
 @Composable
 internal fun RecentSearchTile(
     entry: RecentSearchEntry,
     now: Long,
     onClick: () -> Unit,
     saving: RecentSearchSaving?,
+    modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
     Card(
-        modifier = Modifier
+        modifier = modifier
             .testTag("Recent search:${entry.queryHash}")
-            .widthIn(max = 240.dp)
+            .widthIn(max = RECENT_SEARCH_TILE_MAX_WIDTH)
             .clip(CardShape)
             .combinedClickable(
                 onClick = onClick,
@@ -218,6 +219,7 @@ private fun recentSearchContext(entry: RecentSearchEntry, accent: Color): Annota
     }
 }
 
+internal val RECENT_SEARCH_TILE_MAX_WIDTH = 240.dp
 private val CardShape = RoundedCornerShape(14.dp)
 private const val MARK_CORNER_FRACTION = 0.28f
 private const val MARK_GLYPH_FRACTION = 0.55f

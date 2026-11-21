@@ -38,7 +38,6 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.components.LoadingState
 import com.theoriacodex.app.ui.components.SingleChoiceMenu
 import com.theoriacodex.app.ui.components.SourceSelector
@@ -88,7 +87,6 @@ fun RecentsScreen(
     var showMenu by remember { mutableStateOf(false) }
     var selectedSource by rememberSaveable(stateSaver = NullableSourceKeySaver) { mutableStateOf<SourceKey?>(null) }
     val visible = rememberVisibleRecents(watchedPosts, codexPosts, searches, fypSearches, activity, selectedSource)
-    val sourceEmptyMessage = selectedSource?.let { "No recent activity from ${it.displayName()}." }
     val openWatchedPost: (Int) -> Unit = { onOpenWatchedPost(visible.watchedPosts, it) }
     val openCodexPost: (Int) -> Unit = { onOpenCodexPost(visible.codexPosts, it) }
     val now = remember(watchedPosts, codexPosts, searches, fypSearches, activity) { System.currentTimeMillis() }
@@ -110,7 +108,7 @@ fun RecentsScreen(
         }
 
         RecentsTab(
-            filter, searchFilter, { searchFilter = it }, visible, sourceEmptyMessage, now, cards, relatedSlot,
+            filter, searchFilter, { searchFilter = it }, visible, now, cards, relatedSlot,
             { post, section ->
                 selectedActionPost = post
                 selectedActionSection = section
@@ -136,6 +134,10 @@ fun RecentsScreen(
             }.takeIf { maxOf(post.mediaCount ?: 1, post.media.size) > 1 },
             onShowRelated = related?.let { shelf -> { shelf.controller.show(post) } },
             liked = post.id in likedPostIds, onToggleLike = onToggleLike,
+            onRemoveFromCodex = onRemovePost?.let { remove ->
+                visible.entryFor(post, selectedActionSection)?.let { entry -> { remove(entry) } }
+            },
+            removeLabel = REMOVE_FROM_HISTORY,
         )
     }
 }
@@ -202,14 +204,22 @@ private fun RecentsSectionSelector(filter: RecentsFilter, onSelected: (RecentsFi
     }
 }
 
-/** Recents after the source filter; everything the tabs show comes from here. */
+/** Recents after the [source] filter; everything the tabs show comes from here. */
 internal class VisibleRecents(
     val watchedPosts: List<RecentPostEntry>,
     val codexPosts: List<RecentPostEntry>,
     val searches: List<RecentSearchEntry>,
     val fypSearches: List<RecentSearchEntry>,
     val activity: List<RecentActivityEntry>,
-)
+    private val source: SourceKey?,
+) {
+    /** Whether the source filter lets [entry] through, so a removed search's Undo placeholder belongs here. */
+    fun shows(entry: RecentSearchEntry) = entry.matchesSource(source)
+
+    /** The History entry [post] was long-pressed as, if it is one (related posts are not). */
+    fun entryFor(post: Post, section: RecentPostSection): RecentPostEntry? =
+        (if (section == RecentPostSection.CODEX) codexPosts else watchedPosts).firstOrNull { it.post.id == post.id }
+}
 
 @Composable
 private fun rememberVisibleRecents(
@@ -226,6 +236,7 @@ private fun rememberVisibleRecents(
         searches.filter { it.matchesSource(source) },
         fypSearches.filter { it.matchesSource(source) },
         activity.filter { it.matchesSource(source) },
+        source,
     )
 }
 
