@@ -10,6 +10,7 @@ import com.theoriacodex.app.codex.CodexSaveRelevanceLoader
 import com.theoriacodex.app.codex.LocalCodexPostIds
 import com.theoriacodex.app.codex.LocalCodexSaveRelevanceLoader
 import com.theoriacodex.app.codex.LocalQuickSave
+import com.theoriacodex.app.lift.rememberLiftSession
 import com.theoriacodex.app.recommend.LikedTagCounts
 import com.theoriacodex.app.recommend.LocalLikedTagCounts
 import com.theoriacodex.app.recommend.observeLikedTagCounts
@@ -18,7 +19,6 @@ import com.theoriacodex.app.search.LocalPostWatchPresentation
 import com.theoriacodex.app.search.rememberPostWatchPresentation
 import com.theoriacodex.app.source.LocalSourceHealth
 import com.theoriacodex.app.ui.components.LocalPostMenuActions
-import com.theoriacodex.app.ui.navigation.LiftController
 import com.theoriacodex.app.ui.navigation.LocalLiftController
 import com.theoriacodex.app.ui.navigation.LocalTrailOpener
 import com.theoriacodex.app.ui.navigation.LocalTriageOpener
@@ -49,7 +49,7 @@ internal fun ShellCompositionLocals(shell: TheoriaShell, content: @Composable ()
         LocalLikedTagCounts provides rememberLikedTagCounts(shell),
         LocalViewerReturnTransition provides viewerReturnTransition,
         LocalPostMenuActions provides rememberPostMenuActions(shell),
-        LocalLiftController provides LiftController.None,
+        LocalLiftController provides rememberLiftSession(),
         LocalNetworkOnline provides shell.sources.networkOnline,
         LocalSourceHealth provides rememberSourceHealth(shell),
         LocalRelatedPostsSupport provides relatedPostsSupport,
