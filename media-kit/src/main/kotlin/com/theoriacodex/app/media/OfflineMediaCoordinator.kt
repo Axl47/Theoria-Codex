@@ -40,6 +40,7 @@ class OfflineMediaCoordinator(
     private val lock = Any()
     private val persistence = Mutex()
     private val active = mutableMapOf<String, Job>()
+    private val preparations = mutableMapOf<String, Job>()
     private val requests = mutableMapOf<String, List<Post>>()
     private val mutableJobs = MutableStateFlow<Map<String, OfflineMediaJob>>(emptyMap())
     val jobs: StateFlow<Map<String, OfflineMediaJob>> = mutableJobs
@@ -76,6 +77,19 @@ class OfflineMediaCoordinator(
     }
 
     fun makeAvailableOffline(owner: String, posts: List<Post>) { enqueueOffline(owner, posts, start = true) }
+
+    /**
+     * Runs [prepare] as [owner]'s preparation: loading what to keep, then usually [makeAvailableOffline]. [cancel]
+     * stops it, and [remove] and [clear] stop it and wait for it before clearing copies, so a list loaded before a
+     * removal can never start a job for an owner that is gone. The returned job completes when it ends.
+     */
+    fun prepare(owner: String, prepare: suspend () -> Unit): Job {
+        val job = scope.launch(start = CoroutineStart.LAZY) { prepare() }
+        synchronized(lock) { preparations.put(owner, job) }?.cancel()
+        job.invokeOnCompletion { synchronized(lock) { if (preparations[owner] === job) preparations.remove(owner) } }
+        job.start()
+        return job
+    }
 
     /**
      * Downloads [posts] (and only them) into [owner]'s offline copy, so a Codex kept offline stays complete as
@@ -137,7 +151,7 @@ class OfflineMediaCoordinator(
     }
 
     fun cancel(owner: String) {
-        synchronized(lock) { active[owner]?.cancel() }
+        synchronized(lock) { preparations[owner]?.cancel(); active[owner]?.cancel() }
         mutableJobs.update { jobs ->
             val job = jobs[owner] ?: return@update jobs
             jobs + (owner to job.copy(isRunning = false, isCancelled = true))
@@ -155,6 +169,7 @@ class OfflineMediaCoordinator(
     }
 
     suspend fun remove(owner: String) {
+        synchronized(lock) { preparations[owner] }?.cancelAndJoin()
         synchronized(lock) { active[owner] }?.cancelAndJoin()
         mutableJobs.update { jobs -> jobs[owner]?.let { jobs + (owner to it.copy(isRunning = false, isCancelled = true)) } ?: jobs }
         checkpoint()
@@ -164,9 +179,12 @@ class OfflineMediaCoordinator(
     }
 
     suspend fun clear() {
-        val running = synchronized(lock) { active.values.toList() }
-        running.forEach { it.cancel() }
-        running.forEach { it.join() }
+        // Preparations first: one finishing now may still start a job, which the second pass then stops.
+        for (owned in listOf(preparations, active)) {
+            val running = synchronized(lock) { owned.values.toList() }
+            running.forEach { it.cancel() }
+            running.forEach { it.join() }
+        }
         mutableJobs.update { jobs -> jobs.mapValues { (_, job) -> job.copy(isRunning = false, isCancelled = true) } }
         checkpoint()
         store.clear()
