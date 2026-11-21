@@ -125,13 +125,13 @@ class CustomSitesViewModel(
             is CustomSitesAction.OpenBuiltIn -> mutableState.update { it.copy(openBuiltIn = action.source, notice = null) }
             CustomSitesAction.CloseBuiltIn -> mutableState.update { it.copy(openBuiltIn = null) }
             is CustomSitesAction.SetAddress -> setAddress(action.value)
-            is CustomSitesAction.SetLabel -> editField(ProbeReset.NEVER, TYPING_SAVE_DELAY) { copy(label = action.value) }
+            is CustomSitesAction.SetLabel -> editField(LiveField.LABEL, ProbeReset.NEVER, TYPING_SAVE_DELAY) { copy(label = action.value) }
             is CustomSitesAction.SetUser -> setCredentialField(action.value) { copy(user = it) }
             is CustomSitesAction.SetApiKey -> setCredentialField(action.value) { copy(apiKey = it) }
-            is CustomSitesAction.SetUserAgent -> editField(ProbeReset.ALWAYS, TYPING_SAVE_DELAY) { copy(userAgent = action.value) }
-            is CustomSitesAction.SetReferer -> editField(ProbeReset.ALWAYS, TYPING_SAVE_DELAY) { copy(referer = action.value) }
+            is CustomSitesAction.SetUserAgent -> editField(LiveField.USER_AGENT, ProbeReset.ALWAYS, TYPING_SAVE_DELAY) { copy(userAgent = action.value) }
+            is CustomSitesAction.SetReferer -> editField(LiveField.REFERER, ProbeReset.ALWAYS, TYPING_SAVE_DELAY) { copy(referer = action.value) }
             is CustomSitesAction.SetIncludeInUnifiedAndForYou ->
-                editField(ProbeReset.NEVER, Duration.ZERO) { copy(includeInUnifiedAndForYou = action.value) }
+                editField(LiveField.INCLUDE, ProbeReset.NEVER, Duration.ZERO) { copy(includeInUnifiedAndForYou = action.value) }
             CustomSitesAction.ShowCredentials -> updateAdd { copy(showCredentials = true) }
             is CustomSitesAction.SetClearCredentials -> updateEdit { copy(clearCredentials = action.value, message = null) }
             CustomSitesAction.Probe -> probe()
@@ -360,13 +360,14 @@ class CustomSitesViewModel(
     }
 
     /** Changes a field; on the Edit page the change is saved after [wait] (typing restarts the wait). */
-    private fun editField(reset: ProbeReset, wait: Duration, transform: SiteFields.() -> SiteFields) {
+    private fun editField(field: LiveField, reset: ProbeReset, wait: Duration, transform: SiteFields.() -> SiteFields) {
         setFields(reset, transform)
         val form = state.value.form as? SiteForm.Edit ?: return
         if (form.saving) return
         val headers = (form.fields.headers() as? FormInput.Ok)?.value
         if (headers == null) updateEdit { copy(message = HEADER_ERROR_MESSAGE) }
-        liveEdits.schedule(form.sourceId, LiveFields(form.fields.label, form.fields.includeInUnifiedAndForYou, headers), wait)
+        val fields = LiveFields(form.fields.label, form.fields.includeInUnifiedAndForYou, headers)
+        liveEdits.schedule(form.sourceId, field, fields, wait)
     }
 
     /** Saves a live edit; a failure shows on the Edit page, or above the list once the page has closed. True once saved. */

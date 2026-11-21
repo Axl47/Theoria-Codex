@@ -1,6 +1,7 @@
 package com.theoriacodex.app.settings.sites
 
 import com.theoriacodex.app.customsites.CustomSiteEdit
+import com.theoriacodex.app.customsites.HeaderEdit
 import com.theoriacodex.domain.source.SiteHeaders
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -41,9 +42,9 @@ class SiteLiveEditsTest {
     @Test fun `a revert made while a write runs is written after it, one write at a time`() = runTest {
         val edits = edits()
         gate = CompletableDeferred()
-        edits.schedule(saved.sourceId, named("Safer"), Duration.ZERO)
+        edits.schedule(saved.sourceId, LiveField.LABEL, named("Safer"), Duration.ZERO)
         runCurrent()
-        edits.schedule(saved.sourceId, named(saved.label), Duration.ZERO)
+        edits.schedule(saved.sourceId, LiveField.LABEL, named(saved.label), Duration.ZERO)
         runCurrent()
         gate?.complete(Unit)
         runCurrent()
@@ -55,9 +56,9 @@ class SiteLiveEditsTest {
         val ownerScope = CoroutineScope(backgroundScope.coroutineContext + Job())
         val edits = edits(timers = ownerScope)
         gate = CompletableDeferred()
-        edits.schedule(saved.sourceId, named("Safer"), Duration.ZERO)
+        edits.schedule(saved.sourceId, LiveField.LABEL, named("Safer"), Duration.ZERO)
         runCurrent()
-        edits.schedule(saved.sourceId, named("Safest"), TYPING_SAVE_DELAY)
+        edits.schedule(saved.sourceId, LiveField.LABEL, named("Safest"), TYPING_SAVE_DELAY)
         ownerScope.cancel()
         edits.flush()
         gate?.complete(Unit)
@@ -68,11 +69,11 @@ class SiteLiveEditsTest {
     @Test fun `a site's last change flushed during a write is not replaced by another site's change`() = runTest {
         val edits = edits()
         gate = CompletableDeferred()
-        edits.schedule(saved.sourceId, named("Safer"), Duration.ZERO)
+        edits.schedule(saved.sourceId, LiveField.LABEL, named("Safer"), Duration.ZERO)
         runCurrent()
-        edits.schedule(saved.sourceId, named("Safest"), TYPING_SAVE_DELAY)
+        edits.schedule(saved.sourceId, LiveField.LABEL, named("Safest"), TYPING_SAVE_DELAY)
         edits.flush()
-        edits.schedule(other.sourceId, LiveFields("Gel", other.includedInUnifiedAndForYou, other.headers), Duration.ZERO)
+        edits.schedule(other.sourceId, LiveField.LABEL, LiveFields("Gel", other.includedInUnifiedAndForYou, other.headers), Duration.ZERO)
         runCurrent()
         gate?.complete(Unit)
         runCurrent()
@@ -83,18 +84,32 @@ class SiteLiveEditsTest {
     @Test fun `an agent saved elsewhere after a write is replaced when the user sets the first agent again`() = runTest {
         val edits = edits()
         val first = SiteHeaders(userAgent = "U1")
-        edits.schedule(saved.sourceId, LiveFields(saved.label, saved.includedInUnifiedAndForYou, first), Duration.ZERO)
+        edits.schedule(saved.sourceId, LiveField.USER_AGENT, LiveFields(saved.label, saved.includedInUnifiedAndForYou, first), Duration.ZERO)
         runCurrent()
         sites[saved.sourceId] = saved.copy(headers = SiteHeaders(userAgent = "U2"))
-        edits.schedule(saved.sourceId, LiveFields(saved.label, saved.includedInUnifiedAndForYou, first), Duration.ZERO)
+        edits.schedule(saved.sourceId, LiveField.USER_AGENT, LiveFields(saved.label, saved.includedInUnifiedAndForYou, first), Duration.ZERO)
         runCurrent()
-        assertEquals(listOf(first, first), writes.map { it.headers })
+        assertEquals(listOf(HeaderEdit.Replace("U1"), HeaderEdit.Replace("U1")), writes.map { it.userAgent })
+    }
+
+    @Test fun `a rename queued while a browser check saves a new agent keeps the new agent`() = runTest {
+        val edits = edits()
+        gate = CompletableDeferred()
+        edits.schedule(saved.sourceId, LiveField.INCLUDE, LiveFields(saved.label, include = true, saved.headers), Duration.ZERO)
+        runCurrent()
+        edits.schedule(saved.sourceId, LiveField.LABEL, LiveFields("Safer", include = true, saved.headers), TYPING_SAVE_DELAY)
+        edits.flush()
+        sites[saved.sourceId] = saved.copy(headers = SiteHeaders(userAgent = "WebView/2"))
+        gate?.complete(Unit)
+        runCurrent()
+        assertEquals(CustomSiteEdit(label = "Safer"), writes.last())
+        assertEquals("WebView/2", writes.last().userAgent.applyTo(sites.getValue(saved.sourceId).headers.userAgent))
     }
 
     @Test fun `a change back to the saved value writes nothing`() = runTest {
         val edits = edits()
-        edits.schedule(saved.sourceId, named("Safer"), TYPING_SAVE_DELAY)
-        edits.schedule(saved.sourceId, named(saved.label), TYPING_SAVE_DELAY)
+        edits.schedule(saved.sourceId, LiveField.LABEL, named("Safer"), TYPING_SAVE_DELAY)
+        edits.schedule(saved.sourceId, LiveField.LABEL, named(saved.label), TYPING_SAVE_DELAY)
         edits.flush()
         runCurrent()
         assertEquals(emptyList<CustomSiteEdit>(), writes)

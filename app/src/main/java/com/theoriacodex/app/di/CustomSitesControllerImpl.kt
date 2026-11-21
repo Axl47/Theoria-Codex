@@ -9,6 +9,7 @@ import com.theoriacodex.app.customsites.CustomSiteEdit
 import com.theoriacodex.app.customsites.CustomSiteMutation
 import com.theoriacodex.app.customsites.CustomSiteSummary
 import com.theoriacodex.app.customsites.CustomSitesController
+import com.theoriacodex.app.customsites.HeaderEdit
 import com.theoriacodex.app.customsites.SiteCookieBridge
 import com.theoriacodex.app.customsites.SitesRequest
 import com.theoriacodex.app.sourceauth.CredentialStoreUnavailableException
@@ -259,8 +260,12 @@ internal class CustomSitesControllerImpl(
         if (!keysWritten) return CustomSiteMutation.CredentialStoreUnavailable
         // New keys may be what the site was waiting for, so requests should reach it again.
         if (edit.credentials != CredentialEdit.Keep) outages.clear(profile.address.host)
-        if (label != null || edit.headers != null) {
-            val updated = profiles.update(sourceId) { it.copy(label = label ?: it.label, headers = edit.headers ?: it.headers) }
+        if (label != null || edit.userAgent != HeaderEdit.Keep || edit.referer != HeaderEdit.Keep) {
+            // Each header applies to the profile as stored now, so a header saved meanwhile (a browser check's agent) stays.
+            val updated = profiles.update(sourceId) { stored ->
+                val headers = SiteHeaders(edit.userAgent.applyTo(stored.headers.userAgent), edit.referer.applyTo(stored.headers.referer))
+                stored.copy(label = label ?: stored.label, headers = headers)
+            }
             if (!updated) return CustomSiteMutation.NotFound
         }
         edit.includeInUnifiedAndForYou?.let { setIncluded(SourceKey.of(profile), it) }
