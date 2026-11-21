@@ -21,6 +21,9 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.catch
@@ -90,6 +93,10 @@ class OfflineStorageViewModel(
     private val controls = MutableStateFlow(OfflineStorageUiState())
     private val preparationLock = Any()
     private val preparations = mutableMapOf<String, Job>()
+    private val failures = Channel<String>(Channel.BUFFERED)
+
+    /** Why "Make available offline" could not start, once per attempt; the app shows it when the sheet is closed. */
+    val preparationFailures: Flow<String> = failures.receiveAsFlow()
     private val names = codices.observeCodices().flowOn(dispatcher).catch {
         controls.update { it.copy(message = "Codex names could not be loaded.") }
         emit(emptyList())
@@ -134,7 +141,10 @@ class OfflineStorageViewModel(
 
     fun dismiss() { controls.update { it.copy(isOpen = false) } }
 
-    /** Keeps [codexId] offline, or tops up its copy: posts already retained are skipped, not downloaded again. */
+    /**
+     * Keeps [codexId] offline, or tops up its copy: posts already retained are skipped, not downloaded again.
+     * When it cannot start, the reason goes to [message] and to [preparationFailures].
+     */
     fun makeAvailableOffline(codexId: String) {
         val owner = codexOfflineOwner(codexId)
         if (controls.value.working || owner in controls.value.preparingOwners || offline.jobs.value[owner]?.isRunning == true) return
@@ -145,8 +155,8 @@ class OfflineStorageViewModel(
             }
             val posts = result.getOrNull()
             when {
-                posts == null -> controls.update { it.copy(message = "The Codex could not be loaded. Try again.") }
-                posts.isEmpty() -> controls.update { it.copy(message = "This Codex has no posts to keep offline.") }
+                posts == null -> preparationFailed("The Codex could not be loaded. Try again.")
+                posts.isEmpty() -> preparationFailed("This Codex has no posts to keep offline.")
                 else -> offline.makeAvailableOffline(owner, posts)
             }
         }
@@ -156,6 +166,11 @@ class OfflineStorageViewModel(
             controls.update { it.copy(preparingOwners = it.preparingOwners - owner) }
         }
         preparation.start()
+    }
+
+    private fun preparationFailed(reason: String) {
+        controls.update { it.copy(message = reason) }
+        failures.trySend(reason)
     }
 
     fun retry(owner: String) {

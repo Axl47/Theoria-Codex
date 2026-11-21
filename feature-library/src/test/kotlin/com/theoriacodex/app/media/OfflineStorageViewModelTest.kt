@@ -137,6 +137,15 @@ class OfflineStorageViewModelTest {
         }
     }
 
+    @Test fun `making an empty Codex available offline reports why it could not start`() = runBlocking {
+        withTimeout(10_000) {
+            codices.ensureCodex("a", "First")
+            val owner = owner(coordinator())
+            owner.makeAvailableOffline("a")
+            assertEquals("This Codex has no posts to keep offline.", owner.preparationFailures.first())
+        }
+    }
+
     @Test fun `clearing offline cancels collection preparation before it can start a new download`() = runBlocking {
         withTimeout(10_000) {
             val started = CompletableDeferred<Unit>()

@@ -101,7 +101,7 @@ internal fun rememberLibraryTransferTools(
     val currentMessage by rememberUpdatedState(onMessage)
     LaunchedEffect(backup) { backup.effects.collect { currentMessage(it) } }
     AutoBackupFailureEffect(autoBackup) { currentMessage(it) }
-    return remember(downloads, backup, offline, export, import, autoBackup, autoBackupFolder) {
+    val tools = remember(downloads, backup, offline, export, import, autoBackup, autoBackupFolder) {
         LibraryTransferTools(downloads, DownloadRemovals(downloads::remove, downloads.viewModelScope), backup, offline, autoBackup,
             chooseBackupDestination = { export.launch("theoria-backup.json") },
             chooseBackup = { import.launch(arrayOf("application/json", "application/octet-stream")) },
@@ -112,6 +112,9 @@ internal fun rememberLibraryTransferTools(
             },
         )
     }
+    // The open sheet shows the reason itself; closed, it would otherwise be lost.
+    LaunchedEffect(tools) { offline.preparationFailures.collect { if (!tools.showDownloads) currentMessage(it) } }
+    return tools
 }
 
 @Composable
