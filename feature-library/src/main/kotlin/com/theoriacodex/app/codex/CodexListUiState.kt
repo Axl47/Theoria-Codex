@@ -7,7 +7,6 @@ import com.theoriacodex.data.repository.CodexLibrarySort
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -19,7 +18,6 @@ internal class CodexListUiState {
     var deleteTarget by mutableStateOf<Codex?>(null)
     var actionTarget by mutableStateOf<Codex?>(null)
     var autoSaveTarget by mutableStateOf<Codex?>(null)
-    var searchTarget by mutableStateOf<Codex?>(null)
 
     fun synchronizeCodices(codices: List<Codex>) {
         if (codices.none { it.codexId == cleaningTargetId }) cleaningTargetId = null
@@ -30,7 +28,6 @@ internal data class CodexListPresentation(
     val codices: List<Codex>,
     val itemCounts: Map<String, Int>,
     val coverCandidates: Map<String, List<CodexCoverCandidate>>,
-    val searchSourceOptions: Map<String, List<CodexSearchSourceOption>>,
     val searchTagOptions: Map<String, Map<SourceKey, List<CodexSearchTagOption>>>,
     val likesCodexId: String,
     val actionLoading: Boolean = false,
@@ -39,7 +36,6 @@ internal data class CodexListPresentation(
     val librarySort: CodexLibrarySort = CodexLibrarySort.MANUAL,
     /** Null until statistics first answer, or while no sort needs them. */
     val libraryUsage: Map<String, CodexUsage>? = null,
-    val searchTerms: Map<SourceKey, CodexSearchTerms> = emptyMap(),
     /** For a cleaning target and its comparisons, the target's posts each comparison also holds. */
     val observeCleaningMatches: (String, List<String>) -> Flow<Map<String, Set<PostId>>> = { _, _ -> flowOf(emptyMap()) },
 ) {
@@ -58,7 +54,8 @@ internal data class CodexListActions(
     val importCodex: () -> Unit,
     val downloadCodex: (String) -> Unit,
     val shareCodex: (String) -> Unit,
-    val searchFromCodex: (String, SourceKey, Query) -> Unit,
+    /** Opens the Codex filtered by tag, with its tag sheet showing. */
+    val filterByTag: (String) -> Unit,
     val commitReorder: (List<String>) -> Unit,
     val createCodex: (String) -> Unit,
     val renameCodex: (String, String) -> Unit,

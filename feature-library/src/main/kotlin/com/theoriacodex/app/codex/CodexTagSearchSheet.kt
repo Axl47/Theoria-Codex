@@ -52,10 +52,12 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.tags.normalizeMatchToken
 
 /**
- * Builds a search from the tags in a Codex. Its query stays local until Search, which then replaces
- * the current search. Tags belong to one source's vocabulary, so changing source starts over.
+ * Builds a site search from the tags in a Codex, starting from the tags of a Codex tag filter ([seedKeys], match
+ * keys) on the source that has the most of them. Its query stays local until Search, which then replaces the
+ * current search. Tags belong to one source's vocabulary, so changing source starts over.
  */
 @Composable
 internal fun CodexTagSearchSheet(
@@ -64,14 +66,15 @@ internal fun CodexTagSearchSheet(
     terms: Map<SourceKey, CodexSearchTerms>,
     onDismiss: () -> Unit,
     onSearch: (SourceKey, Query) -> Unit,
+    seedKeys: List<String> = emptyList(),
 ) {
-    var preferredSource by remember { mutableStateOf<SourceKey?>(null) }
+    var preferredSource by remember { mutableStateOf(seededSource(sources.map(CodexSearchSourceOption::source), terms, seedKeys)) }
     val source = preferredSource?.takeIf { preferred -> sources.any { it.source == preferred } }
         ?: sources.firstOrNull()?.source
     ExpandedBottomSheet(onDismiss) {
         Column(Modifier.fillMaxWidth().imePadding()) {
             Column(Modifier.padding(horizontal = 16.dp)) {
-                Text("Search with these tags", style = MaterialTheme.typography.titleLarge)
+                Text("Search sites", style = MaterialTheme.typography.titleLarge)
                 Text(
                     codexName,
                     style = MaterialTheme.typography.bodyMedium,
@@ -98,7 +101,7 @@ internal fun CodexTagSearchSheet(
                         )
                     }
                 }
-                CodexTagSearchEditor(source, terms[source] ?: CodexSearchTerms(emptyList(), emptyList())) { query ->
+                CodexTagSearchEditor(source, terms[source] ?: CodexSearchTerms(emptyList(), emptyList()), seedKeys) { query ->
                     onSearch(source, query)
                 }
             }
@@ -110,9 +113,12 @@ internal fun CodexTagSearchSheet(
 private fun ColumnScope.CodexTagSearchEditor(
     source: SourceKey,
     terms: CodexSearchTerms,
+    seedKeys: List<String>,
     onSearch: (Query) -> Unit,
 ) {
-    var query by remember(source) { mutableStateOf(emptySearchQuery(QueryMode.Source(source))) }
+    var query by remember(source) {
+        mutableStateOf(emptySearchQuery(QueryMode.Source(source)).withIncludeTermsAsRequired(terms.seededTerms(seedKeys)))
+    }
     var targetTerm by remember(source) { mutableStateOf<SearchTerm?>(null) }
     var filter by remember(source) { mutableStateOf("") }
     var drawAmount by rememberSaveable { mutableIntStateOf(DEFAULT_DRAW_AMOUNT) }
@@ -238,6 +244,18 @@ internal fun codexTermSections(
     .entries
     .sortedWith(compareBy({ postTagFacetOrder.indexOf(it.key.first) }, { it.key.second.orEmpty() }))
     .map { (type, members) -> searchScopeLabel(FacetedSearchScope(type.first, type.second)) to members }
+
+/** For each of [keys] (tag match keys) this source has, its most common term, in the order of [keys]. */
+internal fun CodexSearchTerms.seededTerms(keys: List<String>): List<SearchTerm> = keys.mapNotNull { key ->
+    options.firstOrNull { normalizeMatchToken(it.term.value) == key }?.term
+}
+
+/** Of [sources], the one whose [terms] have the most of [keys], the first on a tie; null when none has any. */
+internal fun seededSource(sources: List<SourceKey>, terms: Map<SourceKey, CodexSearchTerms>, keys: List<String>): SourceKey? =
+    sources.map { it to terms[it]?.seededTerms(keys).orEmpty().size }
+        .filter { (_, count) -> count > 0 }
+        .maxByOrNull { (_, count) -> count }
+        ?.first
 
 private const val DEFAULT_DRAW_AMOUNT = 3
 private const val MAX_DRAW_AMOUNT = 5

@@ -34,7 +34,7 @@ class CodexGridReorderUiTest {
     private fun showLibrary() = compose.setContent { MaterialTheme {
         CodexListScreen(
             listOf(Codex("a", "Alpha", 1), Codex("b", "Beta", 2), Codex("c", "Gamma", 3)), emptyMap(), emptyMap(),
-            { flowOf(CodexActionOptions()) }, {}, {}, {}, {}, { _, _, _ -> },
+            { flowOf(CodexActionOptions()) }, {}, {}, {}, {}, {},
             onCommitReorder = { committed = it }, onCreateCodex = {}, onRenameCodex = { _, _ -> },
             onSetAutomaticTag = { _, _, _ -> }, onDeleteCodex = {}, likesCodexId = "likes",
             onCleanCodex = { _, _ -> }, librarySort = sort.value, onLibrarySortChange = { sort.value = it },

@@ -144,13 +144,13 @@ private fun CodexDetailEntry(
                 onToggleLike = { shell.toggleLikeAndSyncCodex(it) },
             )
         } else {
-            CodexDetailDestination(shell, codexId)
+            CodexDetailDestination(shell, codexId, entry.codexTagSheetRequest())
         }
     }
 }
 
 @Composable
-private fun CodexDetailDestination(shell: TheoriaShell, codexId: String) {
+private fun CodexDetailDestination(shell: TheoriaShell, codexId: String, tagSheet: CodexTagSheetRequest) {
     val fabContext = codexFeedFabContext(codexId)
     val fabRestoreState = shell.feedFabRestoreRegistry.state(fabContext) ?: return
     val sortMode = fabRestoreState.sortMode?.let { encoded ->
@@ -177,7 +177,7 @@ private fun CodexDetailDestination(shell: TheoriaShell, codexId: String) {
                 resolveInBackground = state.resolveUnknownAnimatedDurations,
             )
         }
-        CodexDetailContent(shell, codexId, sortMode, fabContext, fabRestoreState, state, durationOwner, durationStates)
+        CodexDetailContent(shell, codexId, sortMode, fabContext, fabRestoreState, state, durationOwner, durationStates, tagSheet)
     }
 }
 
@@ -191,6 +191,7 @@ private fun CodexDetailContent(
     state: CodexDetailDestinationState,
     durationOwner: MediaDurationRouteViewModel,
     durationStates: MediaDurationStates,
+    tagSheet: CodexTagSheetRequest,
 ) {
     val routes = shell.routes
     val commands = shell.owners.codexCommands
@@ -236,6 +237,9 @@ private fun CodexDetailContent(
         onBack = { shell.navController.popBackStack() },
         fabRestoreState = fabRestoreState,
         onFabRestoreStateChange = { updated -> shell.feedFabRestoreRegistry.update(fabContext, updated) },
+        onSearchSites = shell::searchFromCodex,
+        tagSheetRequested = tagSheet.requested,
+        onTagSheetRequestHandled = tagSheet.onHandled,
     )
 }
 

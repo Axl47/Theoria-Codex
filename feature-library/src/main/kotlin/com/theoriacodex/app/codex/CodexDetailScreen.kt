@@ -73,6 +73,7 @@ import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 
 /** Not answered yet is not the same as gone; saying so would flash on every first open. */
@@ -119,6 +120,11 @@ fun CodexDetailScreen(
     likedPostIds: Set<PostId> = emptySet(),
     onToggleLike: ((Post) -> Unit)? = null,
     related: RelatedShelfBinding? = null,
+    /** Takes the tag sheet's chosen tags to a site search; null leaves Search sites out. */
+    onSearchSites: ((SourceKey, Query) -> Unit)? = null,
+    /** Asks the screen to open its tag sheet, as a Library tile's Filter by tag does. */
+    tagSheetRequested: Boolean = false,
+    onTagSheetRequestHandled: () -> Unit = {},
 ) {
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var showFilterSheet by remember { mutableStateOf(false) }
@@ -128,9 +134,8 @@ fun CodexDetailScreen(
     val supportsLanguage = remember(sourceOptions) { supportsCodexLanguageFilter(sourceOptions.toSet()) }
     val supportsFullColor = remember(sourceOptions) { supportsCodexFullColorFilter(sourceOptions.toSet()) }
     val filters = remember(fabRestoreState) { fabRestoreState.savedCollectionFilters() }
-    val tags = remember(posts) { codexTopTags(posts) }
-    var tagKey by rememberCodexTagFilter(codexId, tags)
-    val feed = rememberCodexDetailFeed(codexId, posts, filters, durations, related, sortMode, tagKey)
+    val tagFilter = rememberCodexTagFilter(codexId, posts, settled = !loading, tagSheetRequested, onTagSheetRequestHandled)
+    val feed = rememberCodexDetailFeed(codexId, posts, filters, durations, related, sortMode, tagFilter.selected)
     val applyFilters = { updated: CodexCollectionFilters -> onFabRestoreStateChange(fabRestoreState.withCollectionFilters(updated)) }
     CodexFilterReconciliationEffect(filters, sourceOptions, supportsLanguage, supportsFullColor, applyFilters)
     val resolveAllDurations = feed.durationFilterActive || sortMode.usesDuration
@@ -143,7 +148,7 @@ fun CodexDetailScreen(
     val chips = CodexDetailChips(
         sortMode, codexSortModes(posts.any(::isAnimatedPost), sortMode),
         { updatedSort -> onFabRestoreStateChange(fabRestoreState.copy(sortMode = updatedSort.name)) },
-        tags, tagKey, { tagKey = it },
+        tagFilter,
         // Followed and Saved searches pass a custom header; the deck only knows Codices, which Likes is one of.
         rememberCodexTriageAction(codexId, real = customHeader == null, seed = feed.triageSeed()),
     )
@@ -159,7 +164,7 @@ fun CodexDetailScreen(
         },
     ) { padding ->
         CodexDetailBody(
-            padding, codexId, codexName, posts, feed, related, filters.isActive || tagKey != null, chips, customHeader, customFiltersActive,
+            padding, codexId, codexName, posts, feed, related, filters.isActive || tagFilter.selected.isNotEmpty(), chips, customHeader, customFiltersActive,
             editSelection, { editSelection = it }, likedPostIds, onToggleLike, loading, gridState, pixivUgoiraClient, resolvePostById,
             durations, onOpenViewer, { selectedActionPost = it }, emptyMessage, headerActions, onBack, onAddPostsToAnotherCodex, onRemovePosts,
         )
@@ -170,6 +175,7 @@ fun CodexDetailScreen(
             customFilters?.let { content -> ({ content { showFilterSheet = false } }) },
         )
     }
+    CodexTagSheets(tagFilter, codexName, posts, availableSources, onSearchSites)
     selectedActionPost?.let { post ->
         FeedPostActionSheet(
             post, creatorBrowsingSources, { selectedActionPost = null }, onSavePostToDevice, { onAddPostsToAnotherCodex(listOf(it)) },
@@ -274,16 +280,16 @@ private fun CodexDetailFilterFab(
 }
 
 /**
- * Keeps the posts the collection's saved filters and its transient [tagKey] let through; compared by equality, so
+ * Keeps the posts the collection's saved filters and its transient [tagKeys] let through; compared by equality, so
  * a filter change refilters.
  */
-private data class CodexPostFilter(val filters: CodexCollectionFilters, val tagKey: String?) : FeedPostFilter {
+private data class CodexPostFilter(val filters: CodexCollectionFilters, val tagKeys: List<String>) : FeedPostFilter {
     override fun filter(posts: List<Post>, knownDurationMsByPostId: Map<PostId, Long>): List<Post> =
-        filterCodexCollectionPosts(posts, filters, knownDurationMsByPostId).withCodexTag(tagKey)
+        filterCodexCollectionPosts(posts, filters, knownDurationMsByPostId).withCodexTags(tagKeys)
 }
 
 /**
- * The grid's feed for Codex [codexId]: [posts] after the length step, [filters] and the tag of [tagKey], plus the
+ * The grid's feed for Codex [codexId]: [posts] after the length step, [filters] and the tags of [tagKeys], plus the
  * related shelf of [relatedShelf] when the collection has one. The shelf takes only the collection's media filters.
  */
 @Composable
@@ -294,7 +300,7 @@ internal fun rememberCodexDetailFeed(
     durations: FeedDurations,
     relatedShelf: RelatedShelfBinding?,
     sortMode: CodexSortMode,
-    tagKey: String? = null,
+    tagKeys: List<String> = emptyList(),
 ): FeedView {
     val visibility = remember(filters.animatedOnly, filters.animatedDurationRange) {
         SearchVisibilityFilters(animatedOnly = filters.animatedOnly, animatedDurationRange = filters.animatedDurationRange)
@@ -303,7 +309,7 @@ internal fun rememberCodexDetailFeed(
         "codex-detail:$codexId", posts, visibility, durations, relatedShelf?.state ?: RelatedPostsUiState.Idle,
         // The filter's reveal keeps shown cards in place, which a length sort must not do as lengths arrive.
         revealInOrder = !sortMode.usesDuration,
-        postFilter = remember(filters, tagKey) { CodexPostFilter(filters, tagKey) },
+        postFilter = remember(filters, tagKeys) { CodexPostFilter(filters, tagKeys) },
     )
 }
 

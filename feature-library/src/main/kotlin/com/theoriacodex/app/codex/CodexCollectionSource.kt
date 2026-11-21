@@ -24,9 +24,7 @@ data class CodexCollectionPresentation(
 )
 
 data class CodexActionOptions(
-    val sources: List<CodexSearchSourceOption> = emptyList(),
     val tags: Map<SourceKey, List<CodexSearchTagOption>> = emptyMap(),
-    val searchTerms: Map<SourceKey, CodexSearchTerms> = emptyMap(),
 )
 
 /** Summary queries decode bounded covers; full tag projections exist only while choosing post actions or a save target. */
@@ -94,11 +92,7 @@ class CodexCollectionSource(
     fun observeActionOptions(codexId: String, availableSources: Set<SourceKey>): Flow<CodexActionOptions> =
         repository.observeCodexPosts(codexId, CodexSortMode.NEWEST_SAVED).map { posts ->
             val sources = codexSearchSourceOptions(posts, availableSources)
-            CodexActionOptions(
-                sources,
-                sources.associate { it.source to codexSearchTagOptions(posts, it.source) },
-                sources.associate { it.source to codexSearchTerms(posts, it.source) },
-            )
+            CodexActionOptions(sources.associate { it.source to codexSearchTagOptions(posts, it.source) })
         }.flowOn(Dispatchers.Default)
 
     /** For each Codex in [comparisonIds], the posts of [targetId] it also holds: what cleaning against it removes. */

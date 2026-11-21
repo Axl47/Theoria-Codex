@@ -1,40 +1,49 @@
 package com.theoriacodex.app.codex
 
-import com.theoriacodex.app.tags.postActionTerms
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.produceState
+import com.theoriacodex.app.tags.TagCount
+import com.theoriacodex.app.tags.postTagKeys
+import com.theoriacodex.app.tags.topTags
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.tags.normalizeMatchToken
-
-/** One of a Codex's most common tags: how it is spelled on screen, its match [key], and how many posts carry it. */
-data class CodexTagCount(val tag: String, val key: String, val count: Int)
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
- * The [limit] tags carried by the most of [posts], across every source, for Codex detail's chip row. Spellings that
- * match alike count once per post; ties keep alphabetical order. Tags every post carries filter nothing, so they
- * are left out.
+ * Every tag [posts] carry, across every source, most common first, for Codex detail's tag chips and tag sheet.
+ * Spellings that match alike count once per post; ties keep alphabetical order. Tags every post carries filter
+ * nothing, so they are left out.
  */
-internal fun codexTopTags(posts: List<Post>, limit: Int = CODEX_TAG_CHIP_LIMIT): List<CodexTagCount> {
-    val counts = linkedMapOf<String, CodexTagCount>()
-    posts.forEach { post ->
-        postTagKeys(post).forEach { (key, tag) ->
-            counts[key] = counts[key]?.let { it.copy(count = it.count + 1) } ?: CodexTagCount(tag, key, 1)
-        }
-    }
-    return counts.values
-        .filter { it.count < posts.size }
-        .sortedWith(compareByDescending<CodexTagCount> { it.count }.thenBy { it.tag.lowercase() })
-        .take(limit)
-}
+internal fun codexTags(posts: List<Post>): List<TagCount> = topTags(
+    posts,
+    limit = Int.MAX_VALUE,
+    counted = 1 until posts.size,
+    includeTerm = ::isCarriedTag,
+    keyOf = ::normalizeMatchToken,
+    tieOrder = compareBy { it.tag.lowercase() },
+)
 
-/** The posts carrying the tag whose match key is [key], or every post when [key] is null. */
-internal fun List<Post>.withCodexTag(key: String?): List<Post> =
-    if (key == null) this else filter { post -> key in postTagKeys(post) }
+/**
+ * [codexTags] of [posts], computed off the main thread: null until the first list is ready, then the previous list
+ * until the next one is.
+ */
+@Composable
+internal fun rememberCodexTags(posts: List<Post>): State<List<TagCount>?> =
+    produceState<List<TagCount>?>(null, posts) { value = withContext(Dispatchers.Default) { codexTags(posts) } }
 
-/** [post]'s tags by match key, first spelling kept. Negated terms are exclusions, not tags the post carries. */
-private fun postTagKeys(post: Post): Map<String, String> = postActionTerms(post)
-    .filterNot { it.value.startsWith("-") }
-    .map { normalizeMatchToken(it.value) to it.value }
-    .filter { (key, _) -> key.isNotBlank() }
-    .distinctBy { (key, _) -> key }
-    .toMap()
+/** The posts carrying every tag whose match key is in [keys]; every post when [keys] is empty. */
+internal fun List<Post>.withCodexTags(keys: Collection<String>): List<Post> =
+    if (keys.isEmpty()) this else filter { post -> codexTagKeys(post).keys.containsAll(keys) }
 
+/** [post]'s tags by match key, as [codexTags] counts them. */
+internal fun codexTagKeys(post: Post): Map<String, String> =
+    postTagKeys(post, includeTerm = ::isCarriedTag, keyOf = ::normalizeMatchToken)
+
+/** Negated terms are exclusions, not tags the post carries. */
+private fun isCarriedTag(term: SearchTerm): Boolean = !term.value.startsWith("-")
+
+/** How many of a Codex's most common tags its chip row offers as shortcuts. */
 const val CODEX_TAG_CHIP_LIMIT = 12
