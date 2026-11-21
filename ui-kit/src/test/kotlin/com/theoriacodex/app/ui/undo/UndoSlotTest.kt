@@ -83,7 +83,17 @@ class UndoSlotTest {
         owner.cancel()
         runCurrent()
         assertNull(slot.offer.value)
-        assertTrue("deferred destruction must not run when its owner dies", events.isEmpty())
+        assertTrue("an offer must not expire when its owner dies", events.isEmpty())
+    }
+
+    @Test
+    fun `an offer from a cancelled scope leaves the live offer alone`() = runTest {
+        val live = recorded("live")
+        slot.offer(owner(), live)
+        slot.offer(owner().apply { cancel() }, recorded("late"))
+        runCurrent()
+        assertSame(live, slot.offer.value)
+        assertTrue(events.isEmpty())
     }
 
     @Test
