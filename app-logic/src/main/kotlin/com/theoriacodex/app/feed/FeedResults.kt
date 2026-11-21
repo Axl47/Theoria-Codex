@@ -15,6 +15,7 @@ fun mergeFeedPosts(existing: List<Post>, incoming: List<Post>): List<Post> {
     return byId.values.distinctByFile()
 }
 
+/** Each source's latest status: [incoming] replaces [previous] per source, ordered by source id. */
 fun mergeFeedStatuses(previous: List<SourceRunStatus>, incoming: List<SourceRunStatus>): List<SourceRunStatus> =
     (previous.associateBy(SourceRunStatus::source) + incoming.associateBy(SourceRunStatus::source))
         .values.sortedBy { it.source.id }

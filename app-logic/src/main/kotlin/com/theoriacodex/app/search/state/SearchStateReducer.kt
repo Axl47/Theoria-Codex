@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search.state
 
+import com.theoriacodex.app.feed.mergeFeedStatuses
 import com.theoriacodex.app.search.SearchContinuation
 import com.theoriacodex.app.search.SearchExecutionResult
 import com.theoriacodex.app.search.SearchInitialization
@@ -347,7 +348,7 @@ object SearchStateReducer {
                 state.copy(
                     content = state.content.copy(
                         results = (state.content.results + result.posts).distinctByFile(),
-                        statuses = mergeStatusesBySource(state.content.statuses, result.statuses),
+                        statuses = mergeFeedStatuses(state.content.statuses, result.statuses),
                         canLoadMore = result.continuation.canLoadMore,
                         error = null,
                         displayVersion = state.content.displayVersion + 1,
@@ -389,7 +390,7 @@ object SearchStateReducer {
             content = content.copy(
                 results = if (queryState.appliedQueryHash != query.appliedQueryHash) emptyList() else content.results,
                 statuses = if (request.isPage && statuses.isNotEmpty()) {
-                    mergeStatusesBySource(content.statuses, statuses)
+                    mergeFeedStatuses(content.statuses, statuses)
                 } else {
                     statuses.ifEmpty { content.statuses }
                 },
@@ -400,14 +401,6 @@ object SearchStateReducer {
             execution = execution.copy(request = null, continuation = continuation),
         )
     }
-
-    private fun mergeStatusesBySource(
-        current: List<SourceRunStatus>,
-        updates: List<SourceRunStatus>,
-    ): List<SourceRunStatus> = (current + updates)
-        .associateBy(SourceRunStatus::source)
-        .values
-        .sortedBy { status -> status.source.id }
 
     private fun cancelRequest(state: SearchUiState, requestId: Long): SearchReduction {
         if (state.activeRequest(requestId) == null) return SearchReduction(state)

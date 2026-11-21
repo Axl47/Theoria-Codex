@@ -2,6 +2,7 @@ package com.theoriacodex.app.search
 
 import com.theoriacodex.app.media.recoverRemoteMedia
 import com.theoriacodex.app.feed.FeedCursor
+import com.theoriacodex.app.feed.mergeFeedStatuses
 import com.theoriacodex.app.feed.nextPage
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.post.FileMirrorIndex
@@ -225,11 +226,8 @@ class SearchCoordinator(
                 executionKey = base.executionKey,
                 query = sanitized,
                 sourceScope = sourceScope,
-                statuses = (sanitized.mode as? QueryMode.Source)
-                    ?.let { mode -> listOf(sourceFailureStatus(mode.source, error)) }.orEmpty(),
-                message = if (isPixivUnknownError(error, sanitized)) {
-                    PIXIV_UNKNOWN_RETRY_MESSAGE
-                } else error.message ?: "Unknown error",
+                statuses = thrownStatuses(error, sanitized),
+                message = thrownMessage(error, sanitized, fallback = "Unknown error"),
             )
         }
     }
@@ -266,12 +264,12 @@ class SearchCoordinator(
             onPartial = onPartial?.let { publish ->
                 { partial ->
                     fileMirrors.learn(partial.items)
-                    publish(base.found(partial.items, mergeStatuses(excluded, partial.statuses)))
+                    publish(base.found(partial.items, mergeFeedStatuses(excluded, partial.statuses)))
                 }
             },
         )
         currentCoroutineContext().ensureActive()
-        val statuses = mergeStatuses(excluded, result.statuses)
+        val statuses = mergeFeedStatuses(excluded, result.statuses)
         val next = base.accept(result, enabled)
         if (statuses.none { it.state == SourceRunState.SUCCESS }) {
             return SearchExecutionResult.Failure(base.executionKey, base.query, base.sourceScope, statuses,
@@ -333,8 +331,7 @@ class SearchCoordinator(
         currentCoroutineContext().ensureActive()
         if (result.statuses.none { it.state == SourceRunState.SUCCESS }) {
             return SearchPageResult.Failure(
-                base.executionKey, result.statuses, buildSourceFailureMessage(result.statuses)
-                    ?: buildSourceAuthErrorMessage(result.statuses) ?: "Source could not be retried",
+                base.executionKey, result.statuses, sourceFailureMessage(result.statuses, fallback = "Source could not be retried"),
             )
         }
         listed(result.items)
@@ -349,6 +346,13 @@ class SearchCoordinator(
         SearchPageResult.Failure(base.executionKey, listOf(sourceFailureStatus(source, error)),
             error.message ?: "Could not retry source")
     }
+
+    /** A thrown request failure is the query's one source's failure; Unified reports its sources' failures as statuses. */
+    private fun thrownStatuses(error: Throwable, query: Query): List<SourceRunStatus> =
+        (query.mode as? QueryMode.Source)?.let { mode -> listOf(sourceFailureStatus(mode.source, error)) }.orEmpty()
+
+    private fun thrownMessage(error: Throwable, query: Query, fallback: String): String =
+        if (isPixivUnknownError(error, query)) PIXIV_UNKNOWN_RETRY_MESSAGE else error.message ?: fallback
 
     private fun sourceFailureStatus(source: SourceKey, error: Throwable): SourceRunStatus {
         val reason = (error as? SourceAdapterException)?.reason ?: SourceFailureReason.UNKNOWN
@@ -368,11 +372,8 @@ class SearchCoordinator(
         } catch (error: Throwable) {
             SearchPageResult.Failure(
                 executionKey = continuation.executionKey,
-                statuses = (continuation.query.mode as? QueryMode.Source)
-                    ?.let { listOf(sourceFailureStatus(it.source, error)) }.orEmpty(),
-                message = if (isPixivUnknownError(error, continuation.query)) {
-                    PIXIV_UNKNOWN_RETRY_MESSAGE
-                } else error.message ?: "Could not load more results",
+                statuses = thrownStatuses(error, continuation.query),
+                message = thrownMessage(error, continuation.query, fallback = "Could not load more results"),
             )
         }
     }
@@ -389,7 +390,7 @@ class SearchCoordinator(
         if (pageable.isEmpty()) return SearchPageResult.Success(continuation.executionKey, emptyList(), excluded, continuation.ended())
         val result = registry.unifiedOrchestrator().nextPage(continuation.cursor, pageable)
         currentCoroutineContext().ensureActive()
-        val statuses = mergeStatuses(excluded, result.statuses)
+        val statuses = mergeFeedStatuses(excluded, result.statuses)
         if (statuses.none { it.state == SourceRunState.SUCCESS }) {
             return SearchPageResult.Failure(continuation.executionKey, statuses, unifiedFailureMessage(result.items, statuses))
         }
@@ -618,15 +619,9 @@ class SearchCoordinator(
         }
     }
 
-    private fun mergeStatuses(
-        first: List<SourceRunStatus>,
-        second: List<SourceRunStatus>,
-    ): List<SourceRunStatus> = (first + second).associateBy { it.source }.values.sortedBy { it.source.id }
-
     private fun unifiedFailureMessage(posts: List<Post>, statuses: List<SourceRunStatus>): String =
         if (isPixivUnknownFailure(posts, statuses)) PIXIV_UNKNOWN_RETRY_MESSAGE else
-            buildSourceFailureMessage(statuses) ?: buildSourceAuthErrorMessage(statuses)
-                ?: "These search options are not supported by the selected sources."
+            sourceFailureMessage(statuses, fallback = "These search options are not supported by the selected sources.")
 
     private fun isPixivUnknownFailure(posts: List<Post>, statuses: List<SourceRunStatus>): Boolean =
         posts.isEmpty() && statuses.any { status ->
