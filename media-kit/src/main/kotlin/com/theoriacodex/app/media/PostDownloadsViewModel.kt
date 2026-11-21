@@ -61,12 +61,11 @@ class PostDownloadsViewModel(
 
     /**
      * Removes the downloads (and their files, for [deleteFiles]) on the queue's thread and returns whether every one
-     * went; the caller offers Retry otherwise. A deferred removal commits through this after its Undo, possibly after
+     * went, a removed gallery's pages included; the caller offers Retry otherwise. A deferred removal commits through this after its Undo, possibly after
      * this ViewModel is cleared, so a started removal finishes deleting and saving the queue even then.
      */
     suspend fun removeNow(itemIds: Set<Long>, deleteFiles: Boolean): Boolean = withContext(queueDispatcher + NonCancellable) {
         queue.removeItems(itemIds, deleteFiles)
-        queue.batches.value.none { batch -> batch.items.any { it.id in itemIds } }
     }
 
     fun cancel(batchId: Long) {

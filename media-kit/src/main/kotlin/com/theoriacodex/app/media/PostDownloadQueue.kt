@@ -43,6 +43,9 @@ data class PostDownloadItem(
     val expandedFrom: Long? = null,
 ) {
     val active: Boolean get() = status in ACTIVE_DOWNLOAD_STATUSES
+
+    /** Whether a removal of [ids] covers this download: named directly, or a page of a gallery row it names. */
+    fun removedBy(ids: Set<Long>): Boolean = id in ids || expandedFrom in ids
 }
 
 data class PostDownloadBatch(val id: Long, val title: String, val items: List<PostDownloadItem>) {
@@ -149,11 +152,14 @@ class PostDownloadQueue(
         schedule()
     }
 
-    /** Stop workers before record removal; history-only clearing never deletes completed files. */
-    suspend fun removeItems(itemIds: Set<Long>, deleteFiles: Boolean) {
+    /**
+     * Stop workers before record removal; history-only clearing never deletes completed files. Returns whether every
+     * download the removal covers ([PostDownloadItem.removedBy]) went.
+     */
+    suspend fun removeItems(itemIds: Set<Long>, deleteFiles: Boolean): Boolean {
         restore()
         // A confirmation can outlive the parent row while a gallery becomes page downloads.
-        val selected = mutableBatches.value.flatMap { it.items }.filter { it.id in itemIds || it.expandedFrom in itemIds }
+        val selected = mutableBatches.value.flatMap { it.items }.filter { it.removedBy(itemIds) }
         selected.filter { it.active }.forEach { item ->
             update(item.id) { it.copy(status = PostDownloadStatus.CANCELLED, message = null) }
             workers[item.id]?.cancel()
@@ -179,6 +185,7 @@ class PostDownloadQueue(
         }
         commit(remaining) { previous }
         schedule()
+        return mutableBatches.value.none { batch -> batch.items.any { it.removedBy(itemIds) } }
     }
 
     private suspend fun retryItem(item: PostDownloadItem) {

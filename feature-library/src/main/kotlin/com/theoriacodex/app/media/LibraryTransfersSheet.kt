@@ -120,8 +120,6 @@ internal class TransfersSheetContent(
     val offlineRowsStart = 1 + listOfNotNull(offline.message).size + offline.pendingRemovals.size
 }
 
-private fun PostDownloadItem.removedBy(ids: Set<Long>) = id in ids || expandedFrom in ids
-
 private fun LazyGridScope.downloadsSection(
     content: TransfersSheetContent,
     batches: List<PostDownloadBatch>,
