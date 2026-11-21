@@ -135,10 +135,16 @@ private fun RestoreBackupDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text("${preview.profileNames.size} profiles · ${preview.collectionCount} collections · ${preview.savedPostCount} saved posts")
+                Text(
+                    listOf(
+                        countLabel(preview.profileNames.size, "profile"),
+                        countLabel(preview.collectionCount, "Codex", "Codices"),
+                        countLabel(preview.savedPostCount, "saved post"),
+                    ).joinToString(" · "),
+                )
                 Text(preview.profileNames.joinToString())
                 Text("${preview.likeCount} Likes · ${preview.savedSearchCount} saved searches · ${preview.followedCreatorCount} follows · ${preview.recentCount} recent entries")
-                Text("Adds what's missing to matching profiles and collections. Nothing you have is removed or changed, and restoring twice adds nothing more.")
+                Text("Adds what's missing to matching profiles and Codices. Nothing you have is removed or changed, and restoring twice adds nothing more.")
                 Text("Login credentials and downloaded media are not included.")
                 BackupCheckbox("Also apply global preferences", state.applyPreferences, onApplyPreferences, !state.busy)
                 if (state.busy) Text("Restoring backup…")

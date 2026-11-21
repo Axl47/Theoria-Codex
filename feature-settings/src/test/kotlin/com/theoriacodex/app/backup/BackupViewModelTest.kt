@@ -63,7 +63,7 @@ class BackupViewModelTest {
         assertArrayEquals(documents.bytes, actions.restoredBytes)
         assertFalse(actions.appliedPreferences)
         assertNull(owner.state.value.preview)
-        assertTrue(owner.effects.first().contains("2 profiles and 3 collections added"))
+        assertTrue(owner.effects.first().contains("2 profiles and 3 Codices added"))
     }
 
     @Test

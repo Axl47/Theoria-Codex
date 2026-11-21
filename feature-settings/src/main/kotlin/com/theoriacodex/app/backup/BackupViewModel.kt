@@ -153,13 +153,14 @@ class BackupViewModel(
 }
 
 private fun ProfileRestoreResult.message(): String {
-    val restored = if (profilesAdded == 0 && collectionsAdded == 0) "Backup restored into your existing collections."
-    else "Backup restored: ${countLabel(profilesAdded, "profile")} and ${countLabel(collectionsAdded, "collection")} added."
+    val restored = if (profilesAdded == 0 && collectionsAdded == 0) "Backup restored into your existing Codices."
+    else "Backup restored: ${countLabel(profilesAdded, "profile")} and ${countLabel(collectionsAdded, "Codex", "Codices")} added."
     val kept = keptExistingSites.mapNotNull { id -> SourceKey.parse(id)?.displayName() }
     return if (kept.isEmpty()) restored else "$restored Kept this device's settings for ${kept.joinToString()}."
 }
 
-private fun countLabel(count: Int, noun: String) = "$count ${if (count == 1) noun else "${noun}s"}"
+/** "1 profile", "2 profiles": [count] with [noun] or [plural]; used by the restore preview and its messages. */
+internal fun countLabel(count: Int, noun: String, plural: String = "${noun}s") = "$count ${if (count == 1) noun else plural}"
 
 private fun Throwable.backupMessage(fallback: String): String =
     when (this) {

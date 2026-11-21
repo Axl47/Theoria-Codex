@@ -433,7 +433,7 @@ private fun ProfileDeleteDialog(state: SettingsUiState, onAction: (SettingsActio
     AlertDialog(
         onDismissRequest = { onAction(SettingsAction.DismissRemoveProfile) },
         title = { Text("Delete Profile?") },
-        text = { Text("Delete profile \"${profile.name}\" and its likes/codex data? This cannot be undone.") },
+        text = { Text("Delete profile \"${profile.name}\" with its likes and Codices? This cannot be undone.") },
         dismissButton = {
             TextButton(onClick = { onAction(SettingsAction.DismissRemoveProfile) }) { Text("Cancel") }
         },
