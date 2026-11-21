@@ -27,7 +27,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,7 +41,6 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.components.LoadingState
 import com.theoriacodex.app.ui.components.SingleChoiceMenu
-import kotlinx.coroutines.delay
 import com.theoriacodex.app.ui.components.SourceSelector
 import com.theoriacodex.app.ui.components.expandableControlSemantics
 import com.theoriacodex.app.ui.components.FeedPostActionSheet
@@ -52,7 +50,6 @@ import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchEntry
-import com.theoriacodex.data.repository.MAX_SAVED_SEARCH_NAME_LENGTH
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -77,7 +74,7 @@ fun RecentsScreen(
     onOpenSearch: (RecentSearchEntry) -> Unit,
     onOpenFypSearch: (RecentSearchEntry) -> Unit,
     onClear: (RecentsClearTarget) -> Unit,
-    onSaveSearch: ((String, RecentSearchEntry) -> Unit)? = null,
+    saves: RecentSearchSaves? = null,
     onRemoveSearch: ((RecentSearchEntry) -> Unit)? = null,
     onRemovePost: ((RecentPostEntry) -> Unit)? = null,
     removedSearch: RecentSearchEntry? = null,
@@ -97,8 +94,7 @@ fun RecentsScreen(
     val now = remember(watchedPosts, codexPosts, searches, fypSearches, activity) { System.currentTimeMillis() }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var selectedActionSection by remember { mutableStateOf(RecentPostSection.WATCHED) }
-    var searchToRename by remember { mutableStateOf<RecentSearchEntry?>(null) }
-    val saving = rememberRecentSearchSaving(onSaveSearch) { searchToRename = it }
+    val saving = rememberRecentSearchSaving(saves)
     val rows = RecentsRowActions(saving, removedSearch, onRemoveSearch, onRemovePost)
     val cards = rememberRecentsPostCards(pixivUgoiraClient, likedPostIds, durations, onToggleLike)
     val relatedSlot = rememberRecentsRelated(related, filter, selectedSource, visible, cards, onShownPostsChanged) { selectedActionPost = it }
@@ -142,13 +138,6 @@ fun RecentsScreen(
             liked = post.id in likedPostIds, onToggleLike = onToggleLike,
         )
     }
-
-    searchToRename?.let { entry ->
-        SavedSearchNameDialog(savedSearchName(entry), renaming = true, { searchToRename = null }) { name ->
-            onSaveSearch?.invoke(name, entry)
-            searchToRename = null
-        }
-    }
 }
 
 /** History while it loads: its header, then the loading state. */
@@ -162,37 +151,6 @@ fun RecentsLoading(header: LibrarySectionHeader = BareSectionHeader) {
         LoadingState(Modifier.fillMaxSize())
     }
 }
-
-/** Saves at once under the query's own name; the saved search shows "Saved · Rename" for [SAVED_CONFIRM_MS]. */
-@Composable
-private fun rememberRecentSearchSaving(
-    onSaveSearch: ((String, RecentSearchEntry) -> Unit)?,
-    onRename: (RecentSearchEntry) -> Unit,
-): RecentSearchSaving? {
-    var saved by remember { mutableStateOf<RecentSearchEntry?>(null) }
-    LaunchedEffect(saved) {
-        if (saved != null) {
-            delay(SAVED_CONFIRM_MS)
-            saved = null
-        }
-    }
-    val save = onSaveSearch ?: return null
-    return RecentSearchSaving(
-        saved = saved,
-        save = { entry ->
-            save(savedSearchName(entry), entry)
-            saved = entry
-        },
-        rename = { entry ->
-            saved = null
-            onRename(entry)
-        },
-    )
-}
-
-private fun savedSearchName(entry: RecentSearchEntry) = recentSearchPresentation(entry).title.take(MAX_SAVED_SEARCH_NAME_LENGTH)
-
-private const val SAVED_CONFIRM_MS = 5_000L
 
 @Composable
 private fun RecentsSourceSelector(selectedSource: SourceKey?, onSelected: (SourceKey?) -> Unit) {

@@ -4,6 +4,9 @@ import com.theoriacodex.app.search.searchCardTestTag
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
@@ -13,7 +16,9 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
 import com.theoriacodex.app.testing.testPost
@@ -22,6 +27,7 @@ import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
+import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
@@ -39,33 +45,52 @@ class SavedSearchControlsTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
-    fun `recent search long press saves at once under the query's own name`() {
+    fun `a bookmark saves under the query's own name and confirms only once the save commits`() {
         val recent = search(RecentSearchKind.SOURCE)
-        var saved: Pair<String, RecentSearchEntry>? = null
+        var saved by mutableStateOf(emptyList<SavedSearchEntry>())
+        var justSaved by mutableStateOf<String?>(null)
+        val requested = mutableListOf<Pair<String, RecentSearchEntry>>()
         compose.setContent { MaterialTheme {
-            TestRecents(searches = listOf(recent), onSave = { name, entry -> saved = name to entry })
+            TestRecents(
+                searches = listOf(recent),
+                saves = RecentSearchSaves(saved, justSaved, { name, entry -> requested += name to entry }, { _, _ -> }),
+            )
         } }
         openSearches()
         compose.onNodeWithTag("Recent search:${recent.queryHash}")
             .performSemanticsAction(SemanticsActions.OnLongClick) { it() }
-        assertEquals(recentSearchPresentation(recent).title to recent, saved)
+        assertEquals(listOf(recentSearchPresentation(recent).title to recent), requested)
+        compose.onNodeWithText("Saved").assertDoesNotExist()
+
+        saved = listOf(SavedSearchEntry("pin", requested.single().first, recent, savedAtEpochMs = 1))
+        justSaved = "pin"
         compose.onNodeWithText("Saved").assertExists()
+        justSaved = null
+        compose.onNodeWithContentDescription("Rename ${requested.single().first}").assertExists()
     }
 
     @Test
-    fun `rename in place saves the search again under the new name`() {
+    fun `a saved search's bookmark renames it in its row and never saves it again`() {
         val recent = search(RecentSearchKind.SOURCE)
-        val saved = mutableListOf<Pair<String, RecentSearchEntry>>()
+        val pin = SavedSearchEntry("pin", "Evening", recent, savedAtEpochMs = 1)
+        val saved = mutableListOf<String>()
+        val renamed = mutableListOf<Pair<String, String>>()
         compose.setContent { MaterialTheme {
-            TestRecents(searches = listOf(recent), onSave = { name, entry -> saved += name to entry })
+            TestRecents(
+                searches = listOf(recent),
+                saves = RecentSearchSaves(listOf(pin), null, { name, _ -> saved += name }, { id, name -> renamed += id to name }),
+            )
         } }
         openSearches()
-        compose.onNodeWithContentDescription("Save search").performClick()
-        compose.onNodeWithText("Rename").performClick()
+        compose.onNodeWithTag("Recent search:${recent.queryHash}")
+            .performSemanticsAction(SemanticsActions.OnLongClick) { it() }
+        compose.onNode(hasSetTextAction()).assertTextEquals("Evening")
         compose.onNode(hasSetTextAction()).performTextReplacement("Morning recipe")
-        compose.onNodeWithText("Save", substring = false).performClick()
-        assertEquals(listOf(recentSearchPresentation(recent).title to recent, "Morning recipe" to recent), saved)
-        compose.onNodeWithContentDescription("Save search").assertExists()
+        compose.onNode(hasSetTextAction()).performImeAction()
+
+        assertEquals(listOf("pin" to "Morning recipe"), renamed)
+        assertEquals(emptyList<String>(), saved)
+        compose.onNodeWithContentDescription("Rename Evening").assertExists()
     }
 
     @Test
@@ -133,14 +158,14 @@ class SavedSearchControlsTest {
         fyp: List<RecentSearchEntry> = emptyList(),
         activity: List<RecentActivityEntry> = emptyList(),
         onOpenPost: (List<RecentPostEntry>, Int) -> Unit = { _, _ -> },
-        onSave: (String, RecentSearchEntry) -> Unit = { _, _ -> },
+        saves: RecentSearchSaves? = null,
         onOpen: (RecentSearchEntry) -> Unit = {},
         onOpenFyp: (RecentSearchEntry) -> Unit = {},
     ) {
         RecentsScreen(
             watchedPosts = watched, codexPosts = emptyList(), searches = searches,
             fypSearches = fyp, activity = activity,
-            onSaveSearch = onSave,
+            saves = saves,
             onRequestSaveToCodex = {}, onSaveToDevice = {},
             onGoToSearch = {},
             onOpenWatchedPost = onOpenPost, onOpenCodexPost = { _, _ -> }, onOpenSearch = onOpen, onOpenFypSearch = onOpenFyp, onClear = {},

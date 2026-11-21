@@ -26,6 +26,12 @@ data class SavedSearchEntry(
     val savedAtEpochMs: Long,
 )
 
+/** The saved search that stands for [search]: the same query hash and the same stored payload, whatever its name. */
+fun List<SavedSearchEntry>.savedFor(search: RecentSearchEntry): SavedSearchEntry? {
+    val payload by lazy { RecentSearchPayloadCodec.encodeJson(search) }
+    return firstOrNull { it.search.queryHash == search.queryHash && RecentSearchPayloadCodec.encodeJson(it.search) == payload }
+}
+
 /** Named searches are device-wide, like Recents, and independent of history clearing or pruning. */
 interface SavedSearchRepository {
     fun observeSavedSearches(): Flow<List<SavedSearchEntry>>
@@ -94,10 +100,7 @@ private class MutableSavedSearchRepository(
 
     override suspend fun save(name: String, search: RecentSearchEntry): SavedSearchEntry = mutex.withLock {
         val normalizedName = validateSavedSearchName(name)
-        val payload = RecentSearchPayloadCodec.encodeJson(search)
-        val existing = savedSearches.value.firstOrNull { entry ->
-            entry.search.queryHash == search.queryHash && RecentSearchPayloadCodec.encodeJson(entry.search) == payload
-        }
+        val existing = savedSearches.value.savedFor(search)
         require(existing != null || savedSearches.value.size < MAX_SAVED_SEARCHES) {
             "You can pin up to $MAX_SAVED_SEARCHES searches. Remove one before adding another."
         }
