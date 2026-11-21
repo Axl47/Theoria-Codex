@@ -40377,8 +40377,8 @@ PLcom/theoriacodex/app/viewer/ViewerMediaLoadingKt;-><clinit>()V
 PLcom/theoriacodex/app/viewer/ViewerMediaLoadingKt;->ViewerPlaybackFooter$lambda$0(Landroidx/compose/ui/Modifier;Lkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;I)Lkotlin/Unit;
 PLcom/theoriacodex/app/viewer/ViewerMediaLoadingKt;->ViewerPlaybackFooter(Landroidx/compose/ui/Modifier;Lkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;II)V
 PLcom/theoriacodex/app/viewer/ViewerMediaLoadingKt;->access$loadGifBytes-lOba5wQ(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-PLcom/theoriacodex/app/viewer/ViewerMediaLoadingKt;->buildViewerImageRequest-Kq_1UmU$default(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/Integer;Ljava/lang/Integer;ILjava/lang/Object;)Lcoil/request/ImageRequest;
-PLcom/theoriacodex/app/viewer/ViewerMediaLoadingKt;->buildViewerImageRequest-Kq_1UmU(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/Integer;Ljava/lang/Integer;)Lcoil/request/ImageRequest;
+PLcom/theoriacodex/app/viewer/ViewerImageRequestKt;->buildViewerImageRequest-Kq_1UmU$default(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/Integer;Ljava/lang/Integer;ILjava/lang/Object;)Lcoil/request/ImageRequest;
+PLcom/theoriacodex/app/viewer/ViewerImageRequestKt;->buildViewerImageRequest-Kq_1UmU(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;ZLjava/lang/Integer;Ljava/lang/Integer;)Lcoil/request/ImageRequest;
 PLcom/theoriacodex/app/viewer/ViewerMediaLoadingKt;->getVIEWER_TIMELINE_HEIGHT()F
 PLcom/theoriacodex/app/viewer/ViewerMediaLoadingKt;->gifLocationLabel(Ljava/lang/String;)Ljava/lang/String;
 PLcom/theoriacodex/app/viewer/ViewerMediaLoadingKt;->loadFirstGifMovie-Ny_5XnE(Landroid/content/Context;Ljava/lang/String;Ljava/util/List;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;

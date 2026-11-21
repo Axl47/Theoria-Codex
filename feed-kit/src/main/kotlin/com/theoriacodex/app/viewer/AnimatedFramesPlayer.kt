@@ -44,7 +44,7 @@ fun rememberAnimatedFrames(
         events.onReady()
     }
     AnimatePlayback(
-        frames.playback, controls.isActive && controls.isPlaying, controls.playbackRate.coerceAtLeast(MIN_VIEWER_PLAYBACK_RATE),
+        frames.playback, controls.isActive && controls.isPlaying, controls.playbackRate,
         controls.loopPlayback, events.onPlaybackCompleted, availableUntilMs,
     )
     LaunchedEffect(frames, controls.restartRequest) { if (controls.restartRequest > 0L) frames.playback.seekTo(0L) }

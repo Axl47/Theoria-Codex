@@ -118,9 +118,6 @@ private fun ViewerWebPProgress(state: ViewerWebPState, controls: ViewerRendererC
             delay(100L)
         }
     }
-    LaunchedEffect(controls.restartRequest, state.drawable) {
-        if (controls.restartRequest > 0L) { state.drawable?.reset(); state.frameIndex = 0 }
-    }
 }
 
 /** Playback buttons, the frame counter and a track, laid out like the other timelines; see [viewerTimelineOnOneLine]. */

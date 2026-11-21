@@ -191,7 +191,7 @@ private fun ViewerVideoBinding(
         val player = lease.player
         // Read after the previous binding's disposal has saved its final position.
         resumePosition().takeIf { it > 0L }?.let(player::seekTo)
-        player.playbackParameters = PlaybackParameters(controls.playbackRate.coerceAtLeast(MIN_VIEWER_PLAYBACK_RATE))
+        player.playbackParameters = PlaybackParameters(controls.playbackRate)
         val listener = viewerVideoListener(player, state, recovery) { latestEvents }
         player.addListener(listener)
         state.player = player
@@ -306,7 +306,7 @@ private fun ViewerVideoCommands(state: ViewerVideoState, controls: ViewerRendere
         state.player?.repeatMode = if (controls.loopPlayback) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
     }
     LaunchedEffect(state.player, controls.playbackRate) {
-        runCatching { state.player?.playbackParameters = PlaybackParameters(controls.playbackRate.coerceAtLeast(MIN_VIEWER_PLAYBACK_RATE)) }
+        runCatching { state.player?.playbackParameters = PlaybackParameters(controls.playbackRate) }
     }
     LaunchedEffect(state.player, controls.restartRequest) {
         if (controls.restartRequest != handledRestart) {

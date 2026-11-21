@@ -47,5 +47,3 @@ data class ViewerRendererEvents(
     }
 }
 
-/** The slowest rate a Viewer clock runs at; playback clocks require a positive rate. */
-const val MIN_VIEWER_PLAYBACK_RATE = 0.1f
