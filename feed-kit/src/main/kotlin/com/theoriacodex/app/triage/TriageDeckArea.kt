@@ -113,7 +113,8 @@ internal fun TriageDeckArea(
                 .semantics { customActions = triageActions(targets, viewModel.removes) { choice -> onDecide(choice, post.id) } },
         ) {
             TriageCards(deck, drag, support, thresholds, ratioFloor) {
-                callbacks.onOpenPost(deck.posts, deck.index)
+                val (posts, index) = deck.viewerLaunch()
+                callbacks.onOpenPost(posts, index)
             }
             TriageDragOverlays(drag, targets, saveState, hideState, thresholds, viewModel.removes)
         }
