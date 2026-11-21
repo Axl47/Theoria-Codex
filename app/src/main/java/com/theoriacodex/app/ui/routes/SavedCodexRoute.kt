@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -58,21 +58,28 @@ import com.theoriacodex.app.ui.components.FeedFabRestoreRegistry
 import com.theoriacodex.app.ui.components.codexFeedFabContext
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.FeedFabRestoreState
+import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
+import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.domain.model.PostId
 
+/**
+ * Likes, Followed and saved Searches as shelves under a fixed [header]: Library's own in its Saved
+ * section, [SavedBackHeader] on the standalone route.
+ */
 @Composable
 internal fun SavedCodexRoute(
     data: DataDependencies,
     sources: SourceDependencies,
     features: FeatureDependencies,
     restoreRegistry: FeedFabRestoreRegistry,
-    onBack: () -> Unit,
     onOpenCodex: (String) -> Unit,
     onOpenViewer: (String, List<Post>, Int) -> Unit,
     onOpenCodexActions: (String) -> Unit,
     resolvePost: suspend (PostId) -> Post?,
     onToggleLike: (Post) -> Unit = {},
+    header: @Composable () -> Unit,
 ) {
     val settings = browsingMetadataOwner(data).state.collectAsStateWithLifecycle().value?.settings ?: return
     val searches = rememberRetained("saved-searches") { data.savedSearches.observeSavedSearches() }.value ?: return
@@ -82,35 +89,64 @@ internal fun SavedCodexRoute(
     val counts = listOf(likesCount, settings.followedCreators.size, searches.size)
     val scroll = rememberLazyListState()
     val children = remember(likesId) { savedCodexChildren(likesId) }
-    val shelfIds = remember(children) { listOf(null) + children.map { ViewerReturnShelfId.Saved(it.codexId) } }
-    ViewerReturnColumn(shelfIds, scroll) {
-        LazyColumn(state = scroll, contentPadding = PaddingValues(vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            item(key = "header") {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-                    Text("Saved", style = MaterialTheme.typography.titleLarge)
-                }
-            }
-            children.forEachIndexed { index, child ->
-                item(key = child.codexId) {
-                    val restore = restoreRegistry.state(codexFeedFabContext(child.codexId)) ?: return@item
-                    val sort = CodexSortMode.entries.firstOrNull { it.name == restore.sortMode }
-                        ?: CodexSortMode.NEWEST_SAVED
-                    // Owned above the boundary so its known lengths reach the length sorts.
-                    val owner = viewModel<MediaDurationRouteViewModel>(key = "saved-duration:${child.codexId}",
-                        factory = MediaDurationRouteViewModel.factory(features.mediaDurationCoordinator, "saved:${child.codexId}"))
-                    val durationStates by owner.states.collectAsStateWithLifecycle()
-                    CodexDetailDestinationStateBoundary(child.codexId, sort, data, sources, features, restore, durationStates) { state ->
-                        SavedCodexSection(state, child.codexId, child.name, counts[index], restore, sort,
-                            owner, durationStates, sources, { scroll.isScrollInProgress },
-                            { onOpenCodex(child.codexId) },
-                            { onOpenCodexActions(child.codexId) },
-                            { posts, position -> onOpenViewer(child.codexId, posts, position) }, resolvePost, onToggleLike)
+    val shelfIds = remember(children) { children.map { ViewerReturnShelfId.Saved(it.codexId) } }
+    ScrollToTopOnTabReselect(TopLevelDestination.Library) { scroll.animateScrollToItem(0) }
+    Column(Modifier.fillMaxSize()) {
+        header()
+        ViewerReturnColumn(shelfIds, scroll) {
+            LazyColumn(state = scroll, contentPadding = PaddingValues(vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                children.forEachIndexed { index, child ->
+                    item(key = child.codexId) {
+                        SavedCodexShelf(child, counts[index], data, sources, features, restoreRegistry, { scroll.isScrollInProgress },
+                            SavedShelfActions({ onOpenCodex(child.codexId) }, { onOpenCodexActions(child.codexId) },
+                                { posts, position -> onOpenViewer(child.codexId, posts, position) }, resolvePost, onToggleLike))
                     }
                 }
             }
         }
+    }
+}
+
+/** The standalone Saved route's title row. */
+@Composable
+internal fun SavedBackHeader(onBack: () -> Unit) {
+    Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+        Text("Saved", style = MaterialTheme.typography.titleLarge)
+    }
+}
+
+/** What a Saved shelf can do: open its collection or its actions, open a post, and like. */
+private class SavedShelfActions(
+    val open: () -> Unit,
+    val openActions: () -> Unit,
+    val openViewer: (List<Post>, Int) -> Unit,
+    val resolvePost: suspend (PostId) -> Post?,
+    val toggleLike: (Post) -> Unit,
+)
+
+@Composable
+private fun SavedCodexShelf(
+    child: Codex,
+    count: Int,
+    data: DataDependencies,
+    sources: SourceDependencies,
+    features: FeatureDependencies,
+    restoreRegistry: FeedFabRestoreRegistry,
+    parentScrolling: () -> Boolean,
+    actions: SavedShelfActions,
+) {
+    val restore = restoreRegistry.state(codexFeedFabContext(child.codexId)) ?: return
+    val sort = CodexSortMode.entries.firstOrNull { it.name == restore.sortMode } ?: CodexSortMode.NEWEST_SAVED
+    // Owned above the boundary so its known lengths reach the length sorts.
+    val owner = viewModel<MediaDurationRouteViewModel>(key = "saved-duration:${child.codexId}",
+        factory = MediaDurationRouteViewModel.factory(features.mediaDurationCoordinator, "saved:${child.codexId}"))
+    val durationStates by owner.states.collectAsStateWithLifecycle()
+    CodexDetailDestinationStateBoundary(child.codexId, sort, data, sources, features, restore, durationStates) { state ->
+        SavedCodexSection(state, child.codexId, child.name, count, restore, sort,
+            owner, durationStates, sources, parentScrolling,
+            actions.open, actions.openActions, actions.openViewer, actions.resolvePost, actions.toggleLike)
     }
 }
 

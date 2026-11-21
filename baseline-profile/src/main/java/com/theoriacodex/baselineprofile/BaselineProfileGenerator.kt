@@ -90,6 +90,6 @@ class BaselineProfileGenerator {
         val FEED_MEDIA: Pattern = Pattern.compile("search_media_pixiv_benchmark_video_.*")
         val VIEWER_MEDIA: Pattern = Pattern.compile("viewer_video_pixiv_benchmark_video_.*")
         const val UI_TIMEOUT_MS = 15_000L
-        val TOP_LEVEL_DESTINATIONS = listOf("Search", "Recents", "For You", "Codex", "Settings")
+        val TOP_LEVEL_DESTINATIONS = listOf("Search", "For You", "Library")
     }
 }

@@ -11,13 +11,6 @@ fun savedCodexChildren(likesCodexId: String) = listOf(
     Codex(SAVED_SEARCHES_CODEX_ID, "Searches", 0),
 )
 
-internal fun savedCodexLibraryEntries(codices: List<Codex>, likesCodexId: String): List<Codex> {
-    val saved = Codex(SAVED_CODEX_ID, "Saved", 0)
-    return if (codices.any { it.codexId == likesCodexId }) {
-        codices.map { if (it.codexId == likesCodexId) saved else it }
-    } else listOf(saved) + codices
-}
-
 /** The overview reads the same saved filters as the full collection. */
 fun FeedFabRestoreState.savedCollectionFilters() = CodexCollectionFilters(
     animatedOnly = animatedOnly,

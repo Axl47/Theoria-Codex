@@ -58,11 +58,11 @@ class AdaptiveNavigationTest {
         val railBounds = compose.onNodeWithTag("navigation-rail").fetchSemanticsNode().boundsInRoot
         val contentBounds = compose.onNodeWithTag("content").fetchSemanticsNode().boundsInRoot
         assertEquals(contentBounds.bottom, railBounds.bottom, 1f)
-        compose.onNodeWithText("Settings").performClick()
+        compose.onNodeWithText("Library").performClick()
         compose.runOnIdle {
             assertEquals(20, scroll.firstVisibleItemIndex)
             assertEquals(1, createdContent)
-            assertEquals(TopLevelDestination.entries.indexOf(TopLevelDestination.Settings), selected.value)
+            assertEquals(TopLevelDestination.entries.indexOf(TopLevelDestination.Library), selected.value)
             width.value = 400f
         }
         compose.onNodeWithTag("navigation-rail").assertDoesNotExist()

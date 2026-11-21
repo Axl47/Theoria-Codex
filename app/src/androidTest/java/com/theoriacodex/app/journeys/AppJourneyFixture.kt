@@ -1,5 +1,8 @@
 package com.theoriacodex.app.journeys
 
+import com.theoriacodex.app.library.LIBRARY_SETTINGS_TAG
+import com.theoriacodex.app.library.LibrarySection
+import com.theoriacodex.app.library.librarySectionTag
 import android.graphics.Bitmap
 import android.graphics.Color
 import androidx.compose.ui.geometry.Offset
@@ -126,6 +129,20 @@ abstract class AppJourneyFixture {
 
     protected fun tab(label: String) {
         activate(compose.onNodeWithContentDescription(label))
+        compose.waitForIdle()
+    }
+
+    /** Shows Library at [section]. */
+    protected fun library(section: LibrarySection) {
+        tab("Library")
+        activate(compose.onNodeWithTag(librarySectionTag(section)))
+        compose.waitForIdle()
+    }
+
+    /** Opens Settings from Library's gear. */
+    protected fun openSettings() {
+        tab("Library")
+        activate(compose.onNodeWithTag(LIBRARY_SETTINGS_TAG))
         compose.waitForIdle()
     }
 

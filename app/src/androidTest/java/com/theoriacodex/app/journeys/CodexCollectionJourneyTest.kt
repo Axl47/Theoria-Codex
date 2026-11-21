@@ -1,5 +1,6 @@
 package com.theoriacodex.app.journeys
 
+import com.theoriacodex.app.library.LibrarySection
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.onAllNodesWithText
@@ -26,7 +27,7 @@ class CodexCollectionJourneyTest : AppJourneyFixture() {
         }
         val original = io { container.content.observeCodexItems(collection.codexId).first() }
         launch()
-        tab("Codex")
+        library(LibrarySection.Codices)
         activate(compose.onNodeWithContentDescription("Create Codex"))
         compose.onNodeWithText("Name").performTextInput("Second collection")
         activate(compose.onNodeWithText("Save"))

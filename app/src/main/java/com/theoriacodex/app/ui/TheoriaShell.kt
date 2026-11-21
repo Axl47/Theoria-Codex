@@ -399,7 +399,7 @@ internal class TheoriaShell(
             "Creator profile"
         } else when (navigation.homeTabRoute) {
             TopLevelDestination.ForYou.route -> "FYP"
-            TopLevelDestination.Recents.route -> "Recents"
+            TopLevelDestination.Library.route -> "Library"
             else -> "Search"
         }
         transfers.downloads.submitPosts(listOf(post), originLabel = origin)
@@ -580,9 +580,7 @@ internal class TheoriaShell(
         val currentSettings = data.currentSettingsSnapshot()
         workflows.likesCodexSync.ensureProfileCodex(currentSettings.activeRecommendationProfile())
         owners.settings.onAction(SettingsAction.RefreshAccounts)
-        navigation.homeTabRoute = data.uiRestoreRepository.getLastTab()
-            ?.takeIf { route -> TopLevelDestination.entries.any { destination -> destination.route == route } }
-            ?: TopLevelDestination.Search.route
+        navigation.homeTabRoute = data.restoreHomeTabRoute()
         appShellOwner.onAction(AppShellAction.MarkAppReady)
         navReady = true
     }

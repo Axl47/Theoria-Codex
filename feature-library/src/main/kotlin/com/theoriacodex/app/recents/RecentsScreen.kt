@@ -1,5 +1,7 @@
 package com.theoriacodex.app.recents
 
+import com.theoriacodex.app.library.BareSectionHeader
+import com.theoriacodex.app.library.LibrarySectionHeader
 import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
 import com.theoriacodex.app.ui.components.FeedPostCard
 import com.theoriacodex.app.ui.components.FeedCardEnvironment
@@ -104,6 +106,7 @@ fun RecentsScreen(
     onStartOver: (Post, RecentPostSection) -> Unit = { _, _ -> },
     related: RelatedShelfBinding? = null,
     onShownPostsChanged: (key: String, posts: List<Post>) -> Unit = { _, _ -> },
+    header: LibrarySectionHeader = BareSectionHeader,
 ) {
     var filter by rememberSaveable { mutableStateOf(RecentsFilter.ALL) }
     var searchFilter by rememberSaveable { mutableStateOf(RecentSearchFilter.ALL) }
@@ -125,9 +128,10 @@ fun RecentsScreen(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        RecentsHeader(onOpenMenu = { showMenu = true }) {
+        header {
             RecentsSectionSelector(filter, onSelected = { filter = it })
             RecentsSourceSelector(selectedSource, onSelected = { selectedSource = it })
+            IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, "Recents actions") }
         }
 
         RecentsTab(
@@ -343,21 +347,6 @@ private fun RecentPostsGrid(
     )
 }
 
-@Composable
-private fun RecentsHeader(
-    onOpenMenu: () -> Unit,
-    selectors: @Composable () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("Recents", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-        selectors()
-        IconButton(onClick = onOpenMenu) { Icon(Icons.Default.MoreVert, "Recents actions") }
-    }
-}
-
 /** Names exactly what will be cleared. Clearing a section always covers every source. */
 @Composable
 private fun RecentsClearMenu(
@@ -420,7 +409,7 @@ private fun WatchedGrid(
         return
     }
     val gridState = rememberRetainedFeedGridState("recents")
-    ScrollToTopOnTabReselect(TopLevelDestination.Recents) { gridState.animateScrollToItem(0) }
+    ScrollToTopOnTabReselect(TopLevelDestination.Library) { gridState.animateScrollToItem(0) }
     DurationRouteEnvironmentEffect(gridState, cards.onEnvironmentChanged)
     val rows = remember(watchedPosts, now, related?.request) {
         recentsGridRows(watchedPosts, now).withRelatedShelf(related?.request, watchedPosts)
@@ -520,7 +509,7 @@ private fun SearchHistoryList(
         }
         val days = remember(searches, now) { searches.groupBy { recentsDay(it.searchedAtEpochMs) } }
         val list = rememberLazyListState()
-        ScrollToTopOnTabReselect(TopLevelDestination.Recents) { list.animateScrollToItem(0) }
+        ScrollToTopOnTabReselect(TopLevelDestination.Library) { list.animateScrollToItem(0) }
         LazyColumn(Modifier.fillMaxSize(), state = list) {
             days.forEach { (day, entries) ->
                 item(key = "day:$day") { RecentsDayHeading(recentsDayLabel(entries.first().searchedAtEpochMs, now)) }
@@ -556,7 +545,7 @@ private fun ActivityList(
     }
     val timeline = remember(activity, now, related?.request) { recentsTimeline(activity, now).withRelatedShelf(related?.request) }
     val list = rememberLazyListState()
-    ScrollToTopOnTabReselect(TopLevelDestination.Recents) { list.animateScrollToItem(0) }
+    ScrollToTopOnTabReselect(TopLevelDestination.Library) { list.animateScrollToItem(0) }
     val shelfSeed = related?.request?.seed?.id
     ViewerReturnColumn(list, timeline, { request -> timeline.indexOfFirst { it.holdsReturn(request, shelfSeed) } }) {
     LazyColumn(modifier = Modifier.fillMaxSize(), state = list, verticalArrangement = Arrangement.spacedBy(8.dp)) {

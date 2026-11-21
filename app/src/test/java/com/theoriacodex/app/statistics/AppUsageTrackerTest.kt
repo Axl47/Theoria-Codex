@@ -1,5 +1,6 @@
 package com.theoriacodex.app.statistics
 
+import com.theoriacodex.app.library.LibrarySection
 import com.theoriacodex.app.ui.statisticsUsageCategory
 import com.theoriacodex.data.repository.InMemoryStatisticsRepository
 import kotlinx.coroutines.flow.first
@@ -141,13 +142,15 @@ class AppUsageTrackerTest {
 
     @Test
     fun `route categories map home tabs and secondary destinations without overlap`() {
-        assertEquals(StatisticsUsageCategory.BROWSING, statisticsUsageCategory("home", "search"))
-        assertEquals(StatisticsUsageCategory.BROWSING, statisticsUsageCategory("home", "recents"))
-        assertEquals(StatisticsUsageCategory.BROWSING, statisticsUsageCategory("home", "for_you"))
-        assertEquals(StatisticsUsageCategory.CODEX, statisticsUsageCategory("home", "codex"))
-        assertNull(statisticsUsageCategory("home", "settings"))
-        assertEquals(StatisticsUsageCategory.WATCHING, statisticsUsageCategory("viewer", "search"))
-        assertEquals(StatisticsUsageCategory.BROWSING, statisticsUsageCategory("creator-profile", "settings"))
-        assertEquals(StatisticsUsageCategory.CODEX, statisticsUsageCategory("codex/detail/{codexId}", "search"))
+        val codices = LibrarySection.Codices
+        assertEquals(StatisticsUsageCategory.BROWSING, statisticsUsageCategory("home", "search", codices))
+        assertEquals(StatisticsUsageCategory.BROWSING, statisticsUsageCategory("home", "for_you", codices))
+        assertEquals(StatisticsUsageCategory.BROWSING, statisticsUsageCategory("home", "library", LibrarySection.History))
+        assertEquals(StatisticsUsageCategory.CODEX, statisticsUsageCategory("home", "library", codices))
+        assertEquals(StatisticsUsageCategory.CODEX, statisticsUsageCategory("home", "library", LibrarySection.Saved))
+        assertNull(statisticsUsageCategory("settings-screen", "search", codices))
+        assertEquals(StatisticsUsageCategory.WATCHING, statisticsUsageCategory("viewer", "search", codices))
+        assertEquals(StatisticsUsageCategory.BROWSING, statisticsUsageCategory("creator-profile", "library", codices))
+        assertEquals(StatisticsUsageCategory.CODEX, statisticsUsageCategory("codex/detail/{codexId}", "search", codices))
     }
 }

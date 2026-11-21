@@ -18,12 +18,11 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.filter
 
+/** The bottom bar's tabs, in pager order. [route] is what the last-tab preference stores. */
 enum class TopLevelDestination(val route: String, val label: String) {
     Search("search", "Search"),
-    Recents("recents", "Recents"),
     ForYou("for_you", "For You"),
-    Codex("codex", "Codex"),
-    Settings("settings", "Settings"),
+    Library("library", "Library"),
 }
 
 /** Lets a Codex tile and its detail screen morph into each other across navigation. */

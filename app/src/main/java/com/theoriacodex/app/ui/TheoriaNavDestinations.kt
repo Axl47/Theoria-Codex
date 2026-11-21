@@ -45,6 +45,7 @@ import com.theoriacodex.app.ui.routes.CreatorProfileStateSaver
 import com.theoriacodex.app.ui.routes.CreatorRoute
 import com.theoriacodex.app.ui.routes.CreatorRouteCallbacks
 import com.theoriacodex.app.ui.routes.CreatorRouteConfig
+import com.theoriacodex.app.ui.routes.SavedBackHeader
 import com.theoriacodex.app.ui.routes.SavedCodexRoute
 import com.theoriacodex.app.ui.routes.ViewerDestinationState
 import com.theoriacodex.app.ui.routes.ViewerDestinationStateBoundary
@@ -112,7 +113,7 @@ private fun CodexDetailEntry(
                 sources = shell.sources,
                 features = shell.features,
                 restoreRegistry = shell.feedFabRestoreRegistry,
-                onBack = { shell.navController.popBackStack() },
+                header = { SavedBackHeader { shell.navController.popBackStack() } },
                 onOpenCodex = { shell.navController.navigate(AppRoute.codexDetail(it)) },
                 onOpenViewer = shell::openCodexViewer,
                 onOpenCodexActions = shell.overlays::openCollectionActions,

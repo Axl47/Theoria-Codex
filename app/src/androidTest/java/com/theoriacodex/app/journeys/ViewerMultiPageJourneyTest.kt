@@ -1,5 +1,6 @@
 package com.theoriacodex.app.journeys
 
+import com.theoriacodex.app.library.LibrarySection
 import android.graphics.Color
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -68,7 +69,7 @@ class ViewerMultiPageJourneyTest : AppJourneyFixture() {
             )
         }
         launch()
-        tab("Recents")
+        library(LibrarySection.History)
         openRecentsSection("Searches")
         activate(compose.onNodeWithTag("Recent search:$RECENT_SEARCH"))
         val card = compose.onNodeWithTag(searchCardTestTag(posts.getValue(SourceKey.PIXIV)[index].id))
