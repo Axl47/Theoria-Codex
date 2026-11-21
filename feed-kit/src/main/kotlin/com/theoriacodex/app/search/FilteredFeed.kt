@@ -11,29 +11,12 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
 /**
- * The feed's [posts] that [filters] let through. A page appended to [posts] filters only that page; a filter, mark or
- * duration change refilters off the main thread while the previous list stays on screen. Over the length step's
- * presented list, a length that changes nothing shown costs no pass, and one that reveals posts filters only those.
- * [retainKey] names the feed, so an unchanged result is not filtered again when the feed returns from the Viewer.
- */
-@Composable
-fun rememberFilteredFeed(
-    posts: List<Post>,
-    filters: SearchVisibilityFilters,
-    unknownDurationPolicy: UnknownAnimatedDurationPolicy,
-    durations: DurationFilterMetadata,
-    marks: PostMarkInputs = NO_MARKS,
-    retainKey: String,
-): List<Post> = rememberCarriedFilter(posts, durations, filters, marks, unknownDurationPolicy, retainKey = retainKey) { candidates, known ->
-    filterSearchResults(
-        candidates, filters, marks.liked, marks.saved, marks.watched, unknownDurationPolicy, known, marks.retained,
-    )
-}
-
-/**
- * [filter] over [posts] with the known lengths of [durations], computed as [rememberFilteredFeed] describes: the result
- * is carried over to a longer or revealed list, and recomputed off the main thread when [inputs] (everything else
- * [filter] reads, compared by equality) or the lengths change. [filter] must keep or drop each post on its own.
+ * [filter] over [posts] with the known lengths of [durations]. A page appended to [posts] filters only that page; a
+ * change to [inputs] (everything else [filter] reads, compared by equality) or to the lengths refilters off the main
+ * thread while the previous list stays on screen. Over the length step's presented list, a length that changes
+ * nothing shown costs no pass, and one that reveals posts filters only those. [retainKey] names the feed, so an
+ * unchanged result is not filtered again when the feed returns from the Viewer. [filter] must keep or drop each post
+ * on its own.
  */
 @Composable
 fun rememberCarriedFilter(
@@ -80,4 +63,3 @@ internal fun extendFiltered(
     return FilteredPosts(shown + filter(appended), durations)
 }
 
-private val NO_MARKS = PostMarkInputs(emptySet(), emptySet(), emptySet(), emptySet())

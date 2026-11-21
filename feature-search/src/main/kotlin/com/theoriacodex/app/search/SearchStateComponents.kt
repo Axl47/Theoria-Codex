@@ -1,9 +1,6 @@
 package com.theoriacodex.app.search
 
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.theoriacodex.app.ui.LocalNetworkOnline
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.runtime.getValue
 import com.theoriacodex.app.settings.sites.ADD_API_KEY_LABEL
 import com.theoriacodex.app.settings.sites.VERIFY_IN_BROWSER_LABEL
 import com.theoriacodex.app.source.LocalSourceHealth
@@ -11,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedErrorTile
+import com.theoriacodex.app.ui.components.FeedFailureTile
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 
 @Composable
@@ -28,27 +26,6 @@ internal fun EmptyBlock(
     )
 }
 
-@Composable
-internal fun ErrorBlock(
-    message: String,
-    onRetry: (() -> Unit)? = null,
-    title: String = "Could not load results",
-    actionLabel: String = "Retry",
-    /** An account or verification problem, which reconnecting won't fix even when it has an action. */
-    accountProblem: Boolean = false,
-    onDismiss: (() -> Unit)? = null,
-) {
-    val online by LocalNetworkOnline.current.collectAsStateWithLifecycle()
-    val offline = !online && onRetry != null && !accountProblem
-    FeedErrorTile(
-        message = if (offline) OFFLINE_FEED_MESSAGE else message,
-        title = if (offline) OFFLINE_FEED_TITLE else title,
-        actionLabel = actionLabel,
-        onRetry = onRetry,
-        onDismiss = onDismiss,
-    )
-}
-
 /** A failed search, whose action verifies the source in the browser when a challenge blocked it, else retries. */
 @Composable
 fun SourceFailureBlock(
@@ -59,9 +36,12 @@ fun SourceFailureBlock(
 ) {
     val health = LocalSourceHealth.current
     val challenged = statuses.challengedSource(health.issues)
-    if (challenged == null) return ErrorBlock(message = message, onRetry = onRetry, onDismiss = onDismiss)
-    ErrorBlock(
+    if (challenged == null) {
+        return FeedFailureTile(message = message, onRetry = onRetry, title = SEARCH_FAILURE_TITLE, onDismiss = onDismiss)
+    }
+    FeedFailureTile(
         message = message,
+        title = SEARCH_FAILURE_TITLE,
         onRetry = { health.verify(challenged) },
         actionLabel = VERIFY_IN_BROWSER_LABEL,
         accountProblem = true,
@@ -73,7 +53,7 @@ fun SourceFailureBlock(
 @Composable
 internal fun SourceAccountNotice(message: String, statuses: List<SourceRunStatus>, onDismiss: (() -> Unit)? = null) {
     val health = LocalSourceHealth.current
-    ErrorBlock(
+    FeedFailureTile(
         title = "Source account required",
         message = message,
         onRetry = statuses.siteNeedingKey()?.let { site -> { health.addKey(site) } },
@@ -121,3 +101,5 @@ internal fun SourceStatusActions(
         onOpenAccounts = onOpenAccounts,
     )
 }
+
+private const val SEARCH_FAILURE_TITLE = "Could not load results"

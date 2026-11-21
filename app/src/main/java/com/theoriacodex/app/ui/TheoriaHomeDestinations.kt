@@ -1,5 +1,7 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.app.media.MediaDurationStates
+import com.theoriacodex.app.ui.components.feedDurations
 import android.widget.Toast
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
@@ -97,8 +99,6 @@ private fun SearchDestination(shell: TheoriaShell) {
                 onOpenViewer = { effect -> shell.openSearchViewer(effect) },
                 onShowMessage = { message -> Toast.makeText(shell.appContext, message, Toast.LENGTH_SHORT).show() },
                 onToggleLike = { post -> shell.feedLikeAction(ViewerStreamSource.SEARCH)(post) },
-                onOpenCreatorProfile = shell::launchOpenCreator,
-                onOpenLegacyCreatorProfile = shell::launchOpenCreator,
                 onRequestSaveToCodex = { post ->
                     shell.requestSaveToCodex(post, searchQuery = routes.search.current?.state?.value?.query?.applied)
                 },
@@ -168,13 +168,6 @@ private fun ForYouDestination(shell: TheoriaShell) {
                 onToggleLike = { post -> shell.feedLikeAction(ViewerStreamSource.FOR_YOU)(post) },
                 onRequestSaveToCodex = { post -> shell.requestSaveToCodex(post, fromForYou = true) },
                 onSaveToDevice = shell::requestSaveToDevice,
-                onOpenCreatorProfile = shell::launchOpenCreator,
-                onOpenLegacyCreatorProfile = shell::launchOpenCreator,
-                onAddIncludeTerm = routes.addSearchIncludeTerm,
-                onAddExcludeTerm = routes.addSearchExcludeTerm,
-                onRemoveIncludeTerm = routes.removeSearchIncludeTerm,
-                onRemoveExcludeTerm = routes.removeSearchExcludeTerm,
-                onFavoriteTagLongPress = shell.addFavoriteTag,
                 onGoToSearch = { navigation.showTab(TopLevelDestination.Search) },
             ),
             onOwnerAvailable = routes::publishForYou,
@@ -241,26 +234,15 @@ private fun RecentsDestination(shell: TheoriaShell) {
             fypSearches = state.fypSearches,
             activity = state.activity,
             pixivUgoiraClient = shell.sources.pixivUgoiraClient,
-            durationStateForPost = durationOwner::observeState,
-            onDurationPostVisibilityChanged = durationOwner::onPostVisibilityChanged,
-            onDurationEnvironmentChanged = durationOwner::onEnvironmentChanged,
-            onAuthoritativeDurationKnown = durationOwner::publishPlayerDuration,
+            // Recents filters no lengths, so it only reports what its cards learn.
+            durations = durationOwner.feedDurations(MediaDurationStates.EMPTY, resolveInBackground = false),
             likedPostIds = state.likedPostIds,
             creatorBrowsingSources = shell.sources.registry.creatorBrowsingSources(),
-            tagVideoCountProvider = shell.features.search::tagVideoCount,
-            fetchTagVideoCounts = shell.features.search::fetchTagVideoCounts,
             onToggleLike = { post ->
                 shell.toggleLikeAndSyncCodex(post) { outcome -> relatedOwner.related.onLikeCommitted(post, outcome) }
             },
             onRequestSaveToCodex = { post -> shell.requestSaveToCodex(post) },
             onSaveToDevice = shell::requestSaveToDevice,
-            onOpenCreatorProfile = shell::launchOpenCreator,
-            onOpenLegacyCreatorProfile = shell::launchOpenCreator,
-            onAddIncludeTerm = routes.addSearchIncludeTerm,
-            onAddExcludeTerm = routes.addSearchExcludeTerm,
-            onRemoveIncludeTerm = routes.removeSearchIncludeTerm,
-            onRemoveExcludeTerm = routes.removeSearchExcludeTerm,
-            onFavoriteTagLongPress = shell.addFavoriteTag,
             onGoToSearch = { shell.navigation.showTab(TopLevelDestination.Search) },
             onOpenWatchedPost = { entries, index -> shell.openRecentSection(entries, index, RecentPostSection.WATCHED) },
             onOpenCodexPost = { entries, index -> shell.openRecentSection(entries, index, RecentPostSection.CODEX) },

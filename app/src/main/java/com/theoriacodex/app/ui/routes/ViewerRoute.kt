@@ -297,14 +297,11 @@ private fun rememberViewerScreenHost(
             viewerOwner.onAction(action)
             if (action is ViewerAction.SetPlaybackMode) callbacks.onPlaybackModeSelected(action.mode)
         },
-        onRemoveIncludeTerm = callbacks.onRemoveIncludeTerm,
-        onRemoveExcludeTerm = callbacks.onRemoveExcludeTerm,
         onGoToSearch = {
             viewerOwner.clearSession(retainPresentation = true)
             latestDependencies.value.sessionRetentionOwner.clear()
             callbacks.onGoToSearch()
         },
-        onFavoriteTagLongPress = callbacks.onFavoriteTagLongPress,
         onOpenCreatorFallback = callbacks.onOpenCreatorFallback,
         onRequestMediaRecovery = { post, failedMedia ->
             routeScope.launch {

@@ -1,12 +1,14 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.ui.components.LocalPostMenuActions
+import com.theoriacodex.app.ui.components.FeedMarks
+import com.theoriacodex.app.ui.components.FeedDurations
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
@@ -27,10 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.AnimatedDurationRange
-import com.theoriacodex.app.media.MediaDurationState
-import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.media.animatedDurationRangeLabel
-import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchQueryUiState
 import com.theoriacodex.app.search.state.SearchUiState
@@ -57,18 +56,15 @@ import com.theoriacodex.data.repository.defaultRecentSearchSources
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
-import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
-import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -80,24 +76,14 @@ fun SearchScreen(
     onAction: (SearchAction) -> Unit,
     resolvePostById: suspend (PostId) -> Post?,
     recoverPostMedia: suspend (Post, ImageRef) -> Post?,
-    tagVideoCountProvider: (SourceKey, String) -> Int?,
-    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     likedPostIds: Set<PostId> = emptySet(),
     pendingLikePostIds: Set<PostId> = emptySet(),
     savedPostIds: Set<PostId> = emptySet(),
     watchedPostIds: Set<PostId> = emptySet(),
     favoriteTags: List<FavoriteTagEntry> = emptyList(),
-    resolveUnknownAnimatedDurations: Boolean = false,
-    durationStates: MediaDurationStates = MediaDurationStates.EMPTY,
-    durationStateForPost: (Post) -> Flow<MediaDurationState?> = noMediaDurationStateForPost,
-    onDurationFilterChanged: (Boolean) -> Unit = {},
-    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit = { _, _ -> },
-    onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit = { _, _ -> },
-    onAuthoritativeDurationKnown: (Post, Long) -> Unit = { _, _ -> },
+    durations: FeedDurations = FeedDurations.NONE,
     onToggleLike: ((Post) -> Unit)? = null,
-    onOpenCreatorProfile: (CreatorProfile) -> Unit,
-    onOpenLegacyCreatorProfile: (Post) -> Unit,
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
     onOpenSourceAccounts: () -> Unit = {},
@@ -119,13 +105,14 @@ fun SearchScreen(
     val scope = rememberCoroutineScope()
     val gridState = rememberRetainedFeedGridState("search")
     SearchTabReselectEffect(state.restoration, gridState, onAction)
-    val feed = rememberSearchFeed(state, fabRestoreState, likedPostIds, pendingLikePostIds, savedPostIds, watchedPostIds, durationStates, resolveUnknownAnimatedDurations)
+    val marks = FeedMarks(likedPostIds, savedPostIds, watchedPostIds, pendingLikePostIds)
+    val feed = rememberSearchFeed(state, fabRestoreState, marks, durations)
     val serverFilters = state.query.serverFilters()
     val filterScroll = rememberFeedScrollSignal()
     var filterSheetBaseline by remember { mutableStateOf(serverFilters) }
-    LaunchedEffect(feed.animatedDurationFilterActive) { onDurationFilterChanged(feed.animatedDurationFilterActive) }
-    DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
-    val pageDemand = rememberSearchScrollAndPaging(state, feed, gridState, resolveUnknownAnimatedDurations, onAction)
+    LaunchedEffect(feed.animatedDurationFilterActive) { durations.onFilterChanged(feed.animatedDurationFilterActive) }
+    DurationRouteEnvironmentEffect(gridState, durations.onEnvironmentChanged)
+    val pageDemand = rememberSearchScrollAndPaging(state, feed, gridState, durations.resolveInBackground, onAction)
     SearchScrollDismissEffect(gridState, chrome, inputFocus)
     val applyDraft = { chrome.applyDraft(inputFocus, onAction) }
     val filterActions = SearchFilterActions(state, fabRestoreState, rememberUpdatedState(serverFilters), onAction, onFabRestoreStateChange, applyDraft)
@@ -143,8 +130,7 @@ fun SearchScreen(
     ) { padding ->
         SearchChromeLayout(
             padding, state, feed, fabRestoreState, chrome, oldSearchBar, sourcePicker, applyDraft, gridState, pageDemand, inputFocus,
-            pixivUgoiraClient, likedPostIds, durationStateForPost, onToggleLike, onDurationPostVisibilityChanged,
-            onAuthoritativeDurationKnown, resolvePostById, recoverPostMedia, onAction,
+            pixivUgoiraClient, likedPostIds, durations, onToggleLike, resolvePostById, recoverPostMedia, onAction,
         ) { post ->
             inputFocus.clear()
             actionPost.open(post, state.content.results, scope, resolvePostById)
@@ -152,8 +138,8 @@ fun SearchScreen(
     }
     actionPost.post?.let { post ->
         SearchPostSheet(
-            post, actionPost, state, creatorBrowsingSources, tagVideoCountProvider, fetchTagVideoCounts, onAction, onSaveToDevice,
-            onRequestSaveToCodex, onOpenCreatorProfile, onOpenLegacyCreatorProfile, onAddFavoriteTag, applyDraft,
+            post, actionPost, state, creatorBrowsingSources, onAction, onSaveToDevice,
+            onRequestSaveToCodex, onAddFavoriteTag, applyDraft,
             liked = post.id in likedPostIds, onToggleLike = onToggleLike,
         )
     }
@@ -163,7 +149,7 @@ fun SearchScreen(
             favoriteTags, onAddFavoriteTag, onRemoveFavoriteTag, onRenameFavoriteTag)
     }
     if (chrome.showFavoriteTagSheet) {
-        SearchFavoriteTags(state, favoriteTags, tagVideoCountProvider, fetchTagVideoCounts, onAction, onRemoveFavoriteTag, onRenameFavoriteTag) { chrome.showFavoriteTagSheet = false }
+        SearchFavoriteTags(state, favoriteTags, onAction, onRemoveFavoriteTag, onRenameFavoriteTag) { chrome.showFavoriteTagSheet = false }
     }
     if (chrome.showFilterSheet) {
         SearchFilterSheet(state, feed, fabRestoreState, onAction, onFabRestoreStateChange, filterActions::resetFilterDraft) {
@@ -219,10 +205,8 @@ private fun SearchChromeLayout(
     inputFocus: SearchInputFocus,
     pixivUgoiraClient: PixivUgoiraClient?,
     likedPostIds: Set<PostId>,
-    durationStateForPost: (Post) -> Flow<MediaDurationState?>,
+    durations: FeedDurations,
     onToggleLike: ((Post) -> Unit)?,
-    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit,
-    onAuthoritativeDurationKnown: (Post, Long) -> Unit,
     resolvePostById: suspend (PostId) -> Post?,
     recoverPostMedia: suspend (Post, ImageRef) -> Post?,
     onAction: (SearchAction) -> Unit,
@@ -239,8 +223,7 @@ private fun SearchChromeLayout(
         inputField = { SearchChromeInput(state, feed, fabRestoreState, chrome, oldSearchBar, sourcePicker, applyDraft) },
     ) {
         val cards = rememberFeedCardEnvironment(
-            pixivUgoiraClient, likedPostIds, feed.durationMetadata.knownDurationMsByPostId, durationStateForPost,
-            onToggleLike, onDurationPostVisibilityChanged, onAuthoritativeDurationKnown,
+            pixivUgoiraClient, likedPostIds, feed.durationMetadata.knownDurationMsByPostId, durations, onToggleLike,
         )
         SearchResultsBody(state, feed, cards, gridState, pageDemand, inputFocus, resolvePostById, recoverPostMedia, onAction, openPostActions)
     }
@@ -373,18 +356,15 @@ private fun SearchPostSheet(
     actionPost: SearchActionPostState,
     state: SearchUiState,
     creatorBrowsingSources: Set<SourceKey>,
-    tagVideoCountProvider: (SourceKey, String) -> Int?,
-    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?>,
     onAction: (SearchAction) -> Unit,
     onSaveToDevice: (Post) -> Unit,
     onRequestSaveToCodex: (Post) -> Unit,
-    onOpenCreatorProfile: (CreatorProfile) -> Unit,
-    onOpenLegacyCreatorProfile: (Post) -> Unit,
     onAddFavoriteTag: (SourceKey, List<String>, String?) -> Unit,
     applyDraft: () -> Unit,
     liked: Boolean,
     onToggleLike: ((Post) -> Unit)?,
 ) {
+    val menuActions = LocalPostMenuActions.current
     PostActionSheet(
         post = post,
         creatorBrowsingSources = creatorBrowsingSources,
@@ -394,16 +374,14 @@ private fun SearchPostSheet(
         onToggleLike = onToggleLike?.let { toggle -> { toggle(post) } },
         onSaveToCodex = { onRequestSaveToCodex(post) },
         saveToCodexQuery = state.query.applied,
-        onOpenCreatorProfile = onOpenCreatorProfile,
-        onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
+        onOpenCreatorProfile = menuActions.openCreator,
+        onOpenLegacyCreatorProfile = { menuActions.openPostCreator(post) },
         onShowRelated = { onAction(SearchAction.ShowRelatedPosts(post)) },
         tagContent = {
             PostTagActionSection(
                 draftQuery = state.query.draft,
                 loading = actionPost.resolving && !post.hasActionableTags(),
                 post = post,
-                tagVideoCountProvider = tagVideoCountProvider,
-                fetchTagVideoCounts = fetchTagVideoCounts,
                 onAddIncludeTerm = { term ->
                     onAction(SearchAction.AddPostIncludeTerm(post, term))
                     true
@@ -596,8 +574,6 @@ private fun rememberFavoriteTagSections(
 private fun SearchFavoriteTags(
     state: SearchUiState,
     favoriteTags: List<FavoriteTagEntry>,
-    tagVideoCountProvider: (SourceKey, String) -> Int?,
-    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?>,
     onAction: (SearchAction) -> Unit,
     onRemoveFavoriteTag: (SourceKey, List<String>) -> Unit,
     onRenameFavoriteTag: (SourceKey, List<String>, String) -> Unit,
@@ -613,8 +589,6 @@ private fun SearchFavoriteTags(
     }
     FavoriteTagSheet(
         sections = sections,
-        tagVideoCountProvider = tagVideoCountProvider,
-        fetchTagVideoCounts = fetchTagVideoCounts,
         emptyMessage = emptyMessage,
         onAddTag = { entry ->
             val terms = entry.terms

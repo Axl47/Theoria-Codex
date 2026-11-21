@@ -57,17 +57,14 @@ class SearchWatchedPresentationTest {
                             ForYouScreen(
                                 state = ForYouUiState(results = listOf(post)), likedPostIds = emptySet(),
                                 onToggleLike = {}, onAction = {}, onRequestSaveToCodex = {}, onSaveToDevice = {},
-                                onOpenCreatorProfile = {}, onOpenLegacyCreatorProfile = {},
-                                onAddIncludeTerm = { _, _ -> false }, onAddExcludeTerm = { _, _ -> false },
-                                onRemoveIncludeTerm = { _, _ -> }, onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
+                               
+                                onGoToSearch = {},
                             )
                         } else SearchScreen(
                             state = SearchUiState(content = SearchContentUiState(results = listOf(post), hasExecutedSearch = true)),
                             creatorBrowsingSources = emptySet(), onAction = {},
                             watchedPostIds = setOf(post.id),
                             resolvePostById = { null }, recoverPostMedia = { _, _ -> null },
-                            tagVideoCountProvider = { _, _ -> null }, fetchTagVideoCounts = { _, _ -> emptyMap() },
-                            onOpenCreatorProfile = {}, onOpenLegacyCreatorProfile = {},
                             onRequestSaveToCodex = {}, onSaveToDevice = {},
                         )
                     }

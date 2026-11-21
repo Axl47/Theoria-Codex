@@ -7,7 +7,6 @@ import com.theoriacodex.domain.model.CommentOrder
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.VideoQuality
 import com.theoriacodex.domain.model.ViewerPlaybackMode
@@ -16,8 +15,6 @@ import com.theoriacodex.domain.model.ViewerPlaybackMode
 data class ViewerScreenConfig(
     val creatorBrowsingSources: Set<SourceKey> = emptySet(),
     val pixivUgoiraClient: PixivUgoiraClient? = null,
-    val tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
-    val fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
     val playbackMode: ViewerPlaybackMode = ViewerPlaybackMode.LOOP,
     val videoQuality: VideoQuality = VideoQuality.AUTO,
     val invertMultiImageScrollDirection: Boolean = false,
@@ -35,9 +32,6 @@ data class ViewerScreenCallbacks(
     val onVisiblePostChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
     val onVisibleMediaChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
     val onOpenUrl: (String) -> Unit = {},
-    val onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
-    val onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
-    val onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
     val onGoToSearch: () -> Unit,
     val onDismissRelatedPosts: (ViewerStreamSource) -> Unit = {},
     val onRetryRelatedPosts: (ViewerStreamSource) -> Unit = {},
@@ -53,10 +47,7 @@ data class ViewerScreenCallbacks(
 @Immutable
 class ViewerScreenHost(
     val onAction: (ViewerAction) -> Unit,
-    val onRemoveIncludeTerm: (Post, SearchTerm) -> Unit = { _, _ -> },
-    val onRemoveExcludeTerm: (Post, SearchTerm) -> Unit = { _, _ -> },
     val onGoToSearch: () -> Unit = {},
-    val onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
     val onOpenCreatorFallback: ((Post) -> Unit)? = null,
     val onRequestMediaRecovery: ((Post, ImageRef) -> Unit)? = null,
     val onVisiblePostChanged: ((Post, Int) -> Unit)? = null,

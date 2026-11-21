@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.ui.components.feedDurations
 import com.theoriacodex.app.ui.LocalNetworkOnline
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -22,10 +23,8 @@ import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.FeedFabRestoreState
-import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 
 /** App-level inputs rendered by For You or used to reconcile recommendation inputs. */
@@ -48,13 +47,6 @@ internal data class ForYouRouteCallbacks(
     val onToggleLike: (Post) -> Unit,
     val onRequestSaveToCodex: (Post) -> Unit,
     val onSaveToDevice: (Post) -> Unit,
-    val onOpenCreatorProfile: (CreatorProfile) -> Unit,
-    val onOpenLegacyCreatorProfile: (Post) -> Unit,
-    val onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
-    val onAddExcludeTerm: (Post, SearchTerm) -> Boolean,
-    val onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
-    val onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
-    val onFavoriteTagLongPress: (SourceKey, String) -> Unit,
     val onGoToSearch: () -> Unit,
 )
 
@@ -132,27 +124,14 @@ private fun ForYouRouteContent(
         state = state,
         likedPostIds = config.likedPostIds,
         pixivUgoiraClient = pixivUgoiraClient,
-        resolveUnknownAnimatedDurations = config.resolveUnknownAnimatedDurations,
-        durationStates = duration.states,
-        durationStateForPost = duration.stateForPost,
-        onDurationFilterChanged = duration.owner::onFilterChanged,
-        onDurationPostVisibilityChanged = duration.owner::onPostVisibilityChanged,
-        onDurationEnvironmentChanged = duration.owner::onEnvironmentChanged,
-        onAuthoritativeDurationKnown = duration.owner::publishPlayerDuration,
+        durations = duration.owner.feedDurations(duration.states, config.resolveUnknownAnimatedDurations),
         resolvePostById = owner::resolvePost,
         onToggleLike = callbacks.onToggleLike,
         onAction = owner::onAction,
         creatorBrowsingSources = config.creatorBrowsingSources,
         onRequestSaveToCodex = callbacks.onRequestSaveToCodex,
         onSaveToDevice = callbacks.onSaveToDevice,
-        onOpenCreatorProfile = callbacks.onOpenCreatorProfile,
-        onOpenLegacyCreatorProfile = callbacks.onOpenLegacyCreatorProfile,
         onOpenSourceAccounts = callbacks.onOpenSourceAccounts,
-        onAddIncludeTerm = callbacks.onAddIncludeTerm,
-        onAddExcludeTerm = callbacks.onAddExcludeTerm,
-        onRemoveIncludeTerm = callbacks.onRemoveIncludeTerm,
-        onRemoveExcludeTerm = callbacks.onRemoveExcludeTerm,
-        onFavoriteTagLongPress = callbacks.onFavoriteTagLongPress,
         onGoToSearch = callbacks.onGoToSearch,
         fabRestoreState = fabRestoreState,
         onFabRestoreStateChange = onFabRestoreStateChange,

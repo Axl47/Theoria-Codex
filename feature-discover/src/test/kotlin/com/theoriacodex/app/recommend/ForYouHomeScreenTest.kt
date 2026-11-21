@@ -1,17 +1,17 @@
 package com.theoriacodex.app.recommend
 
+import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
+import com.theoriacodex.app.ui.components.FeedDurations
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recommend.state.ForYouUiState
 import com.theoriacodex.domain.model.SourceKey
@@ -95,8 +95,8 @@ class ForYouHomeScreenTest {
     private fun render(home: ForYouHomeState, actions: MutableList<ForYouAction>) {
         compose.setContent {
             MaterialTheme {
-                ForYouHomeScreen(ForYouUiState(home = home), emptySet(), null, { it },
-                    noMediaDurationStateForPost, { _, _ -> }, { _, _ -> }, {}, {},
+                val cards = rememberFeedCardEnvironment(null, emptySet(), emptyMap(), FeedDurations.NONE, {})
+                ForYouHomeScreen(ForYouUiState(home = home), cards, { it }, {},
                     onAction = { actions += it }, onShowFilters = {}, filterLabels = emptyList(), onClearFilters = { {} },
                     onOpenPreview = { _, _, _ -> })
             }

@@ -99,6 +99,7 @@ private fun rememberPostTagSavedTags(shell: TheoriaShell): PostTagSavedTags = re
             settings.favoriteTagsByProfile[settings.activeRecommendationProfile().profileId].orEmpty()
                 .mapNotNullTo(mutableSetOf()) { entry -> entry.tags.singleOrNull()?.let { entry.source to it } }
         }.distinctUntilChanged(),
+        add = shell.addFavoriteTag,
         remove = { source, tag -> shell.removeFavoriteTags(source, listOf(tag)) },
     )
 }
@@ -164,8 +165,8 @@ internal fun TheoriaAppContent(
             PostTagContextProvider(
                 shell.routes.search.current?.state,
                 shell.features.search::fetchSearchTermCounts,
-                shell.routes.postTagSearchActions,
-                savedTags,
+                shell.routes.postTagSearchActions, savedTags,
+                shell.features.search::tagVideoCount, shell.features.search::fetchTagVideoCounts,
             ) {
                 TheoriaNightTheme {
                     ShellOverlaySheets(shell)
@@ -361,6 +362,8 @@ private fun rememberPostMenuActions(shell: TheoriaShell): PostMenuActions = reme
         copyLink = { url ->
             if (copyTextToClipboard(shell.appContext, "post_url", url)) shell.recordPostUrlCopy() else shell.toast("Could not copy the link")
         },
+        openCreator = shell::launchOpenCreator,
+        openPostCreator = shell::launchOpenCreator,
     )
 }
 

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.ui.components.feedDurations
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -21,7 +22,6 @@ import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.data.repository.FeedFabRestoreState
 
@@ -45,10 +45,6 @@ internal data class CreatorRouteCallbacks(
     val onSaveToDevice: (Post) -> Unit,
     val onToggleFollow: (CreatorProfile, List<Post>) -> Unit = { _, _ -> },
     val onOpenUrl: (String) -> Unit,
-    val onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
-    val onAddExcludeTerm: (Post, SearchTerm) -> Boolean,
-    val onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
-    val onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
 )
 
 /** Navigation-scoped Creator owner plus its immutable rendering boundary. */
@@ -125,23 +121,13 @@ private fun CreatorRouteContent(
         pendingLikePostIds = config.pendingLikePostIds,
         savedPostIds = config.savedPostIds,
         pixivUgoiraClient = pixivUgoiraClient,
-        resolveUnknownAnimatedDurations = config.resolveUnknownAnimatedDurations,
-        durationStates = duration.states,
-        durationStateForPost = duration.stateForPost,
-        onDurationFilterChanged = duration.owner::onFilterChanged,
-        onDurationPostVisibilityChanged = duration.owner::onPostVisibilityChanged,
-        onDurationEnvironmentChanged = duration.owner::onEnvironmentChanged,
-        onAuthoritativeDurationKnown = duration.owner::publishPlayerDuration,
+        durations = duration.owner.feedDurations(duration.states, config.resolveUnknownAnimatedDurations),
         resolvePostById = owner::resolvePost,
         onToggleLike = callbacks.onToggleLike,
         onAction = owner::onAction,
         onRequestSaveToCodex = callbacks.onRequestSaveToCodex,
         onSaveToDevice = callbacks.onSaveToDevice,
         onOpenUrl = callbacks.onOpenUrl,
-        onAddIncludeTerm = callbacks.onAddIncludeTerm,
-        onAddExcludeTerm = callbacks.onAddExcludeTerm,
-        onRemoveIncludeTerm = callbacks.onRemoveIncludeTerm,
-        onRemoveExcludeTerm = callbacks.onRemoveExcludeTerm,
         fabRestoreState = fabRestoreState,
         onFabRestoreStateChange = onFabRestoreStateChange,
     )

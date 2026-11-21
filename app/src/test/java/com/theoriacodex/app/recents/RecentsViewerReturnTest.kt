@@ -67,9 +67,9 @@ class RecentsViewerReturnTest {
                             RecentActivityEntry.Watched(first), RecentActivityEntry.Watched(neighbor),
                             RecentActivityEntry.Search(search), RecentActivityEntry.Watched(otherRow),
                         ),
-                        onRequestSaveToCodex = {}, onSaveToDevice = {}, onOpenCreatorProfile = {}, onOpenLegacyCreatorProfile = {},
-                        onAddIncludeTerm = { _, _ -> false }, onAddExcludeTerm = { _, _ -> false },
-                        onRemoveIncludeTerm = { _, _ -> }, onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
+                        onRequestSaveToCodex = {}, onSaveToDevice = {},
+                       
+                        onGoToSearch = {},
                         onOpenWatchedPost = { _, _ -> }, onOpenCodexPost = { _, _ -> }, onOpenSearch = {}, onOpenFypSearch = {}, onClear = {},
                     )
                 }

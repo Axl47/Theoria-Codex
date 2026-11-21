@@ -47,8 +47,6 @@ class SearchInputSubmissionTest {
             SearchScreen(
                 state = state.value, creatorBrowsingSources = emptySet(), onAction = { actions += it },
                 resolvePostById = { null }, recoverPostMedia = { _, _ -> null },
-                tagVideoCountProvider = { _, _ -> null }, fetchTagVideoCounts = { _, _ -> emptyMap() },
-                onOpenCreatorProfile = {}, onOpenLegacyCreatorProfile = {},
                 onRequestSaveToCodex = {}, onSaveToDevice = {},
             )
         } } }
@@ -149,8 +147,6 @@ class SearchInputSubmissionTest {
                             }
                         },
                         resolvePostById = { null }, recoverPostMedia = { _, _ -> null },
-                        tagVideoCountProvider = { _, _ -> null }, fetchTagVideoCounts = { _, _ -> emptyMap() },
-                        onOpenCreatorProfile = {}, onOpenLegacyCreatorProfile = {},
                         onRequestSaveToCodex = {}, onSaveToDevice = {},
                     )
                 }

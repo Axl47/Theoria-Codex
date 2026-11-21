@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.ui.components.feedDurations
 import com.theoriacodex.app.ui.LocalNetworkOnline
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.SavedSearchEntry
@@ -33,7 +34,6 @@ import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.data.repository.FeedFabRestoreState
-import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -57,8 +57,6 @@ internal data class SearchRouteCallbacks(
     val onOpenViewer: suspend (SearchEffect.OpenViewer) -> Unit,
     val onShowMessage: (String) -> Unit,
     val onToggleLike: ((Post) -> Unit)?,
-    val onOpenCreatorProfile: (CreatorProfile) -> Unit,
-    val onOpenLegacyCreatorProfile: (Post) -> Unit,
     val onRequestSaveToCodex: (Post) -> Unit,
     val onSaveToDevice: (Post) -> Unit,
     val onOpenSourceAccounts: () -> Unit = {},
@@ -212,24 +210,14 @@ private fun SearchRouteContent(
         onAction = owner::onAction,
         resolvePostById = resolvePostById,
         recoverPostMedia = coordinator::recoverPostMedia,
-        tagVideoCountProvider = coordinator::tagVideoCount,
-        fetchTagVideoCounts = coordinator::fetchTagVideoCounts,
         pixivUgoiraClient = pixivUgoiraClient,
         likedPostIds = config.likedPostIds,
         pendingLikePostIds = config.pendingLikePostIds,
         savedPostIds = config.savedPostIds,
         watchedPostIds = config.watchedPostIds,
         favoriteTags = config.favoriteTags,
-        resolveUnknownAnimatedDurations = config.resolveUnknownAnimatedDurations,
-        durationStates = duration.states,
-        durationStateForPost = duration.stateForPost,
-        onDurationFilterChanged = duration.owner::onFilterChanged,
-        onDurationPostVisibilityChanged = duration.owner::onPostVisibilityChanged,
-        onDurationEnvironmentChanged = duration.owner::onEnvironmentChanged,
-        onAuthoritativeDurationKnown = duration.owner::publishPlayerDuration,
+        durations = duration.owner.feedDurations(duration.states, config.resolveUnknownAnimatedDurations),
         onToggleLike = callbacks.onToggleLike,
-        onOpenCreatorProfile = callbacks.onOpenCreatorProfile,
-        onOpenLegacyCreatorProfile = callbacks.onOpenLegacyCreatorProfile,
         onRequestSaveToCodex = callbacks.onRequestSaveToCodex,
         onSaveToDevice = callbacks.onSaveToDevice,
         onOpenSourceAccounts = callbacks.onOpenSourceAccounts,

@@ -18,9 +18,7 @@ import com.theoriacodex.app.related.RelatedShelfBinding
 import com.theoriacodex.app.related.anchorIndexIn
 import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.search.SearchVisibilityFilters
-import com.theoriacodex.app.search.unknownAnimatedDurationPolicy
 import com.theoriacodex.app.ui.components.FeedRelatedPostsShelf
-import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
 import com.theoriacodex.app.ui.components.rememberRelatedFeedPresentation
 import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostEntry
@@ -103,20 +101,16 @@ private fun rememberRecentsRelatedSlot(
     onLongPress: (Post) -> Unit,
 ): RecentsRelatedSlot? {
     val request = binding?.state?.requestOrNull ?: return null
-    val environment = rememberFeedCardEnvironment(
-        cards.pixivUgoiraClient, cards.likedPostIds, emptyMap(), cards.durationStateForPost, cards.onToggleLike,
-        cards.onDurationPostVisibilityChanged, cards.onAuthoritativeDurationKnown,
-    )
+    val environment = cards.environment
     val presentation = rememberRelatedFeedPresentation(
         retainKey = retainKey,
         canonicalPosts = shownPosts,
         visibleCanonicalPosts = shownPosts,
         relatedState = binding.state,
         visibilityFilters = SearchVisibilityFilters(),
-        likedPostIds = cards.likedPostIds,
+        likedPostIds = environment.likedPostIds.value,
         savedPostIds = emptySet(),
         watchedPostIds = emptySet(),
-        unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy(resolveInBackground = false),
         durationStates = MediaDurationStates.EMPTY,
         durationFilterActive = false,
     )

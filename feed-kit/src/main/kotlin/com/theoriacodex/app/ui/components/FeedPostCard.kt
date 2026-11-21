@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.components
 
+import com.theoriacodex.app.tags.PostTagActionSection
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
@@ -11,13 +12,10 @@ import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.tags.LocalPostTagSearchActions
-import com.theoriacodex.app.tags.PostBoundTagSection
 import com.theoriacodex.app.viewer.PixivUgoiraClient
-import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
 
@@ -43,28 +41,31 @@ fun rememberFeedCardEnvironment(
     pixivUgoiraClient: PixivUgoiraClient?,
     likedPostIds: Set<PostId>,
     acquiredDurations: Map<PostId, Long>,
-    durationStateForPost: (Post) -> Flow<MediaDurationState?>,
+    durations: FeedDurations,
     onToggleLike: ((Post) -> Unit)?,
-    onViewportChanged: (Post, Boolean) -> Unit,
-    onAuthoritativeDurationKnown: (Post, Long) -> Unit,
     resolvePostById: (suspend (PostId) -> Post?)? = null,
 ): FeedCardEnvironment {
     val liked = rememberUpdatedState(likedPostIds)
-    val durations = rememberUpdatedState(acquiredDurations)
+    val known = rememberUpdatedState(acquiredDurations)
     // A fresh resolver instance each recomposition must not rebuild the environment, so tiles call through the latest one.
     val latestResolve = rememberUpdatedState(resolvePostById)
     val resolver: (suspend (PostId) -> Post?)? = if (resolvePostById == null) null else {
         remember<suspend (PostId) -> Post?> { { postId -> latestResolve.value?.invoke(postId) } }
     }
-    return remember(pixivUgoiraClient, durationStateForPost, onToggleLike, onViewportChanged, onAuthoritativeDurationKnown, resolver) {
+    val durationStateForPost = durations.stateForPost
+    val onViewportChanged = durations.onPostVisibilityChanged
+    val onDurationKnown = durations.onAuthoritativeDurationKnown
+    return remember(pixivUgoiraClient, durationStateForPost, onToggleLike, onViewportChanged, onDurationKnown, resolver) {
         FeedCardEnvironment(
-            pixivUgoiraClient, liked, durations, durationStateForPost,
-            onToggleLike, onViewportChanged, onAuthoritativeDurationKnown, resolver,
+            pixivUgoiraClient, liked, known, durationStateForPost, onToggleLike, onViewportChanged, onDurationKnown, resolver,
         )
     }
 }
 
-/** One feed tile, showing the best duration known so far and reporting events against its post. */
+/**
+ * Every feed tile, in grids and shelves alike, showing the best duration known so far and reporting events against its
+ * post. [likeEnabled] hides the like button while another gesture owns taps (Codex selection).
+ */
 @Composable
 fun FeedPostCard(
     post: Post,
@@ -73,7 +74,12 @@ fun FeedPostCard(
     onLongPress: () -> Unit,
     showWatchHistory: Boolean = false,
     showSourceBadge: Boolean = false,
+    showTitle: Boolean = true,
+    metadataLabel: String? = null,
+    viewedMediaNumber: Int? = null,
     mediaAspectRatio: Float? = null,
+    likeEnabled: Boolean = true,
+    refreshOnPreviewError: Boolean = false,
     resolvePostById: (suspend (PostId) -> Post?)? = null,
     recoverPostMedia: (suspend (Post, ImageRef) -> Post?)? = null,
 ) {
@@ -90,11 +96,15 @@ fun FeedPostCard(
         pixivUgoiraClient = environment.pixivUgoiraClient,
         acquiredDurationMs = observedDurationMs ?: acquiredDurationMs,
         showSourceBadge = showSourceBadge,
+        metadataLabel = metadataLabel,
+        viewedMediaNumber = viewedMediaNumber,
         mediaAspectRatio = mediaAspectRatio,
+        showTitle = showTitle,
         liked = liked,
-        onToggleLike = environment.onToggleLike?.let { toggle -> { toggle(post) } },
+        onToggleLike = environment.onToggleLike?.takeIf { likeEnabled }?.let { toggle -> { toggle(post) } },
         resolvePostById = resolvePostById ?: environment.resolvePostById,
         recoverPostMedia = recoverPostMedia,
+        refreshOnPreviewError = refreshOnPreviewError,
         onClick = onClick,
         onLongPress = onLongPress,
         onViewportChanged = { visible -> environment.onViewportChanged(post, visible) },
@@ -140,16 +150,7 @@ fun FeedPostActionSheet(
     onDismiss: () -> Unit,
     onSaveToDevice: (Post) -> Unit,
     onSaveToCodex: (Post) -> Unit,
-    onOpenCreatorProfile: (CreatorProfile) -> Unit,
-    onOpenLegacyCreatorProfile: (Post) -> Unit,
     onGoToSearch: (() -> Unit)?,
-    onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
-    onAddExcludeTerm: (Post, SearchTerm) -> Boolean,
-    onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
-    onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
-    onFavoriteTagLongPress: ((SourceKey, String) -> Unit)?,
-    tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
-    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
     saveToCodexLabel: String = "Save to Codex",
     onRemoveFromCodex: (() -> Unit)? = null,
     onStartOver: (() -> Unit)? = null,
@@ -158,6 +159,7 @@ fun FeedPostActionSheet(
     onToggleLike: ((Post) -> Unit)? = null,
 ) {
     val searchActions = LocalPostTagSearchActions.current
+    val menuActions = LocalPostMenuActions.current
     PostActionSheet(
         post, creatorBrowsingSources, onDismiss, { onSaveToDevice(post) },
         liked = liked,
@@ -165,15 +167,14 @@ fun FeedPostActionSheet(
         onSaveToCodex = { onSaveToCodex(post) },
         saveToCodexLabel = saveToCodexLabel,
         onRemoveFromCodex = onRemoveFromCodex,
-        onOpenCreatorProfile = onOpenCreatorProfile,
-        onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
+        onOpenCreatorProfile = menuActions.openCreator,
+        onOpenLegacyCreatorProfile = { menuActions.openPostCreator(post) },
         onGoToSearch = onGoToSearch,
         onStartOver = onStartOver,
         onShowRelated = onShowRelated,
     ) {
-        PostBoundTagSection(
-            post, onAddIncludeTerm, onAddExcludeTerm, onRemoveIncludeTerm, onRemoveExcludeTerm,
-            onFavoriteTagLongPress, tagVideoCountProvider, fetchTagVideoCounts,
+        PostTagActionSection(
+            post,
             onSearch = onGoToSearch?.let { goToSearch ->
                 {
                     searchActions.applyDraft()

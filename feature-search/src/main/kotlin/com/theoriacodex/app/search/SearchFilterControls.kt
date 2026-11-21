@@ -44,8 +44,6 @@ import com.theoriacodex.domain.model.SourceKey
 @Composable
 internal fun FavoriteTagSheet(
     sections: List<FavoriteTagSection>,
-    tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
-    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
     emptyMessage: String,
     onAddTag: (FavoriteTagEntry) -> Unit,
     onRemoveTag: (SourceKey, List<String>) -> Unit,
@@ -74,7 +72,7 @@ internal fun FavoriteTagSheet(
             } else {
                 sections.forEachIndexed { index, section ->
                     FavoriteTagSectionContent(
-                        section, tagVideoCountProvider, fetchTagVideoCounts, onAddTag, onRemoveTag, onRenameTag,
+                        section, onAddTag, onRemoveTag, onRenameTag,
                     )
                     if (index != sections.lastIndex) HorizontalDivider()
                 }
@@ -86,8 +84,6 @@ internal fun FavoriteTagSheet(
 @Composable
 private fun FavoriteTagSectionContent(
     section: FavoriteTagSection,
-    tagVideoCountProvider: (SourceKey, String) -> Int?,
-    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?>,
     onAddTag: (FavoriteTagEntry) -> Unit,
     onRemoveTag: (SourceKey, List<String>) -> Unit,
     onRenameTag: (FavoriteTagEntry) -> Unit,
@@ -97,8 +93,6 @@ private fun FavoriteTagSectionContent(
         FavoriteTagActionGrid(
             source = section.source,
             entries = section.entries,
-            tagVideoCountProvider = tagVideoCountProvider,
-            fetchTagVideoCounts = fetchTagVideoCounts,
             onAddTag = onAddTag,
             onRemoveTag = { entry -> onRemoveTag(section.source, entry.tags) },
             onRenameTag = onRenameTag,
