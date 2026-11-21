@@ -1,6 +1,7 @@
 package com.theoriacodex.app.settings.sites
 
 import com.theoriacodex.app.customsites.CustomSiteEdit
+import com.theoriacodex.domain.source.SiteHeaders
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -15,18 +16,22 @@ import kotlin.time.Duration
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SiteLiveEditsTest {
-    /** The sites list never catches up here, as when it lags behind a write. */
+    /** The sites list never catches up with a write here, as when it lags behind one. */
     private val saved = site()
+    private val other = site(sourceId = "custom_gelbooru_com", label = "Gelbooru", host = "gelbooru.com")
+    private val sites = mutableMapOf(saved.sourceId to saved, other.sourceId to other)
     private val writes = mutableListOf<CustomSiteEdit>()
+    private val writtenSites = mutableListOf<String>()
     private var running = 0
     private var mostAtOnce = 0
     private var gate: CompletableDeferred<Unit>? = null
 
-    private fun TestScope.edits(timers: CoroutineScope = backgroundScope) = SiteLiveEdits(timers, backgroundScope, { saved }) { _, edit ->
+    private fun TestScope.edits(timers: CoroutineScope = backgroundScope) = SiteLiveEdits(timers, backgroundScope, sites::get) { sourceId, edit ->
         running++
         mostAtOnce = maxOf(mostAtOnce, running)
         gate?.await()
         writes += edit
+        writtenSites += sourceId
         running--
         true
     }
@@ -58,6 +63,32 @@ class SiteLiveEditsTest {
         gate?.complete(Unit)
         runCurrent()
         assertEquals(listOf(CustomSiteEdit(label = "Safer"), CustomSiteEdit(label = "Safest")), writes)
+    }
+
+    @Test fun `a site's last change flushed during a write is not replaced by another site's change`() = runTest {
+        val edits = edits()
+        gate = CompletableDeferred()
+        edits.schedule(saved.sourceId, named("Safer"), Duration.ZERO)
+        runCurrent()
+        edits.schedule(saved.sourceId, named("Safest"), TYPING_SAVE_DELAY)
+        edits.flush()
+        edits.schedule(other.sourceId, LiveFields("Gel", other.includedInUnifiedAndForYou, other.headers), Duration.ZERO)
+        runCurrent()
+        gate?.complete(Unit)
+        runCurrent()
+        assertEquals(listOf(saved.sourceId, saved.sourceId, other.sourceId), writtenSites)
+        assertEquals(listOf("Safer", "Safest", "Gel"), writes.map { it.label })
+    }
+
+    @Test fun `an agent saved elsewhere after a write is replaced when the user sets the first agent again`() = runTest {
+        val edits = edits()
+        val first = SiteHeaders(userAgent = "U1")
+        edits.schedule(saved.sourceId, LiveFields(saved.label, saved.includedInUnifiedAndForYou, first), Duration.ZERO)
+        runCurrent()
+        sites[saved.sourceId] = saved.copy(headers = SiteHeaders(userAgent = "U2"))
+        edits.schedule(saved.sourceId, LiveFields(saved.label, saved.includedInUnifiedAndForYou, first), Duration.ZERO)
+        runCurrent()
+        assertEquals(listOf(first, first), writes.map { it.headers })
     }
 
     @Test fun `a change back to the saved value writes nothing`() = runTest {

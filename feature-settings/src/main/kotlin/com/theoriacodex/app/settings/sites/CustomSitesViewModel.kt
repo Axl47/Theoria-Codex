@@ -298,7 +298,7 @@ class CustomSitesViewModel(
     }
 
     override fun onCleared() {
-        liveEdits.flush()
+        liveEdits.close()
         removals.commitAll()
     }
 
