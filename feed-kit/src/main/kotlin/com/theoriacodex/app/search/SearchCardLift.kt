@@ -31,8 +31,12 @@ private class CardLift(private val controller: LiftController) {
 
     private fun toWindow(local: Offset): Offset? = coordinates?.takeIf { it.isAttached }?.localToWindow(local)
 
-    /** Lifts [post] from [bounds] at the long-press timeout; true when the card should open its menu instead. */
+    /**
+     * Lifts [post] from [bounds] at the long-press timeout; true when the card should open its menu instead. A
+     * long press while another lift is active (a second finger) does nothing.
+     */
     fun start(local: Offset, post: Post, bounds: Rect?, like: LiftLike?): Boolean {
+        if (controller.lifting) return false
         val window = toWindow(local)
         lifting = window != null && bounds != null && controller.start(post, bounds, window, like = like)
         if (lifting) pointer = requireNotNull(window)

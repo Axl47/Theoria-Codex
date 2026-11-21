@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -47,8 +48,9 @@ import com.theoriacodex.app.codex.CodexCoverImage
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
 import kotlin.math.roundToInt
 
-/** What a collect target shows: an icon, or a Codex cover that falls back to an icon. */
+/** What a collect target shows: an icon, a Codex cover that falls back to an icon, or progress while it works. */
 sealed interface CollectTargetVisual {
+    data object Busy : CollectTargetVisual
     data class Icon(val icon: ImageVector) : CollectTargetVisual
     data class Cover(val candidates: List<CodexCoverCandidate>, val fallback: ImageVector) : CollectTargetVisual
 }
@@ -160,6 +162,7 @@ private fun <T> CollectTargetBubble(target: CollectTarget<T>, hovered: Boolean, 
         ) {
             Box(contentAlignment = Alignment.Center) {
                 when (val visual = target.visual) {
+                    CollectTargetVisual.Busy -> CircularProgressIndicator(Modifier.size(TARGET_SIZE / 2), strokeWidth = 3.dp)
                     is CollectTargetVisual.Icon -> Icon(visual.icon, contentDescription = null)
                     is CollectTargetVisual.Cover -> CodexCoverImage(visual.candidates, null, Modifier.fillMaxSize().clip(CircleShape)) {
                         Icon(visual.fallback, contentDescription = null)
