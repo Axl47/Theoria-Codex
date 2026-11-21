@@ -67,11 +67,11 @@ private fun rememberCodexSaveRelevanceLoader(shell: TheoriaShell): CodexSaveRele
     CodexSaveRelevanceLoader(shell.data.codexRepository, shell.scope, observeLibrary = source::observeSavedLibrary)
 }
 
-/** The active profile's tag counts across its Likes, observed while a surface collects them. */
+/** The active profile's tag counts across its Likes, kept from the first collector on for the app session. */
 @Composable
 private fun rememberLikedTagCounts(shell: TheoriaShell): StateFlow<LikedTagCounts> = remember(shell) {
     observeLikedTagCounts(shell.data.settingsRepository, shell.data.likesRepository)
-        .stateIn(shell.scope, SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000), LikedTagCounts.Empty)
+        .stateIn(shell.scope, SharingStarted.Lazily, LikedTagCounts.Empty)
 }
 
 /** The app-wide in-a-Codex set behind [LocalCodexPostIds], read from the shared browsing metadata. */
