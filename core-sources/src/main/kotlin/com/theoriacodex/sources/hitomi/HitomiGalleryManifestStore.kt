@@ -39,13 +39,10 @@ internal class HitomiGalleryManifestStore(
         galleryId: Int,
         loader: suspend () -> HitomiGalleryManifest?,
     ): JsonObject? {
-        synchronized(lock) {
-            cache.get(galleryId)?.let { cached ->
-                if (cached.expiresAtEpochMs > nowMillis()) return cached.manifest.gallery
-                cache.remove(galleryId)
-            }
-        }
+        fresh(galleryId)?.let { return it.gallery }
         return flights.share(galleryId) {
+            // A load that overlapped this caller's miss may have finished before this flight started.
+            fresh(galleryId)?.let { return@share it }
             // The wrapper tells a missing gallery (null) apart from a load that ran out of time.
             val loaded = withTimeoutOrNull(loadTimeoutMs) { Result.success(loader()) }
                 ?: throw SourceAdapterException(SourceFailureReason.NETWORK, "Hitomi gallery timed out")
@@ -53,6 +50,14 @@ internal class HitomiGalleryManifestStore(
                 cache.put(galleryId, CachedManifest(manifest, nowMillis() + ttlMillis))
             }
         }?.gallery
+    }
+
+    /** The cached record for [galleryId] while it is fresh; an expired one is dropped. */
+    private fun fresh(galleryId: Int): HitomiGalleryManifest? = synchronized(lock) {
+        val cached = cache.get(galleryId) ?: return@synchronized null
+        if (cached.expiresAtEpochMs > nowMillis()) return@synchronized cached.manifest
+        cache.remove(galleryId)
+        null
     }
 
     internal fun snapshot(): HitomiByteBudgetCacheSnapshot<Int> = cache.snapshot()
