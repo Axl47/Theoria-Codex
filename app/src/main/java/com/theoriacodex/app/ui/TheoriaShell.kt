@@ -709,19 +709,15 @@ internal class TheoriaShell(
             streamSource = ViewerStreamSource.SEARCH,
             scrollOffsetHint = 0,
         )
-        viewerSessions.retain(
-            ViewerSession(
-                posts = listOf(resolved),
-                context = context,
-                liveSearchBinding = false,
-                initialMediaIndices = mapOf(resolved.id to deepLink.initialMediaIndex),
-                focusComment = deepLink.comment,
-            ),
+        val session = ViewerSession(
+            posts = listOf(resolved),
+            context = context,
+            liveSearchBinding = false,
+            initialMediaIndices = mapOf(resolved.id to deepLink.initialMediaIndex),
+            focusComment = deepLink.comment,
         )
-        data.uiRestoreRepository.setViewerLaunchContext(context)
-        navController.navigate(AppRoute.Viewer) {
-            launchSingleTop = true
-        }
+        // Unlike other one-post launches, a shared link leaves an open Viewer underneath and reuses one on top.
+        launchViewer(session, saveContext = true, singleTop = true)
     }
 
     fun openHistoricalSearch(entry: RecentSearchEntry) {
@@ -771,72 +767,6 @@ internal class TheoriaShell(
     suspend fun previewStatisticsPost(postId: PostId): Post? = runCatchingPreservingCancellation {
         data.codexRepository.getPost(postId) ?: viewerRouteWorkflow.resolvePostWithoutSaving(postId)
     }.getOrNull()
-
-    /** Replaces any open Viewer with a session holding one post, or reports that the post could not be loaded. */
-    private suspend fun openSinglePostViewer(queryHash: String, initialMediaIndex: Int = 0, load: suspend () -> Post?) {
-        val post = runCatchingPreservingCancellation { load() }.getOrNull()
-        if (post == null) {
-            snackbarHostState.showSnackbar("This post could not be opened. Try again.")
-            return
-        }
-        openViewerSession(queryHash, listOf(post), initialMediaIndex)
-    }
-
-    /** Replaces any open Viewer with a fresh session over [posts], which also teach the file mirror index. */
-    private suspend fun openViewerSession(queryHash: String, posts: List<Post>, initialMediaIndex: Int = 0) {
-        data.fileMirrors.learn(posts)
-        if (navigation.currentRoute == AppRoute.Viewer) {
-            routes.viewer.current?.clearSession(retainPresentation = true)
-            viewerSessions.clear()
-            navController.popBackStack(AppRoute.Viewer, inclusive = true)
-        }
-        val context = ViewerLaunchContext(queryHash, 0, ViewerStreamSource.RECENTS, 0)
-        viewerSessions.retain(
-            ViewerSession(
-                posts = posts,
-                context = context,
-                liveSearchBinding = false,
-                initialMediaIndices = posts.firstOrNull()?.let { first -> mapOf(first.id to initialMediaIndex) }.orEmpty(),
-            ),
-        )
-        data.uiRestoreRepository.setViewerLaunchContext(context)
-        navController.navigate(AppRoute.Viewer)
-    }
-
-    /** Opens the Viewer from a Codex; resumes at the saved position when this post has one. */
-    fun openCodexViewer(codexId: String, visiblePosts: List<Post>, index: Int) {
-        openStaticViewer(visiblePosts, "codex:$codexId", index, ViewerStreamSource.CODEX, persistContext = true)
-    }
-
-    /** Opens a related shelf no feed owner pages, such as a live Codex's; like other related streams it is not restored. */
-    fun openRelatedViewer(seed: Post, shelfPosts: List<Post>, index: Int) {
-        val queryHash = "related:${seed.id.source.id}:${seed.id.sourcePostId}"
-        openStaticViewer(shelfPosts, queryHash, index, ViewerStreamSource.RELATED, persistContext = false)
-    }
-
-    private fun openStaticViewer(
-        visiblePosts: List<Post>,
-        queryHash: String,
-        index: Int,
-        streamSource: ViewerStreamSource,
-        persistContext: Boolean,
-    ) {
-        val context = ViewerLaunchContext(
-            queryHash = queryHash,
-            startIndex = index,
-            streamSource = streamSource,
-            scrollOffsetHint = 0,
-        )
-        scope.launch {
-            viewerSessions.retain(
-                viewerRouteWorkflow.prepareResumableSession(
-                    ViewerSession(posts = visiblePosts, context = context, liveSearchBinding = false),
-                ),
-            )
-            if (persistContext) data.uiRestoreRepository.setViewerLaunchContext(context)
-            navController.navigate(AppRoute.Viewer)
-        }
-    }
 }
 
 /** Creates the shell once per container; ViewModels resolve against the Activity's store here. */

@@ -52,11 +52,9 @@ import com.theoriacodex.app.ui.routes.ViewerRouteDependencies
 import com.theoriacodex.app.ui.routes.ViewerRouteEffectCallbacks
 import com.theoriacodex.app.ui.routes.ViewerRouteLiveSourceState
 import com.theoriacodex.app.ui.routes.virtualCodexUi
-import com.theoriacodex.app.viewer.ViewerRelatedBinding
 import com.theoriacodex.app.viewer.ViewerReturnLifetime
 import com.theoriacodex.app.viewer.ViewerScreenCallbacks
 import com.theoriacodex.app.viewer.ViewerScreenConfig
-import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.viewerMediaPrefetcher
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.FeedFabRestoreState
@@ -255,23 +253,14 @@ private fun CreatorDestination(shell: TheoriaShell) {
             onFabRestoreStateChange = { updated -> shell.feedFabRestoreRegistry.update(fabContext, updated) },
             callbacks = CreatorRouteCallbacks(
                 onToggleFollow = shell.owners.follows::toggle,
+                // Creator pages save no launch context; a launch that will not follow the feed reuses a Viewer on top.
                 onOpenViewer = { effect ->
-                    val likeAction = shell.feedLikeAction(ViewerStreamSource.CREATOR_PROFILE)
-                    shell.viewerSessions.retain(
-                        shell.viewerRouteWorkflow.prepareResumableSession(ViewerSession(
-                            posts = effect.posts,
-                            context = effect.context,
-                            liveSearchBinding = effect.liveSearchBinding,
-                            searchVisibilityFilters = effect.visibilityFilters,
-                            onToggleLike = likeAction,
-                            relatedBinding = ViewerRelatedBinding(
-                                ViewerStreamSource.CREATOR_PROFILE, routes.creator.current?.state?.value?.queryHash.orEmpty(),
-                            ),
-                        )),
+                    shell.openFeedViewer(
+                        ViewerStreamSource.CREATOR_PROFILE,
+                        FeedViewerLaunch(effect.posts, effect.context, effect.liveSearchBinding, effect.visibilityFilters),
+                        saveContext = false,
+                        singleTop = !effect.liveSearchBinding,
                     )
-                    shell.navController.navigate(AppRoute.Viewer) {
-                        launchSingleTop = !effect.liveSearchBinding
-                    }
                 },
                 onNavigateBack = { shell.navController.popBackStack() },
                 onToggleLike = { post -> shell.feedLikeAction(ViewerStreamSource.CREATOR_PROFILE)(post) },

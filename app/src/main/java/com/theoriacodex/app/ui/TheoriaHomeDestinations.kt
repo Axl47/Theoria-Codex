@@ -35,13 +35,10 @@ import com.theoriacodex.app.ui.routes.SearchRouteCallbacks
 import com.theoriacodex.app.ui.routes.SearchRouteConfig
 import com.theoriacodex.app.settings.StatsActions
 import com.theoriacodex.app.ui.routes.SettingsDestinationStateBoundary
-import com.theoriacodex.app.viewer.ViewerRelatedBinding
-import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchKind
-import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
@@ -128,25 +125,17 @@ private fun searchRouteConfig(shell: TheoriaShell, state: BrowsingDestinationSta
     resolveUnknownAnimatedDurations = state.settings.contentFilters.resolveUnknownAnimatedDurations,
 )
 
-/** Binds the Viewer's like action and related posts to the Search query current at this tap. */
+/** Search keeps its own saved launch context, and a launch that will not follow the feed reuses a Viewer on top. */
 private suspend fun TheoriaShell.openSearchViewer(effect: SearchEffect.OpenViewer) {
-    val likeAction = feedLikeAction(ViewerStreamSource.SEARCH)
-    val current = routes.search.current?.state?.value?.query
-    viewerSessions.retain(
-        viewerRouteWorkflow.prepareResumableSession(ViewerSession(
-            posts = effect.posts,
-            context = effect.context,
-            liveSearchBinding = effect.liveSearchBinding,
-            searchVisibilityFilters = effect.visibilityFilters,
-            onToggleLike = likeAction,
-            relatedBinding = ViewerRelatedBinding(ViewerStreamSource.SEARCH, current?.appliedQueryHash.orEmpty()),
-            // A typed ID was never searched, so saving it to a Codex has no search to record.
-            saveQuery = current?.applied?.takeUnless { effect.fromTypedId },
-        )),
+    val query = routes.search.current?.state?.value?.query?.applied
+    openFeedViewer(
+        ViewerStreamSource.SEARCH,
+        FeedViewerLaunch(effect.posts, effect.context, effect.liveSearchBinding, effect.visibilityFilters),
+        saveContext = false,
+        singleTop = !effect.liveSearchBinding,
+        // A typed ID was never searched, so saving it to a Codex has no search to record.
+        saveQuery = query?.takeUnless { effect.fromTypedId },
     )
-    navController.navigate(AppRoute.Viewer) {
-        launchSingleTop = !effect.liveSearchBinding
-    }
 }
 
 @Composable
@@ -196,50 +185,14 @@ private fun ForYouDestination(shell: TheoriaShell) {
     }
 }
 
-/** Binds the Viewer's like action and related posts to the For You seed current at this tap. */
+/** For You saves a live launch's context for restore, and always stacks a new Viewer. */
 private suspend fun TheoriaShell.openForYouViewer(effect: ForYouEffect.OpenViewer) {
-    val likeAction = feedLikeAction(ViewerStreamSource.FOR_YOU)
-    viewerSessions.retain(
-        viewerRouteWorkflow.prepareResumableSession(ViewerSession(
-            posts = effect.posts,
-            context = effect.context,
-            liveSearchBinding = effect.liveSearchBinding,
-            searchVisibilityFilters = effect.visibilityFilters,
-            onToggleLike = likeAction,
-            relatedBinding = ViewerRelatedBinding(
-                ViewerStreamSource.FOR_YOU, "for_you:${routes.forYou.current?.state?.value?.seedId}",
-            ),
-        )),
+    openFeedViewer(
+        ViewerStreamSource.FOR_YOU,
+        FeedViewerLaunch(effect.posts, effect.context, effect.liveSearchBinding, effect.visibilityFilters),
+        saveContext = effect.liveSearchBinding,
+        singleTop = false,
     )
-    if (effect.liveSearchBinding) features.search.setViewerLaunchContext(effect.context)
-    navController.navigate(AppRoute.Viewer)
-}
-
-/** Opens one Recents section in the Viewer, resuming each post unless asked to start over. */
-private fun TheoriaShell.openRecentSection(
-    entries: List<RecentPostEntry>,
-    index: Int,
-    section: RecentPostSection,
-    startOver: Boolean = false,
-) {
-    val posts = entries.map { entry -> entry.post }
-    if (posts.isEmpty()) return
-    val context = ViewerLaunchContext(
-        queryHash = "recents:${section.name.lowercase()}",
-        startIndex = index.coerceIn(0, posts.lastIndex),
-        streamSource = ViewerStreamSource.RECENTS,
-        scrollOffsetHint = 0,
-        recentsSection = section,
-    )
-    scope.launch {
-        val session = viewerRouteWorkflow.prepareResumableSession(
-            ViewerSession(posts = posts, context = context),
-            startOver = startOver,
-        )
-        viewerSessions.retain(session)
-        data.uiRestoreRepository.setViewerLaunchContext(context)
-        navController.navigate(AppRoute.Viewer)
-    }
 }
 
 private fun TheoriaShell.clearRecents(target: RecentsClearTarget, state: RecentsDestinationState) {
