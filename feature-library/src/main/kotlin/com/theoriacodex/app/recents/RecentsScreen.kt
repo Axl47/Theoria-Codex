@@ -93,7 +93,9 @@ fun RecentsScreen(
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var selectedActionSection by remember { mutableStateOf(RecentPostSection.WATCHED) }
     val saving = rememberRecentSearchSaving(saves)
-    val rows = RecentsRowActions(saving, removedSearch, onRemoveSearch, onRemovePost)
+    var searchMenu by remember { mutableStateOf<RecentSearchEntry?>(null) }
+    val openSearchMenu = { entry: RecentSearchEntry -> searchMenu = entry }.takeIf { saving != null || onRemoveSearch != null }
+    val rows = RecentsRowActions(saving, removedSearch, onRemoveSearch, onRemovePost, openSearchMenu)
     val cards = rememberRecentsPostCards(pixivUgoiraClient, likedPostIds, durations, onToggleLike)
     val relatedSlot = rememberRecentsRelated(related, filter, selectedSource, visible, cards, onShownPostsChanged) { selectedActionPost = it }
 
@@ -123,6 +125,8 @@ fun RecentsScreen(
             onClear, onDismiss = { showMenu = false },
         )
     }
+
+    searchMenu?.let { entry -> RecentSearchMenu(entry, saving, onRemoveSearch) { searchMenu = null } }
 
     selectedActionPost?.let { post ->
         FeedPostActionSheet(
