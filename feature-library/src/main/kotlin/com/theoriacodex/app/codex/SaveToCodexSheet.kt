@@ -1,5 +1,6 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.ui.components.focusOnOpen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -369,7 +370,7 @@ private fun CodexPickerRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "$itemCount items",
+                    text = "$itemCount ${countNoun(itemCount, "item")}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -472,7 +473,7 @@ fun CreateCodexDialog(
                     )
                 }
                 OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().focusOnOpen(),
                     value = value,
                     onValueChange = { input -> value = input.replace("\n", " ") },
                     label = { Text("Codex name") },

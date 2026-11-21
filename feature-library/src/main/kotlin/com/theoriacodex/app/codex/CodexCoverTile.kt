@@ -34,8 +34,9 @@ fun savedCodexChildIcon(codexId: String): ImageVector = when (codexId) {
     else -> Icons.Default.Favorite
 }
 
-fun savedCodexCountSuffix(codexId: String): String? = when (codexId) {
-    FOLLOWED_CODEX_ID -> "creators"
+/** The word after a Saved shelf's [count], if its collection is counted in something other than items. */
+fun savedCodexCountSuffix(codexId: String, count: Int): String? = when (codexId) {
+    FOLLOWED_CODEX_ID -> countNoun(count, "creator")
     SAVED_SEARCHES_CODEX_ID -> "saved"
     else -> null
 }

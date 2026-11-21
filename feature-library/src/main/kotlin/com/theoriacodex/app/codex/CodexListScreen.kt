@@ -208,7 +208,7 @@ private fun CodexReorderMetadata(codex: Codex, itemCount: Int, modifier: Modifie
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            "$itemCount items", style = MaterialTheme.typography.bodySmall,
+            "$itemCount ${countNoun(itemCount, "item")}", style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }

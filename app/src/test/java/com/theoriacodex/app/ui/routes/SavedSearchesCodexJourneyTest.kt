@@ -168,7 +168,7 @@ class SavedSearchesCodexJourneyTest {
         compose.onNodeWithText("Exclude all").performClick()
         compose.onNodeWithContentDescription("Close sheet").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isEmpty() }
-        compose.onNodeWithText("Save a search from Recents or include a search in this feed").assertIsDisplayed()
+        compose.onNodeWithText("Include a search in this feed").assertIsDisplayed()
     }
 
 
