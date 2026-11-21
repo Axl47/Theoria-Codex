@@ -26,21 +26,44 @@ val LocalViewerAutoRotateVideos = staticCompositionLocalOf { false }
 
 /**
  * The orientation the Viewer holds, which the app shell applies while the Viewer is open. Null leaves
- * rotation to the phone. Owned by the Activity so the shell and the mounted video can both reach it.
+ * rotation to the phone. Owned by the Activity so the shell and the mounted video can both reach it, and so
+ * every level of a trail shares one rotation: the shell calls [release] once the last Viewer level leaves.
  */
 class ViewerRotationState {
     var held by mutableStateOf<ViewerOrientation?>(null)
 
     /** What the mounted video's decoded frames fill; covers sources that report no dimensions. */
     var measured by mutableStateOf<MeasuredVideoShape?>(null)
+
+    private var openingClaimed = false
+
+    /** The media the Viewer opened on while its one automatic rotation is still pending; null once settled. */
+    internal var openingKey: ViewerMediaKey? = null
+
+    /** [openingKey], naming [key] as the opening media when this is the first level since [release]; trail levels never open. */
+    internal fun openingFor(key: ViewerMediaKey): ViewerMediaKey? {
+        if (!openingClaimed) {
+            openingClaimed = true
+            openingKey = key
+        }
+        return openingKey
+    }
+
+    /** Returns rotation to the phone and lets the next Viewer opening rotate again. */
+    fun release() {
+        held = null
+        measured = null
+        openingClaimed = false
+        openingKey = null
+    }
 }
 
 data class MeasuredVideoShape(val key: ViewerMediaKey, val fill: ViewerOrientation?)
 
 /**
  * Rotates once when the Viewer opens on a clearly wide or tall video, then holds that orientation while
- * swiping. Later rotations are the user's, through the rotate button, which always turns to the other orientation
- * (outside picture-in-picture). Clears the hold when the Viewer leaves.
+ * swiping and through trail levels. Later rotations are the user's, through the rotate button, which always turns
+ * to the other orientation (outside picture-in-picture).
  */
 @Composable
 internal fun rememberViewerRotation(selection: ViewerSelection, rotation: ViewerRotationState?, inPictureInPicture: Boolean): ViewerRotationOffer? {
@@ -54,22 +77,15 @@ internal fun rememberViewerRotation(selection: ViewerSelection, rotation: Viewer
     val key = ViewerMediaKey(selection.post.id, selection.mediaIndex)
     val isVideo = selection.isVideoForRotation()
     val fill = selection.fillOrientation(rotation.measured?.takeIf { it.key == key })
-    var openingKey by remember { mutableStateOf<ViewerMediaKey?>(key) }
     LaunchedEffect(key, fill, isVideo, autoRotate, inPictureInPicture) {
-        val opening = openingKey ?: return@LaunchedEffect
+        val opening = rotation.openingFor(key) ?: return@LaunchedEffect
         when {
-            key != opening || !autoRotate || inPictureInPicture -> openingKey = null
+            key != opening || !autoRotate || inPictureInPicture -> rotation.openingKey = null
             isVideo && fill != null -> {
                 if (fill != screen) rotation.held = fill
-                openingKey = null
+                rotation.openingKey = null
             }
             // Otherwise wait: a post without dimensions learns its size once the video decodes.
-        }
-    }
-    DisposableEffect(rotation) {
-        onDispose {
-            rotation.held = null
-            rotation.measured = null
         }
     }
     if (inPictureInPicture) return null
@@ -77,7 +93,7 @@ internal fun rememberViewerRotation(selection: ViewerSelection, rotation: Viewer
     val target = screen.opposite
     return ViewerRotationOffer(fits) {
         // The user's choice wins over an automatic rotation still waiting on the video's size.
-        openingKey = null
+        rotation.openingKey = null
         rotation.held = target
     }
 }
