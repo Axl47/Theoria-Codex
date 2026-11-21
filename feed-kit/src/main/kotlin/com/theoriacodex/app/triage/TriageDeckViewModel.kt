@@ -93,7 +93,8 @@ class TriageDeckViewModel(
         mutableState.update { deck ->
             val decision = work.decision
             val passedOver = if (decision is TriageDecision.Hid) deck.passedOverTags + normalizeMatchToken(decision.tag) else deck.passedOverTags
-            val moved = deck.copy(last = decision, passedOverTags = passedOver)
+            val removed = if (decision is TriageDecision.Removed) deck.removed + post.id else deck.removed
+            val moved = deck.copy(last = decision, passedOverTags = passedOver, removed = removed)
             moved.copy(index = moved.shownFrom(deck.index + 1))
         }
         pageIfNearEnd()
@@ -145,7 +146,7 @@ class TriageDeckViewModel(
             when {
                 !failed -> deck.copy(notice = notice)
                 stillLatest -> deck.restoring(work.decision).copy(last = null, notice = notice)
-                else -> deck.copy(notice = notice, passedOverTags = deck.passedOverTags - work.decision.passedOverTag())
+                else -> deck.unwinding(work.decision).copy(notice = notice)
             }
         }
     }
@@ -180,8 +181,10 @@ private fun decisionFor(choice: TriageChoice, post: Post): TriageDecision = when
 private fun TriageDecision.passedOverTag(): Set<String> =
     if (this is TriageDecision.Hid) setOf(normalizeMatchToken(tag)) else emptySet()
 
-/** The deck with [decision]'s card current again and the tag it hid shown again. */
-private fun TriageDeckState.restoring(decision: TriageDecision): TriageDeckState {
-    val shown = copy(passedOverTags = passedOverTags - decision.passedOverTag())
-    return shown.copy(index = posts.indexOfFirst { it.id == decision.post.id }.coerceAtLeast(0))
-}
+/** The deck with what [decision] took out of it shown again: the tag it hid, the post it removed. */
+private fun TriageDeckState.unwinding(decision: TriageDecision): TriageDeckState =
+    copy(passedOverTags = passedOverTags - decision.passedOverTag(), removed = removed - decision.post.id)
+
+/** The deck with [decision] unwound and its card current again. */
+private fun TriageDeckState.restoring(decision: TriageDecision): TriageDeckState =
+    unwinding(decision).copy(index = posts.indexOfFirst { it.id == decision.post.id }.coerceAtLeast(0))

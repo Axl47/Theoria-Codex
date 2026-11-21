@@ -14,6 +14,7 @@ import androidx.compose.ui.test.performTouchInput
 import com.theoriacodex.app.ui.undo.PendingRemoval
 import com.theoriacodex.data.repository.CodexLibrarySort
 import com.theoriacodex.domain.model.Codex
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -31,6 +32,7 @@ class CodexGridReorderUiTest {
 
     private val sort = mutableStateOf(CodexLibrarySort.MANUAL)
     private var committed: List<String>? = null
+    private val failures = MutableSharedFlow<List<String>>(extraBufferCapacity = 1)
 
     private fun showLibrary(
         deletes: CodexListDeletes = CodexListDeletes(),
@@ -44,6 +46,7 @@ class CodexGridReorderUiTest {
             onSetAutomaticTag = { _, _, _ -> }, onDeleteCodex = {}, likesCodexId = "likes",
             onCleanCodex = { _, _ -> }, librarySort = sort.value, onLibrarySortChange = { sort.value = it },
             initialActionCodexId = actionCodexId, deletes = deletes, renameInPlace = renameInPlace,
+            reorderFailures = failures,
         )
     } }
 
@@ -83,6 +86,21 @@ class CodexGridReorderUiTest {
         compose.runOnIdle { assertNull(committed) }
     }
 
+    @Test fun `a drag lifted from an order whose commit fails mid-drag ends on the presented order`() {
+        showLibrary()
+        compose.runOnIdle { assertTrue(moves("Gamma").single { it.label == "Move earlier" }.action()) }
+        compose.runOnIdle { assertTrue(precedes("Gamma", "Beta")) }
+        // While a tile is lifted its edge auto-scroll asks for every frame, so the clock is driven by hand until release.
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithText("Alpha").performTouchInput { down(center) }
+        compose.mainClock.advanceTimeBy(LONG_PRESS_MILLIS)
+        assertTrue(failures.tryEmit(listOf("a", "c", "b")))
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithText("Alpha").performTouchInput { up() }
+        compose.mainClock.autoAdvance = true
+        compose.runOnIdle { assertTrue(precedes("Beta", "Gamma")) }
+    }
+
     @Test fun `TalkBack moves a tile one place at a time under Manual only`() {
         showLibrary()
         assertEquals(listOf("Move later"), moveLabels("Alpha"))
@@ -110,9 +128,16 @@ class CodexGridReorderUiTest {
     private fun moves(name: String) =
         compose.onNodeWithText(name).fetchSemanticsNode().config.getOrElse(SemanticsActions.CustomActions) { emptyList() }
 
+    private fun precedes(first: String, second: String): Boolean {
+        val bounds = { name: String -> compose.onNodeWithText(name).fetchSemanticsNode().boundsInRoot }
+        val (a, b) = bounds(first) to bounds(second)
+        return a.top < b.top || (a.top == b.top && a.left < b.left)
+    }
+
     private fun moveLabels(name: String) = moves(name).map { it.label }
 
     private companion object {
         const val DRAG_STEPS = 12
+        const val LONG_PRESS_MILLIS = 1_000L
     }
 }

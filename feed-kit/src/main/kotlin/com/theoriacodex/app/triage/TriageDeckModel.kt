@@ -5,6 +5,7 @@ import com.theoriacodex.app.ui.components.FeedView
 import com.theoriacodex.app.ui.navigation.TriageSeed
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import kotlinx.coroutines.flow.Flow
@@ -114,12 +115,23 @@ data class TriageDeckState(
     val notice: TriageNotice? = null,
     /** Tags hidden from this deck, as [normalizeMatchToken] spells them. */
     val passedOverTags: Set<String> = emptySet(),
+    /** Posts a left swipe took out of the deck's Codex, until Undo or a failed write puts them back. */
+    val removed: Set<PostId> = emptySet(),
 ) {
     val current: Post? get() = posts.getOrNull(index)
     val next: Post? get() = posts.getOrNull(shownFrom(index + 1))
 
     /** Every post is decided and the origin feed has no more. */
     val finished: Boolean get() = loaded && index >= posts.size && !canLoadMore
+
+    /**
+     * The posts a tap on the current card opens the Viewer on, less those taken out of the deck's Codex, and the
+     * current card's place among them.
+     */
+    fun viewerLaunch(): Pair<List<Post>, Int> {
+        val kept = posts.filterNot { it.id in removed }
+        return kept to kept.indexOfFirst { it.id == current?.id }.coerceAtLeast(0)
+    }
 
     /** The first card at or after [from] that is not passed over; the end of [posts] when there is none. */
     fun shownFrom(from: Int): Int {

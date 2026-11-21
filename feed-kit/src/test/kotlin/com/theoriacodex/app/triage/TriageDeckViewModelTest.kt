@@ -197,6 +197,16 @@ class TriageDeckViewModelTest {
         deck.decideCurrent(TriageChoice.Remove)
         assertEquals(0, deck.state.value.index)
         assertEquals(TriageNotice(TriageDecision.Removed(posts[0]), failed = true), deck.state.value.notice)
+        assertEquals(posts.take(3) to 0, deck.state.value.viewerLaunch())
+    }
+
+    @Test fun `the Viewer opened from a Codex deck leaves out a removed post until it is undone`() = runTest {
+        val deck = removingDeck(FakeRemoval())
+        deck.decideCurrent(TriageChoice.Skip)
+        deck.decideCurrent(TriageChoice.Remove)
+        assertEquals(listOf(posts[0], posts[2]) to 1, deck.state.value.viewerLaunch())
+        deck.undo()
+        assertEquals(posts.take(3) to 1, deck.state.value.viewerLaunch())
     }
 
     @Test fun `remove, undo and remove again run in order, so the post ends removed`() = runTest {
