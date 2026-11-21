@@ -9,10 +9,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Icon
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.NavigationRail
 import com.theoriacodex.app.ui.motion.TheoriaMotion
@@ -39,6 +37,7 @@ internal fun TheoriaAdaptiveScaffold(
     bottomBarWindowInsets: WindowInsets,
     snackbarHostState: SnackbarHostState,
     onDestinationSelected: (TopLevelDestination) -> Unit,
+    marked: Set<TopLevelDestination> = emptySet(),
     containerColor: Color = MaterialTheme.colorScheme.background,
     windowWidthDp: Float = LocalWindowInfo.current.containerSize.width / LocalDensity.current.density,
     content: @Composable (Modifier) -> Unit,
@@ -49,7 +48,7 @@ internal fun TheoriaAdaptiveScaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             if (navigationVisible && !rail) TheoriaBottomNavigation(
-                selectedIndex, bottomBarHeight, bottomBarIconSize, bottomBarWindowInsets, onDestinationSelected,
+                selectedIndex, bottomBarHeight, bottomBarIconSize, bottomBarWindowInsets, onDestinationSelected, marked,
             )
         },
     ) { padding ->
@@ -62,7 +61,7 @@ internal fun TheoriaAdaptiveScaffold(
                         NavigationRailItem(
                             selected = selectedIndex == index,
                             onClick = { onDestinationSelected(destination) },
-                            icon = { Icon(destination.icon(), destination.label, Modifier.size(24.dp)) },
+                            icon = { destination.TabIcon(destination in marked, 24.dp) },
                             label = { Text(destination.label) },
                         )
                     }

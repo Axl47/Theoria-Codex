@@ -104,6 +104,7 @@ private fun CodexDetailEntry(
     BackHandler { shell.navController.popBackStack() }
     val codexId = requireNotNull(entry.arguments?.getString("codexId"))
     RecordCodexEntryEffect(entry, codexId, shell.data.statisticsRepository)
+    MarkNewPostsSeenEffect(shell.owners.follows, codexId)
     val codexMorph = remember { CodexMorphScope(sharedScope, entryScope) }
     // Opaque so the screen hides the tile it grows out of.
     Box(Modifier.fillMaxSize().codexMorph(codexId, codexMorph).background(MaterialTheme.colorScheme.background)) {

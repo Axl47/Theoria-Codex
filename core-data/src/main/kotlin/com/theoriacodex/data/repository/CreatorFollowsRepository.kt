@@ -2,6 +2,7 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import java.util.UUID
@@ -17,7 +18,12 @@ data class FollowedCreator(
     val latestPostIds: List<String> = emptyList(),
     val checkedAtEpochMs: Long? = null,
 ) {
-    val newPostCount: Int get() = latestPostIds.count { it !in seenPostIds }
+    val marks: NewPostMarks get() = NewPostMarks(seenPostIds, latestPostIds, checkedAtEpochMs)
+    val newPostCount: Int get() = marks.newPostCount
+    val newPostIds: List<PostId> get() = marks.newPostIds.map { PostId(creator.source, it) }
+
+    fun withMarks(marks: NewPostMarks) =
+        copy(seenPostIds = marks.seenPostIds, latestPostIds = marks.latestPostIds, checkedAtEpochMs = marks.checkedAtEpochMs)
 }
 
 /** Local membership only. Refreshes cannot resurrect a removed or replaced follow. */
@@ -43,10 +49,18 @@ class CreatorFollowsRepository(private val settings: SettingsRepository) {
     }
 
     suspend fun recordCheck(follow: FollowedCreator, posts: List<Post>, checkedAt: Long) {
-        val ids = posts.filter { it.id.source == follow.creator.source }.map { it.id.sourcePostId }.distinct().take(MAX_FOLLOW_POST_IDS)
+        val ids = posts.filter { it.id.source == follow.creator.source }.map { it.id.sourcePostId }
         settings.updateSettings { current -> current.copy(followedCreators = current.followedCreators.map {
-            if (it.membershipId == follow.membershipId) it.copy(latestPostIds = ids, checkedAtEpochMs = checkedAt) else it
+            if (it.membershipId == follow.membershipId) it.withMarks(it.marks.checked(ids, checkedAt)) else it
         }) }
+    }
+
+    /** Opening the Followed feed shows every creator's latest posts, so none of them stays new. */
+    suspend fun markLatestSeen() {
+        settings.updateSettings { current ->
+            if (current.followedCreators.none { it.newPostCount > 0 }) current
+            else current.copy(followedCreators = current.followedCreators.map { it.withMarks(it.marks.seen()) })
+        }
     }
 
     suspend fun recordVisit(creator: CreatorProfile, posts: List<Post>) {
@@ -60,4 +74,4 @@ class CreatorFollowsRepository(private val settings: SettingsRepository) {
 }
 
 const val MAX_FOLLOWED_CREATORS = 200
-private const val MAX_FOLLOW_POST_IDS = 200
+private const val MAX_FOLLOW_POST_IDS = MAX_NEW_POST_MARK_IDS
