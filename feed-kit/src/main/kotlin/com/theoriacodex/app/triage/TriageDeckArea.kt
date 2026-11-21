@@ -41,7 +41,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.theoriacodex.app.codex.LocalQuickSave
 import com.theoriacodex.app.codex.SaveSuggestion
 import com.theoriacodex.app.codex.SaveSuggestions
 import com.theoriacodex.app.media.previewMediaDeliveryPlan
@@ -73,7 +72,8 @@ internal fun TriageDeckArea(
     callbacks: TriageDeckCallbacks,
 ) {
     val post = checkNotNull(deck.current)
-    val targets = rememberTriageTargets(post, query, viewModel)
+    val suggestions = rememberTriageSuggestions(listOfNotNull(post, deck.next), query)
+    val targets = rememberTriageTargets(post, suggestions[post.id], query, viewModel)
     val drag = remember(post.id) { TriageDrag() }
     val saveState = remember(post.id) { CollectTargetsState<SaveSuggestion>() }
     val hideState = remember(post.id) { CollectTargetsState<String>() }
@@ -88,12 +88,11 @@ internal fun TriageDeckArea(
         val thresholds = with(density) { SwipeThresholds(maxWidth.toPx() * COMMIT_FRACTION, FLING_SPEED.toPx(), CUE_DISTANCE.toPx()) }
         val ratioFloor = maxWidth / (maxHeight - CAPTION_ALLOWANCE)
         val area = with(density) { Size(maxWidth.toPx(), maxHeight.toPx()) }
+        // A save swiped before the card's targets load waits for them rather than reading "none" and opening the picker.
         val choose: suspend (SwipeDirection) -> TriageChoice? = { direction ->
-            choiceFor(
-                direction,
-                saveState.hovered?.payload ?: targets.save.firstOrNull()?.payload,
-                hideState.hovered?.payload ?: targets.hide.firstOrNull()?.payload,
-            )
+            val saveTarget = if (direction != SwipeDirection.Up) null else saveState.hovered?.payload
+                ?: (suggestions[post.id] ?: suggestions.await(post.id))?.targets?.firstOrNull()
+            choiceFor(direction, saveTarget, hideState.hovered?.payload ?: targets.hide.firstOrNull()?.payload)
         }
         // The gesture outlives recompositions that bring new targets, so it calls through the latest release.
         val release by rememberUpdatedState { velocity: Velocity? ->
@@ -122,12 +121,14 @@ internal fun TriageDeckArea(
 private class TriageTargets(val save: List<CollectTarget<SaveSuggestion>>, val hide: List<CollectTarget<String>>)
 
 @Composable
-private fun rememberTriageTargets(post: Post, query: Query?, viewModel: TriageDeckViewModel): TriageTargets {
+private fun rememberTriageTargets(
+    post: Post,
+    suggestions: SaveSuggestions?,
+    query: Query?,
+    viewModel: TriageDeckViewModel,
+): TriageTargets {
     val hidden by viewModel.hiddenTags.collectAsStateWithLifecycle(emptySet())
     val likedCounts by LocalLikedTagCounts.current.collectAsStateWithLifecycle()
-    val quickSave = LocalQuickSave.current
-    val suggestions by remember(post.id, query) { quickSave.suggestions(post, query, TRIAGE_SUGGESTIONS) }
-        .collectAsStateWithLifecycle(SaveSuggestions.Empty)
     val candidates = remember(post, likedCounts, hidden, query) {
         val skipped = query?.let { it.includeTags + it.excludeTags }.orEmpty() +
             hidden.filter { it.source == post.id.source }.map(HiddenTag::tag)
@@ -135,7 +136,7 @@ private fun rememberTriageTargets(post: Post, query: Query?, viewModel: TriageDe
     }
     return remember(suggestions, candidates) {
         TriageTargets(
-            save = suggestions.targets.map { target ->
+            save = suggestions?.targets.orEmpty().map { target ->
                 CollectTarget(target.codexId, target.name, CollectTargetVisual.Cover(target.cover, Icons.Outlined.CollectionsBookmark), target)
             },
             hide = candidates.map { tag -> CollectTarget(tag, tagLabel(tag), CollectTargetVisual.Icon(Icons.Outlined.VisibilityOff), tag) },
@@ -271,6 +272,5 @@ private val CUE_DISTANCE: Dp = 48.dp
 
 /** Room the card's caption takes below its media. */
 private val CAPTION_ALLOWANCE: Dp = 72.dp
-private const val TRIAGE_SUGGESTIONS = 3
 private const val PEEK_SCALE = 0.94f
 private const val MAX_TILT_DEGREES = 10f

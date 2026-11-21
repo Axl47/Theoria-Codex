@@ -103,7 +103,8 @@ data class TriageDeckState(
 
 /**
  * What a committed swipe in [direction] asks for, given the Codex it would save to and the tag it would hide.
- * Null when it asks for a save and there is no Codex to save to, which the screen answers by opening the picker.
+ * Null when it asks for a save and there is no Codex to save to (none suggested, as when the post is already in
+ * every Codex), which the screen answers by opening the picker.
  * A downward swipe on a post with nothing to hide is a skip.
  */
 internal fun choiceFor(direction: SwipeDirection, saveTarget: SaveSuggestion?, hideTag: String?): TriageChoice? = when (direction) {
