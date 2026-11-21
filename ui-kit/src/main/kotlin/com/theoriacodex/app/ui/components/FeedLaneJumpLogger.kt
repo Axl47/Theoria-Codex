@@ -16,8 +16,9 @@ private const val LANE_JUMP_LOG_TAG = "TheoriaGridJump"
 private val laneHistories = ConcurrentHashMap<String, FeedLaneHistory>()
 
 /**
- * Debug-only check for "no shown card changes column": logs every layout where one did. Read it with
- * `adb logcat -s TheoriaGridJump` to tell which interaction reshuffled a feed.
+ * Debug-only check for "no shown card changes column": logs every layout where one did, or where a card came
+ * back at another height (the usual reason columns re-balance). Read it with `adb logcat -s TheoriaGridJump`
+ * to tell which interaction reshuffled a feed.
  */
 @Composable
 fun FeedLaneJumpLogger(gridId: String, state: LazyStaggeredGridState) {
@@ -25,13 +26,14 @@ fun FeedLaneJumpLogger(gridId: String, state: LazyStaggeredGridState) {
     LaunchedEffect(gridId, state) {
         val history = laneHistories.getOrPut(gridId) { FeedLaneHistory() }
         snapshotFlow {
-            state.layoutInfo.visibleItemsInfo.map { item -> FeedLanePlacement(item.key, item.lane) }
+            state.layoutInfo.visibleItemsInfo.map { item -> FeedLanePlacement(item.key, item.lane, item.size.height) }
         }.collect { placements ->
-            val moved = history.record(placements)
-            if (moved > 0) {
+            val changes = history.record(placements)
+            if (changes.any) {
                 Log.d(
                     LANE_JUMP_LOG_TAG,
-                    "moved=$moved first=${state.firstVisibleItemIndex} scrolling=${state.isScrollInProgress}",
+                    "grid=${gridId.take(8)} moved=${changes.moved} resized=${changes.resized} " +
+                        "first=${state.firstVisibleItemIndex} scrolling=${state.isScrollInProgress}",
                 )
             }
         }
