@@ -1,5 +1,7 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.ui.components.FeedPostCard
+import com.theoriacodex.app.ui.components.FeedCardEnvironment
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.ui.components.RelatedFeedPresentation
 import com.theoriacodex.app.related.RelatedPostsUiState
@@ -56,9 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
-import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
@@ -245,9 +245,12 @@ private fun CodexDetailBody(
             codexName, posts, feed.visiblePosts, filters.isActive || customFiltersActive, editSelection, isLikesCodex,
             onEditSelectionChange, onTitleLongPress, onBack, onAddPostsToAnotherCodex, onRemovePosts, onDeleteCodex,
         )
+        val cards = rememberFeedCardEnvironment(
+            pixivUgoiraClient, likedPostIds, feed.durations.knownDurationMsByPostId, durations, onToggleLike,
+        )
         CodexDetailGrid(
-            feed.visiblePosts, likedPostIds, onToggleLike, posts.isEmpty(), loading, feed.durations.readiness.isResolving,
-            editSelection, gridState, pixivUgoiraClient, resolvePostById, feed.durations.knownDurationMsByPostId, durations,
+            feed.visiblePosts, cards, posts.isEmpty(), loading, feed.durations.readiness.isResolving,
+            editSelection, gridState, resolvePostById,
             { index -> onOpenViewer(feed.visiblePosts, index) },
             { postId -> onEditSelectionChange(editSelection.toggle(postId)) },
             onEditSelectionChange, onOpenPostActions, emptyMessage, related, feed.related,
@@ -507,17 +510,13 @@ private fun CodexDetailHeaderActions(
 @Composable
 private fun CodexDetailGrid(
     posts: List<Post>,
-    likedPostIds: Set<PostId>,
-    onToggleLike: ((Post) -> Unit)?,
+    cards: FeedCardEnvironment,
     collectionIsEmpty: Boolean,
     loading: Boolean,
     resolvingDurations: Boolean,
     editSelection: CodexEditSelection,
     gridState: androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState,
-    pixivUgoiraClient: PixivUgoiraClient?,
     resolvePostById: suspend (PostId) -> Post?,
-    acquiredDurations: Map<PostId, Long>,
-    durations: FeedDurations,
     onOpenViewer: (Int) -> Unit,
     onToggleSelection: (PostId) -> Unit,
     onSelectionChange: (CodexEditSelection) -> Unit,
@@ -529,27 +528,19 @@ private fun CodexDetailGrid(
     if (posts.isEmpty()) return CodexDetailEmptyState(collectionIsEmpty, loading, resolvingDurations, emptyMessage)
     val footerMessage = if (resolvingDurations) "Resolving durations…" else null
     val card: @Composable (Int, Post) -> Unit = { index, post ->
-        val observedDurationMs = observedMediaDurationMs(post, durations.stateForPost)
         CodexSelectablePostCard(
             post = post,
-            liked = post.id in likedPostIds,
-            onToggleLike = onToggleLike,
+            cards = cards,
             index = index,
             editSelection = editSelection,
-            pixivUgoiraClient = pixivUgoiraClient,
             resolvePostById = resolvePostById,
-            acquiredDurationMs = observedDurationMs ?: acquiredDurations[post.id],
-            durations = durations,
             onOpenViewer = onOpenViewer,
             onToggleSelection = onToggleSelection,
             onOpenPostActions = onOpenPostActions,
         )
     }
     if (relatedShelf != null) {
-        val environment = rememberFeedCardEnvironment(
-            pixivUgoiraClient, likedPostIds, acquiredDurations, durations, onToggleLike,
-        )
-        CodexRelatedPostGrid(relatedShelf, related, posts, gridState, footerMessage, environment, onOpenPostActions, card)
+        CodexRelatedPostGrid(relatedShelf, related, posts, gridState, footerMessage, cards, onOpenPostActions, card)
         return
     }
     val postIds = remember(posts) { posts.map(Post::id) }
@@ -593,35 +584,28 @@ private fun CodexDetailEmptyState(collectionIsEmpty: Boolean, loading: Boolean, 
 @Composable
 private fun CodexSelectablePostCard(
     post: Post,
-    liked: Boolean,
-    onToggleLike: ((Post) -> Unit)?,
+    cards: FeedCardEnvironment,
     index: Int,
     editSelection: CodexEditSelection,
-    pixivUgoiraClient: PixivUgoiraClient?,
     resolvePostById: suspend (PostId) -> Post?,
-    acquiredDurationMs: Long?,
-    durations: FeedDurations,
     onOpenViewer: (Int) -> Unit,
     onToggleSelection: (PostId) -> Unit,
     onOpenPostActions: (Post) -> Unit,
 ) {
     Box {
-        SearchResultCard(
+        FeedPostCard(
             post = post,
-            liked = liked,
-            onToggleLike = onToggleLike?.takeUnless { editSelection.active }?.let { toggle -> ({ toggle(post) }) },
-            pixivUgoiraClient = pixivUgoiraClient,
-            acquiredDurationMs = acquiredDurationMs,
-            showSourceBadge = true,
-            resolvePostById = resolvePostById,
-            refreshOnPreviewError = true,
+            environment = cards,
             onClick = {
                 if (editSelection.active) onToggleSelection(post.id) else onOpenViewer(index)
             },
             // While selecting, the grid's drag-select owns long press.
             onLongPress = { if (!editSelection.active) onOpenPostActions(post) },
-            onViewportChanged = { visible -> durations.onPostVisibilityChanged(post, visible) },
-            onAuthoritativeDurationKnown = { durationMs -> durations.onAuthoritativeDurationKnown(post, durationMs) },
+            showSourceBadge = true,
+            likeEnabled = !editSelection.active,
+            refreshOnPreviewError = true,
+            // Only the collection's own cards resolve by id; the related shelf shares this environment without it.
+            resolvePostById = resolvePostById,
         )
         if (editSelection.active) {
             CodexSelectionMarker(selected = post.id in editSelection.selectedPostIds)

@@ -64,7 +64,10 @@ fun rememberFeedCardEnvironment(
     }
 }
 
-/** One feed tile, showing the best duration known so far and reporting events against its post. */
+/**
+ * Every feed tile, in grids and shelves alike, showing the best duration known so far and reporting events against its
+ * post. [likeEnabled] hides the like button while another gesture owns taps (Codex selection).
+ */
 @Composable
 fun FeedPostCard(
     post: Post,
@@ -73,7 +76,12 @@ fun FeedPostCard(
     onLongPress: () -> Unit,
     showWatchHistory: Boolean = false,
     showSourceBadge: Boolean = false,
+    showTitle: Boolean = true,
+    metadataLabel: String? = null,
+    viewedMediaNumber: Int? = null,
     mediaAspectRatio: Float? = null,
+    likeEnabled: Boolean = true,
+    refreshOnPreviewError: Boolean = false,
     resolvePostById: (suspend (PostId) -> Post?)? = null,
     recoverPostMedia: (suspend (Post, ImageRef) -> Post?)? = null,
 ) {
@@ -90,11 +98,15 @@ fun FeedPostCard(
         pixivUgoiraClient = environment.pixivUgoiraClient,
         acquiredDurationMs = observedDurationMs ?: acquiredDurationMs,
         showSourceBadge = showSourceBadge,
+        metadataLabel = metadataLabel,
+        viewedMediaNumber = viewedMediaNumber,
         mediaAspectRatio = mediaAspectRatio,
+        showTitle = showTitle,
         liked = liked,
-        onToggleLike = environment.onToggleLike?.let { toggle -> { toggle(post) } },
+        onToggleLike = environment.onToggleLike?.takeIf { likeEnabled }?.let { toggle -> { toggle(post) } },
         resolvePostById = resolvePostById ?: environment.resolvePostById,
         recoverPostMedia = recoverPostMedia,
+        refreshOnPreviewError = refreshOnPreviewError,
         onClick = onClick,
         onLongPress = onLongPress,
         onViewportChanged = { visible -> environment.onViewportChanged(post, visible) },

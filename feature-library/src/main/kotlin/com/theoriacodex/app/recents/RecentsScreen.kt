@@ -1,5 +1,8 @@
 package com.theoriacodex.app.recents
 
+import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
+import com.theoriacodex.app.ui.components.FeedPostCard
+import com.theoriacodex.app.ui.components.FeedCardEnvironment
 import com.theoriacodex.app.ui.components.FeedDurations
 import com.theoriacodex.app.source.SourcePresentationCatalog
 import com.theoriacodex.app.source.NullableSourceKeySaver
@@ -53,8 +56,6 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.media.observedMediaDurationMs
-import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.viewer.ViewerReturnColumn
 import com.theoriacodex.app.viewer.ViewerReturnShelf
 import com.theoriacodex.app.viewer.ViewerReturnShelfId
@@ -128,7 +129,7 @@ fun RecentsScreen(
     var selectedActionSection by remember { mutableStateOf(RecentPostSection.WATCHED) }
     var searchToPin by remember { mutableStateOf<RecentSearchEntry?>(null) }
     val onPinSearch = onSaveSearch?.let { { entry: RecentSearchEntry -> searchToPin = entry } }
-    val cards = RecentsPostCards(pixivUgoiraClient, likedPostIds, durations, onToggleLike)
+    val cards = rememberRecentsPostCards(pixivUgoiraClient, likedPostIds, durations, onToggleLike)
     val relatedSlot = rememberRecentsRelated(related, filter, selectedSource, visible, cards, onShownPostsChanged) { selectedActionPost = it }
 
     Column(
@@ -313,12 +314,21 @@ private fun rememberVisibleRecents(
     )
 }
 
-/** What each post tile in Recents shares, whichever tab shows it. */
+/** What each post tile and the related shelf in Recents share, and where the grid reports when it is idle. */
 internal class RecentsPostCards(
-    val pixivUgoiraClient: PixivUgoiraClient?,
-    val likedPostIds: Set<PostId>,
-    val durations: FeedDurations,
-    val onToggleLike: ((Post) -> Unit)?,
+    val environment: FeedCardEnvironment,
+    val onEnvironmentChanged: (lifecycleStarted: Boolean, scrollIdle: Boolean) -> Unit,
+)
+
+@Composable
+private fun rememberRecentsPostCards(
+    pixivUgoiraClient: PixivUgoiraClient?,
+    likedPostIds: Set<PostId>,
+    durations: FeedDurations,
+    onToggleLike: ((Post) -> Unit)?,
+) = RecentsPostCards(
+    rememberFeedCardEnvironment(pixivUgoiraClient, likedPostIds, emptyMap(), durations, onToggleLike),
+    durations.onEnvironmentChanged,
 )
 
 @Composable
@@ -423,7 +433,7 @@ private fun WatchedGrid(
     }
     val gridState = rememberRetainedFeedGridState("recents")
     ScrollToTopOnTabReselect(TopLevelDestination.Recents) { gridState.animateScrollToItem(0) }
-    DurationRouteEnvironmentEffect(gridState, cards.durations.onEnvironmentChanged)
+    DurationRouteEnvironmentEffect(gridState, cards.onEnvironmentChanged)
     val rows = remember(watchedPosts, now, related?.request) {
         recentsGridRows(watchedPosts, now).withRelatedShelf(related?.request, watchedPosts)
     }
@@ -479,25 +489,20 @@ private fun RecentPostCard(
     showTitle: Boolean = true,
 ) {
     val post = entry.post
-    SearchResultCard(
+    FeedPostCard(
         post = post,
-        mediaAspectRatio = mediaAspectRatio,
-        showTitle = showTitle,
-        pixivUgoiraClient = cards.pixivUgoiraClient,
-        acquiredDurationMs = observedMediaDurationMs(post, cards.durations.stateForPost),
+        environment = cards.environment,
+        onClick = onClick,
+        onLongPress = onLongPress,
         showSourceBadge = true,
+        showTitle = showTitle,
         metadataLabel = relativeTimeLabel(
             now,
             rememberPostWatchEntry(post.id).value.position?.lastViewedAt
                 ?: entry.viewedAtEpochMs,
         ),
         viewedMediaNumber = viewedMediaNumber,
-        liked = post.id in cards.likedPostIds,
-        onToggleLike = cards.onToggleLike?.let { toggle -> { toggle(post) } },
-        onClick = onClick,
-        onLongPress = onLongPress,
-        onViewportChanged = { visible -> cards.durations.onPostVisibilityChanged(post, visible) },
-        onAuthoritativeDurationKnown = { durationMs -> cards.durations.onAuthoritativeDurationKnown(post, durationMs) },
+        mediaAspectRatio = mediaAspectRatio,
     )
 }
 

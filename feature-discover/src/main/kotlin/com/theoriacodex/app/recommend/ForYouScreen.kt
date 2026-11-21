@@ -141,7 +141,7 @@ fun ForYouScreen(
     ) { homeVisible ->
         if (homeVisible) {
             savedStates.SaveableStateProvider("overview") {
-                ForYouHomeScreen(state, likedPostIds, pixivUgoiraClient, feed::filterHomePosts, durations, onToggleLike,
+                ForYouHomeScreen(state, cards, feed::filterHomePosts,
                     { selectedActionPost = it }, onAction, { showSortSheet = true }, filterLabels, clearFilters,
                     onOpenPreview = { id, posts, index -> onAction(ForYouAction.OpenSectionResult(id, index, posts, feed.filters)) })
             }

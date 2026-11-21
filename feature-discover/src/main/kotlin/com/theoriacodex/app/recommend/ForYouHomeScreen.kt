@@ -1,6 +1,7 @@
 package com.theoriacodex.app.recommend
 
-import com.theoriacodex.app.ui.components.FeedDurations
+import com.theoriacodex.app.ui.components.FeedPostCard
+import com.theoriacodex.app.ui.components.FeedCardEnvironment
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -68,10 +69,8 @@ import com.theoriacodex.app.ui.components.reorderRowPlacement
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recommend.state.ForYouUiState
-import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.ui.components.ReorderListState
 import com.theoriacodex.app.ui.components.ListReorderHandle
 import com.theoriacodex.app.ui.components.FeedErrorTile
@@ -83,18 +82,13 @@ import com.theoriacodex.app.ui.components.PostShelfSection
 import com.theoriacodex.app.viewer.ViewerReturnColumn
 import com.theoriacodex.app.viewer.ViewerReturnShelf
 import com.theoriacodex.app.viewer.ViewerReturnShelfId
-import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.domain.model.Post
-import com.theoriacodex.domain.model.PostId
 
 @Composable
 internal fun ForYouHomeScreen(
     state: ForYouUiState,
-    likedPostIds: Set<PostId>,
-    pixivUgoiraClient: PixivUgoiraClient?,
+    cards: FeedCardEnvironment,
     filterPosts: (List<Post>) -> List<Post>,
-    durations: FeedDurations,
-    onToggleLike: (Post) -> Unit,
     onLongPress: (Post) -> Unit,
     onAction: (ForYouAction) -> Unit,
     onShowFilters: () -> Unit,
@@ -138,8 +132,8 @@ internal fun ForYouHomeScreen(
                 onSectionMenu = { sectionMenuId = it },
                 header = { ForYouHomeHeader(state, sourceMenu, { sourceMenu = it }, onAction, false, onReorder) { homeMenu = true } },
                 preview = { id, posts ->
-                    ForYouPreviewPosts(id ?: "mixed", if (id == null) MIX_CARD_WIDTH else POST_SHELF_CARD_WIDTH, posts, likedPostIds, pixivUgoiraClient, durations,
-                        onToggleLike, onLongPress) { index ->
+                    ForYouPreviewPosts(id ?: "mixed", if (id == null) MIX_CARD_WIDTH else POST_SHELF_CARD_WIDTH, posts, cards,
+                        onLongPress) { index ->
                         onOpenPreview(id, posts, index)
                     }
                 })
@@ -354,10 +348,11 @@ private fun ForYouHomeStatus(state: ForYouUiState, onAction: (ForYouAction) -> U
 
 @Composable
 private fun ForYouPreviewPosts(
-    sectionId: String, cardWidth: Dp, posts: List<Post>, likedPostIds: Set<PostId>, pixivUgoiraClient: PixivUgoiraClient?,
-    durations: FeedDurations,
-    onToggleLike: (Post) -> Unit, onLongPress: (Post) -> Unit, onOpen: (Int) -> Unit,
+    sectionId: String, cardWidth: Dp, posts: List<Post>, environment: FeedCardEnvironment,
+    onLongPress: (Post) -> Unit, onOpen: (Int) -> Unit,
 ) {
+    // Preview cards never resolved posts by id; the grid's resolver stays with the grid.
+    val cards = remember(environment) { environment.copy(resolvePostById = null) }
     val row = rememberLazyListState()
     val postIds = remember(posts) { posts.map { it.id } }
     ViewerReturnShelf(ViewerReturnShelfId.ForYou(sectionId), postIds, row) {
@@ -365,14 +360,9 @@ private fun ForYouPreviewPosts(
         contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         itemsIndexed(posts, key = { _, post -> "${post.id.source}:${post.id.sourcePostId}" }) { index, post ->
             Box(Modifier.width(cardWidth)) {
-                SearchResultCard(post = post, liked = post.id in likedPostIds,
-                    onToggleLike = { onToggleLike(post) }, onClick = { onOpen(index) },
-                    onLongPress = { onLongPress(post) }, pixivUgoiraClient = pixivUgoiraClient,
+                FeedPostCard(post, cards, onClick = { onOpen(index) }, onLongPress = { onLongPress(post) },
                     showWatchHistory = true, showTitle = false, showSourceBadge = true,
-                    mediaAspectRatio = POST_SHELF_MEDIA_ASPECT_RATIO,
-                    acquiredDurationMs = observedMediaDurationMs(post, durations.stateForPost),
-                    onViewportChanged = { durations.onPostVisibilityChanged(post, it) },
-                    onAuthoritativeDurationKnown = { durations.onAuthoritativeDurationKnown(post, it) })
+                    mediaAspectRatio = POST_SHELF_MEDIA_ASPECT_RATIO)
             }
         }
     }
