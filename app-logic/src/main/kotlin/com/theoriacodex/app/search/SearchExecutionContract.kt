@@ -77,6 +77,8 @@ data class SearchInitialization(
     val runtime: SourceRuntimeSettings = SourceRuntimeSettings(),
     /** The faceted search scopes each available source offers, for those that offer any. */
     val scopesBySource: Map<SourceKey, List<FacetedSearchScope>> = emptyMap(),
+    /** The available sources that match only exactly spelled tags, each with its name for the input error. */
+    val exactTagSources: Map<SourceKey, String> = emptyMap(),
 )
 
 /**

@@ -139,6 +139,8 @@ data class SearchQueryUiState(
     val unifiedSources: Set<SourceKey> = emptySet(),
     /** The faceted search scopes each available source offers, for those that offer any. */
     val scopesBySource: Map<SourceKey, List<FacetedSearchScope>> = emptyMap(),
+    /** Sources whose searches match only exactly spelled tags, each with its name for the input error. */
+    val exactTagSources: Map<SourceKey, String> = emptyMap(),
     val selectedScope: FacetedSearchScope = FacetedSearchScope.All,
     /** A notice about the draft itself, such as terms a source change removed; typing leaves it. */
     val validationMessage: String? = null,
@@ -166,6 +168,10 @@ data class SearchQueryUiState(
 
     fun scopesFor(mode: QueryMode): List<FacetedSearchScope> =
         (mode as? QueryMode.Source)?.let { scopesBySource[it.source] }.orEmpty()
+
+    /** The draft's source when it matches only exactly spelled tags, so a typed tag must come from suggestions. */
+    val draftExactTagSource: SourceKey?
+        get() = (draft.mode as? QueryMode.Source)?.source?.takeIf { it in exactTagSources }
 }
 
 data class SearchContentUiState(

@@ -94,6 +94,7 @@ object SearchStateReducer {
             availableSources = initialization.availableSources,
             unifiedSources = initialization.runtime.enabledSources.intersect(initialization.availableSources.toSet()),
             scopesBySource = initialization.scopesBySource,
+            exactTagSources = initialization.exactTagSources,
             validationMessage = initialization.validationMessage,
             appliedByMode = initialization.appliedByMode,
         ),

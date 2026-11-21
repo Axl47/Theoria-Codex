@@ -17,20 +17,20 @@ class UnifiedQueryPreparationTest {
         var clock = 0L
         val preparation = UnifiedQueryPreparation { clock }
         val original = unifiedQuery("blue")
-        assertEquals(listOf("blue_hair"), preparation.prepareGelbooru(adapter, original).includeTags)
-        preparation.prepareGelbooru(adapter, original)
+        assertEquals(listOf("blue_hair"), preparation.prepareExactTags(adapter, original).includeTags)
+        preparation.prepareExactTags(adapter, original)
         assertEquals(1, adapter.autocompletePrefixes.size)
         clock += 31 * 60_000L
-        preparation.prepareGelbooru(adapter, original)
+        preparation.prepareExactTags(adapter, original)
         assertEquals(2, adapter.autocompletePrefixes.size)
     }
 
     @Test
     fun `a tag Gelbooru already reported needs no lookup before searching`() = runTest {
         val adapter = TestAdapter(SourceKey.GELBOORU)
-        val preparation = UnifiedQueryPreparation(isKnownTag = { it == "blue_hair" }, clock = { 0L })
+        val preparation = UnifiedQueryPreparation(isKnownTag = { _, tag -> tag == "blue_hair" }, clock = { 0L })
 
-        assertEquals(listOf("blue_hair"), preparation.prepareGelbooru(adapter, unifiedQuery("blue_hair")).includeTags)
+        assertEquals(listOf("blue_hair"), preparation.prepareExactTags(adapter, unifiedQuery("blue_hair")).includeTags)
         assertEquals(0, adapter.autocompletePrefixes.size)
     }
 
@@ -38,10 +38,10 @@ class UnifiedQueryPreparationTest {
     fun `timed out mappings fall back without poisoning the cache`() = runTest {
         val adapter = TestAdapter(SourceKey.GELBOORU).apply { autocompleteResponseDelayMs = 3_000L }
         val preparation = UnifiedQueryPreparation { testScheduler.currentTime }
-        assertEquals(listOf("blue"), preparation.prepareGelbooru(adapter, unifiedQuery("blue")).includeTags)
+        assertEquals(listOf("blue"), preparation.prepareExactTags(adapter, unifiedQuery("blue")).includeTags)
         assertEquals(2_000L, testScheduler.currentTime)
         adapter.autocompleteResponseDelayMs = 0L
         adapter.autocomplete = listOf(TagSuggestion("blue_hair", "tag", 100))
-        assertEquals(listOf("blue_hair"), preparation.prepareGelbooru(adapter, unifiedQuery("blue")).includeTags)
+        assertEquals(listOf("blue_hair"), preparation.prepareExactTags(adapter, unifiedQuery("blue")).includeTags)
     }
 }

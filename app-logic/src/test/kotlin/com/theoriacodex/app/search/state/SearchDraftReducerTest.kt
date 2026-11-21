@@ -425,6 +425,7 @@ class SearchDraftReducerTest {
             draftSourceScope = SearchSourceScope.fromQuery(query),
             appliedSourceScope = SearchSourceScope.fromQuery(query),
             availableSources = available.toList(),
+            exactTagSources = mapOf(SourceKey.GELBOORU to "Gelbooru"),
         ),
     )
 

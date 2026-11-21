@@ -368,6 +368,7 @@ class SearchViewModel(
             enabledSources = settings.runtime.enabledSources,
             sourceTermLimits = coordinator.sourceTermLimits(),
             scopesBySource = coordinator.searchScopesBySource(),
+            exactTagSources = coordinator.exactTagSources(),
         )
         mutableState.value = next
         val draftChanged = next.query.draft != current.query.draft

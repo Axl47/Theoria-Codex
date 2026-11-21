@@ -21,7 +21,7 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.query.SearchTermLimit
-import com.theoriacodex.domain.tags.normalizeGelbooruToken
+import com.theoriacodex.domain.tags.sourceAutocompletePrefix
 import com.theoriacodex.domain.tags.sourceTagsMatch
 
 data class SearchDraftReduction(
@@ -110,6 +110,7 @@ object SearchDraftReducer {
         enabledSources: Set<SourceKey>,
         sourceTermLimits: Map<SourceKey, SearchTermLimit>,
         scopesBySource: Map<SourceKey, List<FacetedSearchScope>>,
+        exactTagSources: Map<SourceKey, String>,
     ): SearchUiState {
         val available = availableSources.toSet()
         val draftScope = state.query.draftSourceScope.reconciledWith(available)
@@ -123,6 +124,7 @@ object SearchDraftReducer {
             unifiedSources = enabledSources.intersect(available),
             sourceTermLimits = sourceTermLimits,
             scopesBySource = scopesBySource,
+            exactTagSources = exactTagSources,
         )
         return state.copy(query = query.copy(selectedScope = query.validSelectedScope(query.selectedScope, query.draft)))
     }
@@ -184,12 +186,12 @@ object SearchDraftReducer {
     ): SearchDraftReduction {
         if (
             term.isPortableGeneralTag &&
-            state.query.draft.mode == QueryMode.Source(SourceKey.GELBOORU) &&
+            state.query.draftExactTagSource != null &&
             !canCommitInput(state, term.value)
         ) {
             return SearchDraftReduction(
                 state.copy(
-                    suggestions = state.suggestions.copy(inputError = GELBOORU_SUGGESTION_REQUIRED_MESSAGE),
+                    suggestions = state.suggestions.copy(inputError = state.query.exactTagInputError()),
                 ),
                 accepted = false,
             )
@@ -447,8 +449,7 @@ object SearchDraftReducer {
                 parsed.explicitScope != null && state.query.draft.mode == QueryMode.Unified ->
                     UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE
                 parsed.explicitScope != null -> UNSUPPORTED_SEARCH_SCOPE_MESSAGE
-                state.query.draft.mode == QueryMode.Source(SourceKey.GELBOORU) ->
-                    GELBOORU_SUGGESTION_REQUIRED_MESSAGE
+                state.query.draftExactTagSource != null -> state.query.exactTagInputError()
                 else -> state.suggestions.inputError
             }
             return SearchDraftReduction(
@@ -474,11 +475,11 @@ object SearchDraftReducer {
             if (state.query.draft.mode == QueryMode.Unified) return false
             if (resolveSupportedScope(parsed.explicitScope, state.query.supportedScopes) == null) return false
         }
-        if (state.query.draft.mode != QueryMode.Source(SourceKey.GELBOORU)) return true
-        val normalized = normalizeGelbooruToken(parsed.value)
-        // A tag searched before on Gelbooru is as confirmed as one its autocomplete returned.
+        val source = state.query.draftExactTagSource ?: return true
+        val normalized = sourceAutocompletePrefix(source, parsed.value)
+        // A tag searched before on the source is as confirmed as one its autocomplete returned.
         return (state.suggestions.autocomplete.map(TagSuggestion::text) + state.suggestions.searchedTags.map(SearchTerm::value)).any { tag ->
-            sourceTagsMatch(SourceKey.GELBOORU, tag, normalized)
+            sourceTagsMatch(source, tag, normalized)
         }
     }
 
@@ -515,7 +516,6 @@ object SearchDraftReducer {
         val trimmed = input.trim()
         val source = (state.query.draft.mode as? QueryMode.Source)?.source ?: return trimmed
         if (state.query.supportedScopes.isNotEmpty()) return trimmed
-        if (source !in SUGGESTION_CANONICALIZATION_SOURCES && !source.isCustom) return trimmed
         val parsed = parseScopedInput(trimmed)
         if (parsed.explicitScope != null) return trimmed
         // A typed translation ("Hatsune Miku") commits the native tag it labels (初音ミク).
@@ -608,11 +608,6 @@ private fun Query.directNhentaiGalleryIdCandidate(): String? {
     return terms.single().value.trim().takeIf { value -> value.isNotBlank() && value.all(Char::isDigit) }
 }
 
-private val SUGGESTION_CANONICALIZATION_SOURCES = setOf(
-    SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.AIBOORU, SourceKey.DANBOORU, SourceKey.NHENTAI, SourceKey.HITOMI,
-    SourceKey.IWARA, SourceKey.RULE34XXX, SourceKey.RULE34PAHEAL,
-    SourceKey.RULE34VIDEO, SourceKey.RULE34GEN,
-)
 private val NHENTAI_LANGUAGE_TAG_BY_FILTER = mapOf(
     NhentaiLanguageFilter.ENGLISH to "english",
     NhentaiLanguageFilter.CHINESE to "chinese",
@@ -621,5 +616,6 @@ private val NHENTAI_LANGUAGE_TAG_BY_FILTER = mapOf(
 private const val NHENTAI_LANGUAGE_NAMESPACE = "language"
 private const val NHENTAI_TAG_NAMESPACE = "tag"
 private const val NHENTAI_FULL_COLOR_TAG = "full color"
-private const val GELBOORU_SUGGESTION_REQUIRED_MESSAGE =
-    "For Gelbooru, pick a suggested tag from autocomplete."
+/** Asks for a suggested tag on the draft's source, which matches only exactly spelled tags. */
+private fun SearchQueryUiState.exactTagInputError(): String =
+    "For ${exactTagSources[draftExactTagSource]}, pick a suggested tag from autocomplete."

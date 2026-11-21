@@ -4,6 +4,7 @@ import com.theoriacodex.app.media.recoverRemoteMedia
 import com.theoriacodex.app.feed.FeedCursor
 import com.theoriacodex.app.feed.mergeFeedStatuses
 import com.theoriacodex.app.feed.nextPage
+import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.post.FileMirrorIndex
 import com.theoriacodex.app.source.PostResolutionFlights
@@ -121,7 +122,7 @@ class SearchCoordinator(
     private val resolvedPostsByExecution = linkedMapOf<String, LinkedHashMap<PostId, Post>>()
     private val resolveFailuresByExecution = mutableMapOf<String, MutableMap<PostId, ResolveFailureRecord>>()
     private val queryPreparation = UnifiedQueryPreparation(
-        isKnownTag = { tag -> tagSuggestionStore.getCount(SourceKey.GELBOORU, tag) != null },
+        isKnownTag = { source, tag -> tagSuggestionStore.getCount(source, tag) != null },
         clock = clock,
     )
     private val appliedPersistenceMutex = Mutex()
@@ -161,7 +162,19 @@ class SearchCoordinator(
                 .takeIf { sanitized.removedSourceOwnedTerms },
             runtime = settings.runtime,
             scopesBySource = searchScopesBySource(),
+            exactTagSources = exactTagSources(),
         )
+    }
+
+    /** The available sources that match only exactly spelled tags, each with its name for the input error. */
+    fun exactTagSources(): Map<SourceKey, String> = registry.availableSources()
+        .filter { source -> registry.adapterFor(source)?.capabilities?.requiresExactTags == true }
+        .associateWith { source -> source.displayName() }
+
+    /** Spells [query]'s tags as [source] lists them when it matches only exact tags; other sources run it as is. */
+    private suspend fun prepareExactTags(source: SourceKey, query: Query): Query {
+        val adapter = registry.adapterFor(source)?.takeIf { it.capabilities.requiresExactTags } ?: return query
+        return queryPreparation.prepareExactTags(adapter, query)
     }
 
     /** Per-request term caps of the available sources that have one. */
@@ -245,11 +258,7 @@ class SearchCoordinator(
             pageTokens = emptyMap(),
             weights = base.cursor.weights,
             queryOverridesBySource = overrides,
-            prepareQuery = { source, sourceQuery ->
-                if (source == SourceKey.GELBOORU) {
-                    queryPreparation.prepareGelbooru(requireNotNull(registry.adapterFor(source)), sourceQuery)
-                } else sourceQuery
-            },
+            prepareQuery = ::prepareExactTags,
             onPartial = onPartial?.let { publish ->
                 { partial ->
                     fileMirrors.learn(partial.items)
@@ -310,11 +319,7 @@ class SearchCoordinator(
             pageTokens = mapOf(source to base.cursor.pageTokens[source]),
             weights = mapOf(source to 1.0),
             queryOverridesBySource = overrides.filterKeys { it == source },
-            prepareQuery = { key, prepared ->
-                if (key == SourceKey.GELBOORU && key !in ran) {
-                    queryPreparation.prepareGelbooru(requireNotNull(registry.adapterFor(key)), prepared)
-                } else prepared
-            },
+            prepareQuery = { key, prepared -> if (key in ran) prepared else prepareExactTags(key, prepared) },
         )
         currentCoroutineContext().ensureActive()
         if (result.statuses.none { it.state == SourceRunState.SUCCESS }) {

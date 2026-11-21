@@ -1,5 +1,6 @@
 package com.theoriacodex.sources.gelbooru
 
+import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.credentials.ApiKeyUse
@@ -41,6 +42,8 @@ data class GelbooruSite(
     val publicProfiles: Boolean = false,
     /** Searches answer `fav:<account id>` with that account's public favorites (verified on gelbooru.com with a key, 2026-11-11). */
     val favoritesList: Boolean = false,
+    /** Searches match only tags spelled as the site lists them; see [SourceCapabilities.requiresExactTags]. */
+    val exactTags: Boolean = false,
 ) {
     /**
      * A site account as a creator: [owner] is the user name (searched as `user:<owner>`), [creatorId] the
@@ -74,6 +77,7 @@ data class GelbooruSite(
             commentAnchors = false,
             publicProfiles = true,
             favoritesList = true,
+            exactTags = true,
         )
 
         /** The API host differs from the site, every API call needs a key, and tags come from `autocomplete.php`. */
