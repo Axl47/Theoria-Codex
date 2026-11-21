@@ -35,7 +35,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
-import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.media.MediaDurationState
@@ -101,8 +100,6 @@ internal data class ViewerRouteLiveSourceState(
     val likedPostIds: Set<PostId> = emptySet(),
     val savedPostIds: Set<PostId> = emptySet(),
     val watchedPostIds: Set<PostId> = emptySet(),
-    val unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy =
-        UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS,
 ) {
     fun forSource(source: ViewerStreamSource): ViewerFeedSnapshot? = feeds[source]
 
@@ -129,7 +126,6 @@ internal data class ViewerRouteLiveSourceState(
             retainedLikedPostIds = snapshot.retainedLikedPostIds,
             savedPostIds = if (appliesSavedAndLikedPolicy) savedPostIds else emptySet(),
             watchedPostIds = if (appliesSavedAndLikedPolicy) watchedPostIds else emptySet(),
-            unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
         )
     }
 }
@@ -443,7 +439,6 @@ private fun ViewerLiveSourceMergeEffect(
         liveSourceState.likedPostIds,
         liveSourceState.savedPostIds,
         liveSourceState.watchedPostIds,
-        liveSourceState.unknownAnimatedDurationPolicy,
     ) {
         appendLiveSourcePosts(viewerOwner, liveSourceState)
     }
@@ -599,7 +594,6 @@ private fun rememberViewerRelatedPosts(
     val relatedPosts = remember(
         activeSession?.searchVisibilityFilters, accumulatedRelatedPosts, relatedSource, liveSourceState.likedPostIds,
         liveSourceState.savedPostIds, liveSourceState.watchedPostIds, relatedSnapshot?.retainedLikedPostIds,
-        liveSourceState.unknownAnimatedDurationPolicy,
     ) {
         activeSession?.let { active ->
             filterSearchResults(
@@ -608,7 +602,6 @@ private fun rememberViewerRelatedPosts(
                 savedPostIds = if (relatedSource == ViewerStreamSource.FOR_YOU) emptySet() else liveSourceState.savedPostIds,
                 watchedPostIds = if (relatedSource == ViewerStreamSource.FOR_YOU) emptySet() else liveSourceState.watchedPostIds,
                 retainedLikedPostIds = relatedSnapshot?.retainedLikedPostIds.orEmpty(),
-                unknownAnimatedDurationPolicy = liveSourceState.unknownAnimatedDurationPolicy,
             )
         }.orEmpty()
     }

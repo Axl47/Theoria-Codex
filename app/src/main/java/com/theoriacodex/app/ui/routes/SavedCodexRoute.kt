@@ -49,7 +49,6 @@ import com.theoriacodex.app.viewer.ViewerReturnColumn
 import com.theoriacodex.app.viewer.ViewerReturnShelf
 import com.theoriacodex.app.viewer.ViewerReturnShelfId
 import com.theoriacodex.app.search.SearchResultCard
-import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.ui.components.PostShelfSection
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.POST_SHELF_CARD_WIDTH
@@ -136,8 +135,7 @@ private fun SavedCodexSection(
     val filters = remember(restore) { restore.savedCollectionFilters() }
     val metadata = rememberDurationFilterMetadata(state.posts, durationStates, !filters.animatedDurationRange.isFullRange)
     val posts = remember(state.posts, filters, metadata.knownDurationMsByPostId) {
-        filterCodexCollectionPosts(state.posts, filters, UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS,
-            metadata.knownDurationMsByPostId)
+        filterCodexCollectionPosts(state.posts, filters, metadata.knownDurationMsByPostId)
     }
     SideEffect { owner.onFilterChanged(!filters.animatedDurationRange.isFullRange || sort.usesDuration) }
     val cardWidth = POST_SHELF_CARD_WIDTH

@@ -2,7 +2,6 @@ package com.theoriacodex.app.codex
 
 import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.search.SearchVisibilityFilters
-import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -32,7 +31,6 @@ enum class CodexLanguageFilter(val tag: String?) {
 fun filterCodexCollectionPosts(
     posts: List<Post>,
     filters: CodexCollectionFilters,
-    unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy,
     knownDurationMsByPostId: Map<PostId, Long> = emptyMap(),
 ): List<Post> {
     // Runs on the main thread as a Codex opens, so an unfiltered Codex keeps its list untouched.
@@ -45,7 +43,6 @@ fun filterCodexCollectionPosts(
         ),
         likedPostIds = emptySet(),
         savedPostIds = emptySet(),
-        unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
         knownDurationMsByPostId = knownDurationMsByPostId,
     ).filter { post ->
         (filters.source == null || post.id.source == filters.source) &&

@@ -17942,11 +17942,10 @@ SPLcom/theoriacodex/app/search/SearchVisibilityFilters;->getHideSaved()Z
 SPLcom/theoriacodex/app/search/SearchVisibilityFilters;->getHideWatched()Z
 Lcom/theoriacodex/app/search/SearchVisibilityFiltersKt;
 SPLcom/theoriacodex/app/search/SearchVisibilityFiltersKt;-><clinit>()V
-SPLcom/theoriacodex/app/search/SearchVisibilityFiltersKt;->filterSearchResults(Ljava/util/List;Lcom/theoriacodex/app/search/SearchVisibilityFilters;Ljava/util/Set;Ljava/util/Set;Ljava/util/Set;Lcom/theoriacodex/app/search/UnknownAnimatedDurationPolicy;Ljava/util/Map;Ljava/util/Set;)Ljava/util/List;
+SPLcom/theoriacodex/app/search/SearchVisibilityFiltersKt;->filterSearchResults(Ljava/util/List;Lcom/theoriacodex/app/search/SearchVisibilityFilters;Ljava/util/Set;Ljava/util/Set;Ljava/util/Set;Ljava/util/Map;Ljava/util/Set;)Ljava/util/List;
 SPLcom/theoriacodex/app/search/SearchVisibilityFiltersKt;->getDANBOORU_ANIMATED_SEARCH_TAGS()Ljava/util/List;
 SPLcom/theoriacodex/app/search/SearchVisibilityFiltersKt;->getGELBOORU_ANIMATED_SEARCH_TAGS()Ljava/util/List;
 SPLcom/theoriacodex/app/search/SearchVisibilityFiltersKt;->markInputs(Lcom/theoriacodex/app/search/SearchVisibilityFilters;Ljava/util/Set;Ljava/util/Set;Ljava/util/Set;Ljava/util/Set;)Lcom/theoriacodex/app/search/PostMarkInputs;
-SPLcom/theoriacodex/app/search/SearchVisibilityFiltersKt;->unknownAnimatedDurationPolicy(Z)Lcom/theoriacodex/app/search/UnknownAnimatedDurationPolicy;
 Lcom/theoriacodex/app/search/SeenTagRecorder;
 SPLcom/theoriacodex/app/search/SeenTagRecorder;-><clinit>()V
 SPLcom/theoriacodex/app/search/SeenTagRecorder;-><init>(Lcom/theoriacodex/data/repository/StatisticsRepository;Lcom/theoriacodex/app/search/TagSuggestionStore;Lkotlinx/coroutines/CoroutineDispatcher;Lkotlinx/coroutines/CoroutineScope;)V
@@ -18065,10 +18064,6 @@ SPLcom/theoriacodex/app/search/UnifiedQueryPreparation;-><init>(Lkotlin/jvm/func
 Lcom/theoriacodex/app/search/UnifiedQueryPreparation$Companion;
 SPLcom/theoriacodex/app/search/UnifiedQueryPreparation$Companion;-><init>()V
 SPLcom/theoriacodex/app/search/UnifiedQueryPreparation$Companion;-><init>(Lkotlin/jvm/internal/DefaultConstructorMarker;)V
-Lcom/theoriacodex/app/search/UnknownAnimatedDurationPolicy;
-SPLcom/theoriacodex/app/search/UnknownAnimatedDurationPolicy;->$values()[Lcom/theoriacodex/app/search/UnknownAnimatedDurationPolicy;
-SPLcom/theoriacodex/app/search/UnknownAnimatedDurationPolicy;-><clinit>()V
-SPLcom/theoriacodex/app/search/UnknownAnimatedDurationPolicy;-><init>(Ljava/lang/String;I)V
 Lcom/theoriacodex/app/search/state/SearchAction;
 Lcom/theoriacodex/app/search/state/SearchAction$ApplyDraft;
 SPLcom/theoriacodex/app/search/state/SearchAction$ApplyDraft;-><clinit>()V
@@ -19909,7 +19904,7 @@ SPLcom/theoriacodex/app/ui/components/RelatedFeedPresentation;-><init>(Ljava/uti
 SPLcom/theoriacodex/app/ui/components/RelatedFeedPresentation;->equals(Ljava/lang/Object;)Z
 SPLcom/theoriacodex/app/ui/components/RelatedFeedPresentation;->getProjection()Lcom/theoriacodex/app/related/RelatedFeedProjection;
 Lcom/theoriacodex/app/ui/components/RelatedFeedPresentationKt;
-SPLcom/theoriacodex/app/ui/components/RelatedFeedPresentationKt;->rememberRelatedFeedPresentation(Ljava/lang/String;Ljava/util/List;Ljava/util/List;Lcom/theoriacodex/app/related/RelatedPostsUiState;Lcom/theoriacodex/app/search/SearchVisibilityFilters;Ljava/util/Set;Ljava/util/Set;Ljava/util/Set;Lcom/theoriacodex/app/search/UnknownAnimatedDurationPolicy;Ljava/util/Map;ZLjava/util/Set;Landroidx/compose/runtime/Composer;III)Lcom/theoriacodex/app/ui/components/RelatedFeedPresentation;
+SPLcom/theoriacodex/app/ui/components/RelatedFeedPresentationKt;->rememberRelatedFeedPresentation(Ljava/lang/String;Ljava/util/List;Ljava/util/List;Lcom/theoriacodex/app/related/RelatedPostsUiState;Lcom/theoriacodex/app/search/SearchVisibilityFilters;Ljava/util/Set;Ljava/util/Set;Ljava/util/Set;Ljava/util/Map;ZLjava/util/Set;Landroidx/compose/runtime/Composer;III)Lcom/theoriacodex/app/ui/components/RelatedFeedPresentation;
 Lcom/theoriacodex/app/ui/components/SourceSelectorKt;
 SPLcom/theoriacodex/app/ui/components/SourceSelectorKt;->$r8$lambda$A_97tRARhipLBj-Qa8gvO26UL5w(ILandroidx/compose/runtime/Composer;I)Lkotlin/Unit;
 SPLcom/theoriacodex/app/ui/components/SourceSelectorKt;->SourceIconMenu$lambda$1(Landroidx/compose/runtime/MutableState;)Lcom/theoriacodex/app/source/SourcePresentationGroup;

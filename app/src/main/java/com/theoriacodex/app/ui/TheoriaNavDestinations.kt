@@ -314,7 +314,6 @@ private fun viewerLiveSourceState(
     likedPostIds = state.browsing.likedPostIds,
     savedPostIds = state.browsing.savedPostIds,
     watchedPostIds = state.browsing.watchedPostIds,
-    unknownAnimatedDurationPolicy = state.browsing.unknownAnimatedDurationPolicy,
 )
 
 /** Names where a Viewer download came from, by the stream the session was launched from. */

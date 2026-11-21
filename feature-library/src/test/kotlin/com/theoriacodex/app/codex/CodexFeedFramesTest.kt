@@ -15,7 +15,6 @@ import com.theoriacodex.app.media.MediaDurationProvenance
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.mediaDurationKey
 import com.theoriacodex.app.media.mediaDurationStates
-import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.testing.SteppedDispatcher
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.ui.components.FeedTraceSections
@@ -185,7 +184,7 @@ class CodexFeedFramesTest {
             assertEquals(Frame(before), frame())
             assertEquals(0, drainedPasses().filter)
             val whole = filterCodexCollectionPosts(
-                videos.take(index + 1), fab.savedCollectionFilters(), UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND, knownMs,
+                videos.take(index + 1), fab.savedCollectionFilters(), knownMs,
             ).map { it.id.sourcePostId }
             // The length step answered in the background; the newly revealed post is filtered alone, in the frame.
             assertEquals(Frame(whole, filter = 1), frame())

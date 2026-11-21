@@ -44,7 +44,6 @@ import com.theoriacodex.app.di.SourceDependencies
 import com.theoriacodex.app.related.ViewerFeedOwner
 import com.theoriacodex.app.related.ViewerFeedSnapshot
 import com.theoriacodex.app.search.SearchViewModel
-import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.settings.SettingsScreen
 import com.theoriacodex.app.settings.SettingsDiagnosticsEntry
 import com.theoriacodex.app.settings.SettingsSitesEntry
@@ -80,14 +79,7 @@ internal data class BrowsingDestinationState(
     val favoriteTags: List<FavoriteTagEntry>,
     val savedPostIds: Set<PostId>,
     val watchedPostIds: Set<PostId>,
-) {
-    val unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy
-        get() = if (settings.contentFilters.resolveUnknownAnimatedDurations) {
-            UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
-        } else {
-            UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS
-        }
-}
+)
 
 internal data class RecentsDestinationState(
     val watchedPosts: List<RecentPostEntry>,

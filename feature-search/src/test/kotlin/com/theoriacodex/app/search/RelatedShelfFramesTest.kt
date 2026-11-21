@@ -115,7 +115,6 @@ class RelatedShelfFramesTest {
                     shelf = related.visiblePosts.map { it.id.sourcePostId }
                     wholePass = filterSearchResults(
                         shelfPosts, feed.visibilityFilters, emptySet(), emptySet(),
-                        unknownAnimatedDurationPolicy = UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND,
                         knownDurationMsByPostId = related.knownDurationMsByPostId,
                     ).map { it.id.sourcePostId }
                 }

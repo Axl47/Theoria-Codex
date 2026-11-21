@@ -3,7 +3,6 @@ package com.theoriacodex.app.codex
 import com.theoriacodex.app.ui.components.FeedGrid
 import com.theoriacodex.app.ui.components.FeedPostCard
 import com.theoriacodex.app.ui.components.FeedCardEnvironment
-import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.ui.components.rememberFeedView
@@ -272,7 +271,7 @@ private fun CodexDetailFilterFab(
 /** Keeps the posts the collection's saved filters let through; compared by equality, so a filter change refilters. */
 private data class CodexPostFilter(val filters: CodexCollectionFilters) : FeedPostFilter {
     override fun filter(posts: List<Post>, knownDurationMsByPostId: Map<PostId, Long>): List<Post> =
-        filterCodexCollectionPosts(posts, filters, UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS, knownDurationMsByPostId)
+        filterCodexCollectionPosts(posts, filters, knownDurationMsByPostId)
 }
 
 /**
