@@ -18,6 +18,7 @@ import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.media.OfflineAwareCacheRepository
 import com.theoriacodex.app.media.OfflineMediaAcquisition
 import com.theoriacodex.app.media.OfflineMediaCoordinator
+import com.theoriacodex.app.media.PostDownloads
 import com.theoriacodex.app.media.codexOfflineOwner
 import com.theoriacodex.app.codex.LikesCodexSyncService
 import com.theoriacodex.app.codex.transfer.CodexTransferService
@@ -171,6 +172,8 @@ data class FeatureDependencies(
     val mediaDurationCoordinator: MediaDurationCoordinator,
     val appUsageTracker: AppUsageTracker,
     val offlineMedia: OfflineMediaCoordinator,
+    /** The one download queue every Activity instance uses (see [appPostDownloads]). */
+    val postDownloads: PostDownloads,
 )
 
 data class WorkflowDependencies(
@@ -473,6 +476,8 @@ internal class DefaultTheoriaAppContainer(
         mediaDurationCoordinator = mediaDurationCoordinator,
         appUsageTracker = appUsageTracker,
         offlineMedia = offlineMedia,
+        postDownloads = appPostDownloads(appContext, File(storageDirectory, "download_jobs.json"), durableStoreScope,
+            settingsRepository, sources),
     )
 
     override val workflows = WorkflowDependencies(
