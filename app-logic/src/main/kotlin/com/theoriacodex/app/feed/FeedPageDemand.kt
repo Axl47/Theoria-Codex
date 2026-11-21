@@ -58,18 +58,26 @@ class FeedPageDemand(
         }
         if (!input.canLoadMore || input.durationsBlockPaging) return FeedPageDemandResult()
 
+        // A saved place is a known target, not open-ended draining: its pages load until it is present or the
+        // provider runs out. Capping them would strand the restore on a grid that cannot show Continue without a
+        // scroll, and a scroll supersedes the restore.
+        val needsRestorationTarget = input.requiredCanonicalIndex?.let { it >= input.canonicalCount } == true
+        if (!needsRestorationTarget) {
+            if (!viewportWantsPage(input)) return FeedPageDemandResult()
+            if (automaticPages >= automaticPageLimit) return FeedPageDemandResult(showContinue = true)
+            automaticPages += 1
+        }
+        requestedGeneration = input.completedGeneration
+        return FeedPageDemandResult(loadNextPage = true)
+    }
+
+    /** The viewport nears the loaded end, or local filters leave too few posts to show. */
+    private fun viewportWantsPage(input: FeedPageDemandInput): Boolean {
         val nearCanonicalEnd = input.lastVisibleCanonicalIndex?.let { index ->
             input.canonicalCount > 0 && index >= ((input.canonicalCount - 1) * PREFETCH_RATIO).toInt()
         } == true
-        val needsVisiblePosts = input.canonicalCount == 0 ||
+        return nearCanonicalEnd || input.canonicalCount == 0 ||
             (input.hasLocalFilters && (input.visibleCount < minimumVisiblePosts || input.atVisibleEnd))
-        val needsRestorationTarget = input.requiredCanonicalIndex?.let { it >= input.canonicalCount } == true
-        if (!nearCanonicalEnd && !needsVisiblePosts && !needsRestorationTarget) return FeedPageDemandResult()
-        if (automaticPages >= automaticPageLimit) return FeedPageDemandResult(showContinue = true)
-
-        automaticPages += 1
-        requestedGeneration = input.completedGeneration
-        return FeedPageDemandResult(loadNextPage = true)
     }
     private fun reconcileContextAndViewport(input: FeedPageDemandInput) {
         if (input.contextKey != contextKey || (input.refreshing && !wasRefreshing)) {
