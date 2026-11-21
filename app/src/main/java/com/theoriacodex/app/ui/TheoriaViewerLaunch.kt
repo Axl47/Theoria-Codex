@@ -112,13 +112,19 @@ internal suspend fun TheoriaShell.openSinglePostViewer(queryHash: String, initia
     openViewerSession(queryHash, listOf(post), initialMediaIndex)
 }
 
-/** Replaces any open Viewer with a fresh session over [posts], which also teach the file mirror index. */
+/**
+ * Replaces any open Viewer, with every level of its trail, with a fresh session over [posts], which also teach the file
+ * mirror index.
+ */
 internal suspend fun TheoriaShell.openViewerSession(queryHash: String, posts: List<Post>, initialMediaIndex: Int = 0) {
     data.fileMirrors.learn(posts)
     if (navigation.currentRoute == AppRoute.Viewer) {
         routes.viewer.current?.clearSession(retainPresentation = true)
         viewerSessions.clear()
-        navController.popBackStack(AppRoute.Viewer, inclusive = true)
+        // A trail stacks Viewer entries; popping to the route alone would leave the levels under the top one.
+        do {
+            val popped = navController.popBackStack()
+        } while (popped && navController.currentDestination?.route == AppRoute.Viewer)
     }
     val session = ViewerSession(
         posts = posts,
