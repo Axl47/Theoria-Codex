@@ -30,4 +30,11 @@ class ForYouBlacklistMatchTest {
         assertTrue(boats.hidesAny(mapOf(SourceKey.GELBOORU to listOf("sea"), SourceKey.PIXIV to listOf("boats", "sea"))))
         assertFalse(boats.hidesAny(mapOf(SourceKey.GELBOORU to listOf("boats"))))
     }
+
+    @Test fun `a pinned shelf is hidden only by an entry naming exactly its tags`() {
+        val seed = mapOf(SourceKey.PIXIV to listOf("boats", "sea"))
+        assertTrue(boats.hidesShelf(seed, pinned = false))
+        assertFalse(boats.hidesShelf(seed, pinned = true))
+        assertTrue(listOf(ForYouBlacklistEntry(SourceKey.PIXIV, listOf("Sea", "boats"))).hidesShelf(seed, pinned = true))
+    }
 }

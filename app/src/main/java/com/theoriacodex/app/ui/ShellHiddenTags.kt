@@ -27,7 +27,7 @@ internal class HiddenTagsRequests : HiddenTagsOpener {
 }
 
 /**
- * The hidden tags sheet, mounted once above the navigation host, for the active profile. Removing an entry
+ * The hidden tags sheet, mounted once above the navigation host, for the active profile. Unhiding an entry
  * applies at once and offers Undo in the sheet, which puts the entry back for the profile it was removed from.
  */
 @Composable
@@ -41,7 +41,7 @@ internal fun ShellHiddenTagsSheet(shell: TheoriaShell) {
     val scope = rememberCoroutineScope()
     HiddenTagsSheet(
         entries = settings?.activeHiddenTags().orEmpty(),
-        onRemove = { entry ->
+        onUnhide = { entry ->
             profileId?.let { profile ->
                 scope.launch {
                     if (!repository.removeForYouBlacklistEntry(profile, entry.source, entry.tags)) return@launch

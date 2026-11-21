@@ -58,7 +58,8 @@ internal class ForYouSectionsLoader(
         blocked: List<com.theoriacodex.data.repository.ForYouBlacklistEntry>): List<SectionSeed> {
         return savedSearches.observeSavedSearches().first().filter { entry ->
             !request.additionalSection && entry.search.kind == RecentSearchKind.FYP && entry.search.sourceTags.isNotEmpty() &&
-                sources.containsAll(entry.search.sourceTags.keys) && allowedSection(entry.search.sourceTags, request, blocked)
+                sources.containsAll(entry.search.sourceTags.keys) &&
+                allowedSection(entry.search.sourceTags, request, blocked, pinned = true)
         }.take(6).map { entry ->
             SectionSeed(entry.search.sourceTags, entry.name, savedSearchId = entry.id)
         }
@@ -112,5 +113,5 @@ private fun sectionSeedId(tags: Map<SourceKey, List<String>>): String =
     buildForYouSeedId(tags.mapValues { (_, values) -> values.sorted() })
 
 private fun allowedSection(tags: Map<SourceKey, List<String>>, request: ForYouFeedRequest,
-    blocked: List<com.theoriacodex.data.repository.ForYouBlacklistEntry>): Boolean =
-    sectionSeedId(tags) !in request.excludedSectionIds && !blocked.hidesAny(tags)
+    blocked: List<com.theoriacodex.data.repository.ForYouBlacklistEntry>, pinned: Boolean = false): Boolean =
+    sectionSeedId(tags) !in request.excludedSectionIds && !blocked.hidesShelf(tags, pinned)

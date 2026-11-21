@@ -13,6 +13,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.currentCoroutineContext
 
@@ -38,6 +41,7 @@ internal class ForYouHomeController(
     private val admit: (ForYouFeedResult) -> Unit,
     private val emit: (ForYouEffect) -> Unit,
     private val settingsChanged: (AppSettings) -> Unit,
+    private val dispatch: (ForYouAction) -> Unit,
 ) {
     private var context: ForYouHomeContext? = null
     private var generation = 0L
@@ -45,7 +49,10 @@ internal class ForYouHomeController(
     private var appendJob: Job? = null
     private var blacklistUpdates = 0
     val isUpdatingBlacklist: Boolean get() = blacklistUpdates > 0
+    /** Recent hides, newest last, kept across reloads and profiles so a late Undo still finds its own. */
     private val hidden = mutableListOf<HiddenShelves>()
+    /** Tag hides and unhides (Undo included) still being written; closing a why panel waits for them. */
+    private val tagWrites = MutableStateFlow(0)
 
     fun synchronize() {
         if (!state().home.visible) return
@@ -55,7 +62,6 @@ internal class ForYouHomeController(
         context = next
         if (previous != null && isUpdatingBlacklist && previous.copy(blacklist = next.blacklist) == next) return
         appendJob?.cancel()
-        hidden.clear()
         val scopeChanged = previous?.profileId != next.profileId || previous.source != next.source ||
             previous.sources != next.sources || previous.runtime != next.runtime || previous.blacklist != next.blacklist
         val home = state().home
@@ -89,6 +95,8 @@ internal class ForYouHomeController(
             ForYouAction.NewSection -> appendSearch()
             is ForYouAction.ReorderSections -> reorder(action.ids)
             is ForYouAction.HideTag -> hideTag(ForYouBlacklistEntry(action.source, listOf(action.tag)))
+            is ForYouAction.UnhideTag -> unhideTag(action.source, action.tag)
+            is ForYouAction.CloseWhy -> closeWhy(action.target)
             is ForYouAction.UndoSeedBlacklist -> return restore(action)
             else -> return false
         }
@@ -114,16 +122,63 @@ internal class ForYouHomeController(
         hide(state().activeProfileId, entries, isCurrent, label, ForYouUndoAnchor, savedId?.let { section.copy(savedSearchId = it) })
     }
 
+    /** Strikes a tag from a why panel, then refills the slots of the shelves it took. */
     private fun hideTag(entry: ForYouBlacklistEntry) {
         val expected = generation
+        val isCurrent = { expected == generation }
+        tagWrites.update { it + 1 }
         launchGuarded(expected) {
-            hide(state().activeProfileId, listOf(entry), { expected == generation }, hiddenLabel(listOf(entry)), ForYouWhyUndoAnchor)
+            val record = try {
+                hide(state().activeProfileId, listOf(entry), isCurrent, hiddenLabel(listOf(entry)), ForYouWhyUndoAnchor)
+            } finally {
+                tagWrites.update { it - 1 }
+            }
+            record?.let { refill(it, isCurrent) }
+        }
+    }
+
+    /** Unstrikes a tag in a why panel: a recent strike of it is undone in place, an older one is simply removed. */
+    private fun unhideTag(source: SourceKey, tag: String) {
+        val profile = state().activeProfileId
+        val entries = state().blacklistEntries.filter { listOf(it).hidesSeed(source, listOf(tag)) }
+        if (entries.isEmpty()) return
+        hidden.lastOrNull { it.profile == profile && it.entries == entries && it.saved == null }?.let { return restore(it) }
+        tagWrites.update { it + 1 }
+        launchGuarded(generation, onDone = { tagWrites.update { it - 1 } }) {
+            settingsChanged(engine.updateBlacklist(profile, entries, false).settings)
+        }
+    }
+
+    /** Once the tags struck in a closed why panel are written, lets the drilled-in feed it explained catch up. */
+    private fun closeWhy(target: ForYouWhyTarget) {
+        scope.launch {
+            tagWrites.first { it == 0 }
+            val home = state().home
+            if (home.activeSection?.id != target.sectionId) return@launch
+            target.afterClose(home.visible, state().blacklistEntries)?.let(dispatch)
+        }
+    }
+
+    /**
+     * Fills up to [MAX_REFILLS] of the slots [record] freed with new shelves from the planner, each where a hidden
+     * shelf stood. An Undo before a refill lands keeps it out.
+     */
+    private suspend fun refill(record: HiddenShelves, isCurrent: () -> Boolean) {
+        for ((index, _) in record.removed.take(MAX_REFILLS)) {
+            val input = additionalRequest() ?: return
+            val section = engine.loadSections(input).firstOrNull() ?: return
+            if (!isCurrent() || hidden.none { it === record }) return
+            val rows = state().home.sections
+            if (rows.any { it.id == section.id }) continue
+            update(state().home.copy(sections = rows.toMutableList().apply { add(index.coerceAtMost(size), section) }))
+            record.refills += section.id
         }
     }
 
     /**
      * Hides [entries] for [profile], drops every shelf the profile's new hidden list hides (the subset rule can
-     * take several), and offers Undo at [anchor]. [saved] is a search saved on the way, which Undo removes.
+     * take several; see [hidesShelf] for pinned ones), and offers Undo at [anchor]. [saved] is a search saved on
+     * the way, which Undo removes. Returns what Undo restores, or null when nothing changed.
      */
     private suspend fun hide(
         profile: String,
@@ -132,48 +187,75 @@ internal class ForYouHomeController(
         label: String,
         anchor: UndoAnchor,
         saved: ForYouSection? = null,
-    ) = writingBlacklist {
+    ): HiddenShelves? = writingBlacklist {
         val changed = engine.updateBlacklist(profile, entries, true)
-        if (!isCurrent()) return@writingBlacklist
+        if (!isCurrent()) return@writingBlacklist null
         val blocked = changed.settings.forYouBlacklistByProfile[profile].orEmpty()
         val home = state().home
-        val removed = home.sections.withIndex().filter { (_, section) -> blocked.hidesAny(section.feed.seed) }
+        val removed = home.sections.withIndex().filter { (_, section) -> blocked.hidesShelf(section.feed.seed, section.pinned) }
         val removedIds = removed.mapTo(mutableSetOf()) { it.value.id }
         // The drilled-in feed keeps its interest until its why panel closes; see ForYouWhyTarget.afterClose.
         update(home.copy(sections = home.sections.filterNot { it.id in removedIds },
             activeSection = home.activeSection?.takeUnless { home.visible && it.id in removedIds }))
-        if (changed.entries.isNotEmpty() || saved != null) {
-            hidden += HiddenShelves(profile, changed.entries, removed, saved)
-            emit(ForYouEffect.SeedHidden(profile, changed.entries, label, anchor))
-        }
+        val record = if (changed.entries.isNotEmpty() || saved != null) {
+            HiddenShelves(profile, changed.entries, removed, saved, generation).also(::keep)
+        } else null
+        record?.let { emit(ForYouEffect.SeedHidden(profile, changed.entries, label, anchor)) }
         settingsChanged(changed.settings)
+        record
+    }
+
+    /** Keeps [record] for its Undo; only the newest few can still be offered, since one offer shows at a time. */
+    private fun keep(record: HiddenShelves) {
+        hidden += record
+        if (hidden.size > MAX_HIDE_RECORDS) hidden.removeAt(0)
     }
 
     private fun restore(action: ForYouAction.UndoSeedBlacklist): Boolean {
         val record = hidden.lastOrNull { it.profile == action.profileId && it.entries == action.entries } ?: return false
-        hidden.remove(record)
-        if (record.profile != state().activeProfileId) return true
-        val expected = generation
-        launchGuarded(expected) {
-            writingBlacklist {
-                val changed = engine.updateBlacklist(record.profile, record.entries, false)
-                record.saved?.let { engine.pinSection(it, false) }
-                if (expected != generation) return@writingBlacklist
-                val blocked = changed.settings.forYouBlacklistByProfile[record.profile].orEmpty()
-                val rows = state().home.sections.toMutableList()
-                record.removed.filterNot { (_, section) -> blocked.hidesAny(section.feed.seed) || rows.any { it.id == section.id } }
-                    .forEach { (index, section) -> rows.add(index.coerceAtMost(rows.size), section) }
-                update(state().home.copy(sections = rows))
-                settingsChanged(changed.settings)
-            }
-        }
+        restore(record)
         return true
     }
 
+    /**
+     * Unhides [record]'s entries for the profile they were hidden for. In the same view its shelves return to their
+     * places and its refills leave; after a reload (profile, source or reshuffle) the old places mean nothing, so
+     * the settings change reloads the shelves instead.
+     */
+    private fun restore(record: HiddenShelves) {
+        hidden.remove(record)
+        val expected = generation
+        tagWrites.update { it + 1 }
+        val done = { tagWrites.update { it - 1 } }
+        if (record.generation != expected || record.profile != state().activeProfileId) {
+            launchGuarded(expected, done) { settingsChanged(unhide(record)) }
+            return
+        }
+        launchGuarded(expected, done) {
+            writingBlacklist {
+                val settings = unhide(record)
+                if (expected != generation) return@writingBlacklist
+                val blocked = settings.forYouBlacklistByProfile[record.profile].orEmpty()
+                val rows = state().home.sections.filterNot { it.id in record.refills }.toMutableList()
+                record.removed.filterNot { (_, section) ->
+                    blocked.hidesShelf(section.feed.seed, section.pinned) || rows.any { it.id == section.id }
+                }.forEach { (index, section) -> rows.add(index.coerceAtMost(rows.size), section) }
+                update(state().home.copy(sections = rows))
+                settingsChanged(settings)
+            }
+        }
+    }
+
+    private suspend fun unhide(record: HiddenShelves): AppSettings {
+        val changed = engine.updateBlacklist(record.profile, record.entries, false)
+        record.saved?.let { engine.pinSection(it, false) }
+        return changed.settings
+    }
+
     /** Marks a blacklist write in flight, so the settings it produces do not reload the shelves it already updated. */
-    private suspend fun writingBlacklist(operation: suspend () -> Unit) {
+    private suspend fun <T> writingBlacklist(operation: suspend () -> T): T {
         blacklistUpdates++
-        try {
+        return try {
             operation()
         } finally {
             blacklistUpdates--
@@ -205,8 +287,7 @@ internal class ForYouHomeController(
     private fun appendSearch() {
         val home = state().home
         if (home.loading || home.addingSearch || home.pendingSectionIds.isNotEmpty()) return
-        val input = request()?.copy(shuffle = true, additionalSection = true,
-            excludedSectionIds = home.sections.mapTo(mutableSetOf()) { it.id }) ?: return
+        val input = additionalRequest() ?: return
         val expected = generation
         update(home.copy(addingSearch = true, error = null))
         appendJob = scope.launch {
@@ -223,6 +304,10 @@ internal class ForYouHomeController(
             }
         }
     }
+
+    /** The planner's request for one more shelf than those on screen; New search and refills both use it. */
+    private fun additionalRequest(): ForYouFeedRequest? = request()?.copy(shuffle = true, additionalSection = true,
+        excludedSectionIds = state().home.sections.mapTo(mutableSetOf()) { it.id })
 
     private fun retainCurrentFeed() {
         val current = state()
@@ -275,7 +360,7 @@ internal class ForYouHomeController(
         val order = home.sections.map { it.id }
         // A tag struck while these loaded must not bring back the shelves it hides.
         val blocked = state().blacklistEntries
-        val ordered = sections.filterNot { blocked.hidesAny(it.feed.seed) }.sortedBy { order.indexOf(it.id).takeIf { index -> index >= 0 } ?: Int.MAX_VALUE }
+        val ordered = sections.filterNot { blocked.hidesShelf(it.feed.seed, it.pinned) }.sortedBy { order.indexOf(it.id).takeIf { index -> index >= 0 } ?: Int.MAX_VALUE }
         update(home.copy(sections = ordered, loading = false, mixedLoading = false,
             mixedFeed = mixed ?: home.mixedFeed))
         if (mixed != null && home.activeSection == null) admit(mixed)
@@ -307,10 +392,21 @@ private data class ForYouHomeContext(
     )
 }
 
-/** What one hide removed, so its Undo can put it back: the shelves at their old positions, and a search saved on the way. */
-private data class HiddenShelves(
+/**
+ * What one hide removed, so its Undo can put it back: the shelves at their old positions, a search saved on the
+ * way, and the [refills] that took their slots. [generation] is the load it happened in.
+ */
+private class HiddenShelves(
     val profile: String,
     val entries: List<ForYouBlacklistEntry>,
     val removed: List<IndexedValue<ForYouSection>>,
     val saved: ForYouSection?,
-)
+    val generation: Long,
+) {
+    val refills = mutableSetOf<String>()
+}
+
+/** Shelves refilled per hidden tag, so one strike cannot reshape the whole page. */
+private const val MAX_REFILLS = 2
+
+private const val MAX_HIDE_RECORDS = 4

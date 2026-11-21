@@ -5,6 +5,7 @@ import com.theoriacodex.app.recommend.ForYouFeedResult
 import com.theoriacodex.app.feed.mergeFeedPosts
 import com.theoriacodex.app.feed.mergeFeedStatuses
 import com.theoriacodex.app.recommend.ForYouUndoAnchor
+import com.theoriacodex.app.recommend.ForYouWhyTarget
 import com.theoriacodex.app.recommend.buildForYouSeedId
 import com.theoriacodex.app.recommend.hiddenLabel
 import com.theoriacodex.app.related.RelatedPostsUiState
@@ -124,6 +125,10 @@ sealed interface ForYouAction {
     data object BlacklistCurrentSeed : ForYouAction
     /** Hides one [tag] of a shelf on [source] for the active profile, from the shelf's why panel. */
     data class HideTag(val source: SourceKey, val tag: String) : ForYouAction
+    /** Unhides a struck [tag] on [source] for the active profile, from the why panel. */
+    data class UnhideTag(val source: SourceKey, val tag: String) : ForYouAction
+    /** The why panel over [target] closed; once its tag writes land, the feed it explained catches up. */
+    data class CloseWhy(val target: ForYouWhyTarget) : ForYouAction
     data class UndoSeedBlacklist(
         val profileId: String,
         val entries: List<ForYouBlacklistEntry>,
@@ -281,6 +286,8 @@ fun ForYouUiState.reduce(action: ForYouAction): ForYouTransition {
         is ForYouAction.PinSection,
         is ForYouAction.DismissSection,
         is ForYouAction.HideTag,
+        is ForYouAction.UnhideTag,
+        is ForYouAction.CloseWhy,
         -> unchanged()
         is ForYouAction.RefreshCompleted -> refreshCompleted(action)
 

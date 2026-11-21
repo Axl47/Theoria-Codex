@@ -4,6 +4,13 @@ import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
 import com.theoriacodex.app.ui.components.FeedDurations
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.hasStateDescription
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -12,8 +19,10 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recommend.state.ForYouUiState
+import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchResult
@@ -34,11 +43,10 @@ class ForYouHomeScreenTest {
         val why = mutableListOf<ForYouWhyTarget>()
         val section = emptySection()
         render(ForYouHomeState(visible = true, sections = listOf(section)), actions, onOpenWhy = { why += it })
-        // The first "forest" is the jump chip; the second is the shelf title, which opens why.
+        // The first "forest" is the jump chip; the second is the shelf heading, which opens the shelf.
         compose.onAllNodesWithText("forest")[1].performClick()
+        compose.onNodeWithContentDescription("Why this shelf").assertHeightIsAtLeast(48.dp).performClick()
         compose.runOnIdle { assertEquals(listOf(section.whyTarget()), why) }
-        // The first "See all" belongs to Your mix.
-        compose.onAllNodesWithText("See all")[1].performClick()
         compose.onNodeWithText("Save search").assertDoesNotExist()
         fun inMenu(label: String) {
             compose.onNodeWithContentDescription("Actions for forest").performClick()
@@ -102,7 +110,9 @@ class ForYouHomeScreenTest {
         val profiles = listOf(RecommendationProfile("main", "Main"), RecommendationProfile("alt", "Night"))
         render(ForYouHomeState(visible = true), mutableListOf(), ForYouUiState(profiles = profiles, activeProfileId = "main"),
             onSelectProfile = { selected += it })
-        compose.onNodeWithText("Main").performClick()
+        compose.onNodeWithText("Main").assert(SemanticsMatcher("clicks to switch profile") {
+            it.config.getOrNull(SemanticsActions.OnClick)?.label == "Switch profile"
+        }).performClick()
         compose.onNodeWithText("Night").performClick()
         compose.runOnIdle { assertEquals(listOf("alt"), selected) }
     }
@@ -111,6 +121,25 @@ class ForYouHomeScreenTest {
         render(ForYouHomeState(visible = true), mutableListOf(),
             ForYouUiState(profiles = listOf(RecommendationProfile("main", "Main")), activeProfileId = "main"))
         compose.onNodeWithText("Main").assertDoesNotExist()
+    }
+
+    @Test fun `a struck tag in why reads as hidden and its button unhides it`() {
+        val actions = mutableListOf<ForYouAction>()
+        val seed = mapOf(SourceKey.PIXIV to listOf("boats", "sea"))
+        val hidden = listOf(ForYouBlacklistEntry(SourceKey.PIXIV, listOf("boats")))
+        compose.setContent {
+            MaterialTheme {
+                ForYouWhyHost(ForYouWhyTarget("boats + sea", seed, "PIXIV:boats+sea"), ForYouUiState(blacklistEntries = hidden),
+                    onAction = { actions += it }, onClose = {}) {}
+            }
+        }
+        compose.onNodeWithText("boats").assert(hasStateDescription("Hidden"))
+        compose.onNodeWithText("sea").assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
+        compose.onNodeWithContentDescription("Unhide boats").performClick()
+        compose.onNodeWithContentDescription("Hide sea").performClick()
+        compose.runOnIdle {
+            assertEquals(listOf(ForYouAction.UnhideTag(SourceKey.PIXIV, "boats"), ForYouAction.HideTag(SourceKey.PIXIV, "sea")), actions)
+        }
     }
 
     private fun render(

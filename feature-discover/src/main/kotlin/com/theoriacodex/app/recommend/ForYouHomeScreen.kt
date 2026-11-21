@@ -80,7 +80,7 @@ import com.theoriacodex.app.ui.components.POST_SHELF_CARD_WIDTH
 import com.theoriacodex.app.ui.components.POST_SHELF_MEDIA_ASPECT_RATIO
 import com.theoriacodex.app.ui.components.PostShelfSection
 import com.theoriacodex.app.ui.components.EmptyState
-import com.theoriacodex.app.ui.components.ShelfTitleAction
+import com.theoriacodex.app.ui.components.ShelfHeaderAction
 import com.theoriacodex.app.viewer.ViewerReturnColumn
 import com.theoriacodex.app.viewer.ViewerReturnShelf
 import com.theoriacodex.app.viewer.ViewerReturnShelfId
@@ -205,7 +205,7 @@ private fun ForYouOverview(
                         icon = section.kindIcon(),
                         countSuffix = section.kindLabel(),
                         onMore = { onSectionMenu(section.id) },
-                        titleAction = ShelfTitleAction("Show tags", section.named) { onOpenWhy(section.whyTarget()) }) {
+                        headerAction = ShelfHeaderAction("Why", "Why this shelf") { onOpenWhy(section.whyTarget()) }) {
                         preview(section.id, posts)
                     }
                 }
