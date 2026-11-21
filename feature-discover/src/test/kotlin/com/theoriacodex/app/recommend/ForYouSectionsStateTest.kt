@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recommend
 
+import com.theoriacodex.app.feed.FeedCursor
 import androidx.lifecycle.SavedStateHandle
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.testing.testPost
@@ -225,7 +226,7 @@ class ForYouSectionsStateTest {
 
 private class SectionsEngine : ForYouRouteEngine {
     val requests = mutableListOf<ForYouFeedRequest>()
-    val pages = mutableListOf<ForYouContinuation>()
+    val pages = mutableListOf<FeedCursor>()
     var sectionLoads = 0
     val sectionRequests = mutableListOf<ForYouFeedRequest>()
     var savedSection: ForYouSection? = null
@@ -252,7 +253,7 @@ private class SectionsEngine : ForYouRouteEngine {
         val seed = request.historicalSeed ?: mapOf((request.selectedSource ?: SourceKey.PIXIV) to listOf("mixed"))
         return feed(seed.values.flatten().single(), seed.keys.single(), request.sortMode)
     }
-    override suspend fun loadPage(continuation: ForYouContinuation, sources: Set<SourceKey>): UnifiedSearchResult {
+    override suspend fun loadPage(continuation: FeedCursor, sources: Set<SourceKey>): UnifiedSearchResult {
         pages += continuation
         return UnifiedSearchResult(listOf(testPost(sourcePostId = "page")), sources.associateWith { null },
             sources.map { SourceRunStatus(it, SourceRunState.SUCCESS) })
@@ -273,7 +274,7 @@ private fun feed(tag: String, source: SourceKey = SourceKey.PIXIV, sort: SortMod
     val seed = mapOf(source to listOf(tag))
     val page = UnifiedSearchResult(listOf(testPost(source = source, sourcePostId = tag)), mapOf(source to "next"),
         listOf(SourceRunStatus(source, SourceRunState.SUCCESS)))
-    val continuation = ForYouContinuation(forYouBaseQuery(sort), mapOf(source to forYouSourceQuery(source, listOf(tag), sort)),
+    val continuation = FeedCursor(forYouBaseQuery(sort), mapOf(source to forYouSourceQuery(source, listOf(tag), sort)),
         mapOf(source to 1.0), page.nextPageTokens)
     return ForYouFeedResult(seed, buildForYouSeedId(seed), 3, page, continuation)
 }

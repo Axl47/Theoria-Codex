@@ -80,6 +80,9 @@ internal const val SEARCHED_TAG_SUGGESTION_LIMIT = 3
 const val AUTOCOMPLETE_REQUEST_TIMEOUT_MS = 4_000L
 internal const val AUTOCOMPLETE_REFRESH_INTERVAL_MS = 15L * 60L * 1000L
 internal const val MAX_AUTOCOMPLETE_REFRESH_KEYS = 256
+
+/** A single-source retry gives up after this long; its first and next pages wait on the provider. */
+internal const val SINGLE_SOURCE_RETRY_TIMEOUT_MS = 15_000L
 internal const val TRENDING_REFRESH_INTERVAL_MS = 12L * 60L * 60L * 1000L
 internal const val TRENDING_FETCH_PER_SOURCE_LIMIT = 10
 internal const val TRENDING_PER_SOURCE_CACHE_LIMIT = 40

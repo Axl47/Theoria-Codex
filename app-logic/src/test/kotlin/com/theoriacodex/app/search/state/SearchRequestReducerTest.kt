@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search.state
 
+import com.theoriacodex.app.feed.FeedCursor
 import com.theoriacodex.app.search.SearchContinuation
 import com.theoriacodex.app.search.SearchExecutionResult
 import com.theoriacodex.app.search.SearchPageResult
@@ -419,12 +420,10 @@ class SearchRequestReducerTest {
 
     private fun continuation(request: SearchRequest, more: Boolean) = SearchContinuation(
         executionKey = request.executionKey,
-        query = request.query,
         sourceScope = request.sourceScope,
         enabledSources = emptySet(),
         availableSources = emptyList(),
-        weights = emptyMap(),
-        sourcePageToken = "next".takeIf { more },
+        cursor = FeedCursor(request.query, pageTokens = mapOf(SourceKey.PIXIV to "next".takeIf { more })),
     )
 
     private fun success(

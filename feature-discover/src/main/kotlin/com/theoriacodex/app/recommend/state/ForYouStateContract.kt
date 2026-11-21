@@ -1,6 +1,6 @@
 package com.theoriacodex.app.recommend.state
 
-import com.theoriacodex.app.recommend.ForYouContinuation
+import com.theoriacodex.app.feed.FeedCursor
 import com.theoriacodex.app.recommend.ForYouFeedResult
 import com.theoriacodex.app.feed.mergeFeedPosts
 import com.theoriacodex.app.feed.mergeFeedStatuses
@@ -61,7 +61,7 @@ data class ForYouUiState(
     val statuses: List<SourceRunStatus> = emptyList(),
     val isRefreshing: Boolean = false,
     val isPaging: Boolean = false,
-    val continuation: ForYouContinuation? = null,
+    val continuation: FeedCursor? = null,
     val errorMessage: String? = null,
     val emptyReason: ForYouEmptyReason? = null,
     val nextRequestGeneration: Long = 1L,
@@ -206,7 +206,7 @@ sealed interface ForYouEffect {
 
     data class LoadNextPage(
         override val request: ForYouRequestIdentity,
-        val continuation: ForYouContinuation,
+        val continuation: FeedCursor,
         val sources: Set<SourceKey>,
     ) : ForYouEffect
 

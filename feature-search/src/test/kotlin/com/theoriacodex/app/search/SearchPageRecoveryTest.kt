@@ -32,7 +32,7 @@ internal class SearchPageRecoveryTest : SearchViewModelTestFixture() {
                         return delegate.executeInitial(query, sourceScope, sources)
                     }
                     override suspend fun executePage(continuation: SearchContinuation): SearchPageResult {
-                        tokens += continuation.sourcePageToken
+                        tokens += continuation.cursor.pageTokens[SourceKey.PIXIV]
                         return if (tokens.size == 1) SearchPageResult.Failure(continuation.executionKey, emptyList(), "offline")
                         else delegate.executePage(continuation)
                     }

@@ -134,11 +134,13 @@ class SavedSearchFeedLoader(
             is SearchPageResult.Success -> {
                 val next = if (retriedSource == null || scope is SearchSourceScope.Single) result.continuation else {
                     val before = checkNotNull(continuation)
+                    val retried = result.continuation.cursor
                     before.copy(
-                        unifiedPageTokens = before.unifiedPageTokens +
-                            (retriedSource to result.continuation.unifiedPageTokens[retriedSource]),
-                        unifiedQueryOverrides = before.unifiedQueryOverrides +
-                            result.continuation.unifiedQueryOverrides.filterKeys { it == retriedSource },
+                        cursor = before.cursor.copy(
+                            pageTokens = before.cursor.pageTokens + (retriedSource to retried.pageTokens[retriedSource]),
+                            queriesBySource = before.cursor.queriesBySource +
+                                retried.queriesBySource.filterKeys { it == retriedSource },
+                        ),
                         failedSources = before.failedSources - retriedSource,
                     )
                 }

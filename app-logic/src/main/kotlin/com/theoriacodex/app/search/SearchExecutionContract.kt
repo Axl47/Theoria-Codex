@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.feed.FeedCursor
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.sources
 import com.theoriacodex.data.repository.SourceRuntimeSettings
@@ -10,6 +11,7 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.domain.orchestration.SourceRunState
+import com.theoriacodex.domain.orchestration.UnifiedSearchResult
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -91,22 +93,27 @@ data class SearchAutocompleteResult(
     val searchedTags: List<SearchTerm> = emptyList(),
 )
 
-/** Immutable provider continuation owned by the Search route owner. */
+/** Immutable provider continuation owned by the Search route owner. A single-source search keeps its token in [cursor] too. */
 data class SearchContinuation(
     val executionKey: String,
-    val query: Query,
     val sourceScope: SearchSourceScope,
     val enabledSources: Set<SourceKey>,
     val availableSources: List<SourceKey>,
-    val weights: Map<SourceKey, Double>,
-    val unifiedPageTokens: Map<SourceKey, String?> = emptyMap(),
-    val unifiedQueryOverrides: Map<SourceKey, Query> = emptyMap(),
-    val sourcePageToken: String? = null,
+    val cursor: FeedCursor,
     val failedSources: Set<SourceKey> = emptySet(),
 ) {
+    val query: Query
+        get() = cursor.query
+
     val canLoadMore: Boolean
-        get() = sourcePageToken?.isNotBlank() == true ||
-            unifiedPageTokens.any { (source, token) -> source !in failedSources && !token.isNullOrBlank() }
+        get() = cursor.pageTokens.any { (source, token) -> source !in failedSources && !token.isNullOrBlank() }
+
+    /** Folds in a page fetched from [attempted]; sources that failed join [failedSources] and the rest leave it. */
+    fun accept(page: UnifiedSearchResult, attempted: Set<SourceKey>): SearchContinuation = copy(
+        cursor = cursor.accept(page, attempted),
+        failedSources = failedSources - attempted +
+            page.statuses.filter { it.state == SourceRunState.FAILED }.map { it.source },
+    )
 }
 
 sealed interface SearchExecutionResult {

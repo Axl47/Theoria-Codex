@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.feed.FeedCursor
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
@@ -203,7 +204,7 @@ class SearchApplyScrollTest {
 
     /** A continuation with nothing after it, for the search this state shows. */
     private fun SearchUiState.lastPage() = SearchContinuation(
-        query.appliedQueryHash, query.applied, query.appliedSourceScope, emptySet(), emptyList(), emptyMap(),
+        query.appliedQueryHash, query.appliedSourceScope, emptySet(), emptyList(), FeedCursor(query.applied),
     )
 
     private fun resetPosts(animatedOnly: Boolean): List<com.theoriacodex.domain.model.Post> {

@@ -86,8 +86,8 @@ class SourceRetryTest {
         val initial = owner.executeInitial(query, SearchSourceScope.GlobalUnified) as SearchExecutionResult.Success
         gelbooru.failure = SourceAdapterException(SourceFailureReason.NETWORK, "offline")
         val page = owner.executePage(initial.continuation) as SearchPageResult.Success
-        assertEquals("next", page.continuation.unifiedPageTokens[SourceKey.GELBOORU])
-        assertEquals(null, page.continuation.unifiedPageTokens[SourceKey.PIXIV])
+        assertEquals("next", page.continuation.cursor.pageTokens[SourceKey.GELBOORU])
+        assertEquals(null, page.continuation.cursor.pageTokens[SourceKey.PIXIV])
         val successfulCalls = pixiv.searchedTags.size
         gelbooru.failure = null
         val retry = owner.retrySource(query, SearchSourceScope.GlobalUnified, page.continuation,
@@ -111,8 +111,8 @@ class SourceRetryTest {
         gelbooru.failure = null
         val result = owner.retrySource(query, SearchSourceScope.GlobalUnified, initial.continuation,
             SourceKey.GELBOORU) as SearchPageResult.Success
-        assertEquals("next", result.continuation.unifiedPageTokens[SourceKey.PIXIV])
-        assertEquals("next", result.continuation.unifiedPageTokens[SourceKey.GELBOORU])
+        assertEquals("next", result.continuation.cursor.pageTokens[SourceKey.PIXIV])
+        assertEquals("next", result.continuation.cursor.pageTokens[SourceKey.GELBOORU])
         assertEquals(1, pixiv.searchedTags.size)
         assertEquals(listOf("retry-0"), result.posts.map { it.id.sourcePostId })
     }
@@ -126,6 +126,6 @@ class SourceRetryTest {
         val result = owner.retrySource(query, SearchSourceScope.Single(SourceKey.NHENTAI), null,
             SourceKey.NHENTAI) as SearchPageResult.Success
         assertEquals(query, adapter.searchedQueries.single())
-        assertEquals("next", result.continuation.sourcePageToken)
+        assertEquals("next", result.continuation.cursor.pageTokens[SourceKey.NHENTAI])
     }
 }

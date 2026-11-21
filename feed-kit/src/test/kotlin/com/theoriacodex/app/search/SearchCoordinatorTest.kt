@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.feed.FeedCursor
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.data.repository.InMemoryQueryRepository
 import com.theoriacodex.data.repository.InMemoryRecentsRepository
@@ -127,19 +128,21 @@ class SearchCoordinatorTest {
         val key = QueryHash.from(query)
         val continuation = SearchContinuation(
             executionKey = key,
-            query = query,
             sourceScope = SearchSourceScope.GlobalUnified,
             enabledSources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU),
             availableSources = listOf(SourceKey.PIXIV, SourceKey.GELBOORU),
-            weights = mapOf(SourceKey.PIXIV to 0.5, SourceKey.GELBOORU to 0.5),
-            unifiedPageTokens = mapOf(SourceKey.PIXIV to "next", SourceKey.GELBOORU to "next"),
+            cursor = FeedCursor(
+                query,
+                weights = mapOf(SourceKey.PIXIV to 0.5, SourceKey.GELBOORU to 0.5),
+                pageTokens = mapOf(SourceKey.PIXIV to "next", SourceKey.GELBOORU to "next"),
+            ),
         )
 
         val result = coordinator.executePage(continuation) as SearchPageResult.Success
 
         assertEquals(listOf("page-1"), result.posts.map { it.id.sourcePostId })
-        assertEquals(null, result.continuation.unifiedPageTokens[SourceKey.PIXIV])
-        assertEquals(null, result.continuation.unifiedPageTokens[SourceKey.GELBOORU])
+        assertEquals(null, result.continuation.cursor.pageTokens[SourceKey.PIXIV])
+        assertEquals(null, result.continuation.cursor.pageTokens[SourceKey.GELBOORU])
         assertFalse(result.continuation.canLoadMore)
     }
 
