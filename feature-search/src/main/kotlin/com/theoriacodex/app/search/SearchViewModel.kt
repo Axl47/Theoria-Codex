@@ -208,7 +208,8 @@ class SearchViewModel(
                 requestRouteEntryScrollRestoration()
                 if (draftStaged) {
                     draftStaged = false
-                    scheduleLiveSearch()
+                    // Staged before Search first opened, the edit runs on the restored draft, not the blank one.
+                    runAfterRestoration(::scheduleLiveSearch)
                 }
                 resumeSearchIfNeeded()
             }
