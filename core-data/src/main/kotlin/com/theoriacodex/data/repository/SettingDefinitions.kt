@@ -60,7 +60,7 @@ object SettingToggles {
         write = { settings, on -> settings.copy(viewer = settings.viewer.copy(invertMultiImageScrollDirection = on)) },
     )
     val AutoRotateVideos = SettingToggle(
-        "auto-rotate", "Auto-Rotate Videos", listOf("rotate", "orientation"), "Rotate to fit the video you open.",
+        "auto-rotate", "Auto-Rotate Videos", listOf("rotate", "orientation"),
         read = { it.viewer.autoRotateVideos }, write = { settings, on -> settings.copy(viewer = settings.viewer.copy(autoRotateVideos = on)) },
     )
     val DownloadsOverMetered = SettingToggle(

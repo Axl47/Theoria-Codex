@@ -84,7 +84,7 @@ fun SettingsHeader(
  * [initiallyExpanded] when that changes, so saving keys folds their section away.
  */
 @Composable
-internal fun ExpandableSection(label: String, initiallyExpanded: Boolean, content: @Composable () -> Unit) {
+fun ExpandableSection(label: String, initiallyExpanded: Boolean, content: @Composable () -> Unit) {
     var expanded by rememberSaveable(initiallyExpanded) { mutableStateOf(initiallyExpanded) }
     TextButton(
         onClick = { expanded = !expanded },

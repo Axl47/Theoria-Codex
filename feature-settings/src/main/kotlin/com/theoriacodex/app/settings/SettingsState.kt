@@ -81,7 +81,6 @@ data class SettingsUiState(
     val page: SettingsPage = SettingsPage.HOME,
     val accounts: SettingsAccountUiState = SettingsAccountUiState(),
     val profileDeleteTargetId: String? = null,
-    val showClearCacheOptions: Boolean = false,
     val changelogLoading: Boolean = false,
     val recoveredStores: List<CorruptionRecovery> = emptyList(),
     /** Someone else's stats file while it is being compared; deliberately never written to storage. */
@@ -110,7 +109,6 @@ sealed interface SettingsAction {
     data class SetCommentOrder(val order: com.theoriacodex.domain.model.CommentOrder) : SettingsAction
     data class SetViewerPlaybackMode(val mode: com.theoriacodex.domain.model.ViewerPlaybackMode) : SettingsAction
     data class SetScenarioPreset(val preset: ScenarioPreset) : SettingsAction
-    data object ToggleClearCacheOptions : SettingsAction
     data object ClearThumbnailCache : SettingsAction
     data object ClearFullImageCache : SettingsAction
     data object OpenChangelog : SettingsAction

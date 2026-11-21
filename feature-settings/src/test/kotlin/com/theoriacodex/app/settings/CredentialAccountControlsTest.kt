@@ -38,20 +38,20 @@ class CredentialAccountControlsTest {
             }
         }
         compose.onNodeWithText("User ID").assertDoesNotExist()
-        compose.onNodeWithText("Replacement API Key").assertDoesNotExist()
+        compose.onNodeWithText("API key").assertDoesNotExist()
         compose.onNodeWithText("Save", substring = false).assertDoesNotExist()
         compose.onNodeWithText("Disconnect").performClick()
         compose.onNodeWithText("User ID").assertExists()
-        compose.onNodeWithText("Replacement API Key").assertExists()
+        compose.onNodeWithText("API key").assertExists()
         compose.onNodeWithText("Save", substring = false).performClick()
         assertTrue(saveRequested)
         compose.onNodeWithText("Missing user ID or API key").assertExists()
         compose.onNodeWithText("User ID").assertExists()
-        compose.onNodeWithText("Replacement API Key").assertExists()
+        compose.onNodeWithText("API key").assertExists()
         configured.value = true
         status.value = "Configured"
         compose.onNodeWithText("User ID").assertDoesNotExist()
-        compose.onNodeWithText("Replacement API Key").assertDoesNotExist()
+        compose.onNodeWithText("API key").assertDoesNotExist()
         compose.onNodeWithText("Disconnect").assertExists()
     }
 }

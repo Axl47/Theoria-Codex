@@ -29,7 +29,6 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -155,7 +154,7 @@ private fun SettingsHome(
                 open(SettingsPage.STATS)
             })
             SettingsRowDivider()
-            SettingsRow(SettingDestinations.ShareStats.title, "Choose what to include and send it as a file", Icons.Default.Share, onClick = {
+            SettingsRow(SettingDestinations.ShareStats.title, icon = Icons.Default.Share, onClick = {
                 open(SettingsPage.STATS_SHARE)
             })
             SettingsRowDivider()
@@ -247,19 +246,14 @@ private fun SettingsHomeGroups(
         SettingsRowDivider()
         SettingsRow(
             SettingDestinations.WhatsNew.title,
-            if (state.changelogLoading) "Loading release history..." else "Changelog for available pre-releases",
+            "Loading release history…".takeIf { state.changelogLoading },
             Icons.Default.NewReleases,
             enabled = !state.changelogLoading,
             onClick = { onAction(SettingsAction.OpenChangelog) },
         )
         if (showDiagnostics) {
             SettingsRowDivider()
-            SettingsRow(
-                SettingDestinations.Diagnostics.title,
-                "Share recent errors to help fix a problem",
-                Icons.Default.BugReport,
-                onClick = { open(SettingsPage.DIAGNOSTICS) },
-            )
+            SettingsRow(SettingDestinations.Diagnostics.title, icon = Icons.Default.BugReport, onClick = { open(SettingsPage.DIAGNOSTICS) })
         }
     }
 }
@@ -392,10 +386,7 @@ private fun BackupPage(backup: SettingsBackupEntry, onBack: () -> Unit) {
 private fun FallbackCacheControls(state: SettingsUiState, onAction: (SettingsAction) -> Unit) {
     Text("Thumbnails: ${state.cacheSnapshot.thumbnailCount}")
     Text("Full images: ${state.cacheSnapshot.fullImageCount}")
-    Button(onClick = { onAction(SettingsAction.ToggleClearCacheOptions) }) {
-        Text(if (state.showClearCacheOptions) "Clear cache ▲" else "Clear cache ▼")
-    }
-    if (state.showClearCacheOptions) {
+    ExpandableSection("Clear cache", initiallyExpanded = false) {
         TextButton(
             modifier = Modifier.fillMaxWidth(),
             onClick = { onAction(SettingsAction.ClearThumbnailCache) },
