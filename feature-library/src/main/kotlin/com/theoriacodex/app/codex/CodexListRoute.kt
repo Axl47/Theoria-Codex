@@ -49,7 +49,7 @@ fun CodexListScreen(
     header: LibrarySectionHeader = BareSectionHeader,
 ) {
     val state = remember {
-        CodexListUiState(codices).apply {
+        CodexListUiState().apply {
             actionTarget = codices.firstOrNull { it.codexId == initialActionCodexId }
         }
     }
@@ -73,7 +73,7 @@ fun CodexListScreen(
         onCommitReorder, onCreateCodex, onRenameCodex, onSetAutomaticTag, onDeleteCodex,
         onCleanCodex, onMakeAvailableOffline, onLibrarySortChange,
     )
-    LaunchedEffect(codices, state.ordering.reorderMode) { state.synchronizeCodices(codices) }
+    LaunchedEffect(codices) { state.synchronizeCodices(codices) }
     if (initialActionCodexId == null) CodexListContent(presentation, state, actions, header)
     val hasOverlay = state.actionTarget != null || state.autoSaveTarget != null || state.searchTarget != null ||
         state.renameTarget != null ||

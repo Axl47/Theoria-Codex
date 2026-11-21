@@ -1,7 +1,10 @@
 package com.theoriacodex.app.codex
 
 import com.theoriacodex.app.ui.codexMorph
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
@@ -44,7 +47,9 @@ fun savedCodexCountSuffix(codexId: String): String? = when (codexId) {
 
 /**
  * Every Codex in the library: name and count over its cover, with actions on long press, and the offline ring in
- * the corner while the Codex is kept offline ([onTopUpOffline] tops an incomplete copy up).
+ * the corner while the Codex is kept offline ([onTopUpOffline] tops an incomplete copy up). Without
+ * [longPressOpensActions] the grid owns the long-press gesture (Manual sort's drag) and only accessibility services
+ * open the actions here.
  */
 @Composable
 internal fun CodexCoverTile(
@@ -56,16 +61,20 @@ internal fun CodexCoverTile(
     onOpenActions: () -> Unit,
     modifier: Modifier,
     onTopUpOffline: (() -> Unit)? = null,
+    longPressOpensActions: Boolean = true,
 ) {
     val onCover = covers.isNotEmpty()
+    val actionsLabel = "Actions for $name"
     val textColor = if (onCover) Color.White else MaterialTheme.colorScheme.onSurface
     Box(
         modifier.codexMorph(codexId).clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .combinedClickable(
-                onClick = onOpen,
-                onLongClick = onOpenActions,
-                onLongClickLabel = "Actions for $name",
+            .then(
+                if (longPressOpensActions) {
+                    Modifier.combinedClickable(onClick = onOpen, onLongClick = onOpenActions, onLongClickLabel = actionsLabel)
+                } else {
+                    Modifier.clickable(onClick = onOpen).semantics { onLongClick(actionsLabel) { onOpenActions(); true } }
+                },
             ),
     ) {
         if (onCover) {

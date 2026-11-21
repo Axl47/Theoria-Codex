@@ -6,22 +6,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.OfflinePin
 import androidx.compose.material.icons.filled.FileOpen
@@ -35,17 +25,11 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.ActionMenuDetailText
 import com.theoriacodex.app.ui.components.ActionMenuDivider
@@ -54,15 +38,8 @@ import com.theoriacodex.app.ui.components.ActionMenuHeader
 import com.theoriacodex.app.ui.components.ActionMenuRow
 import com.theoriacodex.app.ui.components.ActionMenuSheet
 import com.theoriacodex.app.ui.components.NameEntryDialog
-import com.theoriacodex.data.repository.CodexLibrarySort
 import com.theoriacodex.domain.model.Codex
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.zIndex
-import com.theoriacodex.app.ui.components.ReorderAutoScrollEffect
-import com.theoriacodex.app.ui.components.reorderRowPlacement
 
 @Composable
 internal fun CodexListContent(
@@ -81,124 +58,20 @@ internal fun CodexListContent(
         // A deleted Codex's Undo lives until the Library is left; leaving commits the deletion's loss.
         UndoLeaveEffect(CodexUndoAnchors.LIBRARY_SCOPE)
 
-        CodexListBody(presentation, state, actions)
+        CodexGrid(presentation, state, actions)
     }
 }
 
-/**
- * Import, Sort and Create, placed in the Library header while Codices shows. Choosing Manual in the sort menu
- * opens the reorder list, whose Done replaces these until it commits.
- */
+/** Import, Sort and Create, placed in the Library header while Codices shows. */
 @Composable
 private fun CodexListHeaderActions(
     presentation: CodexListPresentation,
     state: CodexListUiState,
     actions: CodexListActions,
 ) {
-    val reorder = { state.ordering.toggle(presentation.libraryCodices, actions.commitReorder) }
-    if (state.ordering.reorderMode) return CodexActionIcon(Icons.Default.Check, "Done reordering Codices", onClick = reorder)
     CodexActionIcon(Icons.Default.FileOpen, "Import Codex", onClick = actions.importCodex)
-    CodexLibrarySortMenu(presentation.librarySort) { sort ->
-        actions.setLibrarySort(sort)
-        if (sort == CodexLibrarySort.MANUAL) reorder()
-    }
+    CodexLibrarySortMenu(presentation.librarySort, actions.setLibrarySort)
     CodexActionIcon(Icons.Default.Add, "Create Codex") { state.showCreateDialog = true }
-}
-
-@Composable
-private fun CodexListBody(
-    presentation: CodexListPresentation,
-    state: CodexListUiState,
-    actions: CodexListActions,
-) {
-    when {
-        state.ordering.reorderMode -> CodexReorderList(presentation, state)
-        else -> CodexGrid(presentation, state, actions)
-    }
-}
-
-@Composable
-private fun CodexReorderList(
-    presentation: CodexListPresentation,
-    state: CodexListUiState,
-) {
-    // Reordering is only opened from Manual, so the rows are the draft itself.
-    val rows = state.ordering.reorderDraft
-    val list = rememberLazyListState()
-    val rowSpacing = with(LocalDensity.current) { 8.dp.toPx() }
-    SideEffect { state.ordering.itemSpacingPx = rowSpacing }
-    ReorderAutoScrollEffect(state.ordering, list)
-    LazyColumn(
-        state = list,
-        modifier = Modifier.fillMaxSize(),
-        userScrollEnabled = state.ordering.draggingId == null,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        itemsIndexed(rows, key = { _, codex -> codex.codexId }) { index, codex ->
-            CodexReorderRow(codex, index, presentation, state, Modifier.reorderRowPlacement(this, state.ordering.draggingId == codex.codexId))
-        }
-    }
-}
-
-@Composable
-private fun CodexReorderRow(
-    codex: Codex,
-    index: Int,
-    presentation: CodexListPresentation,
-    state: CodexListUiState,
-    modifier: Modifier,
-) {
-    val isDragging = state.ordering.draggingId == codex.codexId
-    Surface(
-        modifier = modifier.zIndex(if (isDragging) 1f else 0f).fillMaxWidth().graphicsLayer {
-            if (isDragging) {
-                translationY = state.ordering.dragOffsetY
-                shadowElevation = 14f
-            }
-        }.onSizeChanged { size ->
-            size.height.toFloat().takeIf { it > 1f }?.let { state.ordering.itemHeightPx = it }
-        }.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        shape = RoundedCornerShape(16.dp),
-        tonalElevation = if (isDragging) 6.dp else 0.dp,
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().height(68.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            CodexReorderCover(codex, presentation.coverCandidates[codex.codexId].orEmpty())
-            CodexReorderMetadata(codex, presentation.itemCounts[codex.codexId] ?: 0, Modifier.weight(1f))
-            CodexReorderHandle(codex, index, state)
-        }
-    }
-}
-
-@Composable
-private fun CodexReorderCover(codex: Codex, candidates: List<CodexCoverCandidate>) {
-    Box(
-        modifier = Modifier.size(52.dp).clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surface),
-        contentAlignment = Alignment.Center,
-    ) {
-        CodexCoverImage(candidates, codex.name, Modifier.fillMaxSize()) {
-            Icon(Icons.Default.Image, contentDescription = null)
-        }
-    }
-}
-
-@Composable
-private fun CodexReorderMetadata(codex: Codex, itemCount: Int, modifier: Modifier) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(
-            codex.name, style = MaterialTheme.typography.titleMedium, maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            codexPostCount(itemCount), style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
 }
 
 @Composable

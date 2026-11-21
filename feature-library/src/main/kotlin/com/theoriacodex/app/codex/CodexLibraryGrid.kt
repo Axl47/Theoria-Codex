@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -14,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -27,11 +29,13 @@ import com.theoriacodex.app.ui.components.AdaptiveMediaGrid
 import com.theoriacodex.app.ui.components.EmptyState
 import com.theoriacodex.app.ui.undo.LocalUndoSlot
 import com.theoriacodex.app.ui.undo.UndoRow
+import com.theoriacodex.data.repository.CodexLibrarySort
 import com.theoriacodex.domain.model.Codex
 
 /**
  * The Library's Codex tiles. While a deleted Codex's Undo is live, its offer fills the cell the Codex vacated, so
- * the user finds it where they last saw the Codex.
+ * the user finds it where they last saw the Codex. Under Manual sort a long-press drag reorders the tiles in place
+ * ([CodexGridReorderState]); releasing a tile where it was lifted opens its menu.
  */
 @Composable
 internal fun CodexGrid(
@@ -39,36 +43,52 @@ internal fun CodexGrid(
     state: CodexListUiState,
     actions: CodexListActions,
 ) {
-    val codices = presentation.libraryCodices
     // Survives opening a Codex, so deleting it from its own screen still finds the cell it left.
     var tileOrder by rememberSaveable { mutableStateOf(emptyList<String>()) }
     val vacatedId = rememberVacatedCodexId()
-    // A first frame in manual order would move the restored scroll anchor to the wrong Codex.
-    val awaitingCounts = presentation.librarySort.usesItemCounts && codices.any { it.codexId !in presentation.itemCounts }
-    val awaitingUsage = presentation.librarySort.usesUsage && presentation.libraryUsage == null
-    if (awaitingCounts || awaitingUsage) return
+    val gridState = rememberLazyGridState()
+    val reorder = remember(gridState) { CodexGridReorderState(gridState, ::isVacatedKey) }
+    if (presentation.awaitingSortInputs) return
     val sorted = sortCodicesForLibrary(
-        codices, presentation.librarySort, presentation.itemCounts, presentation.likesCodexId,
+        presentation.libraryCodices, presentation.librarySort, presentation.itemCounts, presentation.likesCodexId,
         presentation.libraryUsage.orEmpty(),
     )
     val sortedIds = sorted.map(Codex::codexId)
-    SideEffect { tileOrder = rememberedTileOrder(tileOrder, sortedIds) }
-    val vacatedAt = vacatedId?.takeIf { it !in sortedIds }?.let { vacatedTileIndex(tileOrder, sortedIds, it) }
-    if (sorted.isEmpty() && vacatedAt == null) return EmptyState("No Codices", Modifier.fillMaxSize())
-    val gridState = rememberLazyGridState()
+    // A pending reorder already wrote the order it will arrive in.
+    SideEffect { if (reorder.order == null) tileOrder = rememberedTileOrder(tileOrder, sortedIds) }
+    val presented = presentedTileKeys(tileOrder, sortedIds, vacatedId)
+    if (presented.isEmpty()) return EmptyState("No Codices", Modifier.fillMaxSize())
+    val manual = presentation.librarySort == CodexLibrarySort.MANUAL
+    SideEffect { reorder.bind(presented, enabled = manual) }
+    val commit: (List<String>) -> Unit = { keys ->
+        tileOrder = keys.map { it.removePrefix(VACATED_KEY_PREFIX) }
+        actions.commitReorder(keys.filterNot(::isVacatedKey))
+    }
     ScrollToTopOnTabReselect(TopLevelDestination.Library) { gridState.animateScrollToItem(0) }
+    val openActions = { key: String -> state.actionTarget = sorted.firstOrNull { it.codexId == key } }
     AdaptiveMediaGrid(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().then(if (manual) rememberCodexReorderGestures(reorder, commit, openActions) else Modifier),
         state = gridState,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        sorted.forEachIndexed { index, codex ->
-            if (index == vacatedAt) item(key = "vacated:$vacatedId") { CodexVacatedTile(checkNotNull(vacatedId)) }
-            item(key = codex.codexId) { CodexLibraryTile(codex, presentation, state, actions) }
+        val byId = sorted.associateBy(Codex::codexId)
+        items(if (manual) reorder.displayed(presented) else presented, key = { it }) { key ->
+            val placement = Modifier.codexTilePlacement(this, reorder, key, animated = manual)
+            val codex = byId[key] ?: return@items CodexVacatedTile(key.removePrefix(VACATED_KEY_PREFIX), placement)
+            val moves = placement.codexTileMoves(reorder, presented.takeIf { manual }, key, commit)
+            CodexLibraryTile(codex, presentation, state, actions, moves, manual)
         }
-        if (vacatedAt == sorted.size) item(key = "vacated:$vacatedId") { CodexVacatedTile(checkNotNull(vacatedId)) }
     }
+}
+
+/**
+ * The grid's keys: [current] with the cell of deleted Codex [vacatedId] where [shown] last had it, while that Codex
+ * is gone.
+ */
+internal fun presentedTileKeys(shown: List<String>, current: List<String>, vacatedId: String?): List<String> {
+    val gone = vacatedId?.takeIf { it !in current } ?: return current
+    return current.toMutableList().apply { add(vacatedTileIndex(shown, current, gone), VACATED_KEY_PREFIX + gone) }
 }
 
 /** The Codex whose deletion the live offer can undo, if any. */
@@ -79,9 +99,9 @@ private fun rememberVacatedCodexId(): String? {
 }
 
 @Composable
-private fun CodexVacatedTile(codexId: String) {
+private fun CodexVacatedTile(codexId: String, modifier: Modifier) {
     Box(
-        Modifier.fillMaxWidth().height(CODEX_TILE_HEIGHT).clip(RoundedCornerShape(16.dp))
+        modifier.fillMaxWidth().height(CODEX_TILE_HEIGHT).clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceContainer).padding(4.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -95,6 +115,8 @@ private fun CodexLibraryTile(
     presentation: CodexListPresentation,
     state: CodexListUiState,
     actions: CodexListActions,
+    modifier: Modifier,
+    manual: Boolean,
 ) {
     CodexCoverTile(
         codexId = codex.codexId,
@@ -103,8 +125,9 @@ private fun CodexLibraryTile(
         covers = presentation.coverCandidates[codex.codexId].orEmpty(),
         onOpen = { actions.openCodex(codex.codexId) },
         onOpenActions = { state.actionTarget = codex },
-        modifier = Modifier.fillMaxWidth().height(CODEX_TILE_HEIGHT),
+        modifier = modifier.fillMaxWidth().height(CODEX_TILE_HEIGHT),
         onTopUpOffline = actions.makeAvailableOffline?.let { topUp -> { topUp(codex.codexId) } },
+        longPressOpensActions = !manual,
     )
 }
 
@@ -127,5 +150,9 @@ internal fun vacatedTileIndex(shown: List<String>, current: List<String>, vacate
     val present = current.toSet()
     return shown.take(before).count { it in present }
 }
+
+private const val VACATED_KEY_PREFIX = "vacated:"
+
+private fun isVacatedKey(key: String): Boolean = key.startsWith(VACATED_KEY_PREFIX)
 
 private val CODEX_TILE_HEIGHT = 168.dp
