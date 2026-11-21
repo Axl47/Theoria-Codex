@@ -156,10 +156,8 @@ private fun UgoiraLoadedPlayer(
     LaunchedEffect(restartRequest, animation, isActive) {
         if (restartRequest > 0L || !isActive) seekToPosition(0L)
     }
-    LaunchedEffect(seekJumpSerial, seekJumpDeltaMs, maxSeekablePositionMs, isActive) {
-        if (seekJumpSerial > 0 && seekJumpDeltaMs != 0L && !isScrubbing.value && isActive) {
-            seekToPosition(animation.positionMs + seekJumpDeltaMs)
-        }
+    ViewerSeekJumps(seekJumpSerial, seekJumpDeltaMs, { isActive && !isScrubbing.value }) {
+        seekToPosition(animation.positionMs + it)
     }
     AnimatePlayback(
         state = animation,

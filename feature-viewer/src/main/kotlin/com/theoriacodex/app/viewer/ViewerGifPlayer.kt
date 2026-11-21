@@ -150,10 +150,8 @@ private fun ViewerGifMovie(
     AnimatePlayback(animation, controls.isActive && controls.isPlaying,
         controls.playbackRate.coerceAtLeast(MIN_VIEWER_PLAYBACK_RATE), controls.loopPlayback, events.onPlaybackCompleted)
     LaunchedEffect(controls.restartRequest, animation) { if (controls.restartRequest > 0L) animation.seekTo(0L) }
-    LaunchedEffect(controls.seekJumpSerial, controls.seekJumpDeltaMs, duration, controls.isActive) {
-        if (controls.seekJumpSerial > 0 && controls.seekJumpDeltaMs != 0L && !scrubbing && controls.isActive) {
-            animation.seekTo(animation.positionMs + controls.seekJumpDeltaMs)
-        }
+    ViewerSeekJumps(controls.seekJumpSerial, controls.seekJumpDeltaMs, { controls.isActive && !scrubbing }) {
+        animation.seekTo(animation.positionMs + it)
     }
     Box(modifier, contentAlignment = Alignment.Center) {
         ViewerGifCanvas(movie, { animation.positionMs }, Modifier.fillMaxSize().then(mediaModifier))

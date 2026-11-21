@@ -320,11 +320,7 @@ private fun ViewerVideoCommands(state: ViewerVideoState, controls: ViewerRendere
         state.setPlaying(controls.isActive && controls.isPlaying && !state.failed &&
             lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
     }
-    LaunchedEffect(state.player, controls.seekJumpSerial, controls.seekJumpDeltaMs, controls.isActive, state.failed, state.duration) {
-        if (controls.seekJumpSerial > 0 && controls.seekJumpDeltaMs != 0L && controls.isActive && !state.failed && !state.scrubbing) {
-            state.jump(controls.seekJumpDeltaMs)
-        }
-    }
+    ViewerSeekJumps(controls.seekJumpSerial, controls.seekJumpDeltaMs, { controls.isActive && !state.failed && !state.scrubbing }, state::jump)
 }
 
 @Composable
