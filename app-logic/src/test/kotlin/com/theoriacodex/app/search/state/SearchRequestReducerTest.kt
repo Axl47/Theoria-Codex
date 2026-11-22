@@ -228,9 +228,11 @@ class SearchRequestReducerTest {
         val painted = SearchUiState().reduce(SearchStateChange.BeginRequest(request))
             .reduce(SearchStateChange.ShowCachedFirstPage(8L, listOf(first, second)))
         val newest = post("newest")
-        // The refresh finds the first post is a copy of the second, and brings another copy of it.
-        val updated = first.copy(title = "Updated", pictureHash = PICTURE)
-        val fresh = success(request, listOf(newest, updated, post("repost").copy(pictureHash = PICTURE xor 1)))
+        // The refresh finds the first post is a copy of the second, and brings another copy of it; the second's own hash
+        // came too late this time.
+        val updated = first.copy(title = "Updated", pictureHash = PICTURE xor 0b111)
+        val repost = post("repost").copy(pictureHash = PICTURE xor 0b1100_0000)
+        val fresh = success(request, listOf(newest, updated, second.copy(pictureHash = null), repost))
 
         val atTop = painted.reduce(SearchStateChange.RootResult(8L, fresh))
         val scrolled = painted.reduce(SearchStateChange.CachedFirstPageScrolled)
@@ -241,7 +243,8 @@ class SearchRequestReducerTest {
         assertSame(atTop, atTop.reduce(SearchStateChange.CachedFirstPageScrolled))
         // The next page keeps them too.
         val more = page(81L, scrolled)
-        val paged = scrolled.reduce(SearchStateChange.BeginRequest(more)).reduce(SearchStateChange.PageResult(81L, nextPage(more, emptyList())))
+        val paged = scrolled.reduce(SearchStateChange.BeginRequest(more))
+            .reduce(SearchStateChange.PageResult(81L, nextPage(more, emptyList())))
         assertEquals(listOf(updated, second, newest), paged.content.results)
     }
 
