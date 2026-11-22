@@ -3,7 +3,6 @@ package com.theoriacodex.app.ui
 import com.theoriacodex.app.series.seriesArguments
 import com.theoriacodex.app.series.SeriesPageDestination
 import kotlinx.coroutines.flow.emptyFlow
-import androidx.compose.runtime.collectAsState
 import com.theoriacodex.app.ui.components.feedDurations
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContentScope
@@ -311,11 +310,7 @@ private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
         var published: ViewerViewModel? = null
         { owner -> if (owner != null) routes.viewer.publish(owner.also { published = it }) else published?.let(routes.viewer::withdraw) }
     }
-    // A series session reads every chapter in the series' mode and shows none of the collecting controls.
-    val seriesSession = routes.viewer.current?.session?.collectAsState()?.value?.takeIf { it.context.streamSource == ViewerStreamSource.SERIES }
-    val seriesMode by remember(seriesSession?.context?.queryHash) {
-        seriesSession?.let { shell.seriesReader?.readingMode(it) } ?: emptyFlow()
-    }.collectAsState(initial = null)
+    val forSeries = rememberSeriesViewerConfig(shell)
     ViewerDestinationStateBoundary(
         data = shell.data,
         sources = shell.sources,
@@ -350,13 +345,7 @@ private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
                     galleryReadingModes = state.browsing.galleryReadingModes,
                     creatorBrowsingSources = state.browsing.creatorBrowsingSources,
                     playbackDiagnosticsEnabled = BuildConfig.BENCHMARK_FIXTURES_ENABLED,
-                ).let { config ->
-                    if (seriesSession == null) config
-                    else config.copy(
-                        seriesChapters = true,
-                        galleryReadingModes = seriesMode?.let { mode -> seriesSession.posts.associate { it.id to mode } }.orEmpty(),
-                    )
-                },
+                ).let(forSeries),
                 liveSourceState = viewerLiveSourceState(state, shell.pendingLikePostIds[state.browsing.activeProfile.profileId].orEmpty()),
                 effectCallbacks = effectCallbacks,
                 screenCallbacks = screenCallbacks,
@@ -365,6 +354,22 @@ private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
             )
         }
     }
+}
+
+/**
+ * What a series session changes in the Viewer's configuration: every chapter reads in the series' mode, and none of the
+ * collecting controls show. Any other session's configuration passes through unchanged.
+ */
+@Composable
+private fun rememberSeriesViewerConfig(shell: TheoriaShell): (ViewerScreenConfig) -> ViewerScreenConfig {
+    // The Viewer's owner holds the session; the retained one is claimed before this destination composes.
+    val session = shell.routes.viewer.current?.session?.collectAsStateWithLifecycle()?.value
+        ?.takeIf { it.context.streamSource == ViewerStreamSource.SERIES }
+        ?: return { it }
+    val mode by remember(session.context.queryHash) { shell.seriesReader?.readingMode(session) ?: emptyFlow() }
+        .collectAsStateWithLifecycle(initialValue = null)
+    val modes = mode?.let { chosen -> session.posts.associate { it.id to chosen } }.orEmpty()
+    return { it.copy(seriesChapters = true, galleryReadingModes = modes) }
 }
 
 /** Pending likes stay visible in a feed that hides liked posts until the like commits or fails. */
