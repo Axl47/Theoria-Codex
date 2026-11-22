@@ -165,10 +165,13 @@ private fun TagAffinityInputs.affinity(source: SourceKey, tag: String, feedShare
     // A tag on most of what the profile watches narrows nothing even when chosen; Likes alone are weaker evidence.
     val common = if (watched != null) watched >= UNIVERSAL_WATCHED_SHARE else likedShare > UNIVERSAL_LIKED_SHARE && !chosen
     val universal = common || (feedShare[token] ?: 0.0) >= UNIVERSAL_FEED_SHARE
-    val lift = lift(source, token)
-        ?: return TagAffinity(tag, interest, (interest + UNKNOWN_TAG_INTEREST) * (1.0 - (watched ?: 0.0)), universal)
+    // Text drawn on the image says nothing about what it shows, though it can be as specific as a series.
+    val offerable = !universal && (chosen || token !in IMAGE_TEXT_TAGS)
+    val lift = lift(source, token) ?: return TagAffinity(
+        tag, interest, (interest + UNKNOWN_TAG_INTEREST) * (1.0 - (watched ?: 0.0)), universal, informative = offerable,
+    )
     val (score, worthOffering) = historyScore(source, token, lift, chosen, watched ?: 0.0)
-    return TagAffinity(tag, interest, score, universal, informative = !universal && worthOffering)
+    return TagAffinity(tag, interest, score, universal, informative = offerable && worthOffering)
 }
 
 /**
@@ -216,6 +219,15 @@ private const val UNIVERSAL_WATCHED_SHARE = 0.5
 private const val MIN_LIKES_FOR_SHARE = 4
 private const val UNIVERSAL_LIKED_SHARE = 0.85
 private const val MIN_FEED_POSTS = 10
+
+/**
+ * Tags for text drawn on the image (a name, a watermark, a handle). Sources file them as ordinary tags, and on what a
+ * profile keeps they can be as much more common as the series it follows, so no count tells them apart.
+ */
+private val IMAGE_TEXT_TAGS = setOf(
+    "artist_name", "character_name", "copyright_name", "signature", "watermark", "web_address", "dated", "artist_logo",
+    "twitter_username", "twitter_logo", "patreon_username", "patreon_logo", "pixiv_username", "instagram_username",
+).mapTo(HashSet(), ::normalizeMatchToken)
 private const val MIN_KEPT_FOR_LIFT = 20
 private const val MIN_KEPT_FOR_TAG = 2
 private const val MIN_INFORMATIVE_LIFT = 2.0

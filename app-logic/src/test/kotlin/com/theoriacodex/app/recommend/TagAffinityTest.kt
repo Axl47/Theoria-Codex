@@ -116,6 +116,17 @@ class TagAffinityTest {
     }
 
     @Test
+    fun `text drawn on the image is never offered unless chosen, however specific`() {
+        val likes = List(40) { index -> like(listOfNotNull("artist_name".takeIf { index % 4 == 0 }, "tree"), "$index") }
+        val watched = statistics(watched = 400, "artist_name" to 12, "tree" to 400, "watermark" to 1)
+        val inputs = tagAffinityInputs(likes, emptyList(), emptyList(), emptyList(), watched)
+        val chosen = tagAffinityInputs(likes, emptyList(), listOf("watermark"), emptyList(), watched)
+
+        assertEquals(emptyList<String>(), tagAffinities(post("artist_name", "watermark"), inputs).filter { it.informative }.map { it.tag })
+        assertEquals(listOf("watermark"), tagAffinities(post("artist_name", "watermark"), chosen).filter { it.informative }.map { it.tag })
+    }
+
+    @Test
     fun `lift compares each source with itself, and a chosen tag on most watched posts is still universal`() {
         val kept = List(30) { index -> like(listOf("tree", "moth"), "$index") }
         val watched = statistics(watched = 300, "tree" to 280, "moth" to 3)
