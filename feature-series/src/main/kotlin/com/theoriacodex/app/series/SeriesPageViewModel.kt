@@ -15,12 +15,13 @@ import com.theoriacodex.domain.series.SeriesSource
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -36,6 +37,8 @@ data class SeriesPageState(
     val entries: List<StoredSeriesEntry> = emptyList(),
     /** The series' source while it is on. */
     val source: SeriesSource? = null,
+    /** What the screens call [source], by [label]; blank without it. */
+    val sourceName: String = "",
     val refreshing: Boolean = true,
     val failure: String? = null,
     /**
@@ -46,8 +49,6 @@ data class SeriesPageState(
     /** Each chapter queued for download or on the device, by address; empty in a build that cannot download. */
     val downloads: Map<String, ChapterDownload> = emptyMap(),
 ) {
-    val sourceName: String get() = source?.name.orEmpty()
-
     /** Whether the chapter at [entry] can be read now: through its source, or from the device without one. */
     fun canOpen(entry: String): Boolean = !sourceMissing || downloads[entry] == ChapterDownload.OnDevice
 
@@ -83,23 +84,49 @@ class SeriesPageViewModel(
         refresh.copy(stored = stored, entries = entries.sortedBy { it.sourceOrder }, downloads = downloads)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SeriesPageState())
 
+    /** The refresh running, which a newer one replaces. */
+    private var refreshJob: Job? = null
+
+    /** True while a move to another source runs, and for good once it moved: no refresh starts meanwhile. */
+    private var moving = false
+
     init {
-        viewModelScope.launch { sourcesChanged.collectLatest { refreshNow() } }
+        viewModelScope.launch { sourcesChanged.collect { refresh() } }
     }
 
     /** Fetches the series' details and entries from its source and stores them. */
     fun refresh() {
-        viewModelScope.launch { refreshNow() }
+        if (moving) return
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch { refreshNow() }
+    }
+
+    /**
+     * Runs [move], which moves this series to another source and returns whether it did, with refreshes stopped: one
+     * finishing after the move would store the old series again. They stop for good once it moved.
+     */
+    suspend fun whileMoving(move: suspend () -> Boolean): Boolean {
+        moving = true
+        refreshJob?.cancelAndJoin()
+        refresh.update { it.copy(refreshing = false) }
+        var moved = false
+        try {
+            moved = move()
+        } finally {
+            moving = moved
+        }
+        return moved
     }
 
     private suspend fun refreshNow() {
         refresh.update { it.copy(refreshing = true, failure = null) }
-        val source = loadSources().firstOrNull { it.key == id.source }
+        val sources = loadSources()
+        val source = sources.firstOrNull { it.key == id.source }
         if (source == null) {
-            refresh.update { it.copy(refreshing = false, source = null, sourceMissing = true) }
+            refresh.update { it.copy(refreshing = false, source = null, sourceName = "", sourceMissing = true) }
             return
         }
-        refresh.update { it.copy(source = source, sourceMissing = false) }
+        refresh.update { it.copy(source = source, sourceName = source.label(sources), sourceMissing = false) }
         val failure = try {
             repository.series(id)?.let { repository.refresh(source, it.series) }
             null

@@ -160,7 +160,7 @@ private fun LazyGridScope.browse(
             fullWidth("browse-sources") {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(sources, key = { it.key.id }) { source ->
-                        FilterChoiceChip(source.name, selected = source.key == state.browse?.key) { viewModel.browse(source.key) }
+                        FilterChoiceChip(source.label(sources), selected = source.key == state.browse?.key) { viewModel.browse(source.key) }
                     }
                 }
             }

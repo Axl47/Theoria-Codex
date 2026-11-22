@@ -4,9 +4,12 @@ import com.theoriacodex.data.repository.SeriesDownloads
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.data.repository.checkFollowed
+import com.theoriacodex.data.repository.switchSource
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.diagnostics.Diagnostics
+import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesExtensions
+import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.sync.Mutex
@@ -39,4 +42,11 @@ class SeriesDependencies(
             onUpdate(update)
         }
     }
+
+    /**
+     * Moves the stored series [from] to [to] on [source], with its settings and progress; see [switchSource]. The
+     * downloaded chapters of [from] are deleted: the moved series no longer needs them.
+     */
+    suspend fun switchSource(from: SeriesId, source: SeriesSource, to: Series) =
+        repository.switchSource(from, source, to, downloads::deleteSeries)
 }

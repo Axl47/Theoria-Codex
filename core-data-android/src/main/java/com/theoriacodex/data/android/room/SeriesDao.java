@@ -63,6 +63,10 @@ public interface SeriesDao {
             + "WHERE source = :source AND series_address = :seriesAddress AND address = :address")
     void mergeRestoredEntry(String source, String seriesAddress, String address, boolean read, int lastPage, Integer pageCount);
 
+    /** Its entries go with it, by the foreign key's cascade. */
+    @Query("DELETE FROM series WHERE source = :source AND address = :address")
+    void deleteSeries(String source, String address);
+
     /** An update in place: replacing the row would cascade its entries away. */
     @Upsert void upsertSeries(SeriesEntity entity);
 
