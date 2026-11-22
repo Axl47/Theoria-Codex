@@ -232,10 +232,14 @@ internal fun CodexDestinationStateBoundary(
             codices.filter { codexBelongsToProfile(it.codexId, profile.profileId) }
         }
         val collection = rememberCodexCollection(data)
+        // The shared presentation spans every profile; warm-up and tiles only consider this profile's Codices.
+        val itemCounts = remember(collection.itemCounts, visible) {
+            visible.mapNotNull { codex -> collection.itemCounts[codex.codexId]?.let { codex.codexId to it } }.toMap()
+        }
         val observeActions = remember(source, availableSources) {
             { id: String -> source.observeActionOptions(id, availableSources) }
         }
-        CodexContentWarmUp(data, collection.itemCounts, savedSortFor)
+        CodexContentWarmUp(data, itemCounts, savedSortFor)
         // Subscribed only while a usage sort needs it, since statistics are written during use.
         val libraryUsage = if (settings.codexLibrarySort.usesUsage) {
             rememberRetained("library-usage") { data.statisticsRepository.observeCodexLibraryUsage() }.value
@@ -247,7 +251,7 @@ internal fun CodexDestinationStateBoundary(
                 allCodices = codices,
                 visibleCodices = visible,
                 activeProfile = profile,
-                itemCounts = collection.itemCounts + (FOLLOWED_CODEX_ID to settings.followedCreators.size) +
+                itemCounts = itemCounts + (FOLLOWED_CODEX_ID to settings.followedCreators.size) +
                     (com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID to savedSearches.size),
                 coverCandidates = collection.coverCandidates,
                 observeActionOptions = observeActions,
