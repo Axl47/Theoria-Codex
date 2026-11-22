@@ -47,7 +47,7 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.codex.CodexCoverCandidate
 import com.theoriacodex.app.codex.CodexCoverImage
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
-import com.theoriacodex.app.viewer.ViewerVeil
+import com.theoriacodex.app.ui.theme.TextOverMediaShadow
 import kotlin.math.roundToInt
 
 /** What a collect target shows: an icon, a Codex cover that falls back to an icon, or progress while it works. */
@@ -176,7 +176,7 @@ private fun <T> CollectTargetBubble(target: CollectTarget<T>, hovered: Boolean, 
         Text(
             target.label,
             color = Color.White,
-            style = MaterialTheme.typography.labelSmall.copy(shadow = ViewerVeil.LegibilityShadow),
+            style = MaterialTheme.typography.labelSmall.copy(shadow = TextOverMediaShadow),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
