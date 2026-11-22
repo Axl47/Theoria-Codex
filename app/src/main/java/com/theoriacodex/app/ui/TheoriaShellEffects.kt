@@ -258,14 +258,11 @@ private suspend fun loadReleaseHistory(shell: TheoriaShell, latestInstalledChang
     }
 }
 
-/** Shows the selected home tab whenever Home is on top, and saves the tab once the pager rests. */
+/** Decides the Series tab again on each return to the app, and settles a saved Series tab that startup could not show. */
 @Composable
-internal fun HomeTabEffects(shell: TheoriaShell, currentRoute: String?) {
+private fun SeriesTabEffects(shell: TheoriaShell, onHome: Boolean) {
     val navigation = shell.navigation
     val pagerState = navigation.pagerState
-    val onHome = shell.navReady && currentRoute == AppRoute.Home
-    var homeTabRestoreComplete by remember { mutableStateOf(false) }
-    var persistedHomeTabRoute by rememberSaveable { mutableStateOf<String?>(null) }
     val series = shell.container.series
     // Installing or removing an extension happens in another app, so the Series tab is decided again on each return.
     LifecycleStartEffect(series, shell.navReady) {
@@ -292,6 +289,17 @@ internal fun HomeTabEffects(shell: TheoriaShell, currentRoute: String?) {
     LaunchedEffect(navigation.homeTabs) {
         if (navigation.homeTabs.none { it.route == navigation.homeTabRoute }) navigation.homeTabRoute = navigation.homeTabs.last().route
     }
+}
+
+/** Shows the selected home tab whenever Home is on top, and saves the tab once the pager rests. */
+@Composable
+internal fun HomeTabEffects(shell: TheoriaShell, currentRoute: String?) {
+    val navigation = shell.navigation
+    val pagerState = navigation.pagerState
+    val onHome = shell.navReady && currentRoute == AppRoute.Home
+    var homeTabRestoreComplete by remember { mutableStateOf(false) }
+    var persistedHomeTabRoute by rememberSaveable { mutableStateOf<String?>(null) }
+    SeriesTabEffects(shell, onHome)
     LaunchedEffect(shell.navReady, currentRoute) {
         if (!onHome) return@LaunchedEffect
         pagerState.scrollToRoute(navigation.homeTabRoute)
