@@ -67,7 +67,7 @@ fun SeriesPageScreen(
             if (context.checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) askToNotify.launch(permission)
         }
     }
-    val missing = state.missing
+    val missing = state.sourceMissing
     Column(modifier.fillMaxSize()) {
         // Without its source the page has no source name to show.
         SecondaryScreenAppBar(title = state.sourceName.ifEmpty { state.stored?.series?.title.orEmpty() }, onBack = onBack)
@@ -78,24 +78,24 @@ fun SeriesPageScreen(
             }
             val failure = state.failure
             when {
-                missing != null -> item("missing") { MissingSourceRow(missing, onOpenExtensions) }
+                missing -> item("missing") { MissingSourceRow(onOpenExtensions) }
                 failure != null && state.entries.isEmpty() -> item("failure") { ErrorState(failure, onRetry = viewModel::refresh) }
                 failure != null -> item("failure") { FailureRow(viewModel::refresh, Modifier.padding(horizontal = 16.dp), failure) }
                 state.refreshing && state.entries.isEmpty() -> item("loading") { LoadingState() }
                 state.entries.isEmpty() -> item("empty") { EmptyState("No chapters") }
             }
             items(state.entries, key = { it.entry.address }) { entry ->
-                EntryRow(entry, enabled = missing == null) { onOpenEntry(entry.entry.address) }
+                EntryRow(entry, enabled = !missing) { onOpenEntry(entry.entry.address) }
             }
         }
     }
 }
 
-/** Says the series' extension is off or gone, which is why its chapters cannot be opened, and leads to where to fix it. */
+/** Says the series' extension cannot be used, which is why its chapters cannot be opened, and leads to where to fix it. */
 @Composable
-private fun MissingSourceRow(missing: SeriesSourceMissing, onOpenExtensions: () -> Unit) {
+private fun MissingSourceRow(onOpenExtensions: () -> Unit) {
     Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(missing.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Extension unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant)
         TextButton(onClick = onOpenExtensions) { Text(EXTENSIONS_TITLE) }
     }
 }
@@ -118,7 +118,7 @@ private fun SeriesHeader(stored: StoredSeries, state: SeriesPageState, onToggleF
                 label = { Text(if (stored.followed) "Following" else "Follow") },
             )
             state.continueWith?.let { entry ->
-                Button(onClick = { onOpenEntry(entry.entry.address) }, enabled = state.missing == null) {
+                Button(onClick = { onOpenEntry(entry.entry.address) }, enabled = !state.sourceMissing) {
                     Text(continueLabel(state.started, entry), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }

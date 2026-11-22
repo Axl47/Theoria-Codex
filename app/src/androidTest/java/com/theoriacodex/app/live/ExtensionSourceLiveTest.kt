@@ -159,7 +159,7 @@ class ExtensionSourceLiveTest {
         try {
             live.openSeriesTab(By.text("Following"))
             live.tap("the followed series on the shelf", By.text(followed.series.title))
-            live.waitFor("the page saying its extension is off", By.text("Extension off"))
+            live.waitFor("the page saying its extension cannot be used", By.text("Extension unavailable"))
             live.waitFor("the button to the Extensions page", By.text("Extensions"))
             live.waitFor("the stored chapter list", By.text(CHAPTER_COUNT))
             live.waitFor("Unfollow still on offer", By.text("Following"))
@@ -167,7 +167,7 @@ class ExtensionSourceLiveTest {
             // The label sits inside the button, which is what is disabled.
             val enabled = generateSequence(start) { it.parent }.take(3).all { it.isEnabled }
             val titled = device.findObjects(By.text(followed.series.title)).size
-            live.report("off", "page says \"Extension off\", title shown $titled times, Continue enabled=$enabled")
+            live.report("off", "page says \"Extension unavailable\", title shown $titled times, Continue enabled=$enabled")
             assertTrue("Continue is disabled while the extension is off", !enabled)
         } finally {
             runBlocking { series.extensions.setOn(extension.id, signer, true) }

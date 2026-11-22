@@ -52,7 +52,7 @@ internal fun SeriesPageDestination(shell: TheoriaShell, entry: NavBackStackEntry
     val source = entry.arguments?.getString("source")?.let(SourceKey::parse) ?: return
     val id = SeriesId(source, entry.arguments?.getString("address") ?: return)
     val viewModel = viewModel {
-        SeriesPageViewModel(id, series.repository, series.sources, series.extensions::installed, series.extensions.revision)
+        SeriesPageViewModel(id, series.repository, series.sources, series.extensions.revision)
     }
     SeriesPageScreen(
         viewModel = viewModel,

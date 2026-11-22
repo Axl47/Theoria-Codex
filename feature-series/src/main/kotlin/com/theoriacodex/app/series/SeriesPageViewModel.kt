@@ -7,7 +7,6 @@ import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.data.repository.continueEntry
 import com.theoriacodex.data.repository.refresh
-import com.theoriacodex.domain.series.InstalledExtension
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesSource
 import kotlinx.coroutines.CancellationException
@@ -22,16 +21,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** Why a stored series has no source to read it from. */
-enum class SeriesSourceMissing(val label: String) {
-    EXTENSION_OFF("Extension off"),
-    EXTENSION_NOT_INSTALLED("Extension not installed"),
-}
-
 /**
  * One series' page: what is stored of it, its entries in the source's order (newest first), and how the refresh from
  * its source is going. A failed refresh leaves the stored series and entries on screen. So does a series whose source
- * is [missing], but its chapters cannot be opened until the extension is back.
+ * is [sourceMissing], but its chapters cannot be opened until the extension is back.
  */
 data class SeriesPageState(
     val stored: StoredSeries? = null,
@@ -39,7 +32,11 @@ data class SeriesPageState(
     val sourceName: String = "",
     val refreshing: Boolean = true,
     val failure: String? = null,
-    val missing: SeriesSourceMissing? = null,
+    /**
+     * No source on offer is the series' own. The app cannot tell why: its extension may be off, removed or blocked,
+     * or the source's language off.
+     */
+    val sourceMissing: Boolean = false,
 ) {
     /** The entry Continue opens. */
     val continueWith: StoredSeriesEntry? get() = stored?.let { continueEntry(it, entries) }
@@ -53,7 +50,6 @@ class SeriesPageViewModel(
     private val id: SeriesId,
     private val repository: SeriesRepository,
     private val loadSources: suspend () -> List<SeriesSource>,
-    private val installedExtensions: suspend () -> List<InstalledExtension> = { emptyList() },
     sourcesChanged: Flow<*> = flowOf(Unit),
 ) : ViewModel() {
     private val refresh = MutableStateFlow(SeriesPageState())
@@ -76,11 +72,10 @@ class SeriesPageViewModel(
         refresh.update { it.copy(refreshing = true, failure = null) }
         val source = loadSources().firstOrNull { it.key == id.source }
         if (source == null) {
-            val missing = missingSource()
-            refresh.update { it.copy(refreshing = false, sourceName = "", missing = missing) }
+            refresh.update { it.copy(refreshing = false, sourceName = "", sourceMissing = true) }
             return
         }
-        refresh.update { it.copy(sourceName = source.name, missing = null) }
+        refresh.update { it.copy(sourceName = source.name, sourceMissing = false) }
         val failure = try {
             repository.series(id)?.let { repository.refresh(source, it.series) }
             null
@@ -91,13 +86,6 @@ class SeriesPageViewModel(
         }
         refresh.update { it.copy(refreshing = false, failure = failure) }
     }
-
-    /**
-     * A series does not record which extension it came from, and an extension that is off does not say which sources
-     * it has. So an extension that is off is taken to be the series' own; with every installed one on, it is gone.
-     */
-    private suspend fun missingSource(): SeriesSourceMissing =
-        if (installedExtensions().any { !it.on }) SeriesSourceMissing.EXTENSION_OFF else SeriesSourceMissing.EXTENSION_NOT_INSTALLED
 
     /** Follows or unfollows the series; [onFollowed] runs once it is followed. */
     fun toggleFollowed(onFollowed: () -> Unit) {
