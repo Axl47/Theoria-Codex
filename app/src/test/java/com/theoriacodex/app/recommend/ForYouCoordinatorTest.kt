@@ -6,7 +6,6 @@ import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.InMemoryLikesRepository
-import com.theoriacodex.data.repository.InMemoryStatisticsRepository
 import com.theoriacodex.data.repository.LikesRepository
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.SourceAdapter
@@ -105,17 +104,12 @@ class ForYouCoordinatorTest {
         assertEquals(SortMode.POPULAR, query.sort)
     }
 
-    @Test fun `a Mix with lanes counts one For You search and its pages record their posts as available`() = runTest {
-        val statistics = InMemoryStatisticsRepository()
-        val empty = testForYouCoordinator(registryOf(FakeAdapter(SourceKey.GELBOORU)), statisticsRepository = statistics)
+    @Test fun `a profile without interests plans no lanes, and a lane's page loads its posts`() = runTest {
+        val empty = testForYouCoordinator(registryOf(FakeAdapter(SourceKey.GELBOORU)))
         assertTrue(empty.lanes(request(empty)).isEmpty())
-        assertEquals(0L, statistics.observeStatistics().first().forYouSearchCount)
 
-        val service = testForYouCoordinator(
-            registryOf(FakeAdapter(SourceKey.GELBOORU)), likesRepository = liked(SourceKey.GELBOORU, "cloud"), statisticsRepository = statistics,
-        )
+        val service = testForYouCoordinator(registryOf(FakeAdapter(SourceKey.GELBOORU)), likesRepository = liked(SourceKey.GELBOORU, "cloud"))
         val lane = service.lanes(request(service)).first()
-        assertEquals(1L, statistics.observeStatistics().first().forYouSearchCount)
         assertEquals(1, service.loadPage(lane.cursor, setOf(lane.source)).items.size)
     }
 

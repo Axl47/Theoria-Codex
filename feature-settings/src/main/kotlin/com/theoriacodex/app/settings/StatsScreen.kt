@@ -239,7 +239,7 @@ private fun PostsSection(statistics: StatisticsSummary) {
 @Composable
 private fun SearchesSection(statistics: StatisticsSummary) {
     StatsSectionTitle("Searches")
-    StatTiles("Searches" to statistics.searchCount, "For You searches" to statistics.forYouSearchCount)
+    StatTiles("Searches" to statistics.searchCount)
     Box(Modifier.padding(top = 8.dp)) {
         StatsCard { SourceBars(statistics.searchSources) }
     }

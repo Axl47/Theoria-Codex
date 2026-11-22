@@ -284,7 +284,6 @@ interface StatisticsRepository {
     suspend fun recordSearch(sources: Set<SourceKey>, terms: Set<SearchTerm> = emptySet())
     /** Once per kind of term, counts the terms of [recentSearches] into [LifetimeStatistics.searchesByTag]. */
     suspend fun seedSearchedTags(recentSearches: List<RecentSearchEntry>)
-    suspend fun recordForYouSearch()
     suspend fun recordForYouSave()
     suspend fun recordPostUrlCopy()
     suspend fun recordCodexEntry(codexId: String)

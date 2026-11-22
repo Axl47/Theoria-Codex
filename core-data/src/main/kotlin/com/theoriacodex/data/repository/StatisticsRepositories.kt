@@ -363,10 +363,6 @@ internal object StatisticsPolicies {
         )
     }
 
-    fun recordForYouSearch(current: LifetimeStatistics): LifetimeStatistics {
-        return current.copy(forYouSearchCount = current.forYouSearchCount.saturatingAdd(1L))
-    }
-
     fun recordForYouSave(current: LifetimeStatistics): LifetimeStatistics {
         return current.copy(forYouSaveCount = current.forYouSaveCount.saturatingAdd(1L))
     }
@@ -458,7 +454,6 @@ internal class CellStatisticsRepository(
         StatisticsPolicies.seedSearchedTags(current, recentSearches)
     }
 
-    override suspend fun recordForYouSearch() = mutate(StatisticsPolicies::recordForYouSearch)
 
     override suspend fun recordForYouSave() = mutate(StatisticsPolicies::recordForYouSave)
 

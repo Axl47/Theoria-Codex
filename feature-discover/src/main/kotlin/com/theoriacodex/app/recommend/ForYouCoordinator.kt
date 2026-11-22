@@ -40,10 +40,7 @@ class ForYouCoordinator(
     override fun availableSources(settings: AppSettings): List<SourceKey> =
         settings.runtime.enabledSources.intersect(registry.availableSources()).inPresentationOrder()
 
-    /** A Mix with lanes counts as one For You search in the statistics. */
-    override suspend fun lanes(request: ForYouFeedRequest): List<ForYouLane> = lanes.load(request).also { built ->
-        if (built.isNotEmpty()) runCatchingPreservingCancellation { statisticsRepository.recordForYouSearch() }
-    }
+    override suspend fun lanes(request: ForYouFeedRequest): List<ForYouLane> = lanes.load(request)
 
     override suspend fun loadPage(continuation: FeedCursor, sources: Set<SourceKey>): UnifiedSearchResult =
         registry.unifiedOrchestrator().nextPage(continuation, sources).also { page ->
