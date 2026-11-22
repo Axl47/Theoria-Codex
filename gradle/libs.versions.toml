@@ -35,8 +35,11 @@ profileInstaller = "1.4.1"
 uiAutomator = "2.4.0"
 kover = "0.9.11"
 detekt = "2.0.0-alpha.6"
+# On-device picture tagger runtime; CPU only (the phone's GPU gives wrong WD-ViT outputs at fp16).
+litert = "2.4.0"
 
 [libraries]
+litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "litert" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 okhttp-brotli = { group = "com.squareup.okhttp3", name = "okhttp-brotli", version.ref = "okhttp" }
 okhttp-zstd = { group = "com.squareup.okhttp3", name = "okhttp-zstd", version.ref = "okhttp" }
