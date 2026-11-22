@@ -32,7 +32,7 @@ internal fun validateBackupSettings(root: JsonObject, profileIds: Set<String>) {
         "resolveUnknownAnimatedDurations", "invertMultiImageScrollDirection").forEach { key ->
         require(root[key].isBackupBoolean()) { "Invalid backup preference: $key" }
     }
-    listOf("instantSeek", "viewerAutoRotateVideos", "oldSearchBar").filter(root::containsKey).forEach { key ->
+    listOf("instantSeek", "viewerAutoRotateVideos", "oldSearchBar", "seriesDeleteAfterReading").filter(root::containsKey).forEach { key ->
         require(root[key].isBackupBoolean()) { "Invalid backup preference: $key" }
     }
     validateProfileTags(root, "favoriteTagsByProfile", profileIds, grouped = false)

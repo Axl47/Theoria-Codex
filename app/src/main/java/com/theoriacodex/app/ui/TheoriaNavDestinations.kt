@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -365,9 +366,14 @@ private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
 @Composable
 private fun rememberSeriesViewerConfig(shell: TheoriaShell): (ViewerScreenConfig) -> ViewerScreenConfig {
     // The Viewer's owner holds the session; the retained one is claimed before this destination composes.
-    val session = shell.routes.viewer.current?.session?.collectAsStateWithLifecycle()?.value
+    val owner = shell.routes.viewer.current ?: return { it }
+    val session = owner.session.collectAsStateWithLifecycle().value
         ?.takeIf { it.context.streamSource == ViewerStreamSource.SERIES }
         ?: return { it }
+    // The Viewer's owner outlives configuration changes and is cleared when the Viewer closes, which leaves its chapter.
+    LaunchedEffect(owner, session.sessionId) {
+        owner.addCloseable { shell.seriesReader?.closed(session) }
+    }
     val mode by remember(session.context.queryHash) { shell.seriesReader?.readingMode(session) ?: emptyFlow() }
         .collectAsStateWithLifecycle(initialValue = session.seriesReadingMode)
     val modes = mode?.let { chosen -> session.posts.associate { it.id to chosen } }.orEmpty()

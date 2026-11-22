@@ -3,7 +3,18 @@ package com.theoriacodex.app.series
 import com.theoriacodex.app.di.SeriesDependencies
 import com.theoriacodex.app.viewer.decodeViewerPostId
 import com.theoriacodex.app.viewer.encodeViewerPostId
+import com.theoriacodex.app.viewer.ViewerSession
+import com.theoriacodex.data.repository.DownloadScheduler
 import com.theoriacodex.data.repository.FollowedSeries
+import com.theoriacodex.data.repository.SeriesDownloadStore
+import com.theoriacodex.data.repository.SeriesDownloads
+import com.theoriacodex.data.storage.AtomicJsonFileStore
+import java.io.File
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
+import org.junit.Rule
+import org.junit.rules.TemporaryFolder
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
@@ -31,6 +42,8 @@ import com.theoriacodex.domain.series.SeriesExtensions
 import kotlinx.coroutines.flow.MutableStateFlow
 
 class SeriesReaderTest {
+    @get:Rule val folder = TemporaryFolder()
+
     private val source = SourceKey.parseOrThrow("custom_mihon_2499283573021220255")
     private val id = SeriesId(source, "/manga/a1b2:c3?lang=en")
 
@@ -51,7 +64,7 @@ class SeriesReaderTest {
             StoredSeriesEntry(SeriesEntry("/c2", "Ch. 2"), sourceOrder = 1, firstSeenAtEpochMs = 0, lastPage = 7, pageCount = 18),
             StoredSeriesEntry(SeriesEntry("/c1", "Ch. 1"), sourceOrder = 2, firstSeenAtEpochMs = 0, read = true, lastPage = 20, pageCount = 20),
         )
-        val reader = SeriesReader(SeriesDependencies(StoredOnly(StoredSeries(Series(id, "Title")), entries), sources = { emptyList() }, extensions = NoExtensions))
+        val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), entries), sources = { emptyList() }))
 
         val session = checkNotNull(reader.session(id, "/c2"))
 
@@ -70,7 +83,7 @@ class SeriesReaderTest {
     fun aSessionKnowsItsReadingModeWithoutLoadingAnExtension() = runTest {
         val webtoon = StoredSeries(Series(id, "Title", genres = listOf("Long Strip")))
         fun reader(stored: StoredSeries) =
-            SeriesReader(SeriesDependencies(StoredOnly(stored, listOf(chapter)), sources = { error("No extension may load") }, extensions = NoExtensions))
+            SeriesReader(dependencies(StoredOnly(stored, listOf(chapter)), sources = { error("No extension may load") }))
 
         assertEquals(GalleryReadingMode.VERTICAL, reader(webtoon).session(id, "/c1")?.seriesReadingMode)
         assertEquals(
@@ -82,7 +95,7 @@ class SeriesReaderTest {
     @Test
     fun aChapterIsRecordedOnlyOnceItsPagesShow() = runTest {
         val repository = StoredOnly(StoredSeries(Series(id, "Title")), listOf(chapter))
-        val reader = SeriesReader(SeriesDependencies(repository, { listOf(OnePage(source)) }, NoExtensions))
+        val reader = SeriesReader(dependencies(repository, { listOf(OnePage(source)) }))
         val session = checkNotNull(reader.session(id, "/c1"))
 
         // The Viewer first reports the chapter while only its cover shows; resolving it reads nothing either.
@@ -97,7 +110,7 @@ class SeriesReaderTest {
     @Test
     fun resolvingAChapterAgainAsksItsSourceForFreshPages() = runTest {
         val pages = OnePage(source)
-        val reader = SeriesReader(SeriesDependencies(StoredOnly(StoredSeries(Series(id, "Title")), listOf(chapter)), { listOf(pages) }, NoExtensions))
+        val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), listOf(chapter)), { listOf(pages) }))
         val chapterId = PostId(source, "/c1")
 
         val first = checkNotNull(reader.resolve(seriesQueryHash(id), chapterId))
@@ -105,6 +118,94 @@ class SeriesReaderTest {
 
         assertEquals("https://pages.test/1.jpg", first.media.single().url)
         assertEquals("https://pages.test/2.jpg", again.media.single().url)
+    }
+
+    @Test
+    fun aDownloadedChapterReadsFromItsFilesWithoutItsExtension() = runTest {
+        val dependencies = dependencies(StoredOnly(StoredSeries(Series(id, "Title", coverUrl = "https://cover.test")), listOf(chapter)), { error("No extension may load") })
+        download("/c1")
+
+        val resolved = checkNotNull(SeriesReader(dependencies).resolve(seriesQueryHash(id), PostId(source, "/c1")))
+
+        assertEquals(listOf("0001.png", "0002.png"), resolved.media.map { File(checkNotNull(it.localPath)).name })
+        assertTrue(resolved.media.all { it.url == null })
+        assertEquals("https://cover.test", resolved.preview.url)
+    }
+
+    @Test
+    fun deleteAfterReadingDeletesAReadChapterOnlyOnceTheReaderLeavesIt() = runTest {
+        val reader = readerOverDownloadedChapters(deleteAfterReading = true)
+        val session = checkNotNull(reader.session(id, "/c1"))
+
+        reader.show(session, "/c1")
+        // Read, but still open.
+        assertEquals(listOf("/c1", "/c2", "/c3"), onDevice())
+        reader.show(session, "/c2")
+        assertEquals(listOf("/c2", "/c3"), onDevice())
+        reader.show(session, "/c3")
+        // Chapter 2 was left unfinished.
+        assertEquals(listOf("/c2", "/c3"), onDevice())
+        reader.closed(session)
+        advanceUntilIdle()
+        assertEquals(listOf("/c2"), onDevice())
+    }
+
+    @Test
+    fun withDeleteAfterReadingOffLeavingAReadChapterKeepsIt() = runTest {
+        val reader = readerOverDownloadedChapters(deleteAfterReading = false)
+        val session = checkNotNull(reader.session(id, "/c1"))
+
+        reader.show(session, "/c1")
+        reader.show(session, "/c2")
+        reader.closed(session)
+        advanceUntilIdle()
+        assertEquals(listOf("/c1", "/c2", "/c3"), onDevice())
+    }
+
+    /** Chapters 1 to 3 on the device, of which 1 and 3 are read. */
+    private suspend fun TestScope.readerOverDownloadedChapters(deleteAfterReading: Boolean): SeriesReader {
+        val entries = (3 downTo 1).mapIndexed { order, number ->
+            StoredSeriesEntry(SeriesEntry("/c$number", "Ch. $number"), sourceOrder = order, firstSeenAtEpochMs = 0, read = number != 2)
+        }
+        listOf("/c1", "/c2", "/c3").forEach { download(it) }
+        return SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), entries), { error("unused") }, deleteAfterReading))
+    }
+
+    /** What the Viewer reports once the chapter at [address] shows its first page. */
+    private suspend fun SeriesReader.show(session: ViewerSession, address: String) {
+        val post = session.posts.single { it.id.sourcePostId == address }
+        recordProgress(session, post.copy(media = listOf(ImageRef(url = null, localPath = "/page", mime = null))), mediaNumber = 1)
+    }
+
+    private suspend fun TestScope.onDevice() = store().downloaded(id).sorted()
+
+    private fun TestScope.store() = SeriesDownloadStore(folder.root.resolve("downloads"), StandardTestDispatcher(testScheduler))
+
+    /** Puts two solid pages of the chapter at [address] on the device. */
+    private suspend fun TestScope.download(address: String) = store().write(id, address) { staging ->
+        repeat(2) { File(staging, SeriesDownloadStore.pageFileName(it, "png")).writeBytes(byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47)) }
+    }
+
+    /** The reader's dependencies over [repository], with downloads in this test's folder that never fetch. */
+    private fun TestScope.dependencies(
+        repository: SeriesRepository,
+        sources: suspend () -> List<SeriesSource>,
+        deleteAfterReading: Boolean = false,
+    ): SeriesDependencies {
+        val downloads = SeriesDownloads(
+            store = store(),
+            queueFile = folder.root.resolve("queue.json"),
+            repository = repository,
+            sources = sources,
+            fetch = { _, _ -> error("Nothing downloads here") },
+            scheduler = object : DownloadScheduler {
+                override fun schedule(automatic: Boolean) = Unit
+
+                override fun ensureScheduled(automatic: Boolean) = Unit
+            },
+            files = AtomicJsonFileStore(StandardTestDispatcher(testScheduler)),
+        )
+        return SeriesDependencies(repository, sources, NoExtensions, downloads, { deleteAfterReading }, scope = this)
     }
 
     private val chapter = StoredSeriesEntry(SeriesEntry("/c1", "Ch. 1"), sourceOrder = 0, firstSeenAtEpochMs = 0)
@@ -134,6 +235,7 @@ private class StoredOnly(private val stored: StoredSeries, private val entries: 
     override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>) = emptyList<SeriesEntry>()
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
+    override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) {
         progress += "$entryAddress $page/$pageCount"
     }

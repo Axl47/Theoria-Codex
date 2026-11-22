@@ -49,8 +49,9 @@ public interface SeriesDao {
 
     /** A restore adds to a stored series without taking anything from it. */
     @Query("UPDATE series SET followed = followed OR :followed, reading_mode = COALESCE(reading_mode, :readingMode), "
-            + "last_opened_entry = COALESCE(last_opened_entry, :lastOpenedEntry) WHERE source = :source AND address = :address")
-    void mergeRestoredSeries(String source, String address, boolean followed, String readingMode, String lastOpenedEntry);
+            + "last_opened_entry = COALESCE(last_opened_entry, :lastOpenedEntry), download_new = download_new OR :downloadNew "
+            + "WHERE source = :source AND address = :address")
+    void mergeRestoredSeries(String source, String address, boolean followed, String readingMode, String lastOpenedEntry, boolean downloadNew);
 
     /**
      * A stored entry takes the further progress of the two: read on either side, and the later page together with the

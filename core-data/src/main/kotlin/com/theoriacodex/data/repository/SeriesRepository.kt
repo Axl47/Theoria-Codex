@@ -16,6 +16,8 @@ data class StoredSeries(
     val lastOpenedEntry: String? = null,
     /** When the source last listed this series' entries. */
     val lastCheckedAtEpochMs: Long? = null,
+    /** Whether chapters the check for new chapters finds are downloaded, while the series is followed. */
+    val downloadNewChapters: Boolean = false,
 )
 
 /** An entry as stored, with the user's progress through it. */
@@ -35,7 +37,7 @@ data class FollowedSeries(val series: Series, val unreadCount: Int)
 
 /**
  * Stored series, their entries and reading progress. A series is stored when its page is opened; following only
- * flags it. Pages are never stored: their addresses expire.
+ * flags it. Page addresses are never stored, since they expire; downloaded pages are [SeriesDownloads]' files.
  */
 interface SeriesRepository {
     /** By title. */
@@ -74,6 +76,8 @@ interface SeriesRepository {
     suspend fun setFollowed(id: SeriesId, followed: Boolean)
 
     suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode)
+
+    suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean)
 
     /**
      * The user is on [page] (from 1) of the entry at [entryAddress]. [pageCount] is null while the entry's pages are

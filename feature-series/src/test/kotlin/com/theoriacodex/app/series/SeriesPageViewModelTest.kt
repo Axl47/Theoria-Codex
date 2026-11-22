@@ -62,5 +62,6 @@ private class Restored(private val stored: StoredSeries, private val entries: Li
     override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>) = emptyList<SeriesEntry>()
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
+    override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) = Unit
 }

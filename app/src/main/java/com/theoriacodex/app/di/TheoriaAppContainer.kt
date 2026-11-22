@@ -134,6 +134,11 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import com.theoriacodex.app.series.keepSeriesUpdatesScheduled
+import com.theoriacodex.app.series.SeriesDownloadScheduler
+import com.theoriacodex.app.media.downloadMediaFile
+import com.theoriacodex.app.media.sniffMediaType
+import com.theoriacodex.data.repository.SeriesDownloadStore
+import com.theoriacodex.data.repository.SeriesDownloads
 
 data class DataDependencies(
     val storageDirectory: File,
@@ -549,7 +554,25 @@ internal class DefaultTheoriaAppContainer(
     override val series: SeriesDependencies? = extensionHost?.let { host ->
         val choices = DeviceExtensionChoices.on(appContext)
         host.bind(choices)
-        SeriesDependencies(RoomSeriesRepository(contentDatabase), host::sources, host.extensions)
+        val repository = RoomSeriesRepository(contentDatabase)
+        // Under noBackupFilesDir, files and queue alike: Android's backup and device transfer carry neither.
+        val downloads = SeriesDownloads(
+            store = SeriesDownloadStore(File(appContext.noBackupFilesDir, "series_downloads")),
+            queueFile = File(appContext.noBackupFilesDir, "series_download_queue.json"),
+            repository = repository,
+            sources = host::sources,
+            // The client that carries the extension interceptor, as the Viewer's image loader does.
+            fetch = { url, file ->
+                downloadMediaFile(url, emptyMap(), file, client = httpClients.downloads)
+                sniffMediaType(file)
+            },
+            scheduler = SeriesDownloadScheduler(appContext),
+        )
+        SeriesDependencies(
+            repository, host::sources, host.extensions, downloads,
+            deleteAfterReading = { settingsRepository.observeSettings().first().seriesDeleteAfterReading },
+            scope = durableStoreScope,
+        )
     }
 
     /** Keeps the new-chapter check scheduled; started by [awaitDurableStores], once. */
@@ -619,6 +642,10 @@ internal class DefaultTheoriaAppContainer(
         // Only now: watching followed series opens Room, which must first get the chance to fail into the startup screen.
         if (seriesScheduling == null) {
             seriesScheduling = series?.let { series ->
+                durableStoreScope.launch {
+                    runCatchingPreservingCancellation { series.downloads.resume() }
+                        .onFailure { Diagnostics.report("series", "Chapter downloads could not resume", it) }
+                }
                 durableStoreScope.launch {
                     keepSeriesUpdatesScheduled(appContext, series.repository.observeFollowed(), settingsRepository.observeSettings())
                 }

@@ -92,7 +92,7 @@ class OfflineMediaAcquisition(
  * Streams a media response to a staging file with bounded memory; callers publish only a complete,
  * recognized media file. Offline saves use the 2 GiB default; caches pass their own [maxBytes].
  */
-internal suspend fun downloadMediaFile(
+suspend fun downloadMediaFile(
     url: String,
     headers: Map<String, String>,
     destination: File,
@@ -146,24 +146,35 @@ private fun mediaTooLarge(maxBytes: Long) = IOException(
 
 /** A successful HTML/error response must never become an apparently available offline image. */
 fun validateOfflineMediaFile(file: File) {
+    if (sniffMediaType(file) == null) throw IOException("The downloaded file is not supported image or video media")
+}
+
+/** The media type [file]'s first bytes show, among the formats offline copies accept; null for anything else. */
+fun sniffMediaType(file: File): String? {
     val header = file.inputStream().use { input ->
         val bytes = ByteArray(16)
         val length = input.read(bytes)
         bytes.take(length.coerceAtLeast(0)).map { it.toInt() and 0xff }
     }
-    val imageSignatures = listOf(
-        listOf(0xff, 0xd8, 0xff), // JPEG
-        listOf(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a), // PNG/APNG
-        listOf(0x47, 0x49, 0x46, 0x38), // GIF
-        listOf(0x42, 0x4d), // BMP
-        listOf(0x1a, 0x45, 0xdf, 0xa3), // WebM/Matroska
-        listOf(0x46, 0x4c, 0x56), // FLV
+    val signatures = listOf(
+        listOf(0xff, 0xd8, 0xff) to "image/jpeg",
+        listOf(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a) to "image/png", // PNG/APNG
+        listOf(0x47, 0x49, 0x46, 0x38) to "image/gif",
+        listOf(0x42, 0x4d) to "image/bmp",
+        listOf(0x1a, 0x45, 0xdf, 0xa3) to "video/webm", // WebM/Matroska
+        listOf(0x46, 0x4c, 0x56) to "video/x-flv",
     )
-    val recognized = imageSignatures.any { header.take(it.size) == it } ||
-        header.drop(4).take(4) == listOf(0x66, 0x74, 0x79, 0x70) || // MP4/AVIF/HEIF
-        header.take(4) == listOf(0x52, 0x49, 0x46, 0x46) &&
-        header.drop(8).take(4) == listOf(0x57, 0x45, 0x42, 0x50) // WebP
-    if (!recognized) throw IOException("The downloaded file is not supported image or video media")
+    signatures.firstOrNull { (signature, _) -> header.take(signature.size) == signature }?.let { return it.second }
+    val brand = String(header.drop(8).take(4).map(Int::toChar).toCharArray())
+    return when {
+        header.drop(4).take(4) == listOf(0x66, 0x74, 0x79, 0x70) -> when (brand) { // ISO media: the brand names the kind
+            "avif", "avis" -> "image/avif"
+            "heic", "heix", "mif1", "msf1" -> "image/heic"
+            else -> "video/mp4"
+        }
+        header.take(4) == listOf(0x52, 0x49, 0x46, 0x46) && brand == "WEBP" -> "image/webp"
+        else -> null
+    }
 }
 
 private const val MAX_OFFLINE_MEDIA_BYTES = 2L * 1024 * 1024 * 1024

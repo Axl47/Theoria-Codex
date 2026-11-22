@@ -98,6 +98,8 @@ class RoomSeriesRepository(
 
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = update(id) { it.copy(readingMode = mode) }
 
+    override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = update(id) { it.copy(downloadNewChapters = on) }
+
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) {
         database.withTransaction {
             val entry = dao.entry(id.source.id, id.address, entryAddress)?.toStored() ?: return@withTransaction
@@ -152,6 +154,7 @@ internal fun SeriesEntity.toStored() = StoredSeries(
     readingMode = readingMode?.let { name -> GalleryReadingMode.entries.firstOrNull { it.name == name } },
     lastOpenedEntry = lastOpenedEntry,
     lastCheckedAtEpochMs = lastCheckedAtEpochMs,
+    downloadNewChapters = downloadNew,
 )
 
 internal fun StoredSeries.toEntity() = SeriesEntity(
@@ -168,6 +171,7 @@ internal fun StoredSeries.toEntity() = SeriesEntity(
     lastCheckedAtEpochMs,
     series.description,
     series.status.takeUnless { it == SeriesStatus.UNKNOWN }?.name,
+    downloadNewChapters,
 )
 
 /**

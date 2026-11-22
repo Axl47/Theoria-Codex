@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Bundle
 import com.theoriacodex.app.MainActivity
 import com.theoriacodex.app.R
+import com.theoriacodex.data.repository.DrainProgress
 import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.SeriesEntry
@@ -56,10 +57,66 @@ internal fun notifySeriesUpdate(context: Context, update: SeriesUpdate) {
     }
 }
 
+private const val DOWNLOADS_CHANNEL = "chapter_downloads"
+
+/** The download queue's one ongoing notification; a failed download's summary replaces the last one. */
+internal const val DOWNLOAD_PROGRESS_NOTIFICATION_ID = 3
+private const val DOWNLOADS_FAILED_NOTIFICATION_ID = 4
+
 /**
- * Where a new-chapters notification lands: it names the series for the running app and brings the app forward. It is
- * not exported, so only this app's notifications reach it, and [opened] is the only way to a series from outside the
- * app's own screens: a link another app sends cannot name one.
+ * The download queue's ongoing notification: the series and chapter being fetched, which of the chapters taken on so
+ * far it is, and its pages as progress. Tapping it opens that series' page. [progress] is null before the first
+ * chapter starts.
+ */
+internal fun downloadProgressNotification(context: Context, progress: DrainProgress?): Notification {
+    val builder = downloadNotification(context).setOngoing(true).setOnlyAlertOnce(true)
+    if (progress == null) return builder.setContentTitle("Downloading chapters").setProgress(0, 0, true).build()
+    val open = Intent(Intent.ACTION_VIEW, seriesUri(progress.seriesId), context, SeriesNotificationActivity::class.java)
+    return builder
+        .setContentTitle(progress.series)
+        .setContentText(downloadProgressText(progress))
+        .setProgress(progress.pageCount, progress.pages, progress.pageCount == 0)
+        .setContentIntent(PendingIntent.getActivity(context, 0, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+        .build()
+}
+
+/** "Ch. 12 · 2 of 5". */
+internal fun downloadProgressText(progress: DrainProgress): String =
+    listOf(progress.chapter, "${progress.number} of ${progress.of}").filter(String::isNotBlank).joinToString(" · ")
+
+/** Shows the queue's notification outside a user-initiated job, which shows its own. Without the permission, nothing shows. */
+internal fun postDownloadProgress(context: Context, notification: Notification) {
+    context.getSystemService(NotificationManager::class.java).notify(DOWNLOAD_PROGRESS_NOTIFICATION_ID, notification)
+}
+
+internal fun cancelDownloadProgress(context: Context) {
+    context.getSystemService(NotificationManager::class.java).cancel(DOWNLOAD_PROGRESS_NOTIFICATION_ID)
+}
+
+/** Says how many chapters a drain gave up on; they show as not downloaded again. */
+internal fun notifyDownloadsFailed(context: Context, failed: Int) {
+    val manager = context.getSystemService(NotificationManager::class.java)
+    if (!manager.areNotificationsEnabled()) return
+    val app = PendingIntent.getActivity(context, 0, Intent(context, SeriesNotificationActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+    manager.notify(
+        DOWNLOADS_FAILED_NOTIFICATION_ID,
+        downloadNotification(context).setContentTitle(downloadsFailedText(failed)).setContentIntent(app).setAutoCancel(true).build(),
+    )
+}
+
+internal fun downloadsFailedText(failed: Int): String =
+    if (failed == 1) "1 chapter could not be downloaded" else "$failed chapters could not be downloaded"
+
+private fun downloadNotification(context: Context): Notification.Builder {
+    context.getSystemService(NotificationManager::class.java)
+        .createNotificationChannel(NotificationChannel(DOWNLOADS_CHANNEL, "Chapter downloads", NotificationManager.IMPORTANCE_LOW))
+    return Notification.Builder(context, DOWNLOADS_CHANNEL).setSmallIcon(R.drawable.ic_notification_series)
+}
+
+/**
+ * Where a new-chapters or download notification lands: it names the series for the running app and brings the app
+ * forward. It is not exported, so only this app's notifications reach it, and [opened] is the only way to a series from
+ * outside the app's own screens: a link another app sends cannot name one.
  */
 class SeriesNotificationActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {

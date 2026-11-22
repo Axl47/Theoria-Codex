@@ -2,6 +2,9 @@ package com.theoriacodex.app.series
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.theoriacodex.data.repository.ChapterDownload
+import com.theoriacodex.data.repository.DownloadChoice
+import com.theoriacodex.data.repository.SeriesDownloads
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
@@ -38,8 +41,13 @@ data class SeriesPageState(
      * or the source's language off.
      */
     val sourceMissing: Boolean = false,
+    /** Each chapter queued for download or on the device, by address; empty in a build that cannot download. */
+    val downloads: Map<String, ChapterDownload> = emptyMap(),
 ) {
     val sourceName: String get() = source?.name.orEmpty()
+
+    /** Whether the chapter at [entry] can be read now: through its source, or from the device without one. */
+    fun canOpen(entry: String): Boolean = !sourceMissing || downloads[entry] == ChapterDownload.OnDevice
 
     /** The entry Continue opens. */
     val continueWith: StoredSeriesEntry? get() = stored?.let { continueEntry(it, entries) }
@@ -48,19 +56,30 @@ data class SeriesPageState(
     val started: Boolean get() = entries.any { it.read || it.lastPage > 0 }
 }
 
-/** [sourcesChanged] emits once at the start and again whenever [loadSources] may answer differently; each is a refresh. */
+/**
+ * [sourcesChanged] emits once at the start and again whenever [loadSources] may answer differently; each is a refresh.
+ * Without [downloads] the page offers none.
+ */
 class SeriesPageViewModel(
     private val id: SeriesId,
     private val repository: SeriesRepository,
     private val loadSources: suspend () -> List<SeriesSource>,
     sourcesChanged: Flow<*> = flowOf(Unit),
+    private val downloads: SeriesDownloads? = null,
 ) : ViewModel() {
     private val refresh = MutableStateFlow(SeriesPageState())
 
-    val state: StateFlow<SeriesPageState> =
-        combine(repository.observeSeries(id), repository.observeEntries(id), refresh) { stored, entries, refresh ->
-            refresh.copy(stored = stored, entries = entries.sortedBy { it.sourceOrder })
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SeriesPageState())
+    /** Whether this page offers downloads. */
+    val canDownload: Boolean = downloads != null
+
+    val state: StateFlow<SeriesPageState> = combine(
+        repository.observeSeries(id),
+        repository.observeEntries(id),
+        refresh,
+        downloads?.states(id) ?: flowOf(emptyMap()),
+    ) { stored, entries, refresh, downloads ->
+        refresh.copy(stored = stored, entries = entries.sortedBy { it.sourceOrder }, downloads = downloads)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SeriesPageState())
 
     init {
         viewModelScope.launch { sourcesChanged.collectLatest { refreshNow() } }
@@ -88,6 +107,30 @@ class SeriesPageViewModel(
             failureLine(error)
         }
         refresh.update { it.copy(refreshing = false, failure = failure) }
+    }
+
+    /** The chapter row's download mark: downloads the chapter, stops its download, or deletes it from the device. */
+    fun toggleDownload(entry: String) {
+        val downloads = downloads ?: return
+        viewModelScope.launch {
+            when (state.value.downloads[entry]) {
+                null -> downloads.download(id, listOf(entry))
+                is ChapterDownload.Queued -> downloads.cancel(id, entry)
+                ChapterDownload.OnDevice -> downloads.delete(id, entry)
+            }
+        }
+    }
+
+    fun download(choice: DownloadChoice) {
+        viewModelScope.launch { downloads?.download(id, choice) }
+    }
+
+    fun deleteDownloads() {
+        viewModelScope.launch { downloads?.deleteSeries(id) }
+    }
+
+    fun setDownloadNewChapters(on: Boolean) {
+        viewModelScope.launch { repository.setDownloadNewChapters(id, on) }
     }
 
     /** Follows or unfollows the series; [onFollowed] runs once it is followed. */

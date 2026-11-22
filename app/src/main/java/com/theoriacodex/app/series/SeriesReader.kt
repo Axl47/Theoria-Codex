@@ -16,16 +16,23 @@ import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.seriesReadingMode
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.launch
 
 /**
  * Reads a series in the Viewer. A session's posts are the series' entries in reading order, each a gallery whose pages
  * arrive when the Viewer reaches it, so the Viewer's own start page, next-post swipe, end card and reading-mode switch
  * give resume, next chapter and modes. What the Viewer reports back goes to the series, never to History or a Codex.
+ * A downloaded chapter's pages are its files, so it reads with no connection and without its extension.
  */
 internal class SeriesReader(private val series: SeriesDependencies) {
+    /** The chapter each open session shows, by session id, so leaving one is noticed. */
+    private val showing = ConcurrentHashMap<String, String>()
+
     /**
      * A session over [id]'s stored entries opening at [entryAddress], on [pageIndex] or, without one, where the user
      * left it. Null when the series or that entry is not stored.
@@ -50,10 +57,12 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         val entry = checkNotNull(series.repository.entries(id).firstOrNull { it.entry.address == postId.sourcePostId }) {
             "The chapter is not stored"
         }
-        val source = source(id.source)
-        val pages = source.pages(entry.entry)
+        // Nothing is asked of the source for a downloaded chapter; the cover is the stored address, as in a session.
+        val downloaded = series.downloads.pages(id, entry.entry.address)
+        val source = if (downloaded == null) source(id.source) else null
+        val pages = downloaded ?: checkNotNull(source).pages(entry.entry)
         if (pages.isEmpty()) return null
-        return chapterPost(stored.series, entry.entry, source.coverAddress(stored.series)).copy(
+        return chapterPost(stored.series, entry.entry, source?.coverAddress(stored.series) ?: stored.series.coverUrl).copy(
             full = pages.first(),
             media = pages,
             mediaCount = pages.size,
@@ -67,8 +76,26 @@ internal class SeriesReader(private val series: SeriesDependencies) {
      */
     suspend fun recordProgress(session: ViewerSession, post: Post, mediaNumber: Int) {
         val id = seriesIdOf(session.context.queryHash) ?: return
+        showing.put(session.sessionId, post.id.sourcePostId)?.takeIf { it != post.id.sourcePostId }?.let { left(id, it) }
         if (post.media.isEmpty()) return
         series.repository.recordProgress(id, post.id.sourcePostId, mediaNumber, post.media.size)
+    }
+
+    /** [session] closed: the chapter it showed is left, which can delete it; see [left]. Returns at once. */
+    fun closed(session: ViewerSession) {
+        val id = seriesIdOf(session.context.queryHash) ?: return
+        val chapter = showing.remove(session.sessionId) ?: return
+        series.scope.launch { runCatchingPreservingCancellation { left(id, chapter) } }
+    }
+
+    /**
+     * The reader moved off the chapter at [entryAddress] to another or closed it. With Delete after reading on, a read
+     * chapter is deleted now: never while it is open, and never one left unfinished.
+     */
+    private suspend fun left(id: SeriesId, entryAddress: String) {
+        if (!series.deleteAfterReading()) return
+        val entry = series.repository.entries(id).firstOrNull { it.entry.address == entryAddress } ?: return
+        if (entry.read) series.downloads.delete(id, entryAddress)
     }
 
     /** A mode chosen in any chapter is the series' mode. */
