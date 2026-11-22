@@ -97,13 +97,22 @@ class RoomProfileBackupStore(
             collectionsAdded
         }
 
+    /**
+     * Adds a backed-up series to what the device holds. An entry on both sides takes the further progress. When the
+     * device already has entries for the series, they are the source's current list, so an entry only the backup has
+     * arrives as one the source no longer lists: kept with its progress, but neither counted as unread nor announced
+     * as new, and listed again as it was if the source brings it back.
+     */
     private fun mergeSeries(backup: BackupSeries) {
         val stored = backup.series
         val id = stored.series.id
         if (series.insertSeries(stored.toEntity()) == -1L) {
-            series.mergeRestoredSeries(id.source.id, id.address, stored.followed, stored.readingMode?.name)
+            series.mergeRestoredSeries(id.source.id, id.address, stored.followed, stored.readingMode?.name, stored.lastOpenedEntry)
         }
-        series.insertEntries(backup.entries.map { it.toEntity(id) })
+        val onDevice = series.allEntries(id.source.id, id.address).mapTo(HashSet()) { it.address }
+        val (known, missing) = backup.entries.partition { it.entry.address in onDevice }
+        known.forEach { series.mergeRestoredEntry(id.source.id, id.address, it.entry.address, it.read, it.lastPage, it.pageCount) }
+        series.insertEntries(missing.map { (if (onDevice.isEmpty()) it else it.copy(sourceOrder = NOT_LISTED)).toEntity(id) })
     }
 
     private fun mergeRecents(library: BackupLibrary) {

@@ -108,6 +108,43 @@ class RoomProfileBackupStoreTest {
         restoredDatabase.close()
     }
 
+    @Test fun `a restore onto a series the device already opened merges progress and lists nothing the device lacks`() = runTest {
+        val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
+        val series = RoomSeriesRepository(database, clock = { 30L })
+        val title = Series(id, "Title", language = "en")
+        series.store(title, listOf(SeriesEntry("/chapter/2", "Ch.2"), SeriesEntry("/chapter/1", "Ch.1"), SeriesEntry("/chapter/0", "Ch.0")))
+        series.setFollowed(id, true)
+        series.recordProgress(id, "/chapter/0", page = 9, pageCount = 9)
+        series.recordProgress(id, "/chapter/1", page = 18, pageCount = 18)
+        series.recordProgress(id, "/chapter/2", page = 3, pageCount = 20)
+        val snapshot = backups.snapshot(includeRecents = false)
+
+        // A new device where the series was opened before the restore: the source's list today, nothing read.
+        val deviceDatabase = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext<Context>(),
+            TheoriaRoomDatabase::class.java).allowMainThreadQueries().build()
+        val device = RoomSeriesRepository(deviceDatabase, clock = { 40L })
+        device.store(title, listOf(SeriesEntry("/chapter/3", "Ch.3"), SeriesEntry("/chapter/2", "Ch.2"), SeriesEntry("/chapter/1", "Ch.1")))
+        RoomProfileBackupStore(deviceDatabase).merge(snapshot)
+
+        assertEquals("/chapter/2", device.series(id)!!.lastOpenedEntry)
+        val merged = device.entries(id).associateBy { it.entry.address }
+        assertEquals(setOf("/chapter/3", "/chapter/2", "/chapter/1"), merged.keys)
+        assertTrue(merged.getValue("/chapter/1").read)
+        assertEquals(3 to 20, merged.getValue("/chapter/2").let { it.lastPage to it.pageCount })
+        // Chapter 0 keeps its progress but is not listed, so the unread count is the device's list: chapters 2 and 3.
+        val dropped = deviceDatabase.seriesDao().allEntries(id.source.id, id.address).single { it.address == "/chapter/0" }
+        assertTrue(dropped.read && dropped.sourceOrder == NOT_LISTED)
+        assertEquals(listOf(2), device.observeFollowed().first().map { it.unreadCount })
+
+        // Further along on the device than in the backup: a second restore takes nothing back.
+        device.recordProgress(id, "/chapter/2", page = 7, pageCount = 20)
+        device.recordProgress(id, "/chapter/3", page = 2, pageCount = 9)
+        RoomProfileBackupStore(deviceDatabase).merge(snapshot)
+        assertEquals("/chapter/3", device.series(id)!!.lastOpenedEntry)
+        assertEquals(7, device.entries(id).single { it.entry.address == "/chapter/2" }.lastPage)
+        deviceDatabase.close()
+    }
+
     @Test fun `replaying an import keeps existing media and history while repairing Likes membership`() = runTest {
         val post = post("42")
         content.ensureCodex("old", "Existing")

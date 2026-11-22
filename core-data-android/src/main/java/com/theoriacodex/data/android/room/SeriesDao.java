@@ -48,9 +48,15 @@ public interface SeriesDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE) void insertEntries(List<SeriesEntryEntity> entities);
 
     /** A restore adds to a stored series without taking anything from it. */
-    @Query("UPDATE series SET followed = followed OR :followed, reading_mode = COALESCE(reading_mode, :readingMode) "
-            + "WHERE source = :source AND address = :address")
-    void mergeRestoredSeries(String source, String address, boolean followed, String readingMode);
+    @Query("UPDATE series SET followed = followed OR :followed, reading_mode = COALESCE(reading_mode, :readingMode), "
+            + "last_opened_entry = COALESCE(last_opened_entry, :lastOpenedEntry) WHERE source = :source AND address = :address")
+    void mergeRestoredSeries(String source, String address, boolean followed, String readingMode, String lastOpenedEntry);
+
+    /** A stored entry takes the further progress of the two: read on either side, the later page. */
+    @Query("UPDATE series_entries SET read = read OR :read, last_page = MAX(last_page, :lastPage), "
+            + "page_count = COALESCE(page_count, :pageCount) "
+            + "WHERE source = :source AND series_address = :seriesAddress AND address = :address")
+    void mergeRestoredEntry(String source, String seriesAddress, String address, boolean read, int lastPage, Integer pageCount);
 
     /** An update in place: replacing the row would cascade its entries away. */
     @Upsert void upsertSeries(SeriesEntity entity);

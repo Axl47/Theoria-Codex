@@ -23,7 +23,7 @@ import kotlinx.coroutines.withContext
  * The `source_order` of an entry its source stopped listing. The row stays, hidden from every list and count, so the
  * chapter is neither new nor unread again if the source lists it once more.
  */
-private const val NOT_LISTED = -1
+internal const val NOT_LISTED = -1
 
 class RoomSeriesRepository(
     private val database: TheoriaRoomDatabase,
