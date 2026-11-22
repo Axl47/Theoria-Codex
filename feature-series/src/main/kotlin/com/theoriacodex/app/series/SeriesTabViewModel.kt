@@ -23,6 +23,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -51,11 +53,11 @@ sealed interface BrowseKind {
 
     data object Latest : BrowseKind
 
-    /**
-     * The source's own search for [text] with [filters]. [changed] counts the filters changed from their defaults,
-     * and the text when there is one.
-     */
-    data class Filtered(val text: String, val filters: List<SeriesFilter>, val changed: Int) : BrowseKind
+    /** The source's own search for [text] with [filters], of which [changed] differ from the source's defaults. */
+    data class Filtered(val text: String, val filters: List<SeriesFilter>, val changed: Int) : BrowseKind {
+        /** What the Filter chip counts: the changed filters, and the text when there is one. */
+        val active: Int get() = changed + if (text.isEmpty()) 0 else 1
+    }
 }
 
 /**
@@ -108,6 +110,9 @@ class SeriesTabViewModel(
 
     /** The filter sheet's load of the source's filters; a sheet closed or opened again cancels it. */
     private var filterLoad: Job? = null
+
+    /** Follows whether the tab shows; see [followShown]. */
+    private var shownWatch: Job? = null
     private val mutableState = MutableStateFlow(SeriesTabState(search = searchText?.let { emptyList() }))
     val state: StateFlow<SeriesTabState> = mutableState
 
@@ -176,17 +181,36 @@ class SeriesTabViewModel(
 
     fun retryBrowse() = choose(state.value.browseKind)
 
-    /** Closes the filter sheet and lists the browsed source's search for what it holds. */
+    /**
+     * Closes the filter sheet and lists the browsed source's search for what it holds. Sent before the source's
+     * filters have loaded, it keeps the filters the listing on screen applied and changes only the text.
+     */
     fun searchSource() {
         val sheet = state.value.filterSheet ?: return
+        val applied = state.value.browseKind as? BrowseKind.Filtered
         val query = sheet.text.trim()
-        val filters = sheet.draft.orEmpty()
         closeFilters()
-        choose(BrowseKind.Filtered(query, filters, filters.changedFrom(sheet.defaults.orEmpty()) + if (query.isEmpty()) 0 else 1))
+        choose(
+            when {
+                sheet.draft != null -> BrowseKind.Filtered(query, sheet.draft, sheet.draft.changedFrom(sheet.defaults.orEmpty()))
+                else -> BrowseKind.Filtered(query, applied?.filters.orEmpty(), applied?.changed ?: 0)
+            },
+        )
     }
 
-    /** Once the tab is left: closes the filter sheet and returns a filtered browse to the popular series. */
-    fun dropFilters() {
+    /**
+     * Follows [shown], whether the tab shows, replacing what was followed before. Filter choices last only while the
+     * tab shows: once it is left, the sheet closes and a filtered browse returns to the popular series. It is followed
+     * here rather than in the tab's composition, which the pager drops before it reports another tab settled.
+     */
+    fun followShown(shown: Flow<Boolean>) {
+        shownWatch?.cancel()
+        shownWatch = viewModelScope.launch {
+            shown.distinctUntilChanged().drop(1).collect { if (!it) dropFilters() }
+        }
+    }
+
+    private fun dropFilters() {
         closeFilters()
         if (state.value.browseKind is BrowseKind.Filtered) choose(BrowseKind.Popular)
     }

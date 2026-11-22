@@ -150,7 +150,7 @@ class SeriesTabViewModelTest {
         advanceUntilIdle()
 
         assertEquals(null, viewModel.state.value.filterSheet)
-        assertEquals(BrowseKind.Filtered("one punch", chosen, changed = 2), viewModel.state.value.browseKind)
+        assertEquals(BrowseKind.Filtered("one punch", chosen, changed = 1), viewModel.state.value.browseKind)
         assertEquals(listOf("one punch", "one punch"), browsed(viewModel))
         assertEquals(listOf(chosen, chosen), source.searchedWith)
 
@@ -163,6 +163,32 @@ class SeriesTabViewModelTest {
         viewModel.choose(BrowseKind.Latest)
         advanceUntilIdle()
         assertEquals(listOf("latest"), browsed(viewModel))
+    }
+
+    @Test
+    fun searchSentBeforeTheFiltersLoadKeepsTheFiltersOnScreen() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val defaults = listOf(SeriesFilter.Check("Completed", false))
+        val chosen = listOf(SeriesFilter.Check("Completed", true))
+        val slow = CompletableDeferred<List<SeriesFilter>>()
+        val answers = ArrayDeque(listOf(CompletableDeferred(defaults), slow))
+        val source = Answering().apply { offered = { answers.removeFirst().await() } }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) {}
+        advanceUntilIdle()
+        viewModel.openFilters()
+        advanceUntilIdle()
+        viewModel.editFilters { it.copy(text = "one", draft = chosen) }
+        viewModel.searchSource()
+        advanceUntilIdle()
+
+        viewModel.openFilters()
+        advanceUntilIdle()
+        viewModel.editFilters { it.copy(text = "two") }
+        viewModel.searchSource()
+        advanceUntilIdle()
+
+        assertEquals(BrowseKind.Filtered("two", chosen, changed = 1), viewModel.state.value.browseKind)
+        assertEquals(chosen, source.searchedWith.last())
     }
 
     @Test
@@ -211,11 +237,13 @@ class SeriesTabViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val offered = listOf(Answering(), Answering("custom_mihon_8"))
         val viewModel = SeriesTabViewModel(NothingStored, { offered }) {}
+        val shown = MutableStateFlow(true)
+        viewModel.followShown(shown)
         advanceUntilIdle()
         searchFor(viewModel, "one punch")
 
         viewModel.openFilters()
-        viewModel.dropFilters()
+        shown.value = false
         advanceUntilIdle()
         assertEquals(null, viewModel.state.value.filterSheet)
         assertEquals(BrowseKind.Popular, viewModel.state.value.browseKind)

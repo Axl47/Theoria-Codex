@@ -63,11 +63,11 @@ internal fun topLevelPagerFling(state: PagerState): TargetedFlingBehavior =
     PagerDefaults.flingBehavior(state = state, snapPositionalThreshold = TheoriaMotion.PAGE_COMMIT_FRACTION)
 
 /**
- * Whether For You is where the tabs rest or are heading. A bar tap from Search to Library scrolls across For You
- * without ever targeting it; a swipe toward it targets it as soon as it is under way.
+ * Whether [tab] is where the tabs rest or are heading. A bar tap from Search to Library scrolls across For You
+ * without ever targeting it; a swipe toward a tab targets it as soon as it is under way.
  */
-internal fun forYouShown(targetPage: Int, settledPage: Int): Boolean =
-    TopLevelDestination.ForYou.ordinal.let { it == targetPage || it == settledPage }
+internal fun tabShown(tab: TopLevelDestination, targetPage: Int, settledPage: Int): Boolean =
+    tab.ordinal.let { it == targetPage || it == settledPage }
 
 /**
  * Whether a sideways swipe changes tab from the tab the pager has settled on. Not while For You shows its deck, where

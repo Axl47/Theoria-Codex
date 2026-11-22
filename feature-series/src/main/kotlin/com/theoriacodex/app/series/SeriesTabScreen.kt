@@ -33,7 +33,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,8 +43,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
 import com.theoriacodex.app.ui.TopLevelDestination
@@ -75,7 +72,6 @@ fun SeriesTabScreen(viewModel: SeriesTabViewModel, onOpenSeries: (SeriesId) -> U
         viewModel.clearSearch()
     }
     ScrollToTopOnTabReselect(TopLevelDestination.Series) { grid.animateScrollToItem(0) }
-    DropFiltersOnLeave(viewModel)
     BackHandler(enabled = state.search != null, onBack = clearSearch)
     Column(modifier.fillMaxSize()) {
         Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -107,18 +103,6 @@ fun SeriesTabScreen(viewModel: SeriesTabViewModel, onOpenSeries: (SeriesId) -> U
     val browsed = state.browse
     if (sheet != null && browsed != null) {
         SeriesFilterSheet(browsed.name, sheet, viewModel::editFilters, onDismiss = viewModel::closeFilters, onSearch = viewModel::searchSource)
-    }
-}
-
-/**
- * Filter choices last only while the tab shows. The pager drops this page when another tab settles while the home
- * entry stays resumed; opening a series stops that entry first, so the choices are still there on the way back.
- */
-@Composable
-private fun DropFiltersOnLeave(viewModel: SeriesTabViewModel) {
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-    DisposableEffect(lifecycle, viewModel) {
-        onDispose { if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) viewModel.dropFilters() }
     }
 }
 
@@ -215,7 +199,7 @@ private fun BrowseKinds(kind: BrowseKind, latest: Boolean, onChoose: (BrowseKind
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FilterChoiceChip("Popular", selected = kind == BrowseKind.Popular) { onChoose(BrowseKind.Popular) }
         if (latest) FilterChoiceChip("Latest", selected = kind == BrowseKind.Latest) { onChoose(BrowseKind.Latest) }
-        val changed = (kind as? BrowseKind.Filtered)?.changed ?: 0
+        val changed = (kind as? BrowseKind.Filtered)?.active ?: 0
         FilterChoiceChip(if (changed > 0) "$FILTER · $changed" else FILTER, selected = kind is BrowseKind.Filtered, onClick = onFilter)
     }
 }

@@ -13,6 +13,7 @@ import eu.kanade.tachiyomi.source.model.SMangaUpdate
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 class MihonFiltersTest {
@@ -74,6 +75,21 @@ class MihonFiltersTest {
         series.search("one", 1, stale)
 
         assertEquals(defaults, source.searchedWith.single().toSeriesFilters())
+    }
+
+    @Test
+    fun `later pages of a search reuse the list its first page used, and a new search makes another`() = runTest {
+        val chosen = series.filters().map { if (it is SeriesFilter.Check) it.copy(checked = true) else it }
+
+        series.search("one", 1, chosen)
+        series.search("one", 2, chosen)
+        series.search("one", 1, chosen)
+        series.search("two", 2, chosen)
+
+        val (first, second, again, other) = source.searchedWith
+        assertSame(first, second)
+        assertNotSame(first, again)
+        assertNotSame(again, other)
     }
 
     @Test
