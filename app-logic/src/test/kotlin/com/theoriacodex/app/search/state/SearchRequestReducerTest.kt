@@ -224,18 +224,20 @@ class SearchRequestReducerTest {
     fun `a scrolled cached page keeps its posts in place when the fresh ones arrive`() {
         val request = root(8L, query("resumed"), SearchRequestKind.RETRY)
         val first = post("first")
-        val second = post("second")
+        val second = post("second").copy(pictureHash = PICTURE)
         val painted = SearchUiState().reduce(SearchStateChange.BeginRequest(request))
             .reduce(SearchStateChange.ShowCachedFirstPage(8L, listOf(first, second)))
         val newest = post("newest")
-        val fresh = success(request, listOf(newest, first.copy(title = "Updated")))
+        // The refresh finds the first post is a copy of the second, and brings another copy of it.
+        val updated = first.copy(title = "Updated", pictureHash = PICTURE)
+        val fresh = success(request, listOf(newest, updated, post("repost").copy(pictureHash = PICTURE xor 1)))
 
         val atTop = painted.reduce(SearchStateChange.RootResult(8L, fresh))
         val scrolled = painted.reduce(SearchStateChange.CachedFirstPageScrolled)
             .reduce(SearchStateChange.RootResult(8L, fresh))
 
         assertEquals(fresh.posts, atTop.content.results)
-        assertEquals(listOf(first.copy(title = "Updated"), second, newest), scrolled.content.results)
+        assertEquals(listOf(updated, second, newest), scrolled.content.results)
         assertSame(atTop, atTop.reduce(SearchStateChange.CachedFirstPageScrolled))
     }
 
@@ -458,3 +460,5 @@ class SearchRequestReducerTest {
         createdAtEpochMs = null,
     )
 }
+
+private const val PICTURE = 0x0F0F_3C3C_5A5A_9669L

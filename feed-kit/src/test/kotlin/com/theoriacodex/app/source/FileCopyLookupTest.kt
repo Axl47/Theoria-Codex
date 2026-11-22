@@ -8,6 +8,7 @@ import com.theoriacodex.domain.adapter.FileHashLookupSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import java.io.IOException
@@ -53,6 +54,17 @@ class FileCopyLookupTest {
     }
 
     @Test
+    fun `a known copy of the same picture is found without a file hash, and offered`() = runTest {
+        val picture = testPost(SourceKey.DANBOORU, "2")
+        val repost = testPost(SourceKey.GELBOORU, "8")
+        val registry = registry(SourceKey.DANBOORU to { _ -> null }, SourceKey.GELBOORU to { _ -> null }, resolved = listOf(repost))
+        val lookup = FileCopyLookup(registry, knownCopies = { setOf(picture.id, repost.id) })
+
+        assertTrue(lookup.canFind(picture))
+        assertEquals(listOf(repost), lookup.find(picture))
+    }
+
+    @Test
     fun `an answer holding another file is dropped and a slow search says so once`() = runTest {
         var notices = 0
         val registry = registry(
@@ -85,9 +97,10 @@ class FileCopyLookupTest {
         vararg answers: Pair<SourceKey, suspend (String) -> Post?>,
         unavailable: Pair<SourceKey, suspend (String) -> Post?>? = null,
         onAsk: (SourceKey) -> Unit = {},
+        resolved: List<Post> = emptyList(),
     ): SourceAdapterRegistry {
         val adapters = (answers.toList() + listOfNotNull(unavailable)).associate { (source, answer) ->
-            source to LookupAdapter(source) { md5 -> onAsk(source); answer(md5) }
+            source to LookupAdapter(source, resolved.associateBy(Post::id)) { md5 -> onAsk(source); answer(md5) }
         }
         return object : SourceAdapterRegistry {
             override fun availableSources(): Set<SourceKey> = answers.map { it.first }.toSet()
@@ -97,12 +110,14 @@ class FileCopyLookupTest {
     }
 }
 
-/** A source whose only working call is the file-hash lookup. */
+/** A source whose only working calls are the file-hash lookup and resolving [resolved] posts. */
 private class LookupAdapter(
     override val sourceKey: SourceKey,
+    private val resolved: Map<PostId, Post>,
     private val answer: suspend (String) -> Post?,
 ) : SourceAdapter by unusedAdapter, FileHashLookupSourceAdapter {
     override suspend fun findByFileHash(md5: String): Post? = answer(md5)
+    override suspend fun resolvePost(id: PostId): Post? = resolved[id]
 }
 
 private val unusedAdapter: SourceAdapter = java.lang.reflect.Proxy.newProxyInstance(

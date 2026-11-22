@@ -15,6 +15,8 @@ import com.theoriacodex.app.triage.TriageReversal
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
+import com.theoriacodex.data.repository.ForYouVerdictRepository
+import com.theoriacodex.data.repository.InMemoryForYouVerdictRepository
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -24,6 +26,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.domain.orchestration.UnifiedSearchResult
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -187,7 +190,12 @@ internal fun deckWiring(
     trails: FakeTrails = FakeTrails(),
     actions: FakeDeckActions = FakeDeckActions(),
     quickSave: FakeDeckQuickSave = FakeDeckQuickSave(),
-) = ForYouDeckWiring(actions, quickSave, trails::open, NoRelatedPosts, scope, fetchContext = EmptyCoroutineContext)
+    verdicts: ForYouVerdictRepository = InMemoryForYouVerdictRepository(),
+    copiesOf: (Post) -> Set<PostId> = { setOf(it.id) },
+) = ForYouDeckWiring(
+    actions, quickSave, trails::open, NoRelatedPosts, scope, fetchContext = EmptyCoroutineContext, verdicts = verdicts,
+    copiesOf = copiesOf, clock = AtomicLong()::incrementAndGet,
+)
 
 internal fun deckEnvironment(
     settings: AppSettings = AppSettings(),

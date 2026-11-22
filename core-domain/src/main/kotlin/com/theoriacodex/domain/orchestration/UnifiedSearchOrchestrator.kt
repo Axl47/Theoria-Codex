@@ -64,6 +64,11 @@ class UnifiedSearchOrchestrator(
      * Tests pass [kotlin.coroutines.EmptyCoroutineContext] to keep those calls on their own dispatcher.
      */
     private val providerContext: CoroutineContext = Dispatchers.Default,
+    /**
+     * Adds what the app derives from each source's page before it is merged with the others, such as every post's
+     * [Post.pictureHash], so copies are collapsed where pages meet. It must return the posts in their order.
+     */
+    private val annotateListing: suspend (List<Post>) -> List<Post> = { it },
 ) {
     suspend fun search(
         query: Query,
@@ -228,7 +233,14 @@ class UnifiedSearchOrchestrator(
         } ?: throw SourceAdapterException(SourceFailureReason.NETWORK, "Source timed out")
     }
 
+    /** One page of [adapter]'s results for [query], annotated; every listing the orchestrator serves passes here. */
     suspend fun searchSource(
+        adapter: SourceAdapter,
+        query: Query,
+        pageToken: String?,
+    ): Page<Post> = fetchSource(adapter, query, pageToken).let { page -> page.copy(items = annotateListing(page.items)) }
+
+    private suspend fun fetchSource(
         adapter: SourceAdapter,
         query: Query,
         pageToken: String?,

@@ -16,14 +16,15 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 
 /**
  * The most recent search's first page, so reopening the app can paint it at once while the search refreshes. It holds
  * one search and is disposable. Unlike saved posts it keeps each post's live listing data: the comment hint, so
- * restored cards still show their comment badges, and the file hash, so a file several sites host stays one card when
- * the refresh arrives. A missing, stale or unreadable file only costs that instant paint.
+ * restored cards still show their comment badges, and the file and picture hashes, so a picture several sites host stays
+ * one card when the refresh arrives. A missing, stale or unreadable file only costs that instant paint.
  */
 class SearchFirstPageStore(
     private val file: File,
@@ -40,7 +41,10 @@ class SearchFirstPageStore(
             root.getValue(POSTS).jsonArray.mapNotNull { element ->
                 val stored = element.jsonObject
                 PostStorageCodec.decode(DurableJson.decodeFromJsonElement(PostStorageRecord.serializer(), stored))
-                    ?.copy(commentHint = stored[COMMENT_HINT]?.jsonPrimitive?.int?.toCommentHint())
+                    ?.copy(
+                        commentHint = stored[COMMENT_HINT]?.jsonPrimitive?.int?.toCommentHint(),
+                        pictureHash = stored[PICTURE_HASH]?.jsonPrimitive?.long,
+                    )
             }
         }.getOrDefault(emptyList())
     }
@@ -55,7 +59,11 @@ class SearchFirstPageStore(
                         posts.take(MAX_POSTS).forEach { post ->
                             val stored = DurableJson.encodeToJsonElement(PostStorageRecord.serializer(), PostStorageCodec.encode(post))
                                 .jsonObject
-                            add(post.commentHint?.let { JsonObject(stored + (COMMENT_HINT to JsonPrimitive(it.count ?: SOME_COMMENTS))) } ?: stored)
+                            val live = listOfNotNull(
+                                post.commentHint?.let { COMMENT_HINT to JsonPrimitive(it.count ?: SOME_COMMENTS) },
+                                post.pictureHash?.let { PICTURE_HASH to JsonPrimitive(it) },
+                            )
+                            add(JsonObject(stored + live))
                         }
                     }
                 }
@@ -74,6 +82,7 @@ class SearchFirstPageStore(
         private const val MAX_POSTS = 60
         private const val CURRENT_VERSION = 2
         private const val COMMENT_HINT = "commentHint"
+        private const val PICTURE_HASH = "pictureHash"
         private const val SOME_COMMENTS = -1
         private const val VERSION = "version"
         private const val KEY = "key"

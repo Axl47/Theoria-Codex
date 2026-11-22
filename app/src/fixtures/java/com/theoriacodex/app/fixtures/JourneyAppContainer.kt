@@ -46,7 +46,11 @@ import com.theoriacodex.app.update.RemoteUpdate
 import com.theoriacodex.app.update.StartupUpdater
 import com.theoriacodex.app.update.UpdateFeedClient
 import com.theoriacodex.app.viewer.PixivUgoiraClient
+import com.theoriacodex.app.di.ListingPictures
+import com.theoriacodex.app.post.FileMirrorIndex
 import com.theoriacodex.data.android.room.RoomCodexLikesRepository
+import com.theoriacodex.data.android.room.RoomForYouVerdictRepository
+import com.theoriacodex.data.android.room.RoomVisualSignatureRepository
 import com.theoriacodex.data.android.room.RoomMediaDurationRepository
 import com.theoriacodex.data.android.room.RoomRecentsRepository
 import com.theoriacodex.data.android.room.TheoriaRoomDatabase
@@ -95,9 +99,12 @@ class JourneyAppContainer(
     private val ownerJob = SupervisorJob(scope.coroutineContext[Job])
     private val ownerScope = CoroutineScope(scope.coroutineContext + ownerJob + Dispatchers.IO)
     override val applicationScope: CoroutineScope get() = ownerScope
+    private val fileMirrors = FileMirrorIndex()
+    private val listingPictures = ListingPictures(appContext, ownerScope, fileMirrors)
     val registry = JourneySourceRegistry(
         postsBySource, pageSize,
         providerShapedSources.associateWith { ProviderShapedSource(postsBySource.getValue(it), httpClient) },
+        annotateListing = listingPictures::annotate,
     )
     val database = TheoriaRoomDatabase.create(appContext, storageDirectory.resolve("journey.db").absolutePath)
     private val profileWriteGuard = ProfileLibraryWriteGuard()
@@ -141,6 +148,9 @@ class JourneyAppContainer(
         readingPositions = FileBackedReadingPositionRepository(storageDirectory),
         galleryReadingModes = FileBackedGalleryReadingModeRepository(storageDirectory),
         savedSearches = FileBackedSavedSearchRepository(storageDirectory),
+        forYouVerdicts = RoomForYouVerdictRepository(database),
+        visualSignatures = RoomVisualSignatureRepository(database),
+        fileMirrors = fileMirrors,
     )
     override val sources = SourceDependencies(
         httpClient, accounts, auth, PixivPkceController(auth, accounts, InMemoryPixivPkceSessionStore()),

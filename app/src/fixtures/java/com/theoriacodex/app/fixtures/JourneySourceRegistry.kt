@@ -24,6 +24,8 @@ class JourneySourceRegistry(
     postsBySource: Map<SourceKey, List<Post>>,
     private val pageSize: Int,
     val providerShaped: Map<SourceKey, ProviderShapedSource> = emptyMap(),
+    /** The app's listing step (picture hashes), as in the app's registry. */
+    private val annotateListing: suspend (List<Post>) -> List<Post> = { it },
 ) : SourceAdapterRegistry {
     data class Request(val source: SourceKey, val query: Query, val pageToken: String?)
     val requests = CopyOnWriteArrayList<Request>()
@@ -33,7 +35,7 @@ class JourneySourceRegistry(
     }
     override fun availableSources() = adapters.keys
     override fun adapterFor(sourceKey: SourceKey): SourceAdapter? = adapters[sourceKey]
-    override fun unifiedOrchestrator() = UnifiedSearchOrchestrator(adapters)
+    override fun unifiedOrchestrator() = UnifiedSearchOrchestrator(adapters, annotateListing = annotateListing)
 
     private inner class FixtureAdapter(override val sourceKey: SourceKey, private val posts: List<Post>) :
         SourceAdapter, CreatorPostsSourceAdapter, RelatedPostsSourceAdapter {
