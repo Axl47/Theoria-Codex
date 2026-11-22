@@ -19,10 +19,13 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
@@ -36,13 +39,17 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
-/** Bottom sheet that opens fully expanded, shared by long-press menus and their follow-up sheets. */
+/**
+ * Bottom sheet that opens fully expanded, shared by long-press menus and their follow-up sheets. While [dismissible] is
+ * false, Back, the scrim and dragging leave it open, for work that must finish where it started.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ExpandedBottomSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+fun ExpandedBottomSheet(onDismiss: () -> Unit, dismissible: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
+    val canDismiss by rememberUpdatedState(dismissible)
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        onDismissRequest = { if (canDismiss) onDismiss() },
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true, confirmValueChange = { it != SheetValue.Hidden || canDismiss }),
         content = content,
     )
 }

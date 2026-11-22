@@ -84,7 +84,8 @@ class MihonSeriesSource(
             SeriesEntry(
                 address = chapter.url,
                 name = chapter.name,
-                number = chapter.chapter_number.takeIf { it >= 0f },
+                // Most extensions leave the number at -1 for the app to read from the name, as Mihon does.
+                number = chapter.chapter_number.takeIf { it >= 0f } ?: ChapterRecognition.parseChapterNumber(series.title, chapter.name),
                 translatorGroup = chapter.scanlator?.takeIf(String::isNotBlank),
                 uploadedAtEpochMs = chapter.date_upload.takeIf { it > 0L },
             )
