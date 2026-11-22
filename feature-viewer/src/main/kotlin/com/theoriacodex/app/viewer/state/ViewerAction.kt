@@ -39,6 +39,8 @@ sealed interface ViewerAction {
     /** Moves to [mediaIndex] of page [pageIndex], as one step. */
     data class Navigate(val pageIndex: Int, val mediaIndex: Int) : ViewerAction
     data object ToggleChrome : ViewerAction
+    /** Sets the requested chrome visibility outright, for callers that must not depend on a frame's snapshot of it. */
+    data class SetChromeVisible(val visible: Boolean) : ViewerAction
     data object ToggleOverview : ViewerAction
     data class ShowPanel(val panel: ViewerPanel) : ViewerAction
     /** Closes [panel] if it is the open one. */

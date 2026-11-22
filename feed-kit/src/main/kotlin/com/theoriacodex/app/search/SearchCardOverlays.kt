@@ -28,10 +28,8 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -49,6 +47,7 @@ import com.theoriacodex.app.source.SourceLogo
 import com.theoriacodex.app.ui.motion.LikedHeartColor
 import com.theoriacodex.app.ui.motion.likePop
 import com.theoriacodex.app.ui.motion.rememberLikeFeedback
+import com.theoriacodex.app.ui.theme.TextOverMediaShadow
 import com.theoriacodex.domain.model.Post
 
 /**
@@ -212,7 +211,7 @@ private fun GalleryProgressLine(fraction: Float, modifier: Modifier) {
 private fun overlayTextStyle(): TextStyle = MaterialTheme.typography.labelSmall.copy(
     color = Color.White,
     fontWeight = FontWeight.SemiBold,
-    shadow = OverlayTextShadow,
+    shadow = TextOverMediaShadow,
 )
 
 private val TOP_SCRIM_HEIGHT = 56.dp
@@ -221,7 +220,6 @@ private val OVERLAY_ROW_HEIGHT = 18.dp
 
 /** Every corner mark shares this inset and the row height above, so marks on one edge share a center line. */
 private val OverlayMarkPlacement = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
-private val OverlayTextShadow = Shadow(Color.Black.copy(alpha = 0.6f), Offset(0f, 1f), blurRadius = 3f)
 private val TopScrim = Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.5f), Color.Transparent))
 private val BottomScrim = Brush.verticalGradient(
     0f to Color.Transparent,

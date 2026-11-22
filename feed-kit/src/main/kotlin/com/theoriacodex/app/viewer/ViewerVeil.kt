@@ -11,14 +11,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.theoriacodex.app.ui.theme.TextOverMediaShadow
 
 /** The current artwork's accent, shown on progress and on the selected thumbnail. White when the art has none. */
 val LocalViewerAccent = compositionLocalOf { Color.White }
@@ -29,11 +28,9 @@ object ViewerVeil {
     val InactiveTrack = Color.White.copy(alpha = 0.32f)
     const val SECONDARY_TEXT_ALPHA = 0.68f
 
-    private val LegibilityShadow = Shadow(Color.Black.copy(alpha = 0.6f), Offset(0f, 1f), blurRadius = 4f)
-
     /** Tabular figures keep time readouts from shifting on device fonts whose digits vary in width. */
-    val Time = TextStyle(fontSize = 13.sp, fontFeatureSettings = "tnum", shadow = LegibilityShadow)
-    val LargeReadout = TextStyle(fontSize = 22.sp, fontFeatureSettings = "tnum", shadow = LegibilityShadow)
+    val Time = TextStyle(fontSize = 13.sp, fontFeatureSettings = "tnum", shadow = TextOverMediaShadow)
+    val LargeReadout = TextStyle(fontSize = 22.sp, fontFeatureSettings = "tnum", shadow = TextOverMediaShadow)
 
     val TopScrim = Brush.verticalGradient(
         0f to Color.Black.copy(alpha = 0.52f), 0.22f to Color.Black.copy(alpha = 0.4f), 0.45f to Color.Black.copy(alpha = 0.22f),
