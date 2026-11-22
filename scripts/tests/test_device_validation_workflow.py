@@ -30,6 +30,14 @@ class DeviceValidationWorkflowTest(unittest.TestCase):
             self.workflow,
         )
 
+    def test_only_an_attempt_without_a_verdict_is_retried(self) -> None:
+        for owner, step in (("debug", "device-tests"), ("acceptance", "acceptance")):
+            self.assertIn(f"id: {step}\n        continue-on-error: true", self.workflow)
+            self.assertIn(f"if: steps.{step}.outcome == 'failure' && "
+                          f"hashFiles('build/reports/ci-emulator/{owner}/verdict') == ''", self.workflow)
+            self.assertIn(f"if: steps.{step}.outcome == 'failure' && steps.{step}-retry.outcome == 'skipped'\n"
+                          "        run: exit 1", self.workflow)
+
     def test_release_acceptance_artifact_matches_emulator_api(self) -> None:
         self.assertIn("name: R8 release acceptance (API ${{ matrix.api-level }})", self.workflow)
         self.assertIn("name: release-acceptance-api-${{ matrix.api-level }}", self.workflow)

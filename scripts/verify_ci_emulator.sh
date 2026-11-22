@@ -39,11 +39,14 @@ export ANDROID_SERIAL="$serial"
 adb_command=("${ADB:-adb}" -s "$serial")
 finite_adb() { run_with_timeout "$probe_timeout" "${adb_command[@]}" "$@"; }
 [[ "$(finite_adb shell getprop ro.kernel.qemu | tr -d '\r')" == 1 ]]
-# Cold boots on CI runners regularly freeze System UI long enough for Android's "isn't responding"
-# dialog, which arrives shortly after this point. It cannot be cancelled and stays on top for the
-# whole run, swallowing system Back and covering screen pixels. App crashes still fail their tests.
+# Cold boots on CI runners regularly freeze System UI or the launcher long enough for Android's
+# "isn't responding" dialog, which stays on top for the whole run, swallowing system Back and covering
+# screen pixels. This stops new ones; readiness below closes one that opened before it. App crashes
+# still fail their tests.
 finite_adb shell settings put global hide_error_dialogs 1
 readonly evidence="build/reports/ci-emulator/$owner"
+# A retry on a fresh emulator keeps the lost attempt's logcat beside its own.
+if [[ -d "$evidence" ]]; then rm -rf "$evidence-lost-attempt"; mv "$evidence" "$evidence-lost-attempt"; fi
 mkdir -p "$evidence"
 "${adb_command[@]}" logcat -b all -v threadtime > "$evidence/logcat.txt" 2>&1 &
 readonly logcat_pid=$!
@@ -70,6 +73,18 @@ avd_api="$(sed -n 's/^target=android-//p' "$evidence/avd.ini" | tr -d '\r')"
   exit 2
 }
 
+# Error dialogs already on screen ("Application Not Responding: <process>", "Application Error: ...").
+# Closing one force-stops the frozen process, which Android restarts.
+error_dialogs_closed() {
+  local windows
+  windows="$(ready_adb shell dumpsys window windows)" || return 1
+  grep -qE 'Application (Not Responding|Error):' <<< "$windows" || return 0
+  printf '%s\n' "$windows" | grep -E 'Application (Not Responding|Error):' >> "$evidence/closed-error-dialogs.txt"
+  ready_adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS > /dev/null || return 1
+  windows="$(ready_adb shell dumpsys window windows)" || return 1
+  ! grep -qE 'Application (Not Responding|Error):' <<< "$windows"
+}
+
 # A boot-completed property alone does not prove package/activity services or shared storage work.
 ready=false
 readonly readiness_deadline=$((SECONDS + readiness_timeout))
@@ -83,13 +98,14 @@ while (( SECONDS < readiness_deadline )); do
   if [[ "$(ready_adb shell am get-current-user 2>/dev/null | tr -d '\r')" == 0 ]] &&
      [[ "$(ready_adb shell am get-started-user-state 0 2>/dev/null | tr -d '\r')" == RUNNING_UNLOCKED ]] &&
      ready_adb shell pm path android > "$evidence/package-service.txt" 2>&1 &&
-     ready_adb shell df -k /data /sdcard > "$evidence/storage-before.txt" 2>&1; then
+     ready_adb shell df -k /data /sdcard > "$evidence/storage-before.txt" 2>&1 &&
+     error_dialogs_closed; then
     ready=true
     break
   fi
   if (( SECONDS < readiness_deadline )); then sleep 1; fi
 done
-[[ "$ready" == true ]] || { echo 'Emulator package/user/storage services are not ready.' >&2; exit 2; }
+[[ "$ready" == true ]] || { echo 'Emulator services are not ready or an error dialog stayed open.' >&2; exit 2; }
 finite_adb shell cat /proc/meminfo > "$evidence/memory-before.txt"
 if (( sdk_level >= 37 )); then
   # A 4 GiB VM reports slightly less usable RAM after kernel reservations.
@@ -99,8 +115,17 @@ if (( sdk_level >= 37 )); then
   }
 fi
 
+test_status=0
 if [[ "$owner" == debug ]]; then
-  scripts/verify_debug_device.sh all
+  scripts/verify_debug_device.sh all || test_status=$?
 else
-  scripts/verify_release_acceptance_device.sh
+  scripts/verify_release_acceptance_device.sh || test_status=$?
 fi
+# Only a run whose emulator outlived it speaks for the code. Without a verdict, the workflow repeats the
+# run once on a fresh emulator; host memory and kernel messages show whether the runner killed it.
+if [[ "$(finite_adb get-state 2>/dev/null | tr -d '\r')" == device ]]; then
+  echo "$test_status" > "$evidence/verdict"
+else
+  { free -m; sudo -n dmesg -T | tail -n 80; } > "$evidence/host-after-emulator-loss.txt" 2>&1 || true
+fi
+exit "$test_status"
