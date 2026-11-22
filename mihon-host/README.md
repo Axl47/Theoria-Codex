@@ -25,7 +25,7 @@ works"), and the release size was measured again and accepted (see "Release buil
   is kept whole too. About 3 MB of that is the zstd decoder Mihon's HTTP client includes.
 - **Trust.** Extension code runs with the app's permissions and can read its data, so none runs until the user turns
 that extension on in the Extensions page. What is stored is the extension's package name with the SHA-256 of the
-signing certificate it had then (`ExtensionChoices.trusted`, in the settings store): an update signed with the same
+signing certificate it had then (`ExtensionChoices.trusted`, in a file under `noBackupFilesDir`): an update signed with the same
 key stays on, a copy signed with another key is off, and so is every other extension, whoever signed it, since
 nearly all Mihon extensions share one key. A file in the debug folder is its own extension, named by its file name and the package inside it, so another
 extension put there under the same name is off and cannot be turned on by an answer given for the first.
@@ -38,8 +38,9 @@ never written to or read from a profile backup.
 
 **Changes on the device.** Every source lookup first compares a cheap stamp of the device's packages and the folder's
 files; an extension installed, updated or removed since then is listed again and only what changed is loaded. Every
-extension image request makes the same check, so a source removed or turned off stops fetching images. Debug
-builds also listen for package changes while the app runs, so the Series tab and the open Extensions page follow without a restart.
+extension image request makes the same check, so a source removed or turned off stops fetching images. The app
+also listens for package changes while it runs, in every build, so the Series tab and the open Extensions page follow
+without a restart.
 
 **Pages.** A chapter's pages are handed out without further requests. Where a source names each image on a page of
 its own, the address handed out is that page's, marked `#mihon-page=` with the source, the page's place and its
@@ -63,12 +64,20 @@ AndroidX, a preference added to the screen stores its declared default when noth
 `onBindEditTextListener` is held and never called, because there is no `EditText`: a source that used it to set a
 numeric keyboard or validate while typing gets a plain text field. Each source reads its values from a preferences
 file it asks for by Mihon's name, `source_<id>`; the host hands extensions an `Application` that stores every such
-file as `mihon_<name>`, so extension files cannot be mistaken for the app's own.
+file as JSON under `noBackupFilesDir/mihon_preferences` (`FilePreferences`), so extension files cannot be mistaken
+for the app's own.
+
+**Android's backup and device transfer.** Neither carries extension data. The choices (which extensions are on, their
+languages) and every extension's preferences, which can hold a server's address and password, are in
+`noBackupFilesDir`, which Android never backs up or copies to a new phone. Both were elsewhere through 1.9.2 and move
+once: preferences from `shared_prefs/mihon_*.xml` the first time an extension asks for any, choices from the settings
+store the first time they are read, and only on an app updated in place. On a fresh install, extension choices found in
+the settings file came from a restore and are dropped, so nothing is on.
 
 | Piece | Where | What it does |
 | --- | --- | --- |
 | Host API | `src/main/kotlin/eu/kanade/tachiyomi`, `uy/kohesive/injekt` | The classes extensions link against, trimmed from Mihon (Apache 2.0, see `LICENSE-APACHE-2.0.txt`). Only the coroutine API; no RxJava. |
-| `ExtensionPackages` | `com.theoriacodex.mihonhost` | Lists the extensions on the device without running them: installed packages with the extension feature and, in debug builds only, APK files in the app's `mihon-extensions` folder. `any()` answers whether there is one at all, which decides the Series tab. |
+| `ExtensionPackages` | `com.theoriacodex.mihonhost` | Lists the extensions on the device without running them: installed packages with the extension feature and, in debug builds only, APK files in the app's `mihon-extensions` folder. `any()` answers whether there is one at all; the Series tab shows when there is, or when a series is followed. The answer is remembered, so startup does not ask: the app looks again after its first screen and on each return to the foreground. |
 | `ExtensionRegistry` | same | The rule for what runs: loads the extensions that are on, on first use, each with 15 s to finish, and offers the sources of the languages that are on; only those sources fetch images. One that hangs or fails is left out and says why on the Extensions page. Settings are read only for the extension whose page is open. |
 | `ExtensionLoader` | same | Loads an installed package's code from its own APK; a folder file is first copied to a private read-only file (Android refuses writable code) and the copy's signer checked again. |
 | `SourceSettings`, `androidx/preference` | same | Reads a source's settings out of the holder classes and stores a changed value where the source reads it. |
@@ -77,7 +86,7 @@ file as `mihon_<name>`, so extension files cannot be mistaken for the app's own.
 | `ExtensionImages` | same | Fetches covers and pages through the extension's own HTTP client. Each address handed to the app ends in `#mihon=<source id>`; an interceptor on the app's media client answers those. |
 | App seam | `app/.../extensions/MihonExtensionSourceHost.kt`, `app/.../di/ExtensionSources.kt` | The application creates the host. Nothing loads at startup: the extensions that are on load once, off the main thread, the first time the Series tab asks for sources or an image address ending in `#mihon=` is requested. The manifest holds `QUERY_ALL_PACKAGES`, as Mihon does: extension packages share only a declared feature, which a `<queries>` element cannot match. The Series tab is shown while an extension is on the device, looked up at startup and each time the app returns to the foreground. |
 | Series | `feature-series`, `app/.../series/`, `core-data` `SeriesRepository` | The Series tab and series page, the Extensions page (also reached from Settings), the Viewer session over a series' chapters, and the `series` and `series_entries` tables that keep followed series, read state and progress. Pages are never stored. |
-| Backup | `core-data` `SeriesBackupRecords.kt`, `RoomProfileBackupStore` | Profile backups hold the series the user follows, started reading or chose a reading mode for, with every stored chapter's read state and last page (`library.series`, backup version 3; a backup without series is still written as version 2). Series are stored once for the whole app, not per profile, so they are backed up once. A restore adds: a series already stored only becomes followed, takes a reading mode if it had none, and gains chapters it lacked. Trust is never in a backup, so a restored series shows "Extension unavailable" until its extension is installed and turned on. |
+| Backup | `core-data` `SeriesBackupRecords.kt`, `RoomProfileBackupStore` | Profile backups hold the series the user follows, started reading or chose a reading mode for, with every stored chapter's read state and last page (`library.series`, backup version 3; a backup without series is still written as version 2). Series are stored once for the whole app, not per profile, so they are backed up once. A restore adds: a series already stored becomes followed, takes a reading mode and a Continue point if it had none, and each chapter takes the further progress of the two sides. A chapter only the backup has arrives as not listed when the device already holds the series' list, so it is not counted as unread. A series over 20,000 chapters is written without its chapters that have no progress, so every backup the app writes is one it restores. Trust is never in a backup, so a restored series shows "Extension unavailable" until its extension is installed and turned on. |
 
 ## Release builds
 
