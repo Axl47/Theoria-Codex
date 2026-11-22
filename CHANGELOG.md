@@ -36,6 +36,7 @@
 ### Changed
 
 - A tag trail now narrows the search you were in, adding the tag to it, instead of searching that tag alone.
+- In the Viewer's information sheet, tags the current search already covers show as included or excluded.
 - Animated only now asks each site for animated posts instead of filtering a mixed page on the phone, so animated results fill the feed from the first page, on Pixiv especially. Turning it on or off re-runs the search like changing the sort, and saved and recent searches remember it. If you had it on, tap it once more after updating.
 - The composer's built-in "Animated" saved tag group is gone: Animated only now does that job everywhere.
 - A tag trail keeps the filters of the level it starts from: Animated only, the date range, the sort, excluded tags, and hiding liked, saved or watched posts.

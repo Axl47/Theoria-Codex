@@ -93,6 +93,8 @@ class PostTagSheetExtras(
     val afterTags: LazyListScope.() -> Unit = {},
     /** When set, tapping a general tag forks a trail from it and holding it offers the Search moves instead. */
     val onFork: ((SearchTerm) -> Unit)? = null,
+    /** The search this sheet's level shows: on forking chips, its tags show as Required or Excluded even when the Search draft differs. */
+    val levelQuery: Query? = null,
 )
 
 /**
@@ -145,7 +147,7 @@ fun PostTagActionSection(
         onRemoveExclude = onRemoveExcludeTerm,
         onAddAlternative = { groupIndex, term -> searchActions.addAlternative(post, groupIndex, term) },
         onConfirmSwitch = { pendingSwitch = it },
-        onFork = sheetExtras?.onFork,
+        extras = sheetExtras,
     )
 
     Column(Modifier.fillMaxWidth()) {
@@ -257,8 +259,13 @@ private class PostTagEditor(
     val onRemoveExclude: (SearchTerm) -> Unit,
     val onAddAlternative: (Int, SearchTerm) -> Boolean,
     val onConfirmSwitch: (PendingSourceSwitch) -> Unit,
-    val onFork: ((SearchTerm) -> Unit)?,
+    private val extras: PostTagSheetExtras?,
 ) {
+    val onFork: ((SearchTerm) -> Unit)? get() = extras?.onFork
+
+    /** The terms the sheet's level searches, which fork chips show as active. */
+    val levelSelection: PostTagSelection? = extras?.levelQuery?.let { PostTagSelection(post.id.source, it.includeTerms, it.excludeTerms) }
+
     fun commit(term: SearchTerm, excluded: Boolean): Boolean =
         if (excluded) onAddExclude(term) else onAddInclude(term)
 
@@ -333,7 +340,9 @@ private fun PostTagChip(
     if (fork != null) {
         val moves = listOfNotNull(TagChipAction(tagTapLabel(name, state)) { editor.tap(term) }.takeIf { editor.canTap(term) }) +
             editor.alternateActions(term) + listOfNotNull(toggleSaved?.let { TagChipAction(savedLabel.orEmpty(), it) })
-        TagForkChip(name, postTagChipLabel(term.value, translation), shownCount, compact, state, icon, "saved".takeIf { saved }, moves) { fork(term) }
+        // A tag the level searches is active whatever the draft says; the moves above still edit the draft.
+        val active = editor.levelSelection?.chipState(term)?.takeIf { it != TagChipState.NONE } ?: state
+        TagForkChip(name, postTagChipLabel(term.value, translation), shownCount, compact, active, icon, "saved".takeIf { saved }, moves) { fork(term) }
         return
     }
     TagPickerChip(
