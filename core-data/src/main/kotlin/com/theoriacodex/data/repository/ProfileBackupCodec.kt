@@ -40,7 +40,7 @@ class ProfileBackupCodec {
 
     /** The validated document [encode] writes, for the restore journal to embed. */
     internal fun encodeDocument(written: ProfileBackup): JsonObject {
-        val backup = written.copy(library = written.library.copy(series = written.library.series.map(BackupSeries::withinEntryLimit)))
+        val backup = written.copy(library = written.library.copy(series = written.library.series.writable()))
         validate(backup)
         return buildJsonObject {
             put("format", "theoria-profile-backup")

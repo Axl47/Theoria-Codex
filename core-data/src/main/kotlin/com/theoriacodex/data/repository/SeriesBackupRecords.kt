@@ -121,6 +121,20 @@ internal fun validateBackupSeries(all: List<BackupSeries>) {
 }
 
 /**
+ * The series a backup writes. An extension can list a series without a title or a chapter without an address, and
+ * one such row must not fail the export of everything else: a series without an address and a chapter without one are
+ * left out, since nothing could find them again, and a blank title is written as the address. A restore still refuses
+ * such input, which no export writes.
+ */
+internal fun List<BackupSeries>.writable(): List<BackupSeries> = filter { it.series.series.id.address.isNotBlank() }.map { backup ->
+    val series = backup.series.series
+    backup.copy(
+        series = backup.series.copy(series = if (series.title.isBlank()) series.copy(title = series.id.address) else series),
+        entries = backup.entries.filter { it.entry.address.isNotBlank() },
+    ).withinEntryLimit()
+}
+
+/**
  * What a backup writes for a series with more entries than a restore accepts, so that one huge series cannot fail the
  * whole export: the entry Continue points at, then entries with progress, then the rest the source lists, then those
  * it dropped; within each, as the source orders them. An entry without progress carries nothing a restore needs,

@@ -142,6 +142,16 @@ class RoomProfileBackupStoreTest {
         RoomProfileBackupStore(deviceDatabase).merge(snapshot)
         assertEquals("/chapter/3", device.series(id)!!.lastOpenedEntry)
         assertEquals(7, device.entries(id).single { it.entry.address == "/chapter/2" }.lastPage)
+
+        // The page count goes with the position that wins: page 8 of 10 here and page 3 of 20 in the backup stay 8 of 10,
+        // and page 2 of 10 here becomes the backup's 3 of 20, never "3 of 10".
+        suspend fun progress() = device.entries(id).single { it.entry.address == "/chapter/2" }.let { it.lastPage to it.pageCount }
+        deviceDatabase.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 8, 10)
+        RoomProfileBackupStore(deviceDatabase).merge(snapshot)
+        assertEquals(8 to 10, progress())
+        deviceDatabase.openHelper.writableDatabase.execSQL("UPDATE series_entries SET last_page = 2, page_count = 10 WHERE address = '/chapter/2'")
+        RoomProfileBackupStore(deviceDatabase).merge(snapshot)
+        assertEquals(3 to 20, progress())
         deviceDatabase.close()
     }
 

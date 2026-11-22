@@ -52,9 +52,13 @@ public interface SeriesDao {
             + "last_opened_entry = COALESCE(last_opened_entry, :lastOpenedEntry) WHERE source = :source AND address = :address")
     void mergeRestoredSeries(String source, String address, boolean followed, String readingMode, String lastOpenedEntry);
 
-    /** A stored entry takes the further progress of the two: read on either side, the later page. */
+    /**
+     * A stored entry takes the further progress of the two: read on either side, and the later page together with the
+     * page count it was recorded against, so a page is never shown beyond its count.
+     */
     @Query("UPDATE series_entries SET read = read OR :read, last_page = MAX(last_page, :lastPage), "
-            + "page_count = COALESCE(page_count, :pageCount) "
+            + "page_count = CASE WHEN :lastPage > last_page THEN COALESCE(:pageCount, page_count) "
+            + "ELSE COALESCE(page_count, :pageCount) END "
             + "WHERE source = :source AND series_address = :seriesAddress AND address = :address")
     void mergeRestoredEntry(String source, String seriesAddress, String address, boolean read, int lastPage, Integer pageCount);
 

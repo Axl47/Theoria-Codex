@@ -353,9 +353,18 @@ class ProfileBackupServiceTest {
         val shuffled = huge.copy(library = huge.library.copy(series = listOf(BackupSeries(stored, entries.reversed()))))
         assertEquals(restored, codec.decode(codec.encode(shuffled)).library.series.single().entries.map { it.entry.address })
 
-        // What a restore refuses, an export refuses too.
-        val invalid = huge.copy(library = huge.library.copy(series = listOf(BackupSeries(StoredSeries(Series(id, "Title")), listOf(entry(1, 0).copy(pageCount = 0))))))
-        assertTrue(runCatching { codec.encode(invalid) }.isFailure)
+        // What an extension can list must not stop the backup: a blank title is written as the address, and a chapter
+        // or a series without an address is left out. The same rows in a file are still refused on restore.
+        val odd = backup().let { plain ->
+            plain.copy(library = plain.library.copy(series = listOf(
+                BackupSeries(StoredSeries(Series(id, " ")), listOf(entry(1, 0), entry(2, 1).let { it.copy(entry = it.entry.copy(address = "")) })),
+                BackupSeries(StoredSeries(Series(SeriesId(id.source, ""), "No address")), emptyList()),
+            )))
+        }
+        val written = codec.decode(codec.encode(odd)).library.series.single()
+        assertEquals("/title/1" to listOf("/chapter/1"), written.series.series.title to written.entries.map { it.entry.address })
+        val blankTitle = codec.encode(odd).toString(Charsets.UTF_8).replace("\"title\":\"/title/1\"", "\"title\":\" \"")
+        assertTrue(blankTitle.contains("\"title\":\" \"") && runCatching { codec.decode(blankTitle.toByteArray()) }.isFailure)
     }
 
     @Test fun `invalid versions malformed bytes unknown sources and deeply nested input are rejected`() {
