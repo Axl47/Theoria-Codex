@@ -45,6 +45,15 @@ class ViewerStateReducerTest {
     }
 
     @Test
+    fun `setting chrome visibility is idempotent`() {
+        val shown = reduceViewerState(ViewerUiState.Empty, ViewerAction.ReplaceSession(session("set-chrome"), listOf(samplePost("first")))).state
+        val hidden = reduceViewerState(shown, ViewerAction.SetChromeVisible(false)).state
+        assertEquals(false, hidden.controls.chromeVisible)
+        assertEquals(hidden, reduceViewerState(hidden, ViewerAction.SetChromeVisible(false)).state)
+        assertEquals(true, reduceViewerState(hidden, ViewerAction.SetChromeVisible(true)).state.controls.chromeVisible)
+    }
+
+    @Test
     fun `completion modes preserve order stop at queue end and reject obsolete media`() {
         val first = samplePost("first", media = listOf(media("video/mp4", "one.mp4"), media("video/mp4", "two.mp4")))
         val second = samplePost("second", media = listOf(media("video/mp4", "three.mp4")))

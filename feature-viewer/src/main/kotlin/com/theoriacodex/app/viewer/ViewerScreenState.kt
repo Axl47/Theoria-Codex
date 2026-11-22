@@ -118,8 +118,9 @@ internal class ViewerControls(
         markInteraction()
     }
 
+    /** Hides by value rather than toggling: begin and end can share one frame's controls, whose visibility is stale. */
     fun endScrub() {
-        if (screen.chromeShownForScrub && chromeVisible) onAction(ViewerAction.ToggleChrome)
+        if (screen.chromeShownForScrub) onAction(ViewerAction.SetChromeVisible(false))
         screen.chromeShownForScrub = false
     }
 

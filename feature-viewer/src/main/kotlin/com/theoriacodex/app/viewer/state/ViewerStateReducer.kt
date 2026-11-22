@@ -114,6 +114,8 @@ fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReducti
         is ViewerAction.SelectMedia -> state.selectMedia(action.mediaIndex)
         is ViewerAction.Navigate -> state.navigate(action.pageIndex, action.mediaIndex)
         ViewerAction.ToggleChrome -> ViewerReduction(state.toggleChrome())
+        is ViewerAction.SetChromeVisible ->
+            ViewerReduction(if (action.visible == state.controls.chromeVisible) state else state.toggleChrome())
         ViewerAction.ToggleOverview -> state.reduceToggleOverview()
         is ViewerAction.ShowPanel -> ViewerReduction(state.showPanel(action.panel))
         is ViewerAction.HidePanel -> ViewerReduction(state.hidePanel(action.panel))
