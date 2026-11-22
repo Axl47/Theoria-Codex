@@ -112,7 +112,7 @@ internal class FakeForYouEngine(var tags: List<String>, private val pages: Int =
 
 /**
  * The app's trails: [similar] and [creator] answer a like or a fork, [tag] a tag fork; an absent one cannot open.
- * While [gate] is set, a request waits for it.
+ * While [gate] is set, a request waits for it. [pager], when set, feeds the trail instead of one whole page.
  */
 internal class FakeTrails(
     var similar: List<Post>? = null,
@@ -121,6 +121,7 @@ internal class FakeTrails(
 ) {
     val asked = mutableListOf<TrailRequest>()
     var gate: CompletableDeferred<Unit>? = null
+    var pager: TrailPager? = null
 
     suspend fun open(request: TrailRequest, @Suppress("UNUSED_PARAMETER") animatedOnly: Boolean): TrailSpec? {
         asked += request
@@ -132,7 +133,7 @@ internal class FakeTrails(
         }
     }
 
-    private fun spec(label: String, query: Query?, posts: List<Post>) = TrailSpec(label, query, TrailPager { TrailPage(posts, canLoadMore = false) })
+    private fun spec(label: String, query: Query?, posts: List<Post>) = TrailSpec(label, query, pager ?: TrailPager { TrailPage(posts, canLoadMore = false) })
 }
 
 internal class FakeDeckActions : TriageActions {

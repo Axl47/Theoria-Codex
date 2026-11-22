@@ -34,6 +34,8 @@ import com.theoriacodex.app.related.testRelatedShelf
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.app.search.sortModeLabel
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.trails.TrailPage
+import com.theoriacodex.app.trails.TrailPager
 import com.theoriacodex.app.triage.TriageCardSupport
 import com.theoriacodex.app.ui.components.FeedDurations
 import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
@@ -239,6 +241,28 @@ class ForYouDeckScreenTest {
             val level = owner.levels.value.single().id
             assertEquals(listOf(level to lanePost("fog", 0, 0).id, level to lanePost("sea", 0, 0).id), opened)
         }
+    }
+
+    @Test fun `a trail's later page that fails offers Retry above the grid's posts`() {
+        val first = listOf(testPost(DECK_SOURCE, "t-1"), testPost(DECK_SOURCE, "t-2"))
+        var down = true
+        var pages = 0
+        trails.creator = first
+        trails.pager = TrailPager {
+            if (++pages > 1) check(!down) { "down" }
+            TrailPage(if (pages == 1) first else first + testPost(DECK_SOURCE, "t-3"), canLoadMore = pages == 1)
+        }
+        val owner = render()
+        compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}creator").performClick()
+        compose.onNodeWithContentDescription("Grid").performClick()
+        compose.runOnIdle { owner.levels.value.last().loadNextPage() }
+
+        compose.onNodeWithTag(FOR_YOU_GRID_TAG).assertExists()
+        card("t-1").assertExists()
+        down = false
+        compose.onNodeWithText("Retry").performClick()
+        card("t-3").assertExists()
+        compose.onNodeWithText("Retry").assertDoesNotExist()
     }
 
     @Test fun `a Mix with nothing to deal says why`() {

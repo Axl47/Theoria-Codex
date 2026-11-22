@@ -1,6 +1,7 @@
 package com.theoriacodex.app.recommend
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -64,7 +65,7 @@ internal fun ForYouBody(
     when {
         feed.posts.isEmpty() && feed.pageFailed && !feed.loadingMore -> Column(Modifier.padding(16.dp)) {
             // The tile words a lost connection itself.
-            FeedFailureTile(state.failure?.takeIf { level.fork == null } ?: "Couldn't load posts", onRetry = level::retryPage)
+            FeedFailureTile(state.failure?.takeIf { level.fork == null } ?: LOAD_FAILED, onRetry = level::retryPage)
         }
         config.grid -> ForYouGrid(level, feed, config, related, callbacks, positioned, onLongPress, end)
         else -> ForYouDeck(owner, level, feed, config, callbacks, end)
@@ -141,6 +142,10 @@ private fun ForYouGrid(
     )
     when {
         view.related.projection.entries.isNotEmpty() -> Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+            // A later page that failed, above the posts as on a creator's page. The Mix says it in its status row.
+            if (feed.pageFailed && level.fork != null) {
+                Box(Modifier.padding(bottom = 8.dp)) { FeedFailureTile(LOAD_FAILED, onRetry = level::retryPage) }
+            }
             FeedContinueLoading(demand)
             FeedGrid(
                 view = view,
@@ -208,6 +213,7 @@ private fun ForYouEnd(mix: ForYouMixState?, empty: Boolean, onStartOver: () -> U
 }
 
 private val NO_FILTERS = SearchVisibilityFilters()
+private const val LOAD_FAILED = "Couldn't load posts"
 
 const val FOR_YOU_GRID_TAG = "for-you-grid"
 const val FOR_YOU_END_TAG = "for-you-end"
