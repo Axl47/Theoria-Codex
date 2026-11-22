@@ -394,23 +394,31 @@ class ForYouDeckViewModel(
      * deal (all of them while a deal waits). Each tagged post joins its lane's buffer unless a hidden tag now catches it,
      * and a deal that came up short deals again. A post whose preview did not load is left out, since its picture may
      * carry a hidden tag; while the model will not load, vetting waits and tries again rather than pass anything. Once
-     * vetting stops ([vetsPictures]) what is left passes on what is known. Does nothing while it already runs; every
-     * [refill] starts it again.
+     * vetting stops ([vetsPictures]) what is left passes on what is known. A post the deal would pass over anyway is
+     * dropped untagged, so such posts neither cost a picture each nor keep their lane first in line. Does nothing while
+     * it already runs; every [refill] starts it again.
      */
     private fun vet(mix: ForYouMix) {
         if (vetting?.isActive == true) return
-        vetting = workScope.launch {
+        // Started only once assigned: on the immediate main dispatcher the loop runs in place, and a deal it makes calls
+        // back here before it first suspends.
+        vetting = workScope.launch(start = CoroutineStart.LAZY) {
             while (true) {
                 val (lane, post) = mix.nextToVet(VET_AHEAD) ?: break
-                if (!vetsPictures) {
-                    lane.vetted(post, shows(post))
-                } else when (val look = wiring.pictures.look(post)) {
-                    is PictureLook.Seen -> lane.vetted(post, shows(post))
-                    PictureLook.Unseen -> lane.vetted(post, shows = false)
-                    PictureLook.Blind -> delay(BLIND_RETRY_MS)
-                }
+                vetOne(mix, lane, post)
                 if (mix.wanted) makeUp(mix) else publish()
             }
+        }.also { it.start() }
+    }
+
+    /** Settles [post], the next of [lane] to vet: tagged, dropped, or (while the model will not load) left to retry. */
+    private suspend fun vetOne(mix: ForYouMix, lane: MixLane, post: Post) {
+        val passed = mix.passesOver(post, seen + kept)
+        if (passed || !vetsPictures) return lane.vetted(post, !passed && shows(post))
+        when (wiring.pictures.look(post)) {
+            is PictureLook.Seen -> lane.vetted(post, shows(post))
+            PictureLook.Unseen -> lane.vetted(post, shows = false)
+            PictureLook.Blind -> delay(BLIND_RETRY_MS)
         }
     }
 

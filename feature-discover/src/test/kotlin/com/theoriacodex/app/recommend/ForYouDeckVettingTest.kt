@@ -60,6 +60,15 @@ class ForYouDeckVettingTest {
         assertEquals(4, owner.posts.size)
     }
 
+    @Test fun `posts the deal would pass over are never tagged`() {
+        val kept = List(FakeForYouEngine.PAGE) { lanePost("a", 0, it).id }.toSet()
+        val pictures = FakePictureTags()
+        val owner = owner(pictures, deckEnvironment(hiding("x"), kept = kept))
+
+        assertEquals(4, owner.posts.size)
+        assertTrue(pictures.asked.none { id -> kept.any { it.sourcePostId == id } })
+    }
+
     @Test fun `a tagger that becomes ready vets what the lanes already hold`() {
         val pictures = FakePictureTags(ready = false, predicted = mapOf("a-0-2" to seen("x")))
         val owner = owner(pictures)
