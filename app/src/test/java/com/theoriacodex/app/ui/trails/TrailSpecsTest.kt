@@ -85,6 +85,12 @@ class TrailSpecsTest {
     }
 
     @Test
+    fun `a tag trail from an Animated only level without a query, such as a creator's, still asks for animated posts`() {
+        assertEquals(MediaFilter.ANIMATED, trailTagQuery("dog", SourceKey.DANBOORU, context = null, animatedOnly = true).media)
+        assertEquals(MediaFilter.ANY, trailTagQuery("dog", SourceKey.DANBOORU, context = null).media)
+    }
+
+    @Test
     fun `a fork keeps its level's phone filters, with its own query's media and dates`() {
         val parent = SearchVisibilityFilters(
             animatedOnly = false, hideWatched = true, dateRange = DateRange(1L, 2L),

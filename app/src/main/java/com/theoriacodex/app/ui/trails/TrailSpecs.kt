@@ -33,9 +33,13 @@ internal interface TrailSources {
     fun similar(seed: Post): TrailPager?
 }
 
-/** The trail [request] asks for, or null when its source cannot supply one. */
-internal fun trailSpec(request: TrailRequest, sources: TrailSources): TrailSpec? = when (request) {
-    is TrailRequest.Tag -> trailTagQuery(request.tag, request.source, request.context).let { query ->
+/** The trail [request] asks for from a level filtered by [parent], or null when its source cannot supply one. */
+internal fun trailSpec(
+    request: TrailRequest,
+    sources: TrailSources,
+    parent: SearchVisibilityFilters = SearchVisibilityFilters(),
+): TrailSpec? = when (request) {
+    is TrailRequest.Tag -> trailTagQuery(request.tag, request.source, request.context, parent.animatedOnly).let { query ->
         TrailSpec(request.tag.replace('_', ' '), query, sources.tag(query))
     }
     is TrailRequest.Creator -> sources.creator(request.creator)?.let { TrailSpec(request.creator.displayName, null, it) }
@@ -44,15 +48,21 @@ internal fun trailSpec(request: TrailRequest, sources: TrailSources): TrailSpec?
 
 /**
  * One tag, searched where the level it came from searched (everywhere for a Unified level, else the post's own source)
- * and under that level's filters: its sort, media, dates and, where it searched the same place, its exclusions.
+ * and under that level's filters: its sort, dates and, where it searched the same place, its exclusions. It asks for
+ * animated posts when the level's query did or the level shows only animated posts ([animatedOnly]); a Creator or
+ * Similar level has no query to say so.
  */
-internal fun trailTagQuery(tag: String, source: SourceKey, context: Query?): Query {
+internal fun trailTagQuery(tag: String, source: SourceKey, context: Query?, animatedOnly: Boolean = false): Query {
     val mode = if (context?.mode == QueryMode.Unified) QueryMode.Unified else QueryMode.Source(source)
-    val tagOnly = Query(mode, listOf(tag), emptyList(), context?.sort ?: SortMode.NEWEST, context?.dateRange, null)
-    if (context == null) return tagOnly
     // Another source's exclusions may name tags this one spells differently, so they stay with their level.
-    val excluded = if (context.mode == mode) context.excludeTerms.filterNot { it.value.equals(tag, ignoreCase = true) } else emptyList()
-    return tagOnly.copy(excludeTerms = excluded, media = context.media)
+    val excluded = if (context != null && context.mode == mode) {
+        context.excludeTerms.filterNot { it.value.equals(tag, ignoreCase = true) }
+    } else {
+        emptyList()
+    }
+    val media = if (animatedOnly || context?.media == MediaFilter.ANIMATED) MediaFilter.ANIMATED else MediaFilter.ANY
+    return Query(mode, listOf(tag), emptyList(), context?.sort ?: SortMode.NEWEST, context?.dateRange, null)
+        .copy(excludeTerms = excluded, media = media)
 }
 
 /**

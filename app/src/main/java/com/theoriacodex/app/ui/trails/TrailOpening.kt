@@ -77,11 +77,11 @@ private suspend fun TheoriaShell.openTrail(
     marks: () -> BrowsingMetadata?,
 ): Boolean {
     val origin = navController.currentBackStackEntry
-    val spec = trailSpec(request, shellTrailSources()) ?: return false
     // A fork from a Viewer keeps that level's filters; one from a grid has only its query's.
     val parent = routes.viewer.current?.session?.value?.searchVisibilityFilters
-        ?.takeIf { origin?.destination?.route == AppRoute.Viewer }
-    val filters = trailVisibilityFilters(parent ?: SearchVisibilityFilters(), spec.query)
+        ?.takeIf { origin?.destination?.route == AppRoute.Viewer } ?: SearchVisibilityFilters()
+    val spec = trailSpec(request, shellTrailSources(), parent) ?: return false
+    val filters = trailVisibilityFilters(parent, spec.query)
     val feed = TrailFeed("trail:${UUID.randomUUID()}", spec.pager, features.relatedPosts)
     var opened = false
     try {
