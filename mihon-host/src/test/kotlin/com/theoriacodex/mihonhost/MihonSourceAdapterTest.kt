@@ -106,6 +106,20 @@ class MihonSourceAdapterTest {
     }
 
     @Test
+    fun `details that name only what they add keep the listed title and cover`() = runTest {
+        source.listing = MangasPage(listOf(manga("/s", "Series", cover = "https://cdn.test/c.jpg")), hasNextPage = false)
+        source.details = SManga.create().also { it.description = "Only a description" }
+        source.chapters = listOf(chapter("Chapter 1", "/c/1"))
+        source.pages = listOf(Page(0, imageUrl = "https://cdn.test/1.jpg"))
+        val listed = adapter.search(query(SortMode.POPULAR), pageToken = null).items.single()
+
+        val post = requireNotNull(adapter.resolvePost(listed.id))
+
+        assertEquals("Series · Chapter 1", post.title)
+        assertEquals("https://cdn.test/c.jpg", post.preview.url)
+    }
+
+    @Test
     fun `resolvePost returns null when there is no chapter or no page`() = runTest {
         val id = PostId(adapter.sourceKey, encoded("/s"))
 
@@ -179,6 +193,9 @@ class MihonSourceAdapterTest {
 
         var listing = MangasPage(emptyList(), hasNextPage = false)
         var chapters = emptyList<SChapter>()
+
+        /** What the details page returns; the series it was asked about when null. */
+        var details: SManga? = null
         var pages = emptyList<Page>()
         var failure: Throwable? = null
 
@@ -199,7 +216,7 @@ class MihonSourceAdapterTest {
             fetchChapters: Boolean,
         ): SMangaUpdate {
             detailRequests += manga.url
-            return SMangaUpdate(manga, this.chapters)
+            return SMangaUpdate(details ?: manga, this.chapters)
         }
 
         override suspend fun getPageList(chapter: SChapter): List<Page> {

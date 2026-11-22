@@ -93,13 +93,25 @@ class MihonSourceAdapter(
                 "listingReused=${known != null}",
         )
         if (chapter == null || media.isEmpty()) return@calling null
-        listedPost(update.manga, id).copy(
+        val series = manga.withDetails(update.manga)
+        listedPost(series, id).copy(
             full = media.first(),
             media = media,
-            title = listOf(update.manga.title, chapter.name).filter(String::isNotBlank).joinToString(" · "),
+            title = listOf(series.title, chapter.name).filter(String::isNotBlank).joinToString(" · "),
             mediaCount = media.size,
             galleryLengthUnknown = false,
         )
+    }
+
+    /**
+     * This series with what its details page added. A source's details often leave out the address, the title or the
+     * cover it already listed, so, as Mihon does, they only add to the series the app asked about.
+     */
+    private fun SManga.withDetails(details: SManga): SManga = copy().also { series ->
+        // The title has no value until the source sets one.
+        runCatching { details.title }.getOrNull()?.takeIf(String::isNotBlank)?.let { series.title = it }
+        details.thumbnail_url?.takeIf(String::isNotBlank)?.let { series.thumbnail_url = it }
+        details.author?.takeIf(String::isNotBlank)?.let { series.author = it }
     }
 
     private fun listedPost(manga: SManga): Post {
