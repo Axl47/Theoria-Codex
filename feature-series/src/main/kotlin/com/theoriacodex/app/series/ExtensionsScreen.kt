@@ -10,9 +10,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -28,6 +25,7 @@ import com.theoriacodex.app.ui.components.SettingsRow
 import com.theoriacodex.app.ui.components.SettingsRowDivider
 import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.domain.series.ExtensionLanguage
+import com.theoriacodex.domain.series.ExtensionSourceSettings
 import com.theoriacodex.domain.series.InstalledExtension
 import java.util.Locale
 
@@ -39,24 +37,29 @@ internal const val EXTENSIONS_TITLE = "Extensions"
  */
 @Composable
 fun ExtensionsScreen(viewModel: ExtensionsViewModel, onBack: () -> Unit) {
-    val extensions by viewModel.state.collectAsStateWithLifecycle()
-    var openId by rememberSaveable { mutableStateOf<String?>(null) }
-    val open = extensions?.firstOrNull { it.id == openId && it.on }
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val open = state.extensions?.firstOrNull { it.id == state.openId && it.on }
     LifecycleResumeEffect(viewModel) {
         viewModel.refresh()
         onPauseOrDispose {}
     }
-    BackHandler(enabled = open != null) { openId = null }
+    BackHandler(enabled = open != null) { viewModel.open(null) }
     if (open != null) {
-        ExtensionPage(open, viewModel, onBack = { openId = null })
+        ExtensionPage(open, state.settings.orEmpty(), viewModel, onBack = { viewModel.open(null) })
     } else {
-        ExtensionsList(extensions, onOpen = { openId = it }, onSetOn = viewModel::setOn, onBack = onBack)
+        ExtensionsList(state.extensions, onOpen = viewModel::open, onAsk = viewModel::ask, onTurnOff = { viewModel.setOn(it, false) }, onBack = onBack)
     }
+    state.asking?.let { extension -> TurnOnDialog(extension, onDismiss = { viewModel.ask(null) }) { viewModel.setOn(extension, true) } }
 }
 
 @Composable
-private fun ExtensionsList(extensions: List<InstalledExtension>?, onOpen: (String) -> Unit, onSetOn: (String, Boolean) -> Unit, onBack: () -> Unit) {
-    var asking by rememberSaveable { mutableStateOf<String?>(null) }
+private fun ExtensionsList(
+    extensions: List<InstalledExtension>?,
+    onOpen: (String) -> Unit,
+    onAsk: (InstalledExtension) -> Unit,
+    onTurnOff: (InstalledExtension) -> Unit,
+    onBack: () -> Unit,
+) {
     SettingsPageColumn {
         SettingsHeader(EXTENSIONS_TITLE, onBack)
         when {
@@ -65,15 +68,9 @@ private fun ExtensionsList(extensions: List<InstalledExtension>?, onOpen: (Strin
             else -> SettingsGroup(null) {
                 extensions.forEachIndexed { index, extension ->
                     if (index > 0) SettingsRowDivider()
-                    ExtensionRow(extension, onOpen, onSwitch = { on -> if (on) asking = extension.id else onSetOn(extension.id, false) })
+                    ExtensionRow(extension, onOpen, onSwitch = { on -> if (on) onAsk(extension) else onTurnOff(extension) })
                 }
             }
-        }
-    }
-    extensions?.firstOrNull { it.id == asking }?.let { extension ->
-        TurnOnDialog(extension, onDismiss = { asking = null }) {
-            asking = null
-            onSetOn(extension.id, true)
         }
     }
 }
@@ -101,31 +98,32 @@ private fun ExtensionRow(extension: InstalledExtension, onOpen: (String) -> Unit
     )
 }
 
-/** The one place a mistake is costly: what turning an extension on lets it do, and who signed it. */
+/** The one place a mistake is costly: what turning an extension on lets it do, how far that reaches, and who signed it. */
 @Composable
 private fun TurnOnDialog(extension: InstalledExtension, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Turn on ${extension.name}?") },
-        text = { Text("Its code runs inside this app and can read this app's data.\n\nSigned by ${extension.signer}") },
+        text = { Text("Its code runs inside this app and can read this app's data. This also turns on every other extension signed with the same key.\n\nSigned by ${extension.signer}") },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
         confirmButton = { TextButton(onClick = onConfirm) { Text("Turn on") } },
     )
 }
 
 @Composable
-private fun ExtensionPage(extension: InstalledExtension, viewModel: ExtensionsViewModel, onBack: () -> Unit) {
+private fun ExtensionPage(extension: InstalledExtension, settings: List<ExtensionSourceSettings>, viewModel: ExtensionsViewModel, onBack: () -> Unit) {
     SettingsPageColumn {
         SettingsHeader(extension.name, onBack, parents = listOf(EXTENSIONS_TITLE))
         SettingsGroup(null) { SettingsRow("Version ${extension.versionName}", extension.signer) }
-        extension.settings.forEach { source ->
+        settings.forEach { source ->
             // Settings come before the languages, which can run to dozens of rows. Each language is a source with
             // settings of its own, so with several on, each group says whose it is.
-            SettingsGroup(if (extension.settings.size > 1) "${source.sourceName} · ${languageName(source.language)}" else "Settings") {
+            SettingsGroup(if (settings.size > 1) "${source.sourceName} · ${languageName(source.language)}" else "Settings") {
                 ExtensionSettingRows(source.settings) { setting -> viewModel.change(extension.id, source.sourceId, setting) }
             }
         }
-        if (extension.languages.size > 1) {
+        // Shown for a single language too: with several extensions on one key, it is the way to turn off just this one.
+        if (extension.languages.isNotEmpty()) {
             SettingsGroup("Languages") {
                 extension.languages.forEachIndexed { index, language ->
                     if (index > 0) SettingsRowDivider()
@@ -136,8 +134,8 @@ private fun ExtensionPage(extension: InstalledExtension, viewModel: ExtensionsVi
     }
 }
 
-/** Whether tapping the row leads anywhere: only an extension that is on has languages or settings to show. */
-private val InstalledExtension.hasPage: Boolean get() = on && (languages.size > 1 || settings.isNotEmpty())
+/** Whether tapping the row leads anywhere: only an extension that is on and loaded has languages or settings to show. */
+private val InstalledExtension.hasPage: Boolean get() = on && languages.isNotEmpty()
 
 /**
  * Off, what there is to judge it by: its version and the start of its signer, which the question asked before it is

@@ -4,6 +4,7 @@ import androidx.preference.PreferenceScreen
 import com.theoriacodex.domain.series.ExtensionChoiceStore
 import com.theoriacodex.domain.series.ExtensionChoices
 import com.theoriacodex.domain.series.ExtensionLanguage
+import com.theoriacodex.domain.series.ExtensionSetting
 import eu.kanade.tachiyomi.source.ConfigurableSource
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.FilterList
@@ -12,6 +13,10 @@ import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.model.SMangaUpdate
+import eu.kanade.tachiyomi.source.online.HttpSource
+import okhttp3.Headers
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import kotlinx.coroutines.runBlocking
@@ -35,15 +40,24 @@ class ExtensionRegistryTest {
             choices = transform(choices)
         }
     }
-    private val registry = ExtensionRegistry(
+    private val images = ExtensionImages()
+    private val registry = registry { error("No source here has settings") }
+
+    private fun registry(settings: (ConfigurableSource) -> SourceSettings) = ExtensionRegistry(
         packages = { onDevice },
         load = { loads += it.apk.path; sourcesOf(it) },
         choices = store,
-        images = ExtensionImages(),
-        settings = { error("No source here has settings") },
+        images = images,
+        settings = settings,
         deviceLanguages = { deviceLanguages },
         limitMs = 500,
     )
+
+    /** Whether an image address tagged with [source] is answered by that source instead of passing down the chain. */
+    private fun fetchesImages(source: StubHttpSource): Boolean {
+        val client = OkHttpClient.Builder().addInterceptor(images).addInterceptor(answering { cannedResponse(it, body = "app") }).build()
+        return client.newCall(Request.Builder().url(images.coverAddress(source, "https://covers.test/1.jpg")).build()).execute().body.string() == "source"
+    }
 
     @Test
     fun `an extension that is off is listed without running its code`() = runBlocking {
@@ -57,7 +71,7 @@ class ExtensionRegistryTest {
 
     @Test
     fun `turning an extension on loads it once and offers its sources`() = runBlocking {
-        registry.setOn("/a.apk", true)
+        registry.setOn("/a.apk", "key-1", true)
 
         assertEquals(setOf("key-1"), store.choices.trustedSigners)
         assertEquals(listOf("custom_mihon_1"), registry.sources().map { it.key.id })
@@ -65,7 +79,7 @@ class ExtensionRegistryTest {
         assertEquals(listOf("/a.apk"), loads)
         assertEquals(1, registry.revision.value)
 
-        registry.setOn("/a.apk", false)
+        registry.setOn("/a.apk", "key-1", false)
 
         assertTrue(registry.sources().isEmpty())
         assertFalse(registry.installed().single().on)
@@ -73,7 +87,7 @@ class ExtensionRegistryTest {
 
     @Test
     fun `an update signed with the same key stays on and a copy signed with another key is off`() = runBlocking {
-        registry.setOn("/a.apk", true)
+        registry.setOn("/a.apk", "key-1", true)
 
         onDevice = listOf(extension("a", signer = "key-1", apk = "/a-2.apk"))
         assertTrue(registry.installed().single().on)
@@ -86,12 +100,72 @@ class ExtensionRegistryTest {
     }
 
     @Test
+    fun `a file replaced while the user was asked is not turned on`() = runBlocking {
+        val shown = registry.installed().single().signer!!
+        onDevice = listOf(extension("a", signer = "key-2"))
+
+        val listed = registry.setOn("/a.apk", shown, true).single()
+
+        assertEquals(listOf<Any?>("key-2", false), listOf(listed.signer, listed.on))
+        assertTrue(store.choices.trustedSigners.isEmpty())
+        assertTrue(loads.isEmpty())
+    }
+
+    @Test
+    fun `a file replaced in place loads anew and its old code is no longer offered`() = runBlocking {
+        registry.setOn("/a.apk", "key-1", true)
+        val before = registry.sources().single()
+
+        // The same path and signer, other content.
+        onDevice = listOf(extension("a", signer = "key-1").copy(modified = 2))
+        registry.installed()
+
+        assertEquals(listOf("/a.apk", "/a.apk"), loads)
+        assertTrue(registry.sources().single() !== before)
+    }
+
+    @Test
+    fun `a source fetches images only while its extension and language are on`() = runBlocking {
+        val english = StubHttpSource(1, "en")
+        val spanish = StubHttpSource(2, "es")
+        sourcesOf = { listOf(english, spanish) }
+
+        registry.setOn("/a.apk", "key-1", true)
+        assertEquals(listOf(true, false), listOf(english, spanish).map(::fetchesImages))
+
+        registry.setOn("/a.apk", "key-1", false)
+        assertEquals(listOf(false, false), listOf(english, spanish).map(::fetchesImages))
+    }
+
+    @Test
+    fun `settings are built only for the extension asked about and an edit for one turned off does nothing`() = runBlocking {
+        val built = mutableListOf<String>()
+        val configurable = ConfigurableStub {}
+        sourcesOf = { listOf(configurable) }
+        val registry = registry { source ->
+            built += source.name
+            error("Stops at the build")
+        }
+
+        registry.setOn("/a.apk", "key-1", true)
+        registry.sources()
+        assertTrue(built.isEmpty())
+
+        registry.settings("/a.apk")
+        assertEquals(1, built.size)
+
+        registry.setOn("/a.apk", "key-1", false)
+        registry.change("/a.apk", "custom_mihon_7", ExtensionSetting.Toggle("k", "", null, enabled = true, on = true))
+        assertEquals(1, built.size)
+    }
+
+    @Test
     fun `an extension without a signing certificate cannot be turned on`() = runBlocking {
         onDevice = listOf(extension("a", signer = null))
         // Even a store that somehow holds an empty fingerprint trusts nothing.
         store.choices = ExtensionChoices(trustedSigners = setOf(""))
 
-        registry.setOn("/a.apk", true)
+        registry.setOn("/a.apk", "key-1", true)
         val listed = registry.installed().single()
 
         assertFalse(listed.on)
@@ -104,7 +178,7 @@ class ExtensionRegistryTest {
         sourcesOf = { listOf(StubSource(1, "en"), StubSource(2, "es"), StubSource(3, "ko")) }
         deviceLanguages = listOf("es-PR")
 
-        registry.setOn("/a.apk", true)
+        registry.setOn("/a.apk", "key-1", true)
 
         assertEquals(listOf("custom_mihon_2"), registry.sources().map { it.key.id })
         assertEquals(listOf("en" to false, "es" to true, "ko" to false), registry.installed().single().languages.map { it.code to it.on })
@@ -129,7 +203,7 @@ class ExtensionRegistryTest {
             }
         }
 
-        registry.setOn("/works.apk", true)
+        registry.setOn("/works.apk", "key-1", true)
         val listed = registry.installed().associate { it.name to it.problem }
 
         assertEquals(mapOf("hangs" to "Took longer than 0 s", "fails" to "androidx/missing/Thing", "works" to null), listed)
@@ -141,14 +215,14 @@ class ExtensionRegistryTest {
     fun `the same extension on the device twice offers its sources once`() = runBlocking {
         onDevice = listOf(extension("a", signer = "key-1"), extension("a", signer = "key-1", apk = "/files/a.apk"))
 
-        registry.setOn("/a.apk", true)
+        registry.setOn("/a.apk", "key-1", true)
 
         assertEquals(listOf("custom_mihon_1"), registry.sources().map { it.key.id })
         assertNull(registry.installed().last().problem)
     }
 
     private fun extension(name: String, signer: String?, apk: String = "/$name.apk") =
-        ExtensionPackage(packageName = name, name = name, versionName = "1.0", signer = signer, apk = File(apk), installed = true, sourceClasses = listOf(".Source"))
+        ExtensionPackage(packageName = name, name = name, versionName = "1.0", versionCode = 1, signer = signer, apk = File(apk), installed = true, sourceClasses = listOf(".Source"))
 }
 
 /** A source that is only ever named, never asked for anything. */
@@ -166,6 +240,17 @@ internal open class StubSource(override val id: Long, override val lang: String)
         error("Not asked in these tests")
 
     override suspend fun getPageList(chapter: SChapter): List<Page> = error("Not asked in these tests")
+}
+
+/** A source with a client of its own, which answers every image request with "source". */
+internal class StubHttpSource(override val id: Long, override val lang: String) : HttpSource() {
+    override val name = "Stub"
+    override val baseUrl = "https://stub.test"
+    override val supportsLatest = false
+    override val client: OkHttpClient = OkHttpClient.Builder().addInterceptor(answering { cannedResponse(it, body = "source") }).build()
+
+    // The default asks the host for its browser agent string, which these tests do not install.
+    override fun headersBuilder() = Headers.Builder()
 }
 
 /** A source whose settings screen is [setup]. */

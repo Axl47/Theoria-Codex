@@ -12,7 +12,6 @@ import com.theoriacodex.domain.series.defaultLanguages
 import com.theoriacodex.domain.series.trusts
 import eu.kanade.tachiyomi.source.ConfigurableSource
 import eu.kanade.tachiyomi.source.Source
-import java.io.File
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -59,8 +58,15 @@ class ExtensionRegistry(
     /** Extension code that may hang runs here, so the caller can stop waiting for it. */
     private val threads = Executors.newCachedThreadPool { task -> Thread(task, "extension").apply { isDaemon = true } }
 
-    /** Every extension loaded in this process, by its APK; an update is another APK. Guarded by [mutex]. */
-    private val loaded = HashMap<File, Loaded>()
+    /**
+     * The extensions on the device that were loaded in this process. The key is the whole package as it was listed,
+     * signer and file stamp included, so a file replaced in place is another extension that loads anew: code is never
+     * run under a signer or a label it was not loaded with. Guarded by [mutex].
+     */
+    private val loaded = HashMap<ExtensionPackage, Loaded>()
+
+    /** Per extension id, its sources that are on, as of the last listing. Guarded by [mutex]. */
+    private var active: Map<String, List<LoadedSource>> = emptyMap()
 
     /** The sources on offer; null until first asked for. */
     @Volatile
@@ -70,62 +76,74 @@ class ExtensionRegistry(
     override val revision: StateFlow<Int> = mutableRevision
 
     /** The sources of the extensions and languages that are on. The first call loads them; later calls are immediate. */
-    suspend fun sources(): List<SeriesSource> = offered ?: withContext(Dispatchers.IO) {
-        mutex.withLock { offered ?: refresh().let { offered.orEmpty() } }
-    }
+    suspend fun sources(): List<SeriesSource> = offered ?: locked { offered ?: refresh().let { offered.orEmpty() } }
 
     override suspend fun installed(): List<InstalledExtension> = locked { refresh() }
 
-    override suspend fun setOn(id: String, on: Boolean) {
-        changing {
-            val signer = extension(id)?.signer ?: return@changing
-            choices.update { it.copy(trustedSigners = if (on) it.trustedSigners + signer else it.trustedSigners - signer) }
-            // Turning one on again is the way to retry one that failed.
-            if (on) loaded.entries.removeAll { it.value.problem != null }
+    override suspend fun setOn(id: String, signer: String, on: Boolean): List<InstalledExtension> = locked {
+        val onDevice = packages()
+        val extension = onDevice.firstOrNull { it.apk.path == id }
+        when {
+            !on -> choices.update { it.copy(trustedSigners = it.trustedSigners - signer) }
+            // Only what the user was shown is trusted; a file replaced since then is listed again to be asked about.
+            extension != null && extension.signer == signer -> {
+                choices.update { it.copy(trustedSigners = it.trustedSigners + signer) }
+                // Turning one on again is the way to retry it when it failed.
+                if (loaded[extension]?.problem != null) loaded -= extension
+            }
         }
+        refresh(onDevice)
     }
 
-    override suspend fun setLanguage(id: String, language: String, on: Boolean) {
-        changing { listed ->
-            val extension = extension(id) ?: return@changing
-            val current = listed.firstOrNull { it.id == id }?.languages.orEmpty().filter(ExtensionLanguage::on).mapTo(LinkedHashSet(), ExtensionLanguage::code)
+    override suspend fun setLanguage(id: String, language: String, on: Boolean): List<InstalledExtension> = locked {
+        val onDevice = packages()
+        val extension = onDevice.firstOrNull { it.apk.path == id }
+        val languages = extension?.let { loaded[it] }?.sources?.map { it.language }
+        if (extension != null && languages != null) {
+            val current = choices.choices().languages[extension.packageName] ?: defaultLanguages(languages.distinct(), deviceLanguages())
             choices.update { it.copy(languages = it.languages + (extension.packageName to if (on) current + language else current - language)) }
         }
+        refresh(onDevice)
     }
 
-    override suspend fun change(id: String, sourceId: String, setting: ExtensionSetting) {
-        changing {
-            val source = loaded[File(id)]?.sources?.firstOrNull { it.series.key.id == sourceId }?.source as? ConfigurableSource ?: return@changing
-            limited("${source.name} settings") { settings(source).change(setting) }
-        }
+    override suspend fun settings(id: String): List<ExtensionSourceSettings> = locked {
+        if (offered == null) refresh()
+        active[id].orEmpty().mapNotNull(::settingsOf)
     }
 
-    /** Lists the extensions, lets [change] act on that list, then lists them again as the result. */
-    private suspend fun changing(change: suspend (List<InstalledExtension>) -> Unit): List<InstalledExtension> = locked {
-        change(refresh())
-        refresh()
+    override suspend fun change(id: String, sourceId: String, setting: ExtensionSetting): List<ExtensionSourceSettings> = locked {
+        // Looked up among the sources that are on now: an edit queued before its extension was turned off does nothing.
+        val sources = active[id].orEmpty()
+        val source = sources.firstOrNull { it.series.key.id == sourceId }
+        val configurable = source?.source as? ConfigurableSource
+        if (configurable != null) limited("${source.name} settings") { settings(configurable).change(setting) }
+        sources.mapNotNull(::settingsOf)
     }
 
     /**
      * Runs [block] alone and off the caller's thread. The revision moves when the sources on offer did, whatever the
      * cause: a choice made here, or a package installed or removed since the last listing.
      */
-    private suspend fun locked(block: suspend () -> List<InstalledExtension>): List<InstalledExtension> = withContext(Dispatchers.IO) {
+    private suspend fun <T> locked(block: suspend () -> T): T = withContext(Dispatchers.IO) {
         mutex.withLock {
             val before = offered
             block().also { if (before != offered) mutableRevision.update { it + 1 } }
         }
     }
 
-    private fun extension(id: String): ExtensionPackage? = packages().firstOrNull { it.apk.path == id }
-
-    /** Lists every extension, loading those that are on and not loaded yet, and replaces [offered]. */
-    private suspend fun refresh(): List<InstalledExtension> {
+    /**
+     * Lists every extension, loading those that are on and not loaded yet, and replaces what is on offer. No settings
+     * are read here: this runs for the first source lookup and image request, which must not wait on every source's
+     * settings screen.
+     */
+    private suspend fun refresh(onDevice: List<ExtensionPackage> = packages()): List<InstalledExtension> {
         val choices = choices.choices()
         val device = deviceLanguages()
         val taken = HashSet<SourceKey>()
-        val on = mutableListOf<LoadedSource>()
-        val listed = packages().map { extension ->
+        val on = LinkedHashMap<String, List<LoadedSource>>()
+        // What is no longer on the device as it was loaded is never offered again.
+        loaded.keys.retainAll(onDevice.toSet())
+        val listed = onDevice.map { extension ->
             val trusted = choices.trusts(extension.signer)
             val listing = InstalledExtension(
                 id = extension.apk.path,
@@ -137,20 +155,18 @@ class ExtensionRegistry(
                 problem = extension.unsupported ?: NOT_SIGNED.takeIf { extension.signer == null },
             )
             if (!trusted || extension.unsupported != null) return@map listing
-            val code = loaded.getOrPut(extension.apk) { load(extension) }
+            val code = loaded.getOrPut(extension) { load(extension) }
             val languages = code.sources.map { it.language }.distinct()
             val chosen = choices.languages[extension.packageName] ?: defaultLanguages(languages, device)
             // The same extension can be on the device twice, installed and as a file; its sources are offered once.
-            val sources = code.sources.filter { it.language in chosen && taken.add(it.series.key) }
-            on += sources
-            listing.copy(
-                problem = code.problem,
-                languages = languages.map { ExtensionLanguage(it, it in chosen) },
-                settings = sources.mapNotNull(::settingsOf),
-            )
+            on[listing.id] = code.sources.filter { it.language in chosen && taken.add(it.series.key) }
+            listing.copy(problem = code.problem, languages = languages.map { ExtensionLanguage(it, it in chosen) })
         }
-        images.only(on.map { it.source })
-        val series = on.map { it.series }
+        active = on
+        val sources = on.values.flatten()
+        // One complete table: only sources of an extension that finished loading, in a language that is on, fetch images.
+        images.publish(sources.map { it.source })
+        val series = sources.map { it.series }
         // The same list object while nothing changed, so a reader can tell.
         if (series != offered) offered = series
         return listed
@@ -167,6 +183,7 @@ class ExtensionRegistry(
         onFailure = { error -> Loaded(emptyList(), error.message ?: error.toString()) },
     )
 
+    /** Builds the source's settings screen, which runs its code, within the limit. */
     private fun settingsOf(source: LoadedSource): ExtensionSourceSettings? {
         val configurable = source.source as? ConfigurableSource ?: return null
         val list = limited("${source.name} settings") { settings(configurable).list() }.getOrNull().orEmpty()

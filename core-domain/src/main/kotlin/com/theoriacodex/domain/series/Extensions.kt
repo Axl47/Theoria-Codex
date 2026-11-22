@@ -33,8 +33,6 @@ data class InstalledExtension(
     val problem: String? = null,
     /** Every language it has a source for; empty until it is on, because finding them runs its code. */
     val languages: List<ExtensionLanguage> = emptyList(),
-    /** The settings of each source that is on and has any. */
-    val settings: List<ExtensionSourceSettings> = emptyList(),
 )
 
 data class ExtensionLanguage(val code: String, val on: Boolean)
@@ -95,13 +93,20 @@ interface SeriesExtensions {
 
     suspend fun installed(): List<InstalledExtension>
 
-    /** Turning one on trusts its signing certificate, and with it every extension signed by the same key. */
-    suspend fun setOn(id: String, on: Boolean)
+    /**
+     * Turning one on trusts its signing certificate, and with it every extension signed by the same key. [signer] is
+     * the fingerprint the user was shown: when the extension's is another by now, because its file was replaced
+     * meanwhile, nothing is turned on and the returned list shows the new one to ask about.
+     */
+    suspend fun setOn(id: String, signer: String, on: Boolean): List<InstalledExtension>
 
-    suspend fun setLanguage(id: String, language: String, on: Boolean)
+    suspend fun setLanguage(id: String, language: String, on: Boolean): List<InstalledExtension>
 
-    /** Stores [setting]'s value; the source can refuse it, and then nothing changes. */
-    suspend fun change(id: String, sourceId: String, setting: ExtensionSetting)
+    /** The settings of each of the extension's sources that is on and has any; empty for one that is off. */
+    suspend fun settings(id: String): List<ExtensionSourceSettings>
+
+    /** Stores [setting]'s value, unless the source refuses it or is no longer on, and returns [settings] as they now are. */
+    suspend fun change(id: String, sourceId: String, setting: ExtensionSetting): List<ExtensionSourceSettings>
 }
 
 /** An extension runs only when it has a signing certificate and the user turned that certificate on. */

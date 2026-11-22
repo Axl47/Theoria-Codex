@@ -41,10 +41,6 @@ class MihonSeriesSource(
     private val listedSeries = recent<SManga>()
     private val listedChapters = recent<SChapter>()
 
-    init {
-        if (source is HttpSource) images.attach(source)
-    }
-
     override suspend fun popular(page: Int): SeriesPage = calling { source.getPopularManga(page).listed() }
 
 

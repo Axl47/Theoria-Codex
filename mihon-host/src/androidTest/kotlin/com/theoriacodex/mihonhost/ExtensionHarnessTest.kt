@@ -47,7 +47,7 @@ class ExtensionHarnessTest {
         report("extension", "${extension.name} ${extension.versionName}, ${sources.size} sources, signer ${extension.signer}")
         report("source", "${source.name} lang=${source.lang} supportsLatest=${source.supportsLatest}")
 
-        val images = ExtensionImages()
+        val images = ExtensionImages().also { it.publish(listOf(source)) }
         val series = MihonSeriesSource(source, images) { report("source", it) }
         val listing = timed("popular") { series.popular(1) }
         report("popular", "${listing.series.size} series, covers=${listing.series.count { it.coverUrl != null }}, more=${listing.hasNextPage}")

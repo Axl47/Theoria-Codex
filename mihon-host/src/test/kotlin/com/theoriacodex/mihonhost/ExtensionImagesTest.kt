@@ -12,7 +12,7 @@ import org.junit.Test
 
 class ExtensionImagesTest {
     private val images = ExtensionImages()
-    private val source = ImageServerSource().also(images::attach)
+    private val source = ImageServerSource().also { images.publish(listOf(it)) }
     private val page = Page(0, url = "chapter-hash", imageUrl = "/data/1.jpg")
 
     @Test
@@ -64,7 +64,7 @@ class ExtensionImagesTest {
     @Test
     fun `a loaded source answers without loading the extensions again`() {
         var loads = 0
-        val loading = ExtensionImages { loads++ }.also { it.attach(source) }
+        val loading = ExtensionImages { loads++ }.also { it.publish(listOf(source)) }
 
         assertEquals("source-token https://covers.test/1.jpg", fetch("https://covers.test/1.jpg#mihon=1", loading))
         assertEquals(0, loads)
@@ -73,7 +73,7 @@ class ExtensionImagesTest {
     @Test
     fun `a request for a source that has not loaded yet loads the extensions first`() {
         lateinit var loading: ExtensionImages
-        loading = ExtensionImages { loading.attach(source) }
+        loading = ExtensionImages { loading.publish(listOf(source)) }
 
         assertEquals("source-token https://covers.test/1.jpg", fetch("https://covers.test/1.jpg#mihon=1", loading))
     }

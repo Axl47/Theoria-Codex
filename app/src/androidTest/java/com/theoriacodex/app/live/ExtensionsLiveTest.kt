@@ -61,6 +61,7 @@ class ExtensionsLiveTest {
         live.tap("the empty state's way to the Extensions page", By.text("Extensions"))
         live.tap("${off.name}'s switch", switchOf(off))
         live.waitFor("what turning an extension on means", By.textContains("can read this app's data"))
+        live.waitFor("how far turning it on reaches", By.textContains("every other extension signed with the same key"))
         live.waitFor("the signer in the question", By.textContains(checkNotNull(off.signer)))
         live.tap("Turn on", By.text("Turn on"))
         val on = live.await("the extension to be on", ::installedPackage) { it.on && it.languages.isNotEmpty() }
@@ -73,7 +74,7 @@ class ExtensionsLiveTest {
         assertEquals("Only that language's source is offered", listOf("en"), sources.map { it.language })
 
         live.tap("the extension's page", By.text(on.name))
-        val listed = on.settings.single().settings
+        val listed = settingsOf(on).single().settings
         live.report("settings", "${listed.size} listed: ${listed.joinToString { "${it.title} (${it::class.simpleName})" }}")
         val toggle = listed.filterIsInstance<ExtensionSetting.Toggle>().firstOrNull { it.enabled } ?: error("The extension lists no switch to change")
         showing(toggle.title).click()
@@ -99,7 +100,7 @@ class ExtensionsLiveTest {
         val stored = checkNotNull(setting(key)) { "The setting is no longer listed" }
         assertEquals("The changed setting kept its value", expected, stored.on)
         // The value is in the source's own preferences file, which the host names apart from the app's files.
-        val sourceId = on.settings.single().sourceId.substringAfterLast('_')
+        val sourceId = settingsOf(on).single().sourceId.substringAfterLast('_')
         val file = live.context.getSharedPreferences("${MihonHost.PREFERENCES_PREFIX}source_$sourceId", Context.MODE_PRIVATE)
         assertEquals("The source's preferences file holds the value", expected, file.all[key])
         live.report("restart", "\"${stored.title}\" is still $expected, kept in ${MihonHost.PREFERENCES_PREFIX}source_$sourceId")
@@ -137,7 +138,9 @@ class ExtensionsLiveTest {
     private fun switchOf(extension: InstalledExtension) = By.checkable(true).hasDescendant(By.desc(extension.name))
 
     private fun setting(key: String): ExtensionSetting.Toggle? =
-        installedPackage().settings.flatMap { it.settings }.firstOrNull { it.key == key } as? ExtensionSetting.Toggle
+        settingsOf(installedPackage()).flatMap { it.settings }.firstOrNull { it.key == key } as? ExtensionSetting.Toggle
+
+    private fun settingsOf(extension: InstalledExtension) = runBlocking { extensions.settings(extension.id) }
 
     /** The row titled [title], scrolled into view when the page is longer than the screen. */
     private fun showing(title: String) = device.findObject(By.text(title))

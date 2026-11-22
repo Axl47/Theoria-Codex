@@ -7,17 +7,25 @@ import java.io.File
 import java.security.MessageDigest
 import java.util.HexFormat
 
-/** An extension as the package manager describes it. Reading one runs none of its code. */
+/**
+ * An extension as the package manager describes it. Reading one runs none of its code. Two values are equal only for
+ * the same content at the same place: [versionCode], [size] and [modified] change when the file is replaced, so code
+ * loaded for one value is never taken for another's.
+ */
 data class ExtensionPackage(
     val packageName: String,
     val name: String,
     val versionName: String,
+    val versionCode: Long,
     /** SHA-256 of its one signing certificate, lowercase hex; null when it has none that can be read. */
     val signer: String?,
     /** Its code: the installed package's own APK, or a file in the app's extensions folder. */
     val apk: File,
     val installed: Boolean,
     val sourceClasses: List<String>,
+    /** The APK's length in bytes and when it was last written, as read when it was listed. */
+    val size: Long = apk.length(),
+    val modified: Long = apk.lastModified(),
     /** Why this host cannot run it, whoever signed it. */
     val unsupported: String? = null,
 )
@@ -58,6 +66,7 @@ class ExtensionPackages(private val context: Context, private val folder: () -> 
             packageName = info.packageName,
             name = info.applicationInfo?.loadLabel(context.packageManager)?.toString()?.removePrefix(LABEL_PREFIX)?.ifBlank { null } ?: info.packageName,
             versionName = info.versionName.orEmpty(),
+            versionCode = info.longVersionCode,
             signer = signer(info),
             apk = apk,
             installed = installed,

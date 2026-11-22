@@ -25,6 +25,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import com.theoriacodex.domain.series.ExtensionSetting
+import com.theoriacodex.domain.series.ExtensionSourceSettings
 import com.theoriacodex.domain.series.InstalledExtension
 import com.theoriacodex.domain.series.SeriesExtensions
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -130,9 +131,11 @@ private object NoExtensions : SeriesExtensions {
 
     override suspend fun installed(): List<InstalledExtension> = emptyList()
 
-    override suspend fun setOn(id: String, on: Boolean) = Unit
+    override suspend fun setOn(id: String, signer: String, on: Boolean) = installed()
 
-    override suspend fun setLanguage(id: String, language: String, on: Boolean) = Unit
+    override suspend fun setLanguage(id: String, language: String, on: Boolean) = installed()
 
-    override suspend fun change(id: String, sourceId: String, setting: ExtensionSetting) = Unit
+    override suspend fun settings(id: String) = emptyList<ExtensionSourceSettings>()
+
+    override suspend fun change(id: String, sourceId: String, setting: ExtensionSetting) = settings(id)
 }

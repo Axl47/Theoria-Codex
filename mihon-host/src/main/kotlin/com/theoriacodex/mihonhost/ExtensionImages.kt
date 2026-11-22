@@ -5,7 +5,6 @@ import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.online.HttpSource
 import java.io.IOException
 import java.util.Collections
-import java.util.concurrent.ConcurrentHashMap
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
@@ -36,12 +35,14 @@ internal inline fun <T> failingAsIo(block: () -> T): T = try {
  * this interceptor, placed on the app's media client, answers tagged addresses through that source and passes every
  * other request on. The tag travels with the address, so a cover the app stored still loads after a restart.
  *
- * [ensureLoaded] loads the device's extensions, attaching their sources, and returns once that is done; it must not
- * throw. It runs on an HTTP client's thread, the first time a tagged address names a source that is not attached:
- * a stored cover can be asked for before anything else has needed the extensions.
+ * Only the sources last handed to [publish] answer: the ones whose extension loaded completely and whose extension
+ * and language are on. [ensureLoaded] loads the device's extensions, which publishes their sources, and returns once
+ * that is done; it must not throw. It runs on an HTTP client's thread, the first time a tagged address names a source
+ * that is not published: a stored cover can be asked for before anything else has needed the extensions.
  */
 class ExtensionImages(private val ensureLoaded: () -> Unit = {}) : Interceptor {
-    private val sources = ConcurrentHashMap<Long, HttpSource>()
+    @Volatile
+    private var sources: Map<Long, HttpSource> = emptyMap()
 
     /** Pages whose request only the source can build; a page from an earlier run is fetched by its address alone. */
     private val pages = Collections.synchronizedMap(
@@ -50,15 +51,9 @@ class ExtensionImages(private val ensureLoaded: () -> Unit = {}) : Interceptor {
         },
     )
 
-    internal fun attach(source: HttpSource) {
-        sources[source.id] = source
-    }
-
-    /** Makes [active] the only sources that fetch: one whose extension or language was turned off stops answering. */
-    internal fun only(active: List<Source>) {
-        val http = active.filterIsInstance<HttpSource>()
-        sources.keys.retainAll(http.mapTo(HashSet()) { it.id })
-        http.forEach(::attach)
+    /** Makes [active] the only sources that fetch, all at once: one whose extension or language was turned off stops answering. */
+    internal fun publish(active: List<Source>) {
+        sources = active.filterIsInstance<HttpSource>().associateBy { it.id }
     }
 
     /** The source once the extensions have loaded; null when its extension is not on the device. */

@@ -44,7 +44,10 @@ the host must provide classes with exactly those packages, names and signatures.
 that extension on in the Extensions page. What is stored is the SHA-256 of the signing certificate
 (`ExtensionChoices.trustedSigners`, in the settings store): an update signed with the same key stays on, a copy
 signed with another key is off, and every extension from one signer goes on and off together. An APK with no
-readable signing certificate, or with several signers, can never be turned on. Until an extension is on, its name,
+readable signing certificate, or with several signers, can never be turned on. The question asked before turning one
+on shows the fingerprint, and only that fingerprint is trusted: a file replaced while the question was open is asked
+about again. Loaded code is kept per listed file, signer, version, length and write time included, so a file replaced
+in place loads anew, from a private copy of its own, and never runs under another file's signer or name. Until an extension is on, its name,
 version and fingerprint come from the package manager alone. Trust is never written to or read from a profile backup.
 
 **Languages.** An extension can ship one source per language (MangaDex ships 62). The ones on by default are those
@@ -57,7 +60,9 @@ Extensions page draws it with the app's settings rows. A survey of 300 extension
 `PreferenceScreen` (`addPreference`, `context`), `SwitchPreferenceCompat` and `CheckBoxPreference` (`summaryOn`,
 `summaryOff`), `EditTextPreference` (`text`, `dialogTitle`, `dialogMessage`, `onBindEditTextListener`),
 `ListPreference` and `MultiSelectListPreference` (`entries`, `entryValues`). Honored: defaults, summaries (a list's
-`%s` names the chosen entry), a change listener returning false to refuse a value, enabled and visible.
+`%s` names the chosen entry), a change listener returning false to refuse a value, enabled and visible. As in
+AndroidX, a preference added to the screen stores its declared default when nothing is stored yet, and an
+`EditTextPreference`'s `text` is the stored one, so the source's code reads the values its rows show.
 `onBindEditTextListener` is held and never called, because there is no `EditText`: a source that used it to set a
 numeric keyboard or validate while typing gets a plain text field. Each source reads its values from a preferences
 file it asks for by Mihon's name, `source_<id>`; the host hands extensions an `Application` that stores every such
@@ -67,7 +72,7 @@ file as `mihon_<name>`, so extension files cannot be mistaken for the app's own.
 | --- | --- | --- |
 | Host API | `src/main/kotlin/eu/kanade/tachiyomi`, `uy/kohesive/injekt` | The classes extensions link against, trimmed from Mihon (Apache 2.0, see `LICENSE-APACHE-2.0.txt`). Only the coroutine API; no RxJava. |
 | `ExtensionPackages` | `com.theoriacodex.mihonhost` | Lists the extensions on the device without running them: installed packages with the extension feature, and APK files in the debug app's `mihon-extensions` folder. |
-| `ExtensionRegistry` | same | The rule for what runs: loads the extensions that are on, on first use, each with 15 s to finish, and offers the sources of the languages that are on. One that hangs or fails is left out and says why on the Extensions page. |
+| `ExtensionRegistry` | same | The rule for what runs: loads the extensions that are on, on first use, each with 15 s to finish, and offers the sources of the languages that are on; only those sources fetch images. One that hangs or fails is left out and says why on the Extensions page. Settings are read only for the extension whose page is open. |
 | `ExtensionLoader` | same | Loads an installed package's code from its own APK; a folder file is first copied to a private read-only file (Android refuses writable code) and the copy's signer checked again. |
 | `SourceSettings`, `androidx/preference` | same | Reads a source's settings out of the holder classes and stores a changed value where the source reads it. |
 | `MihonHost` | same | Gives extensions what they ask the service locator for: the application, a `Json`, and an HTTP client. |

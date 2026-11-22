@@ -18,6 +18,14 @@ class ExtensionRejectedException(message: String, cause: Throwable? = null) : Ex
  * user turned on (see [ExtensionRegistry]). [MihonHost.install] must have run first.
  */
 class ExtensionLoader(private val context: Context, private val packages: ExtensionPackages) {
+    /** Copies an earlier process left behind are removed once, before this process makes its first. */
+    private val copies by lazy {
+        File(context.codeCacheDir, "mihon-extensions").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+    }
+
     /** @throws ExtensionRejectedException when [extension] is not loadable by this host. */
     fun load(extension: ExtensionPackage): List<Source> {
         extension.unsupported?.let { throw ExtensionRejectedException("${extension.packageName}: $it") }
@@ -29,16 +37,16 @@ class ExtensionLoader(private val context: Context, private val packages: Extens
 
     /**
      * Android refuses to load code from a file the app could still write, so a file from the folder is copied and
-     * locked first. The copy is what runs, so it is the copy whose signer must be the one the user turned on.
+     * locked first. Every load gets a copy of its own, never written again, so code already loaded from an earlier
+     * copy is not changed under it. The copy is what runs, so it is the copy that must be what the user turned on:
+     * the same signer, version and length as the file that was listed.
      */
     private fun privateReadOnlyCopy(extension: ExtensionPackage): File {
-        val directory = File(context.codeCacheDir, "mihon-extensions").apply { mkdirs() }
-        // One copy per file: a second file of the same extension must not replace code that is already loaded.
-        val target = File(directory, extension.apk.name)
-        target.delete()
-        extension.apk.copyTo(target)
+        val target = File.createTempFile(extension.apk.nameWithoutExtension, ".apk", copies)
+        extension.apk.copyTo(target, overwrite = true)
         check(target.setReadOnly()) { "Could not lock ${target.name}" }
-        if (extension.signer == null || packages.read(target)?.signer != extension.signer) {
+        val copy = packages.read(target)
+        if (extension.signer == null || copy?.signer != extension.signer || copy.versionCode != extension.versionCode || copy.size != extension.size) {
             target.delete()
             throw ExtensionRejectedException("${extension.apk.name} changed after it was listed")
         }
