@@ -1,6 +1,7 @@
 package com.theoriacodex.app.media
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.SettingsRepository
@@ -92,7 +93,7 @@ class OfflineMediaAcquisition(
  * Streams a media response to a staging file with bounded memory; callers publish only a complete,
  * recognized media file. Offline saves use the 2 GiB default; caches pass their own [maxBytes].
  */
-internal suspend fun downloadMediaFile(
+suspend fun downloadMediaFile(
     url: String,
     headers: Map<String, String>,
     destination: File,
@@ -143,6 +144,13 @@ private const val MEDIA_HTTP_OK = 200
 private fun mediaTooLarge(maxBytes: Long) = IOException(
     if (maxBytes == MAX_OFFLINE_MEDIA_BYTES) "This file exceeds the 2 GiB offline limit" else "Media exceeds its byte limit",
 )
+
+/** The image type [file] decodes as, reading only its header; null when the platform cannot decode it as an image. */
+fun decodableImageType(file: File): String? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(file.path, bounds)
+    return bounds.outMimeType?.takeIf { bounds.outWidth > 0 && bounds.outHeight > 0 }
+}
 
 /** A successful HTML/error response must never become an apparently available offline image. */
 fun validateOfflineMediaFile(file: File) {

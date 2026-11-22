@@ -9,6 +9,7 @@ private val EXTENSIONS = mapOf(
     "image/gif" to "gif",
     "image/avif" to "avif",
     "image/heic" to "heic",
+    "image/heif" to "heif",
     "image/bmp" to "bmp",
     "video/mp4" to "mp4",
     "video/webm" to "webm",
