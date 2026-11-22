@@ -185,7 +185,7 @@ android {
         buildConfigField("String", "DEVELOPER_COPY_CERT_SHA256", "\"\"")
         // Where the opt-in picture tagger's files download from; a test build may point it at a loopback server.
         val visionModelBaseUrl = providers.gradleProperty("theoria.visionModelBaseUrl")
-            .orElse("https://github.com/Axl47/Theoria-Codex/releases/download/vision-models-1/").get()
+            .orElse("https://github.com/Axl47/Theoria-Codex/releases/download/models-vision-1/").get()
         buildConfigField("String", "VISION_MODEL_BASE_URL", "\"$visionModelBaseUrl\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
