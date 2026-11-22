@@ -1,5 +1,7 @@
 package com.theoriacodex.app.ui
 
+import kotlinx.coroutines.flow.emptyFlow
+import androidx.compose.runtime.collectAsState
 import com.theoriacodex.app.ui.components.feedDurations
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContentScope
@@ -306,6 +308,11 @@ private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
         var published: ViewerViewModel? = null
         { owner -> if (owner != null) routes.viewer.publish(owner.also { published = it }) else published?.let(routes.viewer::withdraw) }
     }
+    // A series session reads every chapter in the series' mode and shows none of the collecting controls.
+    val seriesSession = shell.viewerSessions.session.value?.takeIf { it.context.streamSource == ViewerStreamSource.SERIES }
+    val seriesMode by remember(seriesSession?.context?.queryHash) {
+        seriesSession?.let { shell.seriesReader?.readingMode(it) } ?: emptyFlow()
+    }.collectAsState(initial = null)
     ViewerDestinationStateBoundary(
         data = shell.data,
         sources = shell.sources,
@@ -340,7 +347,13 @@ private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
                     galleryReadingModes = state.browsing.galleryReadingModes,
                     creatorBrowsingSources = state.browsing.creatorBrowsingSources,
                     playbackDiagnosticsEnabled = BuildConfig.BENCHMARK_FIXTURES_ENABLED,
-                ),
+                ).let { config ->
+                    if (seriesSession == null) config
+                    else config.copy(
+                        seriesChapters = true,
+                        galleryReadingModes = seriesMode?.let { mode -> seriesSession.posts.associate { it.id to mode } }.orEmpty(),
+                    )
+                },
                 liveSourceState = viewerLiveSourceState(state, shell.pendingLikePostIds[state.browsing.activeProfile.profileId].orEmpty()),
                 effectCallbacks = effectCallbacks,
                 screenCallbacks = screenCallbacks,
@@ -376,6 +389,7 @@ private suspend fun TheoriaShell.viewerDownloadOrigin(): String {
         ViewerStreamSource.CREATOR_PROFILE -> "Creator profile"
         ViewerStreamSource.RECENTS -> "History"
         ViewerStreamSource.RELATED -> "Related posts"
+        ViewerStreamSource.SERIES -> "Series"
         null -> "Viewer"
     }
 }
@@ -440,7 +454,13 @@ private fun viewerScreenCallbacks(shell: TheoriaShell) = ViewerScreenCallbacks(
     onPlaybackModeSelected = { shell.owners.settings.onAction(SettingsAction.SetViewerPlaybackMode(it)) },
     onVideoQualitySelected = { shell.owners.settings.onAction(SettingsAction.SetChoice(SettingChoices.DefaultVideoQuality, it)) },
     onCommentOrderSelected = { shell.owners.settings.onAction(SettingsAction.SetCommentOrder(it)) },
-    onGalleryReadingModeSelected = { postId, mode -> shell.scope.launch { shell.data.galleryReadingModes.set(postId, mode) } },
+    onGalleryReadingModeSelected = { postId, mode ->
+        shell.scope.launch {
+            val session = shell.routes.viewer.current?.session?.value
+            if (session?.context?.streamSource == ViewerStreamSource.SERIES) shell.seriesReader?.setReadingMode(session, mode)
+            else shell.data.galleryReadingModes.set(postId, mode)
+        }
+    },
     onVisiblePostChanged = { post, viewedMediaNumber, session ->
         shell.data.markViewedNewPost(post, session)
         shell.viewerRouteWorkflow.recordVisiblePost(post, viewedMediaNumber, session)

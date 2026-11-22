@@ -72,6 +72,7 @@ internal fun viewerRootLabel(context: ViewerLaunchContext, query: Query?): Strin
         ViewerStreamSource.RECENTS -> "History"
         ViewerStreamSource.RELATED -> "Related"
         ViewerStreamSource.TRAIL -> "Trail"
+        ViewerStreamSource.SERIES -> "Series"
     }
 
 /**

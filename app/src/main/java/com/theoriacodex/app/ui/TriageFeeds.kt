@@ -71,7 +71,8 @@ internal fun TheoriaShell.triageFeed(request: TriageRequest, seed: TriageSeed): 
         SeededTriageFeed(snapshots, flowOf(emptyList()), nextPage = {})
     }
     // For You is a deck itself and offers no Triage.
-    ViewerStreamSource.FOR_YOU, ViewerStreamSource.RELATED, ViewerStreamSource.RECENTS, ViewerStreamSource.TRAIL -> null
+    ViewerStreamSource.FOR_YOU, ViewerStreamSource.RELATED, ViewerStreamSource.RECENTS, ViewerStreamSource.TRAIL,
+    ViewerStreamSource.SERIES -> null
 }
 
 /** What the deck's left swipe removes through when [request] opens it on a Codex to remove from; null otherwise. */

@@ -50,9 +50,11 @@ class TheoriaApplication :
     /** The one place browser cookies reach the app's own requests: every client in [httpClients] carries its jar. */
     override val siteCookieBridge = SiteCookieBridge(AndroidBrowserCookieStore)
 
-    /** Sources that run loaded extension code; only debug builds ship a host. */
+    /** Series sources that run loaded extension code; only debug builds ship a host. It loads nothing until first used. */
     private val extensionHost: ExtensionSourceHost? =
-        if (BuildConfig.DEBUG) ServiceLoader.load(ExtensionSourceHost::class.java, javaClass.classLoader).firstOrNull() else null
+        if (BuildConfig.DEBUG) {
+            ServiceLoader.load(ExtensionSourceHost::class.java, javaClass.classLoader).firstOrNull()?.also { it.attach(this) }
+        } else null
 
     /** Every HTTP client in the app, so they share one connection pool and these cookies. */
     override val httpClients = AppHttpClients(

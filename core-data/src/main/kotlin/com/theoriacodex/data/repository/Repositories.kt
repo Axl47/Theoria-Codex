@@ -585,6 +585,12 @@ enum class ViewerStreamSource {
     RECENTS,
     /** A Trail: a Viewer level forked from a post by tag, creator or similarity. History stores it as [SEARCH]. */
     TRAIL,
+
+    /**
+     * One series' entries (chapters) in reading order. They are read, not collected: History, statistics, stored
+     * posts, Like and Save all leave this stream alone, and its progress and reading mode belong to the series.
+     */
+    SERIES,
 }
 
 data class ViewerLaunchContext(

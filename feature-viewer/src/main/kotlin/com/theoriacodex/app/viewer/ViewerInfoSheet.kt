@@ -166,7 +166,7 @@ internal fun ViewerInfoSheet(
             header = {
                 ViewerInfoActions(
                     selection, post.id in config.likedPostIds, controls, config.creatorBrowsingSources, onAction, host.onGoToSearch,
-                    host.onOpenCreatorFallback, contextActions,
+                    host.onOpenCreatorFallback, contextActions, collectable = !config.seriesChapters,
                 )
             },
             post = post,
@@ -230,6 +230,8 @@ private fun ViewerInfoActions(
     onGoToSearch: () -> Unit,
     onOpenCreatorFallback: ((Post) -> Unit)?,
     contextActions: ViewerContextActions,
+    /** Whether the post can be liked and saved; a series' chapter cannot. */
+    collectable: Boolean,
 ) {
     val post = selection.post
     val creators = if (onOpenCreatorFallback != null) creatorProfileActions(post, creatorBrowsingSources) else emptyList()
@@ -260,8 +262,10 @@ private fun ViewerInfoActions(
             creator = creators.firstOrNull()?.let { creator -> HeaderLink(creator.label) { closeThen { openCreator(creator) } } },
         )
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), Arrangement.SpaceEvenly) {
-            ViewerLikeAction(liked) { onAction(ViewerAction.ToggleLike) }
-            ViewerCodexAction(post.id in LocalCodexPostIds.current.value) { closeThen { onAction(ViewerAction.Save) } }
+            if (collectable) {
+                ViewerLikeAction(liked) { onAction(ViewerAction.ToggleLike) }
+                ViewerCodexAction(post.id in LocalCodexPostIds.current.value) { closeThen { onAction(ViewerAction.Save) } }
+            }
             ViewerInfoAction(Icons.Default.Download, "Device", "Save to device", selection.canDownload) {
                 closeThen { onAction(ViewerAction.Download) }
             }

@@ -11,6 +11,8 @@ import com.theoriacodex.app.related.ViewerFeedOwner
 import com.theoriacodex.app.statistics.statisticsTagsForPost
 import com.theoriacodex.app.codex.SAVED_CODEX_ID
 import com.theoriacodex.app.codex.isVirtualCodex
+import com.theoriacodex.app.series.SeriesReader
+import com.theoriacodex.app.series.seriesIdOf
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.ViewerPostResolver
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
@@ -50,12 +52,15 @@ internal class ViewerRouteWorkflow(
     private val feedOwner: (ViewerStreamSource) -> ViewerFeedOwner?,
     private val offlineMedia: OfflineMediaCoordinator,
     private val providerDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    /** Reads series chapters; a [ViewerStreamSource.SERIES] session goes to it and leaves no trace anywhere else. */
+    private val series: SeriesReader? = null,
 ) : ViewerPostResolver {
     override fun requiresResolution(post: Post): Boolean =
         post.id in offlineMedia.store.snapshot.value.availablePostIds && !offlineMedia.store.hasOfflineLocations(post)
 
     override suspend fun resolve(session: ViewerSessionIdentity, postId: PostId): Post? {
         val source = ViewerStreamSource.entries.firstOrNull { it.name == session.streamKey } ?: ViewerStreamSource.SEARCH
+        if (source == ViewerStreamSource.SERIES) return checkNotNull(series).resolve(session.queryHash, postId)
         return resolvePost(postId, source)
     }
 
@@ -94,6 +99,8 @@ internal class ViewerRouteWorkflow(
         streamSource: ViewerStreamSource,
         stillApplies: () -> Boolean = { true },
     ): Post? {
+        // A chapter's pages come only from its extension, which has no second address to offer.
+        if (streamSource == ViewerStreamSource.SERIES) return null
         val recovered = try {
             withContext(providerDispatcher) { recoverRemoteMedia(sources.registry, post, failedMedia) }
         } catch (error: CancellationException) {
@@ -140,6 +147,10 @@ internal class ViewerRouteWorkflow(
             ?: return null
         if (streamSource == ViewerStreamSource.RELATED) return null
         val selectedId = request.selectedPostId ?: return null
+        if (streamSource == ViewerStreamSource.SERIES) {
+            val id = seriesIdOf(identity.queryHash) ?: return null
+            return series?.session(id, selectedId.sourcePostId, request.selectedMediaIndex, identity.value)
+        }
         val restoredContext = data.uiRestoreRepository.observeViewerLaunchContext()
             .first()
             ?.takeIf { context ->
@@ -232,6 +243,7 @@ internal class ViewerRouteWorkflow(
         viewedMediaNumber: Int,
         session: ViewerSession?,
     ) {
+        if (recordSeriesProgress(post, viewedMediaNumber, session)) return
         val origin = historyOrigin(session?.context)
         recordReadingPosition(post, viewedMediaNumber, session)
         runCatchingPreservingCancellation { data.statisticsRepository.recordPostAvailable(post) }
@@ -262,6 +274,7 @@ internal class ViewerRouteWorkflow(
         viewedMediaNumber: Int,
         session: ViewerSession?,
     ) {
+        if (recordSeriesProgress(post, viewedMediaNumber, session)) return
         val origin = historyOrigin(session?.context)
         recordReadingPosition(post, viewedMediaNumber, session)
         runCatchingPreservingCancellation {
@@ -274,6 +287,13 @@ internal class ViewerRouteWorkflow(
                 viewedMediaNumber = viewedMediaNumber,
             )
         }
+    }
+
+    /** Records a series chapter's page on its series and reports true, so History and statistics never see it. */
+    private suspend fun recordSeriesProgress(post: Post, mediaNumber: Int, session: ViewerSession?): Boolean {
+        if (session?.context?.streamSource != ViewerStreamSource.SERIES) return false
+        runCatchingPreservingCancellation { series?.recordProgress(session, post, mediaNumber) }
+        return true
     }
 
     private suspend fun recordReadingPosition(post: Post, mediaNumber: Int, session: ViewerSession?) {

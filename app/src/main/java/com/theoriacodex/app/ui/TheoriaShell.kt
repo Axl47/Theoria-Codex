@@ -84,6 +84,7 @@ import com.theoriacodex.app.ui.components.rememberFeedFabRestoreRegistry
 import com.theoriacodex.app.ui.routes.CreatorProfileStateSaver
 import com.theoriacodex.app.ui.routes.PendingRouteActions
 import com.theoriacodex.app.ui.routes.RouteOwnerSlot
+import com.theoriacodex.app.series.SeriesReader
 import com.theoriacodex.app.ui.routes.ViewerRouteWorkflow
 import com.theoriacodex.app.ui.routes.activeRecommendationProfile
 import com.theoriacodex.app.update.ReleaseChangelogEntry
@@ -350,12 +351,15 @@ internal class TheoriaShell(
     private val fileCopies = FileCopyLookup(sources.registry)
     val savedSearchOpens = SavedSearchOpenMarks(data.uiRestoreRepository)
     val recentsClearWorkflow = RecentsClearWorkflow(data.recentsRepository)
+    /** Reads series chapters in the Viewer; null in a build without extensions. */
+    val seriesReader = container.series?.let(::SeriesReader)
     val viewerRouteWorkflow = ViewerRouteWorkflow(
         data = data,
         cacheScope = scope,
         sources = sources,
         feedOwner = routes::feed,
         offlineMedia = features.offlineMedia,
+        series = seriesReader,
     )
     /** Saves one tag, or an "or" group with an optional name, for the active profile. */
     val addFavoriteTags: (SourceKey, List<String>, String?) -> Unit = { source, tags, name ->
