@@ -63,9 +63,11 @@ class ExtensionSourceLiveTest {
         live.openSeriesTab()
         searchEverySource(source, listed)
         live.tap("the listed series", scrolledTo(By.text(listed.title)))
-        val chapters = live.waitFor("the chapter count", By.text(CHAPTER_COUNT), SeriesLiveDriver.RESULTS_TIMEOUT_MS).text.substringBefore(' ').toInt()
+        val counted = live.waitFor("the chapter count", By.text(CHAPTER_COUNT), SeriesLiveDriver.RESULTS_TIMEOUT_MS).text
+        val chapters = counted.substringAfterLast(" · ").substringBefore(' ').toInt()
         live.report("series", "chapters=$chapters")
         assertTrue("A series lists more than one chapter", chapters > 1)
+        readAbout(listed, counted)
 
         val (chapter, next) = continueChapters(listed)
         live.tap("the button that starts reading", By.text(Pattern.compile("Start|Continue · .*")))
@@ -350,6 +352,16 @@ class ExtensionSourceLiveTest {
     }
 
     /** The chapter the series page's button opens and the one after it, read from what the page stored. */
+    /** Checks the page shows what the source said about [listed]: its status beside the chapter count, its synopsis below. */
+    private fun readAbout(listed: Series, counted: String) {
+        val stored = checkNotNull(runBlocking { series.repository.series(listed.id) }).series
+        val status = counted.substringBeforeLast(" · ", "")
+        val description = stored.description
+        val shown = description != null && device.hasObject(By.textStartsWith(description.take(DESCRIPTION_START)))
+        live.report("about", "status shown \"$status\" (stored ${stored.status}); a description of ${description?.length ?: 0} characters, shown=$shown")
+        assertTrue("The page shows a status or a description", status.isNotEmpty() || shown)
+    }
+
     private fun continueChapters(listed: Series): Pair<StoredSeriesEntry, StoredSeriesEntry> = runBlocking {
         val stored = checkNotNull(series.repository.series(listed.id)) { "Opening the series did not store it" }
         val entries = series.repository.entries(listed.id).inReadingOrder()
@@ -459,7 +471,8 @@ class ExtensionSourceLiveTest {
     }
 
     private companion object {
-        val CHAPTER_COUNT: Pattern = Pattern.compile("\\d+ chapters?")
+        val CHAPTER_COUNT: Pattern = Pattern.compile("(.+ · )?\\d+ chapters?")
+        const val DESCRIPTION_START = 30
 
         /** The page the test stops on, far enough in that resuming there cannot be the start by accident. */
         const val TARGET_PAGE = 3
