@@ -7,6 +7,8 @@ import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.MediaFilter
+import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
 
@@ -70,6 +72,16 @@ fun filterSearchResults(
             (!filters.hideWatched || post.id !in watchedPostIds || post.id in retainedLikedPostIds)
     }
 }
+
+/**
+ * Whether [this] query's media has the phone hide still posts, as a backup for sources that cannot ask for animated
+ * posts themselves. nhentai alone is exempt: its galleries are never animated.
+ */
+val Query.hidesStillsOnPhone: Boolean
+    get() = media == MediaFilter.ANIMATED && mode != QueryMode.Source(SourceKey.NHENTAI)
+
+/** The posts [query]'s media keeps on the phone; see [hidesStillsOnPhone]. */
+fun List<Post>.keptByMedia(query: Query): List<Post> = if (query.hidesStillsOnPhone) filter(::matchesAnimatedFilter) else this
 
 /** Tags that mark a post as animated across sources, for posts whose previews are stills. */
 private val ANIMATED_TAG_MARKERS = listOf("video", "animated", "animation", "animated_gif", "animated_image", "gif")

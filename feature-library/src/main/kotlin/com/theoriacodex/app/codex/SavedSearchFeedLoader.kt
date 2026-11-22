@@ -7,6 +7,7 @@ import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.search.SearchExecutionResult
 import com.theoriacodex.app.search.SearchPageResult
 import com.theoriacodex.app.search.SearchSources
+import com.theoriacodex.app.search.keptByMedia
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.SavedSearchEntry
@@ -102,7 +103,7 @@ class SavedSearchFeedLoader(
         return if (!part.started) {
             when (val result = coordinator.executeInitial(part.query, part.scope, sourcesFor(part.scope))) {
                 is SearchExecutionResult.Success -> part.copy(
-                    posts = result.posts.distinctByFile(), continuation = result.continuation,
+                    posts = result.posts.keptByMedia(part.query).distinctByFile(), continuation = result.continuation,
                     started = true, failures = failures(emptyMap(), result.statuses), requestError = null,
                 )
                 is SearchExecutionResult.Failure -> part.copy(
@@ -144,7 +145,7 @@ class SavedSearchFeedLoader(
                         failedSources = before.failedSources - retriedSource,
                     )
                 }
-                copy(posts = (posts + result.posts).distinctByFile(), continuation = next,
+                copy(posts = (posts + result.posts.keptByMedia(query)).distinctByFile(), continuation = next,
                     failures = failures(failures, result.statuses), requestError = null)
             }
         }
