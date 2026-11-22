@@ -129,6 +129,19 @@ class TagAffinityTest {
     }
 
     @Test
+    fun `a tag about the file is never offered unless chosen, however much more often it is kept`() {
+        val likes = List(40) { index -> like(listOfNotNull("audible_music".takeIf { index % 4 == 0 }, "tree"), "$index") }
+        // Families the list never names are caught by their wording.
+        val watched = statistics(watched = 400, "audible_music" to 12, "tree" to 400, "3d" to 1, "longer_than_one_minute" to 1, "fox" to 1)
+        val inputs = tagAffinityInputs(likes, emptyList(), emptyList(), emptyList(), watched)
+        val chosen = tagAffinityInputs(likes, emptyList(), listOf("3d"), emptyList(), watched)
+
+        val post = post("audible_music", "3d", "longer_than_one_minute", "fox")
+        assertEquals(listOf("fox"), tagAffinities(post, inputs).filter { it.informative }.map { it.tag })
+        assertEquals(listOf("3d", "fox"), tagAffinities(post, chosen).filter { it.informative }.map { it.tag })
+    }
+
+    @Test
     fun `lift compares each source with itself, and a chosen tag on most watched posts is still universal`() {
         val kept = List(30) { index -> like(listOf("tree", "moth"), "$index") }
         val watched = statistics(watched = 300, "tree" to 280, "moth" to 3)
