@@ -32,8 +32,10 @@ class RoomForYouVerdictRepository(
         }
     }
 
-    override suspend fun remove(profileId: String, postId: PostId) {
-        withContext(Dispatchers.IO) { dao.delete(profileId, postId.source.id, postId.sourcePostId) }
+    override suspend fun remove(verdict: ForYouVerdict) {
+        withContext(Dispatchers.IO) {
+            dao.delete(verdict.profileId, verdict.postId.source.id, verdict.postId.sourcePostId, verdict.decidedAtEpochMs)
+        }
     }
 
     override suspend fun verdicts(profileId: String): List<ForYouVerdict> = withContext(Dispatchers.IO) {

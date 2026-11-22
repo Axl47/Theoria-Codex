@@ -121,10 +121,10 @@ class ForYouDeckViewModel(
     private val seen = mutableSetOf<PostId>()
 
     /**
-     * The profile each logged decision was recorded under, so its Undo removes it there and only there. Keyed by the
-     * decision itself: another deck may decide the same post under another profile. Writes run in order.
+     * The verdict each decision logged, so its Undo removes that verdict and no later one. Keyed by the decision itself:
+     * another deck may decide the same post, under this profile or another. Writes run in order.
      */
-    private val loggedUnder = IdentityHashMap<TriageDecision, String>()
+    private val logged = IdentityHashMap<TriageDecision, ForYouVerdict>()
     private val verdictWrites = Mutex()
 
     /** The Mix's latest decision and the steering before it, for Undo. */
@@ -504,14 +504,14 @@ class ForYouDeckViewModel(
                 seen += post.id
                 val kind = event.decision.signal()?.verdictKind() ?: return
                 val profileId = inputs?.profileId ?: return
-                loggedUnder[event.decision] = profileId
                 val verdict = ForYouVerdict(profileId, post.id, kind, wiring.clock(), postPreviewImageCandidate(post)?.url)
+                logged[event.decision] = verdict
                 writeVerdict { record(verdict) }
             }
             is TriageDecisionEvent.Reverted -> {
                 seen -= post.id
-                val profileId = loggedUnder.remove(event.decision) ?: return
-                writeVerdict { remove(profileId, post.id) }
+                val verdict = logged.remove(event.decision) ?: return
+                writeVerdict { remove(verdict) }
             }
         }
     }

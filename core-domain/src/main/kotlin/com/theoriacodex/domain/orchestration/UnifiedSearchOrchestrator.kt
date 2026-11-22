@@ -235,12 +235,22 @@ class UnifiedSearchOrchestrator(
         return page.copy(items = annotateListing(page.items))
     }
 
-    /** One page of [adapter]'s results for [query], annotated like every page the orchestrator serves. */
+    /**
+     * One page of [adapter]'s results for [query], annotated like every page the orchestrator serves. [timeoutMs] limits
+     * the source's answer only, not the annotating after it.
+     */
     suspend fun searchSource(
         adapter: SourceAdapter,
         query: Query,
         pageToken: String?,
-    ): Page<Post> = fetchSource(adapter, query, pageToken).let { page -> page.copy(items = annotateListing(page.items)) }
+        timeoutMs: Long? = null,
+    ): Page<Post> {
+        val page = if (timeoutMs == null) fetchSource(adapter, query, pageToken) else {
+            withTimeoutOrNull(timeoutMs) { fetchSource(adapter, query, pageToken) }
+                ?: throw SourceAdapterException(SourceFailureReason.NETWORK, "Source timed out")
+        }
+        return page.copy(items = annotateListing(page.items))
+    }
 
     private suspend fun fetchSource(
         adapter: SourceAdapter,

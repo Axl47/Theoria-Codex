@@ -13,6 +13,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.distinctByFile
+import com.theoriacodex.domain.model.plusDistinctFiles
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.domain.query.QueryHash
 
@@ -307,13 +308,7 @@ object SearchStateReducer {
     private fun SearchRequest.refreshed(shown: List<Post>, fresh: List<Post>): List<Post> {
         if (cachedFirstPage != CachedFirstPage.SCROLLED) return fresh
         val freshById = fresh.associateBy(Post::id)
-        return shown.map { post -> freshById[post.id] ?: post }.plusNew(fresh)
-    }
-
-    /** [this] as shown, then each of [incoming] that is neither shown nor a copy of a shown or earlier post. */
-    private fun List<Post>.plusNew(incoming: List<Post>): List<Post> {
-        val shownIds = mapTo(HashSet(), Post::id)
-        return this + (this + incoming).distinctByFile().filterNot { it.id in shownIds }
+        return shown.map { post -> freshById[post.id] ?: post }.plusDistinctFiles(fresh)
     }
 
     private fun SearchUiState.withPublishedResults(
@@ -362,7 +357,7 @@ object SearchStateReducer {
             is SearchPageResult.Success -> SearchReduction(
                 state.copy(
                     content = state.content.copy(
-                        results = state.content.results.plusNew(result.posts),
+                        results = state.content.results.plusDistinctFiles(result.posts),
                         statuses = mergeFeedStatuses(state.content.statuses, result.statuses),
                         canLoadMore = result.continuation.canLoadMore,
                         error = null,

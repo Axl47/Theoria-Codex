@@ -10,8 +10,8 @@ class InMemoryForYouVerdictRepository : ForYouVerdictRepository {
         synchronized(stored) { stored[verdict.profileId to verdict.postId] = verdict }
     }
 
-    override suspend fun remove(profileId: String, postId: PostId) {
-        synchronized(stored) { stored.remove(profileId to postId) }
+    override suspend fun remove(verdict: ForYouVerdict) {
+        synchronized(stored) { stored.remove(verdict.profileId to verdict.postId, verdict) }
     }
 
     override suspend fun verdicts(profileId: String): List<ForYouVerdict> = synchronized(stored) {

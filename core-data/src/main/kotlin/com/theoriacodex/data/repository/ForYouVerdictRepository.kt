@@ -25,8 +25,8 @@ data class ForYouVerdict(
 interface ForYouVerdictRepository {
     suspend fun record(verdict: ForYouVerdict)
 
-    /** Forgets the swipe on [postId], as Undo does. */
-    suspend fun remove(profileId: String, postId: PostId)
+    /** Forgets [verdict], as Undo does, unless a later swipe on its post replaced it. */
+    suspend fun remove(verdict: ForYouVerdict)
 
     /** The profile's verdicts, newest first. */
     suspend fun verdicts(profileId: String): List<ForYouVerdict>
