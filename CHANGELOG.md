@@ -31,8 +31,8 @@
 - For You is a deck: one post at a time, dealt in turn from your interests. Swipe right to like, left to skip, up to save to a suggested Codex, and down to hide one of the post's tags; Undo reverses the last choice. A label under the card names the interest that dealt it.
 - For You: chips above the deck, Mix and one per interest, narrow the deck to that interest.
 - For You: buttons under the card open more of one of its tags, its creator, or similar posts as a deck of their own. The steps you followed are listed at the top: tap one to return to it, or go Back one step at a time. A tag's deck has Save search.
-- For You: liking or saving a card brings two similar posts a few cards later, and skipping several cards from one interest in a row deals that interest less often until you leave.
-- For You: the grid button shows the same posts as a grid, and the deck button returns. The app remembers which one you used.
+- For You: liking or saving a card brings two similar posts a few cards later, labelled "Like one you liked" (or "More by" its creator where the site has no similar posts), and skipping several cards from one interest in a row deals that interest less often until you leave.
+- For You: the grid button shows the same posts as a grid, and the deck button returns. The grid has no buttons under its posts: a post's tags, creator and similar posts open from the deck. The app remembers which one you used.
 - For You: Hidden tags, in For You's Filters, lists the tags you've hidden and lets you unhide them.
 - For You: with more than one profile, a chip at the top switches between them.
 - The search box finds every setting: switches flip right in the list, and the rest open where they live.
@@ -58,8 +58,10 @@
 - In a post's hold menu, the creator's name at the top now opens their profile, as in the Viewer's information sheet, replacing the separate creator button.
 - Removing no longer asks first where it can be undone. Removing posts from a Codex, deleting a Codex, and removing a custom site, a download or an offline copy happen at once, with Undo where the item was. Nothing is actually deleted until Undo is gone: a deleted Codex comes back until you leave Library, and files stay until the sheet or screen is left or the Undo runs out.
 - Follow on a creator page is a labelled button, and unfollowing shows Undo in its place.
-- Hiding a tag in For You now hides every interest that includes it, not only ones with exactly the same tags. This also applies to shelves you dismissed before: a dismissed one-tag shelf hides that tag everywhere. Hidden tags lists them.
-- Tabs change from the bottom bar only. Swiping sideways no longer switches tabs, so it cannot fight the deck or a row you are swiping.
+- Hiding a tag in For You now hides every interest that includes it, and every post that carries it, not only interests with exactly the same tags. Hidden tags lists them.
+- For You shelves you pinned, and For You searches you saved, are now ordinary saved searches that open in Search: one per site the shelf searched, named for the site when there are several.
+- Swiping sideways on For You's deck no longer switches tabs, so it cannot fight a card swipe: change tabs there from the bottom bar. The other tabs, and For You's grid, swipe between tabs as before.
+- Downloads started from For You are labelled "For You" instead of "FYP".
 - Opening For You no longer adds an entry to History.
 - Settings keeps what you set once. Hidden tags moved to For You, Source mix to Search's source picker (with Unified chosen), and default video quality to the Viewer: the quality you pick in a video's playback settings is used for other videos too. Offline Codices and downloads are managed from Library.
 - Custom site edits apply as you make them, without a Save button. Keys still have Save.
@@ -69,6 +71,7 @@
 ### Removed
 
 - For You's shelves, with See all, pins and dismissals, and its video length filter. The deck and its grid replace them.
+- The "For You searches" count in Statistics.
 
 ### Fixed
 
