@@ -740,7 +740,7 @@ internal fun rememberTheoriaShell(
     val homeTabRoute = rememberSaveable { mutableStateOf(TopLevelDestination.Search.route) }
     val pendingCreatorProfile = rememberSaveable(stateSaver = CreatorProfileStateSaver) { mutableStateOf<CreatorProfile?>(null) }
     val seriesTab = remember(container) { container.series?.tab ?: flowOf(false) }
-        .collectAsStateWithLifecycle(initialValue = container.series?.hasExtensions?.value == true)
+        .collectAsStateWithLifecycle(initialValue = container.series?.tabAtStartup == true)
     val pagerState = rememberPagerState(pageCount = { homeTabs(withSeries = seriesTab.value).size })
     val routes = remember { RouteOwners() }
     val pendingSave = remember { PendingCodexSave() }

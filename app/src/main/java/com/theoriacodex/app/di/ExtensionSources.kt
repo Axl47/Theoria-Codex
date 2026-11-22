@@ -36,6 +36,9 @@ class SeriesDependencies(
     /** Whether an extension was on the device at the last [findExtensions], or before that when the app last ran. */
     val hasExtensions: StateFlow<Boolean> = mutableHasExtensions.asStateFlow()
 
+    /** [tab] before anything was looked up: what the last look for extensions found. */
+    val tabAtStartup: Boolean get() = mutableHasExtensions.value
+
     /**
      * Whether the Series tab shows: with an extension on the device, or with a followed series, which stays reachable
      * when its extension is gone (its page then says so).
