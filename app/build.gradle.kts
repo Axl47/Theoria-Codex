@@ -400,6 +400,8 @@ dependencies {
     implementation(project(":feature-library"))
     implementation(project(":feature-discover"))
     implementation(project(":feature-settings"))
+    // Mihon extension host spike: debug builds only, so release APKs carry none of it.
+    debugImplementation(project(":mihon-host"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
