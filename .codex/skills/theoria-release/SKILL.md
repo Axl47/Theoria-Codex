@@ -18,6 +18,8 @@ Treat these as one release unit:
 
 Never use a low sequential Android code: the updater compares against the high SemVer-derived range. Never move, delete, or reuse a published release tag.
 
+Only `vX.Y.Z` tags are app releases. Other tags, such as `vision-models-N` (model files the app downloads on demand), are not: never use them as the previous release, and never move or delete them.
+
 ## Who Does What
 
 Keep the version choice, the release notes, and any failure fix on the main model. Hand the reading to Haiku subagents: in step 2, when there are too many changes since the tag to read yourself, give each subagent a slice of the commits and have it return the user-visible changes it found, with SHAs; when a run fails, have one read the failed job logs and report each failing task or test with its first error line.
@@ -62,7 +64,7 @@ Change nothing yet.
 
 1. Update `versionName` and `versionCode` in `app/build.gradle.kts`, and add `release-notes/vX.Y.Z.md` with the approved text.
 2. Move the released entries from `[Unreleased]` into a dated `[X.Y.Z]` section directly below the now-empty `[Unreleased]` section of root `CHANGELOG.md`.
-3. If startup or the main journeys changed since the last tag and a supported API 36 or 37 emulator is free, refresh the baseline profile with `ANDROID_SERIAL=<emulator-serial> ./gradlew :app:generateReleaseBaselineProfile`. Otherwise skip it and say so.
+3. If startup or the main journeys changed since the last `vX.Y.Z` tag and a supported API 36 or 37 emulator is free, refresh the baseline profile with `ANDROID_SERIAL=<emulator-serial> ./gradlew :app:generateReleaseBaselineProfile`. Otherwise skip it and say so.
 4. Run `python3 scripts/release_gate.py`. Fix any problem it reports.
 5. Commit only those release files as `chore(release): prepare vX.Y.Z` and push the commit straight to `main`. A release commit needs no PR.
 6. Run `gh workflow run release.yml --ref main`, find the new run, and confirm its `headSha` is that commit.
