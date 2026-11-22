@@ -30,6 +30,7 @@ import com.theoriacodex.app.media.OfflineMediaCoordinator
 import com.theoriacodex.app.media.downloadablePages
 import com.theoriacodex.app.media.validateOfflineMediaFile
 import com.theoriacodex.app.recommend.ForYouCoordinator
+import com.theoriacodex.app.recommend.observeTagAffinityInputs
 import com.theoriacodex.app.comments.CommentsLoader
 import com.theoriacodex.app.related.RelatedPostsLoader
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
@@ -155,7 +156,8 @@ class JourneyAppContainer(
     override val features = FeatureDependencies(
         search = SearchCoordinator(registry, data.queryRepository, settings, restore, data.recentsRepository,
             statisticsRepository = statistics, tagSuggestionStore = tags),
-        forYou = ForYouCoordinator(registry, content, statistics, tagSuggestionStore = tags),
+        forYou = ForYouCoordinator(registry, content, statistics,
+            observeTagAffinityInputs(settings, content, content, data.savedSearches, statistics), tagSuggestionStore = tags),
         relatedPosts = RelatedPostsLoader(registry),
         comments = CommentsLoader(registry),
         creatorProfile = CreatorProfileCoordinator(registry),

@@ -78,6 +78,23 @@ class ForYouCoordinatorTest {
         assertEquals(listOf("hatsune_miku"), tagsBySource[SourceKey.GELBOORU])
     }
 
+    @Test fun `a tag saved in pixiv's spelling seeds the boorus in theirs`() = runTest {
+        val store = object : TagSuggestionStore by NoOpTagSuggestionStore {
+            override fun get(source: SourceKey, limit: Int) = listOf(
+                TagSuggestion("初音ミク", "tag", null, alternateText = "Hatsune Miku"),
+            ).takeIf { source == SourceKey.PIXIV }.orEmpty()
+        }
+        val saved = TagAffinityInputs(interest = mapOf("初音ミク" to EXPLICIT_WEIGHT), explicit = setOf("初音ミク"))
+        val service = testForYouCoordinator(
+            registryOf(FakeAdapter(SourceKey.PIXIV), FakeAdapter(SourceKey.GELBOORU)), tagSuggestionStore = store, tagAffinity = saved,
+        )
+
+        val tagsBySource = service.lanes(request(service)).associate { it.source to it.tags }
+
+        assertEquals(listOf("初音ミク"), tagsBySource[SourceKey.PIXIV])
+        assertEquals(listOf("hatsune_miku"), tagsBySource[SourceKey.GELBOORU])
+    }
+
     @Test fun `a profile with no likes gets trending lanes and likes never fetch trending`() = runTest {
         val adapter = FakeAdapter(SourceKey.GELBOORU).apply {
             trendingCandidates = listOf("sky", "sea", "sand", "snow").map { TagSuggestion(it, "tag", null) }
@@ -90,6 +107,28 @@ class ForYouCoordinatorTest {
         val service = testForYouCoordinator(registryOf(warm), likesRepository = liked(SourceKey.GELBOORU, "cloud"))
         assertEquals(listOf(listOf("cloud")), service.lanes(request(service)).map { it.tags })
         assertEquals(0, warm.trendingRequests)
+    }
+
+    @Test fun `a profile that only keeps Codex posts gets lanes from them, not trending`() = runTest {
+        val adapter = FakeAdapter(SourceKey.GELBOORU).apply { trendingCandidates = listOf(TagSuggestion("sky", "tag", null)) }
+        val codexOnly = TagAffinityInputs(interest = mapOf("cloud" to 3.0), keptByTag = mapOf(SourceKey.GELBOORU to mapOf("cloud" to 3)),
+            keptBySource = mapOf(SourceKey.GELBOORU to 3))
+        val service = testForYouCoordinator(registryOf(adapter), tagAffinity = codexOnly)
+
+        assertEquals(listOf(listOf("cloud")), service.lanes(request(service)).map { it.tags })
+        assertEquals(0, adapter.trendingRequests)
+    }
+
+    @Test fun `a tag the source has no posts for gives up its slot, not its partner's`() = runTest {
+        val likes = InMemoryLikesRepository().apply {
+            listOf("a", "b").forEach { id -> toggleLike(PROFILE, PostId(SourceKey.GELBOORU, id), listOf("cloud", "river")) }
+        }
+        val store = object : TagSuggestionStore by NoOpTagSuggestionStore {
+            override fun getCount(source: SourceKey, tag: String): Int? = 0.takeIf { tag == "cloud" }
+        }
+        val service = testForYouCoordinator(registryOf(FakeAdapter(SourceKey.GELBOORU)), likesRepository = likes, tagSuggestionStore = store)
+
+        assertEquals(listOf(listOf("river")), service.lanes(request(service)).map { it.tags })
     }
 
     @Test fun `hidden tags drop their lanes and the media filter reaches each lane's query`() = runTest {
