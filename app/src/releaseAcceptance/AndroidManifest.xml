@@ -4,5 +4,8 @@
         <activity
             android:name="com.theoriacodex.app.acceptance.ReleaseDataAcceptanceActivity"
             android:exported="true" />
+        <activity
+            android:name="com.theoriacodex.app.acceptance.VisionAcceptanceActivity"
+            android:exported="true" />
     </application>
 </manifest>
