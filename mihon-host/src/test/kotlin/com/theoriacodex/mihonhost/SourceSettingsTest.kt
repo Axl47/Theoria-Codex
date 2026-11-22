@@ -76,11 +76,37 @@ class SourceSettingsTest {
         val host = settings.list().single() as ExtensionSetting.Text
 
         assertFalse(settings.change(host.copy(value = "ftp://b.test")))
-        assertFalse(store.contains("host"))
+        assertEquals("https://a.test", store.getString("host", null))
         assertTrue(settings.change(host.copy(value = "https://b.test")))
 
         assertEquals(listOf<Any?>("ftp://b.test", "https://b.test"), seen)
         assertEquals("https://b.test", store.getString("host", null))
+    }
+
+    @Test
+    fun `the source reads the value its row shows`() {
+        store.edit().putString("host", "https://stored.test").commit()
+        val seen = mutableListOf<String?>()
+        val settings = settings { screen ->
+            screen.addPreference(SwitchPreferenceCompat(screen.context).apply { key = "data"; defaultValue = true })
+            screen.addPreference(
+                EditTextPreference(screen.context).apply {
+                    key = "host"
+                    defaultValue = "https://a.test"
+                    text = "set up"
+                    onPreferenceChangeListener = Preference.OnPreferenceChangeListener { preference, _ -> seen += (preference as EditTextPreference).text; true }
+                },
+            )
+        }
+        val (_, host) = settings.list()
+
+        // A default is stored once the screen is built, so the source's own read of its preferences finds it.
+        assertEquals(true, store.all["data"])
+        assertEquals("https://stored.test", (host as ExtensionSetting.Text).value)
+
+        settings.change(host.copy(value = "https://b.test"))
+
+        assertEquals(listOf<String?>("https://stored.test"), seen)
     }
 
     @Test

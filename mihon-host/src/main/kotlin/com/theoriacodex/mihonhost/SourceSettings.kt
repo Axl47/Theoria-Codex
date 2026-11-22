@@ -43,10 +43,11 @@ class SourceSettings(private val context: Context, private val source: Configura
         return editor.commit()
     }
 
+    /** Each preference reads [store] from the moment the source adds it, and stores its default there when nothing is. */
     private fun screen(): List<Preference> {
-        val screen = PreferenceScreen(context)
+        val screen = PreferenceScreen(context, store)
         source.setupPreferenceScreen(screen)
-        return screen.preferences.onEach { it.store = store }.filter { it.isVisible && !it.key.isNullOrEmpty() }
+        return screen.preferences.filter { it.isVisible && !it.key.isNullOrEmpty() }
     }
 
     private fun Preference.toSetting(): ExtensionSetting? {
@@ -57,10 +58,9 @@ class SourceSettings(private val context: Context, private val source: Configura
                 val on = stored(defaultValue as? Boolean ?: false) { getBoolean(key, it) }
                 ExtensionSetting.Toggle(key, title, ((if (on) summaryOn else summaryOff) ?: summary)?.toString(), isEnabled, on)
             }
-            // A text set before the screen is shown stands in for a missing default, as it does in AndroidX.
             is EditTextPreference -> ExtensionSetting.Text(
                 key, title, summary?.toString(), isEnabled,
-                value = stored(defaultValue as? String ?: text.orEmpty()) { getString(key, it).orEmpty() },
+                value = stored(defaultValue as? String ?: "") { getString(key, it).orEmpty() },
                 dialogTitle = dialogTitle?.toString(),
                 dialogMessage = dialogMessage?.toString(),
             )

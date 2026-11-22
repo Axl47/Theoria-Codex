@@ -20,8 +20,25 @@ open class Preference(val context: Context) {
     var isVisible: Boolean = true
     var onPreferenceChangeListener: OnPreferenceChangeListener? = null
 
-    /** Where values are kept, once the host has taken the screen over from the extension. */
+    /** Where values are kept, from the moment the preference is added to a screen. */
     internal var store: SharedPreferences? = null
+        private set
+
+    /**
+     * What AndroidX does when a preference joins a screen: from then on it reads and writes [store], and a declared
+     * default is stored when nothing is yet, so the source's own code reads the value its row shows.
+     */
+    internal fun attach(store: SharedPreferences) {
+        this.store = store
+        val key = key?.takeIf { it.isNotEmpty() } ?: return
+        if (!store.contains(key)) storeDefault(store.edit(), key)?.apply()
+        onAttached(store, key)
+    }
+
+    /** Puts [defaultValue] under [key] when it is of the type this preference stores; null when there is none to store. */
+    internal open fun storeDefault(editor: SharedPreferences.Editor, key: String): SharedPreferences.Editor? = null
+
+    internal open fun onAttached(store: SharedPreferences, key: String) = Unit
 
     /** Asked before a new value is stored; false refuses it. */
     fun interface OnPreferenceChangeListener {
@@ -30,10 +47,13 @@ open class Preference(val context: Context) {
 }
 
 /** The screen an extension adds its settings to. */
-class PreferenceScreen(context: Context) : Preference(context) {
+class PreferenceScreen internal constructor(context: Context, private val values: SharedPreferences) : Preference(context) {
     internal val preferences = mutableListOf<Preference>()
 
-    fun addPreference(preference: Preference): Boolean = preferences.add(preference)
+    fun addPreference(preference: Preference): Boolean {
+        preference.attach(values)
+        return preferences.add(preference)
+    }
 }
 
 /** A setting edited in a dialog. */
@@ -46,6 +66,8 @@ abstract class DialogPreference(context: Context) : Preference(context) {
 abstract class TwoStatePreference(context: Context) : Preference(context) {
     var summaryOn: CharSequence? = null
     var summaryOff: CharSequence? = null
+
+    override fun storeDefault(editor: SharedPreferences.Editor, key: String) = (defaultValue as? Boolean)?.let { editor.putBoolean(key, it) }
 }
 
 class SwitchPreferenceCompat(context: Context) : TwoStatePreference(context)
@@ -53,13 +75,31 @@ class SwitchPreferenceCompat(context: Context) : TwoStatePreference(context)
 class CheckBoxPreference(context: Context) : TwoStatePreference(context)
 
 class EditTextPreference(context: Context) : DialogPreference(context) {
-    /** Setting it on a screen the host has taken over stores it, which is how a change listener rewrites what was typed. */
+    /**
+     * The stored text, once on a screen. Setting it there stores it, which is how a change listener rewrites what was
+     * typed; a text set before that is replaced by the stored one or the default, as in AndroidX.
+     */
     var text: String? = null
         set(value) {
             field = value
             val key = key
-            if (key != null) store?.edit()?.putString(key, value)?.apply()
+            if (key != null && !reading) store?.edit()?.putString(key, value)?.apply()
         }
+
+    /** True while [text] takes the stored value, which is not written back. */
+    private var reading = false
+
+    override fun storeDefault(editor: SharedPreferences.Editor, key: String) = (defaultValue as? String)?.let { editor.putString(key, it) }
+
+    override fun onAttached(store: SharedPreferences, key: String) {
+        reading = true
+        text = try {
+            store.getString(key, null)
+        } catch (_: ClassCastException) {
+            null
+        }
+        reading = false
+    }
 
     /** Held but never called: there is no `EditText` to bind, the app draws its own field. */
     var onBindEditTextListener: OnBindEditTextListener? = null
@@ -73,10 +113,15 @@ class EditTextPreference(context: Context) : DialogPreference(context) {
 class ListPreference(context: Context) : DialogPreference(context) {
     var entries: Array<CharSequence>? = null
     var entryValues: Array<CharSequence>? = null
+
+    override fun storeDefault(editor: SharedPreferences.Editor, key: String) = (defaultValue as? String)?.let { editor.putString(key, it) }
 }
 
 /** Any of [entries], stored as the set of their [entryValues]. */
 class MultiSelectListPreference(context: Context) : DialogPreference(context) {
     var entries: Array<CharSequence>? = null
     var entryValues: Array<CharSequence>? = null
+
+    override fun storeDefault(editor: SharedPreferences.Editor, key: String) =
+        (defaultValue as? Set<*>)?.let { editor.putStringSet(key, it.filterIsInstanceTo(LinkedHashSet<String>())) }
 }
