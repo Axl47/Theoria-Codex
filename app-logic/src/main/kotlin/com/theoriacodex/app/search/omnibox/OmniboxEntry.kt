@@ -1,5 +1,7 @@
 package com.theoriacodex.app.search.omnibox
 
+import com.theoriacodex.app.codex.CodexCoverCandidate
+
 /** What an omnibox row leads to; its icon tells the kinds apart, and each kind has its own cap. */
 enum class OmniboxKind { CODEX, CREATOR, SAVED_SEARCH, RECENT_SEARCH, COMMAND }
 
@@ -16,12 +18,16 @@ sealed interface OmniboxEntry {
     /** Further words that find the entry, such as a command's synonyms. */
     val keywords: List<String>
 
-    /** Opens or runs something elsewhere; picking it closes the composer. */
+    /**
+     * Opens or runs something elsewhere; picking it closes the composer. A non-null [cover] draws a thumbnail in place
+     * of the kind's icon, which stays as its fallback.
+     */
     data class Action(
         override val kind: OmniboxKind,
         override val title: String,
         val detail: String? = null,
         override val keywords: List<String> = emptyList(),
+        val cover: List<CodexCoverCandidate>? = null,
         val run: () -> Unit,
     ) : OmniboxEntry
 
