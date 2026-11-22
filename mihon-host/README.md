@@ -239,6 +239,10 @@ What the feature still lacks.
   code stays idle in memory until the app's process ends.
 - **Extensions outside the sample.** The keep rules cover the packages 300 extensions used. One that calls a class in
   another package of those libraries fails with a missing class or method in release builds only.
+- **A hand-modified backup.** A restored series' and chapters' addresses go to their extension as stored, and an
+  extension builds its requests from addresses as it likes and may talk to several hosts, so the app has no origin to
+  check them against. A backup edited by hand can thus make an approved extension request another host; the boundary
+  is trust in the extension and in the file being restored.
 - **Cloudflare.** `CloudflareInterceptor` is an empty stand-in. A site behind a browser challenge answers 403.
 - **A JavaScript engine, protobuf and extra image decoders**, used by about 2% of extensions.
 - **Installing and updating extensions.** There is no repository browser and no update check.
