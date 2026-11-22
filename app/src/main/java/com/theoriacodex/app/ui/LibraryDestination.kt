@@ -201,7 +201,6 @@ internal fun CodexLibraryDestination(
     CodexDestinationStateBoundary(
         data = shell.data,
         sources = shell.sources,
-        thumbnailCacheGeneration = shell.thumbnailCacheGeneration,
         savedSortFor = { codexId ->
             shell.feedFabRestoreRegistry.state(codexFeedFabContext(codexId))?.sortMode
                 ?.let { saved -> CodexSortMode.entries.firstOrNull { it.name == saved } }

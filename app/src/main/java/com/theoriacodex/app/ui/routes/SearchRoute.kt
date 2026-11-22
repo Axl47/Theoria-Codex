@@ -51,8 +51,11 @@ internal data class SearchRouteConfig(
     val marks: FeedMarks,
     val favoriteTags: List<FavoriteTagEntry>,
     val resolveUnknownAnimatedDurations: Boolean,
-    /** What the composer's typed text reaches besides tags; see `rememberSearchOmniboxEntries`. */
-    val omnibox: List<OmniboxEntry> = emptyList(),
+    /**
+     * What the composer's typed text reaches besides tags (see `rememberSearchOmniboxEntries`), composed only while the
+     * composer is open so its stores are not observed behind the results.
+     */
+    val omnibox: @Composable () -> List<OmniboxEntry> = { emptyList() },
 )
 
 /** Platform and navigation effects that remain owned by the application shell. */
