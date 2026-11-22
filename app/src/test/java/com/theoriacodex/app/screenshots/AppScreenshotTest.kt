@@ -28,6 +28,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import com.theoriacodex.app.appshell.AppShellViewModel
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.fixtures.JourneyAppContainer
+import com.theoriacodex.app.recommend.FOR_YOU_ORIGIN_TAG
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.ui.TheoriaAppContent
@@ -109,6 +110,14 @@ class AppScreenshotTest {
     @Test fun `search results`() {
         openSearchResults()
         capture("search_results")
+    }
+
+    @Test fun `for you deck`() {
+        // For You does not deal saved posts, so half of them leave the Codex first.
+        runBlocking(Dispatchers.IO) { graph.content.removeItems(CODEX_ID, posts.drop(4).mapTo(mutableSetOf()) { it.id }) }
+        compose.onNodeWithContentDescription("For You").performClick()
+        waitFor { compose.onAllNodesWithTag(FOR_YOU_ORIGIN_TAG).fetchSemanticsNodes().isNotEmpty() }
+        capture("for_you_deck")
     }
 
     @Test fun `codex detail`() {
