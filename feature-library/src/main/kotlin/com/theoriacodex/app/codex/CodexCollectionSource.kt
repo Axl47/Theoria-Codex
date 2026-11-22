@@ -41,7 +41,7 @@ class CodexCollectionSource(
         if (codexIds.isEmpty()) return flowOf(emptyMap())
         val relevance = CodexSaveRelevance(posts, searchQuery)
         if (!relevance.hasSignals) return flowOf(emptyMap())
-        return observeSavedLibrary(codexIds).map(relevance::scoreEach).flowOn(Dispatchers.Default)
+        return observeSavedLibrary(codexIds).map { relevance.scoreEach(SavedLibrary(it)) }.flowOn(Dispatchers.Default)
     }
 
     /**

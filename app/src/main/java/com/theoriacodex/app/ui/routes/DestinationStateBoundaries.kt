@@ -29,6 +29,7 @@ import com.theoriacodex.app.codex.CodexCollectionPresentation
 import com.theoriacodex.app.codex.CodexActionOptions
 import com.theoriacodex.app.codex.CodexUsage
 import com.theoriacodex.app.codex.FOLLOWED_CODEX_ID
+import com.theoriacodex.app.codex.latestSaveTimes
 import com.theoriacodex.app.codex.observeCodexLibraryUsage
 import com.theoriacodex.app.codex.usesUsage
 import com.theoriacodex.app.codex.storeOrder
@@ -133,6 +134,7 @@ internal data class SaveToCodexDestinationState(
     val relevanceScores: Map<String, Double>,
     val containingCodexIds: Set<String>,
     val libraryUsage: Map<String, CodexUsage>,
+    val lastSavedAt: Map<String, Long>,
 )
 
 internal data class ViewerDestinationState(
@@ -385,6 +387,10 @@ internal fun SaveToCodexDestinationStateBoundary(
     val libraryUsage = produceState(emptyMap<String, CodexUsage>(), data.statisticsRepository) {
         value = data.statisticsRepository.observeCodexLibraryUsage().first()
     }
+    // Read once per open too, so a save from behind the sheet cannot reorder it.
+    val lastSavedAt = produceState(emptyMap<String, Long>(), data.codexRepository, collectionIds) {
+        value = latestSaveTimes(collectionIds.associateWith { id -> data.codexRepository.observeCodexItems(id).first() })
+    }
     val activeProfile = settings.activeRecommendationProfile()
     content(
         SaveToCodexDestinationState(
@@ -402,6 +408,7 @@ internal fun SaveToCodexDestinationStateBoundary(
             relevanceScores = relevance.value,
             containingCodexIds = containingCodexIds.value,
             libraryUsage = libraryUsage.value,
+            lastSavedAt = lastSavedAt.value,
         ),
     )
 }

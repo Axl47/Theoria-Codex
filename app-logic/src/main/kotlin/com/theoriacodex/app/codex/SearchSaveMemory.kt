@@ -19,18 +19,19 @@ class SearchSaveMemory {
     }
 
     /**
-     * [relevance] with this search's save targets lifted above every tag score (which stay in 0..1),
-     * the most used first.
+     * [relevance] with this search's save targets lifted to [SEARCH_SAVE_TIER] and above, over every tag score (which
+     * stay in 0..1), the most used first.
      */
     @Synchronized
     fun boost(query: Query?, relevance: Map<String, Double>): Map<String, Double> {
         val counts = query?.let { savesByQuery[QueryHash.from(it)] } ?: return relevance
         return relevance + counts.mapValues { (codexId, saves) ->
-            SEARCH_SAVE_BOOST + saves.coerceAtMost(MAX_COUNTED_SAVES) * PER_SAVE_BOOST + (relevance[codexId] ?: 0.0) * PER_SAVE_BOOST
+            SEARCH_SAVE_TIER + saves.coerceAtMost(MAX_COUNTED_SAVES) * PER_SAVE_BOOST + (relevance[codexId] ?: 0.0) * PER_SAVE_BOOST
         }
     }
 }
 
-private const val SEARCH_SAVE_BOOST = 1.0
+/** The least score of a Codex this search already saved into; tag scores stay below it. */
+const val SEARCH_SAVE_TIER = 1.0
 private const val PER_SAVE_BOOST = 0.01
 private const val MAX_COUNTED_SAVES = 50

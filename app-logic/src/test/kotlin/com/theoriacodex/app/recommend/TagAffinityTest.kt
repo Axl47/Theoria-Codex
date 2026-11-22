@@ -87,7 +87,47 @@ class TagAffinityTest {
         assertFalse(ranked.getValue("cat").universal)
     }
 
-    private fun like(tags: List<String>) = LikedPost("profile", PostId(source, tags.joinToString("-")), 0L, tags)
+    @Test
+    fun `with enough history a tag must be clearly more common in what was kept than in what was watched`() {
+        // 40 kept posts: blush on half, as on half of what was watched; the character on a quarter, but rare when watching.
+        val likes = List(40) { index ->
+            like(listOfNotNull("blush".takeIf { index % 2 == 0 }, "miku".takeIf { index % 4 == 0 }, "tree"), "$index")
+        }
+        val watched = statistics(watched = 400, "blush" to 190, "miku" to 12, "tree" to 400)
+        val inputs = tagAffinityInputs(likes, emptyList(), emptyList(), emptyList(), watched)
+
+        val ranked = tagAffinities(post("blush", "tree", "miku"), inputs)
+
+        assertEquals("miku", ranked.first().tag)
+        assertEquals(listOf("miku"), ranked.filter { it.informative }.map { it.tag })
+        assertFalse(ranked.single { it.tag == "blush" }.universal)
+    }
+
+    @Test
+    fun `a tag too rare in what was watched to judge is still offered, after the proven ones`() {
+        val likes = List(40) { index -> like(listOfNotNull("miku".takeIf { index % 4 == 0 }, "tree"), "$index") }
+        // At these rates 40 kept posts would hold about 0.1 fox and 4 dog: missing dog says something, missing fox does not.
+        val watched = statistics(watched = 400, "miku" to 12, "tree" to 400, "fox" to 1, "dog" to 40, "owl" to 2)
+        val inputs = tagAffinityInputs(likes, emptyList(), emptyList(), emptyList(), watched)
+
+        val offered = tagAffinities(post("dog", "owl", "fox", "miku"), inputs).filter { it.informative }.map { it.tag }
+
+        assertEquals(listOf("miku", "fox", "owl"), offered)
+    }
+
+    @Test
+    fun `lift compares each source with itself, and a chosen tag on most watched posts is still universal`() {
+        val kept = List(30) { index -> like(listOf("tree", "moth"), "$index") }
+        val watched = statistics(watched = 300, "tree" to 280, "moth" to 3)
+        val inputs = tagAffinityInputs(kept, emptyList(), listOf("tree"), emptyList(), watched)
+
+        assertTrue(inputs.lift(source, "moth")!! > 10)
+        // The same tag on another source's post has no kept history there to compare.
+        assertEquals(null, inputs.lift(SourceKey.DANBOORU, "moth"))
+        assertTrue(tagAffinities(post("tree", "moth"), inputs).single { it.tag == "tree" }.universal)
+    }
+
+    private fun like(tags: List<String>, id: String = tags.joinToString("-")) = LikedPost("profile", PostId(source, id), 0L, tags)
 
     private fun statistics(watched: Long, vararg tags: Pair<String, Long>) = LifetimeStatistics(
         watchedBySource = mapOf(source to watched),

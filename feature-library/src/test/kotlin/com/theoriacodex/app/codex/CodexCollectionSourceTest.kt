@@ -65,10 +65,11 @@ class CodexCollectionSourceTest {
         val repository = InMemoryCodexRepository()
         repository.ensureCodex("target", "Target")
         val posts = (1..12).map { testPost(sourcePostId = "$it").copy(canonicalTags = listOf("cat")) }
-        repository.addItems("target", posts)
+        // The unmatched post keeps "cat" off part of the library, so it still counts as a match.
+        repository.addItems("target", posts + testPost(sourcePostId = "unmatched").copy(canonicalTags = listOf("dog")))
         val source = CodexCollectionSource(repository, folder.root, InMemoryCacheRepository())
-        assertEquals(mapOf("target" to 1.0), source.observeSaveRelevance(setOf("target"), listOf(posts.first())).first())
-        repository.addItems("target", listOf(testPost(sourcePostId = "unmatched").copy(canonicalTags = listOf("dog"))))
+        val tagScore = source.observeSaveRelevance(setOf("target"), listOf(posts.first())).first().getValue("target")
+        assertEquals(12.0 / (13 + 3), tagScore, 0.000001)
         val query = emptySearchQuery().withIncludeTermsAsRequired(listOf(com.theoriacodex.domain.model.SearchTerm("cat")))
         val score = source.observeSaveRelevance(setOf("target"), listOf(posts.first()), query).first().getValue("target")
         assertEquals(0.95 * 12 / 13, score, 0.000001)
