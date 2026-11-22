@@ -31,6 +31,7 @@ import com.theoriacodex.app.appshell.AppShellAction
 import com.theoriacodex.app.appshell.AppShellEffect
 import com.theoriacodex.app.appshell.AppShellUiState
 import com.theoriacodex.app.appshell.IncomingUriKind
+import com.theoriacodex.app.series.seriesIdOfUri
 import com.theoriacodex.app.codex.CodexCommandHost
 import com.theoriacodex.app.codex.transfer.CodexImportHost
 import com.theoriacodex.app.settings.SettingsAction
@@ -170,7 +171,9 @@ internal fun ShellIncomingUriEffects(
     LaunchedEffect(shell.navReady, pendingExternalContent) {
         if (!shell.navReady) return@LaunchedEffect
         val pending = pendingExternalContent ?: return@LaunchedEffect
-        shell.openExternalContent(pending.value.toUri())
+        val uri = pending.value.toUri()
+        // A new-chapters notification names its series; anything else is a link to a post or a site.
+        seriesIdOfUri(uri)?.let { shell.navController.navigate(AppRoute.series(it)) { launchSingleTop = true } } ?: shell.openExternalContent(uri)
         appShellOwner.onAction(AppShellAction.ConsumeIncomingUri(pending))
     }
 }

@@ -33,6 +33,7 @@ internal fun SettingsScreenDestination(shell: TheoriaShell) {
         },
         diagnostics = shell.diagnosticsEntry,
         storageTools = { LibraryTransferSettings(shell.transfers) },
+        seriesUpdates = shell.container.series != null,
         onClose = { shell.navController.popBackStack() },
         closesFrom = entryPage,
     )

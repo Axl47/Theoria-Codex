@@ -101,7 +101,13 @@ object SettingChoices {
         read = { it.cache.downloadQuality }, write = { settings, quality -> settings.copy(cache = settings.cache.copy(downloadQuality = quality)) },
     )
 
-    val all: List<SettingChoice<*>> = listOf(DefaultVideoQuality, DownloadQuality)
+    /** Only in a build with extensions, which alone has series to check. */
+    val SeriesUpdates = SettingChoice(
+        "series-updates", "Check for new chapters", listOf("series", "notifications", "updates"), SeriesUpdateInterval.entries,
+        read = { it.seriesUpdateInterval }, write = { settings, interval -> settings.copy(seriesUpdateInterval = interval) },
+    )
+
+    val all: List<SettingChoice<*>> = listOf(DefaultVideoQuality, DownloadQuality, SeriesUpdates)
 }
 
 /** Every place that holds settings, as Settings and the search box name it. */

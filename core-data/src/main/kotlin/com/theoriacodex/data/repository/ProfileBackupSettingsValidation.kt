@@ -25,6 +25,7 @@ internal fun validateBackupSettings(root: JsonObject, profileIds: Set<String>) {
     }
     if ("viewerCommentOrder" in root) com.theoriacodex.domain.model.CommentOrder.valueOf(root.backupString("viewerCommentOrder"))
     if ("codexLibrarySort" in root) CodexLibrarySort.valueOf(root.backupString("codexLibrarySort"))
+    if ("seriesUpdateInterval" in root) SeriesUpdateInterval.valueOf(root.backupString("seriesUpdateInterval"))
     VideoQuality.valueOf(root.backupString("videoQuality"))
     VideoQuality.valueOf(root.backupString("downloadQuality"))
     listOf("downloadsOverMetered", "downloadsOverRoaming", "cacheFullImageOnSave",

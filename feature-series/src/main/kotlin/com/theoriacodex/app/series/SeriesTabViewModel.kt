@@ -36,17 +36,21 @@ data class SeriesSourceListing(val key: SourceKey, val name: String, val listing
 
 /**
  * The Series tab. [sources] is null until the extensions have loaded; [browse] is the chosen source's popular series;
- * [search] is one listing per source while a search shows, and null otherwise.
+ * [search] is one listing per source while a search shows, and null otherwise; [refreshing] while a refresh by hand
+ * checks the followed series for new chapters.
  */
 data class SeriesTabState(
     val sources: List<SeriesSource>? = null,
     val browse: SeriesSourceListing? = null,
     val search: List<SeriesSourceListing>? = null,
+    val refreshing: Boolean = false,
 )
 
 class SeriesTabViewModel(
     private val repository: SeriesRepository,
     private val loadSources: suspend () -> List<SeriesSource>,
+    /** Stores the followed series' new chapters, which changes the shelf's unread counts. */
+    private val checkFollowed: suspend () -> Unit,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(SeriesTabState())
     val state: StateFlow<SeriesTabState> = mutableState
@@ -62,6 +66,19 @@ class SeriesTabViewModel(
             val sources = loadSources()
             mutableState.update { it.copy(sources = sources) }
             sources.firstOrNull()?.let { browse(it.key) }
+        }
+    }
+
+    /** Checks the followed series for new chapters, unless a check is already running. */
+    fun refresh() {
+        if (state.value.refreshing) return
+        mutableState.update { it.copy(refreshing = true) }
+        viewModelScope.launch {
+            try {
+                checkFollowed()
+            } finally {
+                mutableState.update { it.copy(refreshing = false) }
+            }
         }
     }
 

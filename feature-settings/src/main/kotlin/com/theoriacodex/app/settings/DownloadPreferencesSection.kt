@@ -15,6 +15,7 @@ import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.data.repository.SettingChoice
 import com.theoriacodex.data.repository.SettingChoices
 import com.theoriacodex.data.repository.SettingDestinations
+import com.theoriacodex.data.repository.SeriesUpdateInterval
 import com.theoriacodex.data.repository.SettingToggles
 import com.theoriacodex.domain.model.VideoQuality
 
@@ -41,3 +42,18 @@ private fun QualityChoices(choice: SettingChoice<VideoQuality>, selected: VideoQ
         }
     }
 }
+
+/** Settings' sheet for how often followed series are checked for new chapters. */
+@Composable
+fun SeriesUpdatesSection(state: SettingsUiState, onAction: (SettingsAction) -> Unit) {
+    val choice = SettingChoices.SeriesUpdates
+    Text(choice.title, style = MaterialTheme.typography.titleMedium)
+    Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth()) {
+        choice.options.forEach { interval ->
+            FilterChip(selected = choice.read(state.settings) == interval, onClick = { onAction(SettingsAction.SetChoice(choice, interval)) },
+                label = { Text(seriesUpdateIntervalLabel(interval)) })
+        }
+    }
+}
+
+fun seriesUpdateIntervalLabel(interval: SeriesUpdateInterval): String = interval.hours?.let { "$it hours" } ?: "Off"
