@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Reorder
+import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.VisibilityOff
 import com.theoriacodex.app.ui.navigation.LocalHiddenTagsOpener
 import androidx.compose.material.icons.filled.BookmarkAdd
@@ -99,6 +100,7 @@ internal fun ForYouHomeScreen(
     onOpenPreview: (String?, List<Post>, Int) -> Unit,
     onOpenWhy: (ForYouWhyTarget) -> Unit,
     onSelectProfile: (String) -> Unit,
+    onTriageShelf: ((String?) -> Unit)? = null,
 ) {
     val scroll = rememberLazyListState()
     ScrollToTopOnTabReselect(TopLevelDestination.ForYou) {
@@ -118,7 +120,8 @@ internal fun ForYouHomeScreen(
     }
     // Looked up live so the menu reflects Pin and disappears if its section does.
     state.home.sections.firstOrNull { it.id == sectionMenuId }?.let { section ->
-        ForYouSectionMenu(section, section.id !in state.home.pendingSectionIds, onAction) { sectionMenuId = null }
+        val onTriage = onTriageShelf?.takeIf { section.feed.page.items.isNotEmpty() }?.let { triage -> { triage(section.id) } }
+        ForYouSectionMenu(section, section.id !in state.home.pendingSectionIds, onAction, onTriage) { sectionMenuId = null }
     }
     Scaffold(modifier = Modifier.nestedScroll(filterScroll.connection), contentWindowInsets = WindowInsets(0), floatingActionButton = {
         FeedFilterFab(filterLabels, "Filter and sort recommendations", onShowFilters, onClearFilters, scrollSignal = filterScroll)
@@ -298,7 +301,7 @@ private fun ForYouHomeMenu(
 
 @Composable
 private fun ForYouSectionMenu(
-    section: ForYouSection, enabled: Boolean, onAction: (ForYouAction) -> Unit, onDismiss: () -> Unit,
+    section: ForYouSection, enabled: Boolean, onAction: (ForYouAction) -> Unit, onTriage: (() -> Unit)?, onDismiss: () -> Unit,
 ) {
     val cover = section.feed.page.items.firstOrNull()
     fun act(action: ForYouAction) {
@@ -311,6 +314,12 @@ private fun ForYouSectionMenu(
             image = { modifier -> if (cover != null) PostThumbnail(cover, modifier) else Box(modifier) },
             details = { ActionMenuDetailText(section.kindLabel() ?: "Interest") },
         )
+        onTriage?.let { triage ->
+            ActionMenuRow(Icons.Default.Style, "Triage", enabled) {
+                onDismiss()
+                triage()
+            }
+        }
         ActionMenuRow(Icons.Default.Bookmark, if (section.pinned) "Remove from Saved" else "Save search", enabled) {
             act(ForYouAction.PinSection(section.id))
         }

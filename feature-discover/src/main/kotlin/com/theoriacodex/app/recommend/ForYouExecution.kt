@@ -30,12 +30,18 @@ data class ForYouFeedResult(
     val page: UnifiedSearchResult,
     val continuation: FeedCursor?,
 ) {
+    /** Names this feed for the Viewer and the triage deck while it is the grid's feed. */
+    val queryHash: String get() = forYouQueryHash(seedId)
+
     companion object {
         fun empty(seedId: String, likesCount: Int): ForYouFeedResult = ForYouFeedResult(
             emptyMap(), seedId, likesCount, UnifiedSearchResult(emptyList(), emptyMap(), emptyList()), null,
         )
     }
 }
+
+/** The key the Viewer and the triage deck find the For You feed by while it shows seed [seedId]. */
+internal fun forYouQueryHash(seedId: String): String = "for_you:$seedId"
 
 data class ForYouBlacklistChange(val settings: AppSettings, val entries: List<ForYouBlacklistEntry>)
 
