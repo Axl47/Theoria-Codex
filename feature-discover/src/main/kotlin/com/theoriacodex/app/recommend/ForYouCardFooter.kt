@@ -53,7 +53,7 @@ internal fun forYouForks(
     return fresh.map { ForYouFork("tag:$it", it.replace('_', ' '), TrailRequest.Tag(it, post.id.source, levelQuery, post)) }.toList() +
         listOfNotNull(
             creator?.let { ForYouFork("creator", it.displayName, TrailRequest.Creator(it, post)) },
-            ForYouFork("similar", "Similar", TrailRequest.Similar(post)).takeIf { similarSupported },
+            ForYouFork(SIMILAR_FORK, "Similar", TrailRequest.Similar(post)).takeIf { similarSupported },
         )
 }
 
@@ -98,27 +98,38 @@ internal fun ForYouCardFooter(
                 modifier = Modifier.padding(start = 4.dp, bottom = 4.dp).testTag(FOR_YOU_ORIGIN_TAG),
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            forks.forEach { fork ->
-                Text(
-                    fork.label,
-                    style = MaterialTheme.typography.labelLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    // Only a creator's name gives way when the row is full; tags and Similar keep their words.
-                    modifier = (if (fork.key == "creator") Modifier.weight(1f, fill = false) else Modifier)
-                        .clip(RoundedCornerShape(50))
-                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                        .clickable(role = Role.Button, onClickLabel = "Open ${fork.label}") { owner.fork(fork.request) }
-                        .height(36.dp)
-                        .wrapContentHeight()
-                        .padding(horizontal = 12.dp)
-                        .testTag("$FOR_YOU_FORK_TAG_PREFIX${fork.key}"),
-                )
-            }
+        ForYouForkRow(forks, owner::fork)
+    }
+}
+
+/**
+ * A card's forks on one line. Similar keeps its word; the others get an equal share of the rest at most, so a long
+ * tag or name shortens instead of pushing the forks after it out of reach. The row sits in the dragged card, so it
+ * does not scroll.
+ */
+@Composable
+internal fun ForYouForkRow(forks: List<ForYouFork>, onFork: (TrailRequest) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        forks.forEach { fork ->
+            Text(
+                fork.label,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = (if (fork.key == SIMILAR_FORK) Modifier else Modifier.weight(1f, fill = false))
+                    .clip(RoundedCornerShape(50))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .clickable(role = Role.Button, onClickLabel = "Open ${fork.label}") { onFork(fork.request) }
+                    .height(36.dp)
+                    .wrapContentHeight()
+                    .padding(horizontal = 12.dp)
+                    .testTag("$FOR_YOU_FORK_TAG_PREFIX${fork.key}"),
+            )
         }
     }
 }
+
+private const val SIMILAR_FORK = "similar"
 
 const val FOR_YOU_ORIGIN_TAG = "for-you-origin"
 const val FOR_YOU_FORK_TAG_PREFIX = "for-you-fork-"

@@ -1,12 +1,15 @@
 package com.theoriacodex.app.recommend
 
 import android.app.Application
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -15,13 +18,17 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.width
 import com.theoriacodex.app.related.LocalRelatedPostsSupport
 import com.theoriacodex.app.related.testRelatedShelf
 import com.theoriacodex.app.search.searchCardTestTag
@@ -44,6 +51,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -167,6 +175,28 @@ class ForYouDeckScreenTest {
         card("more-0-0").assertExists()
         compose.onNodeWithTag(FOR_YOU_ORIGIN_TAG).assertTextEquals("More by artist")
         compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}creator").assertDoesNotExist()
+    }
+
+    @Test fun `a long tag leaves the forks after it room to tap, and Similar its whole word`() {
+        val request = TrailRequest.Similar(testPost(source = DECK_SOURCE, sourcePostId = "1"))
+        val similar = ForYouFork("similar", "Similar", request)
+        // Each wider than the row by itself, whatever the test font's width.
+        val long = "long ".repeat(100)
+        val forks = listOf(ForYouFork("tag:first", long, request), ForYouFork("tag:second", long, request), ForYouFork("creator", long, request), similar)
+        compose.setContent {
+            MaterialTheme {
+                Column(Modifier.width(320.dp)) {
+                    ForYouForkRow(forks) {}
+                    ForYouForkRow(listOf(similar)) {}
+                }
+            }
+        }
+
+        fun bounds(fork: ForYouFork, index: Int = 0) =
+            compose.onAllNodesWithTag("$FOR_YOU_FORK_TAG_PREFIX${fork.key}")[index].getUnclippedBoundsInRoot()
+        (forks - similar).forEach { fork -> assertTrue(fork.key, bounds(fork).width >= 48.dp) }
+        assertTrue(bounds(similar).right <= 320.dp)
+        assertEquals(bounds(similar, index = 1).width, bounds(similar).width)
     }
 
     @Test fun `a tag trail saves its search, and then shows it saved`() {
