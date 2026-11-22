@@ -94,6 +94,18 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
     }
 
     @Test
+    fun `a backup's For You pin never replaces the local search with its ID`() = runTest {
+        val repository = FileBackedSavedSearchRepository(tempDir("pin-backup-for-you-id"), sourceName = { it.id.lowercase() })
+        val forYouPin = goldenPins().first { it.search.isRetiredForYouSearch }
+        val local = SavedSearchEntry(forYouPin.id, "Mine", execution(), 1)
+        repository.replaceAll(listOf(local))
+
+        repository.merge(goldenPins())
+
+        assertEquals(local, repository.observeSavedSearches().first().single { it.id == local.id })
+    }
+
+    @Test
     fun `failed file write never publishes a pin or replaces the last durable library`() = runTest {
         val directory = tempDir("pin-write-failure")
         val repository = FileBackedSavedSearchRepository(directory)

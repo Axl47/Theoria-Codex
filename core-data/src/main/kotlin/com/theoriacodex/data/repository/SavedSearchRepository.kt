@@ -144,9 +144,10 @@ private class MutableSavedSearchRepository(
     }
 
     override suspend fun merge(entries: List<SavedSearchEntry>) = mutex.withLock {
-        // Converted together with the existing searches, so a split mix takes only slots that are still free.
-        val importedIds = entries.mapTo(mutableSetOf(), SavedSearchEntry::id)
-        persist((entries + savedSearches.value.filterNot { it.id in importedIds }).withForYouSearchesConverted(sourceName))
+        // Only an incoming ordinary search replaces the local one with its ID. A For You search is converted together
+        // with the existing searches, so what it generates gives way to them and takes only slots that are still free.
+        val replacedIds = entries.filterNot { it.search.isRetiredForYouSearch }.mapTo(mutableSetOf(), SavedSearchEntry::id)
+        persist((entries + savedSearches.value.filterNot { it.id in replacedIds }).withForYouSearchesConverted(sourceName))
     }
 
     private suspend fun persist(entries: List<SavedSearchEntry>) {

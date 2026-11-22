@@ -49,7 +49,7 @@ private fun SavedSearchEntry.asSourceSearches(sourceName: (SourceKey) -> String)
         val query = Query(QueryMode.Source(source), includeTags = tags, excludeTags = emptyList(),
             sort = search.query.sort, dateRange = null, minScore = null).copy(media = search.query.media)
         SavedSearchEntry(
-            // The first search keeps the entry's identity; the others get stable IDs so a re-import replaces them.
+            // The first search keeps the entry's identity; the others get stable IDs, so a re-import does not add them twice.
             id = if (index == 0) id else UUID.nameUUIDFromBytes("$id:${source.id}".toByteArray()).toString(),
             name = if (bySource.size == 1) name else splitName(name, sourceName(source)),
             search = RecentSearchEntry(query, QueryHash.from(query), search.searchedAtEpochMs),
