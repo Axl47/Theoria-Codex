@@ -112,7 +112,8 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
         }
     };
     // Series from extensions get tables of their own. The spike that showed a series as a post stored those posts
-    // under `custom_mihon_` source ids, which no source answers for any more: they are deleted wherever they were kept.
+    // under `custom_mihon_` source ids, which no source answers for any more: they are deleted from every table here.
+    // Preferences are not touched.
     public static final Migration MIGRATION_12_13 = new Migration(12, 13) {
         @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
             database.execSQL("CREATE TABLE IF NOT EXISTS `series` (`source` TEXT NOT NULL, `address` TEXT NOT NULL, `title` TEXT NOT NULL, `cover_url` TEXT, `author` TEXT, `genres` TEXT NOT NULL, `language` TEXT NOT NULL, `followed` INTEGER NOT NULL, `reading_mode` TEXT, `last_opened_entry` TEXT, `last_checked_at_epoch_ms` INTEGER, `description` TEXT, `status` TEXT, PRIMARY KEY(`source`, `address`))");

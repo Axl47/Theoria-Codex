@@ -71,8 +71,8 @@ class ExtensionRegistry(
     /** Per extension id, its sources that are on, as of the last listing. Guarded by [mutex]. */
     private var active: Map<String, List<LoadedSource>> = emptyMap()
 
-    /** The sources on offer with [stamp] as it was read before the listing they came from. */
-    private class Offer(val sources: List<SeriesSource>, val stamp: Any)
+    /** The sources on offer, with the [packages] they were listed from and [stamp] as it was read before that listing. */
+    private class Offer(val sources: List<SeriesSource>, val stamp: Any, val packages: List<ExtensionPackage>)
 
     /** What a listing found on the device, with [stamp] read first, so a change during the listing is seen by the next check. */
     private class OnDevice(val stamp: Any, val packages: List<ExtensionPackage>)
@@ -147,12 +147,13 @@ class ExtensionRegistry(
     /**
      * Runs [block] alone and off the caller's thread. The revision moves when the sources on offer did or the
      * extensions on the device did, whatever the cause: a choice made here, or a package installed or removed since
-     * the last listing, also one that is off, which the Extensions page lists.
+     * the last listing, also one that is off, which the Extensions page lists. It stays put when [stamp] moved for
+     * a package that is no extension, such as any other app updating.
      */
     private suspend fun <T> locked(block: suspend () -> T): T = withContext(Dispatchers.IO) {
         mutex.withLock {
             val before = offer
-            block().also { if (before?.sources != offer?.sources || before?.stamp != offer?.stamp) mutableRevision.update { it + 1 } }
+            block().also { if (before?.sources != offer?.sources || before?.packages != offer?.packages) mutableRevision.update { it + 1 } }
         }
     }
 
@@ -196,7 +197,7 @@ class ExtensionRegistry(
         images.publish(sources.map { it.source })
         val series = sources.map { it.series }
         // The same list object while nothing changed, so a reader can tell.
-        offer = Offer(offer?.sources?.takeIf { it == series } ?: series, found.stamp)
+        offer = Offer(offer?.sources?.takeIf { it == series } ?: series, found.stamp, onDevice)
         return listed
     }
 

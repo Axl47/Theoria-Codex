@@ -47,6 +47,7 @@ class ViewerReadingModeTest {
         val pages = listOf(image, image, image)
         val series = ViewerScreenConfig(seriesChapters = true)
         assertEquals(0, series.entryMediaIndex(page(pages).copy(selectedMediaIndex = 2)))
+        assertEquals(2, series.entryMediaIndex(page(pages).copy(selectedMediaIndex = 2), back = true))
         assertEquals(1, series.entryMediaIndex(page(pages).copy(selectedMediaIndex = 1)))
         // A chapter whose pages have not arrived is still on its way to the page it resumes at.
         assertEquals(2, series.entryMediaIndex(page(listOf(image)).copy(pendingMediaIndex = 2)))

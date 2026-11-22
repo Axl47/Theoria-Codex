@@ -73,7 +73,8 @@ private fun swipeTargetFrom(
     config: ViewerScreenConfig,
 ): ViewerHorizontalSwipeTarget? {
     val page = pages.getOrNull(origin.postIndex) ?: return null
-    val neighbor = pages.getOrNull(origin.postIndex + if (direction == ViewerHorizontalSwipeDirection.Next) 1 else -1)
+    val back = direction != ViewerHorizontalSwipeDirection.Next
+    val neighbor = pages.getOrNull(origin.postIndex + if (back) -1 else 1)
     val vertical = config.readingModeOf(page) == GalleryReadingMode.VERTICAL
     return viewerHorizontalSwipeTarget(
         currentPostIndex = origin.postIndex,
@@ -83,7 +84,7 @@ private fun swipeTargetFrom(
         targetPostMediaCount = neighbor?.media?.size ?: 0,
         direction = direction,
         galleryMediaPending = !vertical && page.hasPendingGalleryMedia(),
-        targetMediaIndex = neighbor?.let(config::entryMediaIndex) ?: 0,
+        targetMediaIndex = neighbor?.let { config.entryMediaIndex(it, back) } ?: 0,
     )
 }
 

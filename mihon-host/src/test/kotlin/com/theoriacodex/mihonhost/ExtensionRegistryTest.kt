@@ -138,6 +138,19 @@ class ExtensionRegistryTest {
     }
 
     @Test
+    fun `another app updating leaves the revision where it was`() = runBlocking {
+        var stamp = 0
+        val registry = ExtensionRegistry({ onDevice }, { stamp }, { sourcesOf(it) }, store, images, { error("no settings") }, { deviceLanguages }, 500)
+        registry.installed()
+        val listed = registry.revision.value
+
+        stamp++
+        registry.recheck()
+
+        assertEquals(listed, registry.revision.value)
+    }
+
+    @Test
     fun `a lookup interrupted after a change on the device leaves the change for the next one`() = runBlocking {
         store.choices = ExtensionChoices(trusted = mapOf("a" to "key-1"))
         registry.sources()

@@ -49,7 +49,11 @@ internal fun notifySeriesUpdate(context: Context, update: SeriesUpdate) {
     )
     // Counted with this one by name: the system may not list a notification the moment it is posted.
     val showing = manager.activeNotifications.filter { it.id == SERIES_NOTIFICATION_ID }.mapTo(mutableSetOf(tag)) { it.tag }
-    if (showing.size > 1) manager.notify(SUMMARY_NOTIFICATION_ID, notification().setGroupSummary(true).build())
+    if (showing.size > 1) {
+        // The summary names no series: tapping it only brings the app forward.
+        val app = PendingIntent.getActivity(context, 0, Intent(context, SeriesNotificationActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+        manager.notify(SUMMARY_NOTIFICATION_ID, notification().setGroupSummary(true).setContentIntent(app).build())
+    }
 }
 
 /**
