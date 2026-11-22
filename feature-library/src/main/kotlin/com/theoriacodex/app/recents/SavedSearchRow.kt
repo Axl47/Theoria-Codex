@@ -41,7 +41,6 @@ internal fun SavedSearchRow(
         RecentSearchKind.SOURCE -> entry.search.sources.single().displayName()
         RecentSearchKind.UNIFIED -> "Unified"
         RecentSearchKind.MULTI_SEARCH -> "Multi-Search"
-        RecentSearchKind.FYP -> "For You"
     }
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {

@@ -85,7 +85,6 @@ class StatisticsRepositoriesTest {
         val recents = listOf(
             entry(listOf("animation", "sky"), RecentSearchKind.UNIFIED, listOf(SourceKey.PIXIV, SourceKey.GELBOORU)),
             entry(listOf("sky"), RecentSearchKind.SOURCE, listOf(SourceKey.GELBOORU)),
-            entry(listOf("seed"), RecentSearchKind.FYP, listOf(SourceKey.PIXIV)),
         )
 
         repository.seedSearchedTags(recents)

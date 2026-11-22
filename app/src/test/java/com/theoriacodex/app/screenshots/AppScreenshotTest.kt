@@ -88,7 +88,7 @@ class AppScreenshotTest {
                 it.content.restoreItems(posts.mapIndexed { index, post -> CodexItem(CODEX_ID, post.id, index.toLong()) }, posts)
                 it.data.recentsRepository.recordSearch(
                     Query(QueryMode.Source(SourceKey.PIXIV), listOf("landscape"), emptyList(), SortMode.NEWEST, null, null),
-                    SEARCH_ID, RecentSearchKind.SOURCE, listOf(SourceKey.PIXIV), emptyMap(),
+                    SEARCH_ID, RecentSearchKind.SOURCE, listOf(SourceKey.PIXIV),
                 )
             }
         }

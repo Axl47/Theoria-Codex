@@ -374,7 +374,6 @@ class InMemoryRecentsRepository(
         queryHash: String,
         kind: RecentSearchKind,
         sources: List<SourceKey>,
-        sourceTags: Map<SourceKey, List<String>>,
     ) {
         val normalizedHash = queryHash.trim()
         if (normalizedHash.isBlank()) return
@@ -387,7 +386,6 @@ class InMemoryRecentsRepository(
                     searchedAtEpochMs = clock(),
                     kind = kind,
                     sources = sources.distinct(),
-                    sourceTags = sourceTags.mapValues { (_, tags) -> tags.toList() },
                 ),
                 limit = searchLimit,
             )
@@ -428,10 +426,8 @@ class InMemoryRecentsRepository(
         }
     }
 
-    override suspend fun clearSearches(section: RecentSearchSection): List<RecentSearchEntry> = mutex.withLock {
-        val removed = searches.value.filter(section::contains)
-        searches.value = searches.value.filterNot(section::contains)
-        removed
+    override suspend fun clearSearches(): List<RecentSearchEntry> = mutex.withLock {
+        searches.value.also { searches.value = emptyList() }
     }
 
     override suspend fun clearAll() {

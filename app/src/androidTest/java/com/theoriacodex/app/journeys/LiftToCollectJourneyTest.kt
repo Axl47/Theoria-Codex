@@ -21,7 +21,8 @@ class LiftToCollectJourneyTest : AppJourneyFixture() {
         val first = posts.getValue(SourceKey.PIXIV).first()
         val collection = io {
             container.data.recentsRepository.recordSearch(
-                Query(QueryMode.Source(SourceKey.PIXIV), listOf("pixiv_seed"), emptyList(), SortMode.NEWEST, null, null), "lift",
+                Query(QueryMode.Source(SourceKey.PIXIV), listOf("pixiv_seed"), emptyList(), SortMode.NEWEST, null, null),
+                "lift",
             )
             container.content.ensureCodex(profileScopedCodexId("profile-main", "lift"), "Lift target")
         }

@@ -106,7 +106,6 @@ private fun TheoriaShell.clearRecents(target: RecentsClearTarget, state: Recents
             watchedPosts = state.watchedPosts,
             codexPosts = state.codexPosts,
             searches = state.searches,
-            fypSearches = state.fypSearches,
             showActionableFeedback = { message, action -> undo.awaitAction(message, RecentsUndoAnchor, action) },
         )
     }
@@ -153,7 +152,6 @@ private fun RecentsDestination(shell: TheoriaShell, header: LibrarySectionHeader
             watchedPosts = state.watchedPosts,
             codexPosts = state.codexPosts,
             searches = state.searches,
-            fypSearches = state.fypSearches,
             activity = state.activity,
             pixivUgoiraClient = shell.sources.pixivUgoiraClient,
             // Recents filters no lengths, so it only reports what its cards learn.
@@ -174,7 +172,6 @@ private fun RecentsDestination(shell: TheoriaShell, header: LibrarySectionHeader
                 if (index >= 0) shell.openRecentSection(entries, index, section, startOver = true)
             },
             onOpenSearch = shell::openHistoricalSearch,
-            onOpenFypSearch = shell::openHistoricalForYouSearch,
             onClear = { target -> shell.clearRecents(target, state, undo) },
             header = header,
         )

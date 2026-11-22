@@ -70,11 +70,10 @@ class CustomSourceIdentityTest {
         val terms = listOf(SearchTerm("cat_ears"))
         val search = RecentSearchEntry(
             Query(QueryMode.Source(custom), terms, emptyList(), SortMode.NEWEST, null, null, listOf(SearchTermGroup(terms))),
-            "custom-search", 2L, sourceTags = mapOf(custom to listOf("cat_ears")),
+            "custom-search", 2L,
         )
         val payload = RecentSearchPayloadCodec.decodeJson(RecentSearchPayloadCodec.encodeJson(search))
         assertEquals(listOf(custom), payload.sources)
-        assertEquals(mapOf(custom to listOf("cat_ears")), payload.sourceTags)
         assertEquals(QueryMode.Source(custom), payload.query.mode)
 
         val statistics = LifetimeStatistics(

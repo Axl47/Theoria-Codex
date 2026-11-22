@@ -181,7 +181,7 @@ class HideLikedRelatedPostsJourneyTest {
                 )
                 it.data.recentsRepository.recordSearch(
                     Query(QueryMode.Source(SourceKey.PIXIV), listOf("seed"), emptyList(), SortMode.NEWEST, null, null),
-                    "likes-query", RecentSearchKind.SOURCE, listOf(SourceKey.PIXIV), emptyMap(),
+                    "likes-query", RecentSearchKind.SOURCE, listOf(SourceKey.PIXIV),
                 )
             }
         }

@@ -95,7 +95,7 @@ class RecentsRemovalTest {
     }
 
     @Test
-    fun `a removed search's place follows the search filter`() {
+    fun `a removed search's place follows the source filter`() {
         offerUndoFor(search)
         compose.setContent { MaterialTheme { ProvideUndoSlot(undo) {
             TestRecents(searches = emptyList(), activity = listOf(RecentActivityEntry.Watched(post)), removedSearch = search)
@@ -103,10 +103,12 @@ class RecentsRemovalTest {
         openSection("Searches")
 
         compose.onNodeWithText("Undo").assertExists()
-        compose.onNodeWithText("For You", substring = false).performClick()
+        compose.onNodeWithContentDescription("Filter History by source").performClick()
+        compose.onNode(hasContentDescription("Gelbooru") and hasAnyAncestor(isPopup())).performClick()
         compose.onNodeWithText("Undo").assertDoesNotExist()
         compose.onNodeWithText("No searches").assertExists()
-        compose.onNodeWithText("Search", substring = false).performClick()
+        compose.onNodeWithContentDescription("Filter History by source").performClick()
+        compose.onNodeWithContentDescription("All sources").performClick()
         compose.onNodeWithText("Undo").assertExists()
     }
 
@@ -149,11 +151,11 @@ class RecentsRemovalTest {
         removedSearch: RecentSearchEntry? = null,
     ) {
         RecentsScreen(
-            watchedPosts = listOf(post), codexPosts = emptyList(), searches = searches, fypSearches = emptyList(),
+            watchedPosts = listOf(post), codexPosts = emptyList(), searches = searches,
             activity = activity,
             onRemoveSearch = { removedSearches += it }, onRemovePost = { removedPosts += it }, removedSearch = removedSearch,
             onRequestSaveToCodex = {}, onSaveToDevice = {}, onGoToSearch = {},
-            onOpenWatchedPost = { _, _ -> }, onOpenCodexPost = { _, _ -> }, onOpenSearch = {}, onOpenFypSearch = {}, onClear = {},
+            onOpenWatchedPost = { _, _ -> }, onOpenCodexPost = { _, _ -> }, onOpenSearch = {}, onClear = {},
         )
     }
 }

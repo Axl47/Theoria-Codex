@@ -40,7 +40,6 @@ import com.theoriacodex.app.recommend.FOR_YOU_VIEW_TOGGLE_TAG
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.ui.TheoriaAppContent
-import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
@@ -185,7 +184,7 @@ class RelatedViewerReturnTest {
                 it.awaitReady()
                 it.data.recentsRepository.recordSearch(
                     Query(QueryMode.Source(source), listOf("seed"), emptyList(), SortMode.NEWEST, null, null),
-                    "return-query", RecentSearchKind.SOURCE, listOf(source),
+                    "return-query",
                 )
             }
         }

@@ -292,7 +292,7 @@ private suspend fun verifyRoomPayloads(context: Context, databaseName: String, p
             likes.toggleLikeAndSyncSystemCodex(
                 ACCEPTANCE_PROFILE, ProfileLibraryIds.likes(ACCEPTANCE_PROFILE), "Likes", videoPostFixture(), LIKE_TAGS, emptySet(),
             )
-            recents.recordSearch(unifiedQuery, "kotlinx-search", RecentSearchKind.MULTI_SEARCH, MULTI_SOURCES, emptyMap())
+            recents.recordSearch(unifiedQuery, "kotlinx-search", RecentSearchKind.MULTI_SEARCH, MULTI_SOURCES)
             database.codexLikesDao().insertPost(PostEntity(gsonRowId.source.id, gsonRowId.sourcePostId, GSON_ROOM_POST))
             database.codexLikesDao().insertLike(LikedPostEntity(GSON_PROFILE, gsonRowId.source.id, gsonRowId.sourcePostId, 1L, GSON_LIKED_TAGS))
             database.recentsDao().upsertSearch(RecentSearchEntity("gson-search", GSON_RECENT_SEARCH, 1L, database.recentsDao().nextSearchSequence()))
@@ -307,7 +307,11 @@ private suspend fun verifyRoomPayloads(context: Context, databaseName: String, p
         val gsonRow = checkNotNull(likes.getPost(gsonRowId))
         check(gsonRow.title == "Tom & Jerry's <post>" && gsonRow.canonicalTags == listOf("a&b", "c=d"))
         check(likes.observeLikes(GSON_PROFILE).first().single().tags == listOf("a&b", "it's"))
-        check(searches.getValue("gson-search").sourceTags == mapOf(SourceKey.GELBOORU to listOf("rock & roll", "<seed>")))
+        // A For You row reads as Unified with an entry of tags for every source it searched, so it never fails a read.
+        check(searches.getValue("gson-search").let {
+            it.kind == RecentSearchKind.UNIFIED &&
+                it.sourceTags == mapOf(SourceKey.GELBOORU to listOf("rock & roll", "<seed>"), SourceKey.PIXIV to emptyList())
+        })
     } finally {
         database.close()
         if (phase == "read") context.deleteDatabase(databaseName)

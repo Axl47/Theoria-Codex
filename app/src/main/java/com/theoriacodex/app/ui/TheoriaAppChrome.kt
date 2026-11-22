@@ -93,7 +93,7 @@ internal const val NEW_TAB_DOT_TAG = "tab-new-dot"
 
 internal fun TopLevelDestination.icon() = when (this) {
     TopLevelDestination.Search -> Icons.Default.Search
-    // The mark For You searches carry in History; a heart read as Likes.
+    // Sparkles rather than a heart, which would read as Likes.
     TopLevelDestination.ForYou -> Icons.Default.AutoAwesome
     TopLevelDestination.Library -> Icons.Default.Collections
 }

@@ -682,15 +682,10 @@ internal class TheoriaShell(
             RecentSearchKind.MULTI_SEARCH -> SearchSourceScope.fromSources(entry.sources)
             RecentSearchKind.SOURCE,
             RecentSearchKind.UNIFIED,
-            RecentSearchKind.FYP,
             -> SearchSourceScope.fromQuery(entry.query)
         }
         routes.dispatchOrQueue(SearchAction.ApplyHistoricalQuery(query = entry.query, sourceScope = historicalScope))
         navigation.goToTab(TopLevelDestination.Search)
-    }
-
-    fun openHistoricalForYouSearch(entry: RecentSearchEntry) {
-        navigation.showTab(TopLevelDestination.ForYou)
     }
 
     /** Opens a finished download in a fresh Viewer session at the page that was saved. */
