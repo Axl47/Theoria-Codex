@@ -58,14 +58,11 @@ object MihonHost {
      */
     private class ExtensionApplication(private val base: Application) : Application() {
         private val opened = HashMap<String, FilePreferences>()
-        private val legacyMoved by lazy { moveLegacyPreferences(base) }
-
         init {
             attachBaseContext(base)
         }
 
         override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences = synchronized(opened) {
-            legacyMoved
             opened.getOrPut(name.orEmpty()) { FilePreferences(preferencesFile(base, name.orEmpty())) }
         }
     }
@@ -75,17 +72,13 @@ object MihonHost {
         File(File(context.noBackupFilesDir, PREFERENCES_DIRECTORY), URLEncoder.encode(name, "UTF-8") + ".json")
 
     /**
-     * Until 1.9.2 extension preferences were `shared_prefs/mihon_<name>.xml`, which Android backs up. Each is moved
-     * once, the first time an extension asks for any preferences. Removable two releases after the one that added it.
+     * Deletes the `shared_prefs/mihon_<name>.xml` files debug builds wrote before extensions reached a release, which
+     * Android backs up. Nothing is imported. Called by the app at startup, whether or not an extension ever loads.
      */
-    internal fun moveLegacyPreferences(context: Context) {
-        val legacy = File(context.dataDir, "shared_prefs").list().orEmpty()
-            .filter { it.startsWith(LEGACY_PREFERENCES_PREFIX) && it.endsWith(".xml") }.map { it.removeSuffix(".xml") }
-        legacy.forEach { name ->
-            val target = preferencesFile(context, name.removePrefix(LEGACY_PREFERENCES_PREFIX))
-            if (!target.exists()) FilePreferences(target).takeAll(context.getSharedPreferences(name, Context.MODE_PRIVATE).all)
-            context.deleteSharedPreferences(name)
-        }
+    fun deleteLegacyPreferences(context: Context) {
+        File(context.dataDir, "shared_prefs").list().orEmpty()
+            .filter { it.startsWith(LEGACY_PREFERENCES_PREFIX) && it.endsWith(".xml") }
+            .forEach { context.deleteSharedPreferences(it.removeSuffix(".xml")) }
     }
 
     private const val PREFERENCES_DIRECTORY = "mihon_preferences"
