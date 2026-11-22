@@ -27,20 +27,17 @@ suspend fun SeriesRepository.refresh(source: SeriesSource, series: Series): List
  * series whose source is missing or fails is skipped and the rest go on.
  */
 suspend fun SeriesRepository.checkFollowed(sources: List<SeriesSource>): List<SeriesUpdate> = coroutineScope {
-    val sourcesByKey = sources.associateBy(SeriesSource::key)
-    observeFollowed().first().groupBy { it.series.id.source }.mapNotNull { (key, followed) ->
-        val source = sourcesByKey[key] ?: return@mapNotNull null
-        async {
-            followed.mapNotNull { (series) ->
-                val newEntries = try {
-                    refresh(source, series)
-                } catch (error: CancellationException) {
-                    throw error
-                } catch (_: Exception) {
-                    emptyList()
-                }
-                if (newEntries.isEmpty()) null else SeriesUpdate(series, newEntries)
-            }
-        }
+    val followedBySource = observeFollowed().first().map(FollowedSeries::series).groupBy { it.id.source }
+    sources.mapNotNull { source ->
+        followedBySource[source.key]?.let { followed -> async { followed.mapNotNull { update(source, it) } } }
     }.awaitAll().flatten()
+}
+
+/** [series]' new entries after a refresh from [source]; null when it gained none or its source failed. */
+private suspend fun SeriesRepository.update(source: SeriesSource, series: Series): SeriesUpdate? = try {
+    refresh(source, series).takeIf { it.isNotEmpty() }?.let { SeriesUpdate(series, it) }
+} catch (error: CancellationException) {
+    throw error
+} catch (_: Exception) {
+    null
 }
