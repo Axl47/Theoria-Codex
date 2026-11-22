@@ -206,24 +206,21 @@ private fun SettingsHome(
     }
 }
 
+/** Where content comes from: sites, extensions, links, and the check for new chapters of followed series. */
 @Composable
-private fun SettingsHomeGroups(
+private fun SettingsSourcesGroup(
     state: SettingsUiState,
-    onAction: (SettingsAction) -> Unit,
-    storageSummary: String?,
     sites: SettingsSitesEntry?,
-    backup: SettingsBackupEntry?,
-    showDiagnostics: Boolean,
     seriesUpdates: Boolean,
     onOpenExtensions: (() -> Unit)?,
+    onOpenSites: () -> Unit,
     onSheet: (SettingsSheet) -> Unit,
 ) {
-    val open = { page: SettingsPage -> onAction(SettingsAction.OpenPage(page)) }
     SettingsGroup("Sources") {
         if (sites != null) {
             SettingsRow(
                 SettingDestinations.Sites.title, "${sites.summary} · ${sourceAccountsSummary(state.accounts)}", Icons.Default.Public,
-                onClick = { open(SettingsPage.SITES) },
+                onClick = onOpenSites,
             )
             SettingsRowDivider()
         }
@@ -240,6 +237,22 @@ private fun SettingsHomeGroups(
             )
         }
     }
+}
+
+@Composable
+private fun SettingsHomeGroups(
+    state: SettingsUiState,
+    onAction: (SettingsAction) -> Unit,
+    storageSummary: String?,
+    sites: SettingsSitesEntry?,
+    backup: SettingsBackupEntry?,
+    showDiagnostics: Boolean,
+    seriesUpdates: Boolean,
+    onOpenExtensions: (() -> Unit)?,
+    onSheet: (SettingsSheet) -> Unit,
+) {
+    val open = { page: SettingsPage -> onAction(SettingsAction.OpenPage(page)) }
+    SettingsSourcesGroup(state, sites, seriesUpdates, onOpenExtensions, { open(SettingsPage.SITES) }, onSheet)
     SettingsGroup("Viewing") {
         SettingsRow(SettingDestinations.Controls.title, "Search bar, seeking, swipes, rotation", Icons.Default.TouchApp, onClick = {
             onSheet(SettingsSheet.CONTROLS)
