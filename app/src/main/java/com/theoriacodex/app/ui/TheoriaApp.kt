@@ -404,13 +404,19 @@ private fun SaveToCodexOverlay(shell: TheoriaShell) {
                 pendingSave.clear()
             },
             onSelectCodex = { codexId ->
-                shell.owners.codexSaves.save(
-                    codexId = codexId,
-                    posts = posts,
-                    cacheFullImage = state.settings.cache.cacheFullImageOnSave,
-                    fromForYou = pendingSave.fromForYou,
-                )
-                pendingSave.searchSaves.record(pendingSave.query, codexId)
+                val pick = pendingSave.onPickExisting
+                val name = state.codicesByProfile.values.flatten().firstOrNull { it.codexId == codexId }?.name
+                if (pick != null && name != null) {
+                    pick(codexId, name)
+                } else {
+                    shell.owners.codexSaves.save(
+                        codexId = codexId,
+                        posts = posts,
+                        cacheFullImage = state.settings.cache.cacheFullImageOnSave,
+                        fromForYou = pendingSave.fromForYou,
+                    )
+                    pendingSave.searchSaves.record(pendingSave.query, codexId)
+                }
                 pendingSave.clear()
             },
             onDismiss = pendingSave::clear,
