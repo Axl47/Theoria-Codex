@@ -47,18 +47,16 @@ import com.theoriacodex.domain.model.Query
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-/**
- * The top-level tabs, side by side. They change from the bottom bar only: For You, the middle tab, is a swipe deck, so
- * a horizontal drag there decides a card, and a pager that also took drags from the bar, the chips or the grid would
- * change tab by accident.
- */
+/** The top-level tabs, side by side; a sideways swipe changes tab wherever [tabSwipeEnabled] allows it. */
 @Composable
 internal fun HomePager(shell: TheoriaShell) {
     val pagerState = shell.navigation.pagerState
+    val forYouGrid = shell.feedFabRestoreRegistry.state(FOR_YOU_FEED_FAB_CONTEXT)?.grid == true
     HorizontalPager(
         state = pagerState,
         modifier = Modifier.fillMaxSize(),
-        userScrollEnabled = false,
+        userScrollEnabled = tabSwipeEnabled(pagerState.settledPage, forYouGrid),
+        flingBehavior = topLevelPagerFling(pagerState),
     ) { page ->
         when (TopLevelDestination.entries[page]) {
             TopLevelDestination.Search -> SearchDestination(shell)

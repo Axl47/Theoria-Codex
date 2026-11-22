@@ -1,6 +1,5 @@
 package com.theoriacodex.app.journeys
 
-import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -16,10 +15,10 @@ import kotlinx.coroutines.flow.first
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** History rows claim only the leftward swipe: left removes the entry with Undo in place, right does nothing. */
+/** History rows claim only the leftward swipe: left removes the entry with Undo in place, right still pages tabs. */
 class HistorySwipeJourneyTest : AppJourneyFixture() {
     @Test
-    fun swipingASearchLeftRemovesItUntilUndoAndSwipingRightLeavesIt() {
+    fun swipingASearchLeftRemovesItUntilUndoAndSwipingRightChangesTab() {
         io {
             listOf("swipe-kept", "swipe-gone").forEach { tag ->
                 container.data.recentsRepository.recordSearch(
@@ -41,9 +40,8 @@ class HistorySwipeJourneyTest : AppJourneyFixture() {
         val kept = compose.onNodeWithTag("Recent search:swipe-kept")
         compose.waitUntil(10_000) { kept.isDisplayed() }
         kept.performTouchInput { swipeRight() }
-        compose.waitForIdle()
-        // Tabs change from the bottom bar only, and a rightward drag never removes an entry.
-        kept.assertIsDisplayed()
+        // The pager moved to For You; a rightward drag never removes an entry.
+        compose.waitUntil(10_000) { !kept.isDisplayed() }
         assertEquals(setOf("swipe-kept", "swipe-gone"), searches().toSet())
     }
 

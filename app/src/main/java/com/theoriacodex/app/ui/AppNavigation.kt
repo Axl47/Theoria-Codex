@@ -5,6 +5,9 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.gestures.TargetedFlingBehavior
+import androidx.compose.foundation.pager.PagerDefaults
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
@@ -43,6 +46,19 @@ internal object AppRoute {
     /** Joins the Codex ids of [TriageMode.RemoveFromCodex.alsoIn]; Codex ids never contain it. */
     const val TRIAGE_ID_SEPARATOR = ","
 }
+
+/** Slow tab swipes commit as readily as Viewer swipes; the library default needs half the screen. */
+@Composable
+internal fun topLevelPagerFling(state: PagerState): TargetedFlingBehavior =
+    PagerDefaults.flingBehavior(state = state, snapPositionalThreshold = TheoriaMotion.PAGE_COMMIT_FRACTION)
+
+/**
+ * Whether a sideways swipe changes tab from the tab the pager has settled on. Not while For You shows its deck, where
+ * a sideways drag decides a card; there the tabs change from the bottom bar only. For You's grid swipes like the other
+ * tabs, because a pager that takes no drags leaves them to end as taps on whatever they started on.
+ */
+internal fun tabSwipeEnabled(settledPage: Int, forYouGrid: Boolean): Boolean =
+    settledPage != TopLevelDestination.ForYou.ordinal || forYouGrid
 
 private val screenSlide = tween<IntOffset>(TheoriaMotion.SCREEN_MS)
 
