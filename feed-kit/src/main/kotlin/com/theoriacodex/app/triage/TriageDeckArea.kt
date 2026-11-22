@@ -120,7 +120,7 @@ internal fun TriageDeckArea(
     }
 }
 
-/** Where an upward drag can land: a suggested Codex, or More, which saves nothing and opens the picker instead. */
+/** Where an upward drag can land: a suggested Codex, or More, which opens the picker; the app saves what is picked there. */
 private sealed interface TriageSaveTarget {
     data class Codex(val suggestion: SaveSuggestion) : TriageSaveTarget
     data object More : TriageSaveTarget

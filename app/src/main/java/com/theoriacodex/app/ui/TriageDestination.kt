@@ -19,6 +19,7 @@ import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import com.theoriacodex.app.codex.LocalQuickSave
 import com.theoriacodex.app.triage.TriageCardSupport
+import com.theoriacodex.app.triage.TriageChoice
 import com.theoriacodex.app.triage.TriageDeckCallbacks
 import com.theoriacodex.app.triage.TriageDeckScreen
 import com.theoriacodex.app.triage.TriageDeckViewModel
@@ -165,16 +166,25 @@ internal fun TriageDestination(shell: TheoriaShell, request: TriageRequest) {
             viewModel = owner,
             query = query,
             support = support,
-            callbacks = TriageDeckCallbacks(
-                onOpenPost = { posts, index -> shell.openTriagePost(request, seed, query, posts, index) },
-                onOpenSavePicker = { post ->
-                    shell.requestSaveToCodex(post, fromForYou = request.source == ViewerStreamSource.FOR_YOU, searchQuery = query)
-                },
-                onClose = { shell.navController.popBackStack() },
-            ),
+            callbacks = shell.triageCallbacks(request, seed, query, owner),
         )
     }
 }
+
+/**
+ * The deck's links to the rest of the app. The picker hands a picked Codex back to the deck, which saves it itself, so
+ * the card moves on and Undo covers it like any other save.
+ */
+private fun TheoriaShell.triageCallbacks(request: TriageRequest, seed: TriageSeed, query: Query?, deck: TriageDeckViewModel) =
+    TriageDeckCallbacks(
+        onOpenPost = { posts, index -> openTriagePost(request, seed, query, posts, index) },
+        onOpenSavePicker = { post ->
+            pendingSave.request(listOf(post), fromForYou = request.source == ViewerStreamSource.FOR_YOU, searchQuery = query) { codexId, name ->
+                deck.decide(TriageChoice.Save(codexId, name), post.id)
+            }
+        },
+        onClose = { navController.popBackStack() },
+    )
 
 /**
  * Search is the one feed whose query the deck can read, while Search still shows the query the deck opened over;

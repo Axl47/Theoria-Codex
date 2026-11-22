@@ -223,11 +223,19 @@ internal class PendingCodexSave {
     var excludedCodexIds by mutableStateOf<Set<String>>(emptySet())
         private set
 
+    /**
+     * Set by a requester that saves a picked existing Codex itself, as the triage deck does so its Undo covers the
+     * save; the sheet then hands over the Codex's id and name instead of saving. A new Codex the sheet still saves.
+     */
+    var onPickExisting by mutableStateOf<((codexId: String, name: String) -> Unit)?>(null)
+        private set
+
     fun request(
         posts: List<Post>,
         fromForYou: Boolean = false,
         excludedCodexId: String? = null,
         searchQuery: Query? = null,
+        onPickExisting: ((codexId: String, name: String) -> Unit)? = null,
     ) {
         val uniquePosts = posts.distinctBy(Post::id)
         if (uniquePosts.isEmpty()) return
@@ -235,6 +243,7 @@ internal class PendingCodexSave {
         query = searchQuery
         this.fromForYou = fromForYou
         excludedCodexIds = setOfNotNull(excludedCodexId)
+        this.onPickExisting = onPickExisting
         visible = true
     }
 
@@ -244,6 +253,7 @@ internal class PendingCodexSave {
         query = null
         fromForYou = false
         excludedCodexIds = emptySet()
+        onPickExisting = null
     }
 }
 

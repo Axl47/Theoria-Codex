@@ -31,7 +31,10 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 
-/** What a deck does beyond swiping: the app opens a post's Viewer, the save picker, and closes the deck. */
+/**
+ * What a deck does beyond swiping: the app opens a post's Viewer, the save picker (whose pick it hands back to the
+ * deck as a [TriageChoice.Save]), and closes the deck.
+ */
 class TriageDeckCallbacks(
     val onOpenPost: (posts: List<Post>, index: Int) -> Unit,
     val onOpenSavePicker: (Post) -> Unit,
