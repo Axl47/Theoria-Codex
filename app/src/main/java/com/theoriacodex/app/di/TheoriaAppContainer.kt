@@ -1,5 +1,6 @@
 package com.theoriacodex.app.di
 
+import android.app.Application
 import com.theoriacodex.app.media.NetworkMonitor
 import com.theoriacodex.app.network.AppHttpClients
 import android.content.Context
@@ -113,10 +114,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -217,6 +222,7 @@ internal class DefaultTheoriaAppContainer(
     context: Context,
     private val cookieBridge: SiteCookieBridge,
     private val httpClients: AppHttpClients,
+    extensionHost: ExtensionSourceHost? = null,
 ) : TheoriaAppContainer {
     private val appContext = context.applicationContext
     private val storageDirectory = File(appContext.filesDir, "theoria_codex")
@@ -289,6 +295,7 @@ internal class DefaultTheoriaAppContainer(
         ),
         scope = durableStoreScope,
         publishMediaKeys = cookieBridge::updateMediaKeys,
+        extensionSources = extensionSources(extensionHost, appContext as Application),
     )
     /** Opened at the end of [awaitDurableStores]: restored downloads and offline jobs wait on it. */
     private val sourceReadiness = SourceReadiness(accountStore::refreshAvailability) { customSourceRuntime.awaitFirstBuild() }
@@ -578,3 +585,12 @@ private fun siteHosts(profiles: List<SiteProfile>): Set<String> = profiles.mapTo
 
 /** Matches the built-in client's read timeout; probes keep the custom client's 10 s default. */
 private const val CUSTOM_SITE_READ_TIMEOUT_MS = 20_000
+
+/** Stored sites are usable at once; extensions join when their code has loaded, off the main thread. */
+private fun extensionSources(host: ExtensionSourceHost?, application: Application): Flow<List<ExtensionSource>> {
+    if (host == null) return flowOf(emptyList())
+    return flow {
+        emit(emptyList())
+        emit(host.load(application))
+    }.flowOn(Dispatchers.IO)
+}

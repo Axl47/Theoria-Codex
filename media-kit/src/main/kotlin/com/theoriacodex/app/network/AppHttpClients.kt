@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import okhttp3.ConnectionPool
 import okhttp3.CookieJar
 import okhttp3.Dispatcher
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
@@ -29,6 +30,8 @@ class AppHttpClients(
     /** Hosts whose requests carry a browser identity, which a warm-up's fixed agent would misrepresent. */
     private val sharesBrowserIdentity: (host: String) -> Boolean = { false },
     private val siteAuthorization: (url: String) -> String? = { null },
+    /** Answers media requests only loaded extension code can fetch and passes the rest on; null outside debug builds. */
+    private val extensionMedia: Interceptor? = null,
 ) {
     private val warmed = AtomicBoolean(false)
 
@@ -50,6 +53,7 @@ class AppHttpClients(
     private val media: OkHttpClient by lazy {
         val keyRetry = RefusedMediaKeyRetry(siteAuthorization)
         shared.newBuilder()
+            .apply { extensionMedia?.let(::addInterceptor) }
             .addInterceptor { chain ->
                 val request = chain.request()
                 val agent = verifiedUserAgent(request.url.toString())
