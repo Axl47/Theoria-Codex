@@ -193,6 +193,7 @@ internal fun ViewerInfoSheet(
                     controls.setInfoSheetVisible(false)
                     controls.markInteraction()
                 },
+                levelQuery = saveToCodexQuery,
                 afterTags = {
                     commentsState?.let { state ->
                         val view = commentsView(
