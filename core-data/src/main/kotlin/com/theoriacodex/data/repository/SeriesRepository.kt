@@ -80,6 +80,14 @@ interface SeriesRepository {
      * still loading, when only the series' last opened entry is recorded.
      */
     suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?)
+
+    /**
+     * Replaces the stored series [from] with [to], the same work on another source, in one step: stores [to] with
+     * [entries] as [store] does, carries [from]'s settings and progress over by [carryProgress], and removes [from] with
+     * its entries. [to]'s entries are all stored as seen, so only entries listed after the move count as new. Does
+     * nothing when [from] is not stored or is [to].
+     */
+    suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>)
 }
 
 /** [this] after the user reached [page] of [pageCount]: an entry is read once its last page was reached, and stays read. */

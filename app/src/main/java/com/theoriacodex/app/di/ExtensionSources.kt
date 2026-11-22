@@ -3,7 +3,10 @@ package com.theoriacodex.app.di
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.data.repository.checkFollowed
+import com.theoriacodex.data.repository.switchSource
+import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesExtensions
+import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesSource
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -14,6 +17,8 @@ class SeriesDependencies(
     /** Every source that is on; loads their extensions on first use. */
     val sources: suspend () -> List<SeriesSource>,
     val extensions: SeriesExtensions,
+    /** Deletes a series' downloaded chapters; a series moved to another source no longer needs them. */
+    private val removeDownloads: suspend (SeriesId) -> Unit = {},
 ) {
     private val checking = Mutex()
 
@@ -24,4 +29,8 @@ class SeriesDependencies(
      */
     suspend fun checkFollowed(onUpdate: suspend (SeriesUpdate) -> Unit = {}): List<SeriesUpdate> =
         checking.withLock { repository.checkFollowed(sources, onUpdate) }
+
+    /** Moves the stored series [from] to [to] on [source], with its settings and progress; see [switchSource]. */
+    suspend fun switchSource(from: SeriesId, source: SeriesSource, to: Series) =
+        repository.switchSource(from, source, to, removeDownloads)
 }

@@ -158,4 +158,5 @@ private object NothingStored : SeriesRepository {
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) = Unit
+    override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) = Unit
 }

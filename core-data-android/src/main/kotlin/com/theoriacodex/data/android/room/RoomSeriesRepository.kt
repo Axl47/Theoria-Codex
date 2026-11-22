@@ -5,6 +5,7 @@ import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
+import com.theoriacodex.data.repository.carryProgress
 import com.theoriacodex.data.repository.withProgress
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.SourceKey
@@ -50,15 +51,17 @@ class RoomSeriesRepository(
     override suspend fun entries(id: SeriesId): List<StoredSeriesEntry> =
         withContext(Dispatchers.IO) { dao.entries(id.source.id, id.address) }.map(SeriesEntryEntity::toStored)
 
-    override suspend fun store(series: Series, entries: List<SeriesEntry>?): List<SeriesEntry> {
+    override suspend fun store(series: Series, entries: List<SeriesEntry>?): List<SeriesEntry> =
+        database.withTransaction { write(series, entries) }
+
+    /** [store]'s work. Must run in a transaction. */
+    private fun write(series: Series, entries: List<SeriesEntry>?): List<SeriesEntry> {
         val id = series.id
-        return database.withTransaction {
-            val before = dao.series(id.source.id, id.address)?.toStored() ?: StoredSeries(series)
-            val stored = before.copy(series = series.keeping(before.series))
-            if (!entries.isNullOrEmpty()) return@withTransaction storeEntries(stored, entries)
-            dao.upsertSeries(stored.toEntity())
-            emptyList()
-        }
+        val before = dao.series(id.source.id, id.address)?.toStored() ?: StoredSeries(series)
+        val stored = before.copy(series = series.keeping(before.series))
+        if (!entries.isNullOrEmpty()) return storeEntries(stored, entries)
+        dao.upsertSeries(stored.toEntity())
+        return emptyList()
     }
 
     override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>): List<SeriesEntry> = database.withTransaction {
@@ -106,6 +109,20 @@ class RoomSeriesRepository(
             if (series.lastOpenedEntry != entryAddress) dao.upsertSeries(series.copy(lastOpenedEntry = entryAddress).toEntity())
             val progressed = if (pageCount == null || pageCount <= 0) entry else entry.withProgress(page, pageCount)
             if (progressed != entry) dao.upsertEntries(listOf(progressed.toEntity(id)))
+        }
+    }
+
+    override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) {
+        if (from == to.id) return
+        database.withTransaction {
+            val old = dao.series(from.source.id, from.address)?.toStored() ?: return@withTransaction
+            val oldEntries = dao.allEntries(from.source.id, from.address).map(SeriesEntryEntity::toStored)
+            write(to, entries)
+            val target = dao.series(to.id.source.id, to.id.address).toStored()
+            val (moved, changed) = carryProgress(old, oldEntries, target, dao.entries(to.id.source.id, to.id.address).map(SeriesEntryEntity::toStored))
+            if (moved != target) dao.upsertSeries(moved.toEntity())
+            dao.upsertEntries(changed.map { it.toEntity(to.id) })
+            dao.deleteSeries(from.source.id, from.address)
         }
     }
 

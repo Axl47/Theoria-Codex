@@ -213,8 +213,8 @@ class SeriesTabViewModel(
     private fun source(key: SourceKey) = state.value.sources?.firstOrNull { it.key == key }
 }
 
-/** A source's first page as a listing; any failure but cancellation becomes [SeriesListing.Failed]. */
-private suspend fun firstPage(load: suspend () -> SeriesPage): SeriesListing = try {
+/** A source's first page as a listing; any failure but cancellation becomes [SeriesListing.Failed]. Also the Switch source sheet's search. */
+internal suspend fun firstPage(load: suspend () -> SeriesPage): SeriesListing = try {
     load().let { SeriesListing.Loaded(it.series, nextPage = 2.takeIf { _ -> it.hasNextPage }) }
 } catch (error: CancellationException) {
     throw error

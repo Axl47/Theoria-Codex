@@ -54,10 +54,21 @@ internal fun SeriesPageDestination(shell: TheoriaShell, entry: NavBackStackEntry
     val viewModel = viewModel {
         SeriesPageViewModel(id, series.repository, series.sources, series.extensions.revision)
     }
+    val switchSource = viewModel {
+        SwitchSourceViewModel(id, series.sources, series.extensions.revision, store = { series.repository.store(it) }) { source, to ->
+            series.switchSource(id, source, to)
+        }
+    }
     SeriesPageScreen(
         viewModel = viewModel,
         onBack = { shell.navController.popBackStack() },
         onOpenExtensions = shell::openExtensions,
+        switchSource = switchSource,
+        onOpenSeries = { opened -> shell.navController.navigate(AppRoute.series(opened)) },
+        // The old series is gone, so its page leaves the back stack.
+        onSwitched = { moved ->
+            shell.navController.navigate(AppRoute.series(moved)) { popUpTo(entry.destination.id) { inclusive = true } }
+        },
         onOpenEntry = { address ->
             shell.scope.launch {
                 shell.seriesReader?.session(id, address)?.let { session -> shell.launchViewer(session, saveContext = false, singleTop = true) }
