@@ -64,7 +64,7 @@ class TrailSpecsTest {
 
         val everywhere = trailTagQuery("dog", SourceKey.DANBOORU, unified)
         assertEquals(QueryMode.Unified to SortMode.POPULAR, everywhere.mode to everywhere.sort)
-        assertEquals(listOf("dog"), everywhere.includeTags)
+        assertEquals(listOf("cat", "dog"), everywhere.includeTags)
 
         val local = trailTagQuery("dog", SourceKey.DANBOORU, context = null)
         assertEquals(QueryMode.Source(SourceKey.DANBOORU) to SortMode.NEWEST, local.mode to local.sort)
@@ -77,7 +77,7 @@ class TrailSpecsTest {
             .copy(media = MediaFilter.ANIMATED)
 
         val fork = trailTagQuery("dog", SourceKey.DANBOORU, level)
-        assertEquals(listOf("dog"), fork.includeTags)
+        assertEquals(listOf("cat", "dog"), fork.includeTags)
         assertEquals(listOf("comic"), fork.excludeTags)
         assertEquals(Triple(MediaFilter.ANIMATED, dates, SortMode.TOP), Triple(fork.media, fork.dateRange, fork.sort))
 
@@ -93,6 +93,50 @@ class TrailSpecsTest {
         val fork = trailTagQuery("dog", SourceKey.DANBOORU, level, termLimit = SearchTermLimit(maxTerms = 2, rankedSortUsesTerm = true))
 
         assertEquals(listOf("dog") to emptyList<String>(), fork.includeTags to fork.excludeTags)
+    }
+
+    @Test
+    fun `a tag trail narrows its level's search, keeping the tag last and its mode, media and sort`() {
+        val level = Query(QueryMode.Source(SourceKey.DANBOORU), listOf("genshin_impact"), emptyList(), SortMode.TOP, null, null)
+            .copy(media = MediaFilter.ANIMATED)
+
+        val fork = trailTagQuery("blush", SourceKey.DANBOORU, level)
+
+        assertEquals(listOf("genshin_impact", "blush"), fork.includeTags)
+        assertEquals(Triple(QueryMode.Source(SourceKey.DANBOORU), MediaFilter.ANIMATED, SortMode.TOP), Triple(fork.mode, fork.media, fork.sort))
+    }
+
+    @Test
+    fun `a tag the level already searches is not added twice, and forking again appends again`() {
+        val level = Query(QueryMode.Unified, listOf("cat", "dog"), emptyList(), SortMode.NEWEST, null, null)
+
+        assertEquals(listOf("cat", "dog"), trailTagQuery("DOG", SourceKey.DANBOORU, level).includeTags.map(String::lowercase))
+
+        val first = trailTagQuery("blush", SourceKey.DANBOORU, level)
+        assertEquals(listOf("cat", "dog", "blush"), trailTagQuery("blush", SourceKey.DANBOORU, level).includeTags)
+        assertEquals(listOf("cat", "dog", "blush", "smile"), trailTagQuery("smile", SourceKey.DANBOORU, first).includeTags)
+    }
+
+    @Test
+    fun `a tag trail from another source's level searches the tag alone`() {
+        val level = Query(QueryMode.Source(SourceKey.DANBOORU), listOf("cat"), emptyList(), SortMode.NEWEST, null, null)
+
+        assertEquals(listOf("fox"), trailTagQuery("fox", SourceKey.GELBOORU, level).includeTags)
+    }
+
+    @Test
+    fun `a narrowed trail over its source's limit keeps the tag, then the level's tags in order, then exclusions`() {
+        val level = Query(QueryMode.Source(SourceKey.DANBOORU), listOf("cat", "dog"), listOf("comic"), SortMode.NEWEST, null, null)
+
+        val two = trailTagQuery("blush", SourceKey.DANBOORU, level, termLimit = SearchTermLimit(maxTerms = 2))
+        assertEquals(listOf("cat", "blush") to emptyList<String>(), two.includeTags to two.excludeTags)
+
+        val four = trailTagQuery("blush", SourceKey.DANBOORU, level, termLimit = SearchTermLimit(maxTerms = 4))
+        assertEquals(listOf("cat", "dog", "blush") to listOf("comic"), four.includeTags to four.excludeTags)
+
+        // A Unified trail is split per source, so the limit does not apply to it.
+        val unified = trailTagQuery("blush", SourceKey.DANBOORU, level.copy(mode = QueryMode.Unified), termLimit = SearchTermLimit(maxTerms = 1))
+        assertEquals(listOf("cat", "dog", "blush"), unified.includeTags)
     }
 
     @Test

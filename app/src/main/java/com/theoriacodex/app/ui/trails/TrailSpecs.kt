@@ -16,6 +16,8 @@ import com.theoriacodex.domain.model.MediaFilter
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.query.SearchTermLimit
@@ -54,10 +56,13 @@ internal fun trailSpec(
 }
 
 /**
- * One tag, searched where the level it came from searched (everywhere for a Unified level, else the post's own source)
- * and under that level's filters: its sort, dates and, where it searched the same place, its exclusions. It asks for
- * animated posts when the level's query did or the level shows only animated posts ([animatedOnly]); a Creator or
- * Similar level has no query to say so. A single-source trail drops the exclusions that would overrun [termLimit].
+ * The level's search narrowed by one more tag: [tag], added to the include groups of the [context] level it came from
+ * (nothing is added twice), and searched where that level searched (everywhere for a Unified level, else the post's own
+ * source) under its filters: sort, dates and, where it searched the same place, its exclusions, minus [tag] itself. A
+ * tag forked again from the trail appends again. It asks for animated posts when the level's query did or the level shows
+ * only animated posts ([animatedOnly]); a Creator or Similar level has no query, so it searches [tag] alone. A
+ * single-source trail that would overrun [termLimit] keeps [tag] first, then the level's include groups in order, then the
+ * exclusions that still fit.
  */
 internal fun trailTagQuery(
     tag: String,
@@ -67,16 +72,18 @@ internal fun trailTagQuery(
     termLimit: SearchTermLimit? = null,
 ): Query {
     val mode = if (context?.mode == QueryMode.Unified) QueryMode.Unified else QueryMode.Source(source)
-    // Another source's exclusions may name tags this one spells differently, so they stay with their level.
-    val excluded = if (context != null && context.mode == mode) {
-        context.excludeTerms.filterNot { it.value.equals(tag, ignoreCase = true) }
-    } else {
-        emptyList()
-    }
+    // Another source's terms may name tags this one spells differently, so they stay with their level.
+    val level = context?.takeIf { it.mode == mode }
+    val excluded = level?.excludeTerms.orEmpty().filterNot { it.value.equals(tag, ignoreCase = true) }
+    val earlier = level?.includeTermGroups.orEmpty()
+        .filterNot { group -> group.terms.singleOrNull()?.value.equals(tag, ignoreCase = true) }
     val media = if (animatedOnly || context?.media == MediaFilter.ANIMATED) MediaFilter.ANIMATED else MediaFilter.ANY
-    return Query(mode, listOf(tag), emptyList(), context?.sort ?: SortMode.NEWEST, context?.dateRange, null)
+    val tagGroup = SearchTermGroup.single(SearchTerm(tag))
+    val query = Query(mode, listOf(tag), emptyList(), context?.sort ?: SortMode.NEWEST, context?.dateRange, null)
         .copy(excludeTerms = excluded, media = media)
-        .withinTermLimit(termLimit.takeIf { mode is QueryMode.Source })
+    // The limit keeps leading groups, so it sees the tag first; the result reads as the level's tags, then the new one.
+    val limited = query.withIncludeTermGroups(listOf(tagGroup) + earlier).withinTermLimit(termLimit.takeIf { mode is QueryMode.Source })
+    return limited.withIncludeTermGroups(limited.includeTermGroups.drop(1) + tagGroup)
 }
 
 /**
