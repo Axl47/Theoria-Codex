@@ -52,13 +52,12 @@ private fun SearchDestination(shell: TheoriaShell) {
     val routes = shell.routes
     BrowsingDestinationStateBoundary(shell.data, shell.sources) { state ->
         val fabRestoreState = shell.feedFabRestoreRegistry.state(SEARCH_FEED_FAB_CONTEXT) ?: return@BrowsingDestinationStateBoundary
-        val omnibox = rememberSearchOmniboxEntries(shell, state)
         SearchRoute(
             coordinator = shell.features.search,
             relatedPostsLoader = shell.features.relatedPosts,
             mediaDurationCoordinator = shell.features.mediaDurationCoordinator,
             pixivUgoiraClient = shell.sources.pixivUgoiraClient,
-            config = searchRouteConfig(shell, state).copy(omnibox = omnibox),
+            config = searchRouteConfig(shell, state).copy(omnibox = { rememberSearchOmniboxEntries(shell, state) }),
             fabRestoreState = fabRestoreState,
             onFabRestoreStateChange = { updated -> shell.feedFabRestoreRegistry.update(SEARCH_FEED_FAB_CONTEXT, updated) },
             callbacks = SearchRouteCallbacks(

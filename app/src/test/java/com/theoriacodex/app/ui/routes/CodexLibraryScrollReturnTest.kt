@@ -134,7 +134,7 @@ class CodexLibraryScrollReturnTest {
                     val navigation = rememberNavController()
                     NavHost(navigation, startDestination = "library") {
                         composable("library") {
-                            CodexDestinationStateBoundary(data, graph.sources, 0) { state ->
+                            CodexDestinationStateBoundary(data, graph.sources) { state ->
                                 CodexListScreen(
                                     codices = state.visibleCodices,
                                     itemCounts = state.itemCounts,

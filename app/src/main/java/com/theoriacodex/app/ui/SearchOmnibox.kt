@@ -2,8 +2,6 @@ package com.theoriacodex.app.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import com.theoriacodex.app.codex.CodexCollectionPresentation
-import com.theoriacodex.app.codex.CodexCollectionSource
 import com.theoriacodex.app.codex.codexBelongsToProfile
 import com.theoriacodex.app.codex.codexPostCount
 import com.theoriacodex.app.codex.markSavedSearchesSeen
@@ -13,13 +11,13 @@ import com.theoriacodex.app.search.omnibox.OmniboxKind
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.navigation.LocalHiddenTagsOpener
 import com.theoriacodex.app.ui.routes.BrowsingDestinationState
+import com.theoriacodex.app.ui.routes.rememberCodexCollection
 import com.theoriacodex.app.ui.routes.rememberRetained
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.data.repository.SettingDestinations
-import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CreatorProfile
 import kotlinx.coroutines.launch
 
@@ -36,10 +34,7 @@ internal fun rememberSearchOmniboxEntries(shell: TheoriaShell, state: BrowsingDe
     val profileId = state.activeProfile.profileId
     val allCodices = rememberRetained("omnibox-codices") { shell.data.codexRepository.observeCodices() }.value.orEmpty()
     val codices = remember(allCodices, profileId) { allCodices.filter { codexBelongsToProfile(it.codexId, profileId) } }
-    val codexIds = remember(codices) { codices.mapTo(linkedSetOf(), Codex::codexId) }
-    val collection = rememberRetained("omnibox-codex-collection:$codexIds") {
-        with(shell.data) { CodexCollectionSource(codexRepository, storageDirectory, cacheRepository).observe(codexIds) }
-    }.value ?: CodexCollectionPresentation()
+    val collection = rememberCodexCollection(shell.data)
     val recents = rememberRetained("omnibox-recent-searches") { shell.data.recentsRepository.observeSearches() }.value.orEmpty()
     val watched = rememberRetained("omnibox-watched-posts") { shell.data.recentsRepository.observeWatchedPosts() }.value.orEmpty()
     val saved = shell.savedSearches

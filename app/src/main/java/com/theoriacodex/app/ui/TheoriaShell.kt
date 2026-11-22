@@ -12,12 +12,10 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -335,7 +333,6 @@ internal class TheoriaShell(
     savedSearches: State<List<SavedSearchEntry>>,
     pendingLikePostIds: State<Map<String, Set<PostId>>>,
     pendingCreatorProfile: MutableState<CreatorProfile?>,
-    thumbnailCacheGeneration: MutableIntState,
 ) {
     val data = container.data
     val sources = container.sources
@@ -346,7 +343,6 @@ internal class TheoriaShell(
     val savedSearches by savedSearches
     val pendingLikePostIds by pendingLikePostIds
     var pendingCreatorProfile by pendingCreatorProfile
-    var thumbnailCacheGeneration by thumbnailCacheGeneration
     var navReady by mutableStateOf(appShellOwner.state.value.appReady)
     val creatorOpening = CreatorOpeningWorkflow(sources.registry, sources.httpClient)
     private val fileCopies = FileCopyLookup(sources.registry)
@@ -737,7 +733,6 @@ internal fun rememberTheoriaShell(
     val pendingLikePostIds = owners.postMutations.pendingLikePostIds.collectAsStateWithLifecycle()
     val homeTabRoute = rememberSaveable { mutableStateOf(TopLevelDestination.Search.route) }
     val pendingCreatorProfile = rememberSaveable(stateSaver = CreatorProfileStateSaver) { mutableStateOf<CreatorProfile?>(null) }
-    val thumbnailCacheGeneration = rememberSaveable { mutableIntStateOf(0) }
     val pagerState = rememberPagerState(pageCount = { TopLevelDestination.entries.size })
     val routes = remember { RouteOwners() }
     val pendingSave = remember { PendingCodexSave() }
@@ -747,7 +742,6 @@ internal fun rememberTheoriaShell(
         TheoriaShell(
             container, viewerSessions, appShellOwner, appContext, scope, snackbarHostState, registry, transfers, owners,
             codexImportLauncher, routes, navigation, pendingSave, overlays, savedSearches, pendingLikePostIds, pendingCreatorProfile,
-            thumbnailCacheGeneration,
         )
     }
 }
