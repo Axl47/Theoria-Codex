@@ -8,7 +8,8 @@ import okhttp3.Response
 
 /*
  * The shared library compiled into every extension rebuilds the host's HTTP client, and refuses to run unless it
- * finds interceptors with these three simple class names in it. Renaming or removing one breaks every extension.
+ * finds interceptors with these three simple class names in it (the third, `CloudflareInterceptor`, has a file of its
+ * own). Renaming or removing one breaks every extension.
  */
 
 /** Turns any failure later in the chain into an `IOException`, the only kind OkHttp hands back to a caller. */
@@ -23,12 +24,4 @@ class UserAgentInterceptor(private val defaultUserAgentProvider: () -> String) :
         if (!request.header("User-Agent").isNullOrEmpty()) return chain.proceed(request)
         return chain.proceed(request.newBuilder().header("User-Agent", defaultUserAgentProvider()).build())
     }
-}
-
-/**
- * Present only because extensions look for it by name. Mihon's version opens a WebView to pass a Cloudflare
- * challenge; this one passes requests through, so a challenged site answers 403 here.
- */
-class CloudflareInterceptor : Interceptor {
-    override fun intercept(chain: Interceptor.Chain): Response = chain.proceed(chain.request())
 }

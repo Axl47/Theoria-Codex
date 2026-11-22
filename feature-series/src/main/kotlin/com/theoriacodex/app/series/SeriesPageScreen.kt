@@ -53,7 +53,6 @@ import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.ui.components.EmptyState
-import com.theoriacodex.app.ui.components.ErrorState
 import com.theoriacodex.app.ui.components.LoadingState
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.data.repository.ChapterDownload
@@ -83,7 +82,7 @@ fun SeriesPageScreen(
     onOpenSeries: (SeriesId) -> Unit,
     onSwitched: (SeriesId) -> Unit,
     modifier: Modifier = Modifier,
-) {
+) = BrowserCheckScope {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     // New chapters of followed series are announced, so each follow asks for the permission while it is missing.
@@ -110,8 +109,9 @@ fun SeriesPageScreen(
             val failure = state.failure
             when {
                 missing -> item("missing") { MissingSourceRow(onOpenExtensions) }
-                failure != null && state.entries.isEmpty() -> item("failure") { ErrorState(failure, onRetry = viewModel::refresh) }
-                failure != null -> item("failure") { FailureRow(viewModel::refresh, Modifier.padding(horizontal = 16.dp), failure) }
+                failure != null -> item("failure") {
+                    SourceLoadFailure(failure, state.browserCheck, state.sourceName, viewModel::refresh, Modifier.padding(horizontal = 16.dp), compact = state.entries.isNotEmpty())
+                }
                 state.refreshing && state.entries.isEmpty() -> item("loading") { LoadingState() }
                 state.entries.isEmpty() -> item("empty") { EmptyState("No chapters") }
             }

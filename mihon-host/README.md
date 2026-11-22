@@ -66,6 +66,27 @@ file it asks for by Mihon's name, `source_<id>`; the host hands extensions an `A
 file as JSON under `noBackupFilesDir/mihon_preferences` (`FilePreferences`), so extension files cannot be mistaken
 for the app's own.
 
+**Browser checks.** The extensions' HTTP client keeps its cookies in the system WebView's store, for every host, as
+Mihon's does: extensions are written against that, and many keep a session in cookies. It is not limited to the hosts
+the app's own clients may send browser cookies to (`SiteCookieBridge`), since extension code runs in the app's process
+and could read the store anyway. When Cloudflare answers with its challenge (403 or 503 from its server, marked
+`cf-mitigated: challenge`; a hard block or a maintenance page passes through untouched), `CloudflareInterceptor` does
+what Mihon's does: it drops the clearance cookie the challenged request carried, loads the challenged address in a
+WebView no one sees, with the request's agent and only the headers a browser would send itself (language, referrer),
+waits up to 10 s for a new clearance cookie, stores it to disk, and sends the original request once more. A check it
+cannot pass fails with `BrowserCheckException`, which the source reports as `BROWSER_CHECK` with the address and agent.
+The Series tab's listings (popular, latest and filtered) and search results, on their first or a later page, and the
+series page then offer Open check: a full-screen in-app browser with that agent, showing the host it is on, which
+closes itself and loads again once the site lets a page through or a new clearance cookie arrives (the address checked
+can be an endpoint that answers a browser with an error even after the check). If the site let the browser through but
+still refuses the app, the failure shows as an ordinary one for five minutes, since a browser cannot help. Cloudflare
+accepts a clearance only from the network address it was earned from, so the client connects over the address family
+the WebView uses (`BrowserAddressDns`): where IPv6 and IPv4 leave the device from different addresses, OkHttp's usual
+IPv6-first race would otherwise send the cookie from the other one and be refused. A host whose check failed out of sight fails at once for five minutes, or
+until it answers without a challenge, so a screen of covers or the background chapter check does not wait once per
+request. Every wait ends when the call is cancelled. A missing or updating WebView, or one whose renderer dies, counts
+as a failed check, never a crash.
+
 **Android's backup and device transfer.** Neither carries extension data. The choices (which extensions are on, their
 languages) and every extension's preferences, which can hold a server's address and password, are in
 `noBackupFilesDir`, which Android never backs up or copies to a new phone, and are read from nowhere else. Debug
@@ -80,7 +101,7 @@ once more.
 | `ExtensionRegistry` | same | The rule for what runs: loads the extensions that are on, on first use, each with 15 s to finish, and offers the sources of the languages that are on; only those sources fetch images. One that hangs or fails is left out and says why on the Extensions page. Settings are read only for the extension whose page is open. |
 | `ExtensionLoader` | same | Loads an installed package's code from its own APK; a folder file is first copied to a private read-only file (Android refuses writable code) and the copy's signer checked again. |
 | `SourceSettings`, `androidx/preference` | same | Reads a source's settings out of the holder classes and stores a changed value where the source reads it. |
-| `MihonHost` | same | Gives extensions what they ask the service locator for: the application, a `Json`, and an HTTP client. |
+| `MihonHost` | same | Gives extensions what they ask the service locator for: the application, a `Json`, and an HTTP client. The client shares the system WebView's cookies for every host, as Mihon's does (see "Browser checks"). |
 | `MihonSeriesSource` | same | Presents one extension source as the app's `SeriesSource` (`core-domain`): popular, latest and search list series, a series has details and chapters, and a chapter gives its pages when it is opened. A source's search filters become the app's `SeriesFilter`s (`MihonFilters.kt`); a search sets the values chosen onto a list the source makes afresh, matching each by place, kind and name, and leaves one that no longer lines up at the source's default; later pages of the same search reuse that list, as Mihon does. |
 | `ExtensionImages` | same | Fetches covers and pages through the extension's own HTTP client. Each address handed to the image loader ends in a `#mihon=` tag naming the source, with a code only this install can compute; an interceptor on the app's media client answers those. Stored covers are plain addresses: the series' source tags one each time it is drawn (`SeriesSource.coverAddress`), and without its source a cover loads as an ordinary request. |
 | App seam | `app/.../extensions/MihonExtensionSourceHost.kt`, `app/.../di/ExtensionSources.kt` | The application creates the host. Nothing loads at startup: the extensions that are on load once, off the main thread, the first time the Series tab asks for sources or an image address ending in `#mihon=` is requested. The manifest holds `QUERY_ALL_PACKAGES`, as Mihon does: extension packages share only a declared feature, which a `<queries>` element cannot match. |
@@ -221,7 +242,7 @@ took 4 to 12 s: the covers go through the same rate-limited client, and the View
 
 **Ten more extensions through the harness.** Seven listed, opened a series and fetched a page image. One more
 opened a series after a host fix (its details page returns no title, which Mihon tolerates) but could not fetch a
-page: the site's own image link was dead. One sits behind a browser challenge, which needs the missing Cloudflare support. One gets HTTP 403 for page
+page: the site's own image link was dead. One sat behind a browser challenge, which the host then could not pass (see "Browser checks"). One gets HTTP 403 for page
 images through its own client while a plain request succeeds; whether Mihon gets the same was not checked.
 
 **How the sample was measured.** The 300 were drawn at random from the index (seed 20261122). Each APK's references
@@ -243,7 +264,11 @@ What the feature still lacks.
   extension builds its requests from addresses as it likes and may talk to several hosts, so the app has no origin to
   check them against. A backup edited by hand can thus make an approved extension request another host; the boundary
   is trust in the extension and in the file being restored.
-- **Cloudflare.** `CloudflareInterceptor` is an empty stand-in. A site behind a browser challenge answers 403.
+- **One browser identity.** Extensions, Custom Sites and the in-app browser share the WebView's one cookie store, so
+  an extension and a Custom Site on the same host share that host's cookies.
+- **Browser checks in the background and in the Viewer.** The new-chapter job cannot show a check, so a followed series
+  behind one is skipped that round; a chapter page that fails a check inside the Viewer shows the Viewer's usual
+  failure.
 - **A JavaScript engine, protobuf and extra image decoders**, used by about 2% of extensions.
 - **Installing and updating extensions.** There is no repository browser and no update check.
 - **Other extension API versions.** Only extension API 1.6 loads, which is all the index held.

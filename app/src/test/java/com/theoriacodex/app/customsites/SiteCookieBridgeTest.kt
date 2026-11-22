@@ -2,6 +2,7 @@ package com.theoriacodex.app.customsites
 
 import com.theoriacodex.domain.source.SiteAddress
 import com.theoriacodex.domain.source.SiteAddressParse
+import com.theoriacodex.sources.http.BrowserCookieStore
 import okhttp3.Cookie
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
@@ -31,7 +32,7 @@ internal class FakeBrowserCookieStore : BrowserCookieStore {
         flushes++
     }
 
-    override fun expireAll(url: String) {
+    override fun expire(url: String, name: String?) {
         check(!throwing) { "WebView unavailable" }
         expired += url
     }

@@ -8,7 +8,7 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.decode.ImageDecoderDecoder
 import coil.disk.DiskCache
-import com.theoriacodex.app.customsites.AndroidBrowserCookieStore
+import com.theoriacodex.app.network.AndroidBrowserCookieStore
 import com.theoriacodex.app.customsites.SiteCookieBridge
 import com.theoriacodex.app.customsites.SiteCookieBridgeOwner
 import com.theoriacodex.app.di.DefaultTheoriaAppContainer

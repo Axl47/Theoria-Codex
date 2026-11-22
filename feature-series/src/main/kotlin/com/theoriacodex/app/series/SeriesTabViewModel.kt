@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.theoriacodex.app.ui.sourceFailureDetail
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
+import com.theoriacodex.domain.adapter.BrowserCheck
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
@@ -34,14 +35,19 @@ import kotlinx.coroutines.launch
 sealed interface SeriesListing {
     data object Loading : SeriesListing
 
-    data class Failed(val message: String) : SeriesListing
+    /** [browserCheck] is where the source's browser check can be passed, when one is what failed. */
+    data class Failed(val message: String, val browserCheck: BrowserCheck? = null) : SeriesListing
 
-    /** [nextPage] is null once the source has no more; [moreFailed] holds the next page back until Retry. */
+    /**
+     * [nextPage] is null once the source has no more; [moreFailed] holds the next page back until Retry, and
+     * [moreCheck] says where its browser check can be passed when one is what failed.
+     */
     data class Loaded(
         val series: List<Series>,
         val nextPage: Int?,
         val loadingMore: Boolean = false,
         val moreFailed: Boolean = false,
+        val moreCheck: BrowserCheck? = null,
     ) : SeriesListing
 }
 
@@ -262,7 +268,7 @@ class SeriesTabViewModel(
         val source = source(browse.key) ?: return
         val kind = state.value.browseKind
         val run = state.value.browseRun
-        updateBrowse(run, loaded.copy(loadingMore = true, moreFailed = false))
+        updateBrowse(run, loaded.copy(loadingMore = true, moreFailed = false, moreCheck = null))
         viewModelScope.launch {
             val next = loaded.withPage(page) { source.list(kind, it) }
             updateBrowse(run, next)
@@ -276,7 +282,7 @@ class SeriesTabViewModel(
         val page = loaded.nextPage?.takeUnless { loaded.loadingMore } ?: return
         val source = source(key) ?: return
         val run = searchRun
-        updateSearch(key, run, loaded.copy(loadingMore = true, moreFailed = false))
+        updateSearch(key, run, loaded.copy(loadingMore = true, moreFailed = false, moreCheck = null))
         viewModelScope.launch {
             val next = loaded.withPage(page) { source.search(query, it) }
             if (source(key) === source) updateSearch(key, run, next)
@@ -365,21 +371,30 @@ internal suspend fun firstPage(load: suspend () -> SeriesPage): SeriesListing = 
 } catch (error: CancellationException) {
     throw error
 } catch (error: Exception) {
-    SeriesListing.Failed(failureLine(error))
+    SeriesListing.Failed(failureLine(error), browserCheckOf(error))
 }
 
 /** [this] with page [page] from [load] added; a failure keeps what is loaded and holds that page back until Retry. */
 private suspend fun SeriesListing.Loaded.withPage(page: Int, load: suspend (Int) -> SeriesPage): SeriesListing.Loaded = try {
     val more = load(page)
-    copy(series = (series + more.series).distinctBy(Series::id), nextPage = (page + 1).takeIf { more.hasNextPage }, loadingMore = false)
+    copy(
+        series = (series + more.series).distinctBy(Series::id),
+        nextPage = (page + 1).takeIf { more.hasNextPage },
+        loadingMore = false,
+        moreFailed = false,
+        moreCheck = null,
+    )
 } catch (error: CancellationException) {
     throw error
-} catch (_: Exception) {
-    copy(loadingMore = false, moreFailed = true)
+} catch (error: Exception) {
+    copy(loadingMore = false, moreFailed = true, moreCheck = browserCheckOf(error))
 }
 
 /** What the screen says about [error]: a line for its reason, never the exception's own text. */
 internal fun failureLine(error: Exception): String = sourceFailureDetail((error as? SourceAdapterException)?.reason)
+
+/** Where the browser check that stopped [error] can be passed, when one did. */
+internal fun browserCheckOf(error: Exception): BrowserCheck? = (error as? SourceAdapterException)?.browserCheck
 
 private const val SAVED_SEARCH = "search"
 private const val SAVED_BROWSE = "browse"
