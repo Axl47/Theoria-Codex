@@ -2,59 +2,79 @@ package com.theoriacodex.app.recommend
 
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.recommendation.RecommendationTagNormalization
-import com.theoriacodex.domain.recommendation.TagAffinityStats
 import com.theoriacodex.domain.recommendation.TagAffinityBuilder
-import kotlin.math.ln
-import kotlin.math.sqrt
+import com.theoriacodex.domain.recommendation.sharesBooruVocabulary
+import com.theoriacodex.domain.tags.normalizeMatchToken
+import kotlin.math.abs
 import kotlin.random.Random
 
 data class ForYouInterest(val tags: List<String>)
 
-/** Keep co-occurring interests together; provider counts reduce the influence of broad tags. */
+/**
+ * Picks a source's For You interests with the same [TagAffinityInputs.affinity] Trails rank chips by. Candidates are
+ * the tags of what the profile liked ([documents], which may be other sources' Likes translated), kept on the source, or
+ * chose. Once the source has the history, a candidate leads a lane only when [TagAffinity.proven] there, or, spelled
+ * by [translate], on another source sharing its vocabulary, so a character followed on Pixiv seeds the boorus too.
+ * Before that history every informative candidate may lead. Tags that keep appearing together on Likes stay together
+ * as one interest.
+ */
 object ForYouInterests {
+    /**
+     * Up to [maxInterests] interests, strongest first, then the best guess (a tag too rare in what the profile watches
+     * to judge yet) to explore. Tags in [unavailable] (ones the source has no posts for) are never candidates. [random]
+     * varies each score by up to a fifth, so which interests lead changes between Mixes; null keeps score order.
+     */
     fun generate(
         source: SourceKey,
         documents: List<List<String>>,
-        providerCounts: Map<String, Int?> = emptyMap(),
+        affinity: TagAffinityInputs,
+        translate: (tag: String, into: SourceKey) -> String? = { tag, _ -> tag },
+        unavailable: Set<String> = emptySet(),
         random: Random? = null,
         maxInterests: Int = 4,
     ): List<ForYouInterest> {
         val normalized = documents.map { RecommendationTagNormalization.normalizeDistinct(source, it, 40) }
         val stats = TagAffinityBuilder.build(normalized, maxTagsPerDocument = 40)
         val counts = stats.tagDocumentCounts
-        val knownCounts = providerCounts.values.filterNotNull().filter { it > 0 }.sorted()
-        val typicalCount = knownCounts.getOrNull((knownCounts.size - 1) / 2) ?: 0
-        val weights = counts.keys.filter { providerCounts[it] != 0 }.associateWith { tag ->
-            val prevalence = counts.getValue(tag).toDouble() / stats.totalDocuments
-            val genericPenalty = if (prevalence > 0.85 && counts.size > 2) 0.25 else 1.0
-            val specificity = 1.0 / (1.0 + ln(1.0 + (providerCounts[tag] ?: typicalCount).coerceAtLeast(0)))
-            val variation = random?.nextDouble(0.8, 1.2) ?: 1.0
-            sqrt(counts.getValue(tag).toDouble()) * genericPenalty * specificity * variation
+        val ownTags = RecommendationTagNormalization.normalizeDistinct(source, affinity.keptByTag[source].orEmpty().keys + affinity.explicit)
+        val judged = affinity.hasHistory(source)
+        val kin = affinity.keptBySource.keys.filter { other ->
+            other != source && source.sharesBooruVocabulary && other.sharesBooruVocabulary && affinity.hasHistory(other)
         }
-        // Sample each weight once: comparator keys must stay constant throughout the sort.
-        val anchors = weights.keys.sortedByDescending { weights.getValue(it) }
+        val leads = mutableMapOf<String, Double>()
+        val guesses = mutableMapOf<String, Double>()
+        // One candidate per matching key, in the spelling a Like gave it when one did.
+        for (tag in (counts.keys + ownTags).distinctBy(::normalizeMatchToken) - unavailable) {
+            val here = affinity.affinity(source, tag)
+            if (here.universal) continue
+            val evidence = when {
+                !judged -> here.takeIf(TagAffinity::informative)
+                here.proven -> here
+                else -> kin.mapNotNull { other -> translate(tag, other)?.let { affinity.affinity(other, it) } }
+                    .filter(TagAffinity::proven).maxByOrNull(TagAffinity::score)
+            }
+            when {
+                evidence != null -> leads[tag] = evidence.score + abs(evidence.score) * (random?.nextDouble(-JITTER, JITTER) ?: 0.0)
+                here.informative -> guesses[tag] = here.score
+            }
+        }
+        // Ties, such as every tag before any history, go to the tag liked most often.
+        val anchors = leads.keys.sortedByDescending { counts[it] ?: 0 }.sortedByDescending(leads::getValue)
         val chosen = mutableListOf<ForYouInterest>()
         for (anchor in anchors) {
+            if (chosen.size == maxInterests.coerceIn(1, 40)) break
             if (chosen.any { anchor in it.tags }) continue
             val partner = anchors.firstOrNull { candidate ->
                 candidate != anchor && chosen.none { candidate in it.tags } &&
                     stats.pairCount(anchor, candidate) >= 2 &&
                     stats.pairCount(anchor, candidate).toDouble() /
-                    maxOf(counts.getValue(anchor), counts.getValue(candidate)) >= 0.6
+                    maxOf(counts[anchor] ?: 0, counts[candidate] ?: 0) >= 0.6
             }
-            if (partner == null && chosen.isNotEmpty() && stats.isBroadTag(anchor)) continue
             chosen += ForYouInterest(listOfNotNull(anchor, partner))
-            if (chosen.size == maxInterests.coerceIn(1, 40)) break
         }
-        // A less familiar liked tag is still grounded in the user's interests.
-        val adjacent = anchors.asReversed().firstOrNull { tag ->
-            chosen.none { tag in it.tags } && !stats.isBroadTag(tag)
-        }
-        if (adjacent != null) chosen += ForYouInterest(listOf(adjacent))
+        guesses.maxByOrNull { it.value }?.let { chosen += ForYouInterest(listOf(it.key)) }
         return chosen
     }
 }
 
-/** A ubiquitous tag alone adds little direction once more specific interests are represented. */
-private fun TagAffinityStats.isBroadTag(tag: String): Boolean =
-    totalDocuments >= 4 && tagDocumentCounts.getValue(tag).toDouble() / totalDocuments > 0.85
+private const val JITTER = 0.2

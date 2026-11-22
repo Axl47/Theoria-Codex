@@ -23,6 +23,7 @@ import com.theoriacodex.app.media.codexOfflineOwner
 import com.theoriacodex.app.codex.LikesCodexSyncService
 import com.theoriacodex.app.codex.transfer.CodexTransferService
 import com.theoriacodex.app.recommend.ForYouCoordinator
+import com.theoriacodex.app.recommend.observeTagAffinityInputs
 import com.theoriacodex.app.comments.CommentsLoader
 import com.theoriacodex.app.comments.CommentsLoading
 import com.theoriacodex.app.related.RelatedPostsLoader
@@ -481,6 +482,9 @@ internal class DefaultTheoriaAppContainer(
             registry = sourceRegistry,
             likesRepository = likesRepository,
             statisticsRepository = statisticsRepository,
+            tagAffinity = observeTagAffinityInputs(
+                settingsRepository, likesRepository, codexRepository, savedSearches, statisticsRepository,
+            ),
             tagSuggestionStore = tagSuggestionStore,
             postResolutions = postResolutions,
             fileMirrors = data.fileMirrors,

@@ -157,11 +157,19 @@ abstract class AppJourneyFixture {
         compose.waitForIdle()
     }
 
-    /** Opens PIXIV's fixture post at [index] in the Viewer, from a Recents search recorded as [recentSearch]. */
-    protected fun openSearchPost(index: Int, recentSearch: String) {
+    /**
+     * Opens [source]'s fixture post at [index] in the Viewer, from a Recents search for [tags] recorded as
+     * [recentSearch]; the post must show near the top of that search's results.
+     */
+    protected fun openSearchPost(
+        index: Int,
+        recentSearch: String,
+        source: SourceKey = SourceKey.PIXIV,
+        tags: List<String> = listOf("multi"),
+    ) {
         io {
             container.data.recentsRepository.recordSearch(
-                Query(QueryMode.Source(SourceKey.PIXIV), listOf("multi"), emptyList(), SortMode.POPULAR, null, null),
+                Query(QueryMode.Source(source), tags, emptyList(), SortMode.POPULAR, null, null),
                 recentSearch,
             )
         }
@@ -169,7 +177,7 @@ abstract class AppJourneyFixture {
         library(LibrarySection.History)
         openRecentsSection("Searches")
         activate(compose.onNodeWithTag("Recent search:$recentSearch"))
-        val card = compose.onNodeWithTag(searchCardTestTag(posts.getValue(SourceKey.PIXIV)[index].id))
+        val card = compose.onNodeWithTag(searchCardTestTag(posts.getValue(source)[index].id))
         compose.waitUntil(10_000) { card.isDisplayed() }
         activate(card)
     }
