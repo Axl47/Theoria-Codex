@@ -34,8 +34,8 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         val stored = series.repository.series(id) ?: return null
         val entries = series.repository.entries(id).inReadingOrder()
         val start = entries.indexOfFirst { it.entry.address == entryAddress }.takeIf { it >= 0 } ?: return null
-        val cover = cover(stored.series)
-        val posts = entries.map { chapterPost(stored.series, it.entry, cover) }
+        // No extension loads for a session, so the cover is the stored address until a chapter's pages are asked for.
+        val posts = entries.map { chapterPost(stored.series, it.entry, stored.series.coverUrl) }
         val context = ViewerLaunchContext(seriesQueryHash(id), start, ViewerStreamSource.SERIES, scrollOffsetHint = 0)
         val resume = entries.associate { PostId(id.source, it.entry.address) to it.resumePageIndex() } +
             listOfNotNull(pageIndex?.let { posts[start].id to it })
@@ -50,9 +50,10 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         val entry = checkNotNull(series.repository.entries(id).firstOrNull { it.entry.address == postId.sourcePostId }) {
             "The chapter is not stored"
         }
-        val pages = source(id.source).pages(entry.entry)
+        val source = source(id.source)
+        val pages = source.pages(entry.entry)
         if (pages.isEmpty()) return null
-        return chapterPost(stored.series, entry.entry, cover(stored.series)).copy(
+        return chapterPost(stored.series, entry.entry, source.coverAddress(stored.series)).copy(
             full = pages.first(),
             media = pages,
             mediaCount = pages.size,
@@ -80,10 +81,6 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         val id = seriesIdOf(session.context.queryHash) ?: return emptyFlow()
         return series.repository.observeSeries(id).mapNotNull { it?.readingModeOrGuess() }
     }
-
-    /** Where the series' cover loads from: through its source while that is on. */
-    private suspend fun cover(stored: Series) =
-        series.sources().firstOrNull { it.key == stored.id.source }?.coverAddress(stored) ?: stored.coverUrl
 
     private suspend fun source(key: SourceKey) =
         checkNotNull(series.sources().firstOrNull { it.key == key }) { "The extension for this series is not installed" }
