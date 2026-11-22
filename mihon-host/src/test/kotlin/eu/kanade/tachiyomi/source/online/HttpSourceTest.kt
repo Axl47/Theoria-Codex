@@ -11,6 +11,7 @@ import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
 import com.theoriacodex.mihonhost.assertFailsWith
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -24,7 +25,7 @@ import uy.kohesive.injekt.Injekt
 
 class HttpSourceTest {
     /** Every path the source requested, in order. */
-    private val requested = mutableListOf<String>()
+    private val requested = CopyOnWriteArrayList<String>()
     private var status = 200
 
     @Before

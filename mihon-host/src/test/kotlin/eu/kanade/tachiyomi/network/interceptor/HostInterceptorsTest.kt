@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.network.interceptor
 
+import com.theoriacodex.mihonhost.MihonHost
 import com.theoriacodex.mihonhost.answering
 import com.theoriacodex.mihonhost.cannedResponse
 import java.io.IOException
@@ -23,6 +24,14 @@ class HostInterceptorsTest {
         val failure = assertFailsWith<IOException> { client.newCall(request).execute() }
 
         assertSame(cause, failure.cause)
+    }
+
+    @Test
+    fun `the client extensions rebuild carries the interceptor names they require, in Mihon's order`() {
+        assertEquals(
+            listOf("UncaughtExceptionInterceptor", "UserAgentInterceptor", "CloudflareInterceptor"),
+            MihonHost.extensionClient().interceptors.map { it.javaClass.simpleName },
+        )
     }
 
     @Test

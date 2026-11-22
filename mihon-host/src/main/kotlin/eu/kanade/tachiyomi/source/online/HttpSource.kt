@@ -107,7 +107,8 @@ abstract class HttpSource : CatalogueSource {
 
     protected open fun imageUrlParse(response: Response): String = unsupported()
 
-    suspend fun getImage(page: Page): Response = imageCall(page).awaitSuccess()
+    /** Mihon resumes a partly saved image from [existingSize]; this host always fetches the whole image. */
+    suspend fun getImage(page: Page, @Suppress("UNUSED_PARAMETER") existingSize: Long = 0L): Response = imageCall(page).awaitSuccess()
 
     protected open fun imageRequest(page: Page): Request = GET(checkNotNull(page.imageUrl) { "Page ${page.index} has no image URL" }, headers)
 

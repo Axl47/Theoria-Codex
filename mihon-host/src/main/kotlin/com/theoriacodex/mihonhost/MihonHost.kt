@@ -2,7 +2,6 @@ package com.theoriacodex.mihonhost
 
 import android.app.Application
 import android.content.Context
-import android.webkit.WebSettings
 import eu.kanade.tachiyomi.AppInfo
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.interceptor.CloudflareInterceptor
@@ -28,21 +27,19 @@ object MihonHost {
     fun install(application: Application, versionName: String, versionCode: Int) {
         AppInfo.hostVersionName = versionName
         AppInfo.hostVersionCode = versionCode
-        // Building the browser's agent string loads WebView, so it waits until a source first asks.
-        val userAgent by lazy { WebSettings.getDefaultUserAgent(application) }
         Injekt.bind(Application::class.java, application)
         Injekt.bind(Context::class.java, application)
         Injekt.bind(Json::class.java, Json { ignoreUnknownKeys = true; explicitNulls = false })
-        Injekt.bind(NetworkHelper::class.java, NetworkHelper(extensionClient { userAgent }) { userAgent })
+        Injekt.bind(NetworkHelper::class.java, NetworkHelper(extensionClient()) { DEFAULT_USER_AGENT })
     }
 
     // Extensions rebuild this client and require the three named interceptors, in Mihon's order.
-    private fun extensionClient(userAgent: () -> String): OkHttpClient = OkHttpClient.Builder()
+    internal fun extensionClient(): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .callTimeout(CALL_TIMEOUT_MINUTES, TimeUnit.MINUTES)
         .addInterceptor(UncaughtExceptionInterceptor())
-        .addInterceptor(UserAgentInterceptor(userAgent))
+        .addInterceptor(UserAgentInterceptor { DEFAULT_USER_AGENT })
         .addInterceptor(CloudflareInterceptor())
         .addNetworkInterceptor { chain ->
             requestCount.incrementAndGet()
@@ -50,6 +47,9 @@ object MihonHost {
         }
         .build()
 
+    /** Mihon's default, the agent extensions are written and tested against. */
+    private const val DEFAULT_USER_AGENT =
+        "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36"
     private const val CONNECT_TIMEOUT_SECONDS = 30L
     private const val READ_TIMEOUT_SECONDS = 30L
     private const val CALL_TIMEOUT_MINUTES = 2L
