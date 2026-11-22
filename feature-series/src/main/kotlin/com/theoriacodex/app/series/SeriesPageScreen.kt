@@ -70,7 +70,7 @@ fun SeriesPageScreen(
     val missing = state.sourceMissing
     Column(modifier.fillMaxSize()) {
         // Without its source the page has no source name to show.
-        SecondaryScreenAppBar(title = state.sourceName.ifEmpty { state.stored?.series?.title.orEmpty() }, onBack = onBack)
+        SecondaryScreenAppBar(title = state.sourceName, onBack = onBack)
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
             state.stored?.let { stored ->
                 item("header") { SeriesHeader(stored, state, toggleFollowed, onOpenEntry) }
