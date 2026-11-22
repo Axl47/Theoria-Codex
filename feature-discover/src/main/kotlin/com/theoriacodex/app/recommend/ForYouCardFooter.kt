@@ -3,11 +3,11 @@ package com.theoriacodex.app.recommend
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -65,7 +65,7 @@ internal fun DeckOrigin.label(): String = when (this) {
 }
 
 /**
- * The band under a card's media: why the card is in the Mix, then its forks. [feedShare] is how common each tag is on
+ * The band under a card's media: why the card is in the Mix on one line, then its forks on the next. [feedShare] is how common each tag is on
  * this level, so a tag on nearly every post here, such as a trail's own, is not offered.
  */
 @Composable
@@ -87,37 +87,35 @@ internal fun ForYouCardFooter(
         val tags = tagAffinities(post, affinity, feedShare).filter { it.informative }.map { it.tag }
         forYouForks(post, tags, covered, creator, similarSupported, level.query)
     }
-    Row(
-        Modifier.fillMaxSize().padding(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.Center) {
         if (origin != null) {
             Text(
                 origin.label(),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 104.dp).testTag(FOR_YOU_ORIGIN_TAG),
-            )
-        }
-        forks.forEach { fork ->
-            Text(
-                fork.label,
-                style = MaterialTheme.typography.labelLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .weight(1f, fill = false)
-                    .clip(RoundedCornerShape(50))
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                    .clickable(role = Role.Button, onClickLabel = "Open ${fork.label}") { owner.fork(fork.request) }
-                    .height(36.dp)
-                    .wrapContentHeight()
-                    .padding(horizontal = 12.dp)
-                    .testTag("$FOR_YOU_FORK_TAG_PREFIX${fork.key}"),
+                modifier = Modifier.padding(start = 4.dp, bottom = 4.dp).testTag(FOR_YOU_ORIGIN_TAG),
             )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            forks.forEach { fork ->
+                Text(
+                    fork.label,
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    // Only a creator's name gives way when the row is full; tags and Similar keep their words.
+                    modifier = (if (fork.key == "creator") Modifier.weight(1f, fill = false) else Modifier)
+                        .clip(RoundedCornerShape(50))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                        .clickable(role = Role.Button, onClickLabel = "Open ${fork.label}") { owner.fork(fork.request) }
+                        .height(36.dp)
+                        .wrapContentHeight()
+                        .padding(horizontal = 12.dp)
+                        .testTag("$FOR_YOU_FORK_TAG_PREFIX${fork.key}"),
+                )
+            }
         }
     }
 }

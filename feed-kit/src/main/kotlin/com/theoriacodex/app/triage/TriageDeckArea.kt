@@ -302,7 +302,7 @@ internal const val TRIAGE_DECK_TAG = "triage-deck"
 internal const val TRIAGE_CARD_FOOTER_TAG = "triage-card-footer"
 
 /** The height of the band a deck's card footer is drawn in, under the card; its content must fit it. */
-val TRIAGE_CARD_FOOTER_HEIGHT: Dp = 56.dp
+val TRIAGE_CARD_FOOTER_HEIGHT: Dp = 72.dp
 
 /** The card commits once dragged this far across the deck's width. */
 private const val COMMIT_FRACTION = 0.3f
