@@ -58,6 +58,14 @@ class CiEmulatorEnvironmentTest(unittest.TestCase):
             elif args==['shell','cat','/proc/meminfo']:print('MemTotal: '+os.environ.get('FAKE_MEMORY','4000000')+' kB')
             elif args==['shell','df','-k','/data','/sdcard']:print('Filesystem 1K-blocks Used Available Use% Mounted on\\n/data 6000000 1000000 5000000 17% /data\\n/sdcard 6000000 1000000 5000000 17% /sdcard')
             elif args==['shell','dumpsys','dropbox','--print','system_server_crash']:print('crash fixture')
+            elif args==['shell','dumpsys','window','windows']:
+                dialog=os.environ.get('FAKE_DIALOG')=='open' and not pathlib.Path('dialogs-closed').exists()
+                print('  Window #3 Window{1a2b u0 Application Not Responding: com.android.systemui}:' if dialog else '  Window #0 Window{3c4d u0 StatusBar}:')
+            elif args==['shell','am','broadcast','-a','android.intent.action.CLOSE_SYSTEM_DIALOGS']:pathlib.Path('dialogs-closed').touch()
+            elif args==['get-state']:
+                if os.environ.get('FAKE_LOST')=='after-tests':
+                    print('error: device offline',file=sys.stderr);sys.exit(1)
+                print('device')
             else:raise AssertionError(args)
         '''))
         self.environment = {**os.environ, "GITHUB_ACTIONS": "true", "ANDROID_AVD_HOME": str(self.avd),
@@ -78,8 +86,31 @@ class CiEmulatorEnvironmentTest(unittest.TestCase):
         self.assertEqual("all", (self.root / "delegated").read_text())
         self.assertTrue((self.root / "dialogs-hidden").exists())
         evidence = self.root / "build/reports/ci-emulator/debug"
-        for name in ("avd.ini", "avd-config.ini", "logcat.txt", "memory-before.txt", "memory-after.txt", "system-server-crash.txt"):
+        for name in ("avd.ini", "avd-config.ini", "logcat.txt", "memory-before.txt", "memory-after.txt", "system-server-crash.txt",
+                     "host-after.txt"):
             self.assertTrue((evidence / name).is_file(), name)
+        self.assertEqual("23", (evidence / "verdict").read_text().strip())
+        self.assertFalse((self.root / "dialogs-closed").exists())
+
+    def test_emulator_lost_after_tests_leaves_no_verdict_for_the_retry(self):
+        result = self.run_wrapper(FAKE_LOST="after-tests", FAKE_TEST_EXIT="1")
+        self.assertEqual(1, result.returncode, result.stderr)
+        evidence = self.root / "build/reports/ci-emulator/debug"
+        self.assertFalse((evidence / "verdict").exists())
+        self.assertIn("::warning title=Emulator lost::", result.stdout)
+        # The retry on a fresh emulator keeps this attempt's evidence and records its own verdict.
+        result = self.run_wrapper()
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("0", (evidence / "verdict").read_text().strip())
+        self.assertTrue((self.root / "build/reports/ci-emulator/debug-lost-attempt/host-after.txt").is_file())
+        self.assertNotIn("Emulator lost", result.stdout)
+
+    def test_error_dialog_open_before_hiding_is_closed_before_tests(self):
+        result = self.run_wrapper(FAKE_DIALOG="open")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertTrue((self.root / "dialogs-closed").exists())
+        closed = (self.root / "build/reports/ci-emulator/debug/closed-error-dialogs.txt").read_text()
+        self.assertIn("Application Not Responding: com.android.systemui", closed)
 
     def test_misparsed_minor_api_target_is_rejected_before_installation(self):
         (self.avd / "test.ini").write_text("target=android-0\n")
