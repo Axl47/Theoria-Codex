@@ -10,6 +10,9 @@ import eu.kanade.tachiyomi.network.interceptor.UncaughtExceptionInterceptor
 import eu.kanade.tachiyomi.network.interceptor.UserAgentInterceptor
 import java.io.File
 import java.net.URLEncoder
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.security.SecureRandom
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.serialization.json.Json
@@ -79,6 +82,23 @@ object MihonHost {
         File(context.dataDir, "shared_prefs").list().orEmpty()
             .filter { it.startsWith(LEGACY_PREFERENCES_PREFIX) && it.endsWith(".xml") }
             .forEach { context.deleteSharedPreferences(it.removeSuffix(".xml")) }
+    }
+
+    /**
+     * The key [ExtensionImages] signs its addresses with: made once per install and kept where Android neither backs
+     * it up nor transfers it. A key that cannot be read is replaced; addresses signed with the old one then load as
+     * ordinary ones until their series is opened again.
+     */
+    fun imageKey(context: Context): ByteArray {
+        val file = File(context.noBackupFilesDir, "extension_image_key")
+        runCatching { file.readBytes() }.getOrNull()?.takeIf { it.size == ExtensionImages.KEY_BYTES }?.let { return it }
+        val key = ByteArray(ExtensionImages.KEY_BYTES).also(SecureRandom()::nextBytes)
+        runCatching {
+            val pending = File(file.path + ".new")
+            pending.writeBytes(key)
+            Files.move(pending.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        }
+        return key
     }
 
     private const val PREFERENCES_DIRECTORY = "mihon_preferences"

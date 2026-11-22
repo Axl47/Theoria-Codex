@@ -44,8 +44,8 @@ internal class MihonExtensionSourceHost {
     /** The user's choices, which open with the app's data, after the HTTP clients that already hold [mediaInterceptor]. */
     private val choices = CompletableDeferred<ExtensionChoiceStore>()
 
-    // Runs on an HTTP client's thread before each extension image: loads the extensions the first time, then only checks the stamp.
-    private val images = ExtensionImages { runBlocking { registry.sources() } }
+    // Its refresh runs on an HTTP client's thread before each extension image: loads the extensions the first time, then only checks the stamp.
+    private lateinit var images: ExtensionImages
 
     /** Goes on the app's media clients: answers requests only an extension can fetch and passes the rest on. */
     val mediaInterceptor: Interceptor get() = images
@@ -56,6 +56,7 @@ internal class MihonExtensionSourceHost {
     /** Names the application extensions load into. Called once, before anything else; loads nothing. */
     fun attach(application: Application) {
         // Release builds run installed packages only; the folder is how tests hand a debug build an APK.
+        images = ExtensionImages(lazy { MihonHost.imageKey(application) }) { runBlocking { registry.sources() } }
         packages = ExtensionPackages(application) { if (BuildConfig.DEBUG) application.getExternalFilesDir(DIRECTORY) else null }
         val loader = ExtensionLoader(application, packages)
         // What extensions ask their host for is set up when the first one loads, not at startup.

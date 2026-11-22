@@ -5,8 +5,12 @@ import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.online.HttpSource
 import java.io.IOException
+import java.security.MessageDigest
+import java.security.SecureRandom
 import java.util.Collections
 import kotlinx.coroutines.runBlocking
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 import okhttp3.Call
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -38,6 +42,12 @@ internal inline fun <T> failingAsIo(block: () -> T): T = try {
  * this interceptor, placed on the app's media client, answers tagged addresses through that source and passes every
  * other request on. The tag travels with the address, so a cover the app stored still loads after a restart.
  *
+ * The app's media client also loads addresses that other parties supply, such as a Custom Site's thumbnails, and a
+ * fragment is theirs to write. So a tag is honored only with a code only this host can compute: an HMAC, under
+ * [key], of the address and what the tag says. A tag without the right code is not this host's: its request goes out
+ * as an ordinary one, without the fragment, and no extension is loaded or asked. The code covers the address, so one
+ * that leaks lets nobody tag another address.
+ *
  * A page whose source has not named its image yet is handed out as the address of the page that names it, with a
  * fragment that also names its chapter and its place in it, so two pages never share an address. The image's address
  * is asked for here, when that image is requested, and asked for again after a fetch of it failed, since such
@@ -48,7 +58,11 @@ internal inline fun <T> failingAsIo(block: () -> T): T = try {
  * returns once that is done; it must not throw. It runs on an HTTP client's thread before every tagged request, so an
  * image of an extension removed since stops being fetched, and it must cost little while nothing changed.
  */
-class ExtensionImages(private val refresh: () -> Unit = {}) : Interceptor {
+class ExtensionImages(
+    /** Kept for the install, where Android does not back it up; read on first use, off the main thread. */
+    private val key: Lazy<ByteArray> = lazy { ByteArray(KEY_BYTES).also(SecureRandom()::nextBytes) },
+    private val refresh: () -> Unit = {},
+) : Interceptor {
     @Volatile
     private var sources: Map<Long, HttpSource> = emptyMap()
 
@@ -74,7 +88,7 @@ class ExtensionImages(private val refresh: () -> Unit = {}) : Interceptor {
             source.imageCall(page).request().url.tagged(source)
         } else {
             val names = page.url.takeIf(String::isNotBlank)?.let { it.toHttpUrlOrNull() ?: source.baseUrl.toHttpUrlOrNull()?.resolve(it) }
-            names?.newBuilder()?.fragment("$UNRESOLVED_TAG${source.id}/${page.index}/${chapter.url}")?.build() ?: return null
+            names?.newBuilder()?.fragment(marker(UNRESOLVED_TAG, source.id, names, "${page.index}/${chapter.url}"))?.build() ?: return null
         }
         pages[address.toString()] = page
         return address.toString()
@@ -89,9 +103,9 @@ class ExtensionImages(private val refresh: () -> Unit = {}) : Interceptor {
         val unresolved = fragment.startsWith(UNRESOLVED_TAG)
         if (!unresolved && !fragment.startsWith(TAG)) return chain.proceed(chain.request())
         val tag = fragment.substringAfter('=').split('/', limit = UNRESOLVED_PARTS)
-        val sourceId = tag[0].toLongOrNull() ?: return chain.proceed(chain.request())
-        refresh()
-        val source = sources[sourceId] ?: return chain.proceed(chain.request())
+        // A tag this host did not issue, or one for a source that is not on: an ordinary request, without the tag.
+        val source = issuedSource(url, fragment, tag)
+            ?: return chain.proceed(chain.request().newBuilder().url(url.newBuilder().fragment(null).build()).build())
         return failingAsIo {
             if (unresolved) {
                 val page = unresolvedPage(source, url.toString(), tag)
@@ -103,6 +117,19 @@ class ExtensionImages(private val refresh: () -> Unit = {}) : Interceptor {
                 (if (page != null) source.imageCall(page) else source.imageCall(url.newBuilder().fragment(null).build().toString())).execute()
             }
         }
+    }
+
+    /**
+     * The source [fragment] names, when this host issued that fragment for [url] and the source is on. The code is
+     * checked before anything else, so a forged tag does not load extensions either.
+     */
+    private fun issuedSource(url: HttpUrl, fragment: String, tag: List<String>): HttpSource? {
+        val sourceId = tag[0].substringBefore('.').toLongOrNull() ?: return null
+        val kind = if (fragment.startsWith(UNRESOLVED_TAG)) UNRESOLVED_TAG else TAG
+        val issued = marker(kind, sourceId, url, tag.drop(1).joinToString("/"))
+        if (!MessageDigest.isEqual(issued.toByteArray(), fragment.toByteArray())) return null
+        refresh()
+        return sources[sourceId]
     }
 
     /**
@@ -142,7 +169,15 @@ class ExtensionImages(private val refresh: () -> Unit = {}) : Interceptor {
         return response
     }
 
-    private fun HttpUrl.tagged(source: HttpSource): HttpUrl = newBuilder().fragment("$TAG${source.id}").build()
+    private fun HttpUrl.tagged(source: HttpSource): HttpUrl = newBuilder().fragment(marker(TAG, source.id, this)).build()
+
+    /** The fragment for [url] under [kind]: the source, this host's code for all of it, then [rest]. */
+    private fun marker(kind: String, sourceId: Long, url: HttpUrl, rest: String = ""): String {
+        val signed = "$kind$sourceId/$rest\n${url.newBuilder().fragment(null).build()}"
+        val code = Mac.getInstance(MAC).apply { init(SecretKeySpec(key.value, MAC)) }.doFinal(signed.toByteArray())
+        val shown = code.take(CODE_BYTES).joinToString("") { (it.toInt() and BYTE).toString(HEX).padStart(2, '0') }
+        return "$kind$sourceId.$shown" + if (rest.isEmpty()) "" else "/$rest"
+    }
 
     internal companion object {
         private const val TAG = "mihon="
@@ -153,6 +188,12 @@ class ExtensionImages(private val refresh: () -> Unit = {}) : Interceptor {
 
         /** Where the tag starts in a tagged address. */
         const val FRAGMENT = "#$TAG"
+
+        const val KEY_BYTES = 32
+        private const val MAC = "HmacSHA256"
+        private const val CODE_BYTES = 16
+        private const val BYTE = 0xff
+        private const val HEX = 16
 
         /** A few hundred chapters' worth. */
         private const val MAX_PAGES = 8_192
