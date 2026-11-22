@@ -69,10 +69,10 @@ for the app's own.
 
 **Android's backup and device transfer.** Neither carries extension data. The choices (which extensions are on, their
 languages) and every extension's preferences, which can hold a server's address and password, are in
-`noBackupFilesDir`, which Android never backs up or copies to a new phone. Both were elsewhere through 1.9.2 and move
-once: preferences from `shared_prefs/mihon_*.xml` the first time an extension asks for any, choices from the settings
-store the first time they are read, and only on an app updated in place. On a fresh install, extension choices found in
-the settings file came from a restore and are dropped, so nothing is on.
+`noBackupFilesDir`, which Android never backs up or copies to a new phone, and are read from nowhere else. Debug
+builds before the first release with extensions kept them in the settings store and in `shared_prefs/mihon_*.xml`;
+the app deletes both at every start and imports neither, so an extension that was on in such a build is turned on
+once more.
 
 | Piece | Where | What it does |
 | --- | --- | --- |
@@ -86,7 +86,7 @@ the settings file came from a restore and are dropped, so nothing is on.
 | `ExtensionImages` | same | Fetches covers and pages through the extension's own HTTP client. Each address handed to the app ends in `#mihon=<source id>`; an interceptor on the app's media client answers those. |
 | App seam | `app/.../extensions/MihonExtensionSourceHost.kt`, `app/.../di/ExtensionSources.kt` | The application creates the host. Nothing loads at startup: the extensions that are on load once, off the main thread, the first time the Series tab asks for sources or an image address ending in `#mihon=` is requested. The manifest holds `QUERY_ALL_PACKAGES`, as Mihon does: extension packages share only a declared feature, which a `<queries>` element cannot match. The Series tab is shown while an extension is on the device, looked up at startup and each time the app returns to the foreground. |
 | Series | `feature-series`, `app/.../series/`, `core-data` `SeriesRepository` | The Series tab and series page, the Extensions page (also reached from Settings), the Viewer session over a series' chapters, and the `series` and `series_entries` tables that keep followed series, read state and progress. Pages are never stored. |
-| Backup | `core-data` `SeriesBackupRecords.kt`, `RoomProfileBackupStore` | Profile backups hold the series the user follows, started reading or chose a reading mode for, with every stored chapter's read state and last page (`library.series`, backup version 3; a backup without series is still written as version 2). Series are stored once for the whole app, not per profile, so they are backed up once. A restore adds: a series already stored becomes followed, takes a reading mode and a Continue point if it had none, and each chapter takes the further progress of the two sides. A chapter only the backup has arrives as not listed when the device already holds the series' list, so it is not counted as unread. A series over 20,000 chapters is written without its chapters that have no progress, so every backup the app writes is one it restores. Trust is never in a backup, so a restored series shows "Extension unavailable" until its extension is installed and turned on. |
+| Backup | `core-data` `SeriesBackupRecords.kt`, `RoomProfileBackupStore` | Profile backups hold the series the user follows, started reading or chose a reading mode for, with every stored chapter's read state and last page (`library.series`, backup version 3; a backup without series is still written as version 2). Series are stored once for the whole app, not per profile, so they are backed up once. A restore adds: a series already stored becomes followed, takes a reading mode and a Continue point if it had none, and each chapter takes the further progress of the two sides. A chapter only the backup has arrives as not listed when the device already holds the series' list, so it is not counted as unread. A series over 20,000 chapters is cut to that many, keeping the Continue point, then chapters with progress, then listed ones, so every backup the app writes is one it restores. Covers are never written or read: a cover's address chooses the extension client that fetches it, so a restored series gets its cover from its source, when its page opens or at the next check of followed series. Trust is never in a backup, so a restored series shows "Extension unavailable" until its extension is installed and turned on. |
 
 ## Release builds
 
