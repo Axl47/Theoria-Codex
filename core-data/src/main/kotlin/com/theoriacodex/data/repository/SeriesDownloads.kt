@@ -116,8 +116,8 @@ class SeriesDownloads(
     private val fetching = MutableStateFlow<Pair<QueuedChapter, Float>?>(null)
     private var loaded = false
 
-    /** The lanes with a drain under way, by [QueuedChapter.automatic]. */
-    private val draining = mutableSetOf<Boolean>()
+    /** The lanes with a drain under way, by [QueuedChapter.automatic], each with the token of its newest drain. */
+    private val draining = mutableMapOf<Boolean, Any>()
     private var active: Pair<QueuedChapter, Job>? = null
 
     /** Each chapter of [id] that is queued or on the device, by address. */
@@ -156,21 +156,28 @@ class SeriesDownloads(
     /**
      * Schedules each waiting lane again whenever what it may have waited for changes: both lanes when [sources] (the
      * sources that are on) change, and the user's lane when its [network] settings do, since only its job's network
-     * follows them. Scheduling again replaces the pending job with today's requirements and no failure backoff; a lane
-     * that is draining is left alone. Changes count from each flow's first value. Never returns.
+     * follows them. Scheduling again replaces the lane's job with today's requirements and no failure backoff. A sources
+     * change leaves a draining lane alone; a network change replaces the user's job even while it drains, so it stops
+     * on a network the settings no longer allow, and the chapter it was fetching stays queued. Changes count from each
+     * flow's first value. Never returns.
      */
     suspend fun rescheduleOnChanges(sources: Flow<*>, network: Flow<*>): Unit = coroutineScope {
-        launch { sources.distinctUntilChanged().drop(1).collect { reschedule { true } } }
-        launch { network.distinctUntilChanged().drop(1).collect { reschedule { automatic -> !automatic } } }
+        launch {
+            sources.distinctUntilChanged().drop(1).collect {
+                reschedule(automatic = false, evenDraining = false)
+                reschedule(automatic = true, evenDraining = false)
+            }
+        }
+        launch { network.distinctUntilChanged().drop(1).collect { reschedule(automatic = false, evenDraining = true) } }
     }
 
-    /** Schedules each lane that [lanes] picks, has chapters queued and is not draining. */
-    private suspend fun reschedule(lanes: (automatic: Boolean) -> Boolean) {
-        val waiting = lock.withLock {
+    /** Schedules the [automatic] lane if it has chapters queued, and unless [evenDraining], only while it is not draining. */
+    private suspend fun reschedule(automatic: Boolean, evenDraining: Boolean) {
+        val schedule = lock.withLock {
             load()
-            queue.value.map { it.automatic }.distinct().filter { it !in draining && lanes(it) }
+            queue.value.any { it.automatic == automatic } && (evenDraining || automatic !in draining)
         }
-        waiting.forEach { scheduler.schedule(it) }
+        if (schedule) scheduler.schedule(automatic)
     }
 
     /**
@@ -246,18 +253,20 @@ class SeriesDownloads(
     /**
      * Downloads one lane of the queue, chapters the user queued or [automatic] ones, in order until it is empty or a
      * chapter fails in a way that may pass, which stops the drain with [DrainResult.retry]. Cancelling it stops the
-     * chapter being fetched, which stays queued for the next drain.
+     * chapter being fetched, which stays queued for the next drain. A drain that starts while a cancelled one of the same
+     * lane is still stopping takes the lane over, so the old one's end does not mark the lane idle.
      */
     suspend fun drain(automatic: Boolean, onProgress: (DrainProgress) -> Unit = {}): DrainResult {
+        val token = Any()
         lock.withLock {
             load()
-            draining += automatic
+            draining[automatic] = token
         }
         var downloaded = 0
         var failed = 0
         try {
             while (true) {
-                when (drains.withLock { fetchNext(automatic, downloaded + failed + 1, onProgress) }) {
+                when (drains.withLock { fetchNext(automatic, token, downloaded + failed + 1, onProgress) }) {
                     Outcome.DOWNLOADED -> downloaded++
                     Outcome.UNAVAILABLE -> failed++
                     Outcome.LATER -> return DrainResult(downloaded, failed, retry = true)
@@ -266,16 +275,19 @@ class SeriesDownloads(
                 }
             }
         } finally {
-            withContext(NonCancellable) { lock.withLock { draining -= automatic } }
+            withContext(NonCancellable) { lock.withLock { draining.remove(automatic, token) } }
         }
     }
 
-    /** Fetches the first chapter of the [automatic] lane, the [number]th of this drain; null when the lane is empty. */
-    private suspend fun fetchNext(automatic: Boolean, number: Int, onProgress: (DrainProgress) -> Unit): Outcome? {
+    /**
+     * Fetches the first chapter of the [automatic] lane, the [number]th of the drain holding [token]; null when the lane
+     * is empty.
+     */
+    private suspend fun fetchNext(automatic: Boolean, token: Any, number: Int, onProgress: (DrainProgress) -> Unit): Outcome? {
         // The lane stops draining in the same step that finds it empty, so a chapter queued after is scheduled.
         val (next, remaining) = lock.withLock {
             val lane = queue.value.filter { it.automatic == automatic }
-            if (lane.isEmpty()) draining -= automatic
+            if (lane.isEmpty()) draining.remove(automatic, token)
             lane.firstOrNull() to lane.size
         }
         next ?: return null

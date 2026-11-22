@@ -246,7 +246,7 @@ class SeriesDownloadsTest {
         assertEquals(DrainResult(downloaded = 1, failed = 0), harness.downloads.drain(automatic = true))
     }
 
-    @Test fun `waiting lanes are scheduled again when the sources or the network settings change, draining ones are not`() = runTest {
+    @Test fun `lanes are scheduled again when the sources change, and the user's lane, draining too, when the network settings do`() = runTest {
         val harness = Harness(this)
         val sources = MutableStateFlow(1)
         val network = MutableStateFlow(false)
@@ -267,7 +267,7 @@ class SeriesDownloadsTest {
         runCurrent()
         assertEquals(listOf("schedule user", "schedule automatic"), harness.scheduled)
 
-        // A draining lane keeps its running job.
+        // A sources change leaves a draining lane its running job; a network change replaces it.
         val held = CompletableDeferred<Unit>()
         harness.onFetch = { url -> if ("/c1/" in url) held.await() }
         val user = async { harness.downloads.drain(automatic = false) }
@@ -276,8 +276,37 @@ class SeriesDownloadsTest {
         sources.value = 3
         runCurrent()
         assertEquals(listOf("schedule automatic"), harness.scheduled)
+        harness.scheduled.clear()
+        network.value = false
+        runCurrent()
+        assertEquals(listOf("schedule user"), harness.scheduled)
         held.complete(Unit)
         user.await()
+    }
+
+    @Test fun `a replaced drain stops without dropping its chapter, and leaves the lane to the drain that replaced it`() = runTest {
+        val harness = Harness(this)
+        val held = CompletableDeferred<Unit>()
+        harness.onFetch = { url -> if ("/c1/" in url) held.await() }
+        harness.downloads.download(id, listOf("/c1"))
+        val replaced = launch { harness.downloads.drain(automatic = false) }
+        advanceUntilIdle()
+
+        // The system starts the replacing job before the replaced one has stopped.
+        val replacing = async { harness.downloads.drain(automatic = false) }
+        advanceUntilIdle()
+        replaced.cancel()
+        advanceUntilIdle()
+        // Chapter 1 is still queued, now fetched by the replacing drain.
+        assertEquals(mapOf("/c1" to ChapterDownload.Queued(0f)), harness.downloads.states(id).first())
+        // The lane still counts as draining, so a chapter queued now joins the running drain instead of replacing its job.
+        harness.scheduled.clear()
+        harness.downloads.download(id, listOf("/c2"))
+        assertEquals(emptyList<String>(), harness.scheduled)
+
+        held.complete(Unit)
+        assertEquals(DrainResult(downloaded = 2, failed = 0), replacing.await())
+        assertFalse(root().walk().any { it.name.startsWith(".partial-") })
     }
 
     @Test fun `new chapters download by themselves only for a followed series set to`() = runTest {

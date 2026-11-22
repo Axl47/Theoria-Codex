@@ -26,6 +26,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
@@ -123,7 +124,8 @@ class SeriesDownloadJobService : JobService() {
                 false
             }
             if (!params.isUserInitiatedJob) cancelDownloadProgress(this@SeriesDownloadJobService)
-            runs.remove(params.jobId)
+            // Only this run's entry: a replacement of the job may already be running under the same id.
+            runs.remove(params.jobId, coroutineContext.job)
             jobFinished(params, retry)
         }
         return true
