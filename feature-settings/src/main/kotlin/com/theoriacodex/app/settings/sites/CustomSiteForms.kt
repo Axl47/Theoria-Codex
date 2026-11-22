@@ -29,13 +29,13 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.customsites.CustomSiteSummary
 import com.theoriacodex.app.settings.ExpandableSection
-import com.theoriacodex.app.settings.SettingsGroup
-import com.theoriacodex.app.settings.SettingsHeader
-import com.theoriacodex.app.settings.SettingsPageColumn
-import com.theoriacodex.app.settings.SettingsRow
 import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.domain.source.ProtocolFamily
 import com.theoriacodex.domain.source.SiteProfile
+import com.theoriacodex.app.ui.components.SettingsHeader
+import com.theoriacodex.app.ui.components.SettingsGroup
+import com.theoriacodex.app.ui.components.SettingsRow
+import com.theoriacodex.app.ui.components.SettingsPageColumn
 
 /** Add flow: address → probe → keys if asked → confirm name and opt-in → save. */
 @Composable

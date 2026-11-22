@@ -9,6 +9,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.ExtensionChoices
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -531,6 +532,8 @@ data class AppSettings(
     val forYouBlacklistByProfile: Map<String, List<ForYouBlacklistEntry>> = emptyMap(),
     val favoriteTagsByProfile: Map<String, List<FavoriteTagEntry>> = emptyMap(),
     val providerHealth: Map<SourceKey, ProviderHealthSnapshot> = emptyMap(),
+    /** Which extensions the user turned on, and which of their languages. */
+    val extensions: ExtensionChoices = ExtensionChoices(),
 )
 
 enum class ScenarioPreset {

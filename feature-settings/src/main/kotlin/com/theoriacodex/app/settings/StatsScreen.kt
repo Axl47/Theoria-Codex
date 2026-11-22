@@ -71,6 +71,11 @@ import com.theoriacodex.domain.model.PostId
 import java.io.File
 import java.time.LocalDate
 import kotlinx.coroutines.launch
+import com.theoriacodex.app.ui.components.SettingsHeader
+import com.theoriacodex.app.ui.components.SettingsGroup
+import com.theoriacodex.app.ui.components.SettingsRowDivider
+import com.theoriacodex.app.ui.components.SettingsRow
+import com.theoriacodex.app.ui.components.SettingsPageColumn
 
 // Validated against the Theoria surface with the dataviz palette checks (lightness, CVD, contrast).
 internal val BrowsingColor = Color(0xFF5A99DD)

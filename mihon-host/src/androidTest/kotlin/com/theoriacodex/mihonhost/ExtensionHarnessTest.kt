@@ -40,9 +40,11 @@ class ExtensionHarnessTest {
         val context = instrumentation.targetContext
         MihonHost.install(context.applicationContext as Application, versionName = "harness", versionCode = 1)
 
-        val extension = timed("load") { ExtensionLoader(context).load(File(context.getExternalFilesDir(null), apkName!!)) }
-        val source = extension.sources.firstOrNull { it.lang == "en" } ?: extension.sources.first()
-        report("extension", "${extension.name} ${extension.versionName}, ${extension.sources.size} sources, signer ${extension.signatureSha256}")
+        val packages = ExtensionPackages(context)
+        val extension = checkNotNull(packages.read(File(context.getExternalFilesDir(null), apkName!!))) { "$apkName is not an extension" }
+        val sources = timed("load") { ExtensionLoader(context, packages).load(extension) }
+        val source = sources.firstOrNull { it.lang == "en" } ?: sources.first()
+        report("extension", "${extension.name} ${extension.versionName}, ${sources.size} sources, signer ${extension.signer}")
         report("source", "${source.name} lang=${source.lang} supportsLatest=${source.supportsLatest}")
 
         val images = ExtensionImages()

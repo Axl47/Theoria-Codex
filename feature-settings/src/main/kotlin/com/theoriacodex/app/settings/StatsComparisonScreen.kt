@@ -33,6 +33,8 @@ import com.theoriacodex.app.viewer.decodeViewerPostId
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.app.ui.components.SettingsHeader
+import com.theoriacodex.app.ui.components.SettingsPageColumn
 
 private enum class ComparedPostView(val label: String) { BOTH("Both"), THEIRS("Theirs"), YOURS("Yours") }
 

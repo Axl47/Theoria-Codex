@@ -10,9 +10,12 @@ import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -35,10 +38,10 @@ sealed interface SeriesListing {
 data class SeriesSourceListing(val key: SourceKey, val name: String, val listing: SeriesListing)
 
 /**
- * The Series tab. [sources] is null until the extensions have loaded; [browse] is the chosen source's popular series;
- * [search] is one listing per source while a search shows, and null otherwise; a search sent before the extensions
- * have loaded is empty until they have, and then runs. [refreshing] is true while a refresh by hand checks the
- * followed series for new chapters.
+ * The Series tab. [sources] is null until the extensions that are on have loaded; [browse] is the chosen source's
+ * popular series; [search] is one listing per source while a search shows, and null otherwise; a search sent before
+ * the extensions have loaded is empty until they have, and then runs. [refreshing] is true while a refresh by hand
+ * checks the followed series for new chapters.
  */
 data class SeriesTabState(
     val sources: List<SeriesSource>? = null,
@@ -47,9 +50,11 @@ data class SeriesTabState(
     val refreshing: Boolean = false,
 )
 
+/** [sourcesChanged] emits once at the start and again whenever [loadSources] may answer differently. */
 class SeriesTabViewModel(
     private val repository: SeriesRepository,
     private val loadSources: suspend () -> List<SeriesSource>,
+    sourcesChanged: Flow<*> = flowOf(Unit),
     /** Stores the followed series' new chapters, which changes the shelf's unread counts. */
     private val checkFollowed: suspend () -> Unit,
 ) : ViewModel() {
@@ -63,13 +68,7 @@ class SeriesTabViewModel(
     private var searchText: String? = null
 
     init {
-        viewModelScope.launch {
-            val sources = loadSources()
-            mutableState.update { it.copy(sources = sources) }
-            sources.firstOrNull()?.let { browse(it.key) }
-            // A search sent while the extensions were loading has waited for them.
-            searchText?.let(::search)
-        }
+        viewModelScope.launch { sourcesChanged.collectLatest { showSources(loadSources()) } }
     }
 
     /** Checks the followed series for new chapters, unless a check is already running. */
@@ -83,6 +82,18 @@ class SeriesTabViewModel(
                 mutableState.update { it.copy(refreshing = false) }
             }
         }
+    }
+
+    /** Keeps what is on screen for the sources still on offer, and browses the first when the browsed one is gone. */
+    private fun showSources(sources: List<SeriesSource>) {
+        val waited = state.value.sources == null
+        val keys = sources.mapTo(HashSet()) { it.key }
+        mutableState.update { state ->
+            state.copy(sources = sources, browse = state.browse?.takeIf { it.key in keys }, search = state.search?.filter { it.key in keys })
+        }
+        if (state.value.browse == null) sources.firstOrNull()?.let { browse(it.key) }
+        // A search sent while the extensions were loading has waited for them.
+        if (waited) searchText?.let(::search)
     }
 
     /** Shows [key]'s popular series from the first page. */
