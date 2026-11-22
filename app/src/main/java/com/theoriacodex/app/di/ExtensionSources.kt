@@ -13,7 +13,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -55,21 +54,25 @@ class SeriesDependencies(
     /** Whether the app has looked for extensions since it started; until then [hasExtensions] is only what it remembered. */
     val looked: StateFlow<Boolean> = mutableLooked.asStateFlow()
 
+    // What storage holds, as far as known: a store that failed is tried again at the next look.
+    private var remembered = extensionSeen
+
     /**
      * Looks again for extensions on the device, each time the app comes to the foreground; never on the way to the
      * first screen. Looks run one after another, so the latest is the one whose answer stays. Never throws: a look or
-     * a remembered answer that fails is handed to [reportFailure] and the tab stays as it was.
+     * a remembered answer that fails is handed to [reportFailure]. A look that fails changes nothing, [looked]
+     * included, so whatever waits for the first answer keeps waiting for a look that succeeds.
      */
     suspend fun findExtensions() = looking.withLock {
         runCatchingPreservingCancellation {
             val found = withContext(Dispatchers.IO) { anyExtension() }
-            val changed = mutableHasExtensions.getAndUpdate { found } != found
+            mutableHasExtensions.value = found
             mutableLooked.value = true
-            if (changed) rememberExtensionSeen(found)
-        }.onFailure {
-            mutableLooked.value = true
-            reportFailure(it)
-        }
+            if (found != remembered) {
+                rememberExtensionSeen(found)
+                remembered = found
+            }
+        }.onFailure(reportFailure)
         Unit
     }
 

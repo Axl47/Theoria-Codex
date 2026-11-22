@@ -81,8 +81,37 @@ class SeriesDependenciesTest {
 
         assertFalse(series.hasExtensions.value)
         assertTrue(series.looked.value)
-        // Both answers changed the remembered one, and storing it failed both times without reaching the caller.
-        assertEquals(listOf("disk full", "disk full"), failures.map { it.message })
+        // Storing the first answer failed without reaching the caller; the second matches what storage holds.
+        assertEquals(listOf("disk full"), failures.map { it.message })
+    }
+
+    @Test fun `a look that fails leaves the first answer pending and a store that failed is tried again`() = runTest {
+        var fails = true
+        val stored = mutableListOf<Boolean>()
+        val series = SeriesDependencies(
+            Followed(followed), { emptyList() }, NoExtensions, { check(!fails) { "package manager died" }; true },
+            rememberExtensionSeen = { check(!fails) { "disk full" }; stored += it },
+        )
+        series.findExtensions()
+        assertFalse(series.looked.value || series.hasExtensions.value)
+
+        fails = false
+        series.findExtensions()
+        assertTrue(series.looked.value && series.hasExtensions.value)
+        assertEquals(listOf(true), stored)
+
+        // The answer is the same, but the store failed: it is written at the next look, and then no more.
+        val retried = mutableListOf<Boolean>()
+        var storeFails = true
+        val again = SeriesDependencies(
+            Followed(followed), { emptyList() }, NoExtensions, { true },
+            rememberExtensionSeen = { check(!storeFails) { "disk full" }; retried += it },
+        )
+        again.findExtensions()
+        storeFails = false
+        again.findExtensions()
+        again.findExtensions()
+        assertEquals(listOf(true), retried)
     }
 }
 
