@@ -144,6 +144,8 @@ class Device:
             alive = bool(self.shell(f"pidof {PACKAGE}", check=False))
             seen_process |= alive
             if seen_process and not alive:
+                if self.app(f"ls files/results/{name}.json", check=False).endswith(".json"):
+                    break  # finished between the two checks
                 print(f"  {name}: process exited without results", flush=True)
                 break
         else:

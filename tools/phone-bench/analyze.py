@@ -80,6 +80,9 @@ def summarize_run(path: Path, mask: np.ndarray) -> dict:
         for key in ("infer", "total"):
             s = e2e["summary"][key]
             out[f"{key}_median"], out[f"{key}_p90"] = s.get("median"), s.get("p90")
+        # GPU run() returns before the work finishes and readFloat() waits for it, so inference is run + read.
+        model_ms = np.array(e2e["infer_ms"]) + np.array(e2e["read_ms"])
+        out["model_median"], out["model_p90"] = float(np.median(model_ms)), float(np.percentile(model_ms, 90))
         for key in ("decode_ms", "prep_ms", "read_ms", "native_ms"):
             out[f"{key}_median"] = float(np.median(e2e[key])) if e2e[key] else None
     tel = r.get("telemetry", [])
@@ -118,7 +121,7 @@ if __name__ == "__main__":
         par = row.get("parity_exact_vs_host") or {}
         e2e = row.get("parity_e2e_vs_host") or {}
         print(f"{row['run']:<18} load {f(row['load_ms'])} first {f(row['first_ms'])} "
-              f"infer {f(row.get('infer_median'))}/{f(row.get('infer_p90'))} e2e {f(row.get('total_median'))}/{f(row.get('total_p90'))} "
+              f"model {f(row.get('model_median'))}/{f(row.get('model_p90'))} e2e {f(row.get('total_median'))}/{f(row.get('total_p90'))} "
               f"n={row.get('n', 0)} pss {f(row['peak_pss_mb'])}MB hwm {f(row['vm_hwm_mb'])}MB "
               f"cos exact {f(par.get('cos_mean'), 4)}/{f(par.get('cos_min'), 4)} e2e {f(e2e.get('cos_mean'), 4)}/{f(e2e.get('cos_min'), 4)} "
               f"tagJ {f(par.get('tag_jaccard_mean'), 3)}/{f(e2e.get('tag_jaccard_mean'), 3)} "

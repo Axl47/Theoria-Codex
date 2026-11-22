@@ -38,11 +38,13 @@ data class RunSpec(
     val parity: Boolean,
     /** GPU: let fully-connected and conv ops read int8 weights directly (allowSrcQuantizedFcConvOps). */
     val gpuQuantOps: Boolean,
+    /** NPU: Qualcomm HTP performance mode name (e.g. BURST, SUSTAINED_HIGH_PERFORMANCE), or null for LiteRT's default. */
+    val htpMode: String?,
 ) {
     fun json(): JSONObject = JSONObject().put("run", run).put("model", model).put("kind", kind.name)
         .put("accelerator", accelerator.name).put("threads", threads).put("precision", precision)
         .put("strict", strict).put("mode", if (soak) "soak" else "matrix").put("seconds", seconds)
-        .put("min_images", minImages).put("parity", parity).put("gpu_quant_ops", gpuQuantOps)
+        .put("min_images", minImages).put("parity", parity).put("gpu_quant_ops", gpuQuantOps).put("htp_mode", htpMode)
 
     companion object {
         fun from(intent: Intent) = RunSpec(
@@ -58,6 +60,7 @@ data class RunSpec(
             minImages = intent.getIntExtra("min_images", 64),
             parity = intent.getBooleanExtra("parity", true),
             gpuQuantOps = intent.getBooleanExtra("gpu_quant_ops", false),
+            htpMode = intent.getStringExtra("htp"),
         )
     }
 }
@@ -160,9 +163,15 @@ class Bench(private val context: Context, private val spec: RunSpec) {
                 precision = when (spec.precision) {
                     "fp16" -> CompiledModel.GpuOptions.Precision.FP16
                     "fp32" -> CompiledModel.GpuOptions.Precision.FP32
+                    "fp16acc" -> CompiledModel.GpuOptions.Precision.FP16_WITH_FP32_ACCUM
                     else -> CompiledModel.GpuOptions.Precision.DEFAULT
                 },
                 allowSrcQuantizedFcConvOps = spec.gpuQuantOps.takeIf { it },
+            )
+        }
+        spec.htpMode?.let { mode ->
+            options.qualcommOptions = CompiledModel.QualcommOptions(
+                htpPerformanceMode = CompiledModel.QualcommOptions.HtpPerformanceMode.valueOf(mode),
             )
         }
         return if (spec.strict) options.disableAutoFallbackToCpu() else options
