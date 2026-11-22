@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -15,8 +16,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -40,13 +47,16 @@ import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesStatus
 import java.text.DateFormat
 import java.util.Date
 
 /**
  * One series: its cover and names, Follow, a button that continues where the user left off, and every chapter with
- * whether it was read and how far. [onOpenEntry] gets the address of the chapter to read.
+ * whether it was read and how far. [onOpenEntry] gets the address of the chapter to read. The overflow menu moves the
+ * series to another source through [switchSource]: [onOpenSeries] shows another series' page, and [onSwitched] shows
+ * the series once moved, in place of this page.
  */
 @Composable
 fun SeriesPageScreen(
@@ -54,6 +64,9 @@ fun SeriesPageScreen(
     onBack: () -> Unit,
     onOpenEntry: (String) -> Unit,
     onOpenExtensions: () -> Unit,
+    switchSource: SwitchSourceViewModel,
+    onOpenSeries: (SeriesId) -> Unit,
+    onSwitched: (SeriesId) -> Unit,
     modifier: Modifier = Modifier,
 ) = BrowserCheckScope {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -70,7 +83,10 @@ fun SeriesPageScreen(
     val missing = state.sourceMissing
     Column(modifier.fillMaxSize()) {
         // Without its source the page has no source name to show.
-        SecondaryScreenAppBar(title = state.sourceName, onBack = onBack)
+        SecondaryScreenAppBar(title = state.sourceName, onBack = onBack, actions = {
+            state.stored?.let { stored -> SeriesPageMenu(switchSource) { switchSource.open(stored.series.title) } }
+        })
+        SwitchSourceSheet(switchSource, onOpenSeries, onSwitched)
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
             state.stored?.let { stored ->
                 item("header") { SeriesHeader(stored, state, toggleFollowed, onOpenEntry) }
@@ -88,6 +104,23 @@ fun SeriesPageScreen(
             items(state.entries, key = { it.entry.address }) { entry ->
                 EntryRow(entry, enabled = !missing) { onOpenEntry(entry.entry.address) }
             }
+        }
+    }
+}
+
+/** The page's overflow menu, shown while another source is on to switch to. */
+@Composable
+private fun SeriesPageMenu(switchSource: SwitchSourceViewModel, onSwitchSource: () -> Unit) {
+    val offered = switchSource.state.collectAsStateWithLifecycle().value.others.isNotEmpty()
+    if (!offered) return
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More options") }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(text = { Text(SWITCH_SOURCE) }, onClick = {
+                open = false
+                onSwitchSource()
+            })
         }
     }
 }

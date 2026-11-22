@@ -148,17 +148,18 @@ class SeriesTabViewModel(
      * screen, or one sent while the extensions were loading, runs in every source that is new or replaced.
      */
     private fun showSources(sources: List<SeriesSource>) {
-        val keys = sources.mapTo(HashSet()) { it.key }
         val before = state.value.sources.orEmpty()
         val fresh = sources.filter { source -> before.none { it === source } }
         val query = searchText
         mutableState.update { state ->
             state.copy(
                 sources = sources,
-                browse = state.browse?.takeIf { it.key in keys },
+                // Labels are taken again: a source turned on can share a name with one already listed.
+                browse = state.browse?.let { browse -> sources.firstOrNull { it.key == browse.key }?.let { browse.copy(name = it.label(sources)) } },
                 search = query?.let {
                     sources.map { source ->
-                        state.search?.firstOrNull { it.key == source.key && source !in fresh } ?: SeriesSourceListing(source.key, source.name, SeriesListing.Loading)
+                        state.search?.firstOrNull { it.key == source.key && source !in fresh }?.copy(name = source.label(sources))
+                            ?: SeriesSourceListing(source.key, source.label(sources), SeriesListing.Loading)
                     }
                 },
             )
@@ -295,7 +296,7 @@ class SeriesTabViewModel(
         searchText = query
         searchRun++
         saved[SAVED_SEARCH] = query
-        mutableState.update { it.copy(search = sources.map { source -> SeriesSourceListing(source.key, source.name, SeriesListing.Loading) }) }
+        mutableState.update { it.copy(search = sources.map { source -> SeriesSourceListing(source.key, source.label(sources), SeriesListing.Loading) }) }
         sources.forEach { searchIn(it, query) }
     }
 
@@ -339,7 +340,7 @@ class SeriesTabViewModel(
 
     private fun show(source: SeriesSource, kind: BrowseKind) {
         mutableState.update {
-            it.copy(browse = SeriesSourceListing(source.key, source.name, SeriesListing.Loading), browseKind = kind, browseRun = it.browseRun + 1)
+            it.copy(browse = SeriesSourceListing(source.key, source.label(it.sources.orEmpty()), SeriesListing.Loading), browseKind = kind, browseRun = it.browseRun + 1)
         }
         val run = state.value.browseRun
         viewModelScope.launch {
@@ -364,8 +365,8 @@ private suspend fun SeriesSource.list(kind: BrowseKind, page: Int): SeriesPage =
     is BrowseKind.Filtered -> search(kind.text, page, kind.filters)
 }
 
-/** A source's first page as a listing; any failure but cancellation becomes [SeriesListing.Failed]. */
-private suspend fun firstPage(load: suspend () -> SeriesPage): SeriesListing = try {
+/** A source's first page as a listing; any failure but cancellation becomes [SeriesListing.Failed]. Also the Switch source sheet's search. */
+internal suspend fun firstPage(load: suspend () -> SeriesPage): SeriesListing = try {
     load().let { SeriesListing.Loaded(it.series, nextPage = 2.takeIf { _ -> it.hasNextPage }) }
 } catch (error: CancellationException) {
     throw error

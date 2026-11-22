@@ -120,7 +120,7 @@ class MihonSeriesSourceTest {
     }
 
     @Test
-    fun `entries keep the source's order and what it says about each`() = runTest {
+    fun `entries keep the source's order and what it says about each, reading a number left out from the name`() = runTest {
         source.chapters = listOf(
             chapter("Chapter 2", "/c/2").also { it.chapter_number = 2f; it.scanlator = "Group"; it.date_upload = 2_000L },
             chapter("Chapter 1", "/c/1"),
@@ -130,7 +130,7 @@ class MihonSeriesSourceTest {
 
         assertEquals(listOf("/s chapters"), source.updates)
         assertEquals(SeriesEntry("/c/2", "Chapter 2", number = 2f, translatorGroup = "Group", uploadedAtEpochMs = 2_000L), entries[0])
-        assertEquals(SeriesEntry("/c/1", "Chapter 1"), entries[1])
+        assertEquals(SeriesEntry("/c/1", "Chapter 1", number = 1f), entries[1])
     }
 
     @Test

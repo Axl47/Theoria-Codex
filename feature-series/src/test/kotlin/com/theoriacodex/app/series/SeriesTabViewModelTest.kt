@@ -56,6 +56,18 @@ class SeriesTabViewModelTest {
     }
 
     @Test
+    fun searchGroupsOfSourcesSharingANameNameTheirLanguage() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(Answering(), Answering("custom_mihon_8", language = "fr")) }) {}
+        advanceUntilIdle()
+
+        viewModel.search("one punch")
+        advanceUntilIdle()
+
+        assertEquals(listOf("Fake · ${languageName("en")}", "Fake · ${languageName("fr")}"), viewModel.state.value.search.orEmpty().map { it.name })
+    }
+
+    @Test
     fun aSearchOnScreenRunsInASourceTurnedOnMeanwhile() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         var offered = listOf<SeriesSource>(Answering())
@@ -376,10 +388,9 @@ class SeriesTabViewModelTest {
  * Answers each listing with one series a page over [pages] pages, titled `popular`, `latest` or by the text searched
  * for, and keeps the filters each search was given in [searchedWith].
  */
-private class Answering(id: String = "custom_mihon_7", private val pages: Int = 1) : SeriesSource {
+private class Answering(id: String = "custom_mihon_7", private val pages: Int = 1, override val language: String = "en") : SeriesSource {
     override val key = SourceKey.parseOrThrow(id)
     override val name = "Fake"
-    override val language = "en"
     override val supportsLatest = true
     override suspend fun popular(page: Int) = listed("popular", page)
     override suspend fun latest(page: Int) = listed("latest", page)
@@ -420,4 +431,5 @@ private object NothingStored : SeriesRepository {
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) = Unit
+    override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) = false
 }

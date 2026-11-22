@@ -20,7 +20,7 @@ data class SeriesUpdate(val series: Series, val newEntries: List<SeriesEntry>)
  * One lock per source, held while a series' entry list is fetched and stored. Without it, two refreshes of one series
  * could store their lists in the other order than they were fetched in, and the older list would win.
  */
-private val refreshLocks = ConcurrentHashMap<SourceKey, Mutex>()
+internal val refreshLocks = ConcurrentHashMap<SourceKey, Mutex>()
 
 /**
  * Stores what [source] says about [series] now: its details and its whole entry list. Returns the new entries, as
