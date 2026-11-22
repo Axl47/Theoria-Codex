@@ -11,6 +11,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SeriesStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -54,7 +55,7 @@ class RoomSeriesRepository(
         return database.withTransaction {
             val before = dao.series(id.source.id, id.address)?.toStored() ?: StoredSeries(series)
             val listed = !entries.isNullOrEmpty()
-            val stored = before.copy(series = series, lastCheckedAtEpochMs = if (listed) clock() else before.lastCheckedAtEpochMs)
+            val stored = before.copy(series = series.keeping(before.series), lastCheckedAtEpochMs = if (listed) clock() else before.lastCheckedAtEpochMs)
             dao.upsertSeries(stored.toEntity())
             if (entries.isNullOrEmpty()) return@withTransaction emptyList()
             val newEntries = storeEntries(stored, entries)
@@ -124,6 +125,8 @@ private fun SeriesEntity.toStored() = StoredSeries(
         author = author,
         genres = genres.lines().filter(String::isNotBlank),
         language = language,
+        description = description,
+        status = SeriesStatus.entries.firstOrNull { it.name == status } ?: SeriesStatus.UNKNOWN,
     ),
     followed = followed,
     readingMode = readingMode?.let { name -> GalleryReadingMode.entries.firstOrNull { it.name == name } },
@@ -143,6 +146,17 @@ private fun StoredSeries.toEntity() = SeriesEntity(
     readingMode?.name,
     lastOpenedEntry,
     lastCheckedAtEpochMs,
+    series.description,
+    series.status.takeUnless { it == SeriesStatus.UNKNOWN }?.name,
+)
+
+/**
+ * [this] with [stored]'s description and status where it has none: only a details page gives them, so a listing of
+ * the series, or details that leave them out, must not erase what an earlier details page said.
+ */
+private fun Series.keeping(stored: Series): Series = copy(
+    description = description ?: stored.description,
+    status = status.takeUnless { it == SeriesStatus.UNKNOWN } ?: stored.status,
 )
 
 private fun SeriesEntryEntity.toStored() = StoredSeriesEntry(

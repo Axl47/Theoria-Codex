@@ -21,6 +21,9 @@ public final class SeriesEntity {
     @Nullable @ColumnInfo(name = "reading_mode") private final String readingMode;
     @Nullable @ColumnInfo(name = "last_opened_entry") private final String lastOpenedEntry;
     @Nullable @ColumnInfo(name = "last_checked_at_epoch_ms") private final Long lastCheckedAtEpochMs;
+    @Nullable @ColumnInfo(name = "description") private final String description;
+    /** A `SeriesStatus` name; null while the source has not said. */
+    @Nullable @ColumnInfo(name = "status") private final String status;
 
     public SeriesEntity(
             @NonNull String source,
@@ -33,7 +36,9 @@ public final class SeriesEntity {
             boolean followed,
             @Nullable String readingMode,
             @Nullable String lastOpenedEntry,
-            @Nullable Long lastCheckedAtEpochMs
+            @Nullable Long lastCheckedAtEpochMs,
+            @Nullable String description,
+            @Nullable String status
     ) {
         this.source = source;
         this.address = address;
@@ -46,6 +51,8 @@ public final class SeriesEntity {
         this.readingMode = readingMode;
         this.lastOpenedEntry = lastOpenedEntry;
         this.lastCheckedAtEpochMs = lastCheckedAtEpochMs;
+        this.description = description;
+        this.status = status;
     }
 
     @NonNull public String getSource() { return source; }
@@ -59,4 +66,6 @@ public final class SeriesEntity {
     @Nullable public String getReadingMode() { return readingMode; }
     @Nullable public String getLastOpenedEntry() { return lastOpenedEntry; }
     @Nullable public Long getLastCheckedAtEpochMs() { return lastCheckedAtEpochMs; }
+    @Nullable public String getDescription() { return description; }
+    @Nullable public String getStatus() { return status; }
 }

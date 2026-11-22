@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 13,
-    "identityHash": "08d12fe3a17e0085e695c21ac2c7f9ec",
+    "identityHash": "c7d9f36873aca0bcff6bf63d50a5dd2c",
     "entities": [
       {
         "tableName": "codices",
@@ -576,7 +576,7 @@
       },
       {
         "tableName": "series",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`source` TEXT NOT NULL, `address` TEXT NOT NULL, `title` TEXT NOT NULL, `cover_url` TEXT, `author` TEXT, `genres` TEXT NOT NULL, `language` TEXT NOT NULL, `followed` INTEGER NOT NULL, `reading_mode` TEXT, `last_opened_entry` TEXT, `last_checked_at_epoch_ms` INTEGER, PRIMARY KEY(`source`, `address`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`source` TEXT NOT NULL, `address` TEXT NOT NULL, `title` TEXT NOT NULL, `cover_url` TEXT, `author` TEXT, `genres` TEXT NOT NULL, `language` TEXT NOT NULL, `followed` INTEGER NOT NULL, `reading_mode` TEXT, `last_opened_entry` TEXT, `last_checked_at_epoch_ms` INTEGER, `description` TEXT, `status` TEXT, PRIMARY KEY(`source`, `address`))",
         "fields": [
           {
             "fieldPath": "source",
@@ -638,6 +638,16 @@
             "fieldPath": "lastCheckedAtEpochMs",
             "columnName": "last_checked_at_epoch_ms",
             "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT"
           }
         ],
         "primaryKey": {
@@ -748,7 +758,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '08d12fe3a17e0085e695c21ac2c7f9ec')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c7d9f36873aca0bcff6bf63d50a5dd2c')"
     ]
   }
 }

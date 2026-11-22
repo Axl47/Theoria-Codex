@@ -8,6 +8,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SeriesStatus
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -85,6 +86,20 @@ class RoomSeriesRepositoryTest {
         assertEquals("Chapter 2 (v2)", entries.last().entry.name)
         assertTrue(entries.last().read)
         assertEquals(1, repository.observeFollowed().first().single().unreadCount)
+    }
+
+    @Test
+    fun `a listing or details without a description or status keep the stored ones`() = runTest {
+        val detailed = series.copy(description = "A synopsis.", status = SeriesStatus.COMPLETED)
+        repository.store(detailed)
+        assertEquals(detailed, repository.series(id)!!.series)
+
+        repository.store(series.copy(title = "Renamed"))
+        assertEquals(detailed.copy(title = "Renamed"), repository.series(id)!!.series)
+
+        repository.store(series.copy(description = "Rewritten.", status = SeriesStatus.ON_HIATUS))
+        assertEquals("Rewritten.", repository.series(id)!!.series.description)
+        assertEquals(SeriesStatus.ON_HIATUS, repository.series(id)!!.series.status)
     }
 
     @Test

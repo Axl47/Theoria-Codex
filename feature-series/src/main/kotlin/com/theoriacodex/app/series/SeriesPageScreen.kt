@@ -22,6 +22,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -35,6 +39,8 @@ import com.theoriacodex.app.ui.components.LoadingState
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
+import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesStatus
 import java.text.DateFormat
 import java.util.Date
 
@@ -68,6 +74,7 @@ fun SeriesPageScreen(
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
             state.stored?.let { stored ->
                 item("header") { SeriesHeader(stored, state, toggleFollowed, onOpenEntry) }
+                item("about") { SeriesAbout(stored.series) }
             }
             val failure = state.failure
             when {
@@ -76,15 +83,6 @@ fun SeriesPageScreen(
                 failure != null -> item("failure") { FailureRow(viewModel::refresh, Modifier.padding(horizontal = 16.dp), failure) }
                 state.refreshing && state.entries.isEmpty() -> item("loading") { LoadingState() }
                 state.entries.isEmpty() -> item("empty") { EmptyState("No chapters") }
-            }
-            if (state.entries.isNotEmpty()) {
-                item("count") {
-                    Text(
-                        chapterCount(state.entries.size),
-                        Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                }
             }
             items(state.entries, key = { it.entry.address }) { entry ->
                 EntryRow(entry, enabled = missing == null) { onOpenEntry(entry.entry.address) }
@@ -111,6 +109,9 @@ private fun SeriesHeader(stored: StoredSeries, state: SeriesPageState, onToggleF
             stored.series.author?.let { author ->
                 Text(author, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            statusLine(stored.series.status, state.entries.size)?.let { line ->
+                Text(line, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             FilterChip(
                 selected = stored.followed,
                 onClick = onToggleFollowed,
@@ -124,6 +125,41 @@ private fun SeriesHeader(stored: StoredSeries, state: SeriesPageState, onToggleF
         }
     }
 }
+
+/**
+ * The synopsis, cut to a few lines that a tap opens in full when it is longer, then the genres on one line. Both come
+ * from storage, so they show before the source answers and while its extension is off.
+ */
+@Composable
+private fun SeriesAbout(series: Series) {
+    val description = series.description
+    if (description == null && series.genres.isEmpty()) return
+    Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (description != null) {
+            var expanded by rememberSaveable(series.id) { mutableStateOf(false) }
+            var cut by remember(description) { mutableStateOf(false) }
+            Text(
+                description,
+                Modifier.fillMaxWidth().clickable(enabled = cut || expanded) { expanded = !expanded },
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = if (expanded) Int.MAX_VALUE else DESCRIPTION_LINES,
+                overflow = TextOverflow.Ellipsis,
+                onTextLayout = { cut = it.hasVisualOverflow },
+            )
+        }
+        if (series.genres.isNotEmpty()) {
+            Text(
+                series.genres.joinToString(" · "),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+private const val DESCRIPTION_LINES = 4
 
 /** A chapter: its name, then how far the user is in it or, untouched or finished, when it came out. Read ones fade. */
 @Composable
@@ -146,6 +182,21 @@ internal fun continueLabel(started: Boolean, entry: StoredSeriesEntry): String =
     if (started) "Continue · ${entry.entry.name}" else "Start"
 
 internal fun chapterCount(count: Int): String = if (count == 1) "1 chapter" else "$count chapters"
+
+/** "Ongoing · 44 chapters": the status, when the source gave one, then the chapter count once chapters are known. */
+internal fun statusLine(status: SeriesStatus, chapters: Int): String? =
+    listOfNotNull(status.label, chapterCount(chapters).takeIf { chapters > 0 }).joinToString(" · ").ifEmpty { null }
+
+private val SeriesStatus.label: String?
+    get() = when (this) {
+        SeriesStatus.UNKNOWN -> null
+        SeriesStatus.ONGOING -> "Ongoing"
+        SeriesStatus.COMPLETED -> "Completed"
+        SeriesStatus.LICENSED -> "Licensed"
+        SeriesStatus.PUBLISHING_FINISHED -> "Finished"
+        SeriesStatus.CANCELLED -> "Cancelled"
+        SeriesStatus.ON_HIATUS -> "Hiatus"
+    }
 
 /** "Page 7 of 18" for a chapter left unfinished, "Read" for a finished one, else its date when the source gives one. */
 internal fun entryDetail(entry: StoredSeriesEntry): String? = when {

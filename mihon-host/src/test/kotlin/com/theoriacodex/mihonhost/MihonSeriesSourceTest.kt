@@ -5,6 +5,7 @@ import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SeriesStatus
 import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.model.FilterList
@@ -60,6 +61,31 @@ class MihonSeriesSourceTest {
         assertEquals(listOf("Action", "Long Strip"), listed.genres)
         assertEquals("en", listed.language)
         assertFalse(series.popular(1).hasNextPage)
+    }
+
+    @Test
+    fun `details carry the description and Mihon's status, and details without them keep the earlier ones`() = runTest {
+        source.listing = MangasPage(listOf(manga("/s", "Series")), hasNextPage = false)
+        val listed = series.popular(1).series.single()
+        assertNull(listed.description)
+        assertEquals(SeriesStatus.UNKNOWN, listed.status)
+
+        source.details = SManga.create().also { it.description = " A synopsis. "; it.status = SManga.ON_HIATUS }
+        val detailed = series.details(listed)
+        assertEquals("A synopsis.", detailed.description)
+        assertEquals(SeriesStatus.ON_HIATUS, detailed.status)
+
+        source.details = SManga.create()
+        assertEquals(detailed, series.details(listed))
+    }
+
+    @Test
+    fun `each of Mihon's status numbers has its status, and any other is unknown`() {
+        val expected = listOf(
+            SeriesStatus.UNKNOWN, SeriesStatus.ONGOING, SeriesStatus.COMPLETED, SeriesStatus.LICENSED,
+            SeriesStatus.PUBLISHING_FINISHED, SeriesStatus.CANCELLED, SeriesStatus.ON_HIATUS, SeriesStatus.UNKNOWN,
+        )
+        assertEquals(expected, (0..7).map(::seriesStatus))
     }
 
     @Test

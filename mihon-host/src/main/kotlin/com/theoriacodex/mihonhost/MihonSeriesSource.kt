@@ -10,6 +10,7 @@ import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
+import com.theoriacodex.domain.series.SeriesStatus
 import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.MangasPage
@@ -103,6 +104,8 @@ class MihonSeriesSource(
         details.thumbnail_url?.takeIf(String::isNotBlank)?.let { series.thumbnail_url = it }
         details.author?.takeIf(String::isNotBlank)?.let { series.author = it }
         details.genre?.takeIf(String::isNotBlank)?.let { series.genre = it }
+        details.description?.takeIf(String::isNotBlank)?.let { series.description = it }
+        if (details.status != SManga.UNKNOWN) series.status = details.status
     }
 
     private fun SManga.toSeries() = Series(
@@ -114,6 +117,8 @@ class MihonSeriesSource(
         author = author?.takeIf(String::isNotBlank),
         genres = genre.orEmpty().split(',').map(String::trim).filter(String::isNotEmpty),
         language = source.lang,
+        description = description?.trim()?.takeIf(String::isNotEmpty),
+        status = seriesStatus(status),
     )
 
     /** Some sources name each image only on a page of its own; those cost one more request per page here. */
@@ -158,4 +163,15 @@ class MihonSeriesSource(
             },
         )
     }
+}
+
+/** Mihon's `SManga.status` constant as the app's status; a number Mihon does not define is unknown. */
+internal fun seriesStatus(status: Int): SeriesStatus = when (status) {
+    SManga.ONGOING -> SeriesStatus.ONGOING
+    SManga.COMPLETED -> SeriesStatus.COMPLETED
+    SManga.LICENSED -> SeriesStatus.LICENSED
+    SManga.PUBLISHING_FINISHED -> SeriesStatus.PUBLISHING_FINISHED
+    SManga.CANCELLED -> SeriesStatus.CANCELLED
+    SManga.ON_HIATUS -> SeriesStatus.ON_HIATUS
+    else -> SeriesStatus.UNKNOWN
 }
