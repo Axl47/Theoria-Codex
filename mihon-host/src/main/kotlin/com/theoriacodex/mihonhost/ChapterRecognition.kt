@@ -16,7 +16,7 @@ internal object ChapterRecognition {
     private val number = Regex(NUMBER_PATTERN)
 
     /** Volume, version and season tags, which are numbers but not the chapter's. */
-    private val unwanted = Regex("""\b(?:v|ver|vol|version|volume|season|s)[^a-z]?[0-9]+""")
+    private val unwanted = Regex("""\b(?:v|ver|vol|version|volume|season|s)[^a-z0-9]*[0-9]+""")
 
     /** Joins a suffix to its number: "12 special" reads as "12special". */
     private val unwantedWhiteSpace = Regex("""\s(?=extra|special|omake)""")

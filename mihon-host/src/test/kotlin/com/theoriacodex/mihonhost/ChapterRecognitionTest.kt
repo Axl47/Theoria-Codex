@@ -11,6 +11,7 @@ class ChapterRecognitionTest {
     fun `the chapter tag wins over a volume number`() {
         assertEquals(4f, ChapterRecognition.parseChapterNumber("Mokushiroku Alice", "Mokushiroku Alice Vol.1 Ch.4: Misrepresentation"))
         assertEquals(3f, ChapterRecognition.parseChapterNumber("Series", "Vol.1 Ch.3 - Title"))
+        assertEquals(4f, ChapterRecognition.parseChapterNumber("Series", "Vol. 1 Chapter 4"))
     }
 
     @Test
