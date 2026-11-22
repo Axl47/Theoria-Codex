@@ -27,19 +27,22 @@ import kotlinx.coroutines.withContext
 /**
  * Decides which extension code runs and which of its sources the app offers.
  *
- * An extension's code is loaded only once the user has turned its signing certificate on ([ExtensionChoiceStore]);
- * until then it is listed from what the package manager says about it. Loading happens on first use, never at startup,
+ * An extension's code is loaded only once the user has turned that extension on ([ExtensionChoiceStore]), and only
+ * while it still has the signing certificate it had then; until then it is listed from what the package manager says
+ * about it. Loading happens on first use, never at startup,
  * one extension at a time, each on a thread of its own with [limitMs] to finish: one that hangs or fails is left out
  * and says why in the list. Loaded code cannot be unloaded, so turning an extension off stops its sources being
  * offered and its images being fetched, and its code stays idle in memory until the process ends.
  *
  * @param packages the extensions on the device, read without running them
+ * @param stamp a cheap value that differs whenever [packages] would answer differently
  * @param load creates an extension's sources, running its code
  * @param settings the settings of a source that has some
  * @param deviceLanguages the user's languages as language tags, most preferred first
  */
 class ExtensionRegistry(
     private val packages: () -> List<ExtensionPackage>,
+    private val stamp: () -> Any = packages,
     private val load: (ExtensionPackage) -> List<Source>,
     private val choices: ExtensionChoiceStore,
     private val images: ExtensionImages,
@@ -72,22 +75,38 @@ class ExtensionRegistry(
     @Volatile
     private var offered: List<SeriesSource>? = null
 
+    /** [stamp] as it was when the extensions were last listed. */
+    @Volatile
+    private var listedStamp: Any? = null
+
     private val mutableRevision = MutableStateFlow(0)
     override val revision: StateFlow<Int> = mutableRevision
 
-    /** The sources of the extensions and languages that are on. The first call loads them; later calls are immediate. */
-    suspend fun sources(): List<SeriesSource> = offered ?: locked { offered ?: refresh().let { offered.orEmpty() } }
+    /**
+     * The sources of the extensions and languages that are on. The first call loads them. Every later call checks
+     * [stamp], so an extension installed, updated or removed since is picked up without a restart: while nothing
+     * changed that check is all a call costs, and when something did only the extensions that changed load.
+     */
+    suspend fun sources(): List<SeriesSource> = withContext(Dispatchers.IO) {
+        offered?.takeIf { stamp() == listedStamp } ?: locked { refresh().let { offered.orEmpty() } }
+    }
+
+    /** Looks for a change on the device once the extensions have loaded, moving [revision] when there is one; before that, does nothing. */
+    suspend fun recheck() {
+        if (offered != null) sources()
+    }
 
     override suspend fun installed(): List<InstalledExtension> = locked { refresh() }
 
     override suspend fun setOn(id: String, signer: String, on: Boolean): List<InstalledExtension> = locked {
-        val onDevice = packages()
+        val onDevice = onDevice()
         val extension = onDevice.firstOrNull { it.apk.path == id }
         when {
-            !on -> choices.update { it.copy(trustedSigners = it.trustedSigners - signer) }
+            extension == null -> Unit
+            !on -> choices.update { it.copy(trusted = it.trusted - extension.identity) }
             // Only what the user was shown is trusted; a file replaced since then is listed again to be asked about.
-            extension != null && extension.signer == signer -> {
-                choices.update { it.copy(trustedSigners = it.trustedSigners + signer) }
+            extension.signer == signer -> {
+                choices.update { it.copy(trusted = it.trusted + (extension.identity to signer)) }
                 // Turning one on again is the way to retry it when it failed.
                 if (loaded[extension]?.problem != null) loaded -= extension
             }
@@ -96,7 +115,7 @@ class ExtensionRegistry(
     }
 
     override suspend fun setLanguage(id: String, language: String, on: Boolean): List<InstalledExtension> = locked {
-        val onDevice = packages()
+        val onDevice = onDevice()
         val extension = onDevice.firstOrNull { it.apk.path == id }
         val languages = extension?.let { loaded[it] }?.sources?.map { it.language }
         if (extension != null && languages != null) {
@@ -131,12 +150,18 @@ class ExtensionRegistry(
         }
     }
 
+    /** The extensions on the device now. The stamp is read first, so a change during the listing is seen by the next check. */
+    private fun onDevice(): List<ExtensionPackage> {
+        listedStamp = stamp()
+        return packages()
+    }
+
     /**
      * Lists every extension, loading those that are on and not loaded yet, and replaces what is on offer. No settings
      * are read here: this runs for the first source lookup and image request, which must not wait on every source's
      * settings screen.
      */
-    private suspend fun refresh(onDevice: List<ExtensionPackage> = packages()): List<InstalledExtension> {
+    private suspend fun refresh(onDevice: List<ExtensionPackage> = onDevice()): List<InstalledExtension> {
         val choices = choices.choices()
         val device = deviceLanguages()
         val taken = HashSet<SourceKey>()
@@ -144,7 +169,7 @@ class ExtensionRegistry(
         // What is no longer on the device as it was loaded is never offered again.
         loaded.keys.retainAll(onDevice.toSet())
         val listed = onDevice.map { extension ->
-            val trusted = choices.trusts(extension.signer)
+            val trusted = choices.trusts(extension.identity, extension.signer)
             val listing = InstalledExtension(
                 id = extension.apk.path,
                 // A file is told apart from the installed package of the same extension.

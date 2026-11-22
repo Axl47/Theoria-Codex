@@ -25,11 +25,13 @@ class ExtensionsTest {
 
     @Test
     fun `only a certificate the user turned on is trusted`() {
-        val choices = ExtensionChoices(trustedSigners = setOf("key-1", ""))
+        val choices = ExtensionChoices(trusted = mapOf("a" to "key-1", "unsigned" to ""))
 
-        assertTrue(choices.trusts("key-1"))
-        assertFalse(choices.trusts("key-2"))
-        assertFalse(choices.trusts(null))
-        assertFalse(choices.trusts(""))
+        assertTrue(choices.trusts("a", "key-1"))
+        assertFalse(choices.trusts("a", "key-2"))
+        // The same key on another extension was never turned on.
+        assertFalse(choices.trusts("b", "key-1"))
+        assertFalse(choices.trusts("a", null))
+        assertFalse(choices.trusts("unsigned", ""))
     }
 }

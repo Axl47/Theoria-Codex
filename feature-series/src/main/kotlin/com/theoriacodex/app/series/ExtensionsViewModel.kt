@@ -36,7 +36,7 @@ class ExtensionsViewModel(private val extensions: SeriesExtensions) : ViewModel(
     fun ask(extension: InstalledExtension?) = mutableState.update { it.copy(asking = extension) }
 
     /**
-     * Turns [extension] on or off as the signer the user saw. When its file was replaced while the question was open
+     * Turns [extension] alone on or off, as the signer the user saw. When its file was replaced while the question was open
      * it stays off, and the question is asked again about what is there now.
      */
     fun setOn(extension: InstalledExtension, on: Boolean) {

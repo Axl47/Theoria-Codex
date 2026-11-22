@@ -1,6 +1,10 @@
 package com.theoriacodex.app.extensions
 
 import android.app.Application
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.util.Log
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.di.ExtensionSourceHost
@@ -16,6 +20,10 @@ import com.theoriacodex.mihonhost.MihonHost
 import com.theoriacodex.mihonhost.SourceSettings
 import eu.kanade.tachiyomi.source.sourcePreferences
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 
@@ -27,6 +35,8 @@ import okhttp3.Interceptor
  */
 internal class MihonExtensionSourceHost : ExtensionSourceHost {
     private lateinit var registry: ExtensionRegistry
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private lateinit var watching: Lazy<Unit>
 
     /** The settings store, which opens after the HTTP clients that already hold [mediaInterceptor]. */
     private val choices = CompletableDeferred<ExtensionChoiceStore>()
@@ -35,7 +45,7 @@ internal class MihonExtensionSourceHost : ExtensionSourceHost {
     private val images = ExtensionImages { runBlocking { registry.sources() } }
 
     override val mediaInterceptor: Interceptor get() = images
-    override val extensions: SeriesExtensions get() = registry
+    override val extensions: SeriesExtensions get() = registry.also { watching.value }
 
     override fun attach(application: Application) {
         val packages = ExtensionPackages(application) { application.getExternalFilesDir(DIRECTORY) }
@@ -44,6 +54,7 @@ internal class MihonExtensionSourceHost : ExtensionSourceHost {
         val hostInstalled = lazy { MihonHost.install(application, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE) }
         registry = ExtensionRegistry(
             packages = packages::list,
+            stamp = packages::stamp,
             load = { extension ->
                 hostInstalled.value
                 loader.load(extension)
@@ -58,13 +69,37 @@ internal class MihonExtensionSourceHost : ExtensionSourceHost {
             deviceLanguages = { application.resources.configuration.locales.toLanguageTags().split(',') },
             log = { Log.i(TAG, it) },
         )
+        watching = lazy { watchPackages(application) }
+    }
+
+    /**
+     * An extension installed, updated or removed while the app runs is noticed at once, which moves the registry's
+     * revision and so reloads the Series tab. Started when the extensions are first asked about: [attach] runs before
+     * the application can register anything, and there is nothing to reload before then.
+     */
+    private fun watchPackages(application: Application) {
+        val changed = IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addDataScheme("package")
+        }
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                scope.launch { registry.recheck() }
+            }
+        }
+        application.registerReceiver(receiver, changed, Context.RECEIVER_NOT_EXPORTED)
     }
 
     override fun bind(choices: ExtensionChoiceStore) {
         this.choices.complete(choices)
     }
 
-    override suspend fun sources(): List<SeriesSource> = registry.sources()
+    override suspend fun sources(): List<SeriesSource> {
+        watching.value
+        return registry.sources()
+    }
 
     private companion object {
         const val TAG = "MihonHost"
