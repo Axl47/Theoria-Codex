@@ -166,7 +166,7 @@ data class TriageDeckState(
  * What a committed swipe in [direction] asks for, given the Codex it would save to, the tag it would hide, and
  * whether the deck [removes] from its Codex: then left removes rather than skipping and right keeps rather than liking.
  * Null when it asks for a save and there is no Codex to save to (none suggested, as when the post is already in
- * every Codex), which the screen answers by opening the picker.
+ * every Codex, or the drag landed on More), which the screen answers by opening the picker.
  * A downward swipe on a post with nothing to hide is a skip.
  */
 internal fun choiceFor(
