@@ -307,9 +307,13 @@ object SearchStateReducer {
     private fun SearchRequest.refreshed(shown: List<Post>, fresh: List<Post>): List<Post> {
         if (cachedFirstPage != CachedFirstPage.SCROLLED) return fresh
         val freshById = fresh.associateBy(Post::id)
-        val kept = shown.map { post -> freshById[post.id] ?: post }
-        val keptIds = kept.mapTo(HashSet(), Post::id)
-        return kept + (kept + fresh).distinctByFile().filterNot { it.id in keptIds }
+        return shown.map { post -> freshById[post.id] ?: post }.plusNew(fresh)
+    }
+
+    /** [this] as shown, then each of [incoming] that is neither shown nor a copy of a shown or earlier post. */
+    private fun List<Post>.plusNew(incoming: List<Post>): List<Post> {
+        val shownIds = mapTo(HashSet(), Post::id)
+        return this + (this + incoming).distinctByFile().filterNot { it.id in shownIds }
     }
 
     private fun SearchUiState.withPublishedResults(
@@ -358,7 +362,7 @@ object SearchStateReducer {
             is SearchPageResult.Success -> SearchReduction(
                 state.copy(
                     content = state.content.copy(
-                        results = (state.content.results + result.posts).distinctByFile(),
+                        results = state.content.results.plusNew(result.posts),
                         statuses = mergeFeedStatuses(state.content.statuses, result.statuses),
                         canLoadMore = result.continuation.canLoadMore,
                         error = null,

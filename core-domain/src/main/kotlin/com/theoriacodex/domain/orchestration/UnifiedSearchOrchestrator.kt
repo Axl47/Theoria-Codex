@@ -220,20 +220,22 @@ class UnifiedSearchOrchestrator(
         val sourceQuery = if (clientSideExclude) {
             sourceBaseQuery.copy(excludeTerms = emptyList())
         } else sourceBaseQuery
-        return withTimeoutOrNull(sourceTimeoutMs) {
+        val page = withTimeoutOrNull(sourceTimeoutMs) {
             val prepared = prepareQuery(source, sourceQuery)
             preparedQueries[source] = if (clientSideExclude) {
                 prepared.copy(excludeTerms = sourceBaseQuery.excludeTerms)
             } else prepared
-            val page = searchSource(adapter, prepared, pageToken).inDateRange(sourceBaseQuery.dateRange)
+            val page = fetchSource(adapter, prepared, pageToken).inDateRange(sourceBaseQuery.dateRange)
             if (clientSideExclude) {
                 val hydrated = listOf(page).withSearchMetadata(adapter).single()
                 hydrated.copy(items = applyClientSideExcludeFilter(hydrated.items, sourceBaseQuery.excludeTags))
             } else page
         } ?: throw SourceAdapterException(SourceFailureReason.NETWORK, "Source timed out")
+        // Outside the source's timeout: annotating has its own budget, and a page that arrived in time stays answered.
+        return page.copy(items = annotateListing(page.items))
     }
 
-    /** One page of [adapter]'s results for [query], annotated; every listing the orchestrator serves passes here. */
+    /** One page of [adapter]'s results for [query], annotated like every page the orchestrator serves. */
     suspend fun searchSource(
         adapter: SourceAdapter,
         query: Query,
