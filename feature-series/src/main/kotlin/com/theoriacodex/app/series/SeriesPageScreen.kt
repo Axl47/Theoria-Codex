@@ -11,7 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.outlined.Download
-import androidx.compose.material3.Checkbox
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -46,6 +46,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.ui.components.EmptyState
@@ -122,9 +125,9 @@ private fun LazyListScope.chapterList(state: SeriesPageState, viewModel: SeriesP
             entry,
             enabled = state.canOpen(address),
             onClick = { onOpenEntry(address) },
-            trailing = if (downloads) {
-                // A chapter cannot start downloading while its source is missing; one under way can still stop.
-                { DownloadMark(download, enabled = !state.sourceMissing || download != null) { viewModel.toggleDownload(address) } }
+            // Without its source a chapter cannot download; one queued or on the device can still be cancelled or deleted.
+            trailing = if (downloads && (download != null || !state.sourceMissing)) {
+                { DownloadMark(download) { viewModel.toggleDownload(address) } }
             } else null,
         )
     }
@@ -252,18 +255,22 @@ private fun ChapterListHeader(
                     open = false
                     action()
                 }
-                val canFetch = !state.sourceMissing
-                DOWNLOAD_CHOICES.forEach { (choice, label) ->
-                    DropdownMenuItem(text = { Text(label) }, enabled = canFetch, onClick = { choose { onDownload(choice) } })
+                if (!state.sourceMissing) {
+                    DOWNLOAD_CHOICES.forEach { (choice, label) ->
+                        DropdownMenuItem(text = { Text(label) }, onClick = { choose { onDownload(choice) } })
+                    }
                 }
                 DropdownMenuItem(text = { Text("Delete downloads") }, enabled = state.downloads.isNotEmpty(), onClick = { choose(onDeleteDownloads) })
                 val stored = state.stored
                 if (stored?.followed == true) {
                     HorizontalDivider()
+                    val on = stored.downloadNewChapters
+                    // Checked as other menus show their choice, and said as checked or not to accessibility services.
                     DropdownMenuItem(
                         text = { Text("Download new chapters") },
-                        trailingIcon = { Checkbox(checked = stored.downloadNewChapters, onCheckedChange = null) },
-                        onClick = { choose { onDownloadNewChapters(!stored.downloadNewChapters) } },
+                        trailingIcon = { if (on) Icon(Icons.Default.Check, contentDescription = null) },
+                        onClick = { choose { onDownloadNewChapters(!on) } },
+                        modifier = Modifier.semantics { toggleableState = ToggleableState(on) },
                     )
                 }
             }
@@ -279,8 +286,8 @@ private val DOWNLOAD_CHOICES = listOf(
 
 /** A chapter row's download state, which a tap moves on: download, stop the download, or delete it from the device. */
 @Composable
-private fun DownloadMark(download: ChapterDownload?, enabled: Boolean, onClick: () -> Unit) {
-    IconButton(onClick = onClick, enabled = enabled) {
+private fun DownloadMark(download: ChapterDownload?, onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
         when (download) {
             null -> Icon(Icons.Outlined.Download, contentDescription = "Download")
             is ChapterDownload.Queued -> Box(contentAlignment = Alignment.Center) {
