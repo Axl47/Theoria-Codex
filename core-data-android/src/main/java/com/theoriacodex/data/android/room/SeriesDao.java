@@ -41,7 +41,4 @@ public interface SeriesDao {
     @Upsert void upsertSeries(SeriesEntity entity);
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) void upsertEntries(List<SeriesEntryEntity> entities);
-
-    @Query("DELETE FROM series_entries WHERE source = :source AND series_address = :seriesAddress AND address IN (:addresses)")
-    int deleteEntries(String source, String seriesAddress, List<String> addresses);
 }

@@ -54,18 +54,21 @@ class RoomSeriesRepository(
         val id = series.id
         return database.withTransaction {
             val before = dao.series(id.source.id, id.address)?.toStored() ?: StoredSeries(series)
-            val listed = !entries.isNullOrEmpty()
-            val stored = before.copy(series = series.keeping(before.series), lastCheckedAtEpochMs = if (listed) clock() else before.lastCheckedAtEpochMs)
+            val stored = before.copy(series = series.keeping(before.series))
+            if (!entries.isNullOrEmpty()) return@withTransaction storeEntries(stored, entries)
             dao.upsertSeries(stored.toEntity())
-            if (entries.isNullOrEmpty()) return@withTransaction emptyList()
-            val newEntries = storeEntries(stored, entries)
-            if (before.lastCheckedAtEpochMs == null) emptyList() else newEntries
+            emptyList()
         }
     }
 
+    override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>): List<SeriesEntry> = database.withTransaction {
+        val stored = dao.series(id.source.id, id.address)?.toStored()
+        if (stored == null || entries.isEmpty()) emptyList() else storeEntries(stored, entries)
+    }
+
     /**
-     * Replaces [stored]'s entry list with [entries] and returns the ones never stored before. Must run in a
-     * transaction.
+     * Writes [stored] as checked now, with [entries] as its entry list, and returns the new ones (none for its first
+     * list). Must run in a transaction.
      */
     private fun storeEntries(stored: StoredSeries, entries: List<SeriesEntry>): List<SeriesEntry> {
         val id = stored.series.id
@@ -74,23 +77,21 @@ class RoomSeriesRepository(
         val current = entries.distinctBy { it.address }
         val listed = current.mapTo(HashSet()) { it.address }
         val known = dao.allEntries(id.source.id, id.address).map(SeriesEntryEntity::toStored).associateBy { it.entry.address }
-        // Entries the source does not list, by chapter number: a chapter that returns at a new address takes over the
-        // progress of the one it replaces.
-        val unlisted = known.values.filter { it.entry.address !in listed && it.entry.number != null }
-            .associateByTo(HashMap()) { it.entry.number }
-        val replaced = mutableMapOf<String, String>()
+        val moved = movedEntries(known.values.partition { it.entry.address in listed }, current.filter { it.address !in known })
         val newEntries = mutableListOf<SeriesEntry>()
         val rows = current.mapIndexed { order, entry ->
-            val before = known[entry.address] ?: entry.number?.let(unlisted::remove)?.also { replaced[it.entry.address] = entry.address }
+            val before = known[entry.address] ?: moved[entry.address]
             if (before == null) newEntries += entry
             (before?.copy(entry = entry, sourceOrder = order) ?: StoredSeriesEntry(entry, order, firstSeenAtEpochMs = now))
         }
-        val dropped = known.values.filter { it.entry.address !in listed && it.entry.address !in replaced && it.sourceOrder != NOT_LISTED }
-            .map { it.copy(sourceOrder = NOT_LISTED) }
-        if (replaced.isNotEmpty()) dao.deleteEntries(id.source.id, id.address, replaced.keys.toList())
+        // A dropped entry keeps its row and progress, also when a new address took its progress over: if the source
+        // lists both again, neither is new or unread.
+        val dropped = known.values.filter { it.entry.address !in listed && it.sourceOrder != NOT_LISTED }.map { it.copy(sourceOrder = NOT_LISTED) }
+        val reopened = moved.entries.firstOrNull { it.value.entry.address == stored.lastOpenedEntry }?.key
+        // The series first: its entries refer to its row.
+        dao.upsertSeries(stored.copy(lastOpenedEntry = reopened ?: stored.lastOpenedEntry, lastCheckedAtEpochMs = now).toEntity())
         dao.upsertEntries((rows + dropped).map { it.toEntity(id) })
-        stored.lastOpenedEntry?.let(replaced::get)?.let { dao.upsertSeries(stored.copy(lastOpenedEntry = it).toEntity()) }
-        return newEntries
+        return if (stored.lastCheckedAtEpochMs == null) emptyList() else newEntries
     }
 
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = update(id) { it.copy(followed = followed) }
@@ -115,6 +116,28 @@ class RoomSeriesRepository(
             if (changed != stored) dao.upsertSeries(changed.toEntity())
         }
     }
+}
+
+/** A chapter number and who released it: several groups release the same number, each a chapter of its own. */
+private val SeriesEntry.release: Pair<Float, String?>? get() = number?.let { it to translatorGroup }
+
+/**
+ * The stored entry each of the [added] addresses continues, by its address: a dropped entry (the second of [known],
+ * which is split into listed and not) that is the only dropped one of its [release], for an added entry that is the
+ * only added one of it, while no listed entry is that release already. Anything less certain could hand one group's
+ * read chapter to another group's release, or hide a new chapter.
+ */
+private fun movedEntries(
+    known: Pair<List<StoredSeriesEntry>, List<StoredSeriesEntry>>,
+    added: List<SeriesEntry>,
+): Map<String, StoredSeriesEntry> {
+    val (listed, dropped) = known
+    val taken = listed.mapNotNullTo(HashSet()) { it.entry.release }
+    val droppedBy = dropped.groupBy { it.entry.release }
+    return added.groupBy { it.release }.mapNotNull { (release, entries) ->
+        val before = droppedBy[release]?.singleOrNull()
+        if (release == null || release in taken || before == null) null else entries.singleOrNull()?.let { it.address to before }
+    }.toMap()
 }
 
 private fun SeriesEntity.toStored() = StoredSeries(

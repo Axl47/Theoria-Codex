@@ -129,8 +129,41 @@ class RoomSeriesRepositoryTest {
         assertEquals(3, moved.lastPage)
         assertEquals(5, moved.pageCount)
         assertEquals("/c/2-v2", repository.series(id)!!.lastOpenedEntry)
-        // The old address is gone for good: listed again, it is a chapter never stored.
-        assertEquals(3, repository.entries(id).size)
+
+        // The old address is remembered: listed again beside its replacement, it is neither new nor unread.
+        repository.recordProgress(id, "/c/2-v2", page = 5, pageCount = 5)
+        val both = listOf(third, reuploaded, SeriesEntry("/c/2", "Chapter 2", number = 2f), first)
+        assertEquals(emptyList<SeriesEntry>(), repository.store(series, both))
+        assertEquals(listOf(3, 5), listOf("/c/2", "/c/2-v2").map { address -> repository.entries(id).single { it.entry.address == address }.lastPage })
+    }
+
+    @Test
+    fun `another group's release of a number, or one of several, is a new unread chapter`() = runTest {
+        val read = SeriesEntry("/c/1-a", "Chapter 1", number = 1f, translatorGroup = "A")
+        repository.store(series, listOf(read, SeriesEntry("/c/0", "Prologue")))
+        repository.recordProgress(id, "/c/1-a", page = 4, pageCount = 4)
+
+        // Group A's release goes; group B's and two of a group that never released it arrive, and an unnumbered one.
+        val arrived = listOf(
+            SeriesEntry("/c/1-b", "Chapter 1", number = 1f, translatorGroup = "B"),
+            SeriesEntry("/c/1-c", "Chapter 1", number = 1f, translatorGroup = "C"),
+            SeriesEntry("/c/1-c2", "Chapter 1 v2", number = 1f, translatorGroup = "C"),
+            SeriesEntry("/c/extra", "Extra"),
+        )
+        assertEquals(arrived, repository.store(series, arrived))
+        assertEquals(List(4) { false }, repository.entries(id).map { it.read })
+        assertEquals("/c/1-a", repository.series(id)!!.lastOpenedEntry)
+    }
+
+    @Test
+    fun `storing entries alone leaves what is stored about the series as it is`() = runTest {
+        repository.store(series, listOf(SeriesEntry("/c/1", "Chapter 1")))
+        repository.store(series.copy(title = "Renamed", description = "A synopsis."))
+
+        val second = SeriesEntry("/c/2", "Chapter 2")
+        assertEquals(listOf(second), repository.storeEntries(id, listOf(second, SeriesEntry("/c/1", "Chapter 1"))))
+        assertEquals(series.copy(title = "Renamed", description = "A synopsis."), repository.series(id)!!.series)
+        assertEquals(emptyList<SeriesEntry>(), repository.storeEntries(id.copy(address = "/series/unknown"), listOf(second)))
     }
 
     @Test

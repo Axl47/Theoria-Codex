@@ -57,12 +57,19 @@ interface SeriesRepository {
      * dropped leave the list but are remembered, so one that returns is as the user left it. An empty list changes
      * nothing, since a source that fails quietly lists none.
      *
-     * Returns the new entries, in the source's order: those whose address was never stored, unless they have the
-     * chapter number of an entry the source dropped. Such an entry is the same chapter at a new address and takes
-     * over the dropped one's progress. The first list a series ever gets has no new entries, because nothing was
-     * there to compare it with.
+     * Returns the new entries, in the source's order: those whose address was never stored, unless one is plainly a
+     * dropped entry at a new address. That takes both to be the only release of their chapter number by their
+     * translator group, among the dropped entries and among the listed ones; the new address then starts with the
+     * dropped one's progress. The first list a series ever gets has no new entries, because nothing was there to
+     * compare it with.
      */
     suspend fun store(series: Series, entries: List<SeriesEntry>? = null): List<SeriesEntry>
+
+    /**
+     * Replaces the stored entry list of the series [id] with [entries], as [store] does, leaving what is stored about
+     * the series itself as it is. Does nothing for a series that is not stored.
+     */
+    suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>): List<SeriesEntry>
 
     suspend fun setFollowed(id: SeriesId, followed: Boolean)
 

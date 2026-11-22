@@ -23,20 +23,22 @@ data class SeriesUpdate(val series: Series, val newEntries: List<SeriesEntry>)
 private val refreshLocks = ConcurrentHashMap<SourceKey, Mutex>()
 
 /**
- * Stores what [source] says about [series] now: its whole entry list and, [withDetails], its details, which cost a
- * request of their own. Returns the new entries, as [SeriesRepository.store] does. Throws what the source throws.
+ * Stores what [source] says about [series] now: its details and its whole entry list. Returns the new entries, as
+ * [SeriesRepository.store] does. Throws what the source throws.
  */
-suspend fun SeriesRepository.refresh(source: SeriesSource, series: Series, withDetails: Boolean = true): List<SeriesEntry> =
+suspend fun SeriesRepository.refresh(source: SeriesSource, series: Series): List<SeriesEntry> =
     refreshLocks.getOrPut(source.key, ::Mutex).withLock {
-        val details = if (withDetails) source.details(series) else series
+        val details = source.details(series)
         store(details, source.entries(details))
     }
 
 /**
  * Refreshes every followed series' entry list from its source and returns the ones that gained entries. Sources are
  * checked side by side, but each source's series one at a time, because a source's requests share one rate limit.
- * [sources] is asked again before each series, so a source switched off or removed midway is not used any further. A
- * series whose source is missing or fails is skipped and the rest go on.
+ * [sources] is asked again for each series, once its turn has come, so a source switched off or removed while the
+ * check ran or waited is not used any further. A series whose source is missing or fails is skipped and the rest go
+ * on. Only entry lists are fetched and stored: details cost a request of their own, and the ones the check started
+ * with may be older than what a series' page stored meanwhile.
  *
  * [onUpdate] gets each series as soon as its new entries are stored, so a check stopped midway has already reported
  * everything it stored. Sources report side by side.
@@ -47,17 +49,16 @@ suspend fun SeriesRepository.checkFollowed(
 ): List<SeriesUpdate> = coroutineScope {
     observeFollowed().first().map(FollowedSeries::series).groupBy { it.id.source }.values.map { followed ->
         async {
-            followed.mapNotNull { series ->
-                val source = sources().firstOrNull { it.key == series.id.source }
-                source?.let { update(it, series) }?.also { onUpdate(it) }
-            }
+            followed.mapNotNull { series -> update(sources, series)?.also { onUpdate(it) } }
         }
     }.awaitAll().flatten()
 }
 
-/** [series]' new entries after a refresh from [source]; null when it gained none or its source failed. */
-private suspend fun SeriesRepository.update(source: SeriesSource, series: Series): SeriesUpdate? = try {
-    refresh(source, series, withDetails = false).takeIf { it.isNotEmpty() }?.let { SeriesUpdate(series, it) }
+/** [series]' new entries, fetched from its source among [sources]; null when it gained none or its source is gone or failed. */
+private suspend fun SeriesRepository.update(sources: suspend () -> List<SeriesSource>, series: Series): SeriesUpdate? = try {
+    refreshLocks.getOrPut(series.id.source, ::Mutex).withLock {
+        sources().firstOrNull { it.key == series.id.source }?.let { storeEntries(series.id, it.entries(series)) }
+    }?.takeIf { it.isNotEmpty() }?.let { SeriesUpdate(series, it) }
 } catch (error: CancellationException) {
     throw error
 } catch (_: Exception) {

@@ -15,12 +15,22 @@ import com.theoriacodex.domain.series.SeriesSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import com.theoriacodex.data.repository.refresh
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 class SeriesUpdateCheckTest {
     private val database = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext<Context>(), TheoriaRoomDatabase::class.java)
@@ -107,6 +117,25 @@ class SeriesUpdateCheckTest {
     }
 
     @Test
+    fun `a check that waited for a series' page to refresh asks which sources are on only afterwards`() = runTest {
+        follow(series)
+        source.chapters[series.id] = listOf(first)
+        val pageRefresh = CompletableDeferred<Unit>()
+        source.detailsWait = pageRefresh
+        val refresh = launch { repository.refresh(source, series) }
+        runCurrent()
+
+        val askedWhileWaiting = mutableListOf<Boolean>()
+        val check = launch { repository.checkFollowed({ emptyList<SeriesSource>().also { askedWhileWaiting += !pageRefresh.isCompleted } }) }
+        // Real time for the check to read the followed series and reach the refresh it has to wait for.
+        withContext(Dispatchers.Default) { delay(200) }
+        pageRefresh.complete(Unit)
+        joinAll(refresh, check)
+
+        assertEquals(listOf(false), askedWhileWaiting)
+    }
+
+    @Test
     fun `unfollowed series are not checked`() = runTest {
         repository.store(series)
         source.chapters[series.id] = listOf(first)
@@ -127,7 +156,10 @@ private class FakeSource(id: String, private val fails: Boolean = false) : Serie
     override val language = "en"
     override suspend fun popular(page: Int) = SeriesPage(emptyList(), false)
     override suspend fun search(text: String, page: Int) = popular(page)
-    override suspend fun details(series: Series): Series = error("A check asks for chapters only")
+
+    /** What a page's refresh waits for in [details]; a check asks for chapters only. */
+    var detailsWait: CompletableDeferred<Unit>? = null
+    override suspend fun details(series: Series): Series = checkNotNull(detailsWait) { "A check asks for chapters only" }.await().let { series }
     override suspend fun entries(series: Series) = when {
         fails -> throw IllegalStateException("down")
         series.id == stopsAt -> throw CancellationException("stopped")
