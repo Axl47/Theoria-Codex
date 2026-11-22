@@ -34,6 +34,9 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import coil.Coil
+import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -55,6 +58,11 @@ class ViewerVerticalGalleryTest {
     private val next = gallery.copy(id = PostId(SourceKey.NHENTAI, "next"), media = listOf(page))
     private val actions = mutableListOf<ViewerAction>()
     private val state = mutableStateOf(createViewerUiState(ViewerSessionIdentity("vertical"), listOf(gallery, next)))
+
+    // Pages fail at once on the main thread; on Coil's background thread they could land after idling, and a Retry
+    // tapped before the Viewer holds page 1's error only reloads that page locally.
+    @Before fun failImageLoads() = installFailingLoader()
+    @After fun resetCoil() = Coil.reset()
 
     private fun show(modes: Map<PostId, GalleryReadingMode> = mapOf(gallery.id to GalleryReadingMode.VERTICAL)) {
         compose.setContent {
@@ -167,9 +175,6 @@ class ViewerVerticalGalleryTest {
 
     @Test fun `a failed page's Retry goes through the Viewer's shared retry`() {
         show()
-        // Pages fail on Coil's background thread, which idling does not track. Until the Viewer holds page 1's
-        // error, its Retry only reloads the page locally, so wait for that before tapping.
-        compose.waitUntil { state.value.mediaError?.mediaKey == ViewerMediaKey(gallery.id, 0) }
         compose.onNode(hasText("Retry") and hasAnyAncestor(hasContentDescription("Page 1"))).performClick()
         assertTrue(actions.any { it is ViewerAction.RetryMedia })
     }

@@ -9,6 +9,7 @@ import coil.EventListener
 import coil.ImageLoader
 import coil.decode.DataSource
 import coil.fetch.DrawableResult
+import coil.fetch.FetchResult
 import coil.fetch.Fetcher
 import coil.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
@@ -20,26 +21,32 @@ import kotlinx.coroutines.awaitCancellation
  */
 internal fun installHangingLoader(loadsImmediately: String? = null): ImageLoadLog {
     val log = ImageLoadLog()
-    val context = ApplicationProvider.getApplicationContext<Application>()
-    val image = BitmapDrawable(context.resources, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888))
-    Coil.setImageLoader(
-        ImageLoader.Builder(context)
-            .dispatcher(Dispatchers.Unconfined)
-            .components {
-                add(
-                    Fetcher.Factory<Any> { data, _, _ ->
-                        Fetcher {
-                            if (loadsImmediately != null && data.toString().endsWith(loadsImmediately)) DrawableResult(image, false, DataSource.MEMORY)
-                            else awaitCancellation()
-                        }
-                    },
-                )
-            }
-            .eventListener(log)
-            .build(),
-    )
+    val image = BitmapDrawable(context().resources, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888))
+    installTestLoader(log) { data ->
+        if (loadsImmediately != null && data.toString().endsWith(loadsImmediately)) DrawableResult(image, false, DataSource.MEMORY)
+        else awaitCancellation()
+    }
     return log
 }
+
+/**
+ * Replaces Coil's loader with one whose every request fails at once, on the calling thread, so a test's idling
+ * sees each failure land. Call `Coil.reset()` after the test.
+ */
+internal fun installFailingLoader() = installTestLoader(EventListener.NONE) { data -> error("No image in tests: $data") }
+
+/** Unconfined, so loads finish on the main thread, where Compose's idling tracks them. */
+private fun installTestLoader(listener: EventListener, fetch: suspend (Any) -> FetchResult) {
+    Coil.setImageLoader(
+        ImageLoader.Builder(context())
+            .dispatcher(Dispatchers.Unconfined)
+            .components { add(Fetcher.Factory<Any> { data, _, _ -> Fetcher { fetch(data) } }) }
+            .eventListener(listener)
+            .build(),
+    )
+}
+
+private fun context() = ApplicationProvider.getApplicationContext<Application>()
 
 /**
  * [requests], [started] and [cancelled] cover only what is shown on screen. Disk-only warm requests, which never
