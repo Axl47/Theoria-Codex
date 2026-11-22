@@ -5,10 +5,11 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.runtime.snapshots.Snapshot
@@ -33,6 +34,9 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import coil.Coil
+import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -54,6 +58,11 @@ class ViewerVerticalGalleryTest {
     private val next = gallery.copy(id = PostId(SourceKey.NHENTAI, "next"), media = listOf(page))
     private val actions = mutableListOf<ViewerAction>()
     private val state = mutableStateOf(createViewerUiState(ViewerSessionIdentity("vertical"), listOf(gallery, next)))
+
+    // Pages fail at once on the main thread; on Coil's background thread they could land after idling, and a Retry
+    // tapped before the Viewer holds page 1's error only reloads that page locally.
+    @Before fun failImageLoads() = installFailingLoader()
+    @After fun resetCoil() = Coil.reset()
 
     private fun show(modes: Map<PostId, GalleryReadingMode> = mapOf(gallery.id to GalleryReadingMode.VERTICAL)) {
         compose.setContent {
@@ -166,7 +175,7 @@ class ViewerVerticalGalleryTest {
 
     @Test fun `a failed page's Retry goes through the Viewer's shared retry`() {
         show()
-        compose.onAllNodesWithText("Retry")[0].performClick() // page 1, the selected one
+        compose.onNode(hasText("Retry") and hasAnyAncestor(hasContentDescription("Page 1"))).performClick()
         assertTrue(actions.any { it is ViewerAction.RetryMedia })
     }
 
