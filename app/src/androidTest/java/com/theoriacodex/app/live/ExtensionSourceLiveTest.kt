@@ -105,10 +105,12 @@ class ExtensionSourceLiveTest {
         live.report("next", "past the last page opened \"${next.entry.name}\", still \"$mode\"")
 
         // The chapter just finished was left on its last page; picked again, it starts over.
-        viewerControl("the finished chapter in the strip", By.desc("Open ${listed.title} · ${chapter.entry.name}")).click()
+        // The strip redraws as chapters load, so an element found can be gone by the time it is tapped.
+        val picked = By.desc("Open ${listed.title} · ${chapter.entry.name}")
+        generateSequence { runCatching { viewerControl("the finished chapter in the strip", picked).click() } }.take(STRIP_TAPS).first { it.isSuccess }
         viewerControl("the finished chapter's name as the title", By.textStartsWith("${listed.title} · ${chapter.entry.name}"))
-        val reopenedOn = viewerControl("the finished chapter's first page", By.descStartsWith("Page 1 of ")).contentDescription
-        live.report("reread", "the finished \"${chapter.entry.name}\", picked from the strip, opened on \"$reopenedOn\"")
+        viewerControl("the finished chapter on its first page", By.descStartsWith("Page 1 of "))
+        live.report("reread", "the finished \"${chapter.entry.name}\", picked from the strip, opened on page 1")
         device.pressBack()
 
         live.waitFor("the finished chapter marked Read on the series page", By.text("Read"))
@@ -488,6 +490,7 @@ class ExtensionSourceLiveTest {
     private companion object {
         val CHAPTER_COUNT: Pattern = Pattern.compile("(.+ · )?\\d+ chapters?")
         const val DESCRIPTION_START = 30
+        const val STRIP_TAPS = 5
 
         /** The page the test stops on, far enough in that resuming there cannot be the start by accident. */
         const val TARGET_PAGE = 3
