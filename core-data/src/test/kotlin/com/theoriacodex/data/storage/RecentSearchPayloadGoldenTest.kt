@@ -15,7 +15,8 @@ import org.junit.Test
 
 /**
  * recent_searches.query_payload_json rows as the Gson encoder wrote them (HTML-escaped strings) must decode to the
- * same searches. legacy-query.json is the pre-versioned row shape: a bare stored Query.
+ * same searches. legacy-query.json is the pre-versioned row shape: a bare stored Query. fyp.json is a For You search
+ * from before the shelves page was removed; it stays as input that old saved searches and backups still hold.
  */
 class RecentSearchPayloadGoldenTest {
     @Test
@@ -24,7 +25,7 @@ class RecentSearchPayloadGoldenTest {
     }
 
     @Test
-    fun `a Gson-written FYP row keeps its tags by source`() {
+    fun `a Gson-written For You row reads as Unified and keeps its tags by source`() {
         assertEquals(fyp, RecentSearchPayloadCodec.decodeJson(golden("fyp.json")))
     }
 
@@ -45,7 +46,7 @@ class RecentSearchPayloadGoldenTest {
         )
     }
 
-    // The Gson rows are all Multi-Search or FYP, so source.json and animated.json, captured from the kotlinx encoder,
+    // The Gson rows are all Multi-Search or For You, so source.json and animated.json, captured from the kotlinx encoder,
     // add a source mode and the media key.
     @Test
     fun `the goldens hold every stored key`() {
@@ -75,7 +76,7 @@ class RecentSearchPayloadGoldenTest {
         )
         assertStoredFormat(
             golden("multi-search.json") to record(multiSearch),
-            golden("fyp.json") to record(fyp),
+            golden("fyp.json") to record(fyp).copy(kind = "FYP"),
             golden("source.json") to record(source),
             golden("animated.json") to record(animated),
         )
@@ -116,7 +117,7 @@ class RecentSearchPayloadGoldenTest {
             dateRange = null,
             minScore = null,
         ),
-        kind = RecentSearchKind.FYP,
+        kind = RecentSearchKind.UNIFIED,
         sources = listOf(SourceKey.GELBOORU, SourceKey.PIXIV),
         sourceTags = mapOf(
             SourceKey.GELBOORU to listOf("rock & roll", "<seed>"),

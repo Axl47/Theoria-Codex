@@ -290,38 +290,6 @@ abstract class LibraryRepositoryContract {
     }
 
     @Test
-    fun `FYP searches are activity entries and clear independently from applied searches`() = runTest {
-        val repository = createRecentsRepository(clock = { 100L })
-        val fypQuery = Query(
-            mode = QueryMode.Unified,
-            includeTags = listOf("favorite"),
-            excludeTags = emptyList(),
-            sort = SortMode.NEWEST,
-            dateRange = null,
-            minScore = null,
-        )
-        repository.recordSearch(fypQuery.copy(mode = QueryMode.Source(SourceKey.PIXIV)), "search:manual")
-        repository.recordSearch(fypQuery, "for_you:seed", RecentSearchKind.FYP, listOf(SourceKey.PIXIV))
-
-        assertEquals(2, repository.activity().size)
-        repository.clearSearches(RecentSearchSection.FYP)
-        assertEquals(listOf("search:manual"), repository.observeSearches().first().map { it.queryHash })
-    }
-
-    @Test
-    fun `legacy FYP result posts stay out of combined activity`() = runTest {
-        val repository = createRecentsRepository(clock = { 100L })
-        repository.recordWatchedPost(
-            repositoryTestPost(id = "legacy-fyp"),
-            ViewerStreamSource.FOR_YOU,
-            "for_you:legacy",
-            RecentPostSection.FYP,
-        )
-
-        assertTrue(repository.activity().isEmpty())
-    }
-
-    @Test
     fun `recents clears codex and external watched sections independently`() = runTest {
         var now = 100L
         val repository = createRecentsRepository(clock = { now++ })
@@ -466,7 +434,7 @@ abstract class LibraryRepositoryContract {
         assertTrue(repo.observeWatchedPosts().first().isEmpty())
         assertEquals(1, repo.observeSearches().first().size)
 
-        repo.clearSearches(RecentSearchSection.SEARCHES)
+        repo.clearSearches()
 
         assertTrue(repo.observeSearches().first().isEmpty())
 

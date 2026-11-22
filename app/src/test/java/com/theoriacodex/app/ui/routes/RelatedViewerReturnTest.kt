@@ -37,7 +37,6 @@ import com.theoriacodex.app.fixtures.JourneyAppContainer
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.ui.TheoriaAppContent
-import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
@@ -65,21 +64,17 @@ class RelatedViewerReturnTest {
     @get:Rule val compose = createComposeRule()
     @get:Rule val temporary = TemporaryFolder()
 
-    @Test fun `Search related shelf survives repeated fullscreen return`() = verifyReturn(RecentSearchKind.SOURCE)
-    @Test fun `For You related shelf survives repeated fullscreen return`() = verifyReturn(RecentSearchKind.FYP)
+    @Test fun `Search related shelf survives repeated fullscreen return`() = verifyReturn()
     @Test
     @Config(application = TheoriaApplication::class, shadows = [ViewerReturnApplicationShadow::class])
-    fun `Gelbooru video shelf survives Search fullscreen return`() = verifyReturn(RecentSearchKind.SOURCE, SourceKey.GELBOORU, true)
-    @Test
-    @Config(application = TheoriaApplication::class, shadows = [ViewerReturnApplicationShadow::class])
-    fun `Gelbooru video shelf survives For You fullscreen return`() = verifyReturn(RecentSearchKind.FYP, SourceKey.GELBOORU, true)
+    fun `Gelbooru video shelf survives Search fullscreen return`() = verifyReturn(SourceKey.GELBOORU, true)
 
-    private fun verifyReturn(kind: RecentSearchKind, source: SourceKey = SourceKey.PIXIV, video: Boolean = false) {
+    private fun verifyReturn(source: SourceKey = SourceKey.PIXIV, video: Boolean = false) {
         val posts = relatedPosts(source, video)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val showApp = mutableStateOf(true)
         var viewModelOwner: ViewModelStoreOwner? = null
-        val graph = relatedGraph(source, posts, scope, kind)
+        val graph = relatedGraph(source, posts, scope)
         try {
             val restoration = StateRestorationTester(compose)
             restoration.setContent {
@@ -160,17 +155,14 @@ class RelatedViewerReturnTest {
         source: SourceKey,
         posts: List<com.theoriacodex.domain.model.Post>,
         scope: CoroutineScope,
-        kind: RecentSearchKind,
     ): JourneyAppContainer {
         return runBlocking(Dispatchers.IO) {
             JourneyAppContainer(ApplicationProvider.getApplicationContext(), temporary.newFolder(),
                 mapOf(source to posts), scope).also {
                 it.awaitReady()
                 it.data.recentsRepository.recordSearch(
-                    Query(if (kind == RecentSearchKind.FYP) QueryMode.Unified else QueryMode.Source(source),
-                        listOf("seed"), emptyList(), SortMode.NEWEST, null, null),
-                    "return-query", kind, listOf(source),
-                    if (kind == RecentSearchKind.FYP) mapOf(source to listOf("seed")) else emptyMap(),
+                    Query(QueryMode.Source(source), listOf("seed"), emptyList(), SortMode.NEWEST, null, null),
+                    "return-query",
                 )
             }
         }

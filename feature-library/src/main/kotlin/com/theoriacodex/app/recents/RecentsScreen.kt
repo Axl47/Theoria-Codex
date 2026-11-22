@@ -58,7 +58,6 @@ fun RecentsScreen(
     watchedPosts: List<RecentPostEntry>,
     codexPosts: List<RecentPostEntry>,
     searches: List<RecentSearchEntry>,
-    fypSearches: List<RecentSearchEntry>,
     activity: List<RecentActivityEntry>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     durations: FeedDurations = FeedDurations.NONE,
@@ -71,7 +70,6 @@ fun RecentsScreen(
     onOpenWatchedPost: (List<RecentPostEntry>, Int) -> Unit,
     onOpenCodexPost: (List<RecentPostEntry>, Int) -> Unit,
     onOpenSearch: (RecentSearchEntry) -> Unit,
-    onOpenFypSearch: (RecentSearchEntry) -> Unit,
     onClear: (RecentsClearTarget) -> Unit,
     saves: RecentSearchSaves? = null,
     onRemoveSearch: ((RecentSearchEntry) -> Unit)? = null,
@@ -83,13 +81,12 @@ fun RecentsScreen(
     header: LibrarySectionHeader = BareSectionHeader,
 ) {
     var filter by rememberSaveable { mutableStateOf(RecentsFilter.ALL) }
-    var searchFilter by rememberSaveable { mutableStateOf(RecentSearchFilter.ALL) }
     var showMenu by remember { mutableStateOf(false) }
     var selectedSource by rememberSaveable(stateSaver = NullableSourceKeySaver) { mutableStateOf<SourceKey?>(null) }
-    val visible = rememberVisibleRecents(watchedPosts, codexPosts, searches, fypSearches, activity, selectedSource)
+    val visible = rememberVisibleRecents(watchedPosts, codexPosts, searches, activity, selectedSource)
     val openWatchedPost: (Int) -> Unit = { onOpenWatchedPost(visible.watchedPosts, it) }
     val openCodexPost: (Int) -> Unit = { onOpenCodexPost(visible.codexPosts, it) }
-    val now = remember(watchedPosts, codexPosts, searches, fypSearches, activity) { System.currentTimeMillis() }
+    val now = remember(watchedPosts, codexPosts, searches, activity) { System.currentTimeMillis() }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var selectedActionSection by remember { mutableStateOf(RecentPostSection.WATCHED) }
     val saving = rememberRecentSearchSaving(saves)
@@ -110,18 +107,18 @@ fun RecentsScreen(
         }
 
         RecentsTab(
-            filter, searchFilter, { searchFilter = it }, visible, now, cards, relatedSlot,
+            filter, visible, now, cards, relatedSlot,
             { post, section ->
                 selectedActionPost = post
                 selectedActionSection = section
             },
-            openWatchedPost, openCodexPost, onOpenSearch, onOpenFypSearch, rows,
+            openWatchedPost, openCodexPost, onOpenSearch, rows,
         )
     }
 
     if (showMenu) {
         RecentsClearMenu(
-            filter, selectedSource != null, { target -> recentsIsEmpty(target, watchedPosts, codexPosts, searches, fypSearches, activity) },
+            filter, selectedSource != null, { target -> recentsIsEmpty(target, watchedPosts, codexPosts, searches, activity) },
             onClear, onDismiss = { showMenu = false },
         )
     }
@@ -213,7 +210,6 @@ internal class VisibleRecents(
     val watchedPosts: List<RecentPostEntry>,
     val codexPosts: List<RecentPostEntry>,
     val searches: List<RecentSearchEntry>,
-    val fypSearches: List<RecentSearchEntry>,
     val activity: List<RecentActivityEntry>,
     private val source: SourceKey?,
 ) {
@@ -230,15 +226,13 @@ private fun rememberVisibleRecents(
     watchedPosts: List<RecentPostEntry>,
     codexPosts: List<RecentPostEntry>,
     searches: List<RecentSearchEntry>,
-    fypSearches: List<RecentSearchEntry>,
     activity: List<RecentActivityEntry>,
     source: SourceKey?,
-): VisibleRecents = remember(watchedPosts, codexPosts, searches, fypSearches, activity, source) {
+): VisibleRecents = remember(watchedPosts, codexPosts, searches, activity, source) {
     VisibleRecents(
         filterRecentPostsBySource(watchedPosts, source),
         filterRecentPostsBySource(codexPosts, source),
         searches.filter { it.matchesSource(source) },
-        fypSearches.filter { it.matchesSource(source) },
         activity.filter { it.matchesSource(source) },
         source,
     )
@@ -275,10 +269,7 @@ private fun RecentsClearMenu(
         RecentsFilter.ALL -> emptyList()
         RecentsFilter.WATCHED -> listOf("Clear Watched" to RecentsClearTarget.WATCHED)
         RecentsFilter.CODEX -> listOf("Clear Codex history" to RecentsClearTarget.CODEX)
-        RecentsFilter.SEARCHES -> listOf(
-            "Clear searches" to RecentsClearTarget.SEARCHES,
-            "Clear For You searches" to RecentsClearTarget.FYP,
-        )
+        RecentsFilter.SEARCHES -> listOf("Clear searches" to RecentsClearTarget.SEARCHES)
     }
     val targets = sectionTargets + ("Clear all History" to RecentsClearTarget.ALL)
     ActionMenuSheet(onDismiss) {
@@ -298,11 +289,10 @@ private fun RecentsClearMenu(
 
 private fun recentsIsEmpty(
     target: RecentsClearTarget, watchedPosts: List<RecentPostEntry>, codexPosts: List<RecentPostEntry>,
-    searches: List<RecentSearchEntry>, fypSearches: List<RecentSearchEntry>, activity: List<RecentActivityEntry>,
+    searches: List<RecentSearchEntry>, activity: List<RecentActivityEntry>,
 ): Boolean = when (target) {
     RecentsClearTarget.WATCHED -> watchedPosts.isEmpty()
     RecentsClearTarget.CODEX -> codexPosts.isEmpty()
-    RecentsClearTarget.FYP -> fypSearches.isEmpty()
     RecentsClearTarget.SEARCHES -> searches.isEmpty()
     RecentsClearTarget.ALL -> activity.isEmpty()
 }
@@ -315,12 +305,6 @@ internal enum class RecentsFilter(val label: String) {
 }
 
 private const val RECENTS_SECTION_SELECTOR_LABEL = "Filter History by section"
-
-fun RecentSearchEntry.fypSeedBySource(): Map<SourceKey, List<String>> {
-    return sourceTags.ifEmpty {
-        sources.associateWith { query.includeTags }
-    }
-}
 
 private fun filterRecentPostsBySource(posts: List<RecentPostEntry>, source: SourceKey?): List<RecentPostEntry> =
     posts.filter { source == null || it.post.id.source == source }

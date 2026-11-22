@@ -7,7 +7,6 @@ import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.activity
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchKind
-import com.theoriacodex.data.repository.RecentSearchSection
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -43,19 +42,16 @@ class RoomRecentsRepositoryTest {
 
     @After fun tearDown() = database.close()
 
-    @Test fun `section clearing captures exact rows and keeps the other search section`() = runTest {
+    @Test fun `clearing searches captures the exact rows for Undo`() = runTest {
         val repository = RoomRecentsRepository(database, clock = { now++ })
         repository.recordSearch(recentQuery("manual"), "manual")
-        repository.recordSearch(recentQuery("fyp").copy(mode = QueryMode.Unified), "unprefixed",
-            RecentSearchKind.FYP, listOf(SourceKey.PIXIV))
+        repository.recordSearch(recentQuery("unified").copy(mode = QueryMode.Unified), "unified")
         val original = repository.observeSearches().first()
-        val removed = repository.clearSearches(RecentSearchSection.SEARCHES)
-        assertEquals(original.filter { it.kind != RecentSearchKind.FYP }, removed)
-        assertEquals(original.filter { it.kind == RecentSearchKind.FYP }, repository.observeSearches().first())
+        val removed = repository.clearSearches()
+        assertEquals(original, removed)
+        assertTrue(repository.observeSearches().first().isEmpty())
         repository.restoreEntries(searches = removed)
         assertEquals(original, repository.observeSearches().first())
-        assertEquals(original.filter { it.kind == RecentSearchKind.FYP }, repository.clearSearches(RecentSearchSection.FYP))
-        assertEquals(removed, repository.observeSearches().first())
     }
 
     @Test fun `watched membership projection does not hydrate payloads or include Codex-only entries`() = runTest {
@@ -82,34 +78,6 @@ class RoomRecentsRepositoryTest {
         assertEquals(query, restored.query)
         assertEquals(RecentSearchKind.MULTI_SEARCH, restored.kind)
         assertEquals(listOf(SourceKey.GELBOORU, SourceKey.PIXIV), restored.sources)
-    }
-
-    @Test fun `FYP search persists and clears independently from applied searches`() = runTest {
-        val repository = RoomRecentsRepository(database, clock = { now++ })
-        val fypQuery = recentQuery("favorite").copy(mode = QueryMode.Unified)
-        val sourceTags = mapOf(SourceKey.PIXIV to listOf("favorite"))
-        repository.recordSearch(recentQuery("manual"), "search:manual")
-        repository.recordSearch(
-            query = fypQuery,
-            queryHash = "for_you:seed",
-            kind = RecentSearchKind.FYP,
-            sources = listOf(SourceKey.PIXIV),
-            sourceTags = sourceTags,
-        )
-        repository.recordWatchedPost(
-            recentPost("legacy-fyp"),
-            ViewerStreamSource.FOR_YOU,
-            "for_you:legacy",
-            RecentPostSection.FYP,
-        )
-
-        val restored = repository.observeSearches().first().first { it.kind == RecentSearchKind.FYP }
-        assertEquals(fypQuery, restored.query)
-        assertEquals(listOf(SourceKey.PIXIV), restored.sources)
-        assertEquals(sourceTags, restored.sourceTags)
-        assertTrue(repository.activity().none { it is RecentActivityEntry.Watched })
-        repository.clearSearches(RecentSearchSection.FYP)
-        assertEquals(listOf("search:manual"), repository.observeSearches().first().map { it.queryHash })
     }
 
     @Test fun `dedupe caps deterministic ties and origin preservation match Recents contract`() = runTest {
@@ -363,7 +331,7 @@ class RoomRecentsRepositoryTest {
         assertEquals(listOf("search"), repository.observeSearches().first().map { it.queryHash })
 
         repository.recordWatchedPost(recentPost("watched-2"), ViewerStreamSource.CODEX, null)
-        repository.clearSearches(RecentSearchSection.SEARCHES)
+        repository.clearSearches()
         assertTrue(repository.observeSearches().first().isEmpty())
         assertEquals(listOf("watched-2"), repository.observeWatchedPosts().first().map { it.post.id.sourcePostId })
 

@@ -353,7 +353,6 @@ internal object StatisticsPolicies {
             if (term.isPortableGeneralTag) !current.searchesByTagSeeded else !current.searchesByTypedTagSeeded
         }
         val seeded = recentSearches
-            .filter { entry -> entry.kind != RecentSearchKind.FYP }
             .fold(emptyMap<SearchedTagKey, Long>()) { counts, entry ->
                 counts.incrementTerms(entry.sources.toSet(), entry.query.searchedTerms().filterTo(mutableSetOf(), unseeded))
             }

@@ -15,7 +15,6 @@ import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.app.post.FileMirrorIndex
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
-import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.mergeRecentActivity
 import com.theoriacodex.domain.model.PostId
@@ -114,8 +113,7 @@ internal class BrowsingMetadataViewModel(
         RecentsDestinationState(
             watchedPosts = watched.filter { it.section == RecentPostSection.WATCHED },
             codexPosts = watched.filter { it.section == RecentPostSection.CODEX },
-            searches = searches.filterNot { it.kind == RecentSearchKind.FYP },
-            fypSearches = searches.filter { it.kind == RecentSearchKind.FYP },
+            searches = searches,
             activity = mergeRecentActivity(watched, searches),
             likedPostIds = likedIds,
         )

@@ -64,27 +64,6 @@ class ForYouCoordinatorTest {
         assertEquals(fetches + 1, adapter.requestedPageTokens.size)
     }
 
-    @Test fun `section pins reload native searches and dismissal survives generation`() = runTest {
-        val adapter = FakeAdapter(SourceKey.GELBOORU, "section")
-        val settings = InMemorySettingsRepository()
-        val saved = com.theoriacodex.data.repository.InMemorySavedSearchRepository()
-        val service = testForYouCoordinator(registryOf(adapter), settingsRepository = settings,
-            likesRepository = liked(listOf(SourceKey.GELBOORU)), savedSearches = saved)
-        val section = service.loadSections(request(service)).single()
-        assertEquals(mapOf(SourceKey.GELBOORU to listOf("cloud")), section.feed.seed)
-        assertEquals(listOf("cloud"), section.feed.continuation?.queriesBySource?.get(SourceKey.GELBOORU)?.includeTags)
-        val pinId = service.pinSection(section, true)
-        assertEquals(RecentSearchKind.FYP, saved.observeSavedSearches().first().single().search.kind)
-        val reloaded = service.loadSections(request(service)).single()
-        assertEquals(pinId, reloaded.savedSearchId)
-        settings.addForYouBlacklistEntry(defaultRecommendationProfiles().first().profileId,
-            SourceKey.GELBOORU, section.feed.seed.getValue(SourceKey.GELBOORU))
-        assertTrue(service.loadSections(request(service, settings.observeSettings().first())).isEmpty())
-        assertEquals(pinId, saved.observeSavedSearches().first().single().id)
-        service.pinSection(reloaded, false)
-        assertTrue(saved.observeSavedSearches().first().isEmpty())
-    }
-
     @Test fun `overview source selection constrains pins and generated sections without history writes`() = runTest {
         val recents = InMemoryRecentsRepository()
         val service = testForYouCoordinator(registryOf(FakeAdapter(SourceKey.GELBOORU, "g"), FakeAdapter(SourceKey.PIXIV, "p")),

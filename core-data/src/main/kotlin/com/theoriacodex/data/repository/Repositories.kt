@@ -97,8 +97,6 @@ interface QueryRepository {
 enum class RecentPostSection {
     WATCHED,
     CODEX,
-    /** Read compatibility for builds that briefly persisted recommendation result posts. */
-    FYP,
     ;
 
     companion object {
@@ -126,13 +124,18 @@ data class RecentSearchEntry(
     val searchedAtEpochMs: Long,
     val kind: RecentSearchKind = query.defaultRecentSearchKind(),
     val sources: List<SourceKey> = query.defaultRecentSearchSources(),
+    /** Each source's tags; only a For You search read from old data has them, until it is converted. */
     val sourceTags: Map<SourceKey, List<String>> = emptyMap(),
-)
+) {
+    /** A For You search from before the shelves page was removed; saved ones become source searches on load. */
+    val isRetiredForYouSearch: Boolean get() = sourceTags.isNotEmpty()
+}
 
 enum class RecentSearchKind {
     SOURCE,
     UNIFIED,
     MULTI_SEARCH,
+    /** Removed with the shelves page. */
     FYP,
 }
 
@@ -196,15 +199,9 @@ interface RecentsRepository {
     /** Removes one search; [restoreEntries] with the removed entry puts it back. */
     suspend fun removeSearch(queryHash: String)
     suspend fun clearWatchedPosts(section: RecentPostSection)
-    /** Remove only this section and capture the exact Undo payload in the same transaction. */
-    suspend fun clearSearches(section: RecentSearchSection): List<RecentSearchEntry>
+    /** Removes every search and captures the exact Undo payload in the same transaction. */
+    suspend fun clearSearches(): List<RecentSearchEntry>
     suspend fun clearAll()
-}
-
-enum class RecentSearchSection {
-    SEARCHES, FYP;
-
-    fun contains(entry: RecentSearchEntry): Boolean = (entry.kind == RecentSearchKind.FYP) == (this == FYP)
 }
 
 data class StatisticsTagKey(
@@ -613,7 +610,6 @@ internal fun decodeRestoredRecentsSection(
     if (decoded != null || streamSource != ViewerStreamSource.RECENTS) return decoded
     return when (queryHash) {
         "recents:codex" -> RecentPostSection.CODEX
-        "recents:fyp" -> RecentPostSection.FYP
         "recents:watched" -> RecentPostSection.WATCHED
         else -> null
     }

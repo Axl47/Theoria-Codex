@@ -205,6 +205,35 @@ class RoomCollectionStorageTest {
         }
     }
 
+    @Test fun `migration eleven to twelve deletes For You history and keeps every other recent`() {
+        val name = "collection-storage-migration-11-12-test"
+        val fyp = """{"recentSearchSchemaVersion":1,"query":{"schemaVersion":2,"modeType":"unified","includeTags":["x"],""" +
+            """"excludeTags":[],"sort":"TOP"},"kind":"FYP","sources":["PIXIV"],"sourceTags":{"PIXIV":["x"]}}"""
+        val unified = fyp.replace("FYP", "UNIFIED").replace(""""sourceTags":{"PIXIV":["x"]}""", """"sourceTags":{}""")
+        migrationHelper.createDatabase(name, 11).apply {
+            execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('PIXIV','1','{}')")
+            for (section in listOf("FYP", "WATCHED")) {
+                execSQL("INSERT INTO recent_watched(source,source_post_id,section,viewed_at_epoch_ms,sort_sequence,origin) " +
+                    "VALUES('PIXIV','1',?,1,1,'SEARCH')", arrayOf(section))
+            }
+            execSQL("INSERT INTO recent_searches VALUES('for_you:seed',?,1,1)", arrayOf(fyp))
+            execSQL("INSERT INTO recent_searches VALUES('unified',?,2,2)", arrayOf(unified))
+            close()
+        }
+        val migrated = migrationHelper.runMigrationsAndValidate(name, 12, true, TheoriaRoomDatabase.MIGRATION_11_12)
+        migrated.query("SELECT section FROM recent_watched").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("WATCHED", cursor.getString(0))
+            assertEquals(1, cursor.count)
+        }
+        migrated.query("SELECT query_hash FROM recent_searches").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("unified", cursor.getString(0))
+            assertEquals(1, cursor.count)
+        }
+        migrated.close()
+    }
+
     private fun post(id: String): Post {
         val full = ImageRef("https://example.com/$id-full.jpg", null, "image/jpeg")
         return Post(

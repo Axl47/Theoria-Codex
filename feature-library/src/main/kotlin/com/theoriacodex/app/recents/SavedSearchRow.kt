@@ -39,9 +39,8 @@ internal fun SavedSearchRow(
     val presentation = recentSearchPresentation(entry.search)
     val context = when (entry.search.kind) {
         RecentSearchKind.SOURCE -> entry.search.sources.single().displayName()
-        RecentSearchKind.UNIFIED -> "Unified"
+        RecentSearchKind.UNIFIED, RecentSearchKind.FYP -> "Unified"
         RecentSearchKind.MULTI_SEARCH -> "Multi-Search"
-        RecentSearchKind.FYP -> "For You"
     }
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {

@@ -22,9 +22,8 @@ fun recentSearchPresentation(entry: RecentSearchEntry): RecentSearchPresentation
         .takeIf(String::isNotBlank)
     val subtitle = when (entry.kind) {
         RecentSearchKind.SOURCE -> null
-        RecentSearchKind.UNIFIED -> sourceList
+        RecentSearchKind.UNIFIED, RecentSearchKind.FYP -> sourceList
         RecentSearchKind.MULTI_SEARCH -> sourceList?.let { "Multi-Search · $it" } ?: "Multi-Search"
-        RecentSearchKind.FYP -> sourceList
     }
     return RecentSearchPresentation(title, subtitle)
 }

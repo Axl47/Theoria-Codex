@@ -30,6 +30,7 @@ import com.theoriacodex.app.search.FileBackedTagSuggestionStore
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.search.loadSeedTagSuggestions
 import com.theoriacodex.app.statistics.AppUsageTracker
+import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.exposedRealSources
 import com.theoriacodex.app.sourceauth.AndroidSecureSourceCredentialsStore
 import com.theoriacodex.app.sourceauth.AndroidPixivPkceSessionStore
@@ -226,7 +227,9 @@ internal class DefaultTheoriaAppContainer(
     private val fileStoreRecoveryRegistry = FileStoreRecoveryRegistry()
     // Opened before anything starts background work: a pins file from a newer build fails construction, and a retry
     // builds a new container while this one's stores would still be open.
-    private val savedSearches = FileBackedSavedSearchRepository(storageDirectory, recoveryRegistry = fileStoreRecoveryRegistry)
+    private val savedSearches = FileBackedSavedSearchRepository(
+        storageDirectory, recoveryRegistry = fileStoreRecoveryRegistry, sourceName = { it.displayName() },
+    )
     private val tagSuggestionStore = FileBackedTagSuggestionStore(
         storeFile = File(storageDirectory, "tag_suggestions.json"),
         seedData = loadSeedTagSuggestions(appContext),

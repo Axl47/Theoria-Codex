@@ -55,7 +55,6 @@ import com.theoriacodex.app.media.PostDownloadItem
 import com.theoriacodex.app.post.PostMutationViewModel
 import com.theoriacodex.app.recents.RecentsClearWorkflow
 import com.theoriacodex.app.recents.SavedSearchViewModel
-import com.theoriacodex.app.recents.fypSeedBySource
 import com.theoriacodex.app.recommend.ForYouViewModel
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.related.LikeToggleOutcome
@@ -696,11 +695,6 @@ internal class TheoriaShell(
         }
         routes.dispatchOrQueue(SearchAction.ApplyHistoricalQuery(query = entry.query, sourceScope = historicalScope))
         navigation.goToTab(TopLevelDestination.Search)
-    }
-
-    fun openHistoricalForYouSearch(entry: RecentSearchEntry) {
-        routes.dispatchOrQueue(ForYouAction.ReplaySearch(seedBySource = entry.fypSeedBySource(), sortMode = entry.query.sort))
-        navigation.showTab(TopLevelDestination.ForYou)
     }
 
     /** Opens a finished download in a fresh Viewer session at the page that was saved. */

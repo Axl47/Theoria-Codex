@@ -5,7 +5,6 @@ import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
-import com.theoriacodex.data.repository.RecentSearchSection
 import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.storage.RecentSearchPayloadCodec
@@ -182,9 +181,9 @@ class RoomRecentsRepository(
         }
     }
 
-    override suspend fun clearSearches(section: RecentSearchSection): List<RecentSearchEntry> =
+    override suspend fun clearSearches(): List<RecentSearchEntry> =
         database.withTransaction {
-            val removed = dao.searches().map(RecentSearchEntity::toDomain).filter(section::contains)
+            val removed = dao.searches().map(RecentSearchEntity::toDomain)
             dao.deleteSearchesByHashes(removed.map { it.queryHash })
             removed
         }

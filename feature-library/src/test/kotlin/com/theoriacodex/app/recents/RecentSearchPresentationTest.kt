@@ -41,10 +41,6 @@ class RecentSearchPresentationTest {
             "Multi-Search · Gelbooru, Pixiv",
             recentSearchPresentation(entry(query(), RecentSearchKind.MULTI_SEARCH, sources)).subtitle,
         )
-        assertEquals(
-            "Gelbooru, Pixiv",
-            recentSearchPresentation(entry(query(), RecentSearchKind.FYP, sources)).subtitle,
-        )
     }
 
     @Test
@@ -59,23 +55,6 @@ class RecentSearchPresentationTest {
         assertEquals(
             "landscape AND (night OR sunset)",
             recentSearchPresentation(entry(grouped, RecentSearchKind.UNIFIED, emptyList())).title,
-        )
-    }
-
-    @Test
-    fun `FYP replay preserves source-specific tags and falls back for legacy entries`() {
-        val sourceTags = mapOf(
-            SourceKey.GELBOORU to listOf("gelbooru seed"),
-            SourceKey.PIXIV to listOf("pixiv seed"),
-        )
-        val current = entry(query(), RecentSearchKind.FYP, sourceTags.keys.toList())
-            .copy(sourceTags = sourceTags)
-        val legacy = entry(query(), RecentSearchKind.FYP, sourceTags.keys.toList())
-
-        assertEquals(sourceTags, current.fypSeedBySource())
-        assertEquals(
-            sourceTags.keys.associateWith { legacy.query.includeTags },
-            legacy.fypSeedBySource(),
         )
     }
 

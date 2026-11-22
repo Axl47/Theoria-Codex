@@ -41,7 +41,7 @@ class RoomProfileBackupStore(
             LikedPost(row.profileId, PostId(SourceKey.parseOrThrow(row.source), row.sourcePostId), row.likedAtEpochMs,
                 LikedTagsCodec.decode(row.tagsJson))
         }
-        val watchedRows = if (includeRecents) recents.watched().filter { it.section != RecentPostSection.FYP.name } else emptyList()
+        val watchedRows = if (includeRecents) recents.watched() else emptyList()
         val referencedIds = items.map { it.postId }.toSet() + likes.map { it.postId } + watchedRows.map {
             PostId(SourceKey.parseOrThrow(it.source), it.sourcePostId)
         }

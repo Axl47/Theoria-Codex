@@ -6,16 +6,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
@@ -107,7 +103,7 @@ internal fun RecentSearchRow(
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    recentSearchContext(entry, colors.primary),
+                    recentSearchContext(entry),
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.onSurfaceVariant,
                     maxLines = 1,
@@ -163,9 +159,8 @@ internal fun RecentSearchTile(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                val time = relativeTimeLabel(now, entry.searchedAtEpochMs)
                 Text(
-                    if (entry.kind == RecentSearchKind.FYP) "For You · $time" else time,
+                    relativeTimeLabel(now, entry.searchedAtEpochMs),
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.onSurfaceVariant,
                     maxLines = 1,
@@ -176,54 +171,34 @@ internal fun RecentSearchTile(
     }
 }
 
-/** The search's source in a tonal tile, or a search glyph when it spans sources; a badge marks For You. */
+/** The search's source in a tonal tile, or a search glyph when it spans sources. */
 @Composable
 private fun RecentSearchMark(entry: RecentSearchEntry, size: Dp) {
     val colors = MaterialTheme.colorScheme
-    Box(Modifier.size(size)) {
-        Box(
-            Modifier.fillMaxSize().clip(RoundedCornerShape(size * MARK_CORNER_FRACTION)).background(colors.surfaceVariant),
-            contentAlignment = Alignment.Center,
-        ) {
-            val source = recentSearchSource(entry)
-            if (source != null) {
-                SourceIcon(source)
-            } else {
-                Icon(
-                    Icons.Default.Search,
-                    if (entry.kind == RecentSearchKind.MULTI_SEARCH) "Multi-Search" else "Unified search",
-                    Modifier.size(size * MARK_GLYPH_FRACTION),
-                    tint = colors.onSurfaceVariant,
-                )
-            }
-        }
-        if (entry.kind == RecentSearchKind.FYP) {
-            Box(
-                Modifier.align(Alignment.BottomEnd).offset(3.dp, 3.dp).size(15.dp).clip(CircleShape).background(colors.primary),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Default.AutoAwesome, contentDescription = null, Modifier.size(9.dp), tint = colors.onPrimary)
-            }
+    Box(
+        Modifier.size(size).clip(RoundedCornerShape(size * MARK_CORNER_FRACTION)).background(colors.surfaceVariant),
+        contentAlignment = Alignment.Center,
+    ) {
+        val source = recentSearchSource(entry)
+        if (source != null) {
+            SourceIcon(source)
+        } else {
+            Icon(
+                Icons.Default.Search,
+                if (entry.kind == RecentSearchKind.MULTI_SEARCH) "Multi-Search" else "Unified search",
+                Modifier.size(size * MARK_GLYPH_FRACTION),
+                tint = colors.onSurfaceVariant,
+            )
         }
     }
 }
 
 /** The single source a search ran on, if it ran on exactly one. */
-private fun recentSearchSource(entry: RecentSearchEntry): SourceKey? = when (entry.kind) {
-    RecentSearchKind.SOURCE -> (entry.query.mode as? QueryMode.Source)?.source
-    RecentSearchKind.FYP -> entry.sources.singleOrNull()
-    else -> null
-}
+private fun recentSearchSource(entry: RecentSearchEntry): SourceKey? = (entry.query.mode as? QueryMode.Source)?.source
 
-/** For You first (in [accent]), then which sources the search covered. */
-private fun recentSearchContext(entry: RecentSearchEntry, accent: Color): AnnotatedString = buildAnnotatedString {
-    if (entry.kind == RecentSearchKind.FYP) withStyle(SpanStyle(color = accent)) { append("For You") }
-    val sources = recentSearchPresentation(entry).subtitle ?: recentSearchSource(entry)?.displayName()
-    if (sources != null) {
-        if (length > 0) append(" · ")
-        append(sources)
-    }
-}
+/** Which sources the search covered. */
+private fun recentSearchContext(entry: RecentSearchEntry): String =
+    recentSearchPresentation(entry).subtitle ?: recentSearchSource(entry)?.displayName().orEmpty()
 
 internal val RECENT_SEARCH_TILE_MAX_WIDTH = 240.dp
 private const val SEARCH_MENU_LABEL = "Search actions"
