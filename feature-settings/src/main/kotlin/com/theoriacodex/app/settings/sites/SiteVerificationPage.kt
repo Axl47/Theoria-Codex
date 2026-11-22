@@ -40,7 +40,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.theoriacodex.app.customsites.SiteCookieBridgeOwner
-import com.theoriacodex.app.settings.SettingsHeader
+import com.theoriacodex.app.ui.components.SettingsHeader
 
 /**
  * Shows [SiteVerification.host]'s home page so the person can pass its browser challenge themselves.

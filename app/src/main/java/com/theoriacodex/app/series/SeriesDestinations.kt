@@ -22,8 +22,24 @@ internal val seriesArguments = listOf(
 @Composable
 internal fun SeriesTabDestination(shell: TheoriaShell) {
     val series = shell.container.series ?: return
-    val viewModel = viewModel { SeriesTabViewModel(series.repository, series.sources) }
-    SeriesTabScreen(viewModel, onOpenSeries = { id -> shell.navController.navigate(AppRoute.series(id)) })
+    val viewModel = viewModel { SeriesTabViewModel(series.repository, series.sources, series.extensions.revision) }
+    SeriesTabScreen(
+        viewModel,
+        onOpenSeries = { id -> shell.navController.navigate(AppRoute.series(id)) },
+        onOpenExtensions = shell::openExtensions,
+    )
+}
+
+/** The Extensions page, pushed from the Series tab and from Settings. */
+@Composable
+internal fun ExtensionsDestination(shell: TheoriaShell) {
+    val series = shell.container.series ?: return
+    val viewModel = viewModel { ExtensionsViewModel(series.extensions) }
+    ExtensionsScreen(viewModel, onBack = { shell.navController.popBackStack() })
+}
+
+internal fun TheoriaShell.openExtensions() {
+    navController.navigate(AppRoute.Extensions) { launchSingleTop = true }
 }
 
 /** One series' page. A chapter opens in the Viewer as a series session, which the saved launch context never names. */

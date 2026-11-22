@@ -31,6 +31,9 @@ internal object AppRoute {
     const val CodexDetail = "codex/detail/{codexId}"
     const val Settings = "settings-screen"
 
+    /** Every extension on the device: which are on, their languages and their settings. */
+    const val Extensions = "extensions"
+
     /** One series' page, named by its [SeriesId]. */
     const val Series = "series?source={source}&address={address}"
 

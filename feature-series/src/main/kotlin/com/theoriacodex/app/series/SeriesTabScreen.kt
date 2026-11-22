@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
@@ -21,6 +20,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -56,7 +56,7 @@ import com.theoriacodex.domain.series.SeriesId
  * search replaces the shelf and the browse grid with one row of results per source until it is cleared.
  */
 @Composable
-fun SeriesTabScreen(viewModel: SeriesTabViewModel, onOpenSeries: (SeriesId) -> Unit, modifier: Modifier = Modifier) {
+fun SeriesTabScreen(viewModel: SeriesTabViewModel, onOpenSeries: (SeriesId) -> Unit, onOpenExtensions: () -> Unit, modifier: Modifier = Modifier) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val followed by viewModel.followed.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
@@ -69,7 +69,10 @@ fun SeriesTabScreen(viewModel: SeriesTabViewModel, onOpenSeries: (SeriesId) -> U
     ScrollToTopOnTabReselect(TopLevelDestination.Series) { grid.animateScrollToItem(0) }
     BackHandler(enabled = state.search != null, onBack = clearSearch)
     Column(modifier.fillMaxSize()) {
-        SeriesSearchField(query, searching = state.search != null, onQueryChange = { query = it }, onSearch = viewModel::search, onClear = clearSearch)
+        Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            SeriesSearchField(query, searching = state.search != null, Modifier.weight(1f), onQueryChange = { query = it }, onSearch = viewModel::search, onClear = clearSearch)
+            IconButton(onClick = onOpenExtensions) { Icon(Icons.Default.Extension, contentDescription = EXTENSIONS_TITLE) }
+        }
         LazyVerticalGrid(
             columns = GridCells.Adaptive(CARD_WIDTH),
             state = grid,
@@ -82,19 +85,26 @@ fun SeriesTabScreen(viewModel: SeriesTabViewModel, onOpenSeries: (SeriesId) -> U
             if (search != null) searchResults(search, open, viewModel::retrySearch)
             else {
                 followingShelf(followed, open)
-                browse(state, viewModel, open)
+                browse(state, viewModel, open, onOpenExtensions)
             }
         }
     }
 }
 
 @Composable
-private fun SeriesSearchField(query: String, searching: Boolean, onQueryChange: (String) -> Unit, onSearch: (String) -> Unit, onClear: () -> Unit) {
+private fun SeriesSearchField(
+    query: String,
+    searching: Boolean,
+    modifier: Modifier,
+    onQueryChange: (String) -> Unit,
+    onSearch: (String) -> Unit,
+    onClear: () -> Unit,
+) {
     val focus = LocalFocusManager.current
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = modifier,
         placeholder = { Text("Search all sources") },
         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
         trailingIcon = {
@@ -119,11 +129,11 @@ private fun LazyGridScope.followingShelf(followed: List<FollowedSeries>, open: (
     }
 }
 
-private fun LazyGridScope.browse(state: SeriesTabState, viewModel: SeriesTabViewModel, open: (Series) -> Unit) {
+private fun LazyGridScope.browse(state: SeriesTabState, viewModel: SeriesTabViewModel, open: (Series) -> Unit, onOpenExtensions: () -> Unit) {
     val sources = state.sources
     when {
         sources == null -> fullWidth("sources-loading") { LoadingState() }
-        sources.isEmpty() -> fullWidth("sources-empty") { EmptyState("No extensions installed") }
+        sources.isEmpty() -> fullWidth("sources-empty") { EmptyState(NO_EXTENSIONS_ON, actionLabel = EXTENSIONS_TITLE, onAction = onOpenExtensions) }
         else -> {
             fullWidth("browse-title") { SectionTitle("Browse") }
             fullWidth("browse-sources") {
@@ -157,7 +167,7 @@ private fun LazyGridScope.browseListing(browse: SeriesSourceListing, viewModel: 
 }
 
 private fun LazyGridScope.searchResults(results: List<SeriesSourceListing>, open: (Series) -> Unit, retry: (SourceKey) -> Unit) {
-    if (results.isEmpty()) fullWidth("search-no-sources") { EmptyState("No extensions installed") }
+    if (results.isEmpty()) fullWidth("search-no-sources") { EmptyState(NO_EXTENSIONS_ON) }
     results.forEach { result ->
         val listing = result.listing
         fullWidth("search-title-${result.key.id}") {
@@ -205,3 +215,4 @@ private fun LazyGridScope.fullWidth(key: String, content: @Composable () -> Unit
 }
 
 private val CARD_WIDTH = 104.dp
+private const val NO_EXTENSIONS_ON = "No extensions on"

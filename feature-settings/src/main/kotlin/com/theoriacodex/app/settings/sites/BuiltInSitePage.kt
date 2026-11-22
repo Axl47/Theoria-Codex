@@ -4,10 +4,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import com.theoriacodex.app.customsites.BuiltInSiteSummary
 import com.theoriacodex.app.settings.BuiltInAccounts
-import com.theoriacodex.app.settings.SettingsGroup
-import com.theoriacodex.app.settings.SettingsHeader
-import com.theoriacodex.app.settings.SettingsPageColumn
-import com.theoriacodex.app.settings.SettingsRow
+import com.theoriacodex.app.ui.components.SettingsHeader
+import com.theoriacodex.app.ui.components.SettingsGroup
+import com.theoriacodex.app.ui.components.SettingsRow
+import com.theoriacodex.app.ui.components.SettingsPageColumn
 
 /** A built-in source in the Sites list, with its last test's result; opens its page. */
 @Composable

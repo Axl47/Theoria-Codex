@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.BugReport
@@ -60,6 +61,11 @@ import com.theoriacodex.data.repository.SettingToggles
 import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.data.storage.CorruptionRecovery
 import kotlinx.coroutines.launch
+import com.theoriacodex.app.ui.components.SettingsHeader
+import com.theoriacodex.app.ui.components.SettingsGroup
+import com.theoriacodex.app.ui.components.SettingsRowDivider
+import com.theoriacodex.app.ui.components.SettingsRow
+import com.theoriacodex.app.ui.components.SettingsPageColumn
 
 private val STORAGE_TOGGLES = listOf(SettingToggles.KeepMediaOffline, SettingToggles.FindAnimationDurations)
 
@@ -80,6 +86,8 @@ fun SettingsScreen(
     storageTools: (@Composable () -> Unit)? = null,
     onClose: () -> Unit = {},
     closesFrom: SettingsPage = SettingsPage.HOME,
+    /** Opens the Extensions page, which lives outside Settings; null in a build without extensions. */
+    onOpenExtensions: (() -> Unit)? = null,
 ) {
     val openHome = { if (state.page == closesFrom) onClose() else onAction(SettingsAction.OpenPage(SettingsPage.HOME)) }
     val openPost = rememberPostOpener(statsActions.openPost)
@@ -93,7 +101,7 @@ fun SettingsScreen(
         label = "Settings page",
     ) { page ->
         when (page) {
-            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, storageSummary, sites, backup, diagnostics != null, onClose)
+            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, storageSummary, sites, backup, diagnostics != null, onClose, onOpenExtensions)
             SettingsPage.SITES -> sites?.page?.invoke(
                 openHome,
                 BuiltInAccounts(
@@ -134,6 +142,7 @@ private fun SettingsHome(
     backup: SettingsBackupEntry?,
     showDiagnostics: Boolean,
     onClose: () -> Unit,
+    onOpenExtensions: (() -> Unit)?,
 ) {
     var profileMenu by rememberSaveable { mutableStateOf(false) }
     var showAddProfile by remember { mutableStateOf(false) }
@@ -155,7 +164,7 @@ private fun SettingsHome(
                 open(SettingsPage.STATS_COMPARE)
             })
         }
-        SettingsHomeGroups(state, onAction, storageSummary, sites, backup, showDiagnostics) { sheet -> onAction(SettingsAction.OpenPage(SettingsPage.HOME, sheet)) }
+        SettingsHomeGroups(state, onAction, storageSummary, sites, backup, showDiagnostics, onOpenExtensions) { sheet -> onAction(SettingsAction.OpenPage(SettingsPage.HOME, sheet)) }
         if (state.showDeveloperScenarios) DeveloperScenarios(state, onAction)
     }
     if (showAddProfile) {
@@ -199,6 +208,7 @@ private fun SettingsHomeGroups(
     sites: SettingsSitesEntry?,
     backup: SettingsBackupEntry?,
     showDiagnostics: Boolean,
+    onOpenExtensions: (() -> Unit)?,
     onSheet: (SettingsSheet) -> Unit,
 ) {
     val open = { page: SettingsPage -> onAction(SettingsAction.OpenPage(page)) }
@@ -208,6 +218,10 @@ private fun SettingsHomeGroups(
                 SettingDestinations.Sites.title, "${sites.summary} · ${sourceAccountsSummary(state.accounts)}", Icons.Default.Public,
                 onClick = { open(SettingsPage.SITES) },
             )
+            SettingsRowDivider()
+        }
+        if (onOpenExtensions != null) {
+            SettingsRow("Extensions", icon = Icons.Default.Extension, onClick = onOpenExtensions)
             SettingsRowDivider()
         }
         OpenLinksRow()

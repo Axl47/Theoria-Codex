@@ -15,6 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.theoriacodex.app.ui.components.SettingsRow
 
 /** Sites can't verify a third-party app, so Android only sends their links here once the user allows it. */
 @Composable

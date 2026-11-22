@@ -1,4 +1,4 @@
-package com.theoriacodex.app.settings
+package com.theoriacodex.app.ui.components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,20 +18,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -39,20 +32,15 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.data.repository.SettingDestinations
-
-/** The path of every page directly under the Settings home. */
-val SETTINGS_PATH = listOf(SettingDestinations.Home.title)
 
 /**
- * Header shared by the Settings home and its pages; [onBack] adds the back arrow. [parents] are the
+ * Header shared by the Settings home, its pages and the pages built like them; [onBack] adds the back arrow. [parents] are the
  * pages above this one, shown dimmed before [title]. The path stays on one line and loses its start
  * first, so the current page is always readable.
  */
@@ -80,24 +68,7 @@ fun SettingsHeader(
     }
 }
 
-/**
- * A collapsed item that reveals [content] when tapped, like Advanced. It returns to
- * [initiallyExpanded] when that changes, so saving keys folds their section away.
- */
-@Composable
-fun ExpandableSection(label: String, initiallyExpanded: Boolean, content: @Composable () -> Unit) {
-    var expanded by rememberSaveable(initiallyExpanded) { mutableStateOf(initiallyExpanded) }
-    TextButton(
-        onClick = { expanded = !expanded },
-        modifier = Modifier.semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" },
-    ) {
-        Text(label)
-        Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null)
-    }
-    if (expanded) content()
-}
-
-/** Centered scrolling column used by every Settings page except the lazy Stats list. */
+/** Centered scrolling column used by every Settings-style page except the lazy Stats list. */
 @Composable
 fun SettingsPageColumn(content: @Composable ColumnScope.() -> Unit) {
     val scroll = rememberScrollState()
