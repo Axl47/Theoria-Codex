@@ -2,14 +2,14 @@
 
 A local-first Android app for browsing, collecting, and rediscovering media from multiple art and gallery sites in one place.
 
-You search across sources (one at a time or all together), open posts in a full-screen viewer, and save what you like into personal collections called **Codices**. Your likes and tag history drive a **For You** feed. Everything (collections, likes, history, preferences) stays on your device. There are no accounts or cloud sync.
+You search across sources (one at a time or all together), open posts in a full-screen viewer, and save what you like into personal collections called **Codices**. Your likes and tag history deal the **For You** deck. Everything (collections, likes, history, preferences) stays on your device. There are no accounts or cloud sync.
 
 ## What it does
 
 - **Search**: tag-based search per source or across all of them (Unified), with include/exclude terms, autocomplete, saved tags, and filters like *Animated only*, *Hide liked*, and *Hide saved*.
 - **Viewer**: images, video, GIFs, animated WebP, Pixiv ugoira, and multi-page galleries, with gesture seek, brightness and volume controls, playback speed, quality selection, and picture-in-picture.
 - **Codex**: local collections you can sort, export or import as JSON, make available offline, or save to the device.
-- **For You**: recommendations from your liked posts and tag affinity, with blacklists and separate profiles.
+- **For You**: a swipe deck dealt from your liked posts' tags, where each card can branch into its tags, creator or similar posts, with a grid view, hidden tags and separate profiles.
 - **Recents**: watch and search history, with named pinned searches and gallery resume.
 - **Creators**: follow creators locally and check for new posts on demand.
 - **Backup**: export and restore profiles, collections, likes, and preferences. Credentials and media are never included.

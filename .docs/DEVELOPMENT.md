@@ -179,7 +179,7 @@ from production coverage. Hotspot, duplication and non-growing Detekt debt budge
 
 The fixture-backed device journeys use actual screens, navigation, owners, Room and DataStore.
 They cover grouped Search, Viewer return, Activity recreation, cold graph reopen, exact Multi-Search
-and FYP Recents replay, collection actions, Undo, related shelves and Creator navigation. Cold graph
+Recents replay, the For You deck and its grid, collection actions, Undo, related shelves and Creator navigation. Cold graph
 reopen creates fresh application dependencies over the same files; it is distinct from killing the
 instrumented process. External provider responses and local media are controlled. Structural tests
 are reserved for narrow architecture and packaged-artifact boundaries, not counted as feature proof.
