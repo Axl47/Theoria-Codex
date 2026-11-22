@@ -136,7 +136,7 @@ private val feedFilters = FeedFabRestoreState(
     followedSources = listOf("PIXIV"),
     animatedOnly = true,
     sortMode = "NEWEST",
-    searchAnimationByScope = mapOf("s" to SearchAnimationFilterRestoreState(true, 1, 9)),
+    searchAnimationByScope = mapOf("s" to SearchAnimationFilterRestoreState(1, 9)),
 )
 
 private val launchContext = ViewerLaunchContext("q", 4, ViewerStreamSource.CODEX, 21)

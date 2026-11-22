@@ -35,6 +35,11 @@
 
 ### Changed
 
+- Animated only now asks each site for animated posts instead of filtering a mixed page on the phone, so animated results fill the feed from the first page, on Pixiv especially. Turning it on or off re-runs the search like changing the sort, and saved and recent searches remember it. If you had it on, tap it once more after updating.
+- The composer's built-in "Animated" saved tag group is gone: Animated only now does that job everywhere.
+- A tag trail keeps the filters of the level it starts from: Animated only, the date range, the sort, excluded tags, and hiding liked, saved or watched posts.
+- Trail chips lead with the tags that say most about what you like (from your Likes, Codices, saved tags, saved searches and repeated searches), and leave out tags that are on nearly everything you watch, such as "image", or on nearly every post in the current stream.
+- Triage no longer offers to hide tags that are on nearly everything you watch.
 - The app has three tabs: Search, For You and Library. Library holds Codices, Saved (Likes, Followed, Searches) and History, which was Recents. Settings opens from the gear at the top of Library.
 - The Viewer's actions (Like, Info, playback settings, page overview, More) moved from the top bar to a dock at the bottom of the screen.
 - Search runs as you edit it: adding, removing or excluding a tag, or changing the source, sort or dates, updates the results after a short pause. The Search button is gone: the keyboard's Done key adds the tag you typed, and pressing it on an empty field closes the editor.

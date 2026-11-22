@@ -19,6 +19,7 @@ import java.nio.charset.StandardCharsets
 import java.util.Base64
 import com.theoriacodex.domain.query.CapabilityExclusionReason
 import com.theoriacodex.domain.query.SourceCapabilityGate
+import com.theoriacodex.domain.query.withMediaTerms
 import com.theoriacodex.domain.query.withinTermLimit
 import com.theoriacodex.domain.coroutines.mapConcurrent
 import java.util.concurrent.ConcurrentHashMap
@@ -232,10 +233,12 @@ class UnifiedSearchOrchestrator(
         query: Query,
         pageToken: String?,
     ): Page<Post> = withContext(providerContext) {
-        val groups = query.effectiveIncludeTermGroups
+        // The media terms go to the provider only; posts are still matched against the user's own terms.
+        val request = query.withMediaTerms(adapter.capabilities)
+        val groups = request.effectiveIncludeTermGroups
         val alternatives = groups.filter { group -> group.terms.size > 1 }
         if (alternatives.isEmpty() || adapter.capabilities.supportsGroupedIncludeTagsServerSide) {
-            return@withContext adapter.search(query, pageToken)
+            return@withContext adapter.search(request, pageToken)
         }
         val pivot = alternatives.minBy { group -> group.terms.size }
         require(pivot.terms.size <= MAX_FALLBACK_BRANCHES) {
@@ -243,7 +246,7 @@ class UnifiedSearchOrchestrator(
         }
         val singletonGroups = groups.filter { group -> group.terms.size == 1 }
         val branchQueries = pivot.terms.map { alternative ->
-            query.withIncludeTermGroups(singletonGroups + SearchTermGroup.single(alternative))
+            request.withIncludeTermGroups(singletonGroups + SearchTermGroup.single(alternative))
         }
         val initial = pageToken == null
         val incomingTokens = if (initial) {

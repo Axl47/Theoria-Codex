@@ -4,6 +4,7 @@ import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.QueryStorageCodec
 import com.theoriacodex.data.storage.assertStoredFormat
 import com.theoriacodex.domain.model.DateRange
+import com.theoriacodex.domain.model.MediaFilter
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
@@ -55,10 +56,29 @@ internal class QueryStoreGoldenTest : FileBackedRepositoryTestFixture() {
     }
 
     @Test
-    fun `the Gson-written store holds every stored key`() {
+    fun `the goldens hold every stored key`() {
         val queries = mapOf("search" to gsonWrittenSearch, "feed" to emptyQuery())
-        assertStoredFormat(golden("gson-written.json") to QueryStoreFile(queries.mapValues { QueryStorageCodec.encode(it.value) }))
+        // animated.json, captured from the kotlinx encoder, adds the media key Gson builds never wrote.
+        val animated = mapOf("animated" to animatedSearch)
+        assertStoredFormat(
+            golden("gson-written.json") to QueryStoreFile(queries.mapValues { QueryStorageCodec.encode(it.value) }),
+            golden("animated.json") to QueryStoreFile(animated.mapValues { QueryStorageCodec.encode(it.value) }),
+        )
     }
+
+    @Test
+    fun `an animated search loads back animated`() = runTest {
+        assertEquals(animatedSearch, repositoryWith(golden("animated.json")).observeAppliedQuery("animated").first())
+    }
+
+    private val animatedSearch = Query(
+        mode = QueryMode.Source(SourceKey.DANBOORU),
+        includeTags = listOf("cat"),
+        excludeTags = emptyList(),
+        sort = SortMode.NEWEST,
+        dateRange = null,
+        minScore = null,
+    ).copy(media = MediaFilter.ANIMATED)
 
     private fun repositoryWith(json: String, recoveries: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry()) =
         tempDir("query-golden-").let { dir ->

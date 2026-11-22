@@ -40,6 +40,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import com.theoriacodex.domain.model.MediaFilter
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
@@ -149,19 +150,22 @@ class SearchApplyScrollTest {
     }
 
     private fun setSearchContent(
-        state: androidx.compose.runtime.State<SearchUiState>,
+        state: androidx.compose.runtime.MutableState<SearchUiState>,
         animatedOnly: Boolean,
         onAction: (SearchAction) -> Unit,
     ) {
+        val media = if (animatedOnly) MediaFilter.ANIMATED else MediaFilter.ANY
+        state.value = state.value.copy(query = state.value.query.copy(
+            draft = state.value.query.draft.copy(media = media),
+            applied = state.value.query.applied.copy(media = media),
+        ))
         compose.setContent {
             MaterialTheme {
                 SearchScreen(
                     state = state.value,
                     related = testRelatedShelf(),
                     creatorBrowsingSources = emptySet(),
-                    fabRestoreState = FeedFabRestoreState().withSearchAnimationFilter(state.value.query.draft.mode) {
-                        it.copy(animatedOnly = animatedOnly)
-                    },
+                    fabRestoreState = FeedFabRestoreState(),
                     onAction = onAction,
                     resolvePostById = { null },
                     recoverPostMedia = { _, _ -> null },

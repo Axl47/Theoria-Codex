@@ -1,5 +1,6 @@
 package com.theoriacodex.domain.query
 
+import com.theoriacodex.domain.model.MediaFilter
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
@@ -36,6 +37,23 @@ class QueryHashTest {
         )
 
         assertEquals(QueryHash.from(first), QueryHash.from(second))
+    }
+
+    @Test
+    fun `media filter adds to the hash only when animated`() {
+        val any = Query(
+            mode = QueryMode.Source(SourceKey.DANBOORU),
+            includeTerms = listOf(SearchTerm("landscape")),
+            excludeTerms = listOf(SearchTerm("comic")),
+            sort = SortMode.TOP,
+            dateRange = null,
+            minScore = null,
+        )
+        // The hash every stored query has had since v3; changing it orphans saved pages and keys.
+        val stored = "v3|source:DANBOORU|group[include:TAG:null:9:landscape];exclude:TAG:null:5:comic|TOP|none|none"
+
+        assertEquals(stored, QueryHash.from(any))
+        assertEquals("$stored|media=animated", QueryHash.from(any.copy(media = MediaFilter.ANIMATED)))
     }
 
     @Test

@@ -1,5 +1,7 @@
 package com.theoriacodex.sources.gelbooru
 
+import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.adapter.AnimatedSearchTerm
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.theoriacodex.domain.adapter.AccountProfileSourceAdapter
@@ -98,6 +100,8 @@ private class GelbooruFamilyAdapter(
         supportsExcludeTagsServerSide = true,
         supportsGroupedIncludeTagsServerSide = site.orGroup != null,
         requiresExactTags = site.exactTags,
+        // One tag matches the whole video/animated family on Gelbooru-engine sites, checked live 2026-11.
+        animatedTerm = AnimatedSearchTerm(SearchTerm("animated")),
     )
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> = sourceCall {

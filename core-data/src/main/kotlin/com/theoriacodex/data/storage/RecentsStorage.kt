@@ -1,6 +1,7 @@
 package com.theoriacodex.data.storage
 
 import com.theoriacodex.domain.model.DateRange
+import com.theoriacodex.domain.model.MediaFilter
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
@@ -40,6 +41,9 @@ data class QueryStorageRecord(
     val excludeTerms: List<SearchTermStorageRecord?>? = null,
     @SerialName("includeTermGroups")
     val includeTermGroups: List<List<SearchTermStorageRecord?>?>? = null,
+    /** Written only for a restricted search, so every query stored without it keeps its exact payload. */
+    @SerialName("media")
+    val media: String? = null,
 )
 
 @Serializable
@@ -70,6 +74,7 @@ object QueryStorageCodec {
             includeTermGroups = query.effectiveIncludeTermGroups.map { group ->
                 group.terms.map(::encodeTerm)
             },
+            media = query.media.takeIf { it != MediaFilter.ANY }?.name,
         )
     }
 
@@ -99,7 +104,7 @@ object QueryStorageCodec {
         }
         return Query(
             mode = mode,
-            includeTerms = includeGroups.flatMap(SearchTermGroup::terms),
+            includeTermGroups = includeGroups,
             excludeTerms = record.excludeTerms?.mapNotNull { it?.toDomainOrNull() }
                 ?: record.excludeTags.map(::SearchTerm),
             sort = runCatching { SortMode.valueOf(record.sort) }.getOrDefault(SortMode.TOP),
@@ -107,7 +112,7 @@ object QueryStorageCodec {
                 DateRange(record.dateFromEpochMs, record.dateToEpochMs)
             },
             minScore = record.minScore,
-            includeTermGroups = includeGroups,
+            media = MediaFilter.entries.firstOrNull { it.name == record.media } ?: MediaFilter.ANY,
         )
     }
 

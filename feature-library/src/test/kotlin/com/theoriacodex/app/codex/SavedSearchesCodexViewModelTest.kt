@@ -15,6 +15,7 @@ import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.SourceAdapter
+import com.theoriacodex.domain.model.MediaFilter
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
@@ -107,6 +108,28 @@ class SavedSearchesCodexViewModelTest {
             advanceUntilIdle()
             assertFalse(owner.state.value.canLoadMore)
             assertEquals(listOf("shared", "last"), owner.state.value.posts.map { it.id.sourcePostId })
+        }
+    }
+
+    @Test fun `an Animated only saved search hides stills a source could not leave out, on every page`() = runTest {
+        // TestAdapter has no animated term, so the source answers with mixed media.
+        val source = adapter(SourceKey.PIXIV) { _, token ->
+            val page = token ?: "first"
+            Page(
+                listOf(
+                    testPost(SourceKey.PIXIV, "$page-moving").copy(canonicalTags = listOf("animated")),
+                    testPost(SourceKey.PIXIV, "$page-still"),
+                ),
+                "second".takeIf { token == null },
+            )
+        }
+        withOwner(listOf(source)) { owner ->
+            val animated = entry("moving", "cat").let { it.copy(search = it.search.copy(query = it.search.query.copy(media = MediaFilter.ANIMATED))) }
+            owner.synchronize(listOf(animated), AppSettings(), setOf(SourceKey.PIXIV))
+            advanceUntilIdle()
+            owner.loadMore()
+            advanceUntilIdle()
+            assertEquals(listOf("first-moving", "second-moving"), owner.state.value.posts.map { it.id.sourcePostId })
         }
     }
 

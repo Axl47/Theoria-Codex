@@ -31,9 +31,20 @@ class TrailFeedTest {
 
     @Test
     fun `opens only once the first page holds posts`() = runTest {
-        assertTrue(feed(ScriptedPager(page("a", more = true))).start())
-        assertFalse(feed(ScriptedPager(page(more = false))).start())
-        assertFalse(feed(ScriptedPager(null)).start())
+        assertTrue(feed(ScriptedPager(page("a", more = true))).start().isNotEmpty())
+        assertTrue(feed(ScriptedPager(page(more = false))).start().isEmpty())
+        assertTrue(feed(ScriptedPager(null)).start().isEmpty())
+    }
+
+    @Test
+    fun `a filtered fork pages until something shows, up to three pages`() = runTest {
+        val onlyB: (List<Post>) -> List<Post> = { posts -> posts.filter { it.id.sourcePostId.startsWith("b") } }
+        val found = ScriptedPager(page("a1", more = true), page("a1", "b1", more = true))
+        assertEquals(listOf("b1"), feed(found).start(onlyB).map { it.id.sourcePostId })
+
+        val never = ScriptedPager(page("a1", more = true), page("a2", more = true), page("a3", more = true), page("b", more = true))
+        assertTrue(feed(never).start(onlyB).isEmpty())
+        assertEquals(3, never.calls)
     }
 
     @Test

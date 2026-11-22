@@ -7,6 +7,8 @@ import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.MediaFilter
+import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
 
@@ -71,18 +73,25 @@ fun filterSearchResults(
     }
 }
 
-/** The built-in "Animated" saved "or" group for Gelbooru-engine sites, which tag animation several ways. */
-val GELBOORU_ANIMATED_SEARCH_TAGS = listOf("video", "animated", "animation", "animated_gif", "animated_image", "gif")
+/**
+ * Whether [this] query's media has the phone hide still posts, as a backup for sources that cannot ask for animated
+ * posts themselves. nhentai alone is exempt: its galleries are never animated.
+ */
+val Query.hidesStillsOnPhone: Boolean
+    get() = media == MediaFilter.ANIMATED && mode != QueryMode.Source(SourceKey.NHENTAI)
 
-/** Danbooru-engine sites tag animation consistently; a short group keeps within their tag limits. */
-val DANBOORU_ANIMATED_SEARCH_TAGS = listOf("animated", "video")
+/** The posts [query]'s media keeps on the phone; see [hidesStillsOnPhone]. */
+fun List<Post>.keptByMedia(query: Query): List<Post> = if (query.hidesStillsOnPhone) filter(::matchesAnimatedFilter) else this
+
+/** Tags that mark a post as animated across sources, for posts whose previews are stills. */
+private val ANIMATED_TAG_MARKERS = listOf("video", "animated", "animation", "animated_gif", "animated_image", "gif")
 
 /** One rule for every source: animated media, or a tag that says so (covers sites whose previews are stills). */
 private fun matchesAnimatedFilter(post: Post): Boolean =
     isAnimatedPost(post) || post.rawTags.any(::isAnimatedTag) || post.canonicalTags.any(::isAnimatedTag)
 
 /** Compares case-insensitively in place, so a filter pass copies and lowercases no tags. */
-private fun isAnimatedTag(tag: String): Boolean = GELBOORU_ANIMATED_SEARCH_TAGS.any { it.equals(tag, ignoreCase = true) }
+private fun isAnimatedTag(tag: String): Boolean = ANIMATED_TAG_MARKERS.any { it.equals(tag, ignoreCase = true) }
 
 /** A length filter shows only animated posts whose length is known and in range; an unknown length stays hidden. */
 private fun matchesAnimatedDurationFilter(post: Post, filters: SearchVisibilityFilters, acquiredDurationMs: Long?): Boolean {

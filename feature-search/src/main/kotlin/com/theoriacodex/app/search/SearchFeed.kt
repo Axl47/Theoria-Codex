@@ -50,7 +50,8 @@ fun rememberSearchFeed(
     val durationMinBucket = animationRestoreState.durationMinBucket
     val durationMaxBucket = animationRestoreState.durationMaxBucket
     val isNhentaiSourceMode = state.query.draft.mode == QueryMode.Source(SourceKey.NHENTAI)
-    val animatedFilterActive = animationRestoreState.animatedOnly && !isNhentaiSourceMode
+    // The results on screen answer the applied query, so its media decides the phone filter, as its date range does.
+    val animatedFilterActive = state.query.applied.hidesStillsOnPhone
     val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
         AnimatedDurationRange(minBucket = durationMinBucket, maxBucket = durationMaxBucket)
     }

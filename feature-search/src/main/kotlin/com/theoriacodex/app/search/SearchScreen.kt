@@ -62,6 +62,7 @@ import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.DateRange
+import com.theoriacodex.domain.model.MediaFilter
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -329,8 +330,6 @@ private fun SearchComposerDialog(
             onSave = onAddFavoriteTag,
             onRemove = onRemoveFavoriteTag,
             onRename = onRenameFavoriteTag,
-            // Single-source only: Unified would expand the group across sources with tighter tag limits.
-            builtIn = listOfNotNull(animatedSavedGroup((state.query.draft.mode as? QueryMode.Source)?.source)),
         ),
         omnibox = omnibox,
     )
@@ -478,6 +477,7 @@ private class SearchFilterActions(
 ) {
     private fun applyServerFilters(filters: SearchServerFilters) {
         onAction(SearchAction.SelectSort(filters.sort))
+        onAction(SearchAction.SetMedia(filters.media))
         onAction(SearchAction.SetDateRange(filters.dateRange))
         // These two rewrite the draft's nhentai terms, so only a real change may dispatch them.
         if (filters.fullColor != currentServerFilters.value.fullColor) onAction(SearchAction.SetNhentaiFullColor(filters.fullColor))
@@ -490,7 +490,6 @@ private class SearchFilterActions(
             fabRestoreState.copy(hideLiked = false, hideSaved = false, hideWatched = false)
                 .withSearchAnimationFilter(state.query.draft.mode) { restoreState ->
                     restoreState.copy(
-                        animatedOnly = false,
                         durationMinBucket = AnimatedDurationRange.Full.normalizedMinBucket,
                         durationMaxBucket = AnimatedDurationRange.Full.normalizedMaxBucket,
                     )
@@ -648,13 +647,12 @@ private fun SearchFilterSheet(
     onDismiss: () -> Unit,
 ) {
     val mode = state.query.draft.mode
-    val animatedOnly = fabRestoreState.searchAnimationFilter(mode).animatedOnly
     FilterSheet(
         query = state.query.draft,
         onAction = onAction,
-        animatedOnly = animatedOnly,
+        animatedOnly = state.query.draft.media == MediaFilter.ANIMATED,
         onAnimatedOnlyChange = { enabled ->
-            onFabRestoreStateChange(fabRestoreState.withSearchAnimationFilter(mode) { it.copy(animatedOnly = enabled) })
+            onAction(SearchAction.SetMedia(if (enabled) MediaFilter.ANIMATED else MediaFilter.ANY))
         },
         animatedDurationRange = feed.animatedDurationRange,
         onAnimatedDurationRangeChange = { range ->
@@ -747,15 +745,16 @@ private fun nhentaiLanguageLabel(filter: NhentaiLanguageFilter): String = when (
 /** The filters that change what a source returns, so changing them runs a new search. */
 private data class SearchServerFilters(
     val sort: SortMode,
+    val media: MediaFilter,
     val dateRange: DateRange?,
     val fullColor: Boolean,
     val language: NhentaiLanguageFilter,
 )
 
 private fun SearchQueryUiState.serverFilters() =
-    SearchServerFilters(draft.sort, draft.dateRange, nhentaiFullColorFilter, nhentaiLanguageFilter)
+    SearchServerFilters(draft.sort, draft.media, draft.dateRange, nhentaiFullColorFilter, nhentaiLanguageFilter)
 
-private val DEFAULT_SERVER_FILTERS = SearchServerFilters(SortMode.NEWEST, null, false, NhentaiLanguageFilter.ANY)
+private val DEFAULT_SERVER_FILTERS = SearchServerFilters(SortMode.NEWEST, MediaFilter.ANY, null, false, NhentaiLanguageFilter.ANY)
 
 private fun Post.hasActionableTags(): Boolean {
     return canonicalTags.any { tag -> tag.isNotBlank() } ||

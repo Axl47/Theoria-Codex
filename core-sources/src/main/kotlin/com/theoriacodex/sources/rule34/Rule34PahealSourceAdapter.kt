@@ -1,5 +1,7 @@
 package com.theoriacodex.sources.rule34
 
+import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.adapter.AnimatedSearchTerm
 import com.google.gson.Gson
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.SourceAdapter
@@ -44,6 +46,7 @@ class Rule34PahealSourceAdapter(
         supportsSortTop = false,
         supportsSortRandom = false,
         supportsExcludeTagsServerSide = false,
+        animatedTerm = AnimatedSearchTerm(SearchTerm("animated")),
     )
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> = sourceCall {

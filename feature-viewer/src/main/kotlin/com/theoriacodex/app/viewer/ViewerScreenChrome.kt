@@ -67,7 +67,7 @@ internal fun BoxScope.ViewerChromeOverlays(
             source = selection.post.id.source.displayName(),
             indexLabel = if (selection.mediaItems.size > 1) "${selection.mediaIndex + 1} / ${selection.mediaItems.size}" else null,
             onBack = { controls.requestDismiss() },
-        ) { ViewerTrailRow(selection.post, trail, config.creatorBrowsingSources, screen.trailForks, controls::markInteraction) }
+        ) { ViewerTrailRow(selection.post, frame.posts, trail, config.creatorBrowsingSources, screen.trailForks, controls::markInteraction) }
     }
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_STRIPS && !frame.mediaOverviewVisible, Modifier.align(Alignment.TopEnd).padding(top = 112.dp).then(fadesWhileScrubbing)) {
         ViewerRelatedStrip(

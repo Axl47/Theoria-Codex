@@ -4,17 +4,22 @@ import com.theoriacodex.app.codex.SavedSearchBranch
 import com.theoriacodex.app.codex.SavedSearchFeedLoader
 import com.theoriacodex.app.codex.SavedSearchQueryBranch
 import com.theoriacodex.app.related.RelatedPostsLoading
+import com.theoriacodex.app.media.AnimatedDurationRange
+import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.model.CreatorProfile
+import com.theoriacodex.domain.model.MediaFilter
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.query.SearchTermLimit
+import com.theoriacodex.domain.query.withinTermLimit
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -28,25 +33,60 @@ internal interface TrailSources {
     fun tag(query: Query): TrailPager
     fun creator(creator: CreatorProfile): TrailPager?
     fun similar(seed: Post): TrailPager?
+
+    /** [source]'s cap on terms per request, which a single-source tag trail must fit. */
+    fun termLimit(source: SourceKey): SearchTermLimit? = null
 }
 
-/** The trail [request] asks for, or null when its source cannot supply one. */
-internal fun trailSpec(request: TrailRequest, sources: TrailSources): TrailSpec? = when (request) {
-    is TrailRequest.Tag -> trailTagQuery(request.tag, request.source, request.context).let { query ->
+/** The trail [request] asks for from a level filtered by [parent], or null when its source cannot supply one. */
+internal fun trailSpec(
+    request: TrailRequest,
+    sources: TrailSources,
+    parent: SearchVisibilityFilters = SearchVisibilityFilters(),
+): TrailSpec? = when (request) {
+    is TrailRequest.Tag -> trailTagQuery(
+        request.tag, request.source, request.context, parent.animatedOnly, sources.termLimit(request.source),
+    ).let { query ->
         TrailSpec(request.tag.replace('_', ' '), query, sources.tag(query))
     }
     is TrailRequest.Creator -> sources.creator(request.creator)?.let { TrailSpec(request.creator.displayName, null, it) }
     is TrailRequest.Similar -> sources.similar(request.from)?.let { TrailSpec("Similar", null, it) }
 }
 
-/** One tag, searched where the level it came from searched: everywhere for a Unified level, else the post's own source. */
-internal fun trailTagQuery(tag: String, source: SourceKey, context: Query?): Query = Query(
-    mode = if (context?.mode == QueryMode.Unified) QueryMode.Unified else QueryMode.Source(source),
-    includeTags = listOf(tag),
-    excludeTags = emptyList(),
-    sort = context?.sort ?: SortMode.NEWEST,
-    dateRange = null,
-    minScore = null,
+/**
+ * One tag, searched where the level it came from searched (everywhere for a Unified level, else the post's own source)
+ * and under that level's filters: its sort, dates and, where it searched the same place, its exclusions. It asks for
+ * animated posts when the level's query did or the level shows only animated posts ([animatedOnly]); a Creator or
+ * Similar level has no query to say so. A single-source trail drops the exclusions that would overrun [termLimit].
+ */
+internal fun trailTagQuery(
+    tag: String,
+    source: SourceKey,
+    context: Query?,
+    animatedOnly: Boolean = false,
+    termLimit: SearchTermLimit? = null,
+): Query {
+    val mode = if (context?.mode == QueryMode.Unified) QueryMode.Unified else QueryMode.Source(source)
+    // Another source's exclusions may name tags this one spells differently, so they stay with their level.
+    val excluded = if (context != null && context.mode == mode) {
+        context.excludeTerms.filterNot { it.value.equals(tag, ignoreCase = true) }
+    } else {
+        emptyList()
+    }
+    val media = if (animatedOnly || context?.media == MediaFilter.ANIMATED) MediaFilter.ANIMATED else MediaFilter.ANY
+    return Query(mode, listOf(tag), emptyList(), context?.sort ?: SortMode.NEWEST, context?.dateRange, null)
+        .copy(excludeTerms = excluded, media = media)
+        .withinTermLimit(termLimit.takeIf { mode is QueryMode.Source })
+}
+
+/**
+ * The phone-side filters a fork keeps from the level it leaves. A tag trail's own query decides its media and dates.
+ * A length filter is dropped: a fork's lengths are not known yet, and an unknown length would hide every post.
+ */
+internal fun trailVisibilityFilters(parent: SearchVisibilityFilters, query: Query?): SearchVisibilityFilters = parent.copy(
+    animatedOnly = query?.let { it.media == MediaFilter.ANIMATED } ?: parent.animatedOnly,
+    dateRange = query?.dateRange,
+    animatedDurationRange = AnimatedDurationRange.Full,
 )
 
 /**

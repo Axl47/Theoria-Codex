@@ -12,9 +12,9 @@ import com.theoriacodex.app.codex.LocalCodexSaveRelevanceLoader
 import com.theoriacodex.app.codex.LocalQuickSave
 import com.theoriacodex.app.lift.LocalLiftUgoiraClient
 import com.theoriacodex.app.lift.rememberLiftSession
-import com.theoriacodex.app.recommend.LikedTagCounts
-import com.theoriacodex.app.recommend.LocalLikedTagCounts
-import com.theoriacodex.app.recommend.observeLikedTagCounts
+import com.theoriacodex.app.recommend.LocalTagAffinityInputs
+import com.theoriacodex.app.recommend.TagAffinityInputs
+import com.theoriacodex.app.recommend.observeTagAffinityInputs
 import com.theoriacodex.app.related.LocalRelatedPostsSupport
 import com.theoriacodex.app.search.LocalPostWatchPresentation
 import com.theoriacodex.app.search.rememberPostWatchPresentation
@@ -49,7 +49,7 @@ internal fun ShellCompositionLocals(shell: TheoriaShell, content: @Composable ()
         LocalPostWatchPresentation provides watchPresentation,
         LocalCodexSaveRelevanceLoader provides saveRelevanceLoader,
         LocalQuickSave provides rememberQuickSave(shell, saveRelevanceLoader),
-        LocalLikedTagCounts provides rememberLikedTagCounts(shell),
+        LocalTagAffinityInputs provides rememberTagAffinityInputs(shell),
         LocalViewerReturnTransition provides viewerReturnTransition,
         LocalPostMenuActions provides rememberPostMenuActions(shell),
         LocalLiftController provides rememberLiftSession(),
@@ -71,11 +71,12 @@ private fun rememberCodexSaveRelevanceLoader(shell: TheoriaShell): CodexSaveRele
     CodexSaveRelevanceLoader(shell.data.codexRepository, shell.scope, observeLibrary = source::observeSavedLibrary)
 }
 
-/** The active profile's tag counts across its Likes, kept from the first collector on for the app session. */
+/** The active profile's tag affinity inputs, kept from the first collector on for the app session. */
 @Composable
-private fun rememberLikedTagCounts(shell: TheoriaShell): StateFlow<LikedTagCounts> = remember(shell) {
-    observeLikedTagCounts(shell.data.settingsRepository, shell.data.likesRepository)
-        .stateIn(shell.scope, SharingStarted.Lazily, LikedTagCounts.Empty)
+private fun rememberTagAffinityInputs(shell: TheoriaShell): StateFlow<TagAffinityInputs> = remember(shell) {
+    with(shell.data) {
+        observeTagAffinityInputs(settingsRepository, likesRepository, codexRepository, savedSearches, statisticsRepository)
+    }.stateIn(shell.scope, SharingStarted.Lazily, TagAffinityInputs.Empty)
 }
 
 /** The app-wide in-a-Codex set behind [LocalCodexPostIds], read from the shared browsing metadata. */

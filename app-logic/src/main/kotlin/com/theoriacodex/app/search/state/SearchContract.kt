@@ -1,18 +1,19 @@
 package com.theoriacodex.app.search.state
 
-import com.theoriacodex.app.search.NhentaiLanguageFilter
+import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.search.DateRangePreset
+import com.theoriacodex.app.search.NhentaiLanguageFilter
 import com.theoriacodex.app.search.SearchContinuation
 import com.theoriacodex.app.search.SearchTermLimitNotice
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.searchTermLimitNotices
-import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.DateRange
+import com.theoriacodex.domain.model.MediaFilter
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
@@ -294,6 +295,7 @@ sealed interface SearchAction {
     data class SelectMode(val mode: QueryMode) : SearchAction
     data class ToggleTemporarySource(val source: SourceKey) : SearchAction
     data class SelectSort(val sort: SortMode) : DraftEdit
+    data class SetMedia(val media: MediaFilter) : DraftEdit
     data class SetDateRange(val range: DateRange?) : DraftEdit
     data class SetDateRangePreset(val preset: DateRangePreset) : DraftEdit
     data class AddIncludeTerm(val term: SearchTerm) : DraftEdit
