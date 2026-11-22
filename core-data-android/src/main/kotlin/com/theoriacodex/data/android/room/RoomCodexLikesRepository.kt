@@ -254,8 +254,9 @@ class RoomCodexLikesRepository(
     override fun observeLibraryPosts(codexIds: Set<String>): Flow<List<Post>> {
         if (codexIds.isEmpty()) return flowOf(emptyList())
         val ids = codexIds.sorted()
-        // Every viewed post writes `posts`, which would rerun this whole-library read; membership alone triggers it.
-        return summaries.observeSavedPostIds(codexIds).flatMapLatest { dao.observeLibraryPosts(ids).take(1) }
+        // Every viewed post writes `posts`, which would rerun this whole-library read, so only membership writes trigger
+        // it. Each one does, even one that ends where it began (a removal and its Undo), since the read can fall between.
+        return dao.observeSavedPostIds(ids).flatMapLatest { dao.observeLibraryPosts(ids).take(1) }
             .decodePostSnapshots(retainedPayloads, "library:${ids.joinToString("\u0000")}")
     }
 
