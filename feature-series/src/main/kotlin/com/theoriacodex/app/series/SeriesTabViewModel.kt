@@ -65,8 +65,10 @@ class SeriesTabViewModel(
     /** Stores the followed series' new chapters, which changes the shelf's unread counts. */
     private val checkFollowed: suspend () -> Unit,
 ) : ViewModel() {
-    /** The text of the search on screen; a result for any other text is dropped. */
     private var searchText: String? = saved[SAVED_SEARCH]
+
+    /** Counts submitted searches; a result asked for under an earlier one is dropped, even when its text is the same. */
+    private var searchRun = 0
     private val mutableState = MutableStateFlow(SeriesTabState(search = searchText?.let { emptyList() }))
     val state: StateFlow<SeriesTabState> = mutableState
 
@@ -147,10 +149,11 @@ class SeriesTabViewModel(
         val loaded = state.value.search?.firstOrNull { it.key == key }?.listing as? SeriesListing.Loaded ?: return
         val page = loaded.nextPage?.takeUnless { loaded.loadingMore } ?: return
         val source = source(key) ?: return
-        updateSearch(key, query, loaded.copy(loadingMore = true, moreFailed = false))
+        val run = searchRun
+        updateSearch(key, run, loaded.copy(loadingMore = true, moreFailed = false))
         viewModelScope.launch {
             val next = loaded.withPage(page) { source.search(query, it) }
-            if (source(key) === source) updateSearch(key, query, next)
+            if (source(key) === source) updateSearch(key, run, next)
         }
     }
 
@@ -159,6 +162,7 @@ class SeriesTabViewModel(
         val query = text.trim().ifEmpty { return clearSearch() }
         val sources = state.value.sources.orEmpty()
         searchText = query
+        searchRun++
         saved[SAVED_SEARCH] = query
         mutableState.update { it.copy(search = sources.map { source -> SeriesSourceListing(source.key, source.name, SeriesListing.Loading) }) }
         sources.forEach { searchIn(it, query) }
@@ -167,12 +171,13 @@ class SeriesTabViewModel(
     fun retrySearch(key: SourceKey) {
         val query = searchText ?: return
         val source = source(key) ?: return
-        updateSearch(key, query, SeriesListing.Loading)
+        updateSearch(key, searchRun, SeriesListing.Loading)
         searchIn(source, query)
     }
 
     fun clearSearch() {
         searchText = null
+        searchRun++
         saved.remove<String>(SAVED_SEARCH)
         mutableState.update { it.copy(search = null) }
     }
@@ -186,15 +191,16 @@ class SeriesTabViewModel(
     }
 
     private fun searchIn(source: SeriesSource, query: String) {
+        val run = searchRun
         viewModelScope.launch {
             val listing = firstPage { source.search(query, 1) }
             // An answer from a source that was switched off or replaced meanwhile is dropped.
-            if (source(source.key) === source) updateSearch(source.key, query, listing)
+            if (source(source.key) === source) updateSearch(source.key, run, listing)
         }
     }
 
-    private fun updateSearch(key: SourceKey, query: String, listing: SeriesListing) {
-        if (searchText != query) return
+    private fun updateSearch(key: SourceKey, run: Int, listing: SeriesListing) {
+        if (searchRun != run) return
         mutableState.update { state ->
             state.copy(search = state.search?.map { if (it.key == key) it.copy(listing = listing) else it })
         }

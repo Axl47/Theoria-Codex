@@ -104,6 +104,29 @@ class SeriesTabViewModelTest {
         assertEquals(listOf("/found", "/found2"), listing.series.map { it.id.address })
         assertEquals(null, listing.nextPage)
     }
+
+    @Test
+    fun theSameSearchSubmittedAgainDropsAPageStillLoadingForTheFirst() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val source = Answering(pages = 2)
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) {}
+        advanceUntilIdle()
+        viewModel.search("one punch")
+        advanceUntilIdle()
+        val more = CompletableDeferred<Unit>()
+        source.laterPagesWait = more
+        viewModel.searchMore(source.key)
+        advanceUntilIdle()
+
+        viewModel.search("one punch")
+        advanceUntilIdle()
+        more.complete(Unit)
+        advanceUntilIdle()
+
+        val listing = viewModel.state.value.search?.single()?.listing as SeriesListing.Loaded
+        assertEquals(listOf("/found"), listing.series.map { it.id.address })
+        assertEquals(2, listing.nextPage)
+    }
 }
 
 /** Answers a search with one series a page, titled by the text searched for, over [pages] pages. */
@@ -112,8 +135,13 @@ private class Answering(id: String = "custom_mihon_7", private val pages: Int = 
     override val name = "Fake"
     override val language = "en"
     override suspend fun popular(page: Int) = SeriesPage(emptyList(), hasNextPage = false)
-    override suspend fun search(text: String, page: Int) =
-        SeriesPage(listOf(Series(SeriesId(key, if (page == 1) "/found" else "/found$page"), text)), hasNextPage = page < pages)
+
+    /** What a page after the first waits for, when set. */
+    var laterPagesWait: CompletableDeferred<Unit>? = null
+    override suspend fun search(text: String, page: Int): SeriesPage {
+        if (page > 1) laterPagesWait?.await()
+        return SeriesPage(listOf(Series(SeriesId(key, if (page == 1) "/found" else "/found$page"), text)), hasNextPage = page < pages)
+    }
     override suspend fun details(series: Series) = series
     override suspend fun entries(series: Series) = emptyList<SeriesEntry>()
     override suspend fun pages(entry: SeriesEntry) = emptyList<ImageRef>()
@@ -126,6 +154,7 @@ private object NothingStored : SeriesRepository {
     override suspend fun series(id: SeriesId): StoredSeries? = null
     override suspend fun entries(id: SeriesId): List<StoredSeriesEntry> = emptyList()
     override suspend fun store(series: Series, entries: List<SeriesEntry>?) = emptyList<SeriesEntry>()
+    override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>) = emptyList<SeriesEntry>()
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) = Unit
