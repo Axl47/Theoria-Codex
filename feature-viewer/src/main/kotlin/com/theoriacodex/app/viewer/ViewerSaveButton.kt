@@ -61,6 +61,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.codex.CodexCoverImage
 import com.theoriacodex.app.codex.LocalQuickSave
 import com.theoriacodex.app.codex.QuickSave
+import com.theoriacodex.app.codex.SAVE_MENU_CODICES
 import com.theoriacodex.app.codex.SaveTarget
 import com.theoriacodex.app.codex.QuickSaveRecord
 import com.theoriacodex.app.ui.components.CollectTarget
@@ -181,7 +182,8 @@ internal fun ViewerSaveFanOverlay(fan: ViewerSaveFanState) {
 private fun rememberSettledSaveSuggestions(quickSave: QuickSave, post: Post, query: Query?, fan: ViewerSaveFanState): ViewerPostSuggestions? {
     LaunchedEffect(quickSave, post.id, query, fan) {
         delay(SUGGESTION_SETTLE_MS)
-        quickSave.suggestions(post, query).collect { fan.suggestions = ViewerPostSuggestions(post.id, it) }
+        // The button saves to the top one; the fan shows the next ones.
+        quickSave.suggestions(post, query, SAVE_MENU_CODICES + 1).collect { fan.suggestions = ViewerPostSuggestions(post.id, it) }
     }
     return fan.suggestions
 }

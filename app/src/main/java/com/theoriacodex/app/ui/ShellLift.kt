@@ -15,6 +15,7 @@ import com.theoriacodex.app.lift.LiftPhase
 import com.theoriacodex.app.lift.LiftSession
 import com.theoriacodex.app.ui.components.NameEntryDialog
 import com.theoriacodex.app.ui.navigation.LocalLiftController
+import com.theoriacodex.app.ui.navigation.CodexChosen
 import com.theoriacodex.app.ui.navigation.LocalNewCodexOpener
 import com.theoriacodex.app.ui.navigation.NewCodexOpener
 import com.theoriacodex.app.ui.undo.LocalUndoSlot
@@ -31,10 +32,10 @@ import kotlinx.coroutines.launch
 internal class NewCodexRequests : NewCodexOpener {
     var post by mutableStateOf<Post?>(null)
         private set
-    var onCreated by mutableStateOf<((codexId: String, name: String) -> Unit)?>(null)
+    var onCreated by mutableStateOf<CodexChosen?>(null)
         private set
 
-    override fun openNewCodex(post: Post, onCreated: ((codexId: String, name: String) -> Unit)?) {
+    override fun openNewCodex(post: Post, onCreated: CodexChosen?) {
         this.post = post
         this.onCreated = onCreated
     }
@@ -61,8 +62,8 @@ internal fun ShellLiftOverlay(shell: TheoriaShell) {
         LifecycleEventEffect(Lifecycle.Event.ON_STOP) { session.cancel() }
         LiftOverlay(
             session,
-            onNewCodex = { post -> newCodex.openNewCodex(post, onCreated = null) },
-            onOpenPicker = { post -> shell.requestSaveToCodex(post) },
+            onNewCodex = { post, saveTo -> newCodex.openNewCodex(post, onCreated = saveTo) },
+            onOpenPicker = { post, query, saveTo -> shell.pendingSave.request(listOf(post), searchQuery = query, onPick = saveTo) },
             onFailure = shell::toast,
             onSaved = { record -> undo.awaitAction("Saved to ${record.codexName}", UndoAnchor.App) },
         )
@@ -80,7 +81,7 @@ internal fun ShellLiftOverlay(shell: TheoriaShell) {
 private fun CreateCodexForPostDialog(
     shell: TheoriaShell,
     post: Post,
-    onCreated: ((codexId: String, name: String) -> Unit)?,
+    onCreated: CodexChosen?,
     onDone: () -> Unit,
 ) {
     val quickSave = LocalQuickSave.current
