@@ -87,12 +87,15 @@ the 300 sampled extensions referenced: this module's Mihon API, and the public p
 kotlinx.serialization, kotlinx.coroutines and the Kotlin standard library. Internal packages are left to R8 except two
 members one extension each used.
 
-Why whole packages. Three rule sets were built and measured on `:app:assembleRelease` (the APK the Release workflow
-ships, unsigned here), and each APK was checked symbol by symbol against the 300 extensions:
+Size. `:app:assembleRelease` (the APK the Release workflow ships, unsigned here) grows from 10,917,004 bytes on `main`
+at `d2490c40` to 15,252,345 bytes, +4.34 MB (+40%).
+
+Why whole packages. Three rule sets were built and measured before the feature merged (at `f17caecf`), and each APK was
+checked symbol by symbol against the 300 extensions:
 
 | Rules | APK | Growth | Sampled extensions that link |
 | --- | --- | --- | --- |
-| None (before, at `f17caecf`) | 10,867,852 bytes | | |
+| None | 10,867,852 bytes | | |
 | Exactly the 1,508 sampled classes and members | 13,153,339 bytes | +2.29 MB (+21%) | 294 of 300 |
 | **The packages they are in (chosen)** | 15,170,425 bytes | +4.30 MB (+40%) | 294 of 300 |
 | Every class of those libraries | 17,204,943 bytes | +6.34 MB (+58%) | 294 of 300 |
@@ -107,9 +110,10 @@ extension's HTTP client names; the app packages it for `arm64-v8a` and `x86_64` 
 checks (`scripts/check.sh --part release`) fails when a release build no longer keeps one of them. It lists host names
 only; the survey's scripts and the extension index are not in the repository.
 
-Proved on an emulator with the minified `releaseAcceptance` build: MangaDex and Omoi browse, MangaDex opens a series
-and a 28-page chapter and lists its settings, a Jsoup-only extension lists, and logcat shows no missing class or
-member other than the protobuf one extension needs.
+Proved on an emulator with the minified `releaseAcceptance` build: the tab appears once an extension is installed;
+MangaDex turns on, browses, opens a series and a chapter whose pages download, and keeps a changed setting across a
+restart; following a series and forcing the update job (`cmd jobscheduler run -f <package> 3101`) ends with the job
+finished; a second extension browses and lists chapters. Logcat shows no missing class or member.
 
 ## Try it
 
