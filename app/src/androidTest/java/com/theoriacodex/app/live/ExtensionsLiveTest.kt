@@ -13,6 +13,7 @@ import com.theoriacodex.domain.series.ExtensionLanguage
 import com.theoriacodex.domain.series.ExtensionSetting
 import com.theoriacodex.domain.series.InstalledExtension
 import com.theoriacodex.mihonhost.MihonHost
+import java.util.Locale
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -114,9 +115,16 @@ class ExtensionsLiveTest {
 
         live.openSeriesTab()
         live.tap("the Extensions button", By.desc("Extensions"))
+        // What TalkBack reads: the extension's switch is a checkable element that says it is on.
+        val switch = live.waitFor("the extension's switch", switchOf(on)).let { "checkable=${it.isCheckable} checked=${it.isChecked}" }
+        assertEquals("The extension's switch reports on", "checkable=true checked=true", switch)
         live.tap("the extension's page", By.text(on.name))
         assertEquals("The page shows the kept value", expected, showing(stored.title).parentOrSelfCheckable().isChecked)
         live.report("page", "the Extensions page shows \"${stored.title}\" ${if (expected) "on" else "off"}")
+        val languageName = Locale.forLanguageTag(on.languages.first { it.on }.code).getDisplayName(Locale.getDefault())
+        val language = showing(languageName).parentOrSelfCheckable()
+        assertTrue("The language's switch reports on", language.isChecked)
+        live.report("switches", "extension: $switch; $languageName: checkable=${language.isCheckable} checked=${language.isChecked}")
         live.context.deleteSharedPreferences("extensions_live_test")
     }
 
@@ -127,10 +135,17 @@ class ExtensionsLiveTest {
         assertTrue("The extension is on", on.on)
         live.openSeriesTab()
         val before = runBlocking { live.series.sources() }.map { it.name }
-        // The package's name is the last part of its install folder, before the suffix Android adds.
-        val packageName = on.id.substringBeforeLast('/').substringAfterLast('/').substringBeforeLast('-')
+        // The Extensions page stays open across the uninstall and must drop the extension without being reopened.
+        live.tap("the Extensions button", By.desc("Extensions"))
+        live.waitFor("the extension's switch, on", switchOf(on).checked(true))
+        // The package's name is the last part of its install folder, up to the suffix Android adds after a hyphen;
+        // that suffix can hold hyphens of its own, a package name cannot.
+        val packageName = on.id.substringBeforeLast('/').substringAfterLast('/').substringBefore('-')
         val answer = device.executeShellCommand("pm uninstall $packageName").trim()
         live.report("uninstall", "$packageName: $answer; sources before: $before")
+        assertTrue("The open Extensions page drops the extension; on screen: ${live.screenText()}", device.wait(Until.gone(By.desc(on.name)), SeriesLiveDriver.RESULTS_TIMEOUT_MS))
+        live.report("page", "the open Extensions page no longer lists ${on.name}, without being reopened")
+        device.pressBack()
 
         live.tap("another tab", By.desc(TopLevelDestination.Library.label))
         live.tap("the Series tab again", By.desc(TopLevelDestination.Series.label))

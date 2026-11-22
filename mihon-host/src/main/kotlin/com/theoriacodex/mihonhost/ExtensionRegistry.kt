@@ -145,13 +145,14 @@ class ExtensionRegistry(
     }
 
     /**
-     * Runs [block] alone and off the caller's thread. The revision moves when the sources on offer did, whatever the
-     * cause: a choice made here, or a package installed or removed since the last listing.
+     * Runs [block] alone and off the caller's thread. The revision moves when the sources on offer did or the
+     * extensions on the device did, whatever the cause: a choice made here, or a package installed or removed since
+     * the last listing, also one that is off, which the Extensions page lists.
      */
     private suspend fun <T> locked(block: suspend () -> T): T = withContext(Dispatchers.IO) {
         mutex.withLock {
-            val before = offer?.sources
-            block().also { if (before != offer?.sources) mutableRevision.update { it + 1 } }
+            val before = offer
+            block().also { if (before?.sources != offer?.sources || before?.stamp != offer?.stamp) mutableRevision.update { it + 1 } }
         }
     }
 

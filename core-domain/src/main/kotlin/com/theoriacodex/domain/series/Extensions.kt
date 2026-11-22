@@ -89,7 +89,7 @@ data class ExtensionSettingOption(val value: String, val label: String)
  * none throws for an extension's own failure, which becomes that extension's [InstalledExtension.problem].
  */
 interface SeriesExtensions {
-    /** Changes whenever the sources on offer may have: an extension or a language turned on or off. */
+    /** Changes whenever the sources on offer or the extensions listed may have: one turned on or off, a language, a package installed or removed. */
     val revision: StateFlow<Int>
 
     suspend fun installed(): List<InstalledExtension>

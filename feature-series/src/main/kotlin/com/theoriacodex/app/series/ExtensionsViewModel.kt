@@ -27,7 +27,12 @@ class ExtensionsViewModel(private val extensions: SeriesExtensions) : ViewModel(
     private val mutableState = MutableStateFlow(ExtensionsState())
     val state: StateFlow<ExtensionsState> = mutableState
 
-    /** Lists the extensions again; one may have been installed or removed while the page was away. */
+    init {
+        // Lists the extensions now and again whenever one is installed, removed or switched while the page shows.
+        viewModelScope.launch { extensions.revision.collect { show(extensions.installed()) } }
+    }
+
+    /** Lists the extensions again on return to the page: a file put in the debug folder sends no signal. */
     fun refresh() {
         viewModelScope.launch { show(extensions.installed()) }
     }
