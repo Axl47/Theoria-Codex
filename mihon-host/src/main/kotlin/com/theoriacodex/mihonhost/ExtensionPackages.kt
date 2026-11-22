@@ -67,11 +67,6 @@ class ExtensionPackages(private val context: Context, private val folder: () -> 
 
     private fun apkFiles(): List<File> = folder()?.listFiles { file -> file.extension == "apk" }.orEmpty().sortedBy(File::getName)
 
-    /** Whether [list] would find any. Reads far less of each installed package, so it is cheap enough for app startup. */
-    fun any(): Boolean =
-        context.packageManager.getInstalledPackages(PackageManager.PackageInfoFlags.of(PackageManager.GET_CONFIGURATIONS.toLong()))
-            .any(::isExtension) || apkFiles().any { read(it) != null }
-
     /** The extension in the file [apk]; null when the file is not one. */
     fun read(apk: File): ExtensionPackage? {
         val info = context.packageManager.getPackageArchiveInfo(apk.path, PackageManager.PackageInfoFlags.of(FLAGS)) ?: return null

@@ -19,7 +19,7 @@ internal val seriesArguments = listOf(
     navArgument("address") { type = NavType.StringType },
 )
 
-/** The Series tab; the pager shows it only in a build with extensions. */
+/** The Series tab. */
 @Composable
 internal fun SeriesTabDestination(shell: TheoriaShell) {
     val series = shell.container.series ?: return
