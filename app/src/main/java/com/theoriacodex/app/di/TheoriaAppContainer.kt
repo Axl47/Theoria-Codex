@@ -99,6 +99,7 @@ import com.theoriacodex.data.android.room.TheoriaRoomDatabase
 import com.theoriacodex.app.post.FileMirrorIndex
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.PostId
@@ -601,8 +602,11 @@ internal class DefaultTheoriaAppContainer(
         // Search restores its last source as soon as the app is ready, so extension sources must be registered by then.
         if (extensionHost != null) customSourceRuntime.awaitFirstBuild()
         sourceReadiness.open()
+        // Optional upkeep: if it fails (say the battery broadcast cannot be read), saves still store their hashes.
         durableStoreScope.launch {
-            LibraryPictureBackfill(visualSignatures, listingPictures.hasher::hash, appContext.chargingState()).run()
+            runCatchingPreservingCancellation {
+                LibraryPictureBackfill(visualSignatures, listingPictures.hasher::hash, appContext.chargingState()).run()
+            }.onFailure { Diagnostics.report("similarity", "The Library's pictures could not be hashed", it) }
         }
         // Off the startup path: searched-tag suggestions start from what Recents remembers.
         durableStoreScope.launch {
