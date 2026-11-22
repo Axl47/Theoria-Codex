@@ -1,6 +1,7 @@
 package com.theoriacodex.app.triage
 
 import com.theoriacodex.app.recommend.TagAffinityInputs
+import com.theoriacodex.app.recommend.isImageTextTag
 import com.theoriacodex.app.recommend.tagAffinities
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostTaxonomyTerm
@@ -45,7 +46,8 @@ fun swipeDirection(
 /**
  * The tags the deck offers to hide for [post], at most [limit]: the ones the profile shows least interest in first,
  * never a universal tag (see [tagAffinities]), since hiding one would hide nearly everything. Among equals, which on an unfamiliar post is every tag, a content tag comes before one the post's taxonomy marks
- * as an artist, character, series, group, type, language, meta or rating tag, and then the post's own order holds.
+ * as an artist, character, series, group, type, language, meta or rating tag, or one for text on the image
+ * ([isImageTextTag]), and then the post's own order holds.
  * [excluded] holds tags that must not be offered (the deck's own query and tags already hidden), in any spelling.
  */
 fun hideCandidates(
@@ -60,7 +62,13 @@ fun hideCandidates(
         .withIndex().associate { it.value to it.index }
     return tagAffinities(post, affinity)
         .filterNot { it.universal || normalizeMatchToken(it.tag) in skipped }
-        .sortedWith(compareBy({ it.interest }, { normalizeMatchToken(it.tag) in nonContent }, { order[normalizeMatchToken(it.tag)] }))
+        .sortedWith(
+            compareBy(
+                { it.interest },
+                { normalizeMatchToken(it.tag).let { token -> token in nonContent || isImageTextTag(token) } },
+                { order[normalizeMatchToken(it.tag)] },
+            ),
+        )
         .take(limit)
         .map { it.tag }
 }
