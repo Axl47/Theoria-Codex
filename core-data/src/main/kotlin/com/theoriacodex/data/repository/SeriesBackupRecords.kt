@@ -13,13 +13,17 @@ import kotlinx.serialization.Serializable
  * A series in a profile backup (`library.series`): what its source said, what the user did with it, and its entries
  * with their progress. Series are stored once for the whole app, not per profile, so a backup holds them once.
  * Pages are never stored, so none are here; opening a restored chapter needs the series' extension installed and on.
+ *
+ * The cover is left out, and one found in a file is ignored. A cover's address says which extension fetches it, with
+ * that extension's HTTP client and headers, and a backup is a file anyone can write: it must not be able to send
+ * those to a host it names. A restored series gets its cover from its source, when its page is opened or at the next
+ * check of followed series.
  */
 @Serializable
 internal data class BackupSeriesRecord(
     @SerialName("source") val source: String,
     @SerialName("address") val address: String,
     @SerialName("title") val title: String,
-    @SerialName("coverUrl") val coverUrl: String? = null,
     @SerialName("author") val author: String? = null,
     @SerialName("genres") val genres: List<String> = emptyList(),
     @SerialName("language") val language: String = "",
@@ -38,7 +42,8 @@ internal data class BackupSeriesRecord(
                 series = Series(
                     id = SeriesId(SourceKey.parseOrThrow(source), address),
                     title = title,
-                    coverUrl = coverUrl,
+                    // Never from a backup: see the class comment.
+                    coverUrl = null,
                     author = author,
                     genres = genres,
                     language = language,
@@ -60,7 +65,6 @@ internal data class BackupSeriesRecord(
                 source = series.id.source.id,
                 address = series.id.address,
                 title = series.title,
-                coverUrl = series.coverUrl,
                 author = series.author,
                 genres = series.genres,
                 language = series.language,
@@ -118,12 +122,21 @@ internal fun validateBackupSeries(all: List<BackupSeries>) {
 
 /**
  * What a backup writes for a series with more entries than a restore accepts, so that one huge series cannot fail the
- * whole export: entries with progress first, then the rest the source lists, then those it dropped. An entry without
- * progress carries nothing a restore needs, since the source lists it again.
+ * whole export: the entry Continue points at, then entries with progress, then the rest the source lists, then those
+ * it dropped; within each, as the source orders them. An entry without progress carries nothing a restore needs,
+ * since the source lists it again.
  */
-internal fun BackupSeries.withinEntryLimit(): BackupSeries =
-    if (entries.size <= MAX_BACKUP_SERIES_ENTRIES) this
-    else copy(entries = entries.sortedBy { if (it.read || it.lastPage > 0) 0 else if (it.sourceOrder >= 0) 1 else 2 }.take(MAX_BACKUP_SERIES_ENTRIES))
+internal fun BackupSeries.withinEntryLimit(): BackupSeries {
+    if (entries.size <= MAX_BACKUP_SERIES_ENTRIES) return this
+    fun tier(entry: StoredSeriesEntry) = when {
+        entry.entry.address == series.lastOpenedEntry -> 0
+        entry.read || entry.lastPage > 0 -> 1
+        entry.sourceOrder >= 0 -> 2
+        else -> 3
+    }
+    val kept = entries.sortedWith(compareBy(::tier).thenBy { it.sourceOrder }.thenBy { it.entry.address })
+    return copy(entries = kept.take(MAX_BACKUP_SERIES_ENTRIES))
+}
 
 /** Sanity bounds: far more than anyone follows, or than a series has chapters. */
 internal const val MAX_BACKUP_SERIES = 10_000

@@ -101,7 +101,8 @@ class RoomProfileBackupStore(
      * Adds a backed-up series to what the device holds. An entry on both sides takes the further progress. When the
      * device already has entries for the series, they are the source's current list, so an entry only the backup has
      * arrives as one the source no longer lists: kept with its progress, but neither counted as unread nor announced
-     * as new, and listed again as it was if the source brings it back.
+     * as new, and listed again as it was if the source brings it back. When that entry is the Continue point, the
+     * series page offers the nearest listed chapter until its next refresh lists the entry again.
      */
     private fun mergeSeries(backup: BackupSeries) {
         val stored = backup.series

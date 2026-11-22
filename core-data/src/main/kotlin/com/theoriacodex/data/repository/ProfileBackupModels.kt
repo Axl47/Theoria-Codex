@@ -53,6 +53,7 @@ data class ProfileBackup(
         savedSearchCount = savedSearches.size,
         recentCount = library.watched.size + library.searches.size,
         followedCreatorCount = settings.followedCreators.size,
+        seriesCount = library.series.size,
     )
 }
 
@@ -65,6 +66,7 @@ data class ProfileBackupPreview(
     val savedSearchCount: Int,
     val recentCount: Int,
     val followedCreatorCount: Int,
+    val seriesCount: Int = 0,
 )
 
 /** [keptExistingSites]: ids of sites kept as already configured here, though the backup's address or family differed. */

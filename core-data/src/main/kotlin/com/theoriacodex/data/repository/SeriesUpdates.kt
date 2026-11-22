@@ -1,5 +1,6 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
@@ -38,7 +39,8 @@ suspend fun SeriesRepository.refresh(source: SeriesSource, series: Series): List
  * [sources] is asked again for each series, once its turn has come, so a source switched off or removed while the
  * check ran or waited is not used any further. A series whose source is missing or fails is skipped and the rest go
  * on. Only entry lists are fetched and stored: details cost a request of their own, and the ones the check started
- * with may be older than what a series' page stored meanwhile.
+ * with may be older than what a series' page stored meanwhile. The exception is a series stored without a cover,
+ * whose details are fetched too.
  *
  * [onUpdate] gets each series as soon as its new entries are stored, so a check stopped midway has already reported
  * everything it stored. Sources report side by side.
@@ -57,7 +59,12 @@ suspend fun SeriesRepository.checkFollowed(
 /** [series]' new entries, fetched from its source among [sources]; null when it gained none or its source is gone or failed. */
 private suspend fun SeriesRepository.update(sources: suspend () -> List<SeriesSource>, series: Series): SeriesUpdate? = try {
     refreshLocks.getOrPut(series.id.source, ::Mutex).withLock {
-        sources().firstOrNull { it.key == series.id.source }?.let { storeEntries(series.id, it.entries(series)) }
+        sources().firstOrNull { it.key == series.id.source }?.let { source ->
+            // A series restored from a backup has no cover until its source is asked. Its page asks; this does for a
+            // series never opened since. A failure here leaves the entry check to go on.
+            if (series(series.id)?.series?.coverUrl == null) runCatchingPreservingCancellation { store(source.details(series)) }
+            storeEntries(series.id, source.entries(series))
+        }
     }?.takeIf { it.isNotEmpty() }?.let { SeriesUpdate(series, it) }
 } catch (error: CancellationException) {
     throw error

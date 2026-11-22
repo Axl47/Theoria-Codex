@@ -143,7 +143,8 @@ private fun RestoreBackupDialog(
                     ).joinToString(" · "),
                 )
                 Text(preview.profileNames.joinToString())
-                Text("${preview.likeCount} Likes · ${preview.savedSearchCount} saved searches · ${preview.followedCreatorCount} follows · ${preview.recentCount} recent entries")
+                Text("${preview.likeCount} Likes · ${preview.savedSearchCount} saved searches · ${preview.followedCreatorCount} follows · ${preview.recentCount} recent entries" +
+                    if (preview.seriesCount > 0) " · ${preview.seriesCount} series" else "")
                 Text("Adds what's missing to matching profiles and Codices. Nothing you have is removed or changed, and restoring twice adds nothing more.")
                 Text("Login credentials and downloaded media are not included.")
                 BackupCheckbox("Also apply global preferences", state.applyPreferences, onApplyPreferences, !state.busy)

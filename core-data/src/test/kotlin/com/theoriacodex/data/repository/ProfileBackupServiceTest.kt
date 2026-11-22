@@ -321,7 +321,14 @@ class ProfileBackupServiceTest {
         val withSeries = plain.copy(library = plain.library.copy(series = listOf(series)))
         val encoded = codec.encode(withSeries)
         assertTrue(encoded.toString(Charsets.UTF_8).contains("\"version\":3"))
-        assertEquals(listOf(series), codec.decode(encoded).library.series)
+        // The cover is not in the file: its address would choose the extension client that fetches it.
+        assertFalse(encoded.toString(Charsets.UTF_8).contains("cover.jpg"))
+        val coverless = series.copy(series = series.series.copy(series = series.series.series.copy(coverUrl = null)))
+        assertEquals(listOf(coverless), codec.decode(encoded).library.series)
+        // A file written by hand cannot bring one either, so a restored series never asks an extension for a host the file named.
+        val forged = encoded.toString(Charsets.UTF_8).replace("\"title\":\"Title\"", "\"title\":\"Title\",\"coverUrl\":\"https://attacker.test/c.jpg#mihon=7\"")
+        assertTrue(forged.contains("attacker.test"))
+        assertEquals(listOf(coverless), codec.decode(forged.toByteArray()).library.series)
         // Trust is never in a backup, with or without series.
         assertFalse(encoded.toString(Charsets.UTF_8).contains("trustedExtensions"))
         val twice = withSeries.copy(library = withSeries.library.copy(series = listOf(series, series)))
@@ -332,12 +339,19 @@ class ProfileBackupServiceTest {
         val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
         fun entry(index: Int, order: Int, read: Boolean = false) =
             StoredSeriesEntry(SeriesEntry("/chapter/$index", "Ch.$index"), sourceOrder = order, firstSeenAtEpochMs = 1L, read = read)
-        // Two over the limit: the dropped chapter without progress and one unread listed chapter are left out.
-        val entries = listOf(entry(-2, order = -1), entry(-1, order = -1, read = true)) + List(MAX_BACKUP_SERIES_ENTRIES) { entry(it, order = it) }
-        val huge = backup().let { it.copy(library = it.library.copy(series = listOf(BackupSeries(StoredSeries(Series(id, "Title")), entries)))) }
-        val restored = codec.decode(codec.encode(huge)).library.series.single().entries
+        // Two over the limit: the dropped chapter without progress and the last listed chapter without progress are
+        // left out; the Continue target is kept although it is dropped and has no progress.
+        val entries = listOf(entry(-3, order = -1), entry(-2, order = -1), entry(-1, order = -1, read = true)) +
+            List(MAX_BACKUP_SERIES_ENTRIES - 1) { entry(it, order = it) }
+        val stored = StoredSeries(Series(id, "Title"), lastOpenedEntry = "/chapter/-3")
+        val huge = backup().let { it.copy(library = it.library.copy(series = listOf(BackupSeries(stored, entries)))) }
+        val restored = codec.decode(codec.encode(huge)).library.series.single().entries.map { it.entry.address }
         assertEquals(MAX_BACKUP_SERIES_ENTRIES, restored.size)
-        assertTrue(restored.any { it.entry.address == "/chapter/-1" } && restored.none { it.entry.address == "/chapter/-2" })
+        assertEquals(listOf("/chapter/-3", "/chapter/-1", "/chapter/0"), restored.take(3))
+        assertTrue("/chapter/-2" !in restored && "/chapter/${MAX_BACKUP_SERIES_ENTRIES - 2}" !in restored)
+        // The same series in another order is cut the same way.
+        val shuffled = huge.copy(library = huge.library.copy(series = listOf(BackupSeries(stored, entries.reversed()))))
+        assertEquals(restored, codec.decode(codec.encode(shuffled)).library.series.single().entries.map { it.entry.address })
 
         // What a restore refuses, an export refuses too.
         val invalid = huge.copy(library = huge.library.copy(series = listOf(BackupSeries(StoredSeries(Series(id, "Title")), listOf(entry(1, 0).copy(pageCount = 0))))))

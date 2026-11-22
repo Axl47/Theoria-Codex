@@ -38,7 +38,7 @@ class SeriesUpdateCheckTest {
     private var now = 100L
     private val repository = RoomSeriesRepository(database) { now }
     private val source = FakeSource("custom_mihon_1")
-    private val series = Series(SeriesId(source.key, "/series/a"), "Series")
+    private val series = Series(SeriesId(source.key, "/series/a"), "Series", coverUrl = "https://cdn.test/a.jpg")
     private val first = SeriesEntry("/c/1", "Chapter 1")
     private val second = SeriesEntry("/c/2", "Chapter 2")
 
@@ -136,6 +136,19 @@ class SeriesUpdateCheckTest {
     }
 
     @Test
+    fun `a followed series stored without a cover, as a restore leaves it, gets one at the check`() = runTest {
+        val restored = series.copy(coverUrl = null)
+        follow(restored)
+        source.covers[series.id] = "https://cdn.test/a.jpg"
+        source.chapters[series.id] = listOf(first)
+
+        repository.checkFollowed({ listOf(source) })
+
+        assertEquals("https://cdn.test/a.jpg", repository.series(series.id)!!.series.coverUrl)
+        assertEquals(listOf(first), repository.entries(series.id).map { it.entry })
+    }
+
+    @Test
     fun `unfollowed series are not checked`() = runTest {
         repository.store(series)
         source.chapters[series.id] = listOf(first)
@@ -159,7 +172,10 @@ private class FakeSource(id: String, private val fails: Boolean = false) : Serie
 
     /** What a page's refresh waits for in [details]; a check asks for chapters only. */
     var detailsWait: CompletableDeferred<Unit>? = null
-    override suspend fun details(series: Series): Series = checkNotNull(detailsWait) { "A check asks for chapters only" }.await().let { series }
+    /** The covers this source has; a check asks for the details of a series stored without one. */
+    val covers = mutableMapOf<SeriesId, String>()
+    override suspend fun details(series: Series): Series = covers[series.id]?.let { series.copy(coverUrl = it) }
+        ?: checkNotNull(detailsWait) { "A check asks for chapters only" }.await().let { series }
     override suspend fun entries(series: Series) = when {
         fails -> throw IllegalStateException("down")
         series.id == stopsAt -> throw CancellationException("stopped")
