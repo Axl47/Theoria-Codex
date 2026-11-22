@@ -207,7 +207,7 @@ private fun SettingsHome(
                 SettingsSheet.DOWNLOADS -> DownloadPreferencesSection(state, onAction)
                 SettingsSheet.CONTROLS -> PreferencesSection(state, onAction)
                 // One choice is all this sheet holds, so choosing closes it.
-                SettingsSheet.SERIES_UPDATES -> SeriesUpdatesSection(state) { action ->
+                SettingsSheet.SERIES_UPDATES -> SeriesUpdatesSection(state, notificationSettingsOpener()) { action ->
                     onAction(action)
                     onAction(SettingsAction.OpenPage(SettingsPage.HOME))
                 }
@@ -246,27 +246,30 @@ private fun SettingsSourcesGroup(
     }
 }
 
-/**
- * How often followed series are checked. A check that cannot announce what it finds says so instead, and the row then
- * opens the app's notification settings, since the system stops showing its permission prompt once it was refused.
- */
+/** How often followed series are checked. A check that cannot announce what it finds says so instead of its interval. */
 @Composable
 private fun SeriesUpdatesRow(interval: SeriesUpdateInterval, onChooseInterval: () -> Unit) {
+    val silenced = notificationSettingsOpener() != null && interval.hours != null
+    SettingsRow(
+        SettingChoices.SeriesUpdates.title, if (silenced) NOTIFICATIONS_OFF else seriesUpdateIntervalLabel(interval), Icons.Default.Notifications,
+        onClick = onChooseInterval,
+    )
+}
+
+/**
+ * Opens the app's notification settings, while the app may not notify; null while it may. The system stops showing
+ * its permission prompt once it was refused, so its settings are the only way back. Read again on every return.
+ */
+@Composable
+private fun notificationSettingsOpener(): (() -> Unit)? {
     val context = LocalContext.current
     var notificationsOn by remember { mutableStateOf(true) }
     LifecycleResumeEffect(Unit) {
         notificationsOn = context.getSystemService(NotificationManager::class.java).areNotificationsEnabled()
         onPauseOrDispose {}
     }
-    val silenced = !notificationsOn && interval.hours != null
-    SettingsRow(
-        SettingChoices.SeriesUpdates.title, if (silenced) "Notifications off" else seriesUpdateIntervalLabel(interval), Icons.Default.Notifications,
-        onClick = {
-            if (silenced) {
-                context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
-            } else onChooseInterval()
-        },
-    )
+    if (notificationsOn) return null
+    return { context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)) }
 }
 
 @Composable
