@@ -102,7 +102,8 @@ fun SearchScreen(
     onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
     onSaveSearch: (String, RecentSearchEntry) -> Unit = { _, _ -> },
     onManageSavedSearches: () -> Unit = {},
-    omnibox: List<OmniboxEntry> = emptyList(),
+    /** What the composer's typed text reaches besides tags; composed only while the composer is open. */
+    omnibox: @Composable () -> List<OmniboxEntry> = { emptyList() },
     sourceMix: SearchSourceMix? = null,
 ) {
     val chrome = rememberSearchChromeState(composerOpen)
@@ -149,7 +150,7 @@ fun SearchScreen(
     if (chrome.composerOpen) {
         val saved = composerSavedSearches(state, savedSearches, onSaveSearch, onManageSavedSearches) { chrome.closeComposer(onAction); onOpenSavedSearch(it) }
         SearchComposerDialog(state, feed, chrome, gridState, sourcePicker, applyDraft, onAction, onOpenSourceAccounts, saved,
-            favoriteTags, onAddFavoriteTag, onRemoveFavoriteTag, onRenameFavoriteTag, omnibox + sourceMixCommands(state, chrome, sourceMix, onAction))
+            favoriteTags, onAddFavoriteTag, onRemoveFavoriteTag, onRenameFavoriteTag, omnibox() + sourceMixCommands(state, chrome, sourceMix, onAction))
     }
     SearchSideSheets(state, chrome, favoriteTags, sourceMix, onAction, onRemoveFavoriteTag, onRenameFavoriteTag)
     if (chrome.showFilterSheet) {
