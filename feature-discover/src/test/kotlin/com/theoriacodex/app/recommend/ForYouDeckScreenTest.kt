@@ -1,7 +1,7 @@
 package com.theoriacodex.app.recommend
 
 import android.app.Application
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
@@ -14,21 +14,21 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
-import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.width
 import com.theoriacodex.app.related.LocalRelatedPostsSupport
 import com.theoriacodex.app.related.testRelatedShelf
 import com.theoriacodex.app.search.searchCardTestTag
@@ -53,7 +53,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -179,31 +178,19 @@ class ForYouDeckScreenTest {
         compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}creator").assertDoesNotExist()
     }
 
-    @Test fun `a long tag leaves the forks after it room to tap, and Similar its whole word`() {
+    @Test fun `the fork row scrolls only when its forks overflow it, so a card that fits still swipes from it`() {
         val request = TrailRequest.Similar(testPost(source = DECK_SOURCE, sourcePostId = "1"))
         val similar = ForYouFork("similar", "Similar", request)
-        // Each wider than the row by itself, whatever the test font's width.
-        val long = "long ".repeat(100)
-        val forks = listOf(ForYouFork("tag:first", long, request), ForYouFork("tag:second", long, request), ForYouFork("creator", long, request), similar)
-        compose.setContent {
-            MaterialTheme {
-                Column(Modifier.width(320.dp)) {
-                    ForYouForkRow(forks) {}
-                    ForYouForkRow(listOf(similar)) {}
-                }
-            }
-        }
+        // Each capped well short of the row, but together wider than it whatever the test font's width.
+        val long = List(5) { ForYouFork("tag:$it", "long ".repeat(100), request) }
+        var forks by mutableStateOf(listOf(similar))
+        compose.setContent { MaterialTheme { Box(Modifier.width(320.dp)) { ForYouForkRow(forks) {} } } }
 
-        fun bounds(fork: ForYouFork, index: Int = 0) =
-            compose.onAllNodesWithTag("$FOR_YOU_FORK_TAG_PREFIX${fork.key}")[index].getUnclippedBoundsInRoot()
-        (forks - similar).forEach { fork -> assertTrue(fork.key, bounds(fork).width >= 48.dp) }
-        assertTrue(bounds(similar).right <= 320.dp)
-        assertEquals(bounds(similar, index = 1).width, bounds(similar).width)
-    }
-
-    @Test fun `forks shorten only once the row is full, the longest first`() {
-        assertEquals(listOf(100, 30, 60), forkWidths(listOf(100, 30, 60), available = 300))
-        assertEquals(listOf(135, 30, 135), forkWidths(listOf(400, 30, 200), available = 300))
+        compose.onNodeWithTag(FOR_YOU_FORK_ROW_TAG).assert(SemanticsMatcher.keyNotDefined(SemanticsActions.ScrollBy))
+        forks = listOf(similar) + long
+        compose.onNodeWithTag(FOR_YOU_FORK_ROW_TAG).assert(SemanticsMatcher.keyIsDefined(SemanticsActions.ScrollBy))
+            .performScrollToKey("tag:4")
+        compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}tag:4").assertIsDisplayed()
     }
 
     @Test fun `a tag trail saves its search, and then shows it saved`() {

@@ -14,6 +14,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
+import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
@@ -117,7 +118,7 @@ private class OnePage(override val key: SourceKey) : SeriesSource {
     override val language = "en"
     override suspend fun pages(entry: SeriesEntry) = listOf(ImageRef(url = "https://pages.test/${++asked}.jpg", localPath = null, mime = null))
     override suspend fun popular(page: Int): SeriesPage = error("unused")
-    override suspend fun search(text: String, page: Int): SeriesPage = error("unused")
+    override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>): SeriesPage = error("unused")
     override suspend fun details(series: Series): Series = series
     override suspend fun entries(series: Series): List<SeriesEntry> = emptyList()
 }
@@ -133,6 +134,7 @@ private class StoredOnly(private val stored: StoredSeries, private val entries: 
     override suspend fun store(series: Series, entries: List<SeriesEntry>?) = emptyList<SeriesEntry>()
     override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>) = emptyList<SeriesEntry>()
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
+    override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) = false
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) {
         progress += "$entryAddress $page/$pageCount"

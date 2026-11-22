@@ -18,20 +18,13 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.filter
 
-/**
- * The bottom bar's tabs, in pager order. [route] is what the last-tab preference stores. [Series] stays last because
- * it shows only while an extension is on the device ([homeTabs]), which keeps every other tab's page index the same either way.
- */
+/** The bottom bar's tabs, in pager order. [route] is what the last-tab preference stores. */
 enum class TopLevelDestination(val route: String, val label: String) {
     Search("search", "Search"),
     ForYou("for_you", "For You"),
     Library("library", "Library"),
     Series("series", "Series"),
 }
-
-/** The tabs showing: all of them [withSeries], otherwise all but [TopLevelDestination.Series]. */
-fun homeTabs(withSeries: Boolean): List<TopLevelDestination> =
-    TopLevelDestination.entries.filter { withSeries || it != TopLevelDestination.Series }
 
 /** Lets a Codex tile and its detail screen morph into each other across navigation. */
 class CodexMorphScope(val shared: SharedTransitionScope, val visibility: AnimatedVisibilityScope)

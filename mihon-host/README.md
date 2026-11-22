@@ -2,8 +2,7 @@
 
 Runs [Mihon](https://github.com/mihonapp/mihon) manga extensions and presents their sources as `SeriesSource`s, which
 the Series tab browses and the Viewer reads chapter by chapter. It finds the extensions Mihon installed on the device,
-and runs one only after the user turns it on. Every build includes it; the Series tab shows only while an extension
-is installed.
+and runs one only after the user turns it on. Every build includes it, and the Series tab is always shown.
 
 It began as a spike asking how much of Mihon's run-time Theoria must provide before the extension ecosystem works
 here. That verdict and its measurements are kept below; the Series feature is built on top of it.
@@ -77,14 +76,14 @@ once more.
 | Piece | Where | What it does |
 | --- | --- | --- |
 | Host API | `src/main/kotlin/eu/kanade/tachiyomi`, `uy/kohesive/injekt` | The classes extensions link against, trimmed from Mihon (Apache 2.0, see `LICENSE-APACHE-2.0.txt`). Only the coroutine API; no RxJava. |
-| `ExtensionPackages` | `com.theoriacodex.mihonhost` | Lists the extensions on the device without running them: installed packages with the extension feature and, in debug builds only, APK files in the app's `mihon-extensions` folder. `any()` answers whether there is one at all; the Series tab shows when there is, or when a series is followed. The answer is remembered, so startup does not ask: the app looks again after its first screen and on each return to the foreground. |
+| `ExtensionPackages` | `com.theoriacodex.mihonhost` | Lists the extensions on the device without running them: installed packages with the extension feature and, in debug builds only, APK files in the app's `mihon-extensions` folder. |
 | `ExtensionRegistry` | same | The rule for what runs: loads the extensions that are on, on first use, each with 15 s to finish, and offers the sources of the languages that are on; only those sources fetch images. One that hangs or fails is left out and says why on the Extensions page. Settings are read only for the extension whose page is open. |
 | `ExtensionLoader` | same | Loads an installed package's code from its own APK; a folder file is first copied to a private read-only file (Android refuses writable code) and the copy's signer checked again. |
 | `SourceSettings`, `androidx/preference` | same | Reads a source's settings out of the holder classes and stores a changed value where the source reads it. |
 | `MihonHost` | same | Gives extensions what they ask the service locator for: the application, a `Json`, and an HTTP client. |
-| `MihonSeriesSource` | same | Presents one extension source as the app's `SeriesSource` (`core-domain`): popular and text search list series, a series has details and chapters, and a chapter gives its pages when it is opened. |
+| `MihonSeriesSource` | same | Presents one extension source as the app's `SeriesSource` (`core-domain`): popular, latest and search list series, a series has details and chapters, and a chapter gives its pages when it is opened. A source's search filters become the app's `SeriesFilter`s (`MihonFilters.kt`); a search sets the values chosen onto a list the source makes afresh, matching each by place, kind and name, and leaves one that no longer lines up at the source's default; later pages of the same search reuse that list, as Mihon does. |
 | `ExtensionImages` | same | Fetches covers and pages through the extension's own HTTP client. Each address handed to the image loader ends in a `#mihon=` tag naming the source, with a code only this install can compute; an interceptor on the app's media client answers those. Stored covers are plain addresses: the series' source tags one each time it is drawn (`SeriesSource.coverAddress`), and without its source a cover loads as an ordinary request. |
-| App seam | `app/.../extensions/MihonExtensionSourceHost.kt`, `app/.../di/ExtensionSources.kt` | The application creates the host. Nothing loads at startup: the extensions that are on load once, off the main thread, the first time the Series tab asks for sources or an image address ending in `#mihon=` is requested. The manifest holds `QUERY_ALL_PACKAGES`, as Mihon does: extension packages share only a declared feature, which a `<queries>` element cannot match. The Series tab is shown while an extension is on the device, looked up at startup and each time the app returns to the foreground. |
+| App seam | `app/.../extensions/MihonExtensionSourceHost.kt`, `app/.../di/ExtensionSources.kt` | The application creates the host. Nothing loads at startup: the extensions that are on load once, off the main thread, the first time the Series tab asks for sources or an image address ending in `#mihon=` is requested. The manifest holds `QUERY_ALL_PACKAGES`, as Mihon does: extension packages share only a declared feature, which a `<queries>` element cannot match. |
 | Series | `feature-series`, `app/.../series/`, `core-data` `SeriesRepository` | The Series tab and series page, the Extensions page (also reached from Settings), the Viewer session over a series' chapters, and the `series` and `series_entries` tables that keep followed series, read state and progress. Pages are never stored. |
 | Backup | `core-data` `SeriesBackupRecords.kt`, `RoomProfileBackupStore` | Profile backups hold the series the user follows, started reading or chose a reading mode for, with every stored chapter's read state and last page (`library.series`, backup version 3; a backup without series is still written as version 2). Series are stored once for the whole app, not per profile, so they are backed up once. A restore adds: a series already stored becomes followed, takes a reading mode and a Continue point if it had none, and each chapter takes the further progress of the two sides. A chapter only the backup has arrives as not listed when the device already holds the series' list, so it is not counted as unread. A series over 20,000 chapters is cut to that many, keeping the Continue point, then chapters with progress, then listed ones, so every backup the app writes is one it restores. A cover is written and read as the plain address the source gave, so a restored series shows its cover at once; the series' own source decides how it is fetched. Trust is never in a backup, so a restored series shows "Extension unavailable" until its extension is installed and turned on. |
 
@@ -153,8 +152,8 @@ to `/sdcard/Android/data/com.theoriacodex.debug/files/mihon-extensions/`):
 adb -s <emulator> install -r extension.apk
 ```
 
-Open the Series tab, go to Extensions and turn the extension on. The tab then browses its popular series, searches
-every source that is on at once, and opens a series' page, from which a chapter opens in the Viewer. Two live tests
+Open the Series tab, go to Extensions and turn the extension on. The tab then browses its popular or latest series, searches
+one source with its own filters or every source that is on at once, and opens a series' page, from which a chapter opens in the Viewer. Two live tests
 in `app/src/androidTest` do this through the real UI on `com.theoriacodex.debug.test`, with
 `-e extensionSourceLive true`. Each method is its own run, because the next one checks what survived the app's
 process restarting. `ExtensionsLiveTest` first, since it is what turns the extension on:
@@ -233,12 +232,13 @@ framework. The scripts are not in the repository: they depend on the index, whic
 
 What the feature still lacks.
 
-- **Search filters.** Each extension defines its own filters (genre, status, sort). Only popular, latest and free
-  text are used. Posts carry no tags.
 - **Unloading.** Loaded code cannot be unloaded. Turning an extension off stops its sources and images at once; its
   code stays idle in memory until the app's process ends.
 - **Extensions outside the sample.** The keep rules cover the packages 300 extensions used. One that calls a class in
   another package of those libraries fails with a missing class or method in release builds only.
+- **Failures in native code.** A source that throws is left out and says why. One that fails inside a library's native
+  code (the zstd decoder is the app's only such library) ends the app's process instead, and the Series tab loads its
+  first source when it opens.
 - **A hand-modified backup.** A restored series', chapters' and cover's addresses go to their extension as stored, and an
   extension builds its requests from addresses as it likes and may talk to several hosts, so the app has no origin to
   check them against. A backup edited by hand can thus make an approved extension request another host; the boundary
@@ -260,6 +260,5 @@ Delete `mihon-host/`, `app/src/main/java/com/theoriacodex/app/extensions/` and i
 `settings.gradle.kts`, `app/build.gradle.kts` (the `abiFilters` line too), the root `build.gradle.kts`, `scripts/check.sh`,
 `scripts/verify_device_apk.py`, `config/quality/hotspot-budgets.json` and its Detekt baseline, and the three library
 aliases in `gradle/libs.versions.toml`, and the permissions, service and activity it added to the manifest. The seam
-in `:app` and `:media-kit` (`SeriesDependencies`, `AppHttpClients`' `extensionMedia`) does nothing without a host, and
-without one the Series tab is not shown; `feature-series` and the
+in `:app` and `:media-kit` (`SeriesDependencies`, `AppHttpClients`' `extensionMedia`) does nothing without a host, but the Series tab then has nothing to show, so it goes too (`TopLevelDestination.Series`); `feature-series` and the
 series tables depend only on `SeriesSource`, not on this module.

@@ -1,6 +1,8 @@
 package com.theoriacodex.app.series
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
@@ -8,6 +10,8 @@ import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import com.theoriacodex.app.ui.AppRoute
 import com.theoriacodex.app.ui.TheoriaShell
+import com.theoriacodex.app.ui.TopLevelDestination
+import com.theoriacodex.app.ui.tabShown
 import com.theoriacodex.app.ui.launchViewer
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.SeriesId
@@ -19,12 +23,16 @@ internal val seriesArguments = listOf(
     navArgument("address") { type = NavType.StringType },
 )
 
-/** The Series tab; the pager shows it only in a build with extensions. */
+/** The Series tab. */
 @Composable
 internal fun SeriesTabDestination(shell: TheoriaShell) {
     val series = shell.container.series ?: return
     val viewModel = viewModel {
         SeriesTabViewModel(series.repository, series.sources, series.extensions.revision, createSavedStateHandle()) { series.checkFollowed() }
+    }
+    val pager = shell.navigation.pagerState
+    LaunchedEffect(viewModel, pager) {
+        viewModel.followShown(snapshotFlow { tabShown(TopLevelDestination.Series, pager.targetPage, pager.settledPage) })
     }
     SeriesTabScreen(
         viewModel,
@@ -54,10 +62,23 @@ internal fun SeriesPageDestination(shell: TheoriaShell, entry: NavBackStackEntry
     val viewModel = viewModel {
         SeriesPageViewModel(id, series.repository, series.sources, series.extensions.revision)
     }
+    val switchSource = viewModel {
+        SwitchSourceViewModel(id, series.sources, series.extensions.revision, store = { series.repository.store(it) }) { source, to ->
+            viewModel.whileMoving { series.switchSource(id, source, to) }
+        }
+    }
     SeriesPageScreen(
         viewModel = viewModel,
         onBack = { shell.navController.popBackStack() },
         onOpenExtensions = shell::openExtensions,
+        switchSource = switchSource,
+        onOpenSeries = { opened -> shell.navController.navigate(AppRoute.series(opened)) },
+        // The old series is gone, so its page leaves the back stack; only while it is still the page on screen.
+        onSwitched = { moved ->
+            if (shell.navController.currentBackStackEntry == entry) {
+                shell.navController.navigate(AppRoute.series(moved)) { popUpTo(entry.destination.id) { inclusive = true } }
+            }
+        },
         onOpenEntry = { address ->
             shell.scope.launch {
                 shell.seriesReader?.session(id, address)?.let { session -> shell.launchViewer(session, saveContext = false, singleTop = true) }

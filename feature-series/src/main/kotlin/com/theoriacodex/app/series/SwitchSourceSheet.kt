@@ -1,0 +1,112 @@
+package com.theoriacodex.app.series
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.theoriacodex.app.ui.components.ExpandedBottomSheet
+import com.theoriacodex.app.ui.components.SheetHeader
+import com.theoriacodex.domain.series.SeriesId
+
+/**
+ * The Switch source sheet while [viewModel] has it open: the series' matches on every other source, then a confirmation
+ * for the one tapped. [onOpenSeries] shows a match's page; [onSwitched] shows the series once moved.
+ */
+@Composable
+internal fun SwitchSourceSheet(
+    viewModel: SwitchSourceViewModel,
+    onOpenSeries: (SeriesId) -> Unit,
+    onSwitched: (SeriesId) -> Unit,
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val sheet = state.sheet ?: return
+    // While a switch runs the sheet stays open, so nothing else on the page, such as a chapter to read, can be opened
+    // until the series it belongs to has moved or stayed.
+    ExpandedBottomSheet(onDismiss = viewModel::close, dismissible = !sheet.switching) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+            SheetHeader(SWITCH_SOURCE, closeDescription = "Close", onDismiss = viewModel::close)
+            if (sheet.switching) LinearProgressIndicator(Modifier.fillMaxWidth())
+            sheet.failure?.let { Text(it, Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.error) }
+            CompositionLocalProvider(LocalSeriesSources provides state.others) {
+                sheet.results.forEach { result ->
+                    SourceResult(result, enabled = !sheet.switching, onRetry = { viewModel.retry(result.key) }, onPick = { viewModel.confirm(it) })
+                }
+            }
+        }
+    }
+    sheet.confirming?.let { match ->
+        AlertDialog(
+            onDismissRequest = { viewModel.confirm(null) },
+            title = { Text("Switch to ${sheet.sourceName(match.series.id.source)}?") },
+            text = { Text("The current series leaves the shelf and its downloads are deleted.") },
+            confirmButton = { TextButton(onClick = { viewModel.switchTo(match, onSwitched) }) { Text("Switch") } },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { viewModel.confirm(null) }) { Text("Cancel") }
+                    TextButton(onClick = { viewModel.openMatch(match, onOpenSeries) }) { Text("Open") }
+                }
+            },
+        )
+    }
+}
+
+/** One source's part of the sheet: its matches, or one line while it searches, found nothing, or failed. */
+@Composable
+private fun SourceResult(result: SwitchSourceResult, enabled: Boolean, onRetry: () -> Unit, onPick: (SwitchMatch) -> Unit) {
+    when (val listing = result.listing) {
+        SwitchListing.Loading -> Row(Modifier.padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            SourceLine(result.name)
+            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+        }
+        is SwitchListing.Failed -> FailureRow(onRetry, message = "${result.name} · ${listing.message}")
+        is SwitchListing.Found ->
+            if (listing.matches.isEmpty()) SourceLine("${result.name} · no match", Modifier.padding(vertical = 12.dp))
+            else listing.matches.forEach { match -> MatchRow(match, result.name, enabled) { onPick(match) } }
+    }
+}
+
+/** A match: its cover and title over its source and, once counted, its chapters. */
+@Composable
+private fun MatchRow(match: SwitchMatch, sourceName: String, enabled: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(enabled = enabled, role = Role.Button, onClick = onClick).padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SeriesCover(match.series, Modifier.width(40.dp))
+        Column(Modifier.weight(1f)) {
+            Text(match.series.title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            SourceLine(match.chapters?.let { "$sourceName · ${chapterCount(it)}" } ?: sourceName)
+        }
+    }
+}
+
+@Composable
+private fun SourceLine(text: String, modifier: Modifier = Modifier) {
+    Text(text, modifier, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+}
+
+internal const val SWITCH_SOURCE = "Switch source"

@@ -15,7 +15,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -110,7 +109,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 /**
@@ -170,17 +168,10 @@ internal class RouteOwners {
 internal class HomeNavigation(
     val navController: NavHostController,
     homeTabRoute: MutableState<String>,
-    seriesTab: State<Boolean>,
     val pagerState: PagerState,
     private val scope: CoroutineScope,
 ) {
     var homeTabRoute by homeTabRoute
-
-    /** Set at startup when the saved tab is Series and it cannot be shown yet; cleared once that is settled. */
-    var awaitedSeries by mutableStateOf<AwaitedSeriesTab?>(null)
-
-    /** The tabs showing now; Series only while an extension is on the device. */
-    val homeTabs: List<TopLevelDestination> by derivedStateOf { homeTabs(withSeries = seriesTab.value) }
 
     val currentRoute: String?
         get() = navController.currentBackStackEntry?.destination?.route
@@ -582,10 +573,7 @@ internal class TheoriaShell(
         val currentSettings = data.currentSettingsSnapshot()
         workflows.likesCodexSync.ensureProfileCodex(currentSettings.activeRecommendationProfile())
         owners.settings.onAction(SettingsAction.RefreshAccounts)
-        val series = container.series
-        val restored = data.restoreHomeTab(homeTabs(withSeries = series?.tab?.first() == true), extensionsLooked = series?.looked?.value != false)
-        navigation.homeTabRoute = restored.route
-        navigation.awaitedSeries = restored.awaitedSeries
+        navigation.homeTabRoute = data.restoreHomeTab().route
         appShellOwner.onAction(AppShellAction.MarkAppReady)
         navReady = true
     }
@@ -745,13 +733,11 @@ internal fun rememberTheoriaShell(
     val pendingLikePostIds = owners.postMutations.pendingLikePostIds.collectAsStateWithLifecycle()
     val homeTabRoute = rememberSaveable { mutableStateOf(TopLevelDestination.Search.route) }
     val pendingCreatorProfile = rememberSaveable(stateSaver = CreatorProfileStateSaver) { mutableStateOf<CreatorProfile?>(null) }
-    val seriesTab = remember(container) { container.series?.tab ?: flowOf(false) }
-        .collectAsStateWithLifecycle(initialValue = container.series?.tabAtStartup == true)
-    val pagerState = rememberPagerState(pageCount = { homeTabs(withSeries = seriesTab.value).size })
+    val pagerState = rememberPagerState(pageCount = { TopLevelDestination.entries.size })
     val routes = remember { RouteOwners() }
     val pendingSave = remember { PendingCodexSave() }
     val overlays = remember { ShellOverlays() }
-    val navigation = remember(navController, pagerState) { HomeNavigation(navController, homeTabRoute, seriesTab, pagerState, scope) }
+    val navigation = remember(navController, pagerState) { HomeNavigation(navController, homeTabRoute, pagerState, scope) }
     return remember(container, viewerSessions, appShellOwner, appContext, scope, registry, transfers, owners, codexImportLauncher, navigation) {
         TheoriaShell(
             container, viewerSessions, appShellOwner, appContext, scope, snackbarHostState, registry, transfers, owners,

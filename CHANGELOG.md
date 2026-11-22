@@ -37,10 +37,13 @@
 - For You: with more than one profile, a chip at the top switches between them.
 - The search box finds every setting: switches flip right in the list, and the rest open where they live.
 - Followed creators: Check for new posts shows that it is running, and each creator has a Following button with Undo in the row.
-- Series: a new tab for manga from Mihon extensions. It appears once a Mihon extension is installed or a series is followed. Browse a source's popular series, search every source at once, and open a series to see its chapters.
+- Series: a new tab for manga from Mihon extensions. Browse a source's popular series, search every source at once, and open a series to see its chapters.
 - Extensions are third-party code, so each one stays off until you turn it on under Extensions, in the Series tab or in Settings. Turning one on shows the key it is signed with. The same page chooses an extension's languages and holds its settings.
+- A source in the Series tab can show its latest series as well as its popular ones, where the source offers them. Filter searches just that source, with its own filters (genres, status, sort and so on); the chip shows how many you changed. Choices last until you pick another source or leave the tab.
 - Chapters open in the Viewer, read left to right, right to left, or as one vertical scroll, with the mode kept per series. A chapter resumes at the page you left, is marked read when you finish it, and continues into the next one.
 - Follow a series to keep it on the Series tab with its unread count. Followed series are checked for new chapters when you pull down on the tab and in the background (Settings, Check for new chapters), and a notification for a new chapter opens the series.
+- When a source falls behind or breaks, Switch source in a series' ⋮ menu finds the same series on your other sources and moves it there. Follow and reading mode carry over; chapters before the one you were reading count as read, it resumes at the same page, and a later chapter you read stays read. The chapters already out are not announced as new. Open shows the other source's page first without moving anything.
+- When an extension is on in several languages, the Series tab and series pages name the language next to the source.
 - Profile backups include the series you follow or started, with each chapter's read state and last page and the series' reading mode. Restoring only adds: nothing already on the device is undone. Which extensions are turned on is never in a backup, so a restored series says "Extension unavailable" until its extension is installed and turned on.
 - The app now reads the list of installed apps to find extensions, and asks to send notifications when you follow a series.
 

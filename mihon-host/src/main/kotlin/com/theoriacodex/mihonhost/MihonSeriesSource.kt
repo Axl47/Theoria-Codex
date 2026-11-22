@@ -7,12 +7,15 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EXTENSION_SOURCE_ID_PREFIX
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
+import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
 import com.theoriacodex.domain.series.SeriesStatus
+import com.theoriacodex.domain.series.withChoices
 import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.source.Source
+import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.MangasPage
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
@@ -44,10 +47,30 @@ class MihonSeriesSource(
     private val listedSeries = recent<SManga>()
     private val listedChapters = recent<SChapter>()
 
+    /** The last search asked for and the list its pages were given; another search replaces it. */
+    private class PagedSearch(val text: String, val filters: List<SeriesFilter>, val options: FilterList)
+
+    @Volatile private var pagedSearch: PagedSearch? = null
+
     override suspend fun popular(page: Int): SeriesPage = calling { source.getPopularManga(page).listed() }
 
-    override suspend fun search(text: String, page: Int): SeriesPage =
-        calling { source.getSearchManga(page, text, source.getFilterList()).listed() }
+    override val supportsLatest: Boolean get() = source.supportsLatest
+
+    override suspend fun latest(page: Int): SeriesPage = calling { source.getLatestUpdates(page).listed() }
+
+    override suspend fun filters(): List<SeriesFilter> = calling { source.getFilterList().toSeriesFilters() }
+
+    /**
+     * The source reads a search's options from a list it makes, so a first page sets [filters] onto a new one. Later
+     * pages of the same search hand the source that list again, as Mihon does: a source that fills its filters in
+     * after its first request would otherwise page with other criteria.
+     */
+    override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>): SeriesPage = calling {
+        val options = pagedSearch?.takeIf { page > 1 && it.text == text && it.filters == filters }?.options
+            ?: source.getFilterList().also { options -> if (filters.isNotEmpty()) options.setFrom(options.toSeriesFilters().withChoices(filters)) }
+        pagedSearch = PagedSearch(text, filters, options)
+        source.getSearchManga(page, text, options).listed()
+    }
 
     override suspend fun details(series: Series): Series = calling {
         val manga = manga(series)
@@ -61,7 +84,8 @@ class MihonSeriesSource(
             SeriesEntry(
                 address = chapter.url,
                 name = chapter.name,
-                number = chapter.chapter_number.takeIf { it >= 0f },
+                // Most extensions leave the number at -1 for the app to read from the name, as Mihon does.
+                number = chapter.chapter_number.takeIf { it >= 0f } ?: ChapterRecognition.parseChapterNumber(series.title, chapter.name),
                 translatorGroup = chapter.scanlator?.takeIf(String::isNotBlank),
                 uploadedAtEpochMs = chapter.date_upload.takeIf { it > 0L },
             )
