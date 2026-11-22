@@ -29,7 +29,8 @@ object ViewerVeil {
     val InactiveTrack = Color.White.copy(alpha = 0.32f)
     const val SECONDARY_TEXT_ALPHA = 0.68f
 
-    private val LegibilityShadow = Shadow(Color.Black.copy(alpha = 0.6f), Offset(0f, 1f), blurRadius = 4f)
+    /** Keeps white text readable over media and scrims of any brightness. */
+    val LegibilityShadow = Shadow(Color.Black.copy(alpha = 0.6f), Offset(0f, 1f), blurRadius = 4f)
 
     /** Tabular figures keep time readouts from shifting on device fonts whose digits vary in width. */
     val Time = TextStyle(fontSize = 13.sp, fontFeatureSettings = "tnum", shadow = LegibilityShadow)

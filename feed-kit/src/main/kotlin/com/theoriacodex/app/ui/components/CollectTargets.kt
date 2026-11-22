@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.boundsInWindow
@@ -46,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.codex.CodexCoverCandidate
 import com.theoriacodex.app.codex.CodexCoverImage
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
+import com.theoriacodex.app.viewer.ViewerVeil
 import kotlin.math.roundToInt
 
 /** What a collect target shows: an icon, a Codex cover that falls back to an icon, or progress while it works. */
@@ -170,9 +172,11 @@ private fun <T> CollectTargetBubble(target: CollectTarget<T>, hovered: Boolean, 
                 }
             }
         }
+        // Labels sit over scrims and media rather than a surface, so they never take the inherited content color.
         Text(
             target.label,
-            style = MaterialTheme.typography.labelSmall,
+            color = Color.White,
+            style = MaterialTheme.typography.labelSmall.copy(shadow = ViewerVeil.LegibilityShadow),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
