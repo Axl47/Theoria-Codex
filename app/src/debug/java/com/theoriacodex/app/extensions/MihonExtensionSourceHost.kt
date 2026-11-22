@@ -5,6 +5,7 @@ import android.util.Log
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.di.ExtensionSource
 import com.theoriacodex.app.di.ExtensionSourceHost
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.mihonhost.ExtensionLoader
 import com.theoriacodex.mihonhost.ExtensionImages
 import com.theoriacodex.mihonhost.MihonHost
@@ -28,8 +29,8 @@ internal class MihonExtensionSourceHost : ExtensionSourceHost {
         val apks = application.getExternalFilesDir(DIRECTORY)?.listFiles { file -> file.extension == "apk" }.orEmpty()
         if (apks.isNotEmpty()) MihonHost.install(application, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
         val loader = ExtensionLoader(application)
-        // The same extension pushed under two file names is one source.
-        apks.sortedBy { it.name }.mapNotNull { apk -> source(loader, apk) }.distinctBy { it.source }
+        val loaded = HashSet<SourceKey>()
+        apks.sortedBy { it.name }.mapNotNull { apk -> source(loader, apk, loaded) }
     } catch (@Suppress("TooGenericExceptionCaught") error: Exception) {
         Log.w(TAG, "No extensions loaded", error)
         emptyList()
@@ -41,12 +42,19 @@ internal class MihonExtensionSourceHost : ExtensionSourceHost {
      * An extension can offer one source per language; one is enough here: English, else the first. Reading a source's
      * name or address already runs its code, which can fail like any other call into it.
      */
-    private fun source(loader: ExtensionLoader, apk: File): ExtensionSource? = try {
+    private fun source(loader: ExtensionLoader, apk: File, loaded: MutableSet<SourceKey>): ExtensionSource? = try {
         val extension = loader.load(apk)
         Log.i(TAG, "Loaded ${extension.name} ${extension.versionName}: ${extension.sources.size} sources, signer ${extension.signatureSha256}")
         val source = extension.sources.firstOrNull { it.lang == "en" } ?: extension.sources.first()
         val key = MihonSourceAdapter.sourceKey(source)
-        ExtensionSource(key, source.name, (source as HttpSource).baseUrl, MihonSourceAdapter(key, source, images) { Log.i(TAG, it) })
+        val homeUrl = (source as HttpSource).baseUrl
+        if (loaded.add(key)) {
+            ExtensionSource(key, source.name, homeUrl, MihonSourceAdapter(key, source, images) { Log.i(TAG, it) })
+        } else {
+            // The same extension under a second file name. Only the first one's source may answer image requests.
+            Log.w(TAG, "Skipped ${apk.name}: ${source.name} is already loaded")
+            null
+        }
     } catch (@Suppress("TooGenericExceptionCaught") error: Exception) {
         skipped(apk, error)
     } catch (error: LinkageError) {

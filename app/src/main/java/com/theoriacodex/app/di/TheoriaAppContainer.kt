@@ -222,7 +222,7 @@ internal class DefaultTheoriaAppContainer(
     context: Context,
     private val cookieBridge: SiteCookieBridge,
     private val httpClients: AppHttpClients,
-    extensionHost: ExtensionSourceHost? = null,
+    private val extensionHost: ExtensionSourceHost? = null,
 ) : TheoriaAppContainer {
     private val appContext = context.applicationContext
     private val storageDirectory = File(appContext.filesDir, "theoria_codex")
@@ -571,6 +571,8 @@ internal class DefaultTheoriaAppContainer(
         offlineCatalogReady.await()
         // Registers the saved offline queue before any screen can add to it; its jobs wait on sourceReadiness.
         offlineMedia.recoverPendingJobs()
+        // Search restores its last source as soon as the app is ready, so extension sources must be registered by then.
+        if (extensionHost != null) customSourceRuntime.awaitFirstBuild()
         sourceReadiness.open()
         // Off the startup path: searched-tag suggestions start from what Recents remembers.
         durableStoreScope.launch {
