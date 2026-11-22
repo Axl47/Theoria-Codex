@@ -20,6 +20,7 @@ import com.theoriacodex.data.repository.inReadingOrder
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesSource
+import com.theoriacodex.domain.series.SeriesStatus
 import java.util.regex.Pattern
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.flow.first
@@ -67,7 +68,7 @@ class ExtensionSourceLiveTest {
         val chapters = counted.substringAfterLast(" · ").substringBefore(' ').toInt()
         live.report("series", "chapters=$chapters")
         assertTrue("A series lists more than one chapter", chapters > 1)
-        readAbout(listed, counted)
+        readAbout(listed)
 
         val (chapter, next) = continueChapters(listed)
         live.tap("the button that starts reading", By.text(Pattern.compile("Start|Continue · .*")))
@@ -135,9 +136,14 @@ class ExtensionSourceLiveTest {
         val x = device.displayWidth / 2
         val pushUp = { device.swipe(x, device.displayHeight * 3 / 4, x, device.displayHeight / 4, SWIPE_STEPS) }
         var card: UiObject2? = null
-        // A page can be several screens tall, so the end of the last one can be many pushes away.
+        // A page can be several screens tall, so the end of the last one can be many pushes away. The last push is
+        // left to settle before the card is measured: one more push at the end would open the next chapter.
         repeat(END_PUSHES) { if (card == null) { pushUp(); card = device.wait(Until.findObject(By.text("Next")), SeriesLiveDriver.POLL_MS * 3) } }
-        val cardBottom = checkNotNull(card) { "The end card did not show; on screen: ${live.screenText()}" }.visibleBounds.bottom
+        Thread.sleep(SeriesLiveDriver.SHORT_WAIT_MS)
+        val shown = checkNotNull(card) { "The end card did not show; on screen: ${live.screenText()}" }
+        // A card still cut off by the screen's edge has not reached the end.
+        if (shown.visibleBounds.bottom >= device.displayHeight * 19 / 20) { pushUp(); Thread.sleep(SeriesLiveDriver.SHORT_WAIT_MS) }
+        val cardBottom = shown.visibleBounds.bottom
         // Scrolling down hid the controls; a tap on the page above the card shows them over it.
         device.click(x, device.displayHeight / 4)
         val dockTop = live.waitFor("the dock", By.desc("Info")).visibleBounds.top
@@ -353,11 +359,14 @@ class ExtensionSourceLiveTest {
 
     /** The chapter the series page's button opens and the one after it, read from what the page stored. */
     /** Checks the page shows what the source said about [listed]: its status beside the chapter count, its synopsis below. */
-    private fun readAbout(listed: Series, counted: String) {
-        val stored = checkNotNull(runBlocking { series.repository.series(listed.id) }).series
-        val status = counted.substringBeforeLast(" · ", "")
+    private fun readAbout(listed: Series) {
+        // A series opened before shows its stored chapters at once; what its source says about it arrives after.
+        val deadline = System.currentTimeMillis() + SeriesLiveDriver.RESULTS_TIMEOUT_MS
+        val stored = generateSequence { checkNotNull(runBlocking { series.repository.series(listed.id) }).series }
+            .first { (it.description != null || it.status != SeriesStatus.UNKNOWN || System.currentTimeMillis() > deadline).also { told -> if (!told) Thread.sleep(SeriesLiveDriver.POLL_MS) } }
         val description = stored.description
-        val shown = description != null && device.hasObject(By.textStartsWith(description.take(DESCRIPTION_START)))
+        val shown = description != null && device.wait(Until.hasObject(By.textStartsWith(description.take(DESCRIPTION_START))), SeriesLiveDriver.SHORT_WAIT_MS) == true
+        val status = live.waitFor("the chapter count", By.text(CHAPTER_COUNT)).text.substringBeforeLast(" · ", "")
         live.report("about", "status shown \"$status\" (stored ${stored.status}); a description of ${description?.length ?: 0} characters, shown=$shown")
         assertTrue("The page shows a status or a description", status.isNotEmpty() || shown)
     }
