@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
@@ -62,9 +61,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.codex.CodexCoverImage
 import com.theoriacodex.app.codex.LocalQuickSave
 import com.theoriacodex.app.codex.QuickSave
+import com.theoriacodex.app.codex.SaveTarget
 import com.theoriacodex.app.codex.QuickSaveRecord
 import com.theoriacodex.app.ui.components.CollectTarget
-import com.theoriacodex.app.ui.components.CollectTargetVisual
 import com.theoriacodex.app.ui.components.CollectTargets
 import com.theoriacodex.app.ui.components.CollectTargetsLayout
 import com.theoriacodex.app.ui.components.CollectTargetsState
@@ -89,8 +88,8 @@ internal class ViewerSaveFanState {
     /** The finger in window coordinates while the fan is open, else null. */
     var pointer by mutableStateOf<Offset?>(null)
     var anchor by mutableStateOf(Offset.Zero)
-    var targets by mutableStateOf<List<CollectTarget<ViewerSaveFanTarget>>>(emptyList())
-    val collect = CollectTargetsState<ViewerSaveFanTarget>()
+    var targets by mutableStateOf<List<CollectTarget<SaveTarget>>>(emptyList())
+    val collect = CollectTargetsState<SaveTarget>()
 
     /** The latest suggestions; kept here, outside the dock, so hiding and showing the controls does not reload them. */
     var suggestions by mutableStateOf<ViewerPostSuggestions?>(null)
@@ -104,8 +103,8 @@ internal class ViewerSaveFanState {
 
 /**
  * The dock's Save button for [post]. Tap saves to the top suggested Codex and then offers Undo for a few seconds; hold
- * opens [fan], where sliding onto a Codex saves there, New names a new Codex, and releasing anywhere else opens the full
- * picker ([onOpenPicker]). With no Codex at all, a tap names a new one. Taps and holds report [onInteraction].
+ * opens [fan], where sliding onto a Codex saves there, New names a new Codex, and More or releasing anywhere else opens
+ * the full picker ([onOpenPicker]). With no Codex at all, a tap names a new one. Taps and holds report [onInteraction].
  */
 @Composable
 internal fun ViewerSaveButton(
@@ -131,7 +130,7 @@ internal fun ViewerSaveButton(
             // Undispatched: the removal is under way before the dock can leave and cancel this scope.
             is ViewerSaveCommand.Undo -> scope.launch(start = CoroutineStart.UNDISPATCHED) { quickSave.undoQuickSave(command.record) }
             ViewerSaveCommand.OpenPicker -> onOpenPicker()
-            ViewerSaveCommand.NewCodex -> newCodex.openNewCodex(post)
+            ViewerSaveCommand.NewCodex -> newCodex.openNewCodex(post, onCreated = null)
         }
     }
     val haptics = LocalHapticFeedback.current
@@ -142,7 +141,7 @@ internal fun ViewerSaveButton(
     hold.onStart = onInteraction
     hold.onTap = { run(state.tapCommand()) }
     hold.onRelease = { run(viewerSaveFanRelease(it)) }
-    hold.targets = { viewerSaveFanTargets(post.id, suggestions).map { it.collectTarget() } }
+    hold.targets = { viewerSaveFanTargets(post.id, suggestions) }
     Row(
         Modifier
             .clip(RoundedCornerShape(50))
@@ -205,10 +204,10 @@ private fun rememberSavedUndoClock(lastSave: QuickSaveRecord?): Long {
 /** Links the button's long-lived pointer input to the latest callbacks and to the fan. */
 private class ViewerSaveHold(private val fan: ViewerSaveFanState, private val haptics: HapticFeedback) {
     var coordinates: LayoutCoordinates? = null
-    var targets: () -> List<CollectTarget<ViewerSaveFanTarget>> = { emptyList() }
+    var targets: () -> List<CollectTarget<SaveTarget>> = { emptyList() }
     var onStart: () -> Unit = {}
     var onTap: () -> Unit = {}
-    var onRelease: (ViewerSaveFanTarget?) -> Unit = {}
+    var onRelease: (SaveTarget?) -> Unit = {}
 
     fun start(local: Offset) {
         val layout = coordinates ?: return
@@ -297,13 +296,6 @@ private fun ViewerSaveButtonState.description(): String = when (this) {
     is ViewerSaveButtonState.Saved -> "Saved to ${record.codexName}" + if (record.undoable) ", undo" else ""
     is ViewerSaveButtonState.NoTarget -> if (inAnyCodex) "Saved in every Codex. Choose Codex" else "Save to Codex"
     ViewerSaveButtonState.Loading -> "Save to Codex"
-}
-
-private fun ViewerSaveFanTarget.collectTarget(): CollectTarget<ViewerSaveFanTarget> = when (this) {
-    is ViewerSaveFanTarget.Codex -> CollectTarget(
-        "codex:${suggestion.codexId}", suggestion.name, CollectTargetVisual.Cover(suggestion.cover, Icons.Outlined.Collections), this,
-    )
-    ViewerSaveFanTarget.New -> CollectTarget("new", "New", CollectTargetVisual.Icon(Icons.Default.Add), this)
 }
 
 private const val SUGGESTION_SETTLE_MS = 250L

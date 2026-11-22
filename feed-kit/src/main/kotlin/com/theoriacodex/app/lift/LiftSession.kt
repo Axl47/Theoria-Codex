@@ -26,6 +26,9 @@ import kotlinx.coroutines.job
 sealed interface LiftAction {
     data class Save(val codexId: String, val codexName: String) : LiftAction
     data object NewCodex : LiftAction
+
+    /** The full Save-to-Codex picker. */
+    data object OpenPicker : LiftAction
     data object ToggleLike : LiftAction
     data object Similar : LiftAction
 }

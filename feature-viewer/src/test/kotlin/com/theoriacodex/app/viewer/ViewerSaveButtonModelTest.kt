@@ -3,6 +3,7 @@ package com.theoriacodex.app.viewer
 import com.theoriacodex.app.codex.QuickSaveRecord
 import com.theoriacodex.app.codex.SaveSuggestion
 import com.theoriacodex.app.codex.SaveSuggestions
+import com.theoriacodex.app.codex.SaveTarget
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.post
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -56,15 +57,13 @@ class ViewerSaveButtonModelTest {
     }
 
     @Test
-    fun `the fan holds the next three suggestions then New, and releasing on New names a new Codex`() {
-        val fan = viewerSaveFanTargets(art.id, suggestions("a", "b", "c", "d", "e"))
-        assertEquals(
-            listOf("b", "c", "d").map { ViewerSaveFanTarget.Codex(suggestion(it)) } + ViewerSaveFanTarget.New,
-            fan,
-        )
-        assertEquals(listOf(ViewerSaveFanTarget.New), viewerSaveFanTargets(art.id, null))
+    fun `the fan holds the next three suggestions then New and More, which name a Codex and open the picker`() {
+        val fan = viewerSaveFanTargets(art.id, suggestions("a", "b", "c", "d", "e")).map { it.payload }
+        assertEquals(listOf("b", "c", "d").map { SaveTarget.Codex(suggestion(it)) } + SaveTarget.New + SaveTarget.More, fan)
+        assertEquals(listOf(SaveTarget.New, SaveTarget.More), viewerSaveFanTargets(art.id, null).map { it.payload })
         assertEquals(ViewerSaveCommand.QuickSave("b"), viewerSaveFanRelease(fan.first()))
-        assertEquals(ViewerSaveCommand.NewCodex, viewerSaveFanRelease(ViewerSaveFanTarget.New))
+        assertEquals(ViewerSaveCommand.NewCodex, viewerSaveFanRelease(SaveTarget.New))
+        assertEquals(ViewerSaveCommand.OpenPicker, viewerSaveFanRelease(SaveTarget.More))
         assertEquals(ViewerSaveCommand.OpenPicker, viewerSaveFanRelease(null))
     }
 
@@ -74,7 +73,10 @@ class ViewerSaveButtonModelTest {
 
         assertEquals(ViewerSaveButtonState.Suggest(suggestion("a"), inAnyCodex = false, ready = false), stale)
         assertEquals(ViewerSaveCommand.OpenPicker, stale.tapCommand())
-        assertEquals(listOf(ViewerSaveFanTarget.New), viewerSaveFanTargets(art.id, suggestions("a", "b", postId = "before")))
+        assertEquals(
+            listOf(SaveTarget.New, SaveTarget.More),
+            viewerSaveFanTargets(art.id, suggestions("a", "b", postId = "before")).map { it.payload },
+        )
         val staleEveryCodex = ViewerPostSuggestions(post("before").id, SaveSuggestions(emptyList(), inAnyCodex = true))
         assertEquals(ViewerSaveButtonState.Loading, viewerSaveButtonState(art.id, staleEveryCodex, null, 0L))
     }

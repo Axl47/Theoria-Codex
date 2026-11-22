@@ -28,6 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.codex.LocalQuickSave
 import com.theoriacodex.app.codex.QuickSave
 import com.theoriacodex.app.codex.QuickSaveRecord
+import com.theoriacodex.app.codex.SAVE_MENU_CODICES
 import com.theoriacodex.app.codex.SaveSuggestions
 import com.theoriacodex.app.related.LocalRelatedPostsSupport
 import com.theoriacodex.app.ui.components.CollectTargetVisual
@@ -48,7 +49,7 @@ import kotlinx.coroutines.launch
  * Draws [session]'s lift above the navigation host and acts on its drops. Mount it once, above everything the
  * cards live in. Saves go through [LocalQuickSave], Like through the card's own toggle, and Similar opens a trail
  * through [LocalTrailOpener], with its target showing progress until the opener returns; New hands the post to
- * [onNewCodex]. [onFailure] gets a message when a drop could not act. [onSaved] confirms a save that can be
+ * [onNewCodex] and More to [onOpenPicker]. [onFailure] gets a message when a drop could not act. [onSaved] confirms a save that can be
  * undone, suspending until the confirmation goes away, and returns true when the user chose Undo. Nothing is
  * composed while no lift is in progress.
  */
@@ -56,10 +57,11 @@ import kotlinx.coroutines.launch
 fun LiftOverlay(
     session: LiftSession,
     onNewCodex: (Post) -> Unit,
+    onOpenPicker: (Post) -> Unit,
     onFailure: (String) -> Unit,
     onSaved: suspend (QuickSaveRecord) -> Boolean,
 ) {
-    LiftDropEffect(session, onNewCodex, onFailure, onSaved)
+    LiftDropEffect(session, LiftSaveRoutes(onNewCodex, onOpenPicker), onFailure, onSaved)
     val (lift, settling) = when (val phase = session.phase) {
         LiftPhase.Idle -> return
         is LiftPhase.Lifted -> phase.lift to null
@@ -68,23 +70,26 @@ fun LiftOverlay(
     key(lift) { LiftStage(session, lift, settling) }
 }
 
+/** Where the save edge's New and More send the lifted post. */
+private class LiftSaveRoutes(val newCodex: (Post) -> Unit, val openPicker: (Post) -> Unit)
+
 @Composable
 private fun LiftDropEffect(
     session: LiftSession,
-    onNewCodex: (Post) -> Unit,
+    routes: LiftSaveRoutes,
     onFailure: (String) -> Unit,
     onSaved: suspend (QuickSaveRecord) -> Boolean,
 ) {
     val quickSave = LocalQuickSave.current
     val trails = LocalTrailOpener.current
-    val newCodex by rememberUpdatedState(onNewCodex)
+    val saveRoutes by rememberUpdatedState(routes)
     val failure by rememberUpdatedState(onFailure)
     val saved by rememberUpdatedState(onSaved)
     // Drops outlive the overlay's phases: a save or trail keeps running after the copy has landed.
     val scope = rememberCoroutineScope()
     LaunchedEffect(session, quickSave, trails) {
         session.drops.collect { drop ->
-            scope.launch { failureOf(drop, session, quickSave, trails, newCodex, saved)?.let(failure) }
+            scope.launch { failureOf(drop, session, quickSave, trails, saveRoutes, saved)?.let(failure) }
         }
     }
 }
@@ -95,7 +100,7 @@ private suspend fun failureOf(
     session: LiftSession,
     quickSave: QuickSave,
     trails: TrailOpener,
-    onNewCodex: (Post) -> Unit,
+    routes: LiftSaveRoutes,
     onSaved: suspend (QuickSaveRecord) -> Boolean,
 ): String? {
     val post = drop.lift.post
@@ -106,7 +111,8 @@ private suspend fun failureOf(
             // Undo reverses exactly this save, even when a later save has replaced it as the last one.
             if (record.undoable && onSaved(record)) quickSave.undoQuickSave(record)
         }
-        LiftAction.NewCodex -> onNewCodex(post)
+        LiftAction.NewCodex -> routes.newCodex(post)
+        LiftAction.OpenPicker -> routes.openPicker(post)
         LiftAction.ToggleLike -> drop.lift.like?.toggle?.invoke()
         LiftAction.Similar -> if (!session.whilePending { trails.openTrail(TrailRequest.Similar(post)) }) return "No similar posts found"
     }
@@ -119,7 +125,7 @@ private fun LiftStage(session: LiftSession, lift: LiftedPost, settling: LiftPhas
     val quickSave = LocalQuickSave.current
     // Null until the first ranking arrives: the end edge's targets shift then, so it takes no hover before.
     val suggestions by remember(lift.post.id, lift.query, quickSave) {
-        quickSave.suggestions(lift.post, lift.query, LIFT_SAVE_SUGGESTIONS)
+        quickSave.suggestions(lift.post, lift.query, SAVE_MENU_CODICES)
     }.collectAsStateWithLifecycle<SaveSuggestions?>(null)
     val similarAvailable = LocalRelatedPostsSupport.current(lift.post.id.source)
     val targets = remember(suggestions, lift.like, similarAvailable) {

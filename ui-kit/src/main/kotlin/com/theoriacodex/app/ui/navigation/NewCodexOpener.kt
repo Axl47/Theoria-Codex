@@ -4,14 +4,18 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import com.theoriacodex.domain.model.Post
 
 /**
- * Names a new Codex and saves [Post] into it, through the one Create Codex dialog the shell hosts. The lift's
- * New target and the Viewer dock's New and no-Codex save call it. Read from [LocalNewCodexOpener].
+ * Names a new Codex and saves [Post] into it, through the one Create Codex dialog the shell hosts. Every save menu's
+ * New target and the Viewer dock's no-Codex save call it. Read from [LocalNewCodexOpener].
  */
 fun interface NewCodexOpener {
-    fun openNewCodex(post: Post)
+    /**
+     * Asks for a name, creates the Codex, and saves [post] into it; with [onCreated], it saves nothing and hands the
+     * new Codex's id and name there instead, for a caller that saves itself, as the triage deck does so Undo covers it.
+     */
+    fun openNewCodex(post: Post, onCreated: ((codexId: String, name: String) -> Unit)?)
 
     companion object {
-        val None = NewCodexOpener { }
+        val None = NewCodexOpener { _, _ -> }
     }
 }
 

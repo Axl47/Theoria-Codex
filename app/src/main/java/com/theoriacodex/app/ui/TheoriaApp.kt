@@ -392,19 +392,26 @@ private fun SaveToCodexOverlay(shell: TheoriaShell) {
             containingCodexIds = state.containingCodexIds,
             excludedCodexIds = pendingSave.excludedCodexIds,
             onCreateCodex = { profileId, name ->
-                val codexId = profileScopedCodexId(profileId)
-                shell.owners.codexSaves.save(
-                    codexId = codexId,
-                    posts = posts,
-                    cacheFullImage = state.settings.cache.cacheFullImageOnSave,
-                    fromForYou = pendingSave.fromForYou,
-                    newCollectionName = name,
-                )
-                pendingSave.searchSaves.record(pendingSave.query, codexId)
+                val pick = pendingSave.onPick
+                if (pick != null) {
+                    shell.scope.launch {
+                        shell.createCodex(name, profileId)?.let { codexId -> pick(codexId, name) } ?: shell.toast("Could not save to $name")
+                    }
+                } else {
+                    val codexId = profileScopedCodexId(profileId)
+                    shell.owners.codexSaves.save(
+                        codexId = codexId,
+                        posts = posts,
+                        cacheFullImage = state.settings.cache.cacheFullImageOnSave,
+                        fromForYou = pendingSave.fromForYou,
+                        newCollectionName = name,
+                    )
+                    pendingSave.searchSaves.record(pendingSave.query, codexId)
+                }
                 pendingSave.clear()
             },
             onSelectCodex = { codexId ->
-                val pick = pendingSave.onPickExisting
+                val pick = pendingSave.onPick
                 val name = state.codicesByProfile.values.flatten().firstOrNull { it.codexId == codexId }?.name
                 if (pick != null && name != null) {
                     pick(codexId, name)

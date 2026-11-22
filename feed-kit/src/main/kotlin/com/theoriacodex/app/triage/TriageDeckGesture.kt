@@ -77,9 +77,9 @@ internal class SwipeThresholds(val commitPx: Float, val flingPx: Float, val cueP
 
 /**
  * What a finished drag does. Released ([velocity] non-null) in a direction [choose] gives a choice for, the card
- * flies off and [onDecide] commits it; released toward a save that names no Codex (none to suggest, or dropped on
- * More), it springs back and [onOpenSavePicker] runs. Anything else springs back, and so does every cancelled drag ([velocity] null), however
- * far it went: only a release commits. [choose] may wait, and the card stays where it was let go meanwhile.
+ * flies off and [onDecide] commits it; released toward a save that names no Codex (none to suggest, or let go on
+ * New or More), it springs back and [onSaveElsewhere] runs. Anything else springs back, and so does every cancelled
+ * drag ([velocity] null), however far it went: only a release commits. [choose] may wait, and the card stays where it was let go meanwhile.
  */
 internal suspend fun TriageDrag.release(
     velocity: Velocity?,
@@ -87,12 +87,12 @@ internal suspend fun TriageDrag.release(
     area: Size,
     choose: suspend (SwipeDirection) -> TriageChoice?,
     onDecide: (TriageChoice) -> Unit,
-    onOpenSavePicker: () -> Unit,
+    onSaveElsewhere: () -> Unit,
 ) {
     val direction = velocity?.let { swipeDirection(offset.x, offset.y, it.x, it.y, thresholds.commitPx, thresholds.flingPx) }
     val choice = direction?.let { choose(it) }
     if (direction == null || choice == null) {
-        if (direction != null) onOpenSavePicker()
+        if (direction != null) onSaveElsewhere()
         moveTo(Offset.Zero, fly = false)
         return
     }
