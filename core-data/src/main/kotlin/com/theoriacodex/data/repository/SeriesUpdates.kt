@@ -1,6 +1,5 @@
 package com.theoriacodex.data.repository
 
-import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
@@ -59,12 +58,7 @@ suspend fun SeriesRepository.checkFollowed(
 /** [series]' new entries, fetched from its source among [sources]; null when it gained none or its source is gone or failed. */
 private suspend fun SeriesRepository.update(sources: suspend () -> List<SeriesSource>, series: Series): SeriesUpdate? = try {
     refreshLocks.getOrPut(series.id.source, ::Mutex).withLock {
-        sources().firstOrNull { it.key == series.id.source }?.let { source ->
-            // A series restored from a backup has no cover until its source is asked. Its page asks; this does for a
-            // series never opened since. A failure here leaves the entry check to go on.
-            if (series(series.id)?.series?.coverUrl == null) runCatchingPreservingCancellation { store(source.details(series)) }
-            storeEntries(series.id, source.entries(series))
-        }
+        sources().firstOrNull { it.key == series.id.source }?.let { source -> storeEntries(series.id, source.entries(series)) }
     }?.takeIf { it.isNotEmpty() }?.let { SeriesUpdate(series, it) }
 } catch (error: CancellationException) {
     throw error

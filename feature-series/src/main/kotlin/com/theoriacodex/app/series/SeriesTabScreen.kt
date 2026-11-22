@@ -32,6 +32,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -77,21 +78,23 @@ fun SeriesTabScreen(viewModel: SeriesTabViewModel, onOpenSeries: (SeriesId) -> U
             SeriesSearchField(query, searching = state.search != null, Modifier.weight(1f), onQueryChange = { query = it }, onSearch = viewModel::search, onClear = clearSearch)
             IconButton(onClick = onOpenExtensions) { Icon(Icons.Default.Extension, contentDescription = EXTENSIONS_TITLE) }
         }
-        PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = viewModel::refresh, modifier = Modifier.fillMaxSize()) {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(CARD_WIDTH),
-                state = grid,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                val search = state.search
-                if (search != null && state.sources == null) fullWidth("search-waiting") { LoadingState() }
-                else if (search != null) searchResults(search, open, viewModel::retrySearch, viewModel::searchMore)
-                else {
-                    followingShelf(followed, open)
-                    browse(state, viewModel, open, onOpenExtensions)
+        CompositionLocalProvider(LocalSeriesSources provides state.sources.orEmpty()) {
+            PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = viewModel::refresh, modifier = Modifier.fillMaxSize()) {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(CARD_WIDTH),
+                    state = grid,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    val search = state.search
+                    if (search != null && state.sources == null) fullWidth("search-waiting") { LoadingState() }
+                    else if (search != null) searchResults(search, open, viewModel::retrySearch, viewModel::searchMore)
+                    else {
+                        followingShelf(followed, open)
+                        browse(state, viewModel, open, onOpenExtensions)
+                    }
                 }
             }
         }

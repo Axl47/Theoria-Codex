@@ -78,7 +78,7 @@ class RoomProfileBackupStoreTest {
         // An extension source: restoring needs no extension installed, since nothing here asks one.
         val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
         val series = RoomSeriesRepository(database, clock = { 30L })
-        series.store(Series(id, "Title", language = "en"), listOf(SeriesEntry("/chapter/2", "Ch.2"), SeriesEntry("/chapter/1", "Ch.1")))
+        series.store(Series(id, "Title", coverUrl = "https://cdn.test/c.jpg", language = "en"), listOf(SeriesEntry("/chapter/2", "Ch.2"), SeriesEntry("/chapter/1", "Ch.1")))
         series.setFollowed(id, true)
         series.setReadingMode(id, GalleryReadingMode.VERTICAL)
         series.recordProgress(id, "/chapter/1", page = 18, pageCount = 18)

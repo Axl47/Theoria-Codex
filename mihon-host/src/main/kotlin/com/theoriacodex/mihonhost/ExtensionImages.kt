@@ -75,6 +75,8 @@ class ExtensionImages(
 
     /** Makes [active] the only sources that fetch, all at once: one whose extension or language was turned off stops answering. */
     internal fun publish(active: List<Source>) {
+        // Read here, off the main thread: covers are tagged where screens draw them.
+        key.value
         sources = active.filterIsInstance<HttpSource>().associateBy { it.id }
     }
 

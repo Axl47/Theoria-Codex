@@ -27,7 +27,7 @@ class RoomSeriesRepositoryTest {
     private var now = 100L
     private val repository = RoomSeriesRepository(database) { now }
     private val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_1"), "/series/a")
-    private val series = Series(id, "Series", coverUrl = "https://cdn.test/c.jpg#mihon=1", author = "Author", genres = listOf("Action", "Long Strip"), language = "en")
+    private val series = Series(id, "Series", coverUrl = "https://cdn.test/c.jpg", author = "Author", genres = listOf("Action", "Long Strip"), language = "en")
 
     @After fun close() = database.close()
 

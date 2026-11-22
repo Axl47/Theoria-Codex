@@ -1,6 +1,8 @@
 package com.theoriacodex.mihonhost
 
+import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
+import com.theoriacodex.domain.series.SeriesId
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.online.HttpSource
@@ -40,6 +42,18 @@ class ExtensionImagesTest {
 
         assertTrue(address.startsWith("https://covers.test/1.jpg#mihon=1."))
         assertEquals("source-token https://covers.test/1.jpg", fetch(address))
+    }
+
+    @Test
+    fun `a stored cover is plain and is tagged for its own source each time it is loaded`() = runTest {
+        val series = MihonSeriesSource(source, images)
+        val stored = Series(SeriesId(series.key, "/s"), "Series", coverUrl = "https://covers.test/1.jpg")
+
+        assertEquals("source-token https://covers.test/1.jpg", fetch(checkNotNull(series.coverAddress(stored))))
+        // A cover that names another source, as an earlier build stored it or a backup could: its own source still fetches it.
+        val named = stored.copy(coverUrl = "https://covers.test/1.jpg#mihon=7.00000000000000000000000000000000")
+        assertEquals(series.coverAddress(stored), series.coverAddress(named))
+        assertEquals(null, series.coverAddress(stored.copy(coverUrl = null)))
     }
 
     @Test

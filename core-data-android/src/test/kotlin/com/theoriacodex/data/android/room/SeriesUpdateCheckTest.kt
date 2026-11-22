@@ -136,19 +136,6 @@ class SeriesUpdateCheckTest {
     }
 
     @Test
-    fun `a followed series stored without a cover, as a restore leaves it, gets one at the check`() = runTest {
-        val restored = series.copy(coverUrl = null)
-        follow(restored)
-        source.covers[series.id] = "https://cdn.test/a.jpg"
-        source.chapters[series.id] = listOf(first)
-
-        repository.checkFollowed({ listOf(source) })
-
-        assertEquals("https://cdn.test/a.jpg", repository.series(series.id)!!.series.coverUrl)
-        assertEquals(listOf(first), repository.entries(series.id).map { it.entry })
-    }
-
-    @Test
     fun `unfollowed series are not checked`() = runTest {
         repository.store(series)
         source.chapters[series.id] = listOf(first)
@@ -172,10 +159,7 @@ private class FakeSource(id: String, private val fails: Boolean = false) : Serie
 
     /** What a page's refresh waits for in [details]; a check asks for chapters only. */
     var detailsWait: CompletableDeferred<Unit>? = null
-    /** The covers this source has; a check asks for the details of a series stored without one. */
-    val covers = mutableMapOf<SeriesId, String>()
-    override suspend fun details(series: Series): Series = covers[series.id]?.let { series.copy(coverUrl = it) }
-        ?: checkNotNull(detailsWait) { "A check asks for chapters only" }.await().let { series }
+    override suspend fun details(series: Series): Series = checkNotNull(detailsWait) { "A check asks for chapters only" }.await().let { series }
     override suspend fun entries(series: Series) = when {
         fails -> throw IllegalStateException("down")
         series.id == stopsAt -> throw CancellationException("stopped")

@@ -29,7 +29,8 @@ import kotlinx.coroutines.launch
 data class SeriesPageState(
     val stored: StoredSeries? = null,
     val entries: List<StoredSeriesEntry> = emptyList(),
-    val sourceName: String = "",
+    /** The series' source while it is on. */
+    val source: SeriesSource? = null,
     val refreshing: Boolean = true,
     val failure: String? = null,
     /**
@@ -38,6 +39,8 @@ data class SeriesPageState(
      */
     val sourceMissing: Boolean = false,
 ) {
+    val sourceName: String get() = source?.name.orEmpty()
+
     /** The entry Continue opens. */
     val continueWith: StoredSeriesEntry? get() = stored?.let { continueEntry(it, entries) }
 
@@ -72,10 +75,10 @@ class SeriesPageViewModel(
         refresh.update { it.copy(refreshing = true, failure = null) }
         val source = loadSources().firstOrNull { it.key == id.source }
         if (source == null) {
-            refresh.update { it.copy(refreshing = false, sourceName = "", sourceMissing = true) }
+            refresh.update { it.copy(refreshing = false, source = null, sourceMissing = true) }
             return
         }
-        refresh.update { it.copy(sourceName = source.name, sourceMissing = false) }
+        refresh.update { it.copy(source = source, sourceMissing = false) }
         val failure = try {
             repository.series(id)?.let { repository.refresh(source, it.series) }
             null

@@ -14,16 +14,16 @@ import kotlinx.serialization.Serializable
  * with their progress. Series are stored once for the whole app, not per profile, so a backup holds them once.
  * Pages are never stored, so none are here; opening a restored chapter needs the series' extension installed and on.
  *
- * The cover is left out, and one found in a file is ignored. A cover's address says which extension fetches it, with
- * that extension's HTTP client and headers, and a backup is a file anyone can write: it must not be able to send
- * those to a host it names. A restored series gets its cover from its source, when its page is opened or at the next
- * check of followed series.
+ * The cover is the address the source gave, as stored. Which client fetches it is decided when it is loaded, by the
+ * series' own source, so a file cannot pick one; it can name the address that source's client is sent to, as it can
+ * for the series and its chapters.
  */
 @Serializable
 internal data class BackupSeriesRecord(
     @SerialName("source") val source: String,
     @SerialName("address") val address: String,
     @SerialName("title") val title: String,
+    @SerialName("coverUrl") val coverUrl: String? = null,
     @SerialName("author") val author: String? = null,
     @SerialName("genres") val genres: List<String> = emptyList(),
     @SerialName("language") val language: String = "",
@@ -42,8 +42,7 @@ internal data class BackupSeriesRecord(
                 series = Series(
                     id = SeriesId(SourceKey.parseOrThrow(source), address),
                     title = title,
-                    // Never from a backup: see the class comment.
-                    coverUrl = null,
+                    coverUrl = coverUrl,
                     author = author,
                     genres = genres,
                     language = language,
@@ -65,6 +64,7 @@ internal data class BackupSeriesRecord(
                 source = series.id.source.id,
                 address = series.id.address,
                 title = series.title,
+                coverUrl = series.coverUrl,
                 author = series.author,
                 genres = series.genres,
                 language = series.language,

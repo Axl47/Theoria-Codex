@@ -321,14 +321,9 @@ class ProfileBackupServiceTest {
         val withSeries = plain.copy(library = plain.library.copy(series = listOf(series)))
         val encoded = codec.encode(withSeries)
         assertTrue(encoded.toString(Charsets.UTF_8).contains("\"version\":3"))
-        // The cover is not in the file: its address would choose the extension client that fetches it.
-        assertFalse(encoded.toString(Charsets.UTF_8).contains("cover.jpg"))
-        val coverless = series.copy(series = series.series.copy(series = series.series.series.copy(coverUrl = null)))
-        assertEquals(listOf(coverless), codec.decode(encoded).library.series)
-        // A file written by hand cannot bring one either, so a restored series never asks an extension for a host the file named.
-        val forged = encoded.toString(Charsets.UTF_8).replace("\"title\":\"Title\"", "\"title\":\"Title\",\"coverUrl\":\"https://attacker.test/c.jpg#mihon=7\"")
-        assertTrue(forged.contains("attacker.test"))
-        assertEquals(listOf(coverless), codec.decode(forged.toByteArray()).library.series)
+        // The cover travels as the plain address the source gave; a series without one is written without the field.
+        assertTrue(encoded.toString(Charsets.UTF_8).contains("\"coverUrl\":\"https://example.test/cover.jpg\""))
+        assertEquals(listOf(series), codec.decode(encoded).library.series)
         // Trust is never in a backup, with or without series.
         assertFalse(encoded.toString(Charsets.UTF_8).contains("trustedExtensions"))
         val twice = withSeries.copy(library = withSeries.library.copy(series = listOf(series, series)))

@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -103,7 +104,7 @@ private fun MissingSourceRow(onOpenExtensions: () -> Unit) {
 @Composable
 private fun SeriesHeader(stored: StoredSeries, state: SeriesPageState, onToggleFollowed: () -> Unit, onOpenEntry: (String) -> Unit) {
     Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        SeriesCover(stored.series, Modifier.width(112.dp))
+        CompositionLocalProvider(LocalSeriesSources provides listOfNotNull(state.source)) { SeriesCover(stored.series, Modifier.width(112.dp)) }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(stored.series.title, style = MaterialTheme.typography.titleLarge, maxLines = 3, overflow = TextOverflow.Ellipsis)
             stored.series.author?.let { author ->

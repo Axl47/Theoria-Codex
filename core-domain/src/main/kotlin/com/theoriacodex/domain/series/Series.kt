@@ -25,6 +25,7 @@ enum class SeriesStatus {
 data class Series(
     val id: SeriesId,
     val title: String,
+    /** As the source gave it; [SeriesSource.coverAddress] is what an image loader is handed. */
     val coverUrl: String? = null,
     val author: String? = null,
     val genres: List<String> = emptyList(),
@@ -71,6 +72,12 @@ interface SeriesSource {
 
     /** Addresses that can expire within minutes, so they are asked for each time an entry opens and never stored. */
     suspend fun pages(entry: SeriesEntry): List<ImageRef>
+
+    /**
+     * The address to load [series]' cover from. A source whose images only its own client can fetch marks the address
+     * here, each time it is loaded, so the stored cover stays what the source gave. Makes no request.
+     */
+    fun coverAddress(series: Series): String? = series.coverUrl
 }
 
 /** The id prefix of sources that run loaded extension code. It follows the custom-site id grammar, so stored ids parse. */
