@@ -308,8 +308,14 @@ object SearchStateReducer {
     private fun SearchRequest.refreshed(shown: List<Post>, fresh: List<Post>): List<Post> {
         if (cachedFirstPage != CachedFirstPage.SCROLLED) return fresh
         val freshById = fresh.associateBy(Post::id)
-        return shown.map { post -> freshById[post.id] ?: post }.plusDistinctFiles(fresh)
+        return shown.map { post -> freshById[post.id]?.withPictureHashOf(post) ?: post }.plusDistinctFiles(fresh)
     }
+
+    /** [this] fresh post, with [cached]'s picture hash when its own missed the listing's wait for the same preview. */
+    private fun Post.withPictureHashOf(cached: Post): Post =
+        if (pictureHash == null && preview == cached.preview && cached.pictureHash != null) {
+            copy(pictureHash = cached.pictureHash)
+        } else this
 
     private fun SearchUiState.withPublishedResults(
         applied: AppliedSearch,
