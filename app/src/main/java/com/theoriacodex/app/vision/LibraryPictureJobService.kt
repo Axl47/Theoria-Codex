@@ -8,6 +8,7 @@ import android.content.ComponentName
 import android.content.Context
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
 import com.theoriacodex.domain.diagnostics.Diagnostics
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +30,8 @@ class LibraryPictureJobService : JobService() {
     private var run: Job? = null
 
     override fun onStartJob(params: JobParameters): Boolean {
+        running.set(true)
+        requested.set(false)
         run = scope.launch {
             val more = try {
                 (application as TheoriaAppContainerOwner).awaitAppContainer().pictures?.indexLibrary() ?: false
@@ -39,13 +42,16 @@ class LibraryPictureJobService : JobService() {
                 Diagnostics.report("similarity", "The Library's pictures could not be indexed", error)
                 false
             }
-            jobFinished(params, more)
+            // Work that arrived during the run (a post saved while charging) gets a run of its own.
+            running.set(false)
+            jobFinished(params, more || requested.getAndSet(false))
         }
         return true
     }
 
     /** Unplugged, or the battery ran low: the next charge picks up where this run stopped. */
     override fun onStopJob(params: JobParameters): Boolean {
+        running.set(false)
         run?.cancel()
         return true
     }
@@ -56,17 +62,25 @@ class LibraryPictureJobService : JobService() {
     }
 }
 
+/** Whether a run is under way in this process, and whether work arrived during it. */
+private val running = AtomicBoolean(false)
+private val requested = AtomicBoolean(false)
+
 /**
- * Asks for [LibraryPictureJobService] to run while the device charges and its battery is not low. A job already
- * waiting is left alone, so calling this at every start, and whenever the model becomes ready, costs nothing.
+ * Asks for [LibraryPictureJobService] to run while the device charges on an unmetered network and its battery is not
+ * low, since a run may fetch previews the cache lost. A job already waiting is left alone and a running one is asked to
+ * run again, so calling this whenever the Library or the model changes costs nothing.
  */
 internal fun scheduleLibraryPictures(context: Context) {
+    requested.set(true)
+    if (running.get()) return
     val scheduler = context.getSystemService(JobScheduler::class.java)
     if (scheduler.getPendingJob(LIBRARY_PICTURES_JOB_ID) != null) return
     scheduler.schedule(
         JobInfo.Builder(LIBRARY_PICTURES_JOB_ID, ComponentName(context, LibraryPictureJobService::class.java))
             .setRequiresCharging(true)
             .setRequiresBatteryNotLow(true)
+            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED)
             .build(),
     )
 }

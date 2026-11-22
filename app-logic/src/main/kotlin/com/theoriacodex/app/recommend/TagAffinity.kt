@@ -96,20 +96,27 @@ data class PictureEvidence(
     val kept: Int = 0,
     val baseRates: Map<String, Double> = emptyMap(),
 ) {
-    /** The predicted tags on enough kept posts to be proven by [pictureAffinity]. */
+    /** The predicted tags with enough score across kept posts (a sum of [MIN_KEPT_FOR_TAG]) to be proven by [pictureAffinity]. */
     val candidates: Set<String> get() = keptByTag.filterValues { it >= MIN_KEPT_FOR_TAG }.keys
 
     companion object {
         /** [index]'s predictions on the posts in [kept]. */
         fun of(kept: Set<PostId>, index: PredictedTagIndex): PictureEvidence {
-            val seen = kept.mapNotNull(index::get)
+            val seen = kept.filter { index[it] != null }
             if (seen.isEmpty()) return PictureEvidence()
             val byTag = HashMap<String, Double>()
-            for (tags in seen) tags.tokens(PredictedTagUse.EVIDENCE).forEach { (token, score) -> byTag.merge(token, score, Double::plus) }
-            return PictureEvidence(byTag, seen.size, index.baseRates.mapKeys { normalizeMatchToken(it.key) })
+            for (id in seen) index.evidence(id).forEach { (token, score) -> byTag.merge(token, score, Double::plus) }
+            return PictureEvidence(byTag, seen.size, index.baseRates)
         }
     }
 }
+
+/**
+ * The tags predicted for [id] that may stand as evidence of what its picture shows, by score: confident enough for
+ * [PredictedTagUse.EVIDENCE], never text on the image ([isImageTextTag]), and not on half of Danbooru's posts.
+ */
+fun PredictedTagIndex.evidence(id: PostId): Map<String, Double> =
+    get(id)?.tokens(PredictedTagUse.EVIDENCE).orEmpty().filterKeys { !isImageTextTag(it) && (baseRates[it] ?: 0.0) < UNIVERSAL_WATCHED_SHARE }
 
 /**
  * One of a post's tags in the post's own spelling. [score] ranks how characteristic it is of the profile: by its
@@ -320,7 +327,8 @@ fun TagAffinityInputs.pictureAffinity(source: SourceKey, booruToken: String, sou
     val kept = pictures.keptByTag[booruToken] ?: 0.0
     val watched = watchedShare(source, normalizeMatchToken(sourceToken))
     val baseRate = pictures.baseRates[booruToken] ?: 0.0
-    val universal = maxOf(watched ?: 0.0, baseRate) >= UNIVERSAL_WATCHED_SHARE
+    // Universal like a provider tag: common where the profile watches, or on nearly everything it kept.
+    val universal = maxOf(watched ?: 0.0, baseRate) >= UNIVERSAL_WATCHED_SHARE || kept / maxOf(pictures.kept, 1) > UNIVERSAL_LIKED_SHARE
     val floor = LIFT_PSEUDO_COUNT / maxOf(watchedBySource[source] ?: 0L, MIN_WATCHED_FOR_SHARE)
     val lift = (kept + LIFT_PSEUDO_COUNT) / (pictures.kept + 1.0) / maxOf(watched ?: 0.0, baseRate, floor)
     val proven = !universal && !isImageTextTag(booruToken) && pictures.kept >= MIN_KEPT_FOR_LIFT && kept >= MIN_KEPT_FOR_TAG &&

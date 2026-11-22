@@ -7,6 +7,7 @@ import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.tags.normalizeMatchToken
 import com.theoriacodex.domain.vision.PictureTags
 import com.theoriacodex.domain.vision.PredictedTag
 import com.theoriacodex.domain.vision.PredictedTagIndex
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -67,21 +69,21 @@ class PictureTagger(
     val modelId: String get() = store.id
 
     override val ready: StateFlow<Boolean> =
-        store.states.map { it == ModelState.Ready }.stateIn(scope, SharingStarted.Eagerly, false)
+        store.states.map { it == ModelState.Ready }.stateIn(scope, SharingStarted.Eagerly, store.states.value == ModelState.Ready)
 
-    /** Library rows settle for [LIBRARY_SETTLE_MS], so a batch of stored analyses emits once. */
-    override val index: StateFlow<PredictedTagIndex> = ready.flatMapLatest { ready ->
-        if (!ready) {
-            flowOf(PredictedTagIndex.Empty)
-        } else {
-            combine(library(), session, flow { emit(baseRates()) }) { stored, analysed, rates ->
-                PredictedTagIndex(stored + analysed.tags(), rates)
-            }
-        }
+    /** Library rows settle for [LIBRARY_SETTLE_MS] after the first, so a batch of stored analyses emits once. */
+    override val library: StateFlow<PredictedTagIndex> = ready.flatMapLatest { ready ->
+        if (!ready) flowOf(PredictedTagIndex.Empty) else combine(stored(), flow { emit(baseRates()) }, ::PredictedTagIndex)
     }.distinctUntilChanged().stateIn(scope, SharingStarted.Eagerly, PredictedTagIndex.Empty)
 
-    private fun library(): Flow<Map<PostId, List<PredictedTag>>> =
-        signatures.observePredictedTags(store.id).debounce(LIBRARY_SETTLE_MS)
+    override val index: StateFlow<PredictedTagIndex> = combine(library, session) { library, analysed ->
+        if (!ready.value) PredictedTagIndex.Empty else library.copy(byPost = library.byPost + analysed.tags())
+    }.distinctUntilChanged().stateIn(scope, SharingStarted.Eagerly, PredictedTagIndex.Empty)
+
+    private fun stored(): Flow<Map<PostId, List<PredictedTag>>> {
+        var first = true
+        return signatures.observePredictedTags(store.id).debounce { if (first.also { first = false }) 0L else LIBRARY_SETTLE_MS }
+    }
 
     /**
      * [post]'s picture through the model, once per session when [remember]: later calls answer from memory. A failed
@@ -91,7 +93,9 @@ class PictureTagger(
         session.value[post.id]?.let { return it }
         if (!ready.value) return PictureResult.Unavailable
         val result = if (!hasStill(post)) PictureResult.Unanalysable else read(post)
-        if (remember && result != PictureResult.Unavailable) session.value = session.value.with(post.id, result)
+        // A model deleted while this ran must not leave its answer behind.
+        if (!ready.value) return PictureResult.Unavailable
+        if (remember && result != PictureResult.Unavailable) session.update { it.with(post.id, result) }
         return result
     }
 
@@ -101,7 +105,7 @@ class PictureTagger(
     fun remembered(postId: PostId): PictureResult? = session.value[postId]
 
     private suspend fun baseRates(): Map<String, Double> =
-        if (!ready.value) emptyMap() else runCatchingPreservingCancellation { vocabulary().baseRates() }.getOrDefault(emptyMap())
+        if (!ready.value) emptyMap() else runCatchingPreservingCancellation { vocabulary().baseRates().mapKeys { normalizeMatchToken(it.key) } }.getOrDefault(emptyMap())
 
     /** Frees the loaded model now, as under memory pressure; the next analysis loads it again. */
     suspend fun release() = holder.release()
@@ -122,6 +126,10 @@ class PictureTagger(
         }
     }
 
+    /**
+     * Only a loaded model failing on this picture makes it [PictureResult.Unanalysable]; a model or vocabulary that
+     * fails to load (low memory, say) leaves it [PictureResult.Unavailable] for a later try.
+     */
     private suspend fun read(post: Post): PictureResult {
         val picture = runCatchingPreservingCancellation { loadStill(post) }.getOrNull() ?: return PictureResult.Unavailable
         return runCatchingPreservingCancellation {
@@ -130,7 +138,7 @@ class PictureTagger(
             PictureResult.Analysed(words.predictions(analysis.scores), PictureEmbedding.encode(analysis.embedding))
         }.getOrElse { error ->
             Diagnostics.report("vision", "The picture tagger could not read a picture", error)
-            if (store.states.value == ModelState.Ready) PictureResult.Unanalysable else PictureResult.Unavailable
+            if (error is PictureModelHolder.LoadFailed || vocabulary == null || !ready.value) PictureResult.Unavailable else PictureResult.Unanalysable
         }
     }
 

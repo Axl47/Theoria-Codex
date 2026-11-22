@@ -168,12 +168,20 @@ class ForYouDeckViewModel(
     init {
         stack.value = listOf(mixLevel())
         viewModelScope.launch { wiring.reconnections.collect { retryAfterReconnect() } }
-        // A tagger that becomes ready vets what the lanes already hold.
+        // A tagger that becomes ready vets what the lanes already hold; deleting it plans lanes without its tags.
         viewModelScope.launch {
+            var wasReady = wiring.pictures.ready.value
             wiring.pictures.ready.collect { ready ->
+                val optedOut = wasReady && !ready
+                wasReady = ready
                 val mix = mix ?: return@collect
-                if (ready) mix.revet()
-                vet(mix)
+                when {
+                    optedOut -> rebuild()
+                    vetsPictures -> {
+                        mix.revet()
+                        vet(mix)
+                    }
+                }
             }
         }
     }
@@ -206,9 +214,12 @@ class ForYouDeckViewModel(
         val hiddenChanged = blacklist != hidden
         val unhidden = hidden - blacklist.toSet()
         if (hiddenChanged) {
+            val vetted = vetsPictures
             hidden = blacklist
             hiddenTokens.value = blacklist.filter { it.tags.size == 1 }
                 .groupBy({ it.source }) { normalizeMatchToken(it.tags.single()) }.mapValues { it.value.toSet() }
+            // The first hidden tag turns vetting on: what the lanes hold is vetted before it is dealt.
+            if (!vetted && vetsPictures) mix?.revet()
         }
         when {
             previous != next -> {
@@ -356,7 +367,7 @@ class ForYouDeckViewModel(
         workScope.launch(start = CoroutineStart.UNDISPATCHED) {
             val page = runCatchingPreservingCancellation { engine.loadPage(cursor, setOf(lane.lane.source)) }
             lane.loading = false
-            page.onSuccess { lane.accept(cursor, it, it.items.filter { post -> shows(post) }, wiring.pictures.ready.value) }.onFailure { error ->
+            page.onSuccess { lane.accept(cursor, it, it.items.filter { post -> shows(post) }, vetsPictures) }.onFailure { error ->
                 Diagnostics.report("for-you", "A For You lane failed to load", error)
                 lane.fail(error.message)
             }
@@ -370,16 +381,23 @@ class ForYouDeckViewModel(
     }
 
     /**
+     * Whether For You's posts are tagged before they are dealt: only while the tagger is ready and some hidden tag could
+     * catch what it sees, since hiding is all the tags are for here.
+     */
+    private val vetsPictures: Boolean get() = wiring.pictures.ready.value && hiddenTokens.value.values.any { it.isNotEmpty() }
+
+    /**
      * Tags the pictures [mix]'s lanes hold, the lane with the fewest vetted posts first, [VET_AHEAD] posts ahead of the
      * deal (all of them while a deal waits). Each tagged post joins its lane's buffer unless a hidden tag now catches it,
-     * and a deal that came up short deals again. Does nothing while it already runs.
+     * and a deal that came up short deals again. Once vetting stops ([vetsPictures]) what is left passes on what is
+     * known. Does nothing while it already runs; every [refill] starts it again.
      */
     private fun vet(mix: ForYouMix) {
         if (vetting?.isActive == true) return
         vetting = workScope.launch {
             while (true) {
                 val (lane, post) = mix.nextToVet(VET_AHEAD) ?: break
-                lane.vetted(post, shows(post, wiring.pictures.tagsFor(post)))
+                lane.vetted(post, shows(post, if (vetsPictures) wiring.pictures.tagsFor(post) else wiring.pictures.index.value[post.id]))
                 if (mix.wanted) makeUp(mix) else publish()
             }
         }
@@ -401,10 +419,14 @@ class ForYouDeckViewModel(
         refill(mix)
     }
 
-    /** Asks every lane that runs low for its next page. One at a time, since a lane that answers at once refills too. */
+    /**
+     * Asks every lane that runs low for its next page, one at a time, since a lane that answers at once refills too, and
+     * keeps vetting ahead of what was just dealt (once the lanes have opened).
+     */
     private fun refill(mix: ForYouMix) {
         while (true) load(mix, mix.lanesToRefill().firstOrNull() ?: break)
         publish()
+        if (!opening) vet(mix)
     }
 
     private fun publish() {
@@ -604,7 +626,8 @@ class ForYouDeckViewModel(
     private fun askForMore(mix: ForYouMix, post: Post) {
         val animatedOnly = inputs?.animatedOnly == true
         val creator = creatorProfileActions(post, creatorSources).firstNotNullOfOrNull { it.profile }
-        asking[post.id] = workScope.launch {
+        // Registered until it ends, so Undo of the Like or Save can still stop it while its cards are vetted.
+        val job = workScope.launch(start = CoroutineStart.LAZY) {
             val similar = wiring.trails(TrailRequest.Similar(post), animatedOnly)
             val (spec, origin) = when {
                 similar != null -> similar to DeckOrigin.Similar(post.id)
@@ -613,20 +636,27 @@ class ForYouDeckViewModel(
             }
             val page = withContext(wiring.fetchContext) { spec?.pager?.nextOrNull() }
             val found = if (origin == null) emptyList() else page?.posts.orEmpty().map { DeckCard(it, origin) }
-            asking.remove(post.id)
-            val candidates = found.filter { card ->
+            val fresh = vetted(found.filter { card ->
                 !card.post.copyOfAny(seen + kept + post.id) && !mix.isDealt(card.post.id) && shows(card.post)
-            }.distinctBy { it.post.id }
-            // Vetted like the lanes' posts, as many as it takes to find enough a hidden tag does not catch.
-            val fresh = mutableListOf<DeckCard>()
-            for (card in candidates) {
-                if (fresh.size == INJECTED) break
-                if (!wiring.pictures.ready.value || shows(card.post, wiring.pictures.tagsFor(card.post))) fresh += card
-            }
+            }.distinctBy { it.post.id })
             if (fresh.isEmpty()) return@launch
             mix.steering = mix.steering.inject(fresh)
             if (mix.wanted) makeUp(mix) else publish()
         }
+        asking[post.id] = job
+        job.invokeOnCompletion { asking.remove(post.id, job) }
+        job.start()
+    }
+
+    /** Up to [INJECTED] of [candidates], vetted like the lanes' posts: as many are tagged as it takes to find enough. */
+    private suspend fun vetted(candidates: List<DeckCard>): List<DeckCard> {
+        if (!vetsPictures) return candidates.take(INJECTED)
+        val fresh = mutableListOf<DeckCard>()
+        for (card in candidates) {
+            if (fresh.size == INJECTED) break
+            if (shows(card.post, wiring.pictures.tagsFor(card.post))) fresh += card
+        }
+        return fresh
     }
 
     private companion object {

@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * What the picture tagger knows now: predicted tags by post, and each predicted tag's share of Danbooru posts
- * ([baseRates], by Danbooru spelling), which stands in for what a profile watches until it has watched enough.
+ * ([baseRates], keyed by Danbooru tag as `normalizeMatchToken` spells it), which stands in for what a profile watches until it has watched enough.
  */
 data class PredictedTagIndex(
     val byPost: Map<PostId, List<PredictedTag>> = emptyMap(),
@@ -32,6 +32,9 @@ interface PictureTags {
     /** Every predicted tag known now: library posts' stored ones and this session's analyses. */
     val index: StateFlow<PredictedTagIndex>
 
+    /** The Library's stored predictions only, which change when the Library is indexed, not with every card vetted. */
+    val library: StateFlow<PredictedTagIndex>
+
     /**
      * [post]'s predicted tags, analysing its picture when this session has not yet (about half a second). Empty when
      * the model is absent or the picture cannot be read, so a caller waiting on it never waits twice for one post.
@@ -42,6 +45,7 @@ interface PictureTags {
     object None : PictureTags {
         override val ready: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
         override val index: StateFlow<PredictedTagIndex> = MutableStateFlow(PredictedTagIndex.Empty).asStateFlow()
+        override val library: StateFlow<PredictedTagIndex> get() = index
         override suspend fun tagsFor(post: Post): List<PredictedTag> = emptyList()
     }
 }

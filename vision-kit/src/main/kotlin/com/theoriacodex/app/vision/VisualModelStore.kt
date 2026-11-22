@@ -9,7 +9,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.job
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.coroutineScope
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -33,7 +34,12 @@ data class VisualModelSpec(val id: String, val baseUrl: String, val model: Model
     val totalBytes: Long get() = files.sumOf(ModelFile::bytes)
 
     companion object {
-        /** WD ViT tagger v3 (SmilingWolf, Apache-2.0), exported with both outputs and dynamic-range int8 weights. */
+        /**
+         * WD ViT tagger v3 (SmilingWolf, Apache-2.0), exported with both outputs (normalised 768-d embedding, sigmoid tag
+         * scores) and dynamic-range int8 weights by `tools/phone-bench/export_models.py` on the `spike/phone-bench`
+         * branch (litert-torch 0.10 `full_dynamic_recipe`, jax < 0.9); the vocabulary is the model's `selected_tags.csv`.
+         * A new export gets a new [id], since its bytes and SHA-256 differ.
+         */
         fun wdVitTaggerV3(baseUrl: String) = VisualModelSpec(
             id = "wd-vit-tagger-v3-int8@1",
             baseUrl = baseUrl,
@@ -66,7 +72,8 @@ class VisualModelStore(
     private val onDeleted: suspend () -> Unit,
 ) {
     private val directory = File(root, spec.id.replace(Regex("[^A-Za-z0-9._-]"), "_"))
-    private val state = MutableStateFlow(if (installed()) ModelState.Ready else ModelState.Absent)
+    // What an interrupted download left behind is removed, so an absent model never holds space.
+    private val state = MutableStateFlow(if (installed()) ModelState.Ready else ModelState.Absent.also { directory.deleteRecursively() })
     private val lock = Mutex()
     private var download: Job? = null
 
@@ -114,6 +121,8 @@ class VisualModelStore(
             onSuccess = { ModelState.Ready },
             onFailure = { error ->
                 Diagnostics.report("vision", "The picture tagger download failed", error)
+                // Nothing of a failed download is kept, so a failure never holds the model's space.
+                directory.deleteRecursively()
                 ModelState.Failed(mismatch = error is MismatchException)
             },
         )
@@ -124,12 +133,14 @@ class VisualModelStore(
         try {
             val request = Request.Builder().url(spec.baseUrl + file.name).header("Accept-Encoding", "identity").build()
             val call = client.newCall(request)
-            // A blocking read cancelled from outside: cancelling the call makes it throw at once.
-            val cancelOnStop = coroutineContext.job.invokeOnCompletion { call.cancel() }
-            try {
-                call.execute().use { response -> receive(response, file, part, progress) }
-            } finally {
-                cancelOnStop.dispose()
+            coroutineScope {
+                // A blocking read cannot see cancellation; this child sees it at once and cancels the call, which throws.
+                val watcher = launch { try { awaitCancellation() } finally { call.cancel() } }
+                try {
+                    call.execute().use { response -> receive(response, file, part, progress) }
+                } finally {
+                    watcher.cancel()
+                }
             }
             if (!part.renameTo(file(file))) throw IOException("could not move ${file.name} into place")
         } finally {

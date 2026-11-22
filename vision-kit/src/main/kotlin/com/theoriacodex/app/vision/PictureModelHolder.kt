@@ -23,11 +23,11 @@ class PictureModelHolder(
     private var model: PictureModel? = null
     private var closing: Job? = null
 
-    /** Runs [block] with the loaded model, loading it first when needed. Throws what loading or [block] throws. */
+    /** Runs [block] with the loaded model, loading it first when needed. Throws [LoadFailed] or what [block] throws. */
     suspend fun <T> use(block: (PictureModel) -> T): T = lock.withLock {
         closing?.cancel()
         try {
-            withContext(Dispatchers.Default) { block(model ?: open().also { model = it }) }
+            withContext(Dispatchers.Default) { block(model ?: load()) }
         } finally {
             closing = scope.launch {
                 delay(idleMs)
@@ -43,6 +43,15 @@ class PictureModelHolder(
             closeModel()
         }
     }
+
+    private fun load(): PictureModel = try {
+        open().also { model = it }
+    } catch (error: Throwable) {
+        throw LoadFailed(error)
+    }
+
+    /** The model could not be loaded (as opposed to failing on one picture). */
+    class LoadFailed(cause: Throwable) : Exception("The picture model could not be loaded", cause)
 
     private fun closeModel() {
         model?.close()

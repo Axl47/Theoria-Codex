@@ -61,7 +61,8 @@ internal fun PictureTagsPage(model: VisualModelStore, library: Flow<VisionProgre
         SettingsHeader(SettingDestinations.PictureTags.title, onBack, SETTINGS_PATH)
         SettingsGroup(null) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Tags pictures on this phone, for hidden tags, For You and save suggestions.")
+                // What it does is worth saying before a 98 MB download, not after.
+                if (state != ModelState.Ready) Text("Tags pictures on this phone, for hidden tags, For You and save suggestions.")
                 when (val download = state) {
                     ModelState.Absent -> Button(onClick = model::download) { Text("Download ($size)") }
                     is ModelState.Downloading -> {
@@ -70,10 +71,7 @@ internal fun PictureTagsPage(model: VisualModelStore, library: Flow<VisionProgre
                         OutlinedButton(onClick = { scope.launch { model.delete() } }) { Text("Cancel") }
                     }
                     is ModelState.Failed -> {
-                        Text(
-                            if (download.mismatch) "The download didn't match the expected file." else "Download failed.",
-                            color = MaterialTheme.colorScheme.error,
-                        )
+                        Text("Download failed.", color = MaterialTheme.colorScheme.error)
                         Button(onClick = model::download) { Text("Try again") }
                     }
                     ModelState.Ready -> {
@@ -94,7 +92,7 @@ internal fun PictureTagsPage(model: VisualModelStore, library: Flow<VisionProgre
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text("Delete picture tags?") },
-            text = { Text("Frees $size. The tags found so far are removed, and downloading again tags the Library from the start.") },
+            text = { Text("Frees $size and removes the Library's picture tags.") },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
             confirmButton = {
                 TextButton(onClick = {

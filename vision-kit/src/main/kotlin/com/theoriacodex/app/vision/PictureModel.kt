@@ -38,8 +38,14 @@ class WdTaggerRunner(modelFile: File, private val vocabularySize: Int, threads: 
             environment.close()
             throw error
         }
-        inputs = model.createInputBuffers()
-        outputs = model.createOutputBuffers()
+        try {
+            inputs = model.createInputBuffers()
+            outputs = model.createOutputBuffers()
+        } catch (error: Exception) {
+            model.close()
+            environment.close()
+            throw error
+        }
     }
 
     override fun analyze(picture: Bitmap): PictureAnalysis {

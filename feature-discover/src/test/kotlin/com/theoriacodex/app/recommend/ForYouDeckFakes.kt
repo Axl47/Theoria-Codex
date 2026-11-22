@@ -58,10 +58,10 @@ internal fun hiding(vararg tags: String): AppSettings = AppSettings().let { sett
 }
 
 /**
- * One single-tag lane per entry of [tags] the profile does not hide, each [pages] pages of [PAGE] posts, answered at
+ * One single-tag lane per entry of [tags] the profile does not hide, each [pages] pages of [pageSize] posts, answered at
  * once unless the lane is on [hold].
  */
-internal class FakeForYouEngine(var tags: List<String>, private val pages: Int = 4) : ForYouRouteEngine {
+internal class FakeForYouEngine(var tags: List<String>, private val pages: Int = 4, private val pageSize: Int = PAGE) : ForYouRouteEngine {
     var sources = listOf(DECK_SOURCE)
     val failing = mutableSetOf<String>()
     var failLanes = false
@@ -103,7 +103,7 @@ internal class FakeForYouEngine(var tags: List<String>, private val pages: Int =
             return UnifiedSearchResult(emptyList(), emptyMap(), listOf(SourceRunStatus(DECK_SOURCE, SourceRunState.FAILED, errorMessage = "down")))
         }
         return UnifiedSearchResult(
-            items = List(PAGE) { lanePost(tag, page, it) },
+            items = List(pageSize) { lanePost(tag, page, it) },
             nextPageTokens = mapOf(DECK_SOURCE to (page + 1).takeIf { it < pages }?.toString()),
             statuses = listOf(SourceRunStatus(DECK_SOURCE, SourceRunState.SUCCESS)),
         )
@@ -208,6 +208,7 @@ internal fun deckWiring(
 internal class FakePictureTags(ready: Boolean = true, private val predicted: Map<String, List<PredictedTag>> = emptyMap()) : PictureTags {
     override val ready = MutableStateFlow(ready)
     override val index = MutableStateFlow(PredictedTagIndex.Empty)
+    override val library = MutableStateFlow(PredictedTagIndex.Empty)
     val asked = mutableListOf<String>()
     var held: CompletableDeferred<Unit>? = null
 

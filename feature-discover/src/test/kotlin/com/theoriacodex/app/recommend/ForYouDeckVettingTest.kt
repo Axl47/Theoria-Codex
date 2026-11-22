@@ -70,6 +70,21 @@ class ForYouDeckVettingTest {
         assertFalse("a-0-2" in owner.ids)
     }
 
+    @Test fun `vetting keeps ahead of the deal through pages far bigger than its look-ahead`() {
+        val big = FakeForYouEngine(listOf("a", "b", "c"), pages = 1, pageSize = 24)
+        val owner = ForYouDeckViewModel(big, deckWiring(writeScope, pictures = FakePictureTags())).also { it.synchronize(deckEnvironment(hiding("x"))) }
+        val deck = owner.levels.value.last().deck
+        repeat(20) { deck.decide(com.theoriacodex.app.triage.TriageChoice.Skip, checkNotNull(deck.state.value.current).id) }
+        assertTrue(owner.posts.size > 20)
+    }
+
+    @Test fun `a profile that hides nothing is dealt without tagging`() {
+        val pictures = FakePictureTags()
+        val owner = owner(pictures, deckEnvironment())
+        assertEquals(4, owner.posts.size)
+        assertEquals(emptyList<String>(), pictures.asked)
+    }
+
     @Test fun `without the tagger the Mix deals as before and tags nothing`() {
         val pictures = FakePictureTags(ready = false, predicted = mapOf("b-0-0" to seen("x")))
         val owner = owner(pictures)

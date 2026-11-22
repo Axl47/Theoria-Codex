@@ -111,12 +111,26 @@ class ForYouPictureInterestsTest {
                 kept to listOf(PredictedTag("cat_ears", 0.8f, PredictedTag.Kind.GENERAL), PredictedTag("blush", 0.4f, PredictedTag.Kind.GENERAL)),
                 PostId(SourceKey.DANBOORU, "candidate") to listOf(PredictedTag("cat_ears", 0.9f, PredictedTag.Kind.GENERAL)),
             ),
-            baseRates = mapOf("cat_ears" to 0.05),
+            baseRates = mapOf("cat ears" to 0.05),
         )
         val evidence = PictureEvidence.of(setOf(kept, PostId(SourceKey.DANBOORU, "unanalysed")), index)
         assertEquals(1, evidence.kept)
         assertEquals(mapOf("cat ears" to 0.8f.toDouble()), evidence.keptByTag)
         assertEquals(mapOf("cat ears" to 0.05), evidence.baseRates)
+    }
+
+    @Test fun `text on the image and tags on half of Danbooru are never evidence`() {
+        val post = PostId(SourceKey.PIXIV, "post")
+        val tags = listOf("cat_ears", "signature", "solo").map { PredictedTag(it, 0.9f, PredictedTag.Kind.GENERAL) }
+        val index = PredictedTagIndex(mapOf(post to tags), baseRates = mapOf("solo" to 0.6))
+        assertEquals(setOf("cat ears"), index.evidence(post).keys)
+    }
+
+    @Test fun `a predicted tag on nearly every kept post is universal, however rare on Danbooru`() {
+        val pictures = PictureEvidence(keptByTag = mapOf("looking at viewer" to 27.0), kept = 30, baseRates = mapOf("looking at viewer" to 0.3))
+        val affinity = TagAffinityInputs(pictures = pictures).pictureAffinity(source, "looking at viewer", "looking_at_viewer")
+        assertTrue(affinity.universal)
+        assertFalse(affinity.proven)
     }
 }
 

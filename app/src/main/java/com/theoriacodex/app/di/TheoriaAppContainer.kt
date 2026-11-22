@@ -504,7 +504,7 @@ internal class DefaultTheoriaAppContainer(
 
     private val tagAffinity = shareTagAffinityInputs(
         durableStoreScope, settingsRepository, likesRepository, codexRepository, savedSearches, statisticsRepository,
-        predicted = pictures.tagger.index,
+        predicted = pictures.tagger.library,
     )
 
     override val features = FeatureDependencies(
@@ -647,10 +647,12 @@ internal class DefaultTheoriaAppContainer(
                 }
             }
         }
-        // Optional upkeep, run by JobScheduler while charging: at every start, and again once the model is ready.
+        // Optional upkeep, run by JobScheduler while charging: at every start, whenever the model comes or goes, and
+        // whenever the Library gains or loses a post.
         durableStoreScope.launch {
             runCatchingPreservingCancellation {
-                pictures.model.states.filter { it == ModelState.Absent || it == ModelState.Ready }.distinctUntilChanged()
+                val model = pictures.model.states.filter { it == ModelState.Absent || it == ModelState.Ready }.distinctUntilChanged()
+                combine(model, pictures.progress.map { it.total }.distinctUntilChanged()) { _, _ -> }
                     .collect { scheduleLibraryPictures(appContext) }
             }.onFailure { Diagnostics.report("similarity", "The Library's picture indexing could not be scheduled", it) }
         }

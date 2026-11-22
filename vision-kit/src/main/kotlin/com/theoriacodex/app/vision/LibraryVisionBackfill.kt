@@ -20,8 +20,9 @@ class LibraryVisionBackfill(
 ) {
     /**
      * Analyses a batch at a time and rests as long as the batch took, so the CPU works half the time at most. Stops when
-     * done, when the model goes, or when the device runs [hot]. Returns whether pictures are left that a later run can
-     * read; ones whose preview failed to load wait for the next app start.
+     * done, when the model goes, when the device runs [hot], or when a whole batch could not be read (offline, or the
+     * model would not load). Returns whether pictures are left that a later run can read; ones whose preview failed to
+     * load wait for the next run.
      */
     suspend fun drain(): Boolean {
         val unavailable = HashSet<PostId>()
@@ -31,7 +32,11 @@ class LibraryVisionBackfill(
             if (batch.isEmpty()) return false
             val started = TimeSource.Monotonic.markNow()
             val results = batch.associate { post -> post.id to tagger.analyze(post, remember = false) }
-            results.filterValues { it == PictureResult.Unavailable }.keys.let(unavailable::addAll)
+            val failed = results.filterValues { it == PictureResult.Unavailable }.keys
+            if (failed.size == results.size) return false
+            unavailable += failed
+            // Deleting the model clears what it stored; a batch finishing after that is dropped.
+            if (!tagger.ready.value) return false
             signatures.putVision(tagger.visions(results))
             delay(started.elapsedNow())
         }
@@ -48,7 +53,7 @@ class LibraryVisionBackfill(
                 if (!ready) return@collect
                 val known = signatures.libraryPostsWithoutVision(tagger.modelId, WRITE_THROUGH_LIMIT)
                     .mapNotNull { post -> tagger.remembered(post.id)?.let { post.id to it } }.toMap()
-                if (known.isNotEmpty()) signatures.putVision(tagger.visions(known))
+                if (known.isNotEmpty() && tagger.ready.value) signatures.putVision(tagger.visions(known))
             }
     }
 

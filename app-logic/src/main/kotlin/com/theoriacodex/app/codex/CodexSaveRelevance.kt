@@ -5,8 +5,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.query.matchesIncludeTermGroups
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import com.theoriacodex.domain.vision.PredictedTagIndex
-import com.theoriacodex.domain.vision.PredictedTagUse
-import com.theoriacodex.domain.vision.tokens
+import com.theoriacodex.app.recommend.evidence
 import kotlin.math.ln
 
 /**
@@ -75,9 +74,8 @@ class TagRarity private constructor(private val posts: Int, private val postsByT
     }
 }
 
-/** The post's tag tokens, weighted: its provider's at 1, the ones [predicted] for it at their score where higher. */
+/** The post's tag tokens, weighted: its provider's at 1, the [evidence] predicted for it at its score. */
 private fun Post.matchingTags(predicted: PredictedTagIndex): Map<String, Double> {
     val provided = canonicalTags.ifEmpty { rawTags }.map(::normalizeMatchToken).filter(String::isNotBlank).associateWith { 1.0 }
-    val seen = predicted[id]?.tokens(PredictedTagUse.EVIDENCE) ?: return provided
-    return seen + provided
+    return predicted.evidence(id) + provided
 }
