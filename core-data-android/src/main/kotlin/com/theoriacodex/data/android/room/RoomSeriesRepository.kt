@@ -137,7 +137,7 @@ private fun movedEntries(listed: Pair<List<SeriesEntry>, List<SeriesEntry>>, dro
     }.toMap()
 }
 
-private fun SeriesEntity.toStored() = StoredSeries(
+internal fun SeriesEntity.toStored() = StoredSeries(
     series = Series(
         id = SeriesId(SourceKey.parseOrThrow(source), address),
         title = title,
@@ -154,7 +154,7 @@ private fun SeriesEntity.toStored() = StoredSeries(
     lastCheckedAtEpochMs = lastCheckedAtEpochMs,
 )
 
-private fun StoredSeries.toEntity() = SeriesEntity(
+internal fun StoredSeries.toEntity() = SeriesEntity(
     series.id.source.id,
     series.id.address,
     series.title,
@@ -179,7 +179,7 @@ private fun Series.keeping(stored: Series): Series = copy(
     status = status.takeUnless { it == SeriesStatus.UNKNOWN } ?: stored.status,
 )
 
-private fun SeriesEntryEntity.toStored() = StoredSeriesEntry(
+internal fun SeriesEntryEntity.toStored() = StoredSeriesEntry(
     entry = SeriesEntry(address, name, number, translatorGroup, uploadedAtEpochMs),
     sourceOrder = sourceOrder,
     firstSeenAtEpochMs = firstSeenAtEpochMs,
@@ -188,7 +188,7 @@ private fun SeriesEntryEntity.toStored() = StoredSeriesEntry(
     pageCount = pageCount,
 )
 
-private fun StoredSeriesEntry.toEntity(series: SeriesId) = SeriesEntryEntity(
+internal fun StoredSeriesEntry.toEntity(series: SeriesId) = SeriesEntryEntity(
     series.source.id,
     series.address,
     entry.address,

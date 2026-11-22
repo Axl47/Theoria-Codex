@@ -16,8 +16,13 @@ import kotlinx.serialization.json.put
 
 const val PROFILE_BACKUP_MAX_BYTES = 32 * 1024 * 1024
 
-/** 2 added the optional `customSources` list; older apps refuse it with their "newer version" message. */
-private const val PROFILE_BACKUP_VERSION = 2
+/**
+ * 2 added the optional `customSources` list and 3 the optional `library.series` list; older apps refuse a version
+ * they do not know with their "newer version" message. A backup without series is still written as 2, which the
+ * previous release reads; one with series is 3, so no app restores it and silently leaves the series out.
+ */
+private const val PROFILE_BACKUP_VERSION = 3
+private const val VERSION_WITHOUT_SERIES = 2
 
 /** A sanity bound; a device allows [SiteProfile.MAX_CUSTOM_SITES] plus any added during a restore. */
 private const val MAX_BACKUP_SITE_PROFILES = 256
@@ -38,7 +43,7 @@ class ProfileBackupCodec {
         validate(backup)
         return buildJsonObject {
             put("format", "theoria-profile-backup")
-            put("version", PROFILE_BACKUP_VERSION)
+            put("version", if (backup.library.series.isEmpty()) VERSION_WITHOUT_SERIES else PROFILE_BACKUP_VERSION)
             put("createdAt", backup.createdAtEpochMs)
             put("settings", DurableJson.encodeToJsonElement(
                 SettingsStoreRecord.serializer(), SettingsStoreRecord.fromDomain(portableSettings(backup.settings)),
@@ -142,6 +147,11 @@ class ProfileBackupCodec {
             put("highestMedia", entry.maxViewedMediaNumber)
         } })
         put("searches", backupArray(library.searches, ::backupSearch))
+        if (library.series.isNotEmpty()) {
+            put("series", backupArray(library.series) {
+                DurableJson.encodeToJsonElement(BackupSeriesRecord.serializer(), BackupSeriesRecord.fromDomain(it))
+            })
+        }
     }
 
     private fun decodeLibrary(root: JsonObject): BackupLibrary {
@@ -170,6 +180,9 @@ class ProfileBackupCodec {
             },
             searches = root.backupObjects("searches", 2_000).map { it.readBackupSearch() }
                 .filterNot(RecentSearchEntry::isRetiredForYouSearch),
+            series = if ("series" !in root) emptyList() else root.backupObjects("series", MAX_BACKUP_SERIES).map {
+                DurableJson.decodeFromJsonElement(BackupSeriesRecord.serializer(), it).toDomain()
+            },
         )
     }
 
@@ -221,6 +234,12 @@ private fun validate(backup: ProfileBackup) {
     require(library.items.all { it.codexId in knownCodices && it.postId in knownPosts && it.savedAtEpochMs >= 0 })
     require(library.likes.all { it.profileId in profiles && it.postId in knownPosts && it.likedAtEpochMs >= 0 })
     require(library.watched.all { it.post.id in knownPosts && it.maxViewedMediaNumber > 0 && it.viewedAtEpochMs >= 0 })
+    require(library.series.size <= MAX_BACKUP_SERIES && library.series.distinctBy { it.series.series.id }.size == library.series.size) {
+        "Backup contains duplicate series"
+    }
+    require(library.series.all { series -> series.entries.distinctBy { it.entry.address }.size == series.entries.size }) {
+        "Backup contains duplicate chapters"
+    }
     require(backup.savedSearches.size <= MAX_SAVED_SEARCHES)
     require(backup.savedSearches.distinctBy { it.id }.size == backup.savedSearches.size)
     require(backup.savedSearches.all { it.id.isNotBlank() && it.name.isNotBlank() && it.name.length <= MAX_SAVED_SEARCH_NAME_LENGTH })

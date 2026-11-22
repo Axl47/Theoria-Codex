@@ -11,6 +11,7 @@ import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
+import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -18,6 +19,9 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesEntry
+import com.theoriacodex.domain.series.SeriesId
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -68,6 +72,40 @@ class RoomProfileBackupStoreTest {
         assertEquals(query(), snapshot.searches.single().query)
         assertTrue(backups.snapshot(false).watched.isEmpty())
         assertTrue(backups.snapshot(false).searches.isEmpty())
+    }
+
+    @Test fun `series restore with their progress and add to a stored series without taking from it`() = runTest {
+        // An extension source: restoring needs no extension installed, since nothing here asks one.
+        val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
+        val series = RoomSeriesRepository(database, clock = { 30L })
+        series.store(Series(id, "Title", language = "en"), listOf(SeriesEntry("/chapter/2", "Ch.2"), SeriesEntry("/chapter/1", "Ch.1")))
+        series.setFollowed(id, true)
+        series.setReadingMode(id, GalleryReadingMode.VERTICAL)
+        series.recordProgress(id, "/chapter/1", page = 18, pageCount = 18)
+        series.recordProgress(id, "/chapter/2", page = 3, pageCount = 20)
+        // Only opened, never read or followed: not the user's, so not in a backup.
+        series.store(Series(SeriesId(id.source, "/title/2"), "Glanced at"))
+        val snapshot = backups.snapshot(includeRecents = false)
+        assertEquals(listOf(id), snapshot.series.map { it.series.series.id })
+
+        val restoredDatabase = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext<Context>(),
+            TheoriaRoomDatabase::class.java).allowMainThreadQueries().build()
+        val restored = RoomSeriesRepository(restoredDatabase, clock = { 40L })
+        RoomProfileBackupStore(restoredDatabase).merge(snapshot)
+        assertEquals(series.series(id), restored.series(id))
+        assertEquals(series.entries(id), restored.entries(id))
+        assertEquals(listOf("Title" to 1), restored.observeFollowed().first().map { it.series.title to it.unreadCount })
+
+        // On a device that already has the series, unfollowed and further along, the restore only adds.
+        restored.setFollowed(id, false)
+        restored.setReadingMode(id, GalleryReadingMode.RIGHT_TO_LEFT)
+        restored.recordProgress(id, "/chapter/2", page = 20, pageCount = 20)
+        RoomProfileBackupStore(restoredDatabase).merge(snapshot)
+        val kept = restored.series(id)!!
+        assertTrue(kept.followed)
+        assertEquals(GalleryReadingMode.RIGHT_TO_LEFT, kept.readingMode)
+        assertTrue(restored.entries(id).single { it.entry.address == "/chapter/2" }.read)
+        restoredDatabase.close()
     }
 
     @Test fun `replaying an import keeps existing media and history while repairing Likes membership`() = runTest {

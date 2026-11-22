@@ -77,6 +77,7 @@ file as `mihon_<name>`, so extension files cannot be mistaken for the app's own.
 | `ExtensionImages` | same | Fetches covers and pages through the extension's own HTTP client. Each address handed to the app ends in `#mihon=<source id>`; an interceptor on the app's media client answers those. |
 | App seam | `app/.../extensions/MihonExtensionSourceHost.kt`, `app/.../di/ExtensionSources.kt` | The application creates the host. Nothing loads at startup: the extensions that are on load once, off the main thread, the first time the Series tab asks for sources or an image address ending in `#mihon=` is requested. The manifest holds `QUERY_ALL_PACKAGES`, as Mihon does: extension packages share only a declared feature, which a `<queries>` element cannot match. The Series tab is shown while an extension is on the device, looked up at startup and each time the app returns to the foreground. |
 | Series | `feature-series`, `app/.../series/`, `core-data` `SeriesRepository` | The Series tab and series page, the Extensions page (also reached from Settings), the Viewer session over a series' chapters, and the `series` and `series_entries` tables that keep followed series, read state and progress. Pages are never stored. |
+| Backup | `core-data` `SeriesBackupRecords.kt`, `RoomProfileBackupStore` | Profile backups hold the series the user follows, started reading or chose a reading mode for, with every stored chapter's read state and last page (`library.series`, backup version 3; a backup without series is still written as version 2). Series are stored once for the whole app, not per profile, so they are backed up once. A restore adds: a series already stored only becomes followed, takes a reading mode if it had none, and gains chapters it lacked. Trust is never in a backup, so a restored series shows "Extension unavailable" until its extension is installed and turned on. |
 
 ## Release builds
 
@@ -219,7 +220,6 @@ framework. The scripts are not in the repository: they depend on the index, whic
 
 What the feature still lacks.
 
-- **Backup.** Followed series and reading progress are not in profile backups.
 - **Search filters.** Each extension defines its own filters (genre, status, sort). Only popular, latest and free
   text are used. Posts carry no tags.
 - **Unloading.** Loaded code cannot be unloaded. Turning an extension off stops its sources and images at once; its

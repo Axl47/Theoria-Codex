@@ -2,6 +2,7 @@ package com.theoriacodex.data.android.room
 
 import androidx.room.withTransaction
 import com.theoriacodex.data.repository.BackupLibrary
+import com.theoriacodex.data.repository.BackupSeries
 import com.theoriacodex.data.repository.LikedPost
 import com.theoriacodex.data.repository.ProfileBackupStore
 import com.theoriacodex.data.repository.ProfileLibraryIds
@@ -25,6 +26,7 @@ class RoomProfileBackupStore(
     private val dao = database.codexLikesDao()
     private val recents = database.recentsDao()
     private val recentsWriter = RecentsWriter(recents, SharedPosts(dao))
+    private val series = database.seriesDao()
 
     override suspend fun snapshot(includeRecents: Boolean): BackupLibrary = database.withTransaction {
         val codices = dao.codices().map { row ->
@@ -58,6 +60,10 @@ class RoomProfileBackupStore(
                     RecentPostSection.valueOf(it.section), it.maxViewedMediaNumber)
             },
             if (includeRecents) recents.searches().map(RecentSearchEntity::toDomain) else emptyList(),
+            // Entries the source stopped listing are kept too: one that returns is then as the user left it.
+            series.keptSeries().map { row ->
+                BackupSeries(row.toStored(), series.allEntries(row.source, row.address).map(SeriesEntryEntity::toStored))
+            },
         )
     }
 
@@ -87,8 +93,18 @@ class RoomProfileBackupStore(
                 dao.insertLike(like.toEntity())
             }
             mergeRecents(library)
+            library.series.forEach(::mergeSeries)
             collectionsAdded
         }
+
+    private fun mergeSeries(backup: BackupSeries) {
+        val stored = backup.series
+        val id = stored.series.id
+        if (series.insertSeries(stored.toEntity()) == -1L) {
+            series.mergeRestoredSeries(id.source.id, id.address, stored.followed, stored.readingMode?.name)
+        }
+        series.insertEntries(backup.entries.map { it.toEntity(id) })
+    }
 
     private fun mergeRecents(library: BackupLibrary) {
         library.watched.asReversed().forEach { entry ->

@@ -1,5 +1,10 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.domain.model.GalleryReadingMode
+import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesEntry
+import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SeriesStatus
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
@@ -295,12 +300,40 @@ class ProfileBackupServiceTest {
         assertEquals(0, harness.store.merges)
     }
 
+    @Test fun `series round trip as version 3 and a backup without them is written and read as before`() {
+        val plain = backup()
+        val written = codec.encode(plain).toString(Charsets.UTF_8)
+        assertTrue(written.contains("\"version\":2") && !written.contains("\"series\""))
+        assertEquals(emptyList<BackupSeries>(), codec.decode(written.toByteArray()).library.series)
+
+        val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
+        val series = BackupSeries(
+            StoredSeries(
+                Series(id, "Title", "https://example.test/cover.jpg", "Author", listOf("Drama"), "en", "Synopsis", SeriesStatus.ONGOING),
+                followed = true, readingMode = GalleryReadingMode.VERTICAL, lastOpenedEntry = "/chapter/2", lastCheckedAtEpochMs = 9L,
+            ),
+            listOf(
+                StoredSeriesEntry(SeriesEntry("/chapter/2", "Ch.2", 2f, "Group", 5L), sourceOrder = 0, firstSeenAtEpochMs = 6L, lastPage = 3, pageCount = 20),
+                StoredSeriesEntry(SeriesEntry("/chapter/1", "Ch.1"), sourceOrder = 1, firstSeenAtEpochMs = 4L, read = true, lastPage = 18, pageCount = 18),
+                StoredSeriesEntry(SeriesEntry("/chapter/0", "Dropped"), sourceOrder = -1, firstSeenAtEpochMs = 4L),
+            ),
+        )
+        val withSeries = plain.copy(library = plain.library.copy(series = listOf(series)))
+        val encoded = codec.encode(withSeries)
+        assertTrue(encoded.toString(Charsets.UTF_8).contains("\"version\":3"))
+        assertEquals(listOf(series), codec.decode(encoded).library.series)
+        // Trust is never in a backup, with or without series.
+        assertFalse(encoded.toString(Charsets.UTF_8).contains("trustedExtensions"))
+        val twice = withSeries.copy(library = withSeries.library.copy(series = listOf(series, series)))
+        assertTrue(runCatching { codec.encode(twice) }.isFailure)
+    }
+
     @Test fun `invalid versions malformed bytes unknown sources and deeply nested input are rejected`() {
         val invalid = listOf(
             byteArrayOf(0xc3.toByte(), 0x28),
             "{}".toByteArray(),
             "[".repeat(65).toByteArray(),
-            codec.encode(backup()).toString(Charsets.UTF_8).replace("\"version\":2", "\"version\":3").toByteArray(),
+            codec.encode(backup()).toString(Charsets.UTF_8).replace("\"version\":2", "\"version\":4").toByteArray(),
             codec.encode(backup()).toString(Charsets.UTF_8).replace("\"PIXIV\"", "\"UNKNOWN\"").toByteArray(),
         )
         invalid.forEach { assertTrue(runCatching { codec.decode(it) }.isFailure) }
