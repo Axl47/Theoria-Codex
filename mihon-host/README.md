@@ -26,7 +26,8 @@ works"), and release size is still open:
 that extension on in the Extensions page. What is stored is the extension's package name with the SHA-256 of the
 signing certificate it had then (`ExtensionChoices.trusted`, in the settings store): an update signed with the same
 key stays on, a copy signed with another key is off, and so is every other extension, whoever signed it, since
-nearly all Mihon extensions share one key. A file in the debug folder is its own extension, named by its file name.
+nearly all Mihon extensions share one key. A file in the debug folder is its own extension, named by its file name and the package inside it, so another
+extension put there under the same name is off and cannot be turned on by an answer given for the first.
 An APK with no readable signing certificate, or with several signers, can never be turned on. Until an extension is
 on, its name, version and fingerprint come from the package manager alone. The question asked before turning one on
 shows the fingerprint, and only that fingerprint is trusted: a file replaced while the question was open is asked
@@ -35,12 +36,15 @@ in place loads anew, from a private copy of its own, and never runs under anothe
 never written to or read from a profile backup.
 
 **Changes on the device.** Every source lookup first compares a cheap stamp of the device's packages and the folder's
-files; an extension installed, updated or removed since then is listed again and only what changed is loaded. Debug
+files; an extension installed, updated or removed since then is listed again and only what changed is loaded. Every
+extension image request makes the same check, so a source removed or turned off stops fetching images. Debug
 builds also listen for package changes while the app runs, so the Series tab follows without a restart.
 
 **Pages.** A chapter's pages are handed out without further requests. Where a source names each image on a page of
-its own, the address handed out is that page's, marked `#mihon-page=`, and the image's address is asked for when the
-image is requested, so one page failing fails only that page. Extension calls run off the main thread.
+its own, the address handed out is that page's, marked `#mihon-page=` with the source, the page's place and its
+chapter, and the image's address is asked for when the image is requested, so one page failing fails only that
+page. When that image does not arrive its address is asked for again next time, since such addresses expire; when
+the page is no longer held, after a restart, the chapter's pages are listed again. Extension calls run off the main thread.
 
 **Languages.** An extension can ship one source per language (MangaDex ships 62). The ones on by default are those
 matching a device language, else English, else the first; the Extensions page switches each on and off.
@@ -197,7 +201,8 @@ What the feature still lacks.
 - **A limit on calls.** Loading an extension and reading its settings have a time limit; a listing or page request
   that hangs inside extension code is bounded only by the HTTP client's timeouts.
 - **Cancellation.** An image fetch that the app cancels still runs to completion on the extension's client.
-- **Pages that share an address.** A source whose pages differ only in the request body would show one image for all.
+- **Pages that share an image address.** A source whose pages name the same image address and differ only in the
+  request's headers or body would show one image for all.
 
 ## Removing it
 

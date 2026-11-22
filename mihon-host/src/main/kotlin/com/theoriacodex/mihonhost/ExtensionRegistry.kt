@@ -71,13 +71,18 @@ class ExtensionRegistry(
     /** Per extension id, its sources that are on, as of the last listing. Guarded by [mutex]. */
     private var active: Map<String, List<LoadedSource>> = emptyMap()
 
-    /** The sources on offer; null until first asked for. */
-    @Volatile
-    private var offered: List<SeriesSource>? = null
+    /** The sources on offer with [stamp] as it was read before the listing they came from. */
+    private class Offer(val sources: List<SeriesSource>, val stamp: Any)
 
-    /** [stamp] as it was when the extensions were last listed. */
+    /** What a listing found on the device, with [stamp] read first, so a change during the listing is seen by the next check. */
+    private class OnDevice(val stamp: Any, val packages: List<ExtensionPackage>)
+
+    /**
+     * Null until first asked for. Sources and stamp are replaced together, once a listing has finished: a reader never
+     * pairs a new stamp with the sources of the listing before it, and a listing that was cancelled leaves both as they were.
+     */
     @Volatile
-    private var listedStamp: Any? = null
+    private var offer: Offer? = null
 
     private val mutableRevision = MutableStateFlow(0)
     override val revision: StateFlow<Int> = mutableRevision
@@ -88,19 +93,19 @@ class ExtensionRegistry(
      * changed that check is all a call costs, and when something did only the extensions that changed load.
      */
     suspend fun sources(): List<SeriesSource> = withContext(Dispatchers.IO) {
-        offered?.takeIf { stamp() == listedStamp } ?: locked { refresh().let { offered.orEmpty() } }
+        offer?.takeIf { stamp() == it.stamp }?.sources ?: locked { refresh().let { offer?.sources.orEmpty() } }
     }
 
     /** Looks for a change on the device once the extensions have loaded, moving [revision] when there is one; before that, does nothing. */
     suspend fun recheck() {
-        if (offered != null) sources()
+        if (offer != null) sources()
     }
 
     override suspend fun installed(): List<InstalledExtension> = locked { refresh() }
 
     override suspend fun setOn(id: String, signer: String, on: Boolean): List<InstalledExtension> = locked {
         val onDevice = onDevice()
-        val extension = onDevice.firstOrNull { it.apk.path == id }
+        val extension = onDevice.packages.firstOrNull { it.id == id }
         when {
             extension == null -> Unit
             !on -> choices.update { it.copy(trusted = it.trusted - extension.identity) }
@@ -116,7 +121,7 @@ class ExtensionRegistry(
 
     override suspend fun setLanguage(id: String, language: String, on: Boolean): List<InstalledExtension> = locked {
         val onDevice = onDevice()
-        val extension = onDevice.firstOrNull { it.apk.path == id }
+        val extension = onDevice.packages.firstOrNull { it.id == id }
         val languages = extension?.let { loaded[it] }?.sources?.map { it.language }
         if (extension != null && languages != null) {
             val current = choices.choices().languages[extension.packageName] ?: defaultLanguages(languages.distinct(), deviceLanguages())
@@ -126,7 +131,7 @@ class ExtensionRegistry(
     }
 
     override suspend fun settings(id: String): List<ExtensionSourceSettings> = locked {
-        if (offered == null) refresh()
+        if (offer == null) refresh()
         active[id].orEmpty().mapNotNull(::settingsOf)
     }
 
@@ -145,23 +150,20 @@ class ExtensionRegistry(
      */
     private suspend fun <T> locked(block: suspend () -> T): T = withContext(Dispatchers.IO) {
         mutex.withLock {
-            val before = offered
-            block().also { if (before != offered) mutableRevision.update { it + 1 } }
+            val before = offer?.sources
+            block().also { if (before != offer?.sources) mutableRevision.update { it + 1 } }
         }
     }
 
-    /** The extensions on the device now. The stamp is read first, so a change during the listing is seen by the next check. */
-    private fun onDevice(): List<ExtensionPackage> {
-        listedStamp = stamp()
-        return packages()
-    }
+    private fun onDevice() = OnDevice(stamp(), packages())
 
     /**
      * Lists every extension, loading those that are on and not loaded yet, and replaces what is on offer. No settings
      * are read here: this runs for the first source lookup and image request, which must not wait on every source's
      * settings screen.
      */
-    private suspend fun refresh(onDevice: List<ExtensionPackage> = onDevice()): List<InstalledExtension> {
+    private suspend fun refresh(found: OnDevice = onDevice()): List<InstalledExtension> {
+        val onDevice = found.packages
         val choices = choices.choices()
         val device = deviceLanguages()
         val taken = HashSet<SourceKey>()
@@ -171,7 +173,7 @@ class ExtensionRegistry(
         val listed = onDevice.map { extension ->
             val trusted = choices.trusts(extension.identity, extension.signer)
             val listing = InstalledExtension(
-                id = extension.apk.path,
+                id = extension.id,
                 // A file is told apart from the installed package of the same extension.
                 name = if (extension.installed) extension.name else "${extension.name} (file)",
                 versionName = extension.versionName,
@@ -193,7 +195,7 @@ class ExtensionRegistry(
         images.publish(sources.map { it.source })
         val series = sources.map { it.series }
         // The same list object while nothing changed, so a reader can tell.
-        if (series != offered) offered = series
+        offer = Offer(offer?.sources?.takeIf { it == series } ?: series, found.stamp)
         return listed
     }
 
