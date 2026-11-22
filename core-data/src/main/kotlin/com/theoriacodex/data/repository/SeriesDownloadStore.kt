@@ -19,6 +19,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 
 /**
  * Downloaded chapters on disk, and the only record of which chapters are downloaded: a chapter is on the device exactly
@@ -74,7 +76,7 @@ class SeriesDownloadStore(private val root: File, private val io: CoroutineDispa
                 currentCoroutineContext().ensureActive()
                 withContext(io + NonCancellable) {
                     val marker = ChapterMarker(entry, pages.map { ChapterPageFile(it.name, it.length()) })
-                    File(staging, MARKER_FILE).writeText(DurableJson.encodeToString(ChapterMarker.serializer(), marker))
+                    File(staging, MARKER_FILE).writeText(DurableJson.encodeToString(marker))
                     discard(folder)
                     if (!staging.renameTo(folder)) throw IOException("Could not finish saving the chapter")
                 }
@@ -127,13 +129,13 @@ class SeriesDownloadStore(private val root: File, private val io: CoroutineDispa
         val file = File(this, MARKER_FILE)
         if (!file.isFile) return null
         val marker = try {
-            DurableJson.decodeFromString(ChapterMarker.serializer(), file.readText())
+            DurableJson.decodeFromString<ChapterMarker>(file.readText())
         } catch (_: SerializationException) {
-            return null
+            null
         } catch (_: IllegalArgumentException) {
-            return null
+            null
         }
-        return marker.takeIf { it.pages.isNotEmpty() && it.pages.all { page -> File(this, page.name).length() == page.bytes } }
+        return marker?.takeIf { it.pages.isNotEmpty() && it.pages.all { page -> File(this, page.name).length() == page.bytes } }
     }
 
     companion object {

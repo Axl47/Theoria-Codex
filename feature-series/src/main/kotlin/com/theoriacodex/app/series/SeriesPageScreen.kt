@@ -264,18 +264,22 @@ private fun ChapterListHeader(
                 val stored = state.stored
                 if (stored?.followed == true) {
                     HorizontalDivider()
-                    val on = stored.downloadNewChapters
-                    // Checked as other menus show their choice, and said as checked or not to accessibility services.
-                    DropdownMenuItem(
-                        text = { Text("Download new chapters") },
-                        trailingIcon = { if (on) Icon(Icons.Default.Check, contentDescription = null) },
-                        onClick = { choose { onDownloadNewChapters(!on) } },
-                        modifier = Modifier.semantics { toggleableState = ToggleableState(on) },
-                    )
+                    DownloadNewChaptersItem(stored.downloadNewChapters) { choose { onDownloadNewChapters(it) } }
                 }
             }
         }
     }
+}
+
+/** Checked as other menus show their choice, and said as checked or not to accessibility services. */
+@Composable
+private fun DownloadNewChaptersItem(on: Boolean, onChange: (Boolean) -> Unit) {
+    DropdownMenuItem(
+        text = { Text("Download new chapters") },
+        trailingIcon = { if (on) Icon(Icons.Default.Check, contentDescription = null) },
+        onClick = { onChange(!on) },
+        modifier = Modifier.semantics { toggleableState = ToggleableState(on) },
+    )
 }
 
 private val DOWNLOAD_CHOICES = listOf(

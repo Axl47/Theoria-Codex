@@ -45,7 +45,7 @@
 - Profile backups include the series you follow or started, with each chapter's read state and last page and the series' reading mode. Restoring only adds: nothing already on the device is undone. Which extensions are turned on is never in a backup, so a restored series says "Extension unavailable" until its extension is installed and turned on.
 - Series chapters can be downloaded to read with no connection, even with the extension turned off. Tap the mark on a chapter to download it, cancel it while it downloads, or delete it once it's on the device. The Download menu above the chapters downloads the next 5 unread, all unread or all chapters, or deletes a series' downloads. Downloads continue in the background with a notification, also after a restart, and a chapter that can't be downloaded shows as not downloaded again.
 - A followed series can download its new chapters by itself (Download new chapters, in the same menu), on Wi-Fi and other unmetered networks only.
-- In Settings, below Check for new chapters: Delete after reading removes a downloaded chapter once you've read it and moved on, and Downloaded chapters shows the space they use, with Delete all.
+- In Settings, below Check for new chapters: Delete after reading removes the downloaded chapters you've read when you close the reader, and Downloaded chapters shows the space they use, with Delete all.
 - The app now reads the list of installed apps to find extensions, and asks to send notifications when you follow a series.
 
 ### Changed
