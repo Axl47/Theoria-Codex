@@ -30,12 +30,10 @@ extensions.configure<LibraryExtension> {
 dependencies {
     implementation(project(":core-domain"))
     implementation(project(":core-data"))
-    // Aligns Coil's OkHttp with the version the rest of the app resolves.
+    // The app's OkHttp, for the model download.
     implementation(project(":core-sources"))
-    implementation(project(":media-kit"))
 
     implementation(libs.litert)
-    implementation(libs.coil.compose)
     implementation(libs.kotlinx.coroutines.core)
 
     testImplementation(libs.junit)

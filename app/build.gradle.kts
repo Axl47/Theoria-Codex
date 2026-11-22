@@ -183,10 +183,15 @@ android {
         buildConfigField("boolean", "BENCHMARK_FIXTURES_ENABLED", "false")
         buildConfigField("boolean", "DEVELOPER_COPY_ENABLED", "false")
         buildConfigField("String", "DEVELOPER_COPY_CERT_SHA256", "\"\"")
+        // Where the opt-in picture tagger's files download from; a test build may point it at a loopback server.
+        val visionModelBaseUrl = providers.gradleProperty("theoria.visionModelBaseUrl")
+            .orElse("https://github.com/Axl47/Theoria-Codex/releases/download/vision-models-1/").get()
+        buildConfigField("String", "VISION_MODEL_BASE_URL", "\"$visionModelBaseUrl\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        // Release builds carry one native library, the zstd decoder Mihon extensions expect of their host. Every
-        // device in the support window and the test emulators are 64-bit, so the 32-bit copies are left out.
+        // Release builds carry the zstd decoder Mihon extensions expect of their host and LiteRT's runtime for the
+        // picture tagger. Every device in the support window and the test emulators are 64-bit, so the 32-bit copies
+        // are left out.
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
@@ -404,6 +409,7 @@ dependencies {
     implementation(project(":feature-discover"))
     implementation(project(":feature-series"))
     implementation(project(":feature-settings"))
+    implementation(project(":vision-kit"))
     // Runs Mihon extensions as series sources; see mihon-host/README.md for what it costs release builds.
     implementation(project(":mihon-host"))
 

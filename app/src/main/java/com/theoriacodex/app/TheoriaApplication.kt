@@ -30,6 +30,7 @@ import com.theoriacodex.app.viewer.VideoPlaybackInfrastructure
 import com.theoriacodex.app.viewer.VideoPlaybackInfrastructureOwner
 import com.theoriacodex.data.storage.ApplicationDataReadiness
 import com.theoriacodex.data.storage.ApplicationDataState
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -133,6 +134,8 @@ class TheoriaApplication :
     private fun releaseMemoryCaches() {
         val state = readiness.state.value as? ApplicationDataState.Ready ?: return
         state.value.sources.pixivUgoiraClient.releaseMemoryCaches()
+        // The picture tagger holds about 350 MB while loaded; it loads again for the next picture.
+        state.value.pictures?.let { pictures -> state.value.applicationScope.launch { pictures.tagger.release() } }
     }
 
     override fun newImageLoader(): ImageLoader {

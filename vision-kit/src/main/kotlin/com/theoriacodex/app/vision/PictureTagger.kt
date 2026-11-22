@@ -84,14 +84,14 @@ class PictureTagger(
         signatures.observePredictedTags(store.id).debounce(LIBRARY_SETTLE_MS)
 
     /**
-     * [post]'s picture through the model, once per session: later calls answer from memory. A failed load is not
-     * remembered, so the next call tries again.
+     * [post]'s picture through the model, once per session when [remember]: later calls answer from memory. A failed
+     * load is not remembered, so the next call tries again. The Library's indexing does not remember, since it stores.
      */
-    suspend fun analyze(post: Post): PictureResult {
+    suspend fun analyze(post: Post, remember: Boolean = true): PictureResult {
         session.value[post.id]?.let { return it }
         if (!ready.value) return PictureResult.Unavailable
         val result = if (!hasStill(post)) PictureResult.Unanalysable else read(post)
-        if (result != PictureResult.Unavailable) session.value = session.value.with(post.id, result)
+        if (remember && result != PictureResult.Unavailable) session.value = session.value.with(post.id, result)
         return result
     }
 

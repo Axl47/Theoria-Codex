@@ -31,6 +31,7 @@ dependencies {
     kover(project(":core-stubs"))
     kover(project(":ui-kit"))
     kover(project(":media-kit"))
+    kover(project(":vision-kit"))
     kover(project(":feed-kit"))
     kover(project(":feature-viewer"))
     kover(project(":feature-search"))

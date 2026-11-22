@@ -189,6 +189,7 @@ private fun TheoriaShell.forYouWiring(quickSave: QuickSave, writeScope: Coroutin
     reconnections = sources.networkOnline.reconnections(),
     verdicts = data.forYouVerdicts,
     copiesOf = data.fileMirrors::copiesOf,
+    pictures = features.pictureTags,
 )
 
 /**
