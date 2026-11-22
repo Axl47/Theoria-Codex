@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -101,26 +102,31 @@ fun SeriesPageScreen(
                 state.refreshing && state.entries.isEmpty() -> item("loading") { LoadingState() }
                 state.entries.isEmpty() -> item("empty") { EmptyState("No chapters") }
             }
-            val downloads = viewModel.canDownload
-            if (state.entries.isNotEmpty()) {
-                item("chapters") {
-                    ChapterListHeader(state, downloads, viewModel::download, viewModel::deleteDownloads, viewModel::setDownloadNewChapters)
-                }
-            }
-            items(state.entries, key = { it.entry.address }) { entry ->
-                val address = entry.entry.address
-                val download = state.downloads[address]
-                EntryRow(
-                    entry,
-                    enabled = state.canOpen(address),
-                    onClick = { onOpenEntry(address) },
-                    trailing = if (downloads) {
-                        // A chapter cannot start downloading while its source is missing; one under way can still stop.
-                        { DownloadMark(download, enabled = !missing || download != null) { viewModel.toggleDownload(address) } }
-                    } else null,
-                )
-            }
+            chapterList(state, viewModel, onOpenEntry)
         }
+    }
+}
+
+/** The chapter count with the Download menu, then every chapter, each with its download mark where downloads exist. */
+private fun LazyListScope.chapterList(state: SeriesPageState, viewModel: SeriesPageViewModel, onOpenEntry: (String) -> Unit) {
+    val downloads = viewModel.canDownload
+    if (state.entries.isNotEmpty()) {
+        item("chapters") {
+            ChapterListHeader(state, downloads, viewModel::download, viewModel::deleteDownloads, viewModel::setDownloadNewChapters)
+        }
+    }
+    items(state.entries, key = { it.entry.address }) { entry ->
+        val address = entry.entry.address
+        val download = state.downloads[address]
+        EntryRow(
+            entry,
+            enabled = state.canOpen(address),
+            onClick = { onOpenEntry(address) },
+            trailing = if (downloads) {
+                // A chapter cannot start downloading while its source is missing; one under way can still stop.
+                { DownloadMark(download, enabled = !state.sourceMissing || download != null) { viewModel.toggleDownload(address) } }
+            } else null,
+        )
     }
 }
 

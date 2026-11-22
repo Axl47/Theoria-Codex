@@ -233,16 +233,7 @@ class SeriesDownloads(
      */
     private suspend fun fetchQueued(chapter: QueuedChapter, onPage: (pages: Int, of: Int) -> Unit): Boolean? = coroutineScope {
         var outcome: Boolean? = null
-        val job = launch {
-            outcome = try {
-                fetchChapter(chapter, onPage)
-                true
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Exception) {
-                false
-            }
-        }
+        val job = launch { outcome = fetched(chapter, onPage) }
         lock.withLock { if (chapter in queue.value) active = chapter to job else job.cancel() }
         try {
             job.join()
@@ -257,6 +248,16 @@ class SeriesDownloads(
             }
         }
         outcome
+    }
+
+    /** Whether [chapter] arrived whole; a failure is reported as false, never thrown. */
+    private suspend fun fetched(chapter: QueuedChapter, onPage: (pages: Int, of: Int) -> Unit): Boolean = try {
+        fetchChapter(chapter, onPage)
+        true
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: Exception) {
+        false
     }
 
     private suspend fun fetchChapter(chapter: QueuedChapter, onPage: (pages: Int, of: Int) -> Unit) {
