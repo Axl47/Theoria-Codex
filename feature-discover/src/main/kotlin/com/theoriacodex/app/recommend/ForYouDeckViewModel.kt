@@ -450,8 +450,9 @@ class ForYouDeckViewModel(
     ): ForYouLevel {
         val resolved = MutableStateFlow(emptyMap<PostId, Post>())
         val feed = combine(source.snapshots, resolved, hiddenTokens) { snapshot, fuller, hidden ->
-            val posts = snapshot.posts.filterNot { it.carriesAnyTag(hidden[it.id.source].orEmpty()) }
-            snapshot.copy(posts = if (fuller.isEmpty()) posts else posts.map { fuller[it.id] ?: it })
+            // The fuller copy first: a source whose listings carry no tags shows a hidden one only once resolved.
+            val posts = if (fuller.isEmpty()) snapshot.posts else snapshot.posts.map { fuller[it.id] ?: it }
+            snapshot.copy(posts = posts.filterNot { it.carriesAnyTag(hidden[it.id.source].orEmpty()) })
         }.stateIn(scope, SharingStarted.Eagerly, LOADING_FEED)
         val shared = object : TriageFeed {
             override val snapshots = feed

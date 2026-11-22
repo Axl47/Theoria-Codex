@@ -195,6 +195,13 @@ class ForYouDeckViewModelTest {
         assertTrue("b" in owner.posts.lanes().takeLast(4))
     }
 
+    @Test fun `a post whose resolved copy carries a hidden tag leaves the level's feed`() {
+        val owner = owner(deckEnvironment(hiding("x")))
+        val post = owner.posts.first()
+        owner.top.remember(post.copy(canonicalTags = post.canonicalTags + "x"))
+        assertFalse(post.id in owner.posts.map(Post::id))
+    }
+
     @Test fun `a selected source that can no longer run reads as every source`() {
         val owner = owner(deckEnvironment().copy(selectedSource = SourceKey.PIXIV))
         assertNull(owner.state.value.selectedSource)
