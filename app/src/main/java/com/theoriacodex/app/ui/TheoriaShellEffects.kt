@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.app.ui.routes.codexCollectionOwner
 import com.theoriacodex.app.library.LibrarySection
 import kotlinx.coroutines.flow.filterNotNull
 import com.theoriacodex.app.MainActivity
@@ -211,6 +212,7 @@ internal fun ShellFollowAndSettingsEffects(
 ) {
     val appContext = shell.appContext
     val owners = shell.owners
+    val codexCollection = codexCollectionOwner(shell.data)
     CollectRouteEffects(owners.follows.messages) { message -> shell.toast(message) }
     CollectRouteEffects(owners.settings.effects) { effect ->
         when (effect) {
@@ -221,7 +223,7 @@ internal fun ShellFollowAndSettingsEffects(
                 if (effect.long) Toast.LENGTH_LONG else Toast.LENGTH_SHORT,
             ).show()
             SettingsEffect.LoadChangelog -> loadReleaseHistory(shell, latestInstalledChangelog)
-            SettingsEffect.ThumbnailCacheCleared -> shell.thumbnailCacheGeneration += 1
+            SettingsEffect.ThumbnailCacheCleared -> codexCollection.thumbnailCacheCleared()
             SettingsEffect.NavigateToSettings -> shell.showSettingsRoute()
         }
     }

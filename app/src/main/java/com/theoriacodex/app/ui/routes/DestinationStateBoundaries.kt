@@ -25,7 +25,6 @@ import com.theoriacodex.app.appshell.PendingIncomingUri
 import com.theoriacodex.app.codex.LocalCodexSaveRelevanceLoader
 import com.theoriacodex.app.codex.sortLiveCodexPosts
 import com.theoriacodex.app.codex.CodexCollectionSource
-import com.theoriacodex.app.codex.CodexCollectionPresentation
 import com.theoriacodex.app.codex.CodexActionOptions
 import com.theoriacodex.app.codex.CodexUsage
 import com.theoriacodex.app.codex.FOLLOWED_CODEX_ID
@@ -197,19 +196,22 @@ internal fun RecentsDestinationStateBoundary(
  */
 @Composable
 internal fun browsingMetadataOwner(data: DataDependencies): BrowsingMetadataViewModel = viewModel(
-    viewModelStoreOwner = LocalContext.current.findActivity() as? ViewModelStoreOwner
-        ?: checkNotNull(LocalViewModelStoreOwner.current),
+    viewModelStoreOwner = activityViewModelStoreOwner(),
     key = "browsing-metadata",
 ) {
     BrowsingMetadataViewModel(data.settingsRepository, data.likesRepository, data.codexRepository, data.recentsRepository, mirrors = data.fileMirrors,
         galleryReadingModes = data.galleryReadingModes)
 }
 
+/** The activity's store, for read models every destination shares; the nearest store outside an activity. */
+@Composable
+internal fun activityViewModelStoreOwner(): ViewModelStoreOwner =
+    LocalContext.current.findActivity() as? ViewModelStoreOwner ?: checkNotNull(LocalViewModelStoreOwner.current)
+
 @Composable
 internal fun CodexDestinationStateBoundary(
     data: DataDependencies,
     sources: SourceDependencies,
-    thumbnailCacheGeneration: Int,
     savedSortFor: (String) -> CodexSortMode = { CodexSortMode.NEWEST_SAVED },
     content: @Composable (CodexDestinationState) -> Unit,
 ) {
@@ -229,10 +231,7 @@ internal fun CodexDestinationStateBoundary(
         val visible = remember(codices, profile.profileId) {
             codices.filter { codexBelongsToProfile(it.codexId, profile.profileId) }
         }
-        val collectionIds = remember(visible) { visible.mapTo(linkedSetOf(), Codex::codexId) }
-        val collection = rememberRetained("collection:$collectionIds:$thumbnailCacheGeneration") {
-            source.observe(collectionIds)
-        }.value ?: CodexCollectionPresentation()
+        val collection = rememberCodexCollection(data)
         val observeActions = remember(source, availableSources) {
             { id: String -> source.observeActionOptions(id, availableSources) }
         }
@@ -365,9 +364,7 @@ internal fun SaveToCodexDestinationStateBoundary(
     val settings = browsingMetadataOwner(data).state.collectAsStateWithLifecycle().value?.settings ?: return
     val codices = rememberRetained("save-codices") { data.codexRepository.observeCodices() }.value ?: return
     val collectionIds = remember(codices) { codices.mapTo(linkedSetOf(), Codex::codexId) }
-    val collection = rememberRetained("save-collection:$collectionIds") {
-        CodexCollectionSource(data.codexRepository, data.storageDirectory, data.cacheRepository).observe(collectionIds)
-    }.value ?: CodexCollectionPresentation()
+    val collection = rememberCodexCollection(data)
     val containingCodexIds = remember(data.codexRepository, codices, posts) {
         CodexCollectionSource(data.codexRepository, data.storageDirectory, data.cacheRepository)
             .observeContainingCodexIds(codices.mapTo(linkedSetOf(), Codex::codexId), posts)
