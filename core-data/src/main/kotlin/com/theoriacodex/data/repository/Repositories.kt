@@ -535,7 +535,7 @@ data class AppSettings(
     val forYouBlacklistByProfile: Map<String, List<ForYouBlacklistEntry>> = emptyMap(),
     val favoriteTagsByProfile: Map<String, List<FavoriteTagEntry>> = emptyMap(),
     val providerHealth: Map<SourceKey, ProviderHealthSnapshot> = emptyMap(),
-    /** Where extension choices were kept through 1.9.2; the app moves them to device-only storage and empties this. */
+    /** Where debug builds kept extension choices before the first release with extensions; never read, and emptied at startup. */
     val extensions: ExtensionChoices = ExtensionChoices(),
 )
 

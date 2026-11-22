@@ -155,7 +155,7 @@ class ExtensionsLiveTest {
 
     @Test
     fun aCopySignedWithAnotherKeyIsOff() {
-        val trusted = runBlocking { DeviceExtensionChoices.on(live.context, settings).choices() }.trusted.values
+        val trusted = runBlocking { DeviceExtensionChoices.on(live.context).choices() }.trusted.values
         assertTrue("A signer was turned on before the package was replaced", trusted.isNotEmpty())
         val copy = installedPackage()
         live.report("copy", "${copy.name} ${copy.versionName}, signer ${copy.signer}, on=${copy.on}; turned on earlier: $trusted")

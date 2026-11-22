@@ -549,11 +549,12 @@ internal class DefaultTheoriaAppContainer(
     )
 
     override val series: SeriesDependencies? = extensionHost?.let { host ->
-        val choices = DeviceExtensionChoices.on(appContext, settingsRepository)
+        val choices = DeviceExtensionChoices.on(appContext)
         host.bind(choices)
         SeriesDependencies(
             RoomSeriesRepository(contentDatabase), host::sources, host.extensions, host::anyOnDevice,
             extensionSeen = choices.extensionSeen, rememberExtensionSeen = choices::rememberExtensionSeen,
+            reportFailure = { Diagnostics.report("extensions", "Could not look for extensions or remember the answer", it) },
         )
     }
 
@@ -615,6 +616,12 @@ internal class DefaultTheoriaAppContainer(
         // Registers the saved offline queue before any screen can add to it; its jobs wait on sourceReadiness.
         offlineMedia.recoverPendingJobs()
         sourceReadiness.open()
+        if (series != null) {
+            durableStoreScope.launch {
+                runCatchingPreservingCancellation { forgetLegacyExtensionData(appContext, settingsRepository) }
+                    .onFailure { Diagnostics.report("extensions", "Old extension data could not be removed", it) }
+            }
+        }
         // Only now: watching followed series opens Room, which must first get the chance to fail into the startup screen.
         if (seriesScheduling == null) {
             seriesScheduling = series?.let { series ->

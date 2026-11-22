@@ -13,10 +13,15 @@ import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesExtensions
 import com.theoriacodex.domain.series.SeriesId
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -46,7 +51,7 @@ class SeriesDependenciesTest {
     @Test fun `startup uses what the last look found and a look is remembered only when it changes`() = runTest {
         var looks = 0
         val remembered = mutableListOf<Boolean>()
-        val series = SeriesDependencies(Followed(followed), { emptyList() }, NoExtensions, { looks += 1; false }, extensionSeen = true) { remembered += it }
+        val series = SeriesDependencies(Followed(followed), { emptyList() }, NoExtensions, { looks += 1; false }, extensionSeen = true, rememberExtensionSeen = { remembered += it })
         // Before anything looked at the device, the tab is as it was when the app last ran.
         assertTrue(series.tab.first())
         assertEquals(0, looks)
@@ -55,6 +60,29 @@ class SeriesDependenciesTest {
         series.findExtensions()
         assertFalse(series.tab.first())
         assertEquals(2 to listOf(false), looks to remembered)
+    }
+
+    @Test fun `looks run one at a time so the latest answer stays, and a failure is reported and not thrown`() = runTest {
+        val early = CompletableDeferred<Boolean>()
+        val late = CompletableDeferred<Boolean>()
+        val answers = java.util.concurrent.ConcurrentLinkedQueue(listOf(early, late))
+        val failures = mutableListOf<Throwable>()
+        val series = SeriesDependencies(
+            Followed(followed), { emptyList() }, NoExtensions, { runBlocking { answers.remove().await() } },
+            rememberExtensionSeen = { error("disk full") }, reportFailure = { failures += it },
+        )
+        assertFalse(series.looked.value)
+        val first = launch(Dispatchers.Default) { series.findExtensions() }
+        val second = launch(Dispatchers.Default) { series.findExtensions() }
+        // The later look answers first; it still publishes last.
+        late.complete(false)
+        early.complete(true)
+        joinAll(first, second)
+
+        assertFalse(series.hasExtensions.value)
+        assertTrue(series.looked.value)
+        // Both answers changed the remembered one, and storing it failed both times without reaching the caller.
+        assertEquals(listOf("disk full", "disk full"), failures.map { it.message })
     }
 }
 

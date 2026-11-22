@@ -176,6 +176,9 @@ internal class HomeNavigation(
 ) {
     var homeTabRoute by homeTabRoute
 
+    /** Set at startup when the saved tab is Series and it cannot be shown yet; cleared once that is settled. */
+    var awaitedSeries by mutableStateOf<AwaitedSeriesTab?>(null)
+
     /** The tabs showing now; Series only while an extension is on the device. */
     val homeTabs: List<TopLevelDestination> by derivedStateOf { homeTabs(withSeries = seriesTab.value) }
 
@@ -579,7 +582,10 @@ internal class TheoriaShell(
         val currentSettings = data.currentSettingsSnapshot()
         workflows.likesCodexSync.ensureProfileCodex(currentSettings.activeRecommendationProfile())
         owners.settings.onAction(SettingsAction.RefreshAccounts)
-        navigation.homeTabRoute = data.restoreHomeTabRoute(homeTabs(withSeries = container.series?.tab?.first() == true))
+        val series = container.series
+        val restored = data.restoreHomeTab(homeTabs(withSeries = series?.tab?.first() == true), extensionsLooked = series?.looked?.value != false)
+        navigation.homeTabRoute = restored.route
+        navigation.awaitedSeries = restored.awaitedSeries
         appShellOwner.onAction(AppShellAction.MarkAppReady)
         navReady = true
     }

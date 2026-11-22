@@ -4,6 +4,7 @@ import android.content.Context
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.domain.series.ExtensionChoiceStore
 import com.theoriacodex.domain.series.ExtensionChoices
+import com.theoriacodex.mihonhost.MihonHost
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -16,19 +17,11 @@ import kotlinx.serialization.json.Json
 
 /**
  * What this device decided and knows about extensions, in a file Android neither backs up nor transfers to a new
- * phone: turning an extension on is a decision made on a device, about the code installed on it.
- *
- * Through 1.9.2 the choices were in the settings store, which Android does back up. They are moved here once, and
- * only where [updatedInPlace] says the app was updated over an earlier install. On a fresh install the settings can
- * only have come from a restore, so what they say about extensions is dropped and nothing is on. Removable two
- * releases after the one that added it, together with `SettingsRecord.trustedExtensions`.
+ * phone: turning an extension on is a decision made on a device, about the code installed on it. Nothing else is
+ * ever read: not a profile backup, and not the settings store, where builds before the first release with extensions
+ * kept these choices (see [forgetLegacyExtensionData]).
  */
-internal class DeviceExtensionChoices(
-    private val file: File,
-    /** Empties the settings store's extension choices and returns what they were. */
-    private val takeFromSettings: suspend () -> ExtensionChoices,
-    private val updatedInPlace: () -> Boolean,
-) : ExtensionChoiceStore {
+internal class DeviceExtensionChoices(private val file: File) : ExtensionChoiceStore {
     private val lock = Mutex()
 
     // Read when the app's data opens: the Series tab needs `extensionSeen` before the first frame.
@@ -54,11 +47,7 @@ internal class DeviceExtensionChoices(
         if (after != before) write(after)
     }
 
-    private suspend fun load(): Record = stored ?: run {
-        val fromSettings = takeFromSettings()
-        val moved = if (updatedInPlace()) fromSettings else ExtensionChoices()
-        Record(moved.trusted, moved.languages.mapValues { (_, languages) -> languages.sorted() }).also { write(it) }
-    }
+    private fun load(): Record = stored ?: Record()
 
     private suspend fun write(record: Record) = withContext(Dispatchers.IO) {
         val pending = File(file.path + ".new")
@@ -77,14 +66,16 @@ internal class DeviceExtensionChoices(
     companion object {
         private val json = Json { ignoreUnknownKeys = true }
 
-        fun on(context: Context, settings: SettingsRepository) = DeviceExtensionChoices(
-            file = File(context.noBackupFilesDir, "extension_choices.json"),
-            takeFromSettings = {
-                var before = ExtensionChoices()
-                settings.updateSettings { before = it.extensions; it.copy(extensions = ExtensionChoices()) }
-                before
-            },
-            updatedInPlace = { context.packageManager.getPackageInfo(context.packageName, 0).let { it.firstInstallTime != it.lastUpdateTime } },
-        )
+        fun on(context: Context) = DeviceExtensionChoices(File(context.noBackupFilesDir, "extension_choices.json"))
     }
+}
+
+/**
+ * Removes what debug builds kept where Android backs it up, before extensions reached a release: the choices in the
+ * settings store and extension preferences in `shared_prefs`. Nothing is carried over, so an extension that was on in
+ * such a build is turned on once more. Runs at every start; it changes nothing once both are gone.
+ */
+internal suspend fun forgetLegacyExtensionData(context: Context, settings: SettingsRepository) {
+    settings.updateSettings { if (it.extensions == ExtensionChoices()) it else it.copy(extensions = ExtensionChoices()) }
+    MihonHost.deleteLegacyPreferences(context)
 }

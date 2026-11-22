@@ -3,6 +3,7 @@ package com.theoriacodex.app.di
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.data.repository.checkFollowed
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.series.SeriesExtensions
 import com.theoriacodex.domain.series.SeriesSource
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +30,7 @@ class SeriesDependencies(
     /** What [anyExtension] said when the app last ran, so that startup does not wait for it. */
     extensionSeen: Boolean = false,
     private val rememberExtensionSeen: suspend (Boolean) -> Unit = {},
+    private val reportFailure: (Throwable) -> Unit = {},
 ) {
     private val checking = Mutex()
     private val mutableHasExtensions = MutableStateFlow(extensionSeen)
@@ -47,10 +49,28 @@ class SeriesDependencies(
         extension || followed
     }.distinctUntilChanged()
 
-    /** Looks again for extensions on the device, each time the app comes to the foreground; never on the way to the first screen. */
-    suspend fun findExtensions() {
-        val found = withContext(Dispatchers.IO) { anyExtension() }
-        if (mutableHasExtensions.getAndUpdate { found } != found) rememberExtensionSeen(found)
+    private val looking = Mutex()
+    private val mutableLooked = MutableStateFlow(false)
+
+    /** Whether the app has looked for extensions since it started; until then [hasExtensions] is only what it remembered. */
+    val looked: StateFlow<Boolean> = mutableLooked.asStateFlow()
+
+    /**
+     * Looks again for extensions on the device, each time the app comes to the foreground; never on the way to the
+     * first screen. Looks run one after another, so the latest is the one whose answer stays. Never throws: a look or
+     * a remembered answer that fails is handed to [reportFailure] and the tab stays as it was.
+     */
+    suspend fun findExtensions() = looking.withLock {
+        runCatchingPreservingCancellation {
+            val found = withContext(Dispatchers.IO) { anyExtension() }
+            val changed = mutableHasExtensions.getAndUpdate { found } != found
+            mutableLooked.value = true
+            if (changed) rememberExtensionSeen(found)
+        }.onFailure {
+            mutableLooked.value = true
+            reportFailure(it)
+        }
+        Unit
     }
 
     /**

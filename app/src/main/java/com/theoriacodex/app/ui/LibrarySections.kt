@@ -15,11 +15,35 @@ internal fun restoredHomeTab(stored: String?, tabs: List<TopLevelDestination> = 
         ?: TopLevelDestination.Library.takeIf { stored in legacyTabSections }
         ?: TopLevelDestination.Search
 
-/** Restores the last tab, if it is among [tabs], and Library's section at startup; returns the tab's route. */
-internal suspend fun DataDependencies.restoreHomeTabRoute(tabs: List<TopLevelDestination>): String {
+/**
+ * A saved Series tab that startup could not show. At startup the app only remembers whether an extension was on the
+ * device; until it has looked, a missing Series tab may still appear. [standIn] is the tab shown meanwhile.
+ */
+internal data class AwaitedSeriesTab(val standIn: String) {
+    /** Whether the pager resting on [route] is saved as the last tab. The stand-in is not: it would replace the saved Series tab. */
+    fun saves(route: String): Boolean = route != standIn
+
+    /** The tab to move to once the app has looked: Series when it shows and the user is still on the stand-in. */
+    fun resolved(seriesShows: Boolean, current: String): String? = TopLevelDestination.Series.route.takeIf { seriesShows && current == standIn }
+
+    companion object {
+        /** Null unless Series is the saved tab, is not among [tabs], and the app has not [looked] for extensions yet. */
+        fun at(stored: String?, tabs: List<TopLevelDestination>, looked: Boolean): AwaitedSeriesTab? =
+            if (looked || stored != TopLevelDestination.Series.route || TopLevelDestination.Series in tabs) null
+            else AwaitedSeriesTab(restoredHomeTab(stored, tabs).route)
+    }
+}
+
+internal data class RestoredHomeTab(val route: String, val awaitedSeries: AwaitedSeriesTab?)
+
+/**
+ * Restores the last tab, if it is among [tabs], and Library's section at startup. [extensionsLooked] says whether the
+ * app has looked for extensions since it started; see [AwaitedSeriesTab].
+ */
+internal suspend fun DataDependencies.restoreHomeTab(tabs: List<TopLevelDestination>, extensionsLooked: Boolean): RestoredHomeTab {
     val stored = uiRestoreRepository.getLastTab()
     librarySections.restore(legacyTabSections[stored])
-    return restoredHomeTab(stored, tabs).route
+    return RestoredHomeTab(restoredHomeTab(stored, tabs).route, AwaitedSeriesTab.at(stored, tabs, extensionsLooked))
 }
 
 /** Selects Library at [section] from anywhere, returning to Home first when another screen is on top. */
