@@ -68,6 +68,26 @@ class FilePreferencesTest {
             directory.setWritable(true)
         }
         assertEquals("old", FilePreferences(file).getString("address", null))
+        // Memory is ahead of the file, so a commit that changes nothing still writes, and says it did.
+        assertTrue(preferences.edit().commit())
+        assertEquals("new", FilePreferences(file).getString("address", null))
+    }
+
+    @Test
+    fun aListenerThatFailsToLinkIsReportedAndTheOthersStillHear() {
+        val reported = mutableListOf<Throwable>()
+        val heard = mutableListOf<String?>()
+        val preferences = FilePreferences(file) { reported += it }
+        val broken = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> throw NoSuchMethodError("host method removed") }
+        val working = SharedPreferences.OnSharedPreferenceChangeListener { _, key -> heard += key }
+        preferences.registerOnSharedPreferenceChangeListener(broken)
+        preferences.registerOnSharedPreferenceChangeListener(working)
+
+        preferences.edit().putBoolean("saver", true).apply()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(listOf("host method removed"), reported.map { it.message })
+        assertEquals(listOf<String?>("saver"), heard)
     }
 
     @Test

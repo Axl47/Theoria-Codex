@@ -3,6 +3,7 @@ package com.theoriacodex.mihonhost
 import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -31,8 +32,15 @@ import kotlinx.serialization.json.long
  * before it returns, on the caller's thread: the files are a few hundred bytes and extensions change them off the
  * main thread, so a write queue would add more than it saves.
  */
-internal class FilePreferences(private val file: File) : SharedPreferences {
+internal class FilePreferences(
+    private val file: File,
+    /** Told when a listener, which is extension code, fails; it must not take the main thread down. */
+    private val report: (Throwable) -> Unit = { Log.w("MihonHost", "An extension's preference listener failed", it) },
+) : SharedPreferences {
     private val lock = Any()
+
+    /** Whether a write failed since the file last matched [values]; the next commit then writes even if it changes nothing. */
+    private var unwritten = false
     private val listeners = WeakHashMap<SharedPreferences.OnSharedPreferenceChangeListener, Unit>()
     private var values: Map<String, Any> = read()
 
@@ -104,18 +112,30 @@ internal class FilePreferences(private val file: File) : SharedPreferences {
                 changes.clear()
                 clear = false
                 changed = (before.keys + after.keys).filter { before[it] != after[it] }
-                if (changed.isEmpty()) return true
+                if (changed.isEmpty() && !unwritten) return true
                 values = after
                 written = runCatching { write(after) }.isSuccess
+                unwritten = !written
                 notified = listeners.keys.toList()
             }
-            if (notified.isNotEmpty()) {
-                mainThread.post { notified.forEach { listener -> changed.forEach { listener.onSharedPreferenceChanged(this@FilePreferences, it) } } }
-            }
+            if (notified.isNotEmpty() && changed.isNotEmpty()) mainThread.post { announce(notified, changed) }
             return written
         }
 
         private fun put(key: String, value: Any?) = apply { synchronized(lock) { changes[key] = value } }
+    }
+
+    /** Calls each listener for each key; one that throws, or fails to link against the host, is reported and the rest go on. */
+    private fun announce(notified: List<SharedPreferences.OnSharedPreferenceChangeListener>, changed: List<String>) {
+        notified.forEach { listener ->
+            try {
+                changed.forEach { listener.onSharedPreferenceChanged(this, it) }
+            } catch (failure: Exception) {
+                report(failure)
+            } catch (failure: LinkageError) {
+                report(failure)
+            }
+        }
     }
 
     /**
