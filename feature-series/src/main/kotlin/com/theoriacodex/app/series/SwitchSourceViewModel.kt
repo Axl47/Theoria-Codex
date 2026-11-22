@@ -2,6 +2,7 @@ package com.theoriacodex.app.series
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.theoriacodex.data.repository.NoChaptersToMoveToException
 import com.theoriacodex.data.repository.matchKey
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
@@ -53,46 +54,54 @@ data class SwitchSourceState(val others: List<SeriesSource> = emptyList(), val s
 /**
  * Finds the series [from] on every other source that is on, and moves it to the one the user picks. [sourcesChanged]
  * emits once at the start and again whenever [loadSources] may answer differently. [store] stores a match before its
- * page opens; [switch] moves [from] to a match on its source and throws what the source throws.
+ * page opens; [switch] moves [from] to a match on its source, returns whether this call moved it, and throws what the
+ * source throws. While a switch runs, the sheet stays open and ignores everything but its outcome.
  */
 class SwitchSourceViewModel(
     private val from: SeriesId,
     private val loadSources: suspend () -> List<SeriesSource>,
     sourcesChanged: Flow<*> = flowOf(Unit),
     private val store: suspend (Series) -> Unit,
-    private val switch: suspend (SeriesSource, Series) -> Unit,
+    private val switch: suspend (SeriesSource, Series) -> Boolean,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(SwitchSourceState())
     val state: StateFlow<SwitchSourceState> = mutableState
     private val others get() = state.value.others
+
+    /** Every source that is on, the series' own too, which the labels tell apart. */
+    private var sources = emptyList<SeriesSource>()
     private var title = ""
+    private val switching get() = state.value.sheet?.switching == true
 
     /** Parent of every source call the open sheet makes; closing the sheet cancels them all. */
     private var searching: Job? = null
 
     /** Sources answer slowly and share rate limits, so only a few calls run at once. */
     private val calls = Semaphore(MAX_SOURCE_CALLS)
+
     init {
         viewModelScope.launch {
             sourcesChanged.collectLatest {
-                val others = loadSources().filter { it.key != from.source }
-                mutableState.update { it.copy(others = others) }
+                sources = loadSources()
+                mutableState.update { state -> state.copy(others = sources.filter { it.key != from.source }) }
             }
         }
     }
 
     /** Opens the sheet and searches every other source for [title]. */
     fun open(title: String) {
-        close()
+        if (switching) return
+        closeSheet()
         this.title = title
         val job = SupervisorJob(viewModelScope.coroutineContext[Job]).also { searching = it }
         mutableState.update { state ->
-            state.copy(sheet = SwitchSourceSheet(others.map { SwitchSourceResult(it.key, it.name, SwitchListing.Loading) }))
+            state.copy(sheet = SwitchSourceSheet(others.map { SwitchSourceResult(it.key, it.label(sources), SwitchListing.Loading) }))
         }
         others.forEach { search(it, job) }
     }
 
     fun retry(key: SourceKey) {
+        if (switching) return
         val job = searching ?: return
         val source = others.firstOrNull { it.key == key } ?: return
         updateResult(key) { it.copy(listing = SwitchListing.Loading) }
@@ -100,16 +109,21 @@ class SwitchSourceViewModel(
     }
 
     fun close() {
+        if (!switching) closeSheet()
+    }
+
+    private fun closeSheet() {
         searching?.cancel()
         searching = null
         mutableState.update { it.copy(sheet = null) }
     }
 
     /** Asks to confirm switching to [match]; null dismisses the question. */
-    fun confirm(match: SwitchMatch?) = updateSheet { it.copy(confirming = match) }
+    fun confirm(match: SwitchMatch?) = updateSheet { if (it.switching) it else it.copy(confirming = match) }
 
     /** Stores [match] and closes the sheet, then hands its id to [opened] to show its page; nothing is moved. */
     fun openMatch(match: SwitchMatch, opened: (SeriesId) -> Unit) {
+        if (switching) return
         viewModelScope.launch {
             store(match.series)
             close()
@@ -117,25 +131,26 @@ class SwitchSourceViewModel(
         }
     }
 
-    /** Moves the series to [match]; once moved, closes the sheet and hands the new id to [switched]. */
+    /**
+     * Moves the series to [match]. Once moved, closes the sheet and hands the new id to [switched]; when another switch
+     * moved it first, only closes the sheet.
+     */
     fun switchTo(match: SwitchMatch, switched: (SeriesId) -> Unit) {
+        if (switching) return
         val source = others.firstOrNull { it.key == match.series.id.source } ?: return
         updateSheet { it.copy(confirming = null, switching = true, failure = null) }
         viewModelScope.launch {
-            val failure = try {
+            val moved = try {
                 switch(source, match.series)
-                null
             } catch (error: CancellationException) {
                 throw error
+            } catch (_: NoChaptersToMoveToException) {
+                return@launch updateSheet { it.copy(switching = false, failure = NO_CHAPTERS) }
             } catch (error: Exception) {
-                failureLine(error)
+                return@launch updateSheet { it.copy(switching = false, failure = failureLine(error)) }
             }
-            if (failure != null) {
-                updateSheet { it.copy(switching = false, failure = failure) }
-            } else {
-                close()
-                switched(match.series.id)
-            }
+            closeSheet()
+            if (moved) switched(match.series.id)
         }
     }
 
@@ -180,5 +195,6 @@ internal fun bestMatches(title: String, found: List<Series>): List<Series> {
     return found.sortedByDescending { matchKey(it.title) == key }.take(MAX_MATCHES)
 }
 
+internal const val NO_CHAPTERS = "No chapters to move your progress to"
 private const val MAX_MATCHES = 3
 private const val MAX_SOURCE_CALLS = 4

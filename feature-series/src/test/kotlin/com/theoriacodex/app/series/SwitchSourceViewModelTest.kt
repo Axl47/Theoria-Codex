@@ -1,5 +1,6 @@
 package com.theoriacodex.app.series
 
+import com.theoriacodex.data.repository.NoChaptersToMoveToException
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
@@ -31,7 +32,7 @@ class SwitchSourceViewModelTest {
     @After
     fun resetMainDispatcher() = Dispatchers.resetMain()
 
-    private fun TestScope.viewModel(vararg others: SeriesSource, switch: suspend (SeriesSource, Series) -> Unit = { _, _ -> }): SwitchSourceViewModel {
+    private fun TestScope.viewModel(vararg others: SeriesSource, switch: suspend (SeriesSource, Series) -> Boolean = { _, _ -> true }): SwitchSourceViewModel {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         return SwitchSourceViewModel(from, { listOf(current) + others }, store = {}, switch = switch)
     }
@@ -91,7 +92,7 @@ class SwitchSourceViewModelTest {
     fun aFailedSwitchStaysOnTheSheetAndASwitchThatWorksClosesIt() = runTest {
         val other = Finding("custom_mihon_2", listOf("Hero"))
         var works = false
-        val viewModel = viewModel(other) { _, _ -> check(works) }
+        val viewModel = viewModel(other) { _, _ -> check(works); true }
         advanceUntilIdle()
         viewModel.open("Hero")
         advanceUntilIdle()
@@ -108,13 +109,54 @@ class SwitchSourceViewModelTest {
         assertEquals(match.series.id, switched)
         assertNull(viewModel.state.value.sheet)
     }
+
+    @Test
+    fun aSwitchUnderWayHoldsTheSheetAndOneThatMovedNothingOnlyClosesIt() = runTest {
+        val other = Finding("custom_mihon_2", listOf("Hero"))
+        val outcome = CompletableDeferred<Boolean>()
+        val viewModel = viewModel(other) { _, _ -> outcome.await() }
+        advanceUntilIdle()
+        viewModel.open("Hero")
+        advanceUntilIdle()
+        val match = (viewModel.state.value.sheet!!.results.single().listing as SwitchListing.Found).matches.single()
+        var switched: SeriesId? = null
+        viewModel.switchTo(match) { switched = it }
+        advanceUntilIdle()
+
+        viewModel.close()
+        viewModel.confirm(match)
+        assertEquals(SwitchSourceSheet(viewModel.state.value.sheet!!.results, switching = true), viewModel.state.value.sheet)
+
+        outcome.complete(false)
+        advanceUntilIdle()
+        assertNull(switched)
+        assertNull(viewModel.state.value.sheet)
+    }
+
+    @Test
+    fun aSeriesWithoutChaptersSaysSoAndSourcesOfOneNameAreToldApartByLanguage() = runTest {
+        val french = Finding("custom_mihon_2", listOf("Hero"), name = "MangaDex", language = "fr")
+        val viewModel = viewModel(french, Finding("custom_mihon_3", name = "MangaDex")) { _, _ -> throw NoChaptersToMoveToException() }
+        advanceUntilIdle()
+        viewModel.open("Hero")
+        advanceUntilIdle()
+        val result = viewModel.state.value.sheet!!.results.first()
+        assertEquals("MangaDex · ${languageName("fr")}", result.name)
+
+        viewModel.switchTo((result.listing as SwitchListing.Found).matches.single()) {}
+        advanceUntilIdle()
+        assertEquals(NO_CHAPTERS, viewModel.state.value.sheet!!.failure)
+    }
 }
 
 /** Finds [titles] for any search, in that order, and lists [chapters] chapters for each. */
-private class Finding(id: String, private val titles: List<String> = emptyList()) : SeriesSource {
+private class Finding(
+    id: String,
+    private val titles: List<String> = emptyList(),
+    override val name: String = id,
+    override val language: String = "en",
+) : SeriesSource {
     override val key = SourceKey.parseOrThrow(id)
-    override val name = id
-    override val language = "en"
     var chapters = 1
     var fails = false
     var counted = 0

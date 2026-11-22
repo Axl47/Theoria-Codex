@@ -43,7 +43,9 @@ internal fun SwitchSourceSheet(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val sheet = state.sheet ?: return
-    ExpandedBottomSheet(onDismiss = viewModel::close) {
+    // While a switch runs the sheet stays open, so nothing else on the page, such as a chapter to read, can be opened
+    // until the series it belongs to has moved or stayed.
+    ExpandedBottomSheet(onDismiss = viewModel::close, dismissible = !sheet.switching) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
             SheetHeader(SWITCH_SOURCE, closeDescription = "Close", onDismiss = viewModel::close)
             if (sheet.switching) LinearProgressIndicator(Modifier.fillMaxWidth())

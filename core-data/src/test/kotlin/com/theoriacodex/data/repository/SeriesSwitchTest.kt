@@ -7,7 +7,6 @@ import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SeriesSwitchTest {
@@ -20,47 +19,61 @@ class SeriesSwitchTest {
         val ours = SeriesEntry("/1-a", "Ch. 1", 1f, "Group A")
         val candidates = listOf(first, ours, SeriesEntry("/2", "Ch. 2", 2f))
 
-        assertEquals(ours, matchingEntry(SeriesEntry("/old", "Chapter 1", 1f, "group-a"), candidates))
-        assertEquals(first, matchingEntry(SeriesEntry("/old", "Chapter 1", 1f, "Other"), candidates))
-        assertEquals(first, matchingEntry(SeriesEntry("/old", "Chapter 1", 1f), candidates))
+        assertEquals(ours, matchingEntry(SeriesEntry("/old", "Chapter 1", 1f, "group-a"), emptyList(), candidates))
+        assertEquals(first, matchingEntry(SeriesEntry("/old", "Chapter 1", 1f, "Other"), emptyList(), candidates))
+        assertEquals(first, matchingEntry(SeriesEntry("/old", "Chapter 1", 1f), emptyList(), candidates))
     }
 
     @Test
-    fun `without a number on either side, entries match by name, and nothing else does`() {
+    fun `a name matches where either lacks a number, when no other entry on either side has it`() {
         val extra = SeriesEntry("/extra", "Extra: Side Story!")
         val numbered = SeriesEntry("/5", "Oneshot", 5f)
-        val candidates = listOf(numbered, extra)
+        val half = SeriesEntry("/10.5", "Chapter 10.5")
+        val candidates = listOf(numbered, extra, half, SeriesEntry("/n1", "Notice"), SeriesEntry("/n2", "notice"))
+        fun match(entry: SeriesEntry, own: List<SeriesEntry> = listOf(entry)) = matchingEntry(entry, own, candidates)
 
-        assertEquals(extra, matchingEntry(SeriesEntry("/old", "extra side story"), candidates))
-        assertEquals(numbered, matchingEntry(SeriesEntry("/old", "oneshot"), candidates))
-        assertNull("A different number is another chapter, whatever its name", matchingEntry(SeriesEntry("/old", "Oneshot", 4f), candidates))
-        assertNull(matchingEntry(SeriesEntry("/old", "Chapter 9", 9f), candidates))
+        assertEquals(extra, match(SeriesEntry("/old", "extra side story")))
+        assertEquals(numbered, match(SeriesEntry("/old", "oneshot")))
+        assertEquals(half, match(SeriesEntry("/old", "Chapter 10.5")))
+        assertNull("The point is kept", match(SeriesEntry("/old", "Chapter 105")))
+        assertNull("A different number is another chapter, whatever its name", match(SeriesEntry("/old", "Oneshot", 4f)))
+        assertNull("Two candidates have the name", match(SeriesEntry("/old", "Notice")))
+        val twice = SeriesEntry("/old", "Extra: Side Story")
+        assertNull("Two of its own entries have the name", match(twice, listOf(twice, twice.copy(address = "/old2"))))
     }
 
     @Test
-    fun `entries up to the highest number read are read, and the open chapter resumes at its page`() {
+    fun `the chapter the user is in bounds what is read, and a chapter read beyond it is read alone`() {
         val old = listOf(
-            stored(SeriesEntry("/o3", "3", 3f, "A"), order = 0, lastPage = 12),
-            stored(SeriesEntry("/o2", "2", 2f, "A"), order = 1, read = true),
-            stored(SeriesEntry("/o1", "1", 1f, "A"), order = 2),
+            stored(SeriesEntry("/o200", "200", 200f), order = 0, read = true),
+            stored(SeriesEntry("/o12", "12", 12f, "A"), order = 1, lastPage = 12),
+            stored(SeriesEntry("/o1", "1", 1f), order = 2),
         )
-        val new = listOf(
-            stored(SeriesEntry("/n4", "4", 4f), order = 0),
-            stored(SeriesEntry("/n3-b", "3", 3f, "B"), order = 1),
-            stored(SeriesEntry("/n3-a", "3", 3f, "A"), order = 2, pageCount = 8),
-            stored(SeriesEntry("/n2.5", "2.5", 2.5f), order = 3),
-            stored(SeriesEntry("/n2", "2", 2f), order = 4),
-            stored(SeriesEntry("/n1", "1", 1f), order = 5),
-        )
+        val new = listOf(200f, 13f, 12f, 12f, 11f, 1f).mapIndexed { order, number ->
+            val group = if (order == 2) "B" else if (order == 3) "A" else null
+            stored(SeriesEntry("/n${number.toInt()}${group.orEmpty()}", "$number", number, group), order = order, pageCount = if (group == "A") 8 else null)
+        }
 
-        val (series, changed) = carryProgress(from.copy(lastOpenedEntry = "/o3"), old, to, new)
+        val (series, changed) = carryProgress(from.copy(lastOpenedEntry = "/o12"), old, to, new)
 
-        assertEquals(listOf("/n1", "/n2", "/n3-a"), changed.map { it.entry.address }.sorted())
-        assertTrue(changed.filter { it.entry.number!! <= 2f }.all { it.read })
-        val resumed = changed.single { it.entry.address == "/n3-a" }
-        assertEquals("Capped at the new chapter's page count", 8, resumed.lastPage)
-        assertEquals(false, resumed.read)
-        assertEquals("/n3-a", series.lastOpenedEntry)
+        val byAddress = changed.associateBy { it.entry.address }
+        assertEquals(setOf("/n1", "/n11", "/n200"), changed.filter { it.read }.map { it.entry.address }.toSet())
+        val resumed = byAddress.getValue("/n12A")
+        assertEquals("Unfinished, capped at the new chapter's page count", 8 to false, resumed.lastPage to resumed.read)
+        assertEquals("/n12A", series.lastOpenedEntry)
+    }
+
+    @Test
+    fun `a finished chapter stays finished, and without one opened only chapters read there are read`() {
+        val old = listOf(stored(SeriesEntry("/o3", "3", 3f), order = 0, read = true, lastPage = 9), stored(SeriesEntry("/o1", "1", 1f), order = 1))
+        val new = listOf(3f, 2f, 1f).mapIndexed { order, number -> stored(SeriesEntry("/n$number", "$number", number), order) }
+
+        val (_, finished) = carryProgress(from.copy(lastOpenedEntry = "/o3"), old, to, new)
+        assertEquals(setOf("/n1.0", "/n2.0", "/n3.0"), finished.filter { it.read }.map { it.entry.address }.toSet())
+
+        val (series, alone) = carryProgress(from, old, to, new)
+        assertEquals(listOf("/n3.0"), alone.map { it.entry.address })
+        assertEquals("The furthest chapter read is where Continue goes on from", "/n3.0", series.lastOpenedEntry)
     }
 
     @Test
@@ -86,8 +99,7 @@ class SeriesSwitchTest {
         val (series, changed) = carryProgress(from.copy(lastOpenedEntry = "/o1"), old, to.copy(followed = true, lastOpenedEntry = "/n2"), new)
 
         assertEquals(emptyList<StoredSeriesEntry>(), changed)
-        assertEquals("/n2", series.lastOpenedEntry)
-        assertTrue(series.followed)
+        assertEquals(to.copy(followed = true, lastOpenedEntry = "/n2"), series)
     }
 
     private fun stored(entry: SeriesEntry, order: Int, read: Boolean = false, lastPage: Int = 0, pageCount: Int? = null) =

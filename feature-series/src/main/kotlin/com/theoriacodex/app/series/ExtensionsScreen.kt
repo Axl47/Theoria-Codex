@@ -27,7 +27,6 @@ import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.domain.series.ExtensionLanguage
 import com.theoriacodex.domain.series.ExtensionSourceSettings
 import com.theoriacodex.domain.series.InstalledExtension
-import java.util.Locale
 
 internal const val EXTENSIONS_TITLE = "Extensions"
 
@@ -141,13 +140,6 @@ internal fun extensionSummary(extension: InstalledExtension): String = when {
     extension.problem != null -> listOf(extension.versionName, extension.problem).joinToString(SEPARATOR)
     !extension.on -> extension.versionName
     else -> (listOf(extension.versionName) + extension.languages.filter(ExtensionLanguage::on).map { languageName(it.code) }).joinToString(SEPARATOR)
-}
-
-/** A source language's name in the device's language; Mihon's two codes that are not languages get plain words. */
-internal fun languageName(code: String): String = when (code) {
-    "all" -> "All"
-    "other" -> "Other"
-    else -> Locale.forLanguageTag(code).getDisplayName(Locale.getDefault()).replaceFirstChar { it.titlecase(Locale.getDefault()) }.ifBlank { code }
 }
 
 private const val SEPARATOR = " · "

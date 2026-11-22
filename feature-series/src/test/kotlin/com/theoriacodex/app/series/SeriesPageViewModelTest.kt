@@ -49,6 +49,26 @@ class SeriesPageViewModelTest {
         assertEquals(entries, state.entries)
         collecting.cancel()
     }
+
+    /** A refresh finishing after a move to another source would store the old series again. */
+    @Test
+    fun noRefreshStartsWhileTheSeriesMovesOrOnceItMoved() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
+        var asked = 0
+        val viewModel = SeriesPageViewModel(id, Restored(StoredSeries(Series(id, "Title")), emptyList()), loadSources = { asked++; emptyList() })
+        advanceUntilIdle()
+
+        viewModel.whileMoving { viewModel.refresh(); advanceUntilIdle(); false }
+        viewModel.refresh()
+        advanceUntilIdle()
+        assertEquals("Refreshes resume when nothing moved", 2, asked)
+
+        viewModel.whileMoving { true }
+        viewModel.refresh()
+        advanceUntilIdle()
+        assertEquals(2, asked)
+    }
 }
 
 /** Holds what a restore stored and never hears from a source. */
@@ -63,5 +83,5 @@ private class Restored(private val stored: StoredSeries, private val entries: Li
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) = Unit
-    override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) = Unit
+    override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) = false
 }

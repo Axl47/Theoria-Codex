@@ -56,7 +56,7 @@ internal fun SeriesPageDestination(shell: TheoriaShell, entry: NavBackStackEntry
     }
     val switchSource = viewModel {
         SwitchSourceViewModel(id, series.sources, series.extensions.revision, store = { series.repository.store(it) }) { source, to ->
-            series.switchSource(id, source, to)
+            viewModel.whileMoving { series.switchSource(id, source, to) }
         }
     }
     SeriesPageScreen(
@@ -65,9 +65,11 @@ internal fun SeriesPageDestination(shell: TheoriaShell, entry: NavBackStackEntry
         onOpenExtensions = shell::openExtensions,
         switchSource = switchSource,
         onOpenSeries = { opened -> shell.navController.navigate(AppRoute.series(opened)) },
-        // The old series is gone, so its page leaves the back stack.
+        // The old series is gone, so its page leaves the back stack; only while it is still the page on screen.
         onSwitched = { moved ->
-            shell.navController.navigate(AppRoute.series(moved)) { popUpTo(entry.destination.id) { inclusive = true } }
+            if (shell.navController.currentBackStackEntry == entry) {
+                shell.navController.navigate(AppRoute.series(moved)) { popUpTo(entry.destination.id) { inclusive = true } }
+            }
         },
         onOpenEntry = { address ->
             shell.scope.launch {

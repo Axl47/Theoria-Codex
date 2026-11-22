@@ -133,7 +133,7 @@ private class StoredOnly(private val stored: StoredSeries, private val entries: 
     override suspend fun store(series: Series, entries: List<SeriesEntry>?) = emptyList<SeriesEntry>()
     override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>) = emptyList<SeriesEntry>()
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
-    override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) = Unit
+    override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) = false
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) {
         progress += "$entryAddress $page/$pageCount"

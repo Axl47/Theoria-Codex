@@ -3,6 +3,7 @@ package com.theoriacodex.data.android.room
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.theoriacodex.data.repository.NoChaptersToMoveToException
 import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.data.repository.checkFollowed
 import com.theoriacodex.data.repository.switchSource
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -51,11 +53,12 @@ class SeriesMoveTest {
         source.chapters = (4 downTo 1).map { SeriesEntry("/n$it", "Ch. $it", it.toFloat()) }
         var removed: SeriesId? = null
 
-        repository.switchSource(old.id, source, new) { id ->
+        val switched = repository.switchSource(old.id, source, new) { id ->
             assertNull("The hook runs once the move is stored", repository.series(old.id))
             removed = id
         }
 
+        assertTrue(switched)
         assertEquals(old.id, removed)
         val moved = repository.series(new.id)!!
         assertTrue(moved.followed)
@@ -99,14 +102,30 @@ class SeriesMoveTest {
     }
 
     @Test
-    fun `a failed fetch or a switch to the same series changes nothing`() = runTest {
+    fun `a failed fetch, a series without chapters, or a switch to the same series changes nothing`() = runTest {
         readOld()
         source.fails = true
         runCatching { repository.switchSource(old.id, source, new) }
-        repository.switchSource(old.id, source, old)
+        source.fails = false
+        assertTrue(runCatching { repository.switchSource(old.id, source, new) }.exceptionOrNull() is NoChaptersToMoveToException)
+        assertFalse(repository.switchSource(old.id, source, old))
 
         assertTrue(repository.series(old.id)!!.followed)
         assertNull(repository.series(new.id))
+    }
+
+    @Test
+    fun `of two switches of one series, the second moves nothing and leaves the downloads to the first`() = runTest {
+        readOld()
+        source.chapters = listOf(SeriesEntry("/n1", "Ch. 1", 1f))
+        val other = Series(SeriesId(source.key, "/other"), "Series")
+        repository.switchSource(old.id, source, new)
+        var removed = false
+
+        assertFalse(repository.switchSource(old.id, source, other) { removed = true })
+
+        assertFalse(removed)
+        assertNull(repository.series(other.id))
     }
 }
 

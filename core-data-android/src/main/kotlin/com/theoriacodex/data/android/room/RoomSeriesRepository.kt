@@ -102,6 +102,7 @@ class RoomSeriesRepository(
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = update(id) { it.copy(readingMode = mode) }
 
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) {
+        // A series moved to another source while its chapter was open is gone with its entries, so this writes nothing.
         database.withTransaction {
             val entry = dao.entry(id.source.id, id.address, entryAddress)?.toStored() ?: return@withTransaction
             val series = dao.series(id.source.id, id.address)?.toStored() ?: return@withTransaction
@@ -112,10 +113,10 @@ class RoomSeriesRepository(
         }
     }
 
-    override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) {
-        if (from == to.id) return
-        database.withTransaction {
-            val old = dao.series(from.source.id, from.address)?.toStored() ?: return@withTransaction
+    override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>): Boolean {
+        if (from == to.id) return false
+        return database.withTransaction {
+            val old = dao.series(from.source.id, from.address)?.toStored() ?: return@withTransaction false
             val oldEntries = dao.allEntries(from.source.id, from.address).map(SeriesEntryEntity::toStored)
             write(to, entries)
             val target = dao.series(to.id.source.id, to.id.address).toStored()
@@ -123,6 +124,7 @@ class RoomSeriesRepository(
             if (moved != target) dao.upsertSeries(moved.toEntity())
             dao.upsertEntries(changed.map { it.toEntity(to.id) })
             dao.deleteSeries(from.source.id, from.address)
+            true
         }
     }
 

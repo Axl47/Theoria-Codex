@@ -8,24 +8,33 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
+/** The series switched to lists no chapters, so the progress made on the one switched from would be lost. */
+class NoChaptersToMoveToException : Exception("The series switched to lists no chapters")
+
 /**
  * Moves the stored series [from] to [to], the same work on [source]: fetches [to]'s details and entries, then has the
- * repository [SeriesRepository.moveSeries] in one step. A failed fetch throws what the source throws and changes
- * nothing. Once the move is stored, [removeDownloads] gets [from] so its downloaded chapters can go; its failure leaves
- * the move as it is. Moving a series onto itself does nothing.
+ * repository [SeriesRepository.moveSeries] in one step. Returns whether this call moved it: false when [to] is [from],
+ * or when [from] is no longer stored, as when another switch moved it first.
+ *
+ * Changes nothing and throws when the fetch fails, with what the source throws, or when [to] lists no entries while
+ * [from] has progress, with [NoChaptersToMoveToException]. Once a move is stored, [removeDownloads] gets [from] so its
+ * downloaded chapters can go; its failure leaves the move as it is.
  */
 suspend fun SeriesRepository.switchSource(
     from: SeriesId,
     source: SeriesSource,
     to: Series,
     removeDownloads: suspend (SeriesId) -> Unit = {},
-) {
-    if (from == to.id) return
+): Boolean {
+    if (from == to.id) return false
     // The same lock as a refresh, so a check of [to] cannot store an older list over the one moved in.
-    refreshLocks.getOrPut(source.key, ::Mutex).withLock {
+    val moved = refreshLocks.getOrPut(source.key, ::Mutex).withLock {
         val details = source.details(to)
-        moveSeries(from, details, source.entries(details))
+        val entries = source.entries(details)
+        if (entries.isEmpty() && entries(from).any { it.read || it.lastPage > 0 }) throw NoChaptersToMoveToException()
+        moveSeries(from, details, entries)
     }
+    if (!moved) return false
     try {
         removeDownloads(from)
     } catch (error: CancellationException) {
@@ -33,6 +42,7 @@ suspend fun SeriesRepository.switchSource(
     } catch (_: Exception) {
         // The files stay behind; the move itself is done.
     }
+    return true
 }
 
 /**
@@ -48,12 +58,14 @@ fun StoredSeries.withSettingsOf(from: StoredSeries): StoredSeries = copy(
  * [to] and its listed [toEntries] after taking over the progress the user made on [from] and its [fromEntries], the
  * same work on another source. Returns the series, with [from]'s settings, and only the entries that changed.
  *
- * - Read: an entry is read when its number is at most the highest number read on [from]. Without a number on
- *   either side, an entry is read when a read entry of [from] has the same name, by [matchKey].
- * - Resume: the entry [from] opened last maps to its [matchingEntry], which takes its last page (capped at a known
- *   page count) and becomes the entry opened last, unless [to]'s own last opened entry is as far or further.
+ * The entry [from] opened last is where the user is. Its [matchingEntry] takes its read state and last page (capped at
+ * a known page count) and becomes the entry opened last. Entries numbered below it are read; any other entry is read
+ * only when [from] read that same chapter: one of its number, or, where either lacks a number, of its name. When the
+ * entry opened last has no match, the furthest entry this marks read becomes the entry opened last, so Continue goes
+ * on after it.
  *
- * Read entries stay read and pages never go back, so a [to] the user already read keeps any further progress.
+ * [to]'s own progress stays: read entries stay read, pages never go back, and an entry opened last that is as far or
+ * further in reading order is kept.
  */
 fun carryProgress(
     from: StoredSeries,
@@ -61,44 +73,68 @@ fun carryProgress(
     to: StoredSeries,
     toEntries: List<StoredSeriesEntry>,
 ): Pair<StoredSeries, List<StoredSeriesEntry>> {
-    val read = fromEntries.filter { it.read }
-    val readUpTo = read.mapNotNull { it.entry.number }.maxOrNull()
-    val readNames = read.mapNotNullTo(HashSet()) { matchKey(it.entry.name).ifEmpty { null } }
-    fun wasRead(entry: SeriesEntry): Boolean {
-        val number = entry.number
-        return if (number != null && readUpTo != null) number <= readUpTo else matchKey(entry.name) in readNames
-    }
-
-    val ordered = toEntries.inReadingOrder().map { if (!it.read && wasRead(it.entry)) it.copy(read = true) else it }.toMutableList()
+    val olds = fromEntries.map(StoredSeriesEntry::entry)
+    val oldRead = fromEntries.filter { it.read }.mapTo(HashSet()) { it.entry.address }
+    val readNumbers = fromEntries.filter { it.read }.mapNotNullTo(HashSet()) { it.entry.number }
+    val ordered = toEntries.inReadingOrder()
+    val targets = ordered.map(StoredSeriesEntry::entry)
     val opened = fromEntries.firstOrNull { it.entry.address == from.lastOpenedEntry }
-    val resumed = opened?.let { matchingEntry(it.entry, ordered.map(StoredSeriesEntry::entry)) }
-        ?.let { match -> ordered.indexOfFirst { it.entry.address == match.address } } ?: -1
-    var lastOpened = to.lastOpenedEntry
-    if (opened != null && resumed >= 0) {
-        val entry = ordered[resumed]
-        val page = entry.pageCount?.let { opened.lastPage.coerceAtMost(it) } ?: opened.lastPage
-        ordered[resumed] = entry.copy(lastPage = maxOf(entry.lastPage, page))
-        if (resumed > ordered.indexOfFirst { it.entry.address == to.lastOpenedEntry }) lastOpened = entry.entry.address
+    val resumed = opened?.let { matchingEntry(it.entry, olds, targets) }
+    val boundary = opened?.entry?.number
+
+    fun readThere(entry: SeriesEntry): Boolean = entry.number?.let { it in readNumbers } == true ||
+        sameName(entry, targets, olds)?.address in oldRead
+
+    val carried = ordered.map { stored ->
+        val number = stored.entry.number
+        when {
+            opened != null && stored.entry.address == resumed?.address -> {
+                val page = stored.pageCount?.let { opened.lastPage.coerceAtMost(it) } ?: opened.lastPage
+                stored.copy(read = stored.read || opened.read, lastPage = maxOf(stored.lastPage, page))
+            }
+            stored.read -> stored
+            boundary != null && number != null && number < boundary -> stored.copy(read = true)
+            readThere(stored.entry) -> stored.copy(read = true)
+            else -> stored
+        }
     }
-    val before = toEntries.toSet()
-    return to.withSettingsOf(from).copy(lastOpenedEntry = lastOpened) to ordered.filterNot { it in before }
+    val own = carried.indexOfFirst { it.entry.address == to.lastOpenedEntry }
+    val reached = if (resumed != null) carried.indexOfFirst { it.entry.address == resumed.address }
+    else carried.indices.lastOrNull { carried[it].read && !ordered[it].read } ?: -1
+    val lastOpened = if (reached > own) carried[reached].entry.address else to.lastOpenedEntry
+    return to.withSettingsOf(from).copy(lastOpenedEntry = lastOpened) to carried.filterIndexed { index, entry -> entry != ordered[index] }
 }
 
 /**
- * The entry among [candidates] (in reading order) that is [entry] on another source: the same chapter number, by the
- * same translator group when one has it, else the first in reading order. Without a number on either side, or with no
- * candidate of that number, the first of the same name by [matchKey] among those without a number on either side. Null
- * when nothing matches.
+ * The entry among [candidates] (in reading order) that is [entry], one of [own], on another source: the same chapter
+ * number, by the same translator group when one has it, else the first in reading order. Otherwise, by [sameName].
+ * Null when nothing matches.
  */
-fun matchingEntry(entry: SeriesEntry, candidates: List<SeriesEntry>): SeriesEntry? {
+fun matchingEntry(entry: SeriesEntry, own: List<SeriesEntry>, candidates: List<SeriesEntry>): SeriesEntry? {
     val sameNumber = entry.number?.let { number -> candidates.filter { it.number == number } }.orEmpty()
     val group = entry.translatorGroup?.let(::matchKey)?.ifEmpty { null }
     return sameNumber.firstOrNull { group != null && it.translatorGroup?.let(::matchKey) == group }
         ?: sameNumber.firstOrNull()
-        ?: matchKey(entry.name).ifEmpty { null }?.let { name ->
-            candidates.firstOrNull { (entry.number == null || it.number == null) && matchKey(it.name) == name }
-        }
+        ?: sameName(entry, own, candidates)
 }
 
-/** [text] reduced to what names the same thing across sources: its letters and digits, in lower case. */
-fun matchKey(text: String): String = text.lowercase().filter(Char::isLetterOrDigit)
+/**
+ * The entry among [candidates] with [entry]'s name by [matchKey], where either of the two lacks a number: numbers,
+ * when both have them, say more than names. Only a name that no other entry has, among [own] and among [candidates],
+ * matches, since "Extra" or "Notice" can name several.
+ */
+private fun sameName(entry: SeriesEntry, own: List<SeriesEntry>, candidates: List<SeriesEntry>): SeriesEntry? {
+    val key = matchKey(entry.name).ifEmpty { return null }
+    if (own.count { matchKey(it.name) == key } != 1) return null
+    return candidates.filter { matchKey(it.name) == key }.singleOrNull()?.takeIf { entry.number == null || it.number == null }
+}
+
+/**
+ * [text] reduced to what names the same thing across sources: its letters and digits in lower case, and a point
+ * between two digits, so that chapter 10.5 is not chapter 105.
+ */
+fun matchKey(text: String): String = text.lowercase().let { lower ->
+    lower.filterIndexed { index, char ->
+        char.isLetterOrDigit() || char == '.' && lower.getOrNull(index - 1)?.isDigit() == true && lower.getOrNull(index + 1)?.isDigit() == true
+    }
+}
