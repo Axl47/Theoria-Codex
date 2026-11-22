@@ -67,6 +67,11 @@ class ExtensionPackages(private val context: Context, private val folder: () -> 
 
     private fun apkFiles(): List<File> = folder()?.listFiles { file -> file.extension == "apk" }.orEmpty().sortedBy(File::getName)
 
+    /** Whether [list] would find any. Reads far less of each installed package, so it is cheap enough for app startup. */
+    fun any(): Boolean =
+        context.packageManager.getInstalledPackages(PackageManager.PackageInfoFlags.of(PackageManager.GET_CONFIGURATIONS.toLong()))
+            .any(::isExtension) || apkFiles().any { read(it) != null }
+
     /** The extension in the file [apk]; null when the file is not one. */
     fun read(apk: File): ExtensionPackage? {
         val info = context.packageManager.getPackageArchiveInfo(apk.path, PackageManager.PackageInfoFlags.of(FLAGS)) ?: return null
@@ -79,7 +84,7 @@ class ExtensionPackages(private val context: Context, private val folder: () -> 
     }
 
     private fun extension(info: PackageInfo, apk: File, installed: Boolean): ExtensionPackage? {
-        if (info.reqFeatures.orEmpty().none { it.name == EXTENSION_FEATURE }) return null
+        if (!isExtension(info)) return null
         val metaData = info.applicationInfo?.metaData
         val libVersion = metaData?.getFloat(METADATA_LIB_VERSION)
         val classes = metaData?.getString(METADATA_SOURCE_CLASS).orEmpty().split(';').map(String::trim).filter(String::isNotEmpty)
@@ -100,6 +105,8 @@ class ExtensionPackages(private val context: Context, private val folder: () -> 
             },
         )
     }
+
+    private fun isExtension(info: PackageInfo): Boolean = info.reqFeatures.orEmpty().any { it.name == EXTENSION_FEATURE }
 
     /** Several signers at once would need every one of them trusted; no extension is built that way, so it is refused. */
     private fun signer(info: PackageInfo): String? {

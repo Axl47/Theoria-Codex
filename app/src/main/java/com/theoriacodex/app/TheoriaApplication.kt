@@ -12,7 +12,7 @@ import com.theoriacodex.app.customsites.AndroidBrowserCookieStore
 import com.theoriacodex.app.customsites.SiteCookieBridge
 import com.theoriacodex.app.customsites.SiteCookieBridgeOwner
 import com.theoriacodex.app.di.DefaultTheoriaAppContainer
-import com.theoriacodex.app.di.ExtensionSourceHost
+import com.theoriacodex.app.extensions.MihonExtensionSourceHost
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
 import com.theoriacodex.app.diagnostics.DiagnosticLogStore
@@ -30,7 +30,6 @@ import com.theoriacodex.app.viewer.VideoPlaybackInfrastructure
 import com.theoriacodex.app.viewer.VideoPlaybackInfrastructureOwner
 import com.theoriacodex.data.storage.ApplicationDataReadiness
 import com.theoriacodex.data.storage.ApplicationDataState
-import java.util.ServiceLoader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -50,11 +49,8 @@ class TheoriaApplication :
     /** The one place browser cookies reach the app's own requests: every client in [httpClients] carries its jar. */
     override val siteCookieBridge = SiteCookieBridge(AndroidBrowserCookieStore)
 
-    /** Series sources that run loaded extension code; only debug builds ship a host. It loads nothing until first used. */
-    private val extensionHost: ExtensionSourceHost? =
-        if (BuildConfig.DEBUG) {
-            ServiceLoader.load(ExtensionSourceHost::class.java, javaClass.classLoader).firstOrNull()?.also { it.attach(this) }
-        } else null
+    /** Series sources that run loaded extension code. It loads nothing until first used. */
+    private val extensionHost = MihonExtensionSourceHost().also { it.attach(this) }
 
     /** Every HTTP client in the app, so they share one connection pool and these cookies. */
     override val httpClients = AppHttpClients(
@@ -66,7 +62,7 @@ class TheoriaApplication :
         siteCookieBridge::userAgentFor,
         siteCookieBridge::isAllowed,
         siteCookieBridge::mediaAuthorizationFor,
-        extensionHost?.mediaInterceptor,
+        extensionHost.mediaInterceptor,
     )
 
     override val videoPlaybackInfrastructure: VideoPlaybackInfrastructure by lazy {

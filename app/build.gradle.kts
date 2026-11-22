@@ -185,6 +185,9 @@ android {
         buildConfigField("String", "DEVELOPER_COPY_CERT_SHA256", "\"\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Release builds carry one native library, the zstd decoder Mihon extensions expect of their host. Every
+        // device in the support window and the test emulators are 64-bit, so the 32-bit copies are left out.
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
     buildTypes {
@@ -401,8 +404,8 @@ dependencies {
     implementation(project(":feature-discover"))
     implementation(project(":feature-series"))
     implementation(project(":feature-settings"))
-    // Mihon extension host spike: debug builds only, so release APKs carry none of it.
-    debugImplementation(project(":mihon-host"))
+    // Runs Mihon extensions as series sources; see mihon-host/README.md for what it costs release builds.
+    implementation(project(":mihon-host"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

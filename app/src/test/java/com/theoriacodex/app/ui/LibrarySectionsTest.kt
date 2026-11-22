@@ -16,4 +16,12 @@ class LibrarySectionsTest {
         assertEquals(LibrarySection.Codices, legacyTabSections["codex"])
         assertEquals(null, legacyTabSections["settings"])
     }
+
+    @Test fun `the Series tab shows and restores only while an extension is on the device`() {
+        val without = homeTabs(withSeries = false)
+        assertEquals(listOf(TopLevelDestination.Search, TopLevelDestination.ForYou, TopLevelDestination.Library), without)
+        assertEquals(without + TopLevelDestination.Series, homeTabs(withSeries = true))
+        assertEquals(TopLevelDestination.Series, restoredHomeTab("series", homeTabs(withSeries = true)))
+        assertEquals(TopLevelDestination.Search, restoredHomeTab("series", without))
+    }
 }
