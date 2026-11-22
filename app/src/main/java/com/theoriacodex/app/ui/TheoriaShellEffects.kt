@@ -2,7 +2,6 @@ package com.theoriacodex.app.ui
 
 import com.theoriacodex.app.ui.routes.codexCollectionOwner
 import com.theoriacodex.app.library.LibrarySection
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.filterNotNull
 import com.theoriacodex.app.MainActivity
 import android.content.Intent
@@ -15,10 +14,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -27,7 +24,6 @@ import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
-import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.BuildConfig
@@ -47,7 +43,6 @@ import com.theoriacodex.app.update.PendingPostInstallChangelog
 import com.theoriacodex.app.update.StartupUpdateWorkflowEffect
 import com.theoriacodex.app.update.mergeReleaseHistory
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.first
 
 /** Hosts one-shot feedback from the shell's owners, and keeps usage time following the process. */
 @Composable
