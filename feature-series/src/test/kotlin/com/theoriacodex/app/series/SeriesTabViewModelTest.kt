@@ -35,7 +35,7 @@ class SeriesTabViewModelTest {
     fun aSearchSentWhileExtensionsLoadRunsOnceTheyHave() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val sources = CompletableDeferred<List<SeriesSource>>()
-        val viewModel = SeriesTabViewModel(NothingStored) { sources.await() }
+        val viewModel = SeriesTabViewModel(NothingStored, { sources.await() }) {}
 
         viewModel.search("one punch")
         advanceUntilIdle()
@@ -66,7 +66,7 @@ private object NothingStored : SeriesRepository {
     override fun observeEntries(id: SeriesId): Flow<List<StoredSeriesEntry>> = emptyFlow()
     override suspend fun series(id: SeriesId): StoredSeries? = null
     override suspend fun entries(id: SeriesId): List<StoredSeriesEntry> = emptyList()
-    override suspend fun store(series: Series, entries: List<SeriesEntry>?) = Unit
+    override suspend fun store(series: Series, entries: List<SeriesEntry>?) = emptyList<SeriesEntry>()
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) = Unit
