@@ -328,6 +328,22 @@ class ProfileBackupServiceTest {
         assertTrue(runCatching { codec.encode(twice) }.isFailure)
     }
 
+    @Test fun `a backup the app writes is one it restores even for a series over the chapter limit`() {
+        val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
+        fun entry(index: Int, order: Int, read: Boolean = false) =
+            StoredSeriesEntry(SeriesEntry("/chapter/$index", "Ch.$index"), sourceOrder = order, firstSeenAtEpochMs = 1L, read = read)
+        // Two over the limit: the dropped chapter without progress and one unread listed chapter are left out.
+        val entries = listOf(entry(-2, order = -1), entry(-1, order = -1, read = true)) + List(MAX_BACKUP_SERIES_ENTRIES) { entry(it, order = it) }
+        val huge = backup().let { it.copy(library = it.library.copy(series = listOf(BackupSeries(StoredSeries(Series(id, "Title")), entries)))) }
+        val restored = codec.decode(codec.encode(huge)).library.series.single().entries
+        assertEquals(MAX_BACKUP_SERIES_ENTRIES, restored.size)
+        assertTrue(restored.any { it.entry.address == "/chapter/-1" } && restored.none { it.entry.address == "/chapter/-2" })
+
+        // What a restore refuses, an export refuses too.
+        val invalid = huge.copy(library = huge.library.copy(series = listOf(BackupSeries(StoredSeries(Series(id, "Title")), listOf(entry(1, 0).copy(pageCount = 0))))))
+        assertTrue(runCatching { codec.encode(invalid) }.isFailure)
+    }
+
     @Test fun `invalid versions malformed bytes unknown sources and deeply nested input are rejected`() {
         val invalid = listOf(
             byteArrayOf(0xc3.toByte(), 0x28),

@@ -31,9 +31,8 @@ internal data class BackupSeriesRecord(
     @SerialName("lastCheckedAt") val lastCheckedAt: Long? = null,
     @SerialName("entries") val entries: List<BackupSeriesEntryRecord> = emptyList(),
 ) {
-    /** Throws [IllegalArgumentException] for a record no build wrote; a status or mode this build does not know is dropped. */
+    /** A status or mode this build does not know is dropped; [validateBackupSeries] refuses what no build wrote. */
     fun toDomain(): BackupSeries {
-        require(address.isNotBlank() && title.isNotBlank() && entries.size <= MAX_BACKUP_SERIES_ENTRIES) { "Backup contains an invalid series" }
         return BackupSeries(
             series = StoredSeries(
                 series = Series(
@@ -90,10 +89,7 @@ internal data class BackupSeriesEntryRecord(
     @SerialName("lastPage") val lastPage: Int = 0,
     @SerialName("pageCount") val pageCount: Int? = null,
 ) {
-    fun toDomain(): StoredSeriesEntry {
-        require(address.isNotBlank() && firstSeenAt >= 0 && lastPage >= 0 && (pageCount ?: 1) > 0) { "Backup contains an invalid chapter" }
-        return StoredSeriesEntry(SeriesEntry(address, name, number, translatorGroup, uploadedAt), sourceOrder, firstSeenAt, read, lastPage, pageCount)
-    }
+    fun toDomain() = StoredSeriesEntry(SeriesEntry(address, name, number, translatorGroup, uploadedAt), sourceOrder, firstSeenAt, read, lastPage, pageCount)
 
     companion object {
         fun fromDomain(stored: StoredSeriesEntry): BackupSeriesEntryRecord = with(stored) {
@@ -104,6 +100,30 @@ internal data class BackupSeriesEntryRecord(
         }
     }
 }
+
+/** The one check for series on both paths: a backup the app writes is one it restores. */
+internal fun validateBackupSeries(all: List<BackupSeries>) {
+    require(all.size <= MAX_BACKUP_SERIES && all.distinctBy { it.series.series.id }.size == all.size) { "Backup contains duplicate series" }
+    all.forEach { backup ->
+        val series = backup.series.series
+        require(series.id.address.isNotBlank() && series.title.isNotBlank() && backup.entries.size <= MAX_BACKUP_SERIES_ENTRIES) {
+            "Backup contains an invalid series"
+        }
+        require(backup.entries.distinctBy { it.entry.address }.size == backup.entries.size) { "Backup contains duplicate chapters" }
+        require(backup.entries.all { it.entry.address.isNotBlank() && it.firstSeenAtEpochMs >= 0 && it.lastPage >= 0 && (it.pageCount ?: 1) > 0 }) {
+            "Backup contains an invalid chapter"
+        }
+    }
+}
+
+/**
+ * What a backup writes for a series with more entries than a restore accepts, so that one huge series cannot fail the
+ * whole export: entries with progress first, then the rest the source lists, then those it dropped. An entry without
+ * progress carries nothing a restore needs, since the source lists it again.
+ */
+internal fun BackupSeries.withinEntryLimit(): BackupSeries =
+    if (entries.size <= MAX_BACKUP_SERIES_ENTRIES) this
+    else copy(entries = entries.sortedBy { if (it.read || it.lastPage > 0) 0 else if (it.sourceOrder >= 0) 1 else 2 }.take(MAX_BACKUP_SERIES_ENTRIES))
 
 /** Sanity bounds: far more than anyone follows, or than a series has chapters. */
 internal const val MAX_BACKUP_SERIES = 10_000

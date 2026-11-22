@@ -39,7 +39,8 @@ class ProfileBackupCodec {
         }
 
     /** The validated document [encode] writes, for the restore journal to embed. */
-    internal fun encodeDocument(backup: ProfileBackup): JsonObject {
+    internal fun encodeDocument(written: ProfileBackup): JsonObject {
+        val backup = written.copy(library = written.library.copy(series = written.library.series.map(BackupSeries::withinEntryLimit)))
         validate(backup)
         return buildJsonObject {
             put("format", "theoria-profile-backup")
@@ -234,12 +235,7 @@ private fun validate(backup: ProfileBackup) {
     require(library.items.all { it.codexId in knownCodices && it.postId in knownPosts && it.savedAtEpochMs >= 0 })
     require(library.likes.all { it.profileId in profiles && it.postId in knownPosts && it.likedAtEpochMs >= 0 })
     require(library.watched.all { it.post.id in knownPosts && it.maxViewedMediaNumber > 0 && it.viewedAtEpochMs >= 0 })
-    require(library.series.size <= MAX_BACKUP_SERIES && library.series.distinctBy { it.series.series.id }.size == library.series.size) {
-        "Backup contains duplicate series"
-    }
-    require(library.series.all { series -> series.entries.distinctBy { it.entry.address }.size == series.entries.size }) {
-        "Backup contains duplicate chapters"
-    }
+    validateBackupSeries(library.series)
     require(backup.savedSearches.size <= MAX_SAVED_SEARCHES)
     require(backup.savedSearches.distinctBy { it.id }.size == backup.savedSearches.size)
     require(backup.savedSearches.all { it.id.isNotBlank() && it.name.isNotBlank() && it.name.length <= MAX_SAVED_SEARCH_NAME_LENGTH })
