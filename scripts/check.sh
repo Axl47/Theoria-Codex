@@ -365,6 +365,17 @@ run_release() {
     echo 'Skipping benchmark builds: nothing they depend on changed since main.'
   fi
   phase 'Gradle: release builds' ./gradlew "${task_timings[@]}" "${tasks[@]}" --warning-mode=all --console=plain
+  phase 'Extension keep rules' extension_symbols_kept
+}
+
+# Extensions call the app's classes by name, which the shrinker cannot see. Every name a sample of them used
+# (mihon-host/extension-symbols.txt) must be one R8 reports it was told to keep.
+extension_symbols_kept() {
+  local missing
+  missing="$(grep -v '^#' mihon-host/extension-symbols.txt | grep -Fvxf app/build/outputs/mapping/release/seeds.txt || true)"
+  [[ -z "$missing" ]] && return
+  printf 'mihon-host/consumer-rules.pro no longer keeps what extensions call:\n%s\n' "$missing" >&2
+  return 1
 }
 
 # Reference images are inputs Gradle does not track, so the comparison always reruns.

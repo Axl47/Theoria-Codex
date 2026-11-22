@@ -13,6 +13,8 @@ extensions.configure<LibraryExtension> {
     defaultConfig {
         minSdk = libs.versions.androidMinSdk.get().toInt()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // What the app's shrinker must keep for extensions, which link against this module's dependencies by name.
+        consumerProguardFiles("consumer-rules.pro")
     }
 
     compileOptions {
