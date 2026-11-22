@@ -67,6 +67,7 @@ internal class ForYouLanesLoader(
     private suspend fun availableInterests(source: SourceKey, training: CrossSourceTraining, affinity: TagAffinityInputs): List<ForYouInterest> {
         val documents = training.documentsFor(source)
         val translate = { tag: String, into: SourceKey -> training.translate(tag, source, into) }
+        val affinity = affinity.respellChosen { training.spellSaved(it, source) }
         var unavailable = emptySet<String>()
         for (round in 1..AVAILABILITY_ROUNDS) {
             val interests = ForYouInterests.generate(source, documents, affinity, translate, unavailable, random())

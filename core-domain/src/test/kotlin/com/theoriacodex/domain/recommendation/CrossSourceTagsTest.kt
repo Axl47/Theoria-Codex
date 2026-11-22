@@ -35,6 +35,9 @@ class CrossSourceTagsTest {
         assertEquals("hatsune_miku", training.translate("初音ミク", SourceKey.PIXIV, SourceKey.DANBOORU))
         assertEquals(null, training.translate("未翻訳", SourceKey.PIXIV, SourceKey.DANBOORU))
         assertEquals(null, training.translate("cat", SourceKey.GELBOORU, SourceKey.IWARA))
+        assertEquals("hatsune_miku", training.spellSaved("初音ミク", SourceKey.GELBOORU))
+        assertEquals("初音ミク", training.spellSaved("hatsune_miku", SourceKey.PIXIV))
+        assertEquals(null, training.spellSaved("未翻訳", SourceKey.GELBOORU))
     }
 
     @Test

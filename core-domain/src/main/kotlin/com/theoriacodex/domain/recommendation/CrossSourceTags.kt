@@ -91,6 +91,10 @@ class CrossSourceTraining(
         return conceptKey(tag, from)?.let { spell(it, to) }
     }
 
+    /** A tag saved without a source (a saved tag or search) in [into]'s spelling when the Pixiv dictionary knows it. */
+    fun spellSaved(tag: String, into: SourceKey): String? =
+        translate(tag, from = if (into == SourceKey.PIXIV) SourceKey.DANBOORU else SourceKey.PIXIV, to = into)
+
     private fun conceptKey(tag: String, source: SourceKey): String? =
         (if (source == SourceKey.PIXIV) dictionary.conceptKey(tag) else crossSourceTagKey(tag))?.takeIf(String::isNotEmpty)
 

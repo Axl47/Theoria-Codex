@@ -121,6 +121,22 @@ fun tagAffinityInputs(
     )
 }
 
+/**
+ * These inputs with each chosen tag in [spell]'s spelling where it has one. Saved tags and searches carry no source, so
+ * For You respells them for the source it fills: a tag saved in Pixiv's Japanese seeds the boorus in English.
+ */
+fun TagAffinityInputs.respellChosen(spell: (String) -> String?): TagAffinityInputs {
+    val chosen = explicit.toMutableSet()
+    val weights = interest.toMutableMap()
+    for (tag in explicit) {
+        val spelled = spell(tag)?.let(::normalizeMatchToken)?.takeIf { it.isNotBlank() && it != tag } ?: continue
+        chosen -= tag
+        weights.merge(tag, -EXPLICIT_WEIGHT, Double::plus)
+        if (chosen.add(spelled)) weights.merge(spelled, EXPLICIT_WEIGHT, Double::plus)
+    }
+    return copy(explicit = chosen, interest = weights)
+}
+
 /** The active profile's [TagAffinityInputs], following profile switches; a read failure gives no inputs. */
 @OptIn(ExperimentalCoroutinesApi::class)
 fun observeTagAffinityInputs(

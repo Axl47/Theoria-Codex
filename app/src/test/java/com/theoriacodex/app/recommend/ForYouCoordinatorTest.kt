@@ -78,6 +78,23 @@ class ForYouCoordinatorTest {
         assertEquals(listOf("hatsune_miku"), tagsBySource[SourceKey.GELBOORU])
     }
 
+    @Test fun `a tag saved in pixiv's spelling seeds the boorus in theirs`() = runTest {
+        val store = object : TagSuggestionStore by NoOpTagSuggestionStore {
+            override fun get(source: SourceKey, limit: Int) = listOf(
+                TagSuggestion("初音ミク", "tag", null, alternateText = "Hatsune Miku"),
+            ).takeIf { source == SourceKey.PIXIV }.orEmpty()
+        }
+        val saved = TagAffinityInputs(interest = mapOf("初音ミク" to EXPLICIT_WEIGHT), explicit = setOf("初音ミク"))
+        val service = testForYouCoordinator(
+            registryOf(FakeAdapter(SourceKey.PIXIV), FakeAdapter(SourceKey.GELBOORU)), tagSuggestionStore = store, tagAffinity = saved,
+        )
+
+        val tagsBySource = service.lanes(request(service)).associate { it.source to it.tags }
+
+        assertEquals(listOf("初音ミク"), tagsBySource[SourceKey.PIXIV])
+        assertEquals(listOf("hatsune_miku"), tagsBySource[SourceKey.GELBOORU])
+    }
+
     @Test fun `a profile with no likes gets trending lanes and likes never fetch trending`() = runTest {
         val adapter = FakeAdapter(SourceKey.GELBOORU).apply {
             trendingCandidates = listOf("sky", "sea", "sand", "snow").map { TagSuggestion(it, "tag", null) }
