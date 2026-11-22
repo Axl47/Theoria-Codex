@@ -70,7 +70,8 @@ internal fun SeriesFilterSheet(
 ) {
     ExpandedBottomSheet(onDismiss) {
         SheetHeader(FILTER, "Close filter", onDismiss) {
-            TextButton(onClick = { onEdit { it.copy(text = "", draft = it.defaults) } }) { Text("Reset") }
+            // Off until the filters have loaded: a reset before that would be undone when they arrive.
+            TextButton(onClick = { onEdit { it.copy(text = "", draft = it.defaults) } }, enabled = sheet.draft != null) { Text("Reset") }
         }
         LazyColumn(Modifier.weight(1f, fill = false).padding(horizontal = 16.dp)) {
             item(key = "text") {
