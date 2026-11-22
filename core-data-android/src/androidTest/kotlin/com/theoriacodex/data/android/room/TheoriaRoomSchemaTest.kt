@@ -234,6 +234,29 @@ class TheoriaRoomSchemaTest {
         database.close()
     }
 
+    @Test
+    fun migrationFourteenToFifteenKeepsHashesAsTriedAndAddsEmptyVisionColumns() {
+        migrationHelper.createDatabase(TEST_DATABASE_NAME, 14).apply {
+            execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('PIXIV','1','{}')")
+            execSQL("INSERT INTO post_visual_signatures(source,source_post_id,phash,indexed_at_epoch_ms) VALUES('PIXIV','1',94,1)")
+            close()
+        }
+
+        val database = migrationHelper.runMigrationsAndValidate(
+            TEST_DATABASE_NAME,
+            15,
+            true,
+            TheoriaRoomDatabase.MIGRATION_14_15,
+        )
+        database.query("SELECT phash, phash_checked, model_id, embedding, predicted_tags FROM post_visual_signatures").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(94, cursor.getLong(0))
+            assertEquals(1, cursor.getInt(1))
+            for (column in 2..4) assertTrue(cursor.isNull(column))
+        }
+        database.close()
+    }
+
     companion object {
         private const val TEST_DATABASE_NAME = "theoria-room-schema-test"
     }

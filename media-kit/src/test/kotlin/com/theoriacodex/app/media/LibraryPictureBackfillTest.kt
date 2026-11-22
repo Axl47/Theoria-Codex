@@ -1,10 +1,13 @@
 package com.theoriacodex.app.media
 
+import com.theoriacodex.data.repository.PictureVision
+import com.theoriacodex.data.repository.VisionProgress
 import com.theoriacodex.data.repository.VisualSignatureRepository
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.vision.PredictedTag
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
@@ -45,6 +48,11 @@ class LibraryPictureBackfillTest {
             records[postId] = hash
         }
         override suspend fun libraryPostsWithoutSignature(limit: Int): List<Post> = library.filterNot { it.id in records }.take(limit)
+        override suspend fun putVision(entries: List<PictureVision>) = Unit
+        override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post> = emptyList()
+        override fun observePredictedTags(modelId: String): Flow<Map<PostId, List<PredictedTag>>> = emptyFlow()
+        override fun observeVisionProgress(modelId: String): Flow<VisionProgress> = emptyFlow()
+        override suspend fun clearVision() = Unit
     }
 
     private fun id(value: String) = PostId(SourceKey.DANBOORU, value)

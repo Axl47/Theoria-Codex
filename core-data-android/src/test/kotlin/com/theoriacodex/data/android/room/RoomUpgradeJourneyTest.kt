@@ -24,4 +24,8 @@ class RoomUpgradeJourneyTest {
             RoomUpgradeScenario.verify(ApplicationProvider.getApplicationContext<Context>(), helper, version)
         }
     }
+
+    @Test fun `a version 14 picture hash keeps its meaning when the tagger columns arrive`() = runTest {
+        RoomUpgradeScenario.verifyPictureVisionUpgrade(ApplicationProvider.getApplicationContext<Context>(), helper)
+    }
 }

@@ -31,7 +31,7 @@ import org.json.JSONObject;
                 SeriesEntity.class,
                 SeriesEntryEntity.class
         },
-        version = 14,
+        version = 15,
         exportSchema = true
 )
 public abstract class TheoriaRoomDatabase extends RoomDatabase {
@@ -173,6 +173,15 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             return false;
         }
     }
+    // Pictures also get what the on-device tagger saw. Every existing row had its hash tried, hence the default of 1.
+    public static final Migration MIGRATION_14_15 = new Migration(14, 15) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("ALTER TABLE `post_visual_signatures` ADD COLUMN `phash_checked` INTEGER NOT NULL DEFAULT 1");
+            database.execSQL("ALTER TABLE `post_visual_signatures` ADD COLUMN `model_id` TEXT");
+            database.execSQL("ALTER TABLE `post_visual_signatures` ADD COLUMN `embedding` BLOB");
+            database.execSQL("ALTER TABLE `post_visual_signatures` ADD COLUMN `predicted_tags` TEXT");
+        }
+    };
     public static final Migration[] MIGRATIONS = new Migration[] {
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -186,7 +195,8 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             MIGRATION_10_11,
             MIGRATION_11_12,
             MIGRATION_12_13,
-            MIGRATION_13_14
+            MIGRATION_13_14,
+            MIGRATION_14_15
     };
 
     public abstract CodexLikesDao codexLikesDao();

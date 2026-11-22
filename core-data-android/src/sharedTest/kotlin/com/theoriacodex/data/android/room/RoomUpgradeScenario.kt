@@ -72,7 +72,7 @@ object RoomUpgradeScenario {
                 RoomViewerTranslationCacheRepository(database, clock = { 100L }).putAll(mapOf(translationKey to "Blue sky"))
                 RoomForYouVerdictRepository(database).record(ForYouVerdict("a", shared.id, ForYouVerdictKind.SKIPPED, 100L, null))
                 RoomVisualSignatureRepository(database).put(shared.id, PICTURE_HASH)
-                assertEquals(14, database.openHelper.readableDatabase.version)
+                assertEquals(15, database.openHelper.readableDatabase.version)
                 database.openHelper.readableDatabase.query(
                     "SELECT name FROM sqlite_master WHERE name IN ('migration_metadata','recents_migration_metadata')",
                 ).use { assertFalse(it.moveToFirst()) }
@@ -263,4 +263,29 @@ object RoomUpgradeScenario {
         """"includeTags":["sky"],"excludeTags":[],"sort":"TOP"},"kind":"FYP","sources":["PIXIV"],"sourceTags":{"PIXIV":["sky"]}}"""
 
     private const val LEGACY_QUERY = """{"schemaVersion":1,"modeType":"source","modeSource":"PIXIV","includeTags":["sky"],"excludeTags":["comic"],"sort":"NEWEST"}"""
+
+    /** A version 14 library with a picture hash opens at the latest version with the hash kept as tried and no vision. */
+    suspend fun verifyPictureVisionUpgrade(context: Context, helper: MigrationTestHelper) = withContext<Unit>(Dispatchers.IO) {
+        val name = "upgrade-vision-v14.db"
+        context.deleteDatabase(name)
+        try {
+            helper.createDatabase(name, 14).use { database ->
+                database.execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('PIXIV','shared',?)", arrayOf(payload("shared")))
+                database.execSQL("INSERT INTO post_visual_signatures(source,source_post_id,phash,indexed_at_epoch_ms) VALUES('PIXIV','shared',$PICTURE_HASH,1)")
+            }
+            withDatabase(context, name) { database ->
+                val signatures = RoomVisualSignatureRepository(database)
+                assertEquals(mapOf(PostId(SourceKey.PIXIV, "shared") to PICTURE_HASH), signatures.observePictureHashes().first())
+                database.openHelper.readableDatabase.query(
+                    "SELECT phash_checked, model_id, embedding, predicted_tags FROM post_visual_signatures",
+                ).use { rows ->
+                    assertTrue(rows.moveToFirst())
+                    assertEquals(1, rows.getInt(0))
+                    for (column in 1..3) assertTrue(rows.isNull(column))
+                }
+            }
+        } finally {
+            context.deleteDatabase(name)
+        }
+    }
 }
