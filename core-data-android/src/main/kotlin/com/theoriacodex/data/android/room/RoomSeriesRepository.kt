@@ -77,7 +77,7 @@ class RoomSeriesRepository(
         val current = entries.distinctBy { it.address }
         val listed = current.mapTo(HashSet()) { it.address }
         val known = dao.allEntries(id.source.id, id.address).map(SeriesEntryEntity::toStored).associateBy { it.entry.address }
-        val moved = movedEntries(known.values.partition { it.entry.address in listed }, current.filter { it.address !in known })
+        val moved = movedEntries(current.partition { it.address in known }, known.values.filter { it.entry.address !in listed })
         val newEntries = mutableListOf<SeriesEntry>()
         val rows = current.mapIndexed { order, entry ->
             val before = known[entry.address] ?: moved[entry.address]
@@ -122,17 +122,14 @@ class RoomSeriesRepository(
 private val SeriesEntry.release: Pair<Float, String?>? get() = number?.let { it to translatorGroup }
 
 /**
- * The stored entry each of the [added] addresses continues, by its address: a dropped entry (the second of [known],
- * which is split into listed and not) that is the only dropped one of its [release], for an added entry that is the
- * only added one of it, while no listed entry is that release already. Anything less certain could hand one group's
- * read chapter to another group's release, or hide a new chapter.
+ * The stored entry each added address continues, by that address. [listed] is the source's list now, split into the
+ * addresses stored before and the added ones. An added entry continues a [dropped] one when each is the only one of
+ * its [release] among its kind, and no address stored before is that release now, by what the source says of it now.
+ * Anything less certain could hand one group's read chapter to another group's release, or hide a new chapter.
  */
-private fun movedEntries(
-    known: Pair<List<StoredSeriesEntry>, List<StoredSeriesEntry>>,
-    added: List<SeriesEntry>,
-): Map<String, StoredSeriesEntry> {
-    val (listed, dropped) = known
-    val taken = listed.mapNotNullTo(HashSet()) { it.entry.release }
+private fun movedEntries(listed: Pair<List<SeriesEntry>, List<SeriesEntry>>, dropped: List<StoredSeriesEntry>): Map<String, StoredSeriesEntry> {
+    val (kept, added) = listed
+    val taken = kept.mapNotNullTo(HashSet()) { it.release }
     val droppedBy = dropped.groupBy { it.entry.release }
     return added.groupBy { it.release }.mapNotNull { (release, entries) ->
         val before = droppedBy[release]?.singleOrNull()

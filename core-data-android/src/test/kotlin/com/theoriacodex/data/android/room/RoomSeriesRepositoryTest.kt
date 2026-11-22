@@ -156,6 +156,17 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
+    fun `a kept address renumbered to a dropped chapter's number keeps that chapter's progress from a new address`() = runTest {
+        repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2", number = 2f), SeriesEntry("/c/1", "Chapter 1", number = 1f)))
+        repository.recordProgress(id, "/c/1", page = 3, pageCount = 3)
+
+        // Chapter 1's address goes; the kept address now says it is chapter 1, and a new address says so too.
+        val added = SeriesEntry("/c/1-v2", "Chapter 1", number = 1f)
+        assertEquals(listOf(added), repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 1", number = 1f), added)))
+        assertEquals(listOf(false, false), repository.entries(id).map { it.read })
+    }
+
+    @Test
     fun `storing entries alone leaves what is stored about the series as it is`() = runTest {
         repository.store(series, listOf(SeriesEntry("/c/1", "Chapter 1")))
         repository.store(series.copy(title = "Renamed", description = "A synopsis."))
