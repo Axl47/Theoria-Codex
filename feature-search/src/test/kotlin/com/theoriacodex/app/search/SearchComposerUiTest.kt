@@ -184,13 +184,16 @@ class SearchComposerUiTest {
                 autocomplete = listOf(TagSuggestion("insect", type = null, count = null)),
             ),
             omnibox = listOf(
-                OmniboxEntry.Action(OmniboxKind.CODEX, "Insects") { opened = true },
+                OmniboxEntry.Action(OmniboxKind.CODEX, "Insects", "12 posts", cover = emptyList()) { opened = true },
                 OmniboxEntry.Toggle("Instant Seek", checked = false) { instantSeek = it },
                 OmniboxEntry.Action(OmniboxKind.CODEX, "Landscapes") {},
             ),
             onDismiss = { dismissed = true },
         )
         compose.onNodeWithText("Landscapes").assertDoesNotExist()
+        compose.onNodeWithText("12 posts").assertIsDisplayed()
+        // A Codex with no loadable cover keeps its kind icon inside the thumbnail.
+        compose.onNodeWithContentDescription("Codex").assertIsDisplayed()
         val tag = compose.onNodeWithText("insect").getUnclippedBoundsInRoot().top
         assertTrue(tag < compose.onNodeWithText("Insects").getUnclippedBoundsInRoot().top)
 
