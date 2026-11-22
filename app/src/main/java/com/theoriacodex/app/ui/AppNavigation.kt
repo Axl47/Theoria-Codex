@@ -5,9 +5,6 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.gestures.TargetedFlingBehavior
-import androidx.compose.foundation.pager.PagerDefaults
-import androidx.compose.foundation.pager.PagerState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
@@ -46,11 +43,6 @@ internal object AppRoute {
     /** Joins the Codex ids of [TriageMode.RemoveFromCodex.alsoIn]; Codex ids never contain it. */
     const val TRIAGE_ID_SEPARATOR = ","
 }
-
-/** Slow tab swipes commit as readily as Viewer swipes; the library default needs half the screen. */
-@Composable
-internal fun topLevelPagerFling(state: PagerState): TargetedFlingBehavior =
-    PagerDefaults.flingBehavior(state = state, snapPositionalThreshold = TheoriaMotion.PAGE_COMMIT_FRACTION)
 
 private val screenSlide = tween<IntOffset>(TheoriaMotion.SCREEN_MS)
 

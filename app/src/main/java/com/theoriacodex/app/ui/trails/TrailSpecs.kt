@@ -10,6 +10,7 @@ import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.trails.TrailPage
 import com.theoriacodex.app.trails.TrailPager
+import com.theoriacodex.app.trails.TrailSpec
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.SavedSearchEntry
@@ -29,9 +30,6 @@ import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-
-/** What a trail shows: its crumb [label], the [query] it searches (tag trails only) and the [pager] that feeds it. */
-internal class TrailSpec(val label: String, val query: Query?, val pager: TrailPager)
 
 /** Where each kind of trail gets its posts. */
 internal interface TrailSources {

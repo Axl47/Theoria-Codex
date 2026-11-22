@@ -77,9 +77,8 @@ class FeedView(
  * (or a feed's own [postFilter]), then the related shelf from [relatedState]. [retainKey] names the feed, so each
  * step keeps its last result while the Viewer covers it.
  *
- * [durationPosts] is what the length step covers when the feed resolves lengths for more than its grid (For You's
- * home shelves). [revealInOrder] keeps shown cards in place while lengths arrive; a feed sorted by length turns it
- * off, since its order must follow the lengths.
+ * [revealInOrder] keeps shown cards in place while lengths arrive; a feed sorted by length turns it off, since its
+ * order must follow the lengths.
  */
 @Composable
 fun rememberFeedView(
@@ -90,12 +89,11 @@ fun rememberFeedView(
     relatedState: RelatedPostsUiState,
     marks: FeedMarks = FeedMarks.NONE,
     durationFilterActive: Boolean = !filters.animatedDurationRange.isFullRange,
-    durationPosts: List<Post> = posts,
     revealInOrder: Boolean = true,
     postFilter: FeedPostFilter? = null,
 ): FeedView {
-    val metadata = rememberDurationFilterMetadata(durationPosts, durations.states, durationFilterActive, retainKey)
-    val presented = metadata.presentedPosts?.takeIf { revealInOrder && durationPosts === posts } ?: posts
+    val metadata = rememberDurationFilterMetadata(posts, durations.states, durationFilterActive, retainKey)
+    val presented = metadata.presentedPosts?.takeIf { revealInOrder } ?: posts
     val retained = retainPostsUntilViewerCloses(remember(relatedState, marks.pendingLikes) {
         relatedState.retainedLikedPostIds + marks.pendingLikes
     })

@@ -1,54 +1,69 @@
 package com.theoriacodex.app.ui.routes
 
-import com.theoriacodex.app.ui.components.feedDurations
-import com.theoriacodex.app.ui.LocalNetworkOnline
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.theoriacodex.app.recommend.ForYouCoordinator
-import com.theoriacodex.app.recommend.ForYouScreen
-import com.theoriacodex.app.recommend.ForYouViewModel
-import com.theoriacodex.app.related.RelatedPostsLoading
-import com.theoriacodex.app.related.loadedPosts
+import com.theoriacodex.app.codex.ChosenCodex
 import com.theoriacodex.app.media.MediaDurationCoordinator
-import com.theoriacodex.app.recommend.state.ForYouAction
-import com.theoriacodex.app.recommend.state.ForYouEffect
-import com.theoriacodex.app.recommend.state.ForYouUiState
+import com.theoriacodex.app.recommend.ForYouCoordinator
+import com.theoriacodex.app.recommend.ForYouDeckCallbacks
+import com.theoriacodex.app.recommend.ForYouDeckScreen
+import com.theoriacodex.app.recommend.ForYouDeckViewModel
+import com.theoriacodex.app.recommend.ForYouDeckWiring
+import com.theoriacodex.app.recommend.ForYouEnvironment
+import com.theoriacodex.app.recommend.ForYouLevel
+import com.theoriacodex.app.recommend.ForYouScreenConfig
+import com.theoriacodex.app.related.loadedPosts
+import com.theoriacodex.app.related.requestOrNull
+import com.theoriacodex.app.triage.TriageCardSupport
+import com.theoriacodex.app.ui.components.FeedMarks
+import com.theoriacodex.app.ui.components.feedDurations
+import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.AppSettings
-import com.theoriacodex.app.ui.undo.LocalUndoSlot
-import com.theoriacodex.app.ui.undo.UndoAnchor
 import com.theoriacodex.data.repository.FeedFabRestoreState
+import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 
-/** App-level inputs rendered by For You or used to reconcile recommendation inputs. */
+/** App-level inputs the For You deck is built from or drawn with. */
 internal data class ForYouRouteConfig(
     val settings: AppSettings,
-    val activeProfileLikesCount: Int,
     val availableSources: Set<SourceKey>,
     val creatorBrowsingSources: Set<SourceKey>,
-    val likedPostIds: Set<PostId>,
+    /** The active profile's marks: the Mix does not deal a post it already liked or saved. */
+    val marks: FeedMarks,
     val resolveUnknownAnimatedDurations: Boolean,
 )
 
+/** What the owner and its cards are built with. */
+internal class ForYouRouteServices(
+    val coordinator: ForYouCoordinator,
+    /** Read once, when the owner is created. */
+    val wiring: () -> ForYouDeckWiring,
+    val mediaDurationCoordinator: MediaDurationCoordinator,
+    val pixivUgoiraClient: PixivUgoiraClient?,
+    val recoverPostMedia: suspend (Post, ImageRef) -> Post?,
+)
+
 /** Platform and navigation effects that remain owned by the application shell. */
-internal data class ForYouRouteCallbacks(
-    val onOpenViewer: suspend (ForYouEffect.OpenViewer) -> Unit,
-    val onNavigateToSearch: suspend () -> Unit,
-    val onOpenSourceAccounts: () -> Unit = {},
+internal class ForYouRouteCallbacks(
+    /** Opens the Viewer on a post of a level's feed. */
+    val onOpenPost: (level: ForYouLevel, post: PostId, scrollOffsetHint: Int) -> Unit,
+    val onOpenRelated: (seed: Post, posts: List<Post>, index: Int) -> Unit,
+    val onPickCodex: (post: Post, onPick: (ChosenCodex) -> Unit) -> Unit,
+    val onSaveSearch: (Query) -> Unit,
+    val onOpenSourceAccounts: () -> Unit,
     val onShowMessage: (String) -> Unit,
-    /** Offers Undo labelled `label` where `anchor` draws it; true when the user took it. */
-    val onOfferUndo: suspend (label: String, anchor: UndoAnchor) -> Boolean,
-    /** Makes a profile the active one in settings; For You switches to it first. */
+    /** Makes a profile the active one in settings, which the deck follows. */
     val onSelectProfile: (profileId: String) -> Unit,
     val onToggleLike: (Post) -> Unit,
     val onRequestSaveToCodex: (Post) -> Unit,
@@ -56,132 +71,99 @@ internal data class ForYouRouteCallbacks(
     val onGoToSearch: () -> Unit,
 )
 
-/** Navigation-scoped For You owner plus its immutable rendering boundary. */
+/**
+ * The navigation-scoped For You owner and its screen. The feed's restore state keeps the source, sort, media filter and
+ * the deck or grid choice; the owner itself keeps nothing, so a recreated one deals a fresh Mix from them.
+ */
 @Composable
 internal fun ForYouRoute(
-    coordinator: ForYouCoordinator,
-    relatedPostsLoader: RelatedPostsLoading,
-    mediaDurationCoordinator: MediaDurationCoordinator,
-    pixivUgoiraClient: PixivUgoiraClient?,
+    services: ForYouRouteServices,
     config: ForYouRouteConfig,
     fabRestoreState: FeedFabRestoreState,
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
     callbacks: ForYouRouteCallbacks,
-    onOwnerAvailable: (ForYouViewModel) -> Unit = {},
+    onOwnerAvailable: (ForYouDeckViewModel) -> Unit = {},
 ) {
-    val owner = viewModel<ForYouViewModel>(
-        key = FOR_YOU_ROUTE_OWNER_KEY,
-        factory = ForYouViewModel.factory(
-            coordinator = coordinator,
-            relatedPostsLoader = relatedPostsLoader,
-            networkOnline = LocalNetworkOnline.current,
-            initialProfiles = config.settings.recommendationProfiles,
-            initialSort = fabRestoreState.sortMode?.let { encoded ->
-                com.theoriacodex.domain.model.SortMode.entries.firstOrNull { it.name == encoded }
-            },
-        ),
-    )
-    val state by owner.state.collectAsStateWithLifecycle()
-    val durationPosts = remember(state.results, state.relatedPosts, state.home) {
-        (state.results + state.relatedPosts.loadedPosts + state.home.sections.flatMap { it.feed.page.items } +
-            state.home.mixedFeed?.page?.items.orEmpty()).distinctBy(Post::id)
+    val owner = viewModel<ForYouDeckViewModel>(key = FOR_YOU_ROUTE_OWNER_KEY) {
+        ForYouDeckViewModel(services.coordinator, services.wiring())
+    }
+    val currentOnOwnerAvailable by rememberUpdatedState(onOwnerAvailable)
+    SideEffect { currentOnOwnerAvailable(owner) }
+
+    val sortMode = remember(fabRestoreState.sortMode) { SortMode.entries.firstOrNull { it.name == fabRestoreState.sortMode } ?: SortMode.NEWEST }
+    FollowForYouEnvironment(owner, config, fabRestoreState, sortMode)
+    val showMessage by rememberUpdatedState(callbacks.onShowMessage)
+    LaunchedEffect(owner) { owner.messages.collect { showMessage(it) } }
+
+    val levels by owner.levels.collectAsStateWithLifecycle()
+    val level = levels.last()
+    val feed by level.feed.collectAsStateWithLifecycle()
+    val viewerFeed by owner.viewerFeedChanges.collectAsStateWithLifecycle(owner.viewerFeed)
+    val durationPosts = remember(feed.posts, viewerFeed.relatedPosts) {
+        (feed.posts + viewerFeed.relatedPosts.loadedPosts).distinctBy(Post::id)
     }
     val duration = rememberMediaDurationRouteBinding(
-        coordinator = mediaDurationCoordinator,
+        coordinator = services.mediaDurationCoordinator,
         routeName = "for-you",
         ownerKey = FOR_YOU_DURATION_OWNER_KEY,
-        contentIdentity = state.seedId.ifBlank { "unseeded" },
+        contentIdentity = level.id,
         posts = durationPosts,
         resolveInBackground = config.resolveUnknownAnimatedDurations,
     )
-    val currentOnOwnerAvailable by rememberUpdatedState(onOwnerAvailable)
-
-    SideEffect { currentOnOwnerAvailable(owner) }
-
-    LaunchedEffect(owner, config.settings, config.activeProfileLikesCount) {
-        owner.synchronizeEnvironment(
-            settings = config.settings,
-            activeProfileLikesCount = config.activeProfileLikesCount,
-        )
-    }
-    LaunchedEffect(owner, config.availableSources) {
-        owner.onSourceAvailabilityChanged()
-    }
-
-    // The slot's Activity-retained scope: a rotation must not drop a hidden tag's Undo.
-    val undoScope = LocalUndoSlot.current.scope
-    CollectRouteEffects(owner.effects) { effect ->
-        handleForYouRouteEffect(effect, callbacks, owner, undoScope)
-    }
-
-    ForYouRouteContent(state, owner, duration, pixivUgoiraClient, config, fabRestoreState, onFabRestoreStateChange, callbacks)
-}
-
-@Composable
-private fun ForYouRouteContent(
-    state: ForYouUiState,
-    owner: ForYouViewModel,
-    duration: MediaDurationRouteBinding,
-    pixivUgoiraClient: PixivUgoiraClient?,
-    config: ForYouRouteConfig,
-    fabRestoreState: FeedFabRestoreState,
-    onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
-    callbacks: ForYouRouteCallbacks,
-) {
-    val related = rememberFeedRelatedShelf(state.relatedPosts, owner.related) { posts, index ->
-        owner.onAction(ForYouAction.OpenRelatedResult(index, posts))
-    }
-    ForYouScreen(
-        state = state,
-        related = related,
-        likedPostIds = config.likedPostIds,
-        pixivUgoiraClient = pixivUgoiraClient,
-        durations = duration.owner.feedDurations(duration.states, config.resolveUnknownAnimatedDurations),
+    val durations = duration.owner.feedDurations(duration.states, config.resolveUnknownAnimatedDurations)
+    val liked = remember(config.marks) { config.marks.liked + config.marks.pendingLikes }
+    val support = TriageCardSupport(
+        environment = rememberFeedCardEnvironment(
+            services.pixivUgoiraClient, liked, emptyMap(), durations, callbacks.onToggleLike, owner::resolvePost,
+        ),
         resolvePostById = owner::resolvePost,
-        onToggleLike = callbacks.onToggleLike,
-        onAction = owner::onAction,
-        creatorBrowsingSources = config.creatorBrowsingSources,
-        onRequestSaveToCodex = callbacks.onRequestSaveToCodex,
-        onSaveToDevice = callbacks.onSaveToDevice,
-        onOpenSourceAccounts = callbacks.onOpenSourceAccounts,
-        onSelectProfile = { profileId ->
-            owner.onAction(ForYouAction.SelectProfile(profileId))
-            callbacks.onSelectProfile(profileId)
-        },
-        onGoToSearch = callbacks.onGoToSearch,
-        fabRestoreState = fabRestoreState,
-        onFabRestoreStateChange = onFabRestoreStateChange,
+        recoverPostMedia = services.recoverPostMedia,
+    )
+    val related = rememberFeedRelatedShelf(viewerFeed.relatedPosts, owner.related) { posts, index ->
+        viewerFeed.relatedPosts.requestOrNull?.let { request -> callbacks.onOpenRelated(request.seed, posts, index) }
+    }
+    ForYouDeckScreen(
+        owner = owner,
+        config = ForYouScreenConfig(
+            sortMode, fabRestoreState.animatedOnly, fabRestoreState.grid, liked, config.creatorBrowsingSources, durations, support,
+        ),
+        related = related,
+        callbacks = deckCallbacks(callbacks, fabRestoreState, onFabRestoreStateChange),
     )
 }
 
-private const val FOR_YOU_DURATION_OWNER_KEY = "for-you-duration-owner"
-
-private suspend fun handleForYouRouteEffect(
-    effect: ForYouEffect,
-    callbacks: ForYouRouteCallbacks,
-    owner: ForYouViewModel,
-    undoScope: CoroutineScope,
-) {
-    when (effect) {
-        is ForYouEffect.OpenViewer -> callbacks.onOpenViewer(effect)
-        ForYouEffect.NavigateToSearch -> callbacks.onNavigateToSearch()
-        is ForYouEffect.ShowMessage -> callbacks.onShowMessage(effect.message)
-        // Waiting on the offer must not hold back later effects, such as the next hide replacing this offer.
-        is ForYouEffect.SeedHidden -> undoScope.launch {
-            if (callbacks.onOfferUndo(effect.label, effect.anchor)) {
-                owner.onAction(ForYouAction.UndoSeedBlacklist(effect.profileId, effect.entries))
-            }
-        }
-        is ForYouEffect.BlacklistSeed,
-        is ForYouEffect.ChangeProfile,
-        is ForYouEffect.ChangeSort,
-        is ForYouEffect.ChangeSource,
-        is ForYouEffect.LoadNextPage,
-        is ForYouEffect.RefreshFeed,
-        is ForYouEffect.ReplaySearch,
-        is ForYouEffect.UndoSeedBlacklist,
-        -> Unit
+/** Hands the owner what it deals from, again whenever any of it changes. */
+@Composable
+private fun FollowForYouEnvironment(owner: ForYouDeckViewModel, config: ForYouRouteConfig, restore: FeedFabRestoreState, sortMode: SortMode) {
+    val selectedSource = remember(restore.source, config.availableSources) { config.availableSources.firstOrNull { it.id == restore.source } }
+    val kept = remember(config.marks) { config.marks.liked + config.marks.saved + config.marks.pendingLikes }
+    LaunchedEffect(owner, config.settings, config.availableSources, selectedSource, sortMode, restore.animatedOnly, restore.grid, kept) {
+        owner.synchronize(
+            ForYouEnvironment(config.settings, selectedSource, sortMode, restore.animatedOnly, restore.grid, kept, config.creatorBrowsingSources),
+        )
     }
 }
 
+/** The screen's callbacks: the shell's, plus the choices the feed's restore state keeps. */
+private fun deckCallbacks(
+    callbacks: ForYouRouteCallbacks,
+    restore: FeedFabRestoreState,
+    onRestoreChange: (FeedFabRestoreState) -> Unit,
+) = ForYouDeckCallbacks(
+    onSelectProfile = callbacks.onSelectProfile,
+    onSelectSource = { source -> onRestoreChange(restore.copy(source = source?.id)) },
+    onSelectSort = { sort -> onRestoreChange(restore.copy(sortMode = sort.name)) },
+    onAnimatedOnlyChange = { animatedOnly -> onRestoreChange(restore.copy(animatedOnly = animatedOnly)) },
+    onGridChange = { grid -> onRestoreChange(restore.copy(grid = grid)) },
+    onOpenPost = callbacks.onOpenPost,
+    onPickCodex = callbacks.onPickCodex,
+    onRequestSaveToCodex = callbacks.onRequestSaveToCodex,
+    onSaveToDevice = callbacks.onSaveToDevice,
+    onSaveSearch = callbacks.onSaveSearch,
+    onToggleLike = callbacks.onToggleLike,
+    onOpenSourceAccounts = callbacks.onOpenSourceAccounts,
+    onGoToSearch = callbacks.onGoToSearch,
+)
+
+private const val FOR_YOU_DURATION_OWNER_KEY = "for-you-duration-owner"
 private const val FOR_YOU_ROUTE_OWNER_KEY = "for-you-route-owner"

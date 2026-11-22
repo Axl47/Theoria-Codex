@@ -1,16 +1,32 @@
 package com.theoriacodex.app.ui
 
 import android.widget.Toast
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.ui.Alignment
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import com.theoriacodex.app.recommend.ForYouUndoAnchor
-import com.theoriacodex.app.recommend.state.ForYouEffect
-import com.theoriacodex.app.ui.undo.LocalUndoSlot
-import com.theoriacodex.app.ui.undo.UndoPill
+import com.theoriacodex.app.codex.LocalQuickSave
+import com.theoriacodex.app.codex.QuickSave
+import com.theoriacodex.app.media.reconnections
+import com.theoriacodex.app.recents.recentSearchPresentation
+import com.theoriacodex.app.recommend.ForYouDeckWiring
+import com.theoriacodex.app.recommend.ForYouLevel
+import com.theoriacodex.app.related.relatedViewerContext
+import com.theoriacodex.app.search.SearchVisibilityFilters
+import com.theoriacodex.app.search.searchExecutionKey
+import com.theoriacodex.app.search.state.SearchSourceScope
+import com.theoriacodex.app.ui.routes.ForYouRouteServices
+import com.theoriacodex.app.ui.trails.shellTrailSources
+import com.theoriacodex.app.ui.trails.trailSpec
+import com.theoriacodex.data.repository.MAX_SAVED_SEARCH_NAME_LENGTH
+import com.theoriacodex.data.repository.RecentSearchEntry
+import com.theoriacodex.data.repository.ViewerLaunchContext
+import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.Query
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+import androidx.lifecycle.viewModelScope
 import com.theoriacodex.app.search.state.SearchEffect
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.source.creatorBrowsingSources
@@ -30,14 +46,18 @@ import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.ViewerStreamSource
 
-/** The swipeable top-level tabs. */
+/**
+ * The top-level tabs, side by side. They change from the bottom bar only: For You, the middle tab, is a swipe deck, so
+ * a horizontal drag there decides a card, and a pager that also took drags from the bar, the chips or the grid would
+ * change tab by accident.
+ */
 @Composable
 internal fun HomePager(shell: TheoriaShell) {
     val pagerState = shell.navigation.pagerState
     HorizontalPager(
         state = pagerState,
         modifier = Modifier.fillMaxSize(),
-        flingBehavior = topLevelPagerFling(pagerState),
+        userScrollEnabled = false,
     ) { page ->
         when (TopLevelDestination.entries[page]) {
             TopLevelDestination.Search -> SearchDestination(shell)
@@ -108,52 +128,93 @@ private suspend fun TheoriaShell.openSearchViewer(effect: SearchEffect.OpenViewe
 
 @Composable
 private fun ForYouDestination(shell: TheoriaShell) {
-    val routes = shell.routes
-    val navigation = shell.navigation
-    val undo = LocalUndoSlot.current
-    Box(Modifier.fillMaxSize()) {
-        BrowsingDestinationStateBoundary(shell.data, shell.sources) { state ->
-            val fabRestoreState = shell.feedFabRestoreRegistry.state(FOR_YOU_FEED_FAB_CONTEXT) ?: return@BrowsingDestinationStateBoundary
-            ForYouRoute(
+    val quickSave = LocalQuickSave.current
+    val writes = rememberTriageHandOff()
+    BrowsingDestinationStateBoundary(shell.data, shell.sources) { state ->
+        val fabRestoreState = shell.feedFabRestoreRegistry.state(FOR_YOU_FEED_FAB_CONTEXT) ?: return@BrowsingDestinationStateBoundary
+        ForYouRoute(
+            services = ForYouRouteServices(
                 coordinator = shell.features.forYou,
-                relatedPostsLoader = shell.features.relatedPosts,
+                // The deck's writes run in the activity's scope, so they finish after the tab, or the deck, is gone.
+                wiring = { shell.forYouWiring(quickSave, writes.viewModelScope) },
                 mediaDurationCoordinator = shell.features.mediaDurationCoordinator,
                 pixivUgoiraClient = shell.sources.pixivUgoiraClient,
-                config = ForYouRouteConfig(
-                    settings = state.settings,
-                    activeProfileLikesCount = state.activeProfileLikesCount,
-                    availableSources = state.availableSources,
-                    creatorBrowsingSources = state.creatorBrowsingSources,
-                    likedPostIds = state.likedPostIds,
-                    resolveUnknownAnimatedDurations = state.settings.contentFilters.resolveUnknownAnimatedDurations,
-                ),
-                fabRestoreState = fabRestoreState,
-                onFabRestoreStateChange = { updated -> shell.feedFabRestoreRegistry.update(FOR_YOU_FEED_FAB_CONTEXT, updated) },
-                callbacks = ForYouRouteCallbacks(
-                    onOpenViewer = { effect -> shell.openForYouViewer(effect) },
-                    onNavigateToSearch = { navigation.showTab(TopLevelDestination.Search) },
-                    onOpenSourceAccounts = { shell.owners.settings.onAction(SettingsAction.OpenCustomSites) },
-                    onShowMessage = { message -> Toast.makeText(shell.appContext, message, Toast.LENGTH_SHORT).show() },
-                    onOfferUndo = { label, anchor -> undo.awaitAction(label, anchor) },
-                    onSelectProfile = { id -> shell.owners.settings.onAction(SettingsAction.SetActiveProfile(id)) },
-                    onToggleLike = { post -> shell.feedLikeAction(ViewerStreamSource.FOR_YOU)(post) },
-                    onRequestSaveToCodex = { post -> shell.requestSaveToCodex(post, fromForYou = true) },
-                    onSaveToDevice = shell::requestSaveToDevice,
-                    onGoToSearch = { navigation.showTab(TopLevelDestination.Search) },
-                ),
-                onOwnerAvailable = routes::publishForYou,
-            )
-        }
-        UndoPill(ForYouUndoAnchor, Modifier.align(Alignment.BottomCenter))
+                recoverPostMedia = shell.features.search::recoverPostMedia,
+            ),
+            config = ForYouRouteConfig(
+                settings = state.settings,
+                availableSources = state.availableSources,
+                creatorBrowsingSources = state.creatorBrowsingSources,
+                marks = state.feedMarks(shell.pendingLikePostIds[state.activeProfile.profileId].orEmpty()),
+                resolveUnknownAnimatedDurations = state.settings.contentFilters.resolveUnknownAnimatedDurations,
+            ),
+            fabRestoreState = fabRestoreState,
+            onFabRestoreStateChange = { updated -> shell.feedFabRestoreRegistry.update(FOR_YOU_FEED_FAB_CONTEXT, updated) },
+            callbacks = ForYouRouteCallbacks(
+                onOpenPost = shell::openForYouPost,
+                onOpenRelated = shell::openForYouRelated,
+                onPickCodex = { post, onPick -> shell.pendingSave.request(listOf(post), fromForYou = true, onPick = onPick) },
+                onSaveSearch = shell::saveTrailSearch,
+                onOpenSourceAccounts = { shell.owners.settings.onAction(SettingsAction.OpenCustomSites) },
+                onShowMessage = { message -> Toast.makeText(shell.appContext, message, Toast.LENGTH_SHORT).show() },
+                onSelectProfile = { id -> shell.owners.settings.onAction(SettingsAction.SetActiveProfile(id)) },
+                onToggleLike = { post -> shell.feedLikeAction(ViewerStreamSource.FOR_YOU)(post) },
+                onRequestSaveToCodex = { post -> shell.requestSaveToCodex(post, fromForYou = true) },
+                onSaveToDevice = shell::requestSaveToDevice,
+                onGoToSearch = { shell.navigation.showTab(TopLevelDestination.Search) },
+            ),
+            onOwnerAvailable = shell.routes::publishForYou,
+        )
     }
 }
 
-/** For You saves a live launch's context for restore, and always stacks a new Viewer. */
-private suspend fun TheoriaShell.openForYouViewer(effect: ForYouEffect.OpenViewer) {
-    openFeedViewer(
-        ViewerStreamSource.FOR_YOU,
-        FeedViewerLaunch(effect.posts, effect.context, effect.liveSearchBinding, effect.visibilityFilters),
-        saveContext = effect.liveSearchBinding,
-        singleTop = false,
-    )
+/**
+ * What the deck's owner takes from the app. [ForYouDeckWiring.trails] is the deck's one way to the app's trails: a
+ * fork's level and the posts a like asks for both come from it, with the deck's own media filter.
+ */
+private fun TheoriaShell.forYouWiring(quickSave: QuickSave, writeScope: CoroutineScope) = ForYouDeckWiring(
+    actions = ShellTriageActions(this),
+    quickSave = quickSave,
+    trails = { request, animatedOnly -> trailSpec(request, shellTrailSources(), SearchVisibilityFilters(animatedOnly = animatedOnly)) },
+    relatedLoader = features.relatedPosts,
+    writeScope = writeScope,
+    reconnections = sources.networkOnline.reconnections(),
+)
+
+/**
+ * Opens the Viewer on [post] of [level], which keeps following that level's feed while it is on top. Nothing is saved
+ * for restore: the deck does not outlive its owner.
+ */
+private fun TheoriaShell.openForYouPost(level: ForYouLevel, post: PostId, scrollOffsetHint: Int) {
+    val posts = level.feed.value.posts
+    val index = posts.indexOfFirst { it.id == post }.takeIf { it >= 0 } ?: return
+    val context = ViewerLaunchContext(level.id, index, ViewerStreamSource.FOR_YOU, scrollOffsetHint)
+    scope.launch {
+        openFeedViewer(
+            ViewerStreamSource.FOR_YOU,
+            // The deck's owner already applied For You's filters to its feed.
+            FeedViewerLaunch(posts, context, liveSearchBinding = true, visibilityFilters = SearchVisibilityFilters()),
+            saveContext = false,
+            singleTop = false,
+            saveQuery = level.query,
+        )
+    }
+}
+
+/** Opens the Viewer on a post of the related shelf under [seed]; it does not follow the deck. */
+private fun TheoriaShell.openForYouRelated(seed: Post, posts: List<Post>, index: Int) {
+    scope.launch {
+        openFeedViewer(
+            ViewerStreamSource.FOR_YOU,
+            FeedViewerLaunch(posts, relatedViewerContext(seed, index), liveSearchBinding = false, visibilityFilters = SearchVisibilityFilters()),
+            saveContext = false,
+            singleTop = false,
+        )
+    }
+}
+
+/** Saves a tag trail's search as a saved search, named as Recents would title it. */
+private fun TheoriaShell.saveTrailSearch(query: Query) {
+    val entry = RecentSearchEntry(query, searchExecutionKey(query, SearchSourceScope.fromQuery(query)), System.currentTimeMillis())
+    owners.savedSearches.save(recentSearchPresentation(entry).title.take(MAX_SAVED_SEARCH_NAME_LENGTH), entry)
 }

@@ -15,11 +15,10 @@ class TriageDeckViewModel(
     actions: TriageActions,
     quickSave: QuickSave,
     query: Query?,
-    fromForYou: Boolean,
     writeScope: CoroutineScope,
     removal: TriageRemoval? = null,
 ) : ViewModel() {
-    val deck = TriageDeck(viewModelScope, feed, actions, quickSave, query, fromForYou, writeScope, removal)
+    val deck = TriageDeck(viewModelScope, feed, actions, quickSave, query, fromForYou = false, writeScope, removal)
 
     override fun onCleared() = deck.close()
 }

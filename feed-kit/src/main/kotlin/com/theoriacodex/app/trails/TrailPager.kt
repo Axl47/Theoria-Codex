@@ -3,6 +3,7 @@ package com.theoriacodex.app.trails
 import com.theoriacodex.app.triage.TriageFeed
 import com.theoriacodex.app.triage.TriageFeedSnapshot
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.Query
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.currentCoroutineContext
@@ -20,6 +21,9 @@ data class TrailPage(val posts: List<Post>, val canLoadMore: Boolean)
 fun interface TrailPager {
     suspend fun next(): TrailPage
 }
+
+/** What a trail shows: its crumb [label], the [query] it searches (tag trails only) and the [pager] that feeds it. */
+class TrailSpec(val label: String, val query: Query?, val pager: TrailPager)
 
 /**
  * The next page, or null when it failed. A cancellation that is not the caller's own (the pager's timeout) is a failed

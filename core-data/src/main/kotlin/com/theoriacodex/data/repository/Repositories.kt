@@ -639,6 +639,8 @@ data class FeedFabRestoreState(
     @SerialName("source") val source: String? = null,
     @SerialName("language") val language: String? = null,
     @SerialName("fullColorOnly") val fullColorOnly: Boolean = false,
+    /** For You shows its posts as a grid instead of the swipe deck. */
+    @SerialName("grid") val grid: Boolean = false,
     @SerialName("searchAnimationByScope")
     val searchAnimationByScope: Map<String, SearchAnimationFilterRestoreState> = emptyMap(),
 )

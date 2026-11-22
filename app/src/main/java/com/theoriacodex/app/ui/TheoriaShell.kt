@@ -55,9 +55,7 @@ import com.theoriacodex.app.media.PostDownloadItem
 import com.theoriacodex.app.post.PostMutationViewModel
 import com.theoriacodex.app.recents.RecentsClearWorkflow
 import com.theoriacodex.app.recents.SavedSearchViewModel
-import com.theoriacodex.app.recents.fypSeedBySource
-import com.theoriacodex.app.recommend.ForYouViewModel
-import com.theoriacodex.app.recommend.state.ForYouAction
+import com.theoriacodex.app.recommend.ForYouDeckViewModel
 import com.theoriacodex.app.related.LikeToggleOutcome
 import com.theoriacodex.app.related.ViewerFeedOwner
 import com.theoriacodex.app.search.SearchViewModel
@@ -113,7 +111,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * The navigation-owned ViewModels the shell may reach, and actions waiting for Search or For You to exist.
+ * The navigation-owned ViewModels the shell may reach, and actions waiting for Search to exist.
  *
  * The slots outlive individual destination compositions: Viewer can keep paging through a still-live
  * back-stack owner, and only that owner's clear empties its slot. Hold one instance for the shell's
@@ -122,12 +120,11 @@ import kotlinx.coroutines.launch
 @Stable
 internal class RouteOwners {
     val search = RouteOwnerSlot<SearchViewModel>()
-    val forYou = RouteOwnerSlot<ForYouViewModel>()
+    val forYou = RouteOwnerSlot<ForYouDeckViewModel>()
     val creator = RouteOwnerSlot<CreatorProfileViewModel>()
     /** The Viewer while its destination is composed. */
     val viewer = RouteOwnerSlot<ViewerViewModel>()
     private val pendingSearchActions = PendingRouteActions<SearchAction>()
-    private val pendingForYouActions = PendingRouteActions<ForYouAction>()
 
     /** The live feeds a Viewer session can follow. */
     val feeds: List<ViewerFeedOwner>
@@ -148,16 +145,10 @@ internal class RouteOwners {
         pendingSearchActions.flush { action -> owner.onAction(action); true }
     }
 
-    fun publishForYou(owner: ForYouViewModel) {
-        forYou.publish(owner)
-        pendingForYouActions.flush { action -> owner.onAction(action); true }
-    }
+    fun publishForYou(owner: ForYouDeckViewModel) = forYou.publish(owner)
 
     fun dispatchOrQueue(action: SearchAction): Boolean =
         pendingSearchActions.dispatchOrEnqueue(action) { queued -> search.current?.onAction(queued) != null }
-
-    fun dispatchOrQueue(action: ForYouAction): Boolean =
-        pendingForYouActions.dispatchOrEnqueue(action) { queued -> forYou.current?.onAction(queued) != null }
 
     val postTagSearchActions = PostTagSearchActions(
         addInclude = { post, term -> dispatchOrQueue(SearchAction.AddPostIncludeTerm(post, term)) },
@@ -699,7 +690,6 @@ internal class TheoriaShell(
     }
 
     fun openHistoricalForYouSearch(entry: RecentSearchEntry) {
-        routes.dispatchOrQueue(ForYouAction.ReplaySearch(seedBySource = entry.fypSeedBySource(), sortMode = entry.query.sort))
         navigation.showTab(TopLevelDestination.ForYou)
     }
 

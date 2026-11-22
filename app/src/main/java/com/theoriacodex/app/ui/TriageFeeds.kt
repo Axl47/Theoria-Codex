@@ -60,7 +60,7 @@ internal class SeededTriageFeed(
  * no longer shows that query.
  */
 internal fun TheoriaShell.triageFeed(request: TriageRequest, seed: TriageSeed): SeededTriageFeed? = when (request.source) {
-    ViewerStreamSource.SEARCH, ViewerStreamSource.FOR_YOU, ViewerStreamSource.CREATOR_PROFILE ->
+    ViewerStreamSource.SEARCH, ViewerStreamSource.CREATOR_PROFILE ->
         routes.feed(request.source)?.takeIf { it.viewerFeed.queryHash == request.feedKey }
             ?.seededTriageFeed(request.feedKey, seed, features.mediaDurationCoordinator.states)
     ViewerStreamSource.CODEX -> request.codexId?.let { codexId ->
@@ -69,7 +69,8 @@ internal fun TheoriaShell.triageFeed(request: TriageRequest, seed: TriageSeed): 
         else cleaningReviewSnapshots(codexId, alsoIn)
         SeededTriageFeed(snapshots, flowOf(emptyList()), nextPage = {})
     }
-    ViewerStreamSource.RELATED, ViewerStreamSource.RECENTS, ViewerStreamSource.TRAIL -> null
+    // For You is a deck itself and offers no Triage.
+    ViewerStreamSource.FOR_YOU, ViewerStreamSource.RELATED, ViewerStreamSource.RECENTS, ViewerStreamSource.TRAIL -> null
 }
 
 /** What the deck's left swipe removes through when [request] opens it on a Codex to remove from; null otherwise. */

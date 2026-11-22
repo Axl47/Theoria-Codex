@@ -1,6 +1,5 @@
 package com.theoriacodex.app.recommend
 
-import com.theoriacodex.app.codex.CodexSaveRelevance
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -44,11 +43,9 @@ class ForYouInterestsTest {
         val interests = ForYouInterests.generate(SourceKey.GELBOORU,
             (1..12).map { listOf("Interest $it") })
         assertEquals(5, interests.size)
-        assertTrue(interests.last().discovery)
         assertTrue(interests.all { it.tags.single().startsWith("interest_") })
         assertEquals(5, interests.flatMap { it.tags }.distinct().size)
         assertEquals(emptyList<ForYouInterest>(), ForYouInterests.generate(SourceKey.PIXIV, listOf(listOf("1000users入り"))))
-        assertTrue(CodexSaveRelevance.fromTags(listOf("Blue Hair", "blue_hair")).hasSignals)
     }
 }
 

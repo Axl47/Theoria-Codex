@@ -130,7 +130,7 @@ private fun TheoriaShell.stillOver(origin: NavBackStackEntry?, from: Post): Bool
 }
 
 /** Each trail kind bound to the shell's loaders, read with the current sources and settings. */
-private suspend fun TheoriaShell.shellTrailSources(): TrailSources {
+internal suspend fun TheoriaShell.shellTrailSources(): TrailSources {
     val available = sources.availableSources.value
     val runtime = data.settingsRepository.observeSettings().first().runtime
     val tagLoader = SavedSearchFeedLoader(features.search).apply {

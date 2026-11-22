@@ -10,6 +10,8 @@ import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasScrollToIndexAction
@@ -34,6 +36,7 @@ import com.theoriacodex.app.appshell.AppShellViewModel
 import com.theoriacodex.app.TheoriaApplication
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.fixtures.JourneyAppContainer
+import com.theoriacodex.app.recommend.FOR_YOU_VIEW_TOGGLE_TAG
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.ui.TheoriaAppContent
@@ -65,21 +68,21 @@ class RelatedViewerReturnTest {
     @get:Rule val compose = createComposeRule()
     @get:Rule val temporary = TemporaryFolder()
 
-    @Test fun `Search related shelf survives repeated fullscreen return`() = verifyReturn(RecentSearchKind.SOURCE)
-    @Test fun `For You related shelf survives repeated fullscreen return`() = verifyReturn(RecentSearchKind.FYP)
+    @Test fun `Search related shelf survives repeated fullscreen return`() = verifyReturn(forYou = false)
+    @Test fun `For You grid related shelf survives repeated fullscreen return`() = verifyReturn(forYou = true)
     @Test
     @Config(application = TheoriaApplication::class, shadows = [ViewerReturnApplicationShadow::class])
-    fun `Gelbooru video shelf survives Search fullscreen return`() = verifyReturn(RecentSearchKind.SOURCE, SourceKey.GELBOORU, true)
+    fun `Gelbooru video shelf survives Search fullscreen return`() = verifyReturn(forYou = false, SourceKey.GELBOORU, true)
     @Test
     @Config(application = TheoriaApplication::class, shadows = [ViewerReturnApplicationShadow::class])
-    fun `Gelbooru video shelf survives For You fullscreen return`() = verifyReturn(RecentSearchKind.FYP, SourceKey.GELBOORU, true)
+    fun `Gelbooru video shelf survives For You grid fullscreen return`() = verifyReturn(forYou = true, SourceKey.GELBOORU, true)
 
-    private fun verifyReturn(kind: RecentSearchKind, source: SourceKey = SourceKey.PIXIV, video: Boolean = false) {
+    private fun verifyReturn(forYou: Boolean, source: SourceKey = SourceKey.PIXIV, video: Boolean = false) {
         val posts = relatedPosts(source, video)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val showApp = mutableStateOf(true)
         var viewModelOwner: ViewModelStoreOwner? = null
-        val graph = relatedGraph(source, posts, scope, kind)
+        val graph = relatedGraph(source, posts, scope)
         try {
             val restoration = StateRestorationTester(compose)
             restoration.setContent {
@@ -88,14 +91,7 @@ class RelatedViewerReturnTest {
                 if (showApp.value) TheoriaAppContent(graph, viewModel<ViewerSessionRetentionViewModel>(), viewModel<AppShellViewModel>())
             }
             compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Library").fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithContentDescription("Library").performClick()
-            compose.waitUntil(10_000) { compose.onAllNodesWithTag(librarySectionTag(LibrarySection.History)).fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithTag(librarySectionTag(LibrarySection.History)).performClick()
-            compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Filter History by section").isDisplayed() }
-            compose.onNodeWithContentDescription("Filter History by section").performClick()
-            compose.onNodeWithText("Searches").performClick()
-            compose.waitUntil(10_000) { compose.onAllNodesWithTag("Recent search:return-query").fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithTag("Recent search:return-query").performClick()
+            if (forYou) openSeedLaneGrid() else openSeedSearch()
             compose.waitUntil(10_000) { compose.onAllNodesWithTag(searchCardTestTag(posts[6].id)).fetchSemanticsNodes().isNotEmpty() }
             val verticalGrid = hasScrollToIndexAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange)
             compose.onNode(verticalGrid).performScrollToIndex(10)
@@ -138,6 +134,28 @@ class RelatedViewerReturnTest {
         }
     }
 
+    /** Runs the recorded search for "seed" from History. */
+    private fun openSeedSearch() {
+        compose.onNodeWithContentDescription("Library").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag(librarySectionTag(LibrarySection.History)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(librarySectionTag(LibrarySection.History)).performClick()
+        compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Filter History by section").isDisplayed() }
+        compose.onNodeWithContentDescription("Filter History by section").performClick()
+        compose.onNodeWithText("Searches").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("Recent search:return-query").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("Recent search:return-query").performClick()
+    }
+
+    /** Shows For You as a grid, narrowed to the "seed" lane, so its grid holds the same posts as the search. */
+    private fun openSeedLaneGrid() {
+        compose.onNodeWithContentDescription("For You").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag(FOR_YOU_VIEW_TOGGLE_TAG).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(FOR_YOU_VIEW_TOGGLE_TAG).performClick()
+        val chip = hasText("seed") and hasClickAction()
+        compose.waitUntil(10_000) { compose.onAllNodes(chip).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(chip).performClick()
+    }
+
     private fun relatedPosts(source: SourceKey, video: Boolean): List<com.theoriacodex.domain.model.Post> {
         val videoPath = if (video) {
             val root = generateSequence(File(requireNotNull(System.getProperty("user.dir"))).absoluteFile) { it.parentFile }
@@ -160,17 +178,14 @@ class RelatedViewerReturnTest {
         source: SourceKey,
         posts: List<com.theoriacodex.domain.model.Post>,
         scope: CoroutineScope,
-        kind: RecentSearchKind,
     ): JourneyAppContainer {
         return runBlocking(Dispatchers.IO) {
             JourneyAppContainer(ApplicationProvider.getApplicationContext(), temporary.newFolder(),
                 mapOf(source to posts), scope).also {
                 it.awaitReady()
                 it.data.recentsRepository.recordSearch(
-                    Query(if (kind == RecentSearchKind.FYP) QueryMode.Unified else QueryMode.Source(source),
-                        listOf("seed"), emptyList(), SortMode.NEWEST, null, null),
-                    "return-query", kind, listOf(source),
-                    if (kind == RecentSearchKind.FYP) mapOf(source to listOf("seed")) else emptyMap(),
+                    Query(QueryMode.Source(source), listOf("seed"), emptyList(), SortMode.NEWEST, null, null),
+                    "return-query", RecentSearchKind.SOURCE, listOf(source),
                 )
             }
         }

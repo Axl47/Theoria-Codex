@@ -80,12 +80,12 @@ internal class TriageHandOffViewModel : ViewModel() {
 
 /** The activity's [TriageHandOffViewModel], the same instance from the shell and from the deck's entry. */
 @Composable
-private fun rememberTriageHandOff(): TriageHandOffViewModel =
+internal fun rememberTriageHandOff(): TriageHandOffViewModel =
     viewModel(viewModelStoreOwner = LocalContext.current.findActivity() as ComponentActivity)
 
 /**
  * Opens the triage deck by pushing [AppRoute.Triage]. A feed's menu calls it with the feed's own source and key
- * (Search, For You and a Creator page with their query hash, a Codex or Likes with `codex:<id>`) and what its grid
+ * (Search and a Creator page with their query hash, a Codex or Likes with `codex:<id>`) and what its grid
  * shows. A second tap meanwhile replaces the first.
  */
 @Composable
@@ -131,9 +131,8 @@ internal fun TriageDestination(shell: TheoriaShell, request: TriageRequest) {
     val query = shell.triageQuery(request)
     val quickSave = LocalQuickSave.current
     val owner = viewModel<TriageDeckViewModel> {
-        val fromForYou = request.source == ViewerStreamSource.FOR_YOU
         TriageDeckViewModel(
-            feed, ShellTriageActions(shell), quickSave, query, fromForYou, handOff.viewModelScope, shell.triageRemoval(request),
+            feed, ShellTriageActions(shell), quickSave, query, handOff.viewModelScope, shell.triageRemoval(request),
         )
     }
     val deck by owner.deck.state.collectAsStateWithLifecycle()
@@ -191,7 +190,7 @@ private fun TheoriaShell.triageCallbacks(
     return TriageDeckCallbacks(
         onOpenPost = { posts, index -> openTriagePost(request, seed, query, posts, index) },
         onOpenSavePicker = { post ->
-            pendingSave.request(listOf(post), fromForYou = request.source == ViewerStreamSource.FOR_YOU, searchQuery = query, onPick = save(post))
+            pendingSave.request(listOf(post), searchQuery = query, onPick = save(post))
         },
         onNewCodex = { post -> newCodex.openNewCodex { codex -> save(post)(codex) } },
         onClose = { navController.popBackStack() },

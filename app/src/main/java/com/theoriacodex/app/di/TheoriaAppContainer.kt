@@ -467,10 +467,7 @@ internal class DefaultTheoriaAppContainer(
         ),
         forYou = ForYouCoordinator(
             registry = sourceRegistry,
-            settingsRepository = settingsRepository,
             likesRepository = likesRepository,
-            savedSearches = savedSearches,
-            recentsRepository = recentsRepository,
             statisticsRepository = statisticsRepository,
             tagSuggestionStore = tagSuggestionStore,
             postResolutions = postResolutions,
