@@ -296,6 +296,21 @@ class ForYouSectionsStateTest {
         assertEquals(selected.feed.seed, owner.state.value.seedSummaryBySource)
     }
 
+    // Shelf Triage opens a shelf, then at once asks for the deck by the shelf's key, which must already name the live feed.
+    @Test fun `opening a shelf makes its key the live feed's key at once`() = runTest {
+        val engine = SectionsEngine()
+        val owner = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        owner.synchronizeEnvironment(AppSettings(), 3)
+        advanceUntilIdle()
+        val section = owner.state.value.home.sections.single()
+        owner.onAction(ForYouAction.OpenSection(section.id))
+        assertEquals(section.feed.queryHash, owner.viewerFeed.queryHash)
+        owner.onAction(ForYouAction.ShowHome)
+        val mix = checkNotNull(owner.state.value.home.mixedFeed)
+        owner.onAction(ForYouAction.OpenMixedFeed)
+        assertEquals(mix.queryHash, owner.viewerFeed.queryHash)
+    }
+
     @Test fun `cached section opens immediately pages its own query and retains pages on return`() = runTest {
         val engine = SectionsEngine()
         val owner = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
