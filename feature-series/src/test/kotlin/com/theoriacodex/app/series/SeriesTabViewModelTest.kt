@@ -16,6 +16,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -41,16 +42,34 @@ class SeriesTabViewModelTest {
         advanceUntilIdle()
         assertEquals(emptyList<SeriesSourceListing>(), viewModel.state.value.search)
 
-        sources.complete(listOf(Answering))
+        sources.complete(listOf(Answering()))
         advanceUntilIdle()
         val listing = viewModel.state.value.search?.single()?.listing as SeriesListing.Loaded
         assertEquals(listOf("one punch"), listing.series.map { it.title })
     }
+
+    @Test
+    fun aSearchOnScreenRunsInASourceTurnedOnMeanwhile() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        var offered = listOf<SeriesSource>(Answering())
+        val changed = MutableStateFlow(0)
+        val viewModel = SeriesTabViewModel(NothingStored, { offered }, changed) {}
+        advanceUntilIdle()
+        viewModel.search("one punch")
+        advanceUntilIdle()
+
+        offered = offered + Answering("custom_mihon_8")
+        changed.value = 1
+        advanceUntilIdle()
+
+        val found = viewModel.state.value.search.orEmpty().map { (it.listing as SeriesListing.Loaded).series.single().id.source.id }
+        assertEquals(listOf("custom_mihon_7", "custom_mihon_8"), found)
+    }
 }
 
 /** Answers a search with one series titled by the text searched for. */
-private object Answering : SeriesSource {
-    override val key = SourceKey.parseOrThrow("custom_mihon_7")
+private class Answering(id: String = "custom_mihon_7") : SeriesSource {
+    override val key = SourceKey.parseOrThrow(id)
     override val name = "Fake"
     override val language = "en"
     override suspend fun popular(page: Int) = SeriesPage(emptyList(), hasNextPage = false)

@@ -84,16 +84,28 @@ class SeriesTabViewModel(
         }
     }
 
-    /** Keeps what is on screen for the sources still on offer, and browses the first when the browsed one is gone. */
+    /**
+     * Keeps what is on screen for the sources still on offer, and browses the first when the browsed one is gone. A
+     * search on screen, or one sent while the extensions were loading, runs in every source that is new or replaced.
+     */
     private fun showSources(sources: List<SeriesSource>) {
-        val waited = state.value.sources == null
         val keys = sources.mapTo(HashSet()) { it.key }
+        val before = state.value.sources.orEmpty()
+        val fresh = sources.filter { source -> before.none { it === source } }
+        val query = searchText
         mutableState.update { state ->
-            state.copy(sources = sources, browse = state.browse?.takeIf { it.key in keys }, search = state.search?.filter { it.key in keys })
+            state.copy(
+                sources = sources,
+                browse = state.browse?.takeIf { it.key in keys },
+                search = query?.let {
+                    sources.map { source ->
+                        state.search?.firstOrNull { it.key == source.key && source !in fresh } ?: SeriesSourceListing(source.key, source.name, SeriesListing.Loading)
+                    }
+                },
+            )
         }
         if (state.value.browse == null) sources.firstOrNull()?.let { browse(it.key) }
-        // A search sent while the extensions were loading has waited for them.
-        if (waited) searchText?.let(::search)
+        if (query != null) fresh.forEach { searchIn(it, query) }
     }
 
     /** Shows [key]'s popular series from the first page. */
@@ -159,7 +171,8 @@ class SeriesTabViewModel(
     private fun searchIn(source: SeriesSource, query: String) {
         viewModelScope.launch {
             val listing = firstPage { source.search(query, 1) }
-            updateSearch(source.key, query, listing)
+            // An answer from a source that was switched off or replaced meanwhile is dropped.
+            if (source(source.key) === source) updateSearch(source.key, query, listing)
         }
     }
 
