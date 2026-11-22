@@ -56,13 +56,15 @@ internal fun trailSpec(
 }
 
 /**
- * The level's search narrowed by one more tag: [tag], added to the include groups of the [context] level it came from
- * (nothing is added twice), and searched where that level searched (everywhere for a Unified level, else the post's own
+ * The level's search narrowed by one more tag: [tag], ahead of the include groups of the [context] level it came from
+ * (nothing is added twice), searched where that level searched (everywhere for a Unified level, else the post's own
  * source) under its filters: sort, dates and, where it searched the same place, its exclusions, minus [tag] itself. A
- * tag forked again from the trail appends again. It asks for animated posts when the level's query did or the level shows
- * only animated posts ([animatedOnly]); a Creator or Similar level has no query, so it searches [tag] alone. A
- * single-source trail that would overrun [termLimit] keeps [tag] first, then the level's include groups in order, then the
- * exclusions that still fit.
+ * tag forked again from the trail narrows again. It asks for animated posts when the level's query did or the level
+ * shows only animated posts ([animatedOnly]); a Creator or Similar level has no query, so it searches [tag] alone.
+ *
+ * [tag] leads because a term limit keeps the leading groups: a single-source trail over [termLimit] keeps [tag], then
+ * the level's groups in order, then the exclusions that fit, and each source of a Unified trail does the same with its
+ * own limit.
  */
 internal fun trailTagQuery(
     tag: String,
@@ -78,12 +80,10 @@ internal fun trailTagQuery(
     val earlier = level?.includeTermGroups.orEmpty()
         .filterNot { group -> group.terms.singleOrNull()?.value.equals(tag, ignoreCase = true) }
     val media = if (animatedOnly || context?.media == MediaFilter.ANIMATED) MediaFilter.ANIMATED else MediaFilter.ANY
-    val tagGroup = SearchTermGroup.single(SearchTerm(tag))
-    val query = Query(mode, listOf(tag), emptyList(), context?.sort ?: SortMode.NEWEST, context?.dateRange, null)
+    return Query(mode, listOf(tag), emptyList(), context?.sort ?: SortMode.NEWEST, context?.dateRange, null)
         .copy(excludeTerms = excluded, media = media)
-    // The limit keeps leading groups, so it sees the tag first; the result reads as the level's tags, then the new one.
-    val limited = query.withIncludeTermGroups(listOf(tagGroup) + earlier).withinTermLimit(termLimit.takeIf { mode is QueryMode.Source })
-    return limited.withIncludeTermGroups(limited.includeTermGroups.drop(1) + tagGroup)
+        .withIncludeTermGroups(listOf(SearchTermGroup.single(SearchTerm(tag))) + earlier)
+        .withinTermLimit(termLimit.takeIf { mode is QueryMode.Source })
 }
 
 /**
