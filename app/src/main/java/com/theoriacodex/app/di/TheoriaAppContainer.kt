@@ -120,7 +120,6 @@ import com.theoriacodex.sources.pixiv.PixivTokenCoordinator
 import com.theoriacodex.sources.pixiv.PixivUgoiraMetadataCache
 import com.theoriacodex.app.library.LibrarySectionStore
 import java.io.File
-import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -136,8 +135,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import com.theoriacodex.app.series.keepSeriesUpdatesScheduled
 import com.theoriacodex.app.series.SeriesDownloadScheduler
-import com.theoriacodex.app.media.downloadMediaFile
-import com.theoriacodex.app.media.decodableImageType
+import com.theoriacodex.app.series.downloadChapterPage
 import com.theoriacodex.data.repository.SeriesDownloadStore
 import com.theoriacodex.data.repository.SeriesDownloads
 
@@ -562,13 +560,9 @@ internal class DefaultTheoriaAppContainer(
             queueFile = File(appContext.noBackupFilesDir, "series_download_queue.json"),
             repository = repository,
             sources = host::sources,
-            // The client that carries the extension interceptor, as the Viewer's image loader does. A page counts only
-            // once it decodes as an image, so an error page that arrives whole fails the chapter instead.
-            fetch = { url, file ->
-                downloadMediaFile(url, emptyMap(), file, client = httpClients.downloads)
-                decodableImageType(file) ?: throw IOException("A page is not an image")
-            },
-            scheduler = SeriesDownloadScheduler(appContext),
+            // The client that carries the extension interceptor, as the Viewer's image loader does.
+            fetch = { url, file -> downloadChapterPage(url, file, httpClients.downloads) },
+            scheduler = SeriesDownloadScheduler(appContext) { settingsRepository.observeSettings().first().cache },
         )
         SeriesDependencies(
             repository, host::sources, host.extensions, downloads,

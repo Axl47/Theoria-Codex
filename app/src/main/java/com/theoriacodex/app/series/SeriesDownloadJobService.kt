@@ -6,10 +6,18 @@ import android.app.job.JobScheduler
 import android.app.job.JobService
 import android.content.ComponentName
 import android.content.Context
+import android.net.ConnectivityManager
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
+import com.theoriacodex.app.media.MediaHttpException
+import com.theoriacodex.app.media.UnsupportedMediaException
+import com.theoriacodex.app.media.decodableImageType
+import com.theoriacodex.app.media.downloadMediaFile
+import com.theoriacodex.data.repository.CacheSettings
+import com.theoriacodex.data.repository.ChapterUnavailable
 import com.theoriacodex.data.repository.DownloadScheduler
 import com.theoriacodex.data.repository.DrainProgress
 import com.theoriacodex.domain.diagnostics.Diagnostics
+import java.io.File
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
@@ -19,26 +27,56 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
 
 /** Chapter downloads as `JobScheduler` knows them: the user's, and those the check for new chapters queued. */
 internal const val USER_DOWNLOAD_JOB_ID = 3102
 internal const val AUTOMATIC_DOWNLOAD_JOB_ID = 3103
 
 /**
- * Runs [SeriesDownloadJobService]. Chapters the user queued download in a user-initiated data transfer job on any
- * network: it keeps going once the app leaves the screen and waits for a connection when there is none. Chapters the
- * check for new chapters queued download in an ordinary job that waits for an unmetered network. Both are kept across
- * reboots; the manifest declares the service, `RUN_USER_INITIATED_JOBS` and `RECEIVE_BOOT_COMPLETED` for that.
+ * Downloads the chapter page at [url] into [file] through [client] and returns its image type. A page that is gone or
+ * not an image makes its chapter [unavailable][ChapterUnavailable]; any other failure may pass and throws as it is.
  */
-internal class SeriesDownloadScheduler(private val context: Context) : DownloadScheduler {
+internal suspend fun downloadChapterPage(url: String, file: File, client: OkHttpClient): String {
+    try {
+        downloadMediaFile(url, emptyMap(), file, client = client)
+    } catch (error: MediaHttpException) {
+        if (error.code == HTTP_NOT_FOUND || error.code == HTTP_GONE) throw ChapterUnavailable("A page is gone")
+        throw error
+    } catch (_: UnsupportedMediaException) {
+        throw ChapterUnavailable("A page is not an image")
+    }
+    return decodableImageType(file) ?: throw ChapterUnavailable("A page is not an image")
+}
+
+private const val HTTP_NOT_FOUND = 404
+private const val HTTP_GONE = 410
+
+/**
+ * Runs [SeriesDownloadJobService]. Chapters the user queued download in a user-initiated data transfer job on the
+ * networks [downloadSettings] allow, as post downloads do: it keeps going once the app leaves the screen and waits for
+ * such a network when there is none. Chapters the check for new chapters queued download in an ordinary job that waits
+ * for an unmetered network. Both are kept across reboots; the manifest declares the service, `RUN_USER_INITIATED_JOBS`
+ * and `RECEIVE_BOOT_COMPLETED` for that.
+ */
+internal class SeriesDownloadScheduler(
+    private val context: Context,
+    private val downloadSettings: suspend () -> CacheSettings,
+) : DownloadScheduler {
     private val scheduler get() = context.getSystemService(JobScheduler::class.java)
 
-    override fun schedule(automatic: Boolean) {
+    override suspend fun schedule(automatic: Boolean) {
         if (automatic) {
             scheduler.schedule(job(AUTOMATIC_DOWNLOAD_JOB_ID).setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED).build())
             return
         }
-        val userInitiated = job(USER_DOWNLOAD_JOB_ID).setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+        val settings = downloadSettings()
+        val network = when {
+            !settings.downloadsOverMetered -> JobInfo.NETWORK_TYPE_UNMETERED
+            !settings.downloadsOverRoaming -> JobInfo.NETWORK_TYPE_NOT_ROAMING
+            else -> JobInfo.NETWORK_TYPE_ANY
+        }
+        val userInitiated = job(USER_DOWNLOAD_JOB_ID).setRequiredNetworkType(network)
         // Only an app in view may start a user-initiated job. Out of view (resuming after a restart, say) the
         // chapters still download, in an ordinary job.
         val scheduled = try {
@@ -49,7 +87,7 @@ internal class SeriesDownloadScheduler(private val context: Context) : DownloadS
         if (scheduled != JobScheduler.RESULT_SUCCESS) scheduler.schedule(userInitiated.setUserInitiated(false).build())
     }
 
-    override fun ensureScheduled(automatic: Boolean) {
+    override suspend fun ensureScheduled(automatic: Boolean) {
         if (scheduler.getPendingJob(if (automatic) AUTOMATIC_DOWNLOAD_JOB_ID else USER_DOWNLOAD_JOB_ID) == null) schedule(automatic)
     }
 
@@ -70,12 +108,10 @@ class SeriesDownloadJobService : JobService() {
         // A user-initiated job must name its notification at once.
         showProgress(params, null)
         runs[params.jobId] = scope.launch {
-            // A full disk, say, while the queue is saved: the system runs the job again after a growing wait.
+            // A chapter that may download later, or a full disk while the queue is saved: the system runs the job again
+            // after a growing wait.
             val retry = try {
-                val downloads = (application as TheoriaAppContainerOwner).awaitAppContainer().series?.downloads
-                val result = downloads?.drain(automatic = params.jobId == AUTOMATIC_DOWNLOAD_JOB_ID) { showProgress(params, it) }
-                if (result != null && result.failed > 0) notifyDownloadsFailed(this@SeriesDownloadJobService, result.failed)
-                false
+                drain(params)
             } catch (error: CancellationException) {
                 // onStopJob ended this run; what is left stays queued for the next.
                 throw error
@@ -91,6 +127,19 @@ class SeriesDownloadJobService : JobService() {
             jobFinished(params, retry)
         }
         return true
+    }
+
+    /**
+     * Drains the job's lane; true when it should run again later. The automatic lane waits while the default network is
+     * metered, even if the system started the job on an unmetered one, since requests go over the default network.
+     */
+    private suspend fun drain(params: JobParameters): Boolean {
+        val automatic = params.jobId == AUTOMATIC_DOWNLOAD_JOB_ID
+        if (automatic && getSystemService(ConnectivityManager::class.java).isActiveNetworkMetered) return true
+        val downloads = (application as TheoriaAppContainerOwner).awaitAppContainer().series?.downloads ?: return false
+        val result = downloads.drain(automatic) { showProgress(params, it) }
+        if (result.failed > 0) notifyDownloadsFailed(this, result.failed)
+        return result.retry
     }
 
     /** The network went away, say: the system runs the job again later. Stopped by the user, it waits for the next app start. */

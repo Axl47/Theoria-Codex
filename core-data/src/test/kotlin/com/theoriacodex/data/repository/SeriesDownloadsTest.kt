@@ -65,15 +65,17 @@ class SeriesDownloadsTest {
 
     @Test fun `a chapter whose files do not match its marker is not on the device`() = runTest {
         val store = store()
-        listOf("/c1", "/c2").forEach { address -> store.write(id, address) { staging -> listOf(page(staging, 0), page(staging, 1)) } }
+        listOf("/c1", "/c2", "/c3").forEach { address -> store.write(id, address) { staging -> listOf(page(staging, 0), page(staging, 1)) } }
 
-        // What a disk that lost data or a delete from outside the app can leave: a page missing, a page cut short.
+        // What a disk that lost data, a delete from outside the app, or a delete midway through this read can leave: a
+        // page missing, a page cut short, no marker.
         File(chapterFolder("/c1"), "0002.png").delete()
         File(chapterFolder("/c2"), "0001.png").writeBytes(byteArrayOf(1))
+        File(chapterFolder("/c3"), "chapter.json").delete()
 
-        assertEquals(emptySet<String>(), store.downloaded(id))
-        assertNull(store.pages(id, "/c1"))
-        assertNull(store.pages(id, "/c2"))
+        assertEquals(listOf(null, null, null), listOf("/c1", "/c2", "/c3").map { store.pages(id, it) })
+        // As the files are read when the process starts.
+        assertEquals(emptySet<String>(), store().downloaded(id))
     }
 
     @Test fun `what stopped downloads and deletes leave is swept`() = runTest {
@@ -99,11 +101,16 @@ class SeriesDownloadsTest {
 
         store.delete(id, "/c1")
         assertEquals(setOf("/c2"), store.downloaded(id))
+        store.delete(id, "/c2")
+        // The series' folder goes with its last chapter.
+        assertEquals(1, root().list().orEmpty().size)
+        store.write(id, "/c3") { listOf(page(it, 0)) }
         store.deleteSeries(id)
         assertEquals(emptySet<String>(), store.downloaded(id))
         assertEquals(setOf("/c1"), store.downloaded(other))
         store.deleteAll()
         assertEquals(0L, store.sizeBytes())
+        assertEquals(emptyMap<SeriesId, Set<String>>(), store().downloaded())
     }
 
     @Test fun `the files decide what is downloaded whatever the database or a lost queue says`() = runTest {
@@ -143,7 +150,7 @@ class SeriesDownloadsTest {
         assertFalse(root().walk().any { it.name.startsWith(".partial-") })
     }
 
-    @Test fun `a page is tried a bounded number of times and a chapter that still fails is not downloaded`() = runTest {
+    @Test fun `a page is tried a bounded number of times and a failure that may pass keeps the chapter and stops the lane`() = runTest {
         val harness = Harness(this)
         val attempts = mutableMapOf<String, Int>()
         harness.onFetch = { url ->
@@ -151,13 +158,26 @@ class SeriesDownloadsTest {
             // Chapter 1's first page arrives on its last try; chapter 2's never does.
             if (url == "$PAGES/c1/1" && attempt < SeriesDownloads.PAGE_ATTEMPTS || url == "$PAGES/c2/1") throw IOException("Lost")
         }
-        harness.downloads.download(id, listOf("/c1", "/c2"))
+        harness.downloads.download(id, listOf("/c1", "/c2", "/c3"))
 
-        assertEquals(DrainResult(downloaded = 1, failed = 1), harness.downloads.drain(automatic = false))
+        assertEquals(DrainResult(downloaded = 1, failed = 0, retry = true), harness.downloads.drain(automatic = false))
         assertEquals(SeriesDownloads.PAGE_ATTEMPTS, attempts["$PAGES/c1/1"])
         assertEquals(SeriesDownloads.PAGE_ATTEMPTS, attempts["$PAGES/c2/1"])
-        assertEquals(mapOf("/c1" to ChapterDownload.OnDevice), harness.downloads.states(id).first())
+        assertEquals(
+            mapOf("/c1" to ChapterDownload.OnDevice, "/c2" to ChapterDownload.Queued(null), "/c3" to ChapterDownload.Queued(null)),
+            harness.downloads.states(id).first(),
+        )
         assertFalse(root().walk().any { it.name.startsWith(".partial-") })
+    }
+
+    @Test fun `an unavailable chapter leaves the queue and the lane goes on`() = runTest {
+        val harness = Harness(this)
+        harness.onFetch = { url -> if ("/c1/" in url) throw ChapterUnavailable("Gone") }
+        // Chapter 9 is not one the source lists.
+        harness.downloads.download(id, listOf("/c1", "/c9", "/c2"))
+
+        assertEquals(DrainResult(downloaded = 1, failed = 2), harness.downloads.drain(automatic = false))
+        assertEquals(mapOf("/c2" to ChapterDownload.OnDevice), harness.downloads.states(id).first())
     }
 
     @Test fun `a queue left by a process that ended resumes and its leftovers go`() = runTest {
@@ -227,7 +247,11 @@ class SeriesDownloadsTest {
     private fun page(staging: File, index: Int) = File(staging, SeriesDownloadStore.pageFileName(index, "png")).apply { writeBytes(PAGE) }
 
     /** Downloads over this test's folder, with a source of two pages per chapter and a fetch that records each page. */
-    private inner class Harness(scope: TestScope, stored: StoredSeries = StoredSeries(Series(id, "Title"))) {
+    private inner class Harness(
+        scope: TestScope,
+        stored: StoredSeries = StoredSeries(Series(id, "Title")),
+        entries: List<StoredSeriesEntry> = chapters,
+    ) {
         val scheduled = mutableListOf<String>()
         val fetched = mutableListOf<String>()
         var onFetch: suspend (String) -> Unit = {}
@@ -235,7 +259,7 @@ class SeriesDownloadsTest {
         val downloads = SeriesDownloads(
             store = store,
             queueFile = folder.root.resolve("queue.json"),
-            repository = Stored(stored, chapters),
+            repository = Stored(stored, entries),
             sources = { listOf(TwoPages(source)) },
             fetch = { url, file ->
                 onFetch(url)
@@ -244,11 +268,11 @@ class SeriesDownloadsTest {
                 "image/png"
             },
             scheduler = object : DownloadScheduler {
-                override fun schedule(automatic: Boolean) {
+                override suspend fun schedule(automatic: Boolean) {
                     scheduled += "schedule ${if (automatic) "automatic" else "user"}"
                 }
 
-                override fun ensureScheduled(automatic: Boolean) {
+                override suspend fun ensureScheduled(automatic: Boolean) {
                     scheduled += "ensure ${if (automatic) "automatic" else "user"}"
                 }
             },

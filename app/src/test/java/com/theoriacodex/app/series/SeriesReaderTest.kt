@@ -202,9 +202,9 @@ class SeriesReaderTest {
             sources = sources,
             fetch = { _, _ -> error("Nothing downloads here") },
             scheduler = object : DownloadScheduler {
-                override fun schedule(automatic: Boolean) = Unit
+                override suspend fun schedule(automatic: Boolean) = Unit
 
-                override fun ensureScheduled(automatic: Boolean) = Unit
+                override suspend fun ensureScheduled(automatic: Boolean) = Unit
             },
             files = AtomicJsonFileStore(StandardTestDispatcher(testScheduler)),
         )

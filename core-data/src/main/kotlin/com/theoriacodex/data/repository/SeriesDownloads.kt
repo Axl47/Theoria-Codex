@@ -11,7 +11,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
@@ -23,8 +22,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.mapLatest
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
@@ -49,8 +46,17 @@ data class QueuedChapter(val series: SeriesId, val entry: String, val automatic:
 /** The chapter a drain is fetching, for its notification: the [number]th of the [of] it has taken on so far. */
 data class DrainProgress(val series: String, val chapter: String, val seriesId: SeriesId, val number: Int, val of: Int, val pages: Int, val pageCount: Int)
 
-/** How many chapters a drain finished and how many it gave up on. */
-data class DrainResult(val downloaded: Int, val failed: Int)
+/**
+ * How many chapters a drain finished and how many it gave up on, and whether it stopped at a failure that may pass, such
+ * as no connection, a busy or refusing server, or a source that is off, which leaves the chapter queued to try again.
+ */
+data class DrainResult(val downloaded: Int, val failed: Int, val retry: Boolean = false)
+
+/**
+ * A chapter that cannot download however long one waits: its source no longer lists it, or a page is gone (404 or
+ * 410) or is not an image. It leaves the queue; [SeriesDownloads]' fetch throws it for such a page.
+ */
+class ChapterUnavailable(message: String) : IOException(message)
 
 /** What the series page's Download menu queues. */
 enum class DownloadChoice {
@@ -63,14 +69,14 @@ enum class DownloadChoice {
 /** Runs [SeriesDownloads.drain] when the system lets it; the app's job scheduler. */
 interface DownloadScheduler {
     /**
-     * Has the drain of one lane run soon: on any network for chapters the user queued, only on an unmetered one for
-     * [automatic] ones. Each lane is its own job, so neither stops or holds up the other's; this replaces a run of the
-     * same lane that has not started draining.
+     * Has the drain of one lane run soon: on the networks the download settings allow for chapters the user queued,
+     * only on an unmetered one for [automatic] ones. Each lane is its own job, so neither stops or holds up the other's;
+     * this replaces a run of the same lane that has not started draining.
      */
-    fun schedule(automatic: Boolean)
+    suspend fun schedule(automatic: Boolean)
 
     /** As [schedule], unless that lane's run is already scheduled or running, which this must not stop. */
-    fun ensureScheduled(automatic: Boolean)
+    suspend fun ensureScheduled(automatic: Boolean)
 }
 
 /**
@@ -82,10 +88,10 @@ interface DownloadScheduler {
  * chapters queued, each drained by its own job ([drain]). Drains fetch in queue order, one chapter at a time across
  * both lanes, which also keeps each source to one chapter at a time. A chapter's pages are asked for right before it
  * is fetched, since their addresses expire, and fetched a few at a time through [fetch], each tried [PAGE_ATTEMPTS]
- * times; a chapter that still fails leaves the queue, not downloaded. [scheduler] runs drains: queuing a chapter while
- * its lane has none running schedules one, and [resume] does after the process restarts.
+ * times. A chapter that is [unavailable][ChapterUnavailable] then leaves the queue, not downloaded; any other failure
+ * keeps it queued and stops its lane until the system runs the job again. [scheduler] runs drains: queuing a chapter
+ * while its lane has none running schedules one, and [resume] does after the process restarts.
  */
-@OptIn(ExperimentalCoroutinesApi::class)
 class SeriesDownloads(
     private val store: SeriesDownloadStore,
     private val queueFile: File,
@@ -104,9 +110,6 @@ class SeriesDownloads(
     private val drains = Mutex()
     private val queue = MutableStateFlow<List<QueuedChapter>>(emptyList())
     private val fetching = MutableStateFlow<Pair<QueuedChapter, Float>?>(null)
-
-    /** Moves whenever chapters arrive on the device or leave it. */
-    private val changes = MutableStateFlow(0)
     private var loaded = false
 
     /** The lanes with a drain under way, by [QueuedChapter.automatic]. */
@@ -116,9 +119,8 @@ class SeriesDownloads(
     /** Each chapter of [id] that is queued or on the device, by address. */
     fun states(id: SeriesId): Flow<Map<String, ChapterDownload>> = flow {
         lock.withLock { load() }
-        val onDevice = changes.mapLatest { store.downloaded(id) }
         emitAll(
-            combine(onDevice, queue, fetching) { downloaded, queued, current ->
+            combine(store.observe(id), queue, fetching) { downloaded, queued, current ->
                 downloaded.associateWith<String, ChapterDownload> { ChapterDownload.OnDevice } +
                     queued.filter { it.series == id }.associate { chapter ->
                         chapter.entry to ChapterDownload.Queued(current?.takeIf { it.first == chapter }?.second)
@@ -140,7 +142,7 @@ class SeriesDownloads(
             if (draining.isEmpty()) store.removeUnfinished()
             queue.value
         }
-        queued.map { it.automatic }.distinct().forEach(scheduler::ensureScheduled)
+        queued.map { it.automatic }.distinct().forEach { scheduler.ensureScheduled(it) }
     }
 
     /**
@@ -181,7 +183,6 @@ class SeriesDownloads(
     suspend fun delete(id: SeriesId, entry: String) = withContext(NonCancellable) {
         remove { it.series == id && it.entry == entry }
         store.delete(id, entry)
-        changes.update { it + 1 }
     }
 
     /**
@@ -191,21 +192,20 @@ class SeriesDownloads(
     suspend fun deleteSeries(id: SeriesId) = withContext(NonCancellable) {
         remove { it.series == id }
         store.deleteSeries(id)
-        changes.update { it + 1 }
     }
 
     /** Deletes every download and empties the queue. */
     suspend fun deleteAll() = withContext(NonCancellable) {
         remove { true }
         store.deleteAll()
-        changes.update { it + 1 }
     }
 
     suspend fun sizeBytes(): Long = store.sizeBytes()
 
     /**
-     * Downloads one lane of the queue, chapters the user queued or [automatic] ones, in order until it is empty.
-     * Cancelling it stops the chapter being fetched, which stays queued for the next drain.
+     * Downloads one lane of the queue, chapters the user queued or [automatic] ones, in order until it is empty or a
+     * chapter fails in a way that may pass, which stops the drain with [DrainResult.retry]. Cancelling it stops the
+     * chapter being fetched, which stays queued for the next drain.
      */
     suspend fun drain(automatic: Boolean, onProgress: (DrainProgress) -> Unit = {}): DrainResult {
         lock.withLock {
@@ -216,38 +216,38 @@ class SeriesDownloads(
         var failed = 0
         try {
             while (true) {
-                val tookOne = drains.withLock {
-                    // The lane stops draining in the same step that finds it empty, so a chapter queued after is scheduled.
-                    val (next, remaining) = lock.withLock {
-                        val lane = queue.value.filter { it.automatic == automatic }
-                        if (lane.isEmpty()) draining -= automatic
-                        lane.firstOrNull() to lane.size
-                    }
-                    if (next == null) return@withLock false
-                    val number = downloaded + failed + 1
-                    val (series, chapter) = names(next)
-                    val report = { pages: Int, of: Int -> onProgress(DrainProgress(series, chapter, next.series, number, number + remaining - 1, pages, of)) }
-                    when (fetchQueued(next, report)) {
-                        true -> downloaded++
-                        false -> failed++
-                        null -> Unit
-                    }
-                    true
+                when (drains.withLock { fetchNext(automatic, downloaded + failed + 1, onProgress) }) {
+                    Outcome.DOWNLOADED -> downloaded++
+                    Outcome.UNAVAILABLE -> failed++
+                    Outcome.LATER -> return DrainResult(downloaded, failed, retry = true)
+                    Outcome.REMOVED -> Unit
+                    null -> return DrainResult(downloaded, failed)
                 }
-                if (!tookOne) break
             }
         } finally {
             withContext(NonCancellable) { lock.withLock { draining -= automatic } }
         }
-        return DrainResult(downloaded, failed)
+    }
+
+    /** Fetches the first chapter of the [automatic] lane, the [number]th of this drain; null when the lane is empty. */
+    private suspend fun fetchNext(automatic: Boolean, number: Int, onProgress: (DrainProgress) -> Unit): Outcome? {
+        // The lane stops draining in the same step that finds it empty, so a chapter queued after is scheduled.
+        val (next, remaining) = lock.withLock {
+            val lane = queue.value.filter { it.automatic == automatic }
+            if (lane.isEmpty()) draining -= automatic
+            lane.firstOrNull() to lane.size
+        }
+        next ?: return null
+        val (series, chapter) = names(next)
+        return fetchQueued(next) { pages, of -> onProgress(DrainProgress(series, chapter, next.series, number, number + remaining - 1, pages, of)) }
     }
 
     /**
-     * Fetches [chapter] and takes it out of the queue: true once it is on the device, false when it failed, null when it
-     * was taken out meanwhile. Cancelling the caller leaves it queued.
+     * Fetches [chapter], and takes it out of the queue once it is on the device or [unavailable][ChapterUnavailable].
+     * Cancelling the caller leaves it queued.
      */
-    private suspend fun fetchQueued(chapter: QueuedChapter, onPage: (pages: Int, of: Int) -> Unit): Boolean? = coroutineScope {
-        var outcome: Boolean? = null
+    private suspend fun fetchQueued(chapter: QueuedChapter, onPage: (pages: Int, of: Int) -> Unit): Outcome = coroutineScope {
+        var outcome = Outcome.REMOVED
         val job = launch { outcome = fetched(chapter, onPage) }
         lock.withLock { if (chapter in queue.value) active = chapter to job else job.cancel() }
         try {
@@ -257,27 +257,28 @@ class SeriesDownloads(
                 lock.withLock {
                     active = null
                     fetching.value = null
-                    if (outcome != null) save(queue.value - chapter)
+                    if (outcome == Outcome.DOWNLOADED || outcome == Outcome.UNAVAILABLE) save(queue.value - chapter)
                 }
-                if (outcome == true) changes.update { it + 1 }
             }
         }
         outcome
     }
 
-    /** Whether [chapter] arrived whole; a failure is reported as false, never thrown. */
-    private suspend fun fetched(chapter: QueuedChapter, onPage: (pages: Int, of: Int) -> Unit): Boolean = try {
+    /** How fetching [chapter] ended; a failure is reported, never thrown. */
+    private suspend fun fetched(chapter: QueuedChapter, onPage: (pages: Int, of: Int) -> Unit): Outcome = try {
         fetchChapter(chapter, onPage)
-        true
+        Outcome.DOWNLOADED
     } catch (error: CancellationException) {
         throw error
+    } catch (_: ChapterUnavailable) {
+        Outcome.UNAVAILABLE
     } catch (_: Exception) {
-        false
+        Outcome.LATER
     }
 
     private suspend fun fetchChapter(chapter: QueuedChapter, onPage: (pages: Int, of: Int) -> Unit) {
-        val entry = repository.entries(chapter.series).firstOrNull { it.entry.address == chapter.entry }?.entry
-            ?: throw IOException("The source no longer lists this chapter")
+        val entry = repository.entries(chapter.series).firstOrNull { it.entry.address == chapter.entry && it.sourceOrder >= 0 }?.entry
+            ?: throw ChapterUnavailable("The source no longer lists this chapter")
         val source = sources().firstOrNull { it.key == chapter.series.source } ?: throw IOException("The series' source is not on")
         val pages = attempts { source.pages(entry) }.ifEmpty { throw IOException("The chapter has no pages") }
         fetching.value = chapter to 0f
@@ -363,6 +364,9 @@ class SeriesDownloads(
         private val QUEUE_SERIALIZER = ListSerializer(QueuedChapterRecord.serializer())
     }
 }
+
+/** How fetching one queued chapter ended: on the device, unavailable for good, to try again later, or taken out meanwhile. */
+private enum class Outcome { DOWNLOADED, UNAVAILABLE, LATER, REMOVED }
 
 /**
  * The chapters [choice] queues, oldest first, leaving out [present]: those already queued or on the device. Next unread
