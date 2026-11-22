@@ -508,8 +508,17 @@ enum class CodexLibrarySort {
     MOST_OPENED,
 }
 
+/** How often followed series are checked for new chapters in the background; [hours] is null when they never are. */
+enum class SeriesUpdateInterval(val hours: Int?) {
+    OFF(null),
+    HOURS_6(6),
+    HOURS_12(12),
+    HOURS_24(24),
+}
+
 data class AppSettings(
     val oldSearchBar: Boolean = false,
+    val seriesUpdateInterval: SeriesUpdateInterval = SeriesUpdateInterval.HOURS_12,
     val codexLibrarySort: CodexLibrarySort = CodexLibrarySort.MANUAL,
     val followedCreators: List<FollowedCreator> = emptyList(),
     val runtime: SourceRuntimeSettings = SourceRuntimeSettings(),

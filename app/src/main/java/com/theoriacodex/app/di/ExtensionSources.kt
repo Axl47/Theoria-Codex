@@ -2,7 +2,11 @@ package com.theoriacodex.app.di
 
 import android.app.Application
 import com.theoriacodex.data.repository.SeriesRepository
+import com.theoriacodex.data.repository.SeriesUpdate
+import com.theoriacodex.data.repository.checkFollowed
 import com.theoriacodex.domain.series.SeriesSource
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import okhttp3.Interceptor
 
 /**
@@ -31,4 +35,12 @@ class SeriesDependencies(
     val repository: SeriesRepository,
     /** Every loaded extension source; loads the extensions on first use, off the main thread. */
     val sources: suspend () -> List<SeriesSource>,
-)
+) {
+    private val checking = Mutex()
+
+    /**
+     * Stores the followed series' new chapters and returns the series that gained some. The Series tab's refresh and
+     * the background job both call this; one check runs at a time, so neither repeats the other's requests midway.
+     */
+    suspend fun checkFollowed(): List<SeriesUpdate> = checking.withLock { repository.checkFollowed(sources()) }
+}

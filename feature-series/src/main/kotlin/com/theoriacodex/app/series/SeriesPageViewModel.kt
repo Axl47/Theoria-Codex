@@ -6,6 +6,7 @@ import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.data.repository.continueEntry
+import com.theoriacodex.data.repository.refresh
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesSource
 import kotlinx.coroutines.CancellationException
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -62,8 +64,7 @@ class SeriesPageViewModel(
                 if (source == null || stored == null) {
                     "The extension for this series is not installed"
                 } else {
-                    val details = source.details(stored.series)
-                    repository.store(details, source.entries(details))
+                    repository.refresh(source, stored.series)
                     null
                 }
             } catch (error: CancellationException) {
@@ -75,8 +76,13 @@ class SeriesPageViewModel(
         }
     }
 
-    fun toggleFollowed() {
+    /** Follows or unfollows the series; [onFirstFollowed] runs when it became the only followed series. */
+    fun toggleFollowed(onFirstFollowed: () -> Unit) {
         val followed = state.value.stored?.followed ?: return
-        viewModelScope.launch { repository.setFollowed(id, !followed) }
+        viewModelScope.launch {
+            val first = !followed && repository.observeFollowed().first().isEmpty()
+            repository.setFollowed(id, !followed)
+            if (first) onFirstFollowed()
+        }
     }
 }

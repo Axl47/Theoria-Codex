@@ -20,7 +20,7 @@ import com.theoriacodex.domain.model.SourceKey
 enum class SettingsPage { HOME, SITES, STORAGE, BACKUP, STATS, STATS_SHARE, STATS_COMPARE, DIAGNOSTICS }
 
 /** Sheets over Settings' home; held by the owner, like [SettingsPage], so the search box can open one. */
-enum class SettingsSheet { DOWNLOADS, CONTROLS }
+enum class SettingsSheet { DOWNLOADS, CONTROLS, SERIES_UPDATES }
 
 /**
  * What Sites shows of the accounts Settings owns: a built-in source's status line (null when it has no

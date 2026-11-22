@@ -123,6 +123,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import com.theoriacodex.app.series.keepSeriesUpdatesScheduled
 import kotlinx.coroutines.withContext
 
 data class DataDependencies(
@@ -519,6 +520,14 @@ internal class DefaultTheoriaAppContainer(
 
     override val series: SeriesDependencies? = extensionHost?.let { host ->
         SeriesDependencies(RoomSeriesRepository(contentDatabase)) { withContext(Dispatchers.IO) { host.sources() } }
+    }
+
+    init {
+        series?.let { series ->
+            applicationScope.launch {
+                keepSeriesUpdatesScheduled(appContext, series.repository.observeFollowed(), settingsRepository.observeSettings())
+            }
+        }
     }
 
     override val customSites: CustomSitesController = CustomSitesControllerImpl(

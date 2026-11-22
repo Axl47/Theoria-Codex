@@ -22,7 +22,7 @@ internal val seriesArguments = listOf(
 @Composable
 internal fun SeriesTabDestination(shell: TheoriaShell) {
     val series = shell.container.series ?: return
-    val viewModel = viewModel { SeriesTabViewModel(series.repository, series.sources) }
+    val viewModel = viewModel { SeriesTabViewModel(series.repository, series.sources) { series.checkFollowed() } }
     SeriesTabScreen(viewModel, onOpenSeries = { id -> shell.navController.navigate(AppRoute.series(id)) })
 }
 

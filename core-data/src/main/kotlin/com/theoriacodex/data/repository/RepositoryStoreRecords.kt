@@ -40,6 +40,8 @@ internal data class SettingsStoreRecord(
     @SerialName("invertMultiImageScrollDirection")
     val invertMultiImageScrollDirection: Boolean = false,
     @SerialName("oldSearchBar") val oldSearchBar: Boolean = false,
+    /** Absent while the setting is at its default, so files written before it existed stay byte-for-byte current. */
+    @SerialName("seriesUpdateInterval") val seriesUpdateInterval: String? = null,
     @SerialName("codexLibrarySort") val codexLibrarySort: String? = null,
     @SerialName("instantSeek") val instantSeek: Boolean = false,
     @SerialName("viewerAutoRotateVideos") val viewerAutoRotateVideos: Boolean? = null,
@@ -86,6 +88,8 @@ internal data class SettingsStoreRecord(
         return RepositoryPolicies.normalizeSettings(
             AppSettings(
                 oldSearchBar = oldSearchBar,
+                seriesUpdateInterval = SeriesUpdateInterval.entries.firstOrNull { it.name == seriesUpdateInterval }
+                    ?: AppSettings().seriesUpdateInterval,
                 codexLibrarySort = CodexLibrarySort.entries.firstOrNull { it.name == codexLibrarySort }
                     ?: CodexLibrarySort.MANUAL,
                 followedCreators = followedCreators.orEmpty().mapNotNull { it.toDomain() }.distinctBy { it.creator.followKey() }.take(MAX_FOLLOWED_CREATORS),
@@ -155,6 +159,7 @@ internal data class SettingsStoreRecord(
                 followedCreators = settings.followedCreators.map(FollowedCreatorRecord::fromDomain),
                 sourceCatalogVersion = SHARED_SOURCE_CATALOG_VERSION,
                 oldSearchBar = settings.oldSearchBar,
+                seriesUpdateInterval = settings.seriesUpdateInterval.takeIf { it != AppSettings().seriesUpdateInterval }?.name,
                 codexLibrarySort = settings.codexLibrarySort.name,
                 enabledSources = settings.runtime.enabledSources.map { it.id },
                 sourceWeights = settings.runtime.sourceWeights.mapKeys { it.key.id },

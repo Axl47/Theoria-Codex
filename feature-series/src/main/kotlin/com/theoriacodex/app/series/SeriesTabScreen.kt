@@ -28,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,7 +54,8 @@ import com.theoriacodex.domain.series.SeriesId
 
 /**
  * The Series tab: a search across every source, the followed series, and one source's popular series to browse. A
- * search replaces the shelf and the browse grid with one row of results per source until it is cleared.
+ * search replaces the shelf and the browse grid with one row of results per source until it is cleared. Pulling down
+ * checks the followed series for new chapters.
  */
 @Composable
 fun SeriesTabScreen(viewModel: SeriesTabViewModel, onOpenSeries: (SeriesId) -> Unit, modifier: Modifier = Modifier) {
@@ -70,20 +72,22 @@ fun SeriesTabScreen(viewModel: SeriesTabViewModel, onOpenSeries: (SeriesId) -> U
     BackHandler(enabled = state.search != null, onBack = clearSearch)
     Column(modifier.fillMaxSize()) {
         SeriesSearchField(query, searching = state.search != null, onQueryChange = { query = it }, onSearch = viewModel::search, onClear = clearSearch)
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(CARD_WIDTH),
-            state = grid,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            val search = state.search
-            if (search != null && state.sources == null) fullWidth("search-waiting") { LoadingState() }
-            else if (search != null) searchResults(search, open, viewModel::retrySearch)
-            else {
-                followingShelf(followed, open)
-                browse(state, viewModel, open)
+        PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = viewModel::refresh, modifier = Modifier.fillMaxSize()) {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(CARD_WIDTH),
+                state = grid,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                val search = state.search
+                if (search != null && state.sources == null) fullWidth("search-waiting") { LoadingState() }
+                else if (search != null) searchResults(search, open, viewModel::retrySearch)
+                else {
+                    followingShelf(followed, open)
+                    browse(state, viewModel, open)
+                }
             }
         }
     }

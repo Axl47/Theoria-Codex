@@ -43,15 +43,15 @@ class RoomSeriesRepository(
     override suspend fun entries(id: SeriesId): List<StoredSeriesEntry> =
         withContext(Dispatchers.IO) { dao.entries(id.source.id, id.address) }.map(SeriesEntryEntity::toStored)
 
-    override suspend fun store(series: Series, entries: List<SeriesEntry>?) {
+    override suspend fun store(series: Series, entries: List<SeriesEntry>?): List<SeriesEntry> {
         val id = series.id
-        database.withTransaction {
+        return database.withTransaction {
             val stored = dao.series(id.source.id, id.address)?.toStored() ?: StoredSeries(series)
             val listed = !entries.isNullOrEmpty()
             dao.upsertSeries(
                 stored.copy(series = series, lastCheckedAtEpochMs = if (listed) clock() else stored.lastCheckedAtEpochMs).toEntity(),
             )
-            if (entries.isNullOrEmpty()) return@withTransaction
+            if (entries.isNullOrEmpty()) return@withTransaction emptyList()
             val known = dao.entries(id.source.id, id.address).associateBy { it.address }
             val now = clock()
             // A source can list one address twice; the first is kept.
@@ -64,6 +64,7 @@ class RoomSeriesRepository(
                         .toEntity(id)
                 },
             )
+            if (stored.lastCheckedAtEpochMs == null) emptyList() else current.filter { it.address !in known }
         }
     }
 

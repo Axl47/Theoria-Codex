@@ -30,6 +30,7 @@ class DataStoreFormatTest {
             resolveUnknownAnimatedDurations = true,
             invertMultiImageScrollDirection = true,
             oldSearchBar = true,
+            seriesUpdateInterval = "HOURS_6",
             codexLibrarySort = "NAME",
             instantSeek = true,
             viewerAutoRotateVideos = false,

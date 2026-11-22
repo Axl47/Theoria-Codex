@@ -1,5 +1,8 @@
 package com.theoriacodex.app.series
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -38,11 +41,15 @@ import java.util.Date
 @Composable
 fun SeriesPageScreen(viewModel: SeriesPageViewModel, onBack: () -> Unit, onOpenEntry: (String) -> Unit, modifier: Modifier = Modifier) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // New chapters of followed series are announced, so the first follow is when the permission is asked for.
+    // Refusing changes nothing else: the series is followed and the shelf still counts its new chapters.
+    val askToNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    val toggleFollowed = { viewModel.toggleFollowed { askToNotify.launch(Manifest.permission.POST_NOTIFICATIONS) } }
     Column(modifier.fillMaxSize()) {
         SecondaryScreenAppBar(title = state.sourceName, onBack = onBack)
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
             state.stored?.let { stored ->
-                item("header") { SeriesHeader(stored, state, viewModel::toggleFollowed, onOpenEntry) }
+                item("header") { SeriesHeader(stored, state, toggleFollowed, onOpenEntry) }
             }
             val failure = state.failure
             when {
