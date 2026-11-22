@@ -59,17 +59,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.codex.CodexCoverImage
+import com.theoriacodex.app.codex.LocalNewCodexOpener
 import com.theoriacodex.app.codex.LocalQuickSave
 import com.theoriacodex.app.codex.QuickSave
 import com.theoriacodex.app.codex.SAVE_MENU_CODICES
 import com.theoriacodex.app.codex.SaveTarget
+import com.theoriacodex.app.codex.save
 import com.theoriacodex.app.codex.QuickSaveRecord
 import com.theoriacodex.app.ui.components.CollectTarget
 import com.theoriacodex.app.ui.components.CollectTargets
 import com.theoriacodex.app.ui.components.CollectTargetsLayout
 import com.theoriacodex.app.ui.components.CollectTargetsState
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
-import com.theoriacodex.app.ui.navigation.LocalNewCodexOpener
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
@@ -131,7 +132,9 @@ internal fun ViewerSaveButton(
             // Undispatched: the removal is under way before the dock can leave and cancel this scope.
             is ViewerSaveCommand.Undo -> scope.launch(start = CoroutineStart.UNDISPATCHED) { quickSave.undoQuickSave(command.record) }
             ViewerSaveCommand.OpenPicker -> onOpenPicker()
-            ViewerSaveCommand.NewCodex -> newCodex.openNewCodex(post, onCreated = null)
+            ViewerSaveCommand.NewCodex -> newCodex.openNewCodex { codex ->
+                if (quickSave.save(post, codex, context.query, context.fromForYou) == null) onOpenPicker()
+            }
         }
     }
     val haptics = LocalHapticFeedback.current

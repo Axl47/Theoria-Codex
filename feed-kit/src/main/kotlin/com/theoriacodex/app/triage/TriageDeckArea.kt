@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.theoriacodex.app.codex.ChosenCodex
 import com.theoriacodex.app.codex.SaveTarget
 import com.theoriacodex.app.codex.SaveSuggestions
 import com.theoriacodex.app.codex.saveMenuTargets
@@ -241,7 +242,7 @@ private fun triageActions(
     if (removes) CustomAccessibilityAction("Remove") { onDecide(TriageChoice.Remove); true }
     else CustomAccessibilityAction("Skip") { onDecide(TriageChoice.Skip); true },
     (targets.save.firstOrNull()?.payload as? SaveTarget.Codex)?.suggestion?.let { target ->
-        CustomAccessibilityAction("Save to ${target.name}") { onDecide(TriageChoice.Save(target.codexId, target.name)); true }
+        CustomAccessibilityAction("Save to ${target.name}") { onDecide(TriageChoice.Save(ChosenCodex.Existing(target.codexId, target.name))); true }
     },
     CustomAccessibilityAction("New Codex") { onSaveElsewhere(SaveTarget.New); true },
     CustomAccessibilityAction("Choose Codex") { onSaveElsewhere(SaveTarget.More); true },

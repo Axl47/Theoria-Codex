@@ -17,7 +17,10 @@ import androidx.navigation.NamedNavArgument
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
+import com.theoriacodex.app.codex.ChosenCodex
+import com.theoriacodex.app.codex.LocalNewCodexOpener
 import com.theoriacodex.app.codex.LocalQuickSave
+import com.theoriacodex.app.codex.NewCodexOpener
 import com.theoriacodex.app.triage.TriageCardSupport
 import com.theoriacodex.app.triage.TriageChoice
 import com.theoriacodex.app.triage.TriageDeckCallbacks
@@ -25,8 +28,6 @@ import com.theoriacodex.app.triage.TriageDeckScreen
 import com.theoriacodex.app.triage.TriageDeckViewModel
 import com.theoriacodex.app.ui.components.feedDurations
 import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
-import com.theoriacodex.app.ui.navigation.LocalNewCodexOpener
-import com.theoriacodex.app.ui.navigation.NewCodexOpener
 import com.theoriacodex.app.ui.navigation.TriageMode
 import com.theoriacodex.app.ui.navigation.TriageOpener
 import com.theoriacodex.app.ui.navigation.TriageRequest
@@ -175,7 +176,8 @@ internal fun TriageDestination(shell: TheoriaShell, request: TriageRequest) {
 
 /**
  * The deck's links to the rest of the app. The picker and the Create Codex dialog hand the chosen Codex back to the
- * deck, which saves it itself, so the card moves on and Undo covers it like any other save.
+ * deck, which saves it (creating it, when new) itself, so the card moves on and Undo covers it like any other save. A
+ * deck that has closed meanwhile saves and creates nothing.
  */
 private fun TheoriaShell.triageCallbacks(
     request: TriageRequest,
@@ -184,13 +186,13 @@ private fun TheoriaShell.triageCallbacks(
     deck: TriageDeckViewModel,
     newCodex: NewCodexOpener,
 ): TriageDeckCallbacks {
-    val save = { post: Post -> { codexId: String, name: String -> deck.decide(TriageChoice.Save(codexId, name), post.id) } }
+    val save = { post: Post -> { codex: ChosenCodex -> deck.decide(TriageChoice.Save(codex), post.id) } }
     return TriageDeckCallbacks(
         onOpenPost = { posts, index -> openTriagePost(request, seed, query, posts, index) },
         onOpenSavePicker = { post ->
             pendingSave.request(listOf(post), fromForYou = request.source == ViewerStreamSource.FOR_YOU, searchQuery = query, onPick = save(post))
         },
-        onNewCodex = { post -> newCodex.openNewCodex(post, onCreated = save(post)) },
+        onNewCodex = { post -> newCodex.openNewCodex { codex -> save(post)(codex) } },
         onClose = { navController.popBackStack() },
     )
 }

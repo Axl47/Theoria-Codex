@@ -107,6 +107,27 @@ class QuickSaveViewModelTest {
         assertTrue(codices.observeCodexItems("target").first().any { it.postId == post.id })
     }
 
+    @Test fun `undoing a save to a new Codex removes the Codex it created`() = runTest(dispatcher) {
+        val owner = owner()
+        val record = requireNotNull(owner.saveToNew(post, "Clouds", "profile", fromForYou = false))
+        assertEquals("Clouds", codices.observeCodex(record.codexId).first()?.name)
+
+        owner.undoQuickSave(record)
+
+        assertNull(codices.observeCodex(record.codexId).first())
+    }
+
+    @Test fun `undo keeps a created Codex that has been saved to since`() = runTest(dispatcher) {
+        val owner = owner()
+        val record = requireNotNull(owner.saveToNew(post, "Clouds", "profile", fromForYou = false))
+        val later = testPost(sourcePostId = "later")
+        owner.quickSave(later, record.codexId, fromForYou = false)
+
+        owner.undoQuickSave(record)
+
+        assertEquals(listOf(later.id), codices.observeCodexItems(record.codexId).first().map { it.postId })
+    }
+
     @Test fun `a failed save returns null and records nothing`() = runTest(dispatcher) {
         val owner = owner()
         assertNull(owner.quickSave(post, "missing", fromForYou = false))

@@ -336,6 +336,18 @@ abstract class LibraryRepositoryContract {
     }
 
     @Test
+    fun `a Codex is deleted only while it is empty`() = runTest {
+        val repo = createCodexRepository()
+        val held = repo.createCodex("Held")
+        val empty = repo.createCodex("Empty")
+        repo.addItem(held.codexId, repositoryTestPost("1"))
+
+        assertEquals(false, repo.deleteCodexIfEmpty(held.codexId))
+        assertEquals(true, repo.deleteCodexIfEmpty(empty.codexId))
+        assertEquals(listOf("Held"), repo.observeCodices().first().map { it.name })
+    }
+
+    @Test
     fun `codex repository creates and tracks items`() = runTest {
         val repo = createCodexRepository()
         val codex = repo.createCodex("Favorites")

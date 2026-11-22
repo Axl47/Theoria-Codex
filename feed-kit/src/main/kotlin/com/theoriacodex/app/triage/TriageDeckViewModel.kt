@@ -3,6 +3,7 @@ package com.theoriacodex.app.triage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theoriacodex.app.codex.QuickSave
+import com.theoriacodex.app.codex.save
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -130,7 +131,7 @@ class TriageDeckViewModel(
             TriageChoice.Remove -> checkNotNull(removal) { "This deck does not remove" }.remove(post) ?: NOTHING
             TriageChoice.Like -> actions.like(post) ?: NOTHING
             is TriageChoice.Save -> {
-                val record = quickSave.quickSave(post, choice.codexId, query, fromForYou) ?: error("The save failed")
+                val record = quickSave.save(post, choice.codex, query, fromForYou) ?: error("The save failed")
                 suspend { quickSave.undoQuickSave(record) }
             }
             is TriageChoice.Hide -> actions.hide(post.id.source, choice.tag) ?: NOTHING
@@ -190,7 +191,7 @@ private fun decisionFor(choice: TriageChoice, post: Post): TriageDecision = when
     TriageChoice.Skip -> TriageDecision.Skipped(post)
     TriageChoice.Keep -> TriageDecision.Kept(post)
     TriageChoice.Remove -> TriageDecision.Removed(post)
-    is TriageChoice.Save -> TriageDecision.Saved(post, choice.codexName)
+    is TriageChoice.Save -> TriageDecision.Saved(post, choice.codex.name)
     is TriageChoice.Hide -> TriageDecision.Hid(post, choice.tag)
 }
 

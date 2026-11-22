@@ -1,5 +1,6 @@
 package com.theoriacodex.app.triage
 
+import com.theoriacodex.app.codex.ChosenCodex
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewmodel.initializer
@@ -97,7 +98,7 @@ class TriageDeckViewModelTest {
     @Test fun `save goes to the chosen Codex with the feed's query and undo removes exactly that save`() = runTest {
         val query = Query.newest(SourceKey.PIXIV)
         val deck = TriageDeckViewModel(feed, actions, quickSave, query, fromForYou = true, writeScope = writeScope)
-        deck.decideCurrent(TriageChoice.Save("codex-1", "Skies"))
+        deck.decideCurrent(TriageChoice.Save(ChosenCodex.Existing("codex-1", "Skies")))
         assertEquals(listOf(Triple(posts[0].id, "codex-1", query)), quickSave.saved)
         assertTrue(quickSave.fromForYou)
         deck.undo()
@@ -111,7 +112,7 @@ class TriageDeckViewModelTest {
         actions.failHide = true
         val deck = deck()
         listOf(
-            TriageChoice.Save("codex-1", "Skies") to TriageDecision.Saved(posts[0], "Skies"),
+            TriageChoice.Save(ChosenCodex.Existing("codex-1", "Skies")) to TriageDecision.Saved(posts[0], "Skies"),
             TriageChoice.Like to TriageDecision.Liked(posts[0]),
             TriageChoice.Hide("cat") to TriageDecision.Hid(posts[0], "cat"),
         ).forEach { (choice, decision) ->
@@ -150,7 +151,7 @@ class TriageDeckViewModelTest {
     @Test fun `undo during a running save reverses it once it commits and never confirms it`() = runTest {
         quickSave.hold = CompletableDeferred()
         val deck = deck()
-        deck.decideCurrent(TriageChoice.Save("codex-1", "Skies"))
+        deck.decideCurrent(TriageChoice.Save(ChosenCodex.Existing("codex-1", "Skies")))
         assertTrue(deck.state.value.last != null)
         assertNull(deck.state.value.notice)
         deck.undo()
@@ -349,9 +350,9 @@ class TriageDeckViewModelTest {
         val removal = CompletableDeferred<Unit>()
         quickSave.undoHold = removal
         val deck = deck()
-        deck.decideCurrent(TriageChoice.Save("codex-1", "Skies"))
+        deck.decideCurrent(TriageChoice.Save(ChosenCodex.Existing("codex-1", "Skies")))
         deck.undo()
-        deck.decideCurrent(TriageChoice.Save("codex-2", "Clouds"))
+        deck.decideCurrent(TriageChoice.Save(ChosenCodex.Existing("codex-2", "Clouds")))
         assertEquals(listOf("codex-1"), quickSave.saved.map { it.second })
         removal.complete(Unit)
         assertEquals(listOf("codex-1", "codex-2"), quickSave.saved.map { it.second })
@@ -362,7 +363,7 @@ class TriageDeckViewModelTest {
         quickSave.hold = CompletableDeferred()
         val store = ViewModelStore()
         val deck = ViewModelProvider.create(store, viewModelFactory { initializer { deck() } })[TriageDeckViewModel::class]
-        deck.decideCurrent(TriageChoice.Save("codex-1", "Skies"))
+        deck.decideCurrent(TriageChoice.Save(ChosenCodex.Existing("codex-1", "Skies")))
         deck.undo()
         store.clear()
         quickSave.hold!!.complete(Unit)
@@ -464,6 +465,8 @@ class TriageDeckViewModelTest {
             saved += Triple(post.id, codexId, query)
             return QuickSaveRecord(post, codexId, "Skies", inserted = 1, savedAtEpochMs = 0L).also { records += it }
         }
+        override suspend fun saveToNew(post: Post, name: String, profileId: String, query: Query?, fromForYou: Boolean) =
+            quickSave(post, "new:$name", query, fromForYou)
         override suspend fun undoQuickSave(record: QuickSaveRecord) {
             undoHold?.await()
             undone += record
