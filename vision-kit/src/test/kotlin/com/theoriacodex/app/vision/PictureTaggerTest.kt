@@ -8,6 +8,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.vision.PredictedTag
+import com.theoriacodex.domain.vision.PredictedTagIndex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -65,7 +66,7 @@ class PictureTaggerTest {
         assertFalse(tagger.ready.value)
         assertEquals(PictureResult.Unavailable, tagger.analyze(post))
         assertNull(tagger.remembered(post.id))
-        assertEquals(emptyMap<PostId, List<PredictedTag>>(), tagger.known.value)
-        assertEquals(emptyMap<String, Double>(), tagger.baseRates())
+        assertEquals(emptyList<PredictedTag>(), tagger.tagsFor(post))
+        assertEquals(PredictedTagIndex.Empty, tagger.index.value)
     }
 }
