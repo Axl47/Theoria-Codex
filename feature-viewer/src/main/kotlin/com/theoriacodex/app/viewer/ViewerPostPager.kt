@@ -77,7 +77,7 @@ internal fun ViewerPostPagerSurface(
                 ),
                 viewerGestureHandler(
                     swipe, dismissDrag, screen, controls, haptics, flingVelocity, scope, frame.uiState.controls.slideshow,
-                    openNextChapter = nextChapterOpener(frame, swipe).takeIf { vertical && config.seriesChapters },
+                    openNextChapter = nextPostOpener(frame.navigation.currentIndex, frame, swipe, config).takeIf { vertical && config.seriesChapters },
                 ),
             )
             .graphicsLayer { translationX = swipe.edgeOffset },
@@ -140,11 +140,10 @@ private fun viewerGestureHandler(
     override fun onScrubEnd() = controls.endScrub()
 }
 
-/** Opens the post after the current one where it was left; null on the last post. */
-private fun nextChapterOpener(frame: ViewerFrame, swipe: ViewerSwipeController): (() -> Unit)? {
-    val index = frame.navigation.currentIndex + 1
-    val next = frame.navigation.pages.getOrNull(index) ?: return null
-    return { swipe.navigateTo(ViewerHorizontalSwipeTarget(index, next.targetMediaIndex)) }
+/** Opens the post after [index] at its [entryMediaIndex]; null on the last post. */
+private fun nextPostOpener(index: Int, frame: ViewerFrame, swipe: ViewerSwipeController, config: ViewerScreenConfig): (() -> Unit)? {
+    val next = frame.navigation.pages.getOrNull(index + 1) ?: return null
+    return { swipe.navigateTo(ViewerHorizontalSwipeTarget(index + 1, config.entryMediaIndex(next))) }
 }
 
 /** A gallery read as one vertical strip; its end card opens the next post. */
@@ -159,13 +158,13 @@ private fun ViewerVerticalPostPage(
     dismissDrag: ViewerDismissDrag,
     readReturnProgress: () -> Float,
     host: ViewerScreenHost,
+    config: ViewerScreenConfig,
 ) {
-    val next = frame.navigation.pages.getOrNull(postPage + 1)
     ViewerVerticalGallery(
         postPage, pageState, frame, screen, controls, host,
         dismissDrag = dismissDrag.takeIf { postPage == frame.navigation.currentIndex },
         readReturnProgress = readReturnProgress,
-        onOpenNext = next?.let { { swipe.navigateTo(ViewerHorizontalSwipeTarget(postPage + 1, it.targetMediaIndex)) } },
+        onOpenNext = nextPostOpener(postPage, frame, swipe, config),
     )
 }
 
@@ -191,7 +190,7 @@ private fun ViewerPostPage(
     val post = frame.posts[postPage]
     val pageState = frame.navigation.pages[postPage]
     if (config.readingModeOf(pageState) == GalleryReadingMode.VERTICAL) {
-        return ViewerVerticalPostPage(postPage, pageState, frame, screen, controls, swipe, dismissDrag, readReturnProgress, host)
+        return ViewerVerticalPostPage(postPage, pageState, frame, screen, controls, swipe, dismissDrag, readReturnProgress, host, config)
     }
     val postMedia = pageState.media
     val knownDurationMs by remember(post, host.durations) { host.durations.observe(post) }.collectAsStateWithLifecycle(null)

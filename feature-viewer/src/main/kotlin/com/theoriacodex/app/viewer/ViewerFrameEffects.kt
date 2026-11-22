@@ -83,7 +83,7 @@ private fun swipeTargetFrom(
         targetPostMediaCount = neighbor?.media?.size ?: 0,
         direction = direction,
         galleryMediaPending = !vertical && page.hasPendingGalleryMedia(),
-        targetMediaIndex = neighbor?.targetMediaIndex ?: 0,
+        targetMediaIndex = neighbor?.let(config::entryMediaIndex) ?: 0,
     )
 }
 
@@ -102,6 +102,7 @@ internal fun ViewerFrameEffects(
     loadMoreFromStrip: () -> Unit,
     onAction: (ViewerAction) -> Unit,
     onVisiblePostChanged: ((Post, Int) -> Unit)?,
+    config: ViewerScreenConfig,
 ) {
     val uiState = frame.uiState
     val showInfoSheet = uiState.controls.panel == ViewerPanel.INFO && !frame.inPictureInPicture
@@ -120,7 +121,7 @@ internal fun ViewerFrameEffects(
     LaunchedEffect(frame.chromeVisible, frame.selection.isSeekable) {
         if (!frame.chromeVisible || !frame.selection.isSeekable) screen.timelineInteractionActive = false
     }
-    ViewerPendingPostEffect(frame, screen, swipe, postPagerState, pendingPostId)
+    ViewerPendingPostEffect(frame, screen, swipe, postPagerState, pendingPostId, config)
 }
 
 @Composable
@@ -237,10 +238,11 @@ private fun ViewerPendingPostEffect(
     swipe: ViewerSwipeController,
     postPagerState: PagerState,
     pendingPostId: MutableState<PostId?>,
+    config: ViewerScreenConfig,
 ) {
     val swipeInProgress = swipe.settling
     LaunchedEffect(pendingPostId.value, frame.posts.size, swipeInProgress, frame.opening, frame.uiState.currentPageIndex) {
-        advanceToPendingPost(frame, screen, swipe, swipeInProgress, postPagerState, pendingPostId)
+        advanceToPendingPost(frame, screen, swipe, swipeInProgress, postPagerState, pendingPostId, config)
     }
 }
 
@@ -251,6 +253,7 @@ private fun advanceToPendingPost(
     swipeInProgress: Boolean,
     postPagerState: PagerState,
     pendingPostId: MutableState<PostId?>,
+    config: ViewerScreenConfig,
 ) {
     val pending = pendingPostId.value ?: return
     if (pending == frame.uiState.currentPage?.post?.id) {
@@ -265,7 +268,7 @@ private fun advanceToPendingPost(
         return
     }
     if (screen.pendingDismiss || frame.returning) return
-    swipe.navigateTo(ViewerHorizontalSwipeTarget(index, frame.navigation.pages[index].targetMediaIndex))
+    swipe.navigateTo(ViewerHorizontalSwipeTarget(index, config.entryMediaIndex(frame.navigation.pages[index])))
 }
 
 private val VIEWER_BACK_DISTANCE = 48.dp

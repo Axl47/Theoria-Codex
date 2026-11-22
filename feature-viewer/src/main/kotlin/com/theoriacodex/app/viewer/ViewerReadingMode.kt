@@ -16,5 +16,14 @@ internal fun ViewerScreenConfig.readingModeOf(page: ViewerPageState?): GalleryRe
     return chosen ?: if (invertMultiImageScrollDirection) GalleryReadingMode.RIGHT_TO_LEFT else GalleryReadingMode.LEFT_TO_RIGHT
 }
 
+/**
+ * The page (from 0) [page] shows when the reader moves to its post: where it was left, except a series' chapter left
+ * on its last page. That chapter is finished, and a finished chapter starts over.
+ */
+internal fun ViewerScreenConfig.entryMediaIndex(page: ViewerPageState): Int {
+    val finished = seriesChapters && page.pendingMediaIndex == null && page.selectedMediaIndex > 0 && page.selectedMediaIndex >= page.media.lastIndex
+    return if (finished) 0 else page.targetMediaIndex
+}
+
 /** Vertical reading is for still-image galleries: video and animation need the pager's one active page to play. */
 internal fun ViewerPageState.verticalReadingAvailable(): Boolean = media.all { it.kind == ViewerMediaKind.IMAGE }

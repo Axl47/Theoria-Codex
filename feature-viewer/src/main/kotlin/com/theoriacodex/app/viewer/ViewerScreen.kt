@@ -148,7 +148,7 @@ private fun ViewerLoadedScreen(
     val loadMoreFromStrip = rememberViewerLoadMore(navigation.originalPosts.size, canLoadMoreFromSource, loadingMoreFromSource, onAction)
     ViewerFrameEffects(
         frame, screen, controls, swipe, dismissDrag, postPagerState, pendingPostId, canLoadMoreFromSource,
-        loadingMoreFromSource, loadMoreFromStrip, onAction, host.onVisiblePostChanged,
+        loadingMoreFromSource, loadMoreFromStrip, onAction, host.onVisiblePostChanged, config,
     )
     val viewerAccent = rememberViewerAccent(selection.post, enabled = !opening && !returning)
     CompositionLocalProvider(
