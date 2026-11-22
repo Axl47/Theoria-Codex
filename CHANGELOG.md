@@ -62,7 +62,7 @@
 - For You shelves you pinned, and For You searches you saved, are now ordinary saved searches that open in Search: one per site the shelf searched, named for the site when there are several.
 - Swiping sideways on For You's deck no longer switches tabs, so it cannot fight a card swipe: change tabs there from the bottom bar. The other tabs, and For You's grid, swipe between tabs as before.
 - Downloads started from For You are labelled "For You" instead of "FYP".
-- Opening For You no longer adds an entry to History.
+- Opening For You no longer adds an entry to History, and earlier For You entries are gone from it.
 - Settings keeps what you set once. Hidden tags moved to For You, Source mix to Search's source picker (with Unified chosen), and default video quality to the Viewer: the quality you pick in a video's playback settings is used for other videos too. Offline Codices and downloads are managed from Library.
 - Custom site edits apply as you make them, without a Save button. Keys still have Save.
 - Backup has its own page in Settings. Back up profiles opens the file picker directly, with a switch for including History and statistics.
