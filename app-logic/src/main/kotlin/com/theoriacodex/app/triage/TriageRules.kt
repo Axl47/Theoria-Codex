@@ -6,7 +6,12 @@ import com.theoriacodex.app.recommend.tagAffinities
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
+import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.recommendation.sharesBooruVocabulary
 import com.theoriacodex.domain.tags.normalizeMatchToken
+import com.theoriacodex.domain.vision.PredictedTag
+import com.theoriacodex.domain.vision.PredictedTagUse
+import com.theoriacodex.domain.vision.tokens
 import kotlin.math.abs
 
 /** The way a triage card was thrown. */
@@ -86,6 +91,18 @@ const val HIDE_CANDIDATE_LIMIT = 3
 /** Whether [this] post carries one of [tokens], which are spelled as [normalizeMatchToken] spells them. */
 fun Post.carriesAnyTag(tokens: Set<String>): Boolean =
     tokens.isNotEmpty() && (canonicalTags + rawTags).any { tag -> normalizeMatchToken(tag) in tokens }
+
+/**
+ * Whether [hidden] (hidden tags by source, as [normalizeMatchToken] spells them) hides [this] post. A tag its provider
+ * gave it matches its own source's hidden tags. A tag the picture tagger [predicted] with [PredictedTagUse.HIDE]
+ * confidence also matches those of every source sharing booru vocabulary, since predicted tags are Danbooru's words: a
+ * tag hidden on Danbooru catches a post its provider never tagged.
+ */
+fun Post.hiddenBy(hidden: Map<SourceKey, Set<String>>, predicted: List<PredictedTag>?): Boolean {
+    if (carriesAnyTag(hidden[id.source].orEmpty())) return true
+    val seen = predicted?.tokens(PredictedTagUse.HIDE)?.keys?.takeIf { it.isNotEmpty() } ?: return false
+    return hidden.any { (source, tokens) -> (source == id.source || source.sharesBooruVocabulary) && tokens.any(seen::contains) }
+}
 
 /** A drag's speed counts as this much extra travel per px/s when picking its axis. */
 private const val VELOCITY_REACH_SECONDS = 0.1f

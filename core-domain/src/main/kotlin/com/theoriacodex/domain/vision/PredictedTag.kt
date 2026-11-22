@@ -1,5 +1,7 @@
 package com.theoriacodex.domain.vision
 
+import com.theoriacodex.domain.tags.normalizeMatchToken
+
 /**
  * A tag the on-device tagger predicted from a post's picture, in Danbooru's spelling, with its [score] (0 to 1). It is a
  * second tag source beside the provider's tags and never one of them: nothing shows it as a tag the post was given.
@@ -35,3 +37,7 @@ enum class PredictedTagUse(private val general: Float, private val character: Fl
         PredictedTag.Kind.CHARACTER -> character
     }
 }
+
+/** The predictions confident enough for [use], each as [normalizeMatchToken] spells it, weighted by its score. */
+fun List<PredictedTag>.tokens(use: PredictedTagUse): Map<String, Double> =
+    filter { it.counts(use) }.associate { normalizeMatchToken(it.tag) to it.score.toDouble() }

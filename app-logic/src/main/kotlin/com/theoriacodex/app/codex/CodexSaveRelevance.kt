@@ -4,19 +4,27 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.query.matchesIncludeTermGroups
 import com.theoriacodex.domain.tags.normalizeMatchToken
+import com.theoriacodex.domain.vision.PredictedTagIndex
+import com.theoriacodex.domain.vision.PredictedTagUse
+import com.theoriacodex.domain.vision.tokens
 import kotlin.math.ln
 
 /**
  * How well each Codex fits the incoming posts. The applied search dominates; without one, a Codex scores by the incoming
  * tags its posts carry, each weighted by [TagRarity] so a tag on half the library counts for little, over the Codex's
- * size plus a few posts, so a two-post Codex needs more than one lucky match to lead.
+ * size plus a few posts, so a two-post Codex needs more than one lucky match to lead. Tags the picture tagger [predicted]
+ * with [PredictedTagUse.EVIDENCE] confidence count beside the provider's, each weighted by its score, so a post its
+ * provider tagged in another language, or not at all, still finds the Codex it fits.
  */
-class CodexSaveRelevance(posts: List<Post>, searchQuery: Query? = null) {
+class CodexSaveRelevance(posts: List<Post>, searchQuery: Query? = null, private val predicted: PredictedTagIndex = PredictedTagIndex.Empty) {
     private val groupQueries = searchQuery?.effectiveIncludeTermGroups.orEmpty()
         .filter { group -> group.terms.any { it.value.isNotBlank() } }
         .map { group -> requireNotNull(searchQuery).copy(includeTermGroups = listOf(group)) }
     private val searchTags = groupQueries.flatMap { it.includeTags }.map(::normalizeMatchToken).toSet()
-    private val tags = posts.flatMap { it.matchingTags() }.map(::normalizeMatchToken).filter(String::isNotBlank).toSet() - searchTags
+    private val tags: Map<String, Double> = buildMap {
+        for (post in posts) post.matchingTags(predicted).forEach { (token, weight) -> merge(token, weight, ::maxOf) }
+        searchTags.forEach(::remove)
+    }
     val hasSignals: Boolean = tags.isNotEmpty() || groupQueries.isNotEmpty()
 
     fun score(savedPosts: List<Post>, rarity: TagRarity = TagRarity.Uniform): Double {
@@ -29,9 +37,11 @@ class CodexSaveRelevance(posts: List<Post>, searchQuery: Query? = null) {
             val matchedGroups = groupQueries.count { post.matchesIncludeTermGroups(it) }
             if (groupQueries.isNotEmpty() && matchedGroups == groupQueries.size) wholeMatches++
             groupMatches += matchedGroups
-            tagMatches += post.matchingTags().sumOf { if (it in tags) rarity.weight(it) else 0.0 }
+            tagMatches += post.matchingTags(predicted).entries.sumOf { (token, weight) ->
+                tags[token]?.let { weight * it * rarity.weight(token) } ?: 0.0
+            }
         }
-        val tagWeight = tags.sumOf(rarity::weight)
+        val tagWeight = tags.entries.sumOf { (token, weight) -> weight * rarity.weight(token) }
         val tagDensity = if (tagWeight == 0.0) 0.0 else tagMatches / (unique.size + SMALL_CODEX_POSTS) / tagWeight
         if (groupQueries.isEmpty()) return tagDensity
         return WHOLE_QUERY_WEIGHT * wholeMatches / unique.size +
@@ -57,13 +67,17 @@ class TagRarity private constructor(private val posts: Int, private val postsByT
     companion object {
         val Uniform = TagRarity(0, emptyMap())
 
-        /** Rarity across [library], counting each post once. */
-        fun of(library: Collection<Post>): TagRarity {
+        /** Rarity across [library], counting each post once, with the tags [predicted] for it. */
+        fun of(library: Collection<Post>, predicted: PredictedTagIndex = PredictedTagIndex.Empty): TagRarity {
             val unique = library.distinctBy(Post::id)
-            return TagRarity(unique.size, unique.flatMap { it.matchingTags() }.groupingBy { it }.eachCount())
+            return TagRarity(unique.size, unique.flatMap { it.matchingTags(predicted).keys }.groupingBy { it }.eachCount())
         }
     }
 }
 
-private fun Post.matchingTags(): Set<String> = canonicalTags.ifEmpty { rawTags }
-    .map(::normalizeMatchToken).filter(String::isNotBlank).toSet()
+/** The post's tag tokens, weighted: its provider's at 1, the ones [predicted] for it at their score where higher. */
+private fun Post.matchingTags(predicted: PredictedTagIndex): Map<String, Double> {
+    val provided = canonicalTags.ifEmpty { rawTags }.map(::normalizeMatchToken).filter(String::isNotBlank).associateWith { 1.0 }
+    val seen = predicted[id]?.tokens(PredictedTagUse.EVIDENCE) ?: return provided
+    return seen + provided
+}

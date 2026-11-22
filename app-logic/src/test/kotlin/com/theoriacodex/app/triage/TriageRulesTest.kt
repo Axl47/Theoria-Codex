@@ -7,7 +7,10 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.vision.PredictedTag
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -79,6 +82,26 @@ class TriageRulesTest {
 
     @Test fun `a post with nothing left to hide has no candidates`() {
         assertEquals(emptyList<String>(), hideCandidates(post("cat"), counts, listOf("cat")))
+    }
+
+    @Test fun `a predicted tag hides an untagged post when confident enough, through any booru source's hidden tags`() {
+        val untagged = post().copy(id = PostId(SourceKey.NHENTAI, "n"))
+        val hidden = mapOf(SourceKey.DANBOORU to setOf("furry"), SourceKey.HITOMI to setOf("tail"))
+        fun predicted(tag: String, score: Float, kind: PredictedTag.Kind = PredictedTag.Kind.GENERAL) = listOf(PredictedTag(tag, score, kind))
+
+        assertTrue(untagged.hiddenBy(hidden, predicted("furry", 0.4f)))
+        assertFalse(untagged.hiddenBy(hidden, predicted("furry", 0.3f)))
+        assertFalse(untagged.hiddenBy(hidden, predicted("furry", 0.45f, PredictedTag.Kind.CHARACTER)))
+        // Hitomi does not share booru vocabulary, so only its own posts' predictions meet its hidden tags.
+        assertFalse(untagged.hiddenBy(hidden, predicted("tail", 0.9f)))
+        assertTrue(untagged.copy(id = PostId(SourceKey.HITOMI, "h")).hiddenBy(hidden, predicted("tail", 0.9f)))
+        assertFalse(untagged.hiddenBy(hidden, predicted = null))
+    }
+
+    @Test fun `a provider tag still hides only through its own source's hidden tags`() {
+        val tagged = post("furry")
+        assertTrue(tagged.hiddenBy(mapOf(SourceKey.GELBOORU to setOf("furry")), predicted = null))
+        assertFalse(tagged.hiddenBy(mapOf(SourceKey.DANBOORU to setOf("furry")), predicted = null))
     }
 
     private fun post(vararg tags: String) = Post(

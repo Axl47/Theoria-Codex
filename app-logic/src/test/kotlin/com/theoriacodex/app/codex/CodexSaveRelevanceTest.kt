@@ -9,6 +9,8 @@ import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.vision.PredictedTag
+import com.theoriacodex.domain.vision.PredictedTagIndex
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -90,6 +92,25 @@ class CodexSaveRelevanceTest {
         assertTrue(scores.getValue("miku") > scores.getValue("lucky"))
         // Without the library's rarity every tag weighs alike, and the generic Codex wins on two shared tags.
         assertTrue(relevance.score(library.getValue("generic")) > relevance.score(library.getValue("miku")))
+    }
+
+    @Test fun `predicted tags match a Codex whose posts were tagged in another language or not at all`() {
+        val incoming = post("incoming", emptyList())
+        val untaggedFoxes = collection(3, emptyList(), prefix = "fox")
+        val untaggedCats = collection(3, emptyList(), prefix = "cat")
+        fun guess(tag: String, score: Float) = listOf(PredictedTag(tag, score, PredictedTag.Kind.GENERAL))
+        val predicted = PredictedTagIndex(
+            byPost = mapOf(incoming.id to guess("fox_ears", 0.9f)) +
+                untaggedFoxes.associate { it.id to guess("fox_ears", 0.8f) } + untaggedCats.associate { it.id to guess("cat_ears", 0.8f) },
+        )
+        val relevance = CodexSaveRelevance(listOf(incoming), predicted = predicted)
+        val rarity = TagRarity.of(untaggedFoxes + untaggedCats, predicted)
+
+        assertTrue(relevance.hasSignals)
+        assertTrue(relevance.score(untaggedFoxes, rarity) > 0.0)
+        assertEquals(0.0, relevance.score(untaggedCats, rarity), 0.0)
+        // Below the evidence threshold a prediction says nothing.
+        assertFalse(CodexSaveRelevance(listOf(incoming), predicted = PredictedTagIndex(mapOf(incoming.id to guess("fox_ears", 0.4f)))).hasSignals)
     }
 
     private fun query(vararg tags: String) = emptySearchQuery().withIncludeTermsAsRequired(tags.map(::SearchTerm))
