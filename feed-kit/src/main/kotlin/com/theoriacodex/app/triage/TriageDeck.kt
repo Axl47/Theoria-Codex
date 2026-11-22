@@ -91,9 +91,11 @@ class TriageDeck(
                 loaded = snapshot.loaded
                 feedLoading = snapshot.loadingMore
                 mutableState.update { deck ->
+                    // A post the deck holds takes the feed's newer copy, which can carry tags its listing lacked.
+                    val fresh = snapshot.posts.associateBy { post -> post.id }
                     val known = deck.posts.mapTo(HashSet(), { post -> post.id })
                     val grown = deck.copy(
-                        posts = deck.posts + snapshot.posts.filter { post -> known.add(post.id) },
+                        posts = deck.posts.map { post -> fresh[post.id] ?: post } + snapshot.posts.filter { post -> known.add(post.id) },
                         canLoadMore = snapshot.canLoadMore,
                         pageFailed = snapshot.pageFailed,
                         loaded = true,

@@ -172,6 +172,16 @@ class TriageDeckTest {
         assertEquals(posts[2], deck.state.value.current)
     }
 
+    @Test fun `a card whose newer copy from the feed carries a hidden tag is passed over, in place`() = runTest {
+        val source = FakeFeed(posts, canLoadMore = false)
+        val deck = deck(source)
+        ownerHidden.value = mapOf(SourceKey.PIXIV to setOf("cat"))
+        deck.decideCurrent(TriageChoice.Skip)
+        source.emit(posts.map { if (it == posts[1]) it.copy(canonicalTags = listOf("cat")) else it }, canLoadMore = false)
+        assertEquals(posts[2], deck.state.value.current)
+        assertEquals(posts.size, deck.state.value.posts.size)
+    }
+
     @Test fun `the card Undo brings back stays while the owner still hides its tag`() = runTest {
         val tagged = listOf(testPost(sourcePostId = "a", canonicalTags = listOf("cat")), testPost(sourcePostId = "b", canonicalTags = listOf("cat")), posts[2])
         val deck = deck(FakeFeed(tagged, canLoadMore = false))

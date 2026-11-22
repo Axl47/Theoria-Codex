@@ -44,6 +44,13 @@ class TrailTriageFeedTest {
         assertEquals(2, pager.calls)
     }
 
+    @Test fun `a page that adds no posts still counts as loaded`() = runTest(UnconfinedTestDispatcher()) {
+        val feed = ScriptedPager(TrailPage(posts.take(2), canLoadMore = true), TrailPage(posts.take(2), canLoadMore = true)).asTriageFeed(backgroundScope)
+        val seen = collected(feed)
+        feed.loadNextPage()
+        assertEquals(TriageFeedSnapshot(posts.take(2), canLoadMore = true, loaded = 3), seen.last())
+    }
+
     @Test fun `a failed page keeps what loaded, refuses to page, and retry loads it`() = runTest(UnconfinedTestDispatcher()) {
         val pager = ScriptedPager(TrailPage(posts.take(2), canLoadMore = true), null, TrailPage(posts, canLoadMore = false))
         val feed = pager.asTriageFeed(backgroundScope)

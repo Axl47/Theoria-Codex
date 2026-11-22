@@ -449,21 +449,27 @@ class ForYouDeckViewModel(
         onDecision: (TriageDecisionEvent) -> Unit,
     ): ForYouLevel {
         val resolved = MutableStateFlow(emptyMap<PostId, Post>())
-        val feed = combine(source.snapshots, resolved, hiddenTokens) { snapshot, fuller, hidden ->
-            // The fuller copy first: a source whose listings carry no tags shows a hidden one only once resolved.
-            val posts = if (fuller.isEmpty()) snapshot.posts else snapshot.posts.map { fuller[it.id] ?: it }
-            snapshot.copy(posts = posts.filterNot { it.carriesAnyTag(hidden[it.id.source].orEmpty()) })
-        }.stateIn(scope, SharingStarted.Eagerly, LOADING_FEED)
-        val shared = object : TriageFeed {
-            override val snapshots = feed
-            override fun loadNextPage() = source.loadNextPage()
-            override fun retryPage() = source.retryPage()
+        // The fuller copy first: a source whose listings carry no tags shows a hidden one only once resolved.
+        val fuller = combine(source.snapshots, resolved) { snapshot, fuller ->
+            if (fuller.isEmpty()) snapshot else snapshot.copy(posts = snapshot.posts.map { fuller[it.id] ?: it })
         }
+        val feed = combine(fuller, hiddenTokens) { snapshot, hidden ->
+            snapshot.copy(posts = snapshot.posts.filterNot { it.carriesAnyTag(hidden[it.id.source].orEmpty()) })
+        }.stateIn(scope, SharingStarted.Eagerly, LOADING_FEED)
+        val shared = paging(feed, source)
+        // The deck passes over hidden posts itself, so it takes the fuller copies unfiltered and keeps its place.
         val deck = TriageDeck(
-            scope, shared, wiring.actions, wiring.quickSave, query, fromForYou = true, wiring.writeScope,
+            scope, paging(fuller, source), wiring.actions, wiring.quickSave, query, fromForYou = true, wiring.writeScope,
             pageAhead = pageAhead, onDecision = onDecision, ownerHidden = hiddenTokens,
         )
         return ForYouLevel(id, label, fork, query, deck, feed, shared, scope) { post -> resolved.update { it + (post.id to post) } }
+    }
+
+    /** [snapshots] as a feed that pages through [source]. */
+    private fun paging(snapshots: Flow<TriageFeedSnapshot>, source: TriageFeed) = object : TriageFeed {
+        override val snapshots = snapshots
+        override fun loadNextPage() = source.loadNextPage()
+        override fun retryPage() = source.retryPage()
     }
 
     private fun levelScope(): CoroutineScope {
