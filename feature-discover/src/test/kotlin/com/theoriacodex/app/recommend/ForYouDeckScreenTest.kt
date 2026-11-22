@@ -4,9 +4,11 @@ import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsEnabled
@@ -23,10 +25,13 @@ import androidx.compose.ui.test.performClick
 import com.theoriacodex.app.related.LocalRelatedPostsSupport
 import com.theoriacodex.app.related.testRelatedShelf
 import com.theoriacodex.app.search.searchCardTestTag
+import com.theoriacodex.app.search.sortModeLabel
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.triage.TriageCardSupport
 import com.theoriacodex.app.ui.components.FeedDurations
 import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
+import com.theoriacodex.app.ui.navigation.HiddenTagsOpener
+import com.theoriacodex.app.ui.navigation.LocalHiddenTagsOpener
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.RecommendationProfile
@@ -56,12 +61,15 @@ class ForYouDeckScreenTest {
     private val writeScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var settings = AppSettings()
     private var grid by mutableStateOf(false)
+    private var sort by mutableStateOf(SortMode.NEWEST)
+    private var animated by mutableStateOf(false)
 
     /** Each Viewer launch, as the level's id and the post. */
     private val opened = mutableListOf<Pair<String, PostId>>()
-    private val savedSearches = mutableListOf<Query>()
+    private val savedSearches = mutableStateListOf<Query>()
     private val selectedProfiles = mutableListOf<String>()
-    private val animatedOnly = mutableListOf<Boolean>()
+    private var wentToSearch = 0
+    private var hiddenTagsOpened = 0
 
     @After fun tearDown() = writeScope.cancel()
 
@@ -72,8 +80,12 @@ class ForYouDeckScreenTest {
         val callbacks = ForYouDeckCallbacks(
             onSelectProfile = { selectedProfiles += it },
             onSelectSource = {},
-            onSelectSort = {},
-            onAnimatedOnlyChange = { animatedOnly += it },
+            onSelectSort = { sort = it },
+            onAnimatedOnlyChange = { animated = it },
+            onResetFilters = {
+                sort = SortMode.NEWEST
+                animated = false
+            },
             onGridChange = { shown ->
                 grid = shown
                 owner.synchronize(environment())
@@ -85,15 +97,16 @@ class ForYouDeckScreenTest {
             onSaveSearch = { savedSearches += it },
             onToggleLike = {},
             onOpenSourceAccounts = {},
-            onGoToSearch = {},
+            onGoToSearch = { wentToSearch++ },
         )
         compose.setContent {
             MaterialTheme {
-                CompositionLocalProvider(LocalRelatedPostsSupport provides { true }) {
+                CompositionLocalProvider(LocalRelatedPostsSupport provides { true }, LocalHiddenTagsOpener provides HiddenTagsOpener { hiddenTagsOpened++ }) {
                     val cards = rememberFeedCardEnvironment(null, emptySet(), emptyMap(), FeedDurations.NONE, {})
                     val config = ForYouScreenConfig(
-                        SortMode.NEWEST, animatedOnly = false, grid, emptySet(), setOf(DECK_SOURCE), FeedDurations.NONE,
+                        sort, animated, grid, emptySet(), setOf(DECK_SOURCE), FeedDurations.NONE,
                         TriageCardSupport(cards, resolvePostById = { null }, recoverPostMedia = { _, _ -> null }),
+                        isSearchSaved = { it in savedSearches },
                     )
                     ForYouDeckScreen(owner, config, testRelatedShelf(), callbacks)
                 }
@@ -130,6 +143,7 @@ class ForYouDeckScreenTest {
         compose.onNodeWithTag(FOR_YOU_CHIPS_TAG).assertExists()
         compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}creator").assertTextEquals("artist").performClick()
 
+        compose.onNodeWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}0").assertTextEquals("Mix")
         compose.onNodeWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}1").assertTextEquals("artist")
         compose.onNodeWithTag(FOR_YOU_CHIPS_TAG).assertDoesNotExist()
         // Only a tag trail is a search to save, and a trail's cards say nothing about lanes.
@@ -142,15 +156,31 @@ class ForYouDeckScreenTest {
         compose.runOnIdle { assertEquals(1, owner.levels.value.size) }
     }
 
-    @Test fun `a tag trail saves its search`() {
+    @Test fun `a card a like asked for says so and does not offer its own creator again`() {
+        // No similar posts on this source, so the like asks the liked post's creator.
+        trails.creator = listOf(lanePost("more", 0, 0))
+        render()
+        compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}creator").assertExists()
+        decide("Like")
+        repeat(3) { decide("Skip") }
+
+        card("more-0-0").assertExists()
+        compose.onNodeWithTag(FOR_YOU_ORIGIN_TAG).assertTextEquals("More by artist")
+        compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}creator").assertDoesNotExist()
+    }
+
+    @Test fun `a tag trail saves its search, and then shows it saved`() {
         trails.tag = listOf(testPost(DECK_SOURCE, "t-1"))
         val owner = render()
         compose.runOnUiThread {
             val card = checkNotNull(owner.levels.value.single().deck.state.value.current)
             owner.fork(TrailRequest.Tag("sky", DECK_SOURCE, context = null, from = card))
         }
+        compose.onNodeWithContentDescription("Save search").assertExists()
         compose.onNodeWithTag(FOR_YOU_SAVE_SEARCH_TAG).performClick()
         compose.runOnIdle { assertEquals(listOf(listOf("sky")), savedSearches.map(Query::includeTags)) }
+        compose.onNodeWithContentDescription("Saved").assertExists()
+        compose.onNodeWithTag(FOR_YOU_SAVE_SEARCH_TAG).assertIsNotEnabled()
     }
 
     @Test fun `a chip narrows the deck to its interest`() {
@@ -181,6 +211,8 @@ class ForYouDeckScreenTest {
         render()
         compose.onNodeWithText("No recommendations yet").assertExists()
         compose.onNodeWithTag(FOR_YOU_CHIPS_TAG).assertDoesNotExist()
+        compose.onNodeWithText("Go to Search").performClick()
+        compose.runOnIdle { assertEquals(1, wentToSearch) }
     }
 
     @Test fun `a Mix that could not load offers Retry, which deals it`() {
@@ -202,12 +234,32 @@ class ForYouDeckScreenTest {
         compose.runOnIdle { assertEquals(listOf("alt"), selectedProfiles) }
     }
 
-    @Test fun `a single profile draws no chip and filters hold the media choice`() {
+    @Test fun `a single profile draws no chip`() {
         settings = AppSettings().copy(recommendationProfiles = listOf(RecommendationProfile("main", "Main")), activeProfileId = "main")
         render()
         compose.onNodeWithText("Main").assertDoesNotExist()
+    }
+
+    @Test fun `the Filters button shows when a filter is on, and Reset restores the sort and the media choice`() {
+        render()
+        compose.onNodeWithTag(FOR_YOU_FILTERS_ACTIVE_TAG, useUnmergedTree = true).assertDoesNotExist()
         compose.onNodeWithTag(FOR_YOU_FILTERS_TAG).performClick()
         compose.onNodeWithText("Animated only").performClick()
-        compose.runOnIdle { assertEquals(listOf(true), animatedOnly) }
+        compose.onNodeWithText(sortModeLabel(SortMode.POPULAR)).performClick()
+        compose.runOnIdle { assertEquals(SortMode.POPULAR to true, sort to animated) }
+        compose.onNodeWithTag(FOR_YOU_FILTERS_ACTIVE_TAG, useUnmergedTree = true).assertExists()
+
+        compose.onNodeWithText("Reset").performClick()
+        compose.runOnIdle { assertEquals(SortMode.NEWEST to false, sort to animated) }
+        compose.onNodeWithTag(FOR_YOU_FILTERS_ACTIVE_TAG, useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    @Test fun `Hidden tags is a row that leaves the sheet for the profile's hidden tags`() {
+        render()
+        compose.onNodeWithTag(FOR_YOU_FILTERS_TAG).performClick()
+        // A row, not a choice: it has no selected state.
+        compose.onNode(hasText("Hidden tags") and hasClickAction() and SemanticsMatcher.keyNotDefined(SemanticsProperties.Selected)).performClick()
+        compose.runOnIdle { assertEquals(1, hiddenTagsOpened) }
+        compose.onNodeWithText("Animated only").assertDoesNotExist()
     }
 }

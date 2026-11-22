@@ -60,8 +60,8 @@ internal fun forYouForks(
 /** What a card says about why it is here: its lane, or the like or save that asked for it. */
 internal fun DeckOrigin.label(): String = when (this) {
     is DeckOrigin.Lane -> label
-    is DeckOrigin.Similar -> "Similar"
-    is DeckOrigin.Creator -> name
+    is DeckOrigin.Similar -> "Like one you liked"
+    is DeckOrigin.Creator -> "More by $name"
 }
 
 /**
@@ -79,9 +79,10 @@ internal fun ForYouCardFooter(
     val similarSupported = LocalRelatedPostsSupport.current(post.id.source)
     val affinity by LocalTagAffinityInputs.current.collectAsStateWithLifecycle()
     val origin = if (level.fork == null) owner.originOf(post.id) else null
-    val forks = remember(post, affinity, feedShare, similarSupported, creatorBrowsingSources, level) {
+    val forks = remember(post, affinity, feedShare, similarSupported, creatorBrowsingSources, level, origin) {
+        // Not on that creator's own trail, nor on a card that is here because of its creator, whose label names them.
         val creator = creatorProfileActions(post, creatorBrowsingSources).firstNotNullOfOrNull { it.profile }
-            ?.takeUnless { (level.fork as? TrailRequest.Creator)?.creator == it }
+            ?.takeUnless { (level.fork as? TrailRequest.Creator)?.creator == it || origin is DeckOrigin.Creator }
         val covered = (level.query?.includeTags.orEmpty() + owner.laneTags(post.id)).mapTo(mutableSetOf(), ::normalizeMatchToken)
         val tags = tagAffinities(post, affinity, feedShare).filter { it.informative }.map { it.tag }
         forYouForks(post, tags, covered, creator, similarSupported, level.query)

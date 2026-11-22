@@ -22,7 +22,7 @@ data class ForYouFeedRequest(
  * likes. [cursor] opens its first page through [ForYouRouteEngine.loadPage] and is folded forward with each page.
  */
 data class ForYouLane(val source: SourceKey, val tags: List<String>, val cursor: FeedCursor) {
-    val id: String get() = buildForYouSeedId(mapOf(source to tags.sorted()))
+    val id: String get() = "${source.id}:${tags.sorted().joinToString("+")}"
 
     /** "fog + sea": what the lane's chip and its cards say. */
     val label: String get() = tags.joinToString(" + ") { it.replace('_', ' ') }

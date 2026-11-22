@@ -40,7 +40,12 @@ class ForYouScreenConfig(
     val creatorBrowsingSources: Set<SourceKey>,
     val durations: FeedDurations,
     val support: TriageCardSupport,
-)
+    /** Whether a tag trail's search is already a saved search. */
+    val isSearchSaved: (Query) -> Boolean = { false },
+) {
+    /** Sort or Animated only is off its default. */
+    val filtered: Boolean get() = sortMode != SortMode.NEWEST || animatedOnly
+}
 
 /** What the For You screen asks of the app. */
 class ForYouDeckCallbacks(
@@ -49,6 +54,8 @@ class ForYouDeckCallbacks(
     val onSelectSource: (SourceKey?) -> Unit,
     val onSelectSort: (SortMode) -> Unit,
     val onAnimatedOnlyChange: (Boolean) -> Unit,
+    /** Puts Sort and Animated only back to their defaults in one change. */
+    val onResetFilters: () -> Unit,
     val onGridChange: (Boolean) -> Unit,
     /** Opens the Viewer on [post] of [level]'s feed, which the Viewer keeps following. */
     val onOpenPost: (level: ForYouLevel, post: PostId, scrollOffsetHint: Int) -> Unit,
@@ -89,9 +96,13 @@ fun ForYouDeckScreen(
 
     // The shell's scaffold already insets its content for the system bars.
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        ForYouBar(state, level, config.grid, callbacks, onShowFilters = { showFilters = true })
+        ForYouBar(state, level, config, callbacks, onShowFilters = { showFilters = true })
         if (onTrail) {
-            ForYouCrumbs(levels, onCrumb = owner::popTo, onSaveSearch = level.query?.let { query -> { callbacks.onSaveSearch(query) } })
+            val query = level.query
+            ForYouCrumbs(
+                levels, onCrumb = owner::popTo, saved = query != null && config.isSearchSaved(query),
+                onSaveSearch = query?.let { { callbacks.onSaveSearch(it) } },
+            )
         } else {
             ForYouChips(state.chips, state.only, owner::selectChip)
             if (state.failures.isNotEmpty()) {

@@ -1,6 +1,7 @@
 package com.theoriacodex.app.recommend
 
 import com.theoriacodex.app.feed.FeedCursor
+import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.triage.TriageFeedSnapshot
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -9,9 +10,9 @@ import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.domain.orchestration.UnifiedSearchResult
 
-/** One lane of a Mix: its feed's posts not dealt yet, and where the feed continues. */
-internal class MixLane(val lane: ForYouLane) {
-    val origin = DeckOrigin.Lane(lane.id, lane.label)
+/** One lane of a Mix: its feed's posts not dealt yet, and where the feed continues. [label] is what its chip and cards say. */
+internal class MixLane(val lane: ForYouLane, label: String = lane.label) {
+    val origin = DeckOrigin.Lane(lane.id, label)
     var buffer: List<Post> = emptyList()
         private set
 
@@ -78,7 +79,8 @@ internal class MixLane(val lane: ForYouLane) {
  * requests and is not thread-safe: its owner loads the lanes and uses it on one thread.
  */
 internal class ForYouMix(lanes: List<ForYouLane>) {
-    private val all = lanes.map(::MixLane)
+    /** Every lane of the plan, in order, with the ones hidden tags hide; grows when a hide that kept lanes out goes. */
+    private var all = lanes.map { lane -> MixLane(lane, lane.labelAmong(lanes)) }
 
     /** The lanes the profile's hidden tags do not hide. */
     var lanes: List<MixLane> = all
@@ -96,13 +98,16 @@ internal class ForYouMix(lanes: List<ForYouLane>) {
         private set
     private val dealt = mutableSetOf<PostId>()
 
-    /** Every lane has answered its first request, so the first deal can take from all of them in turn. */
-    val ready: Boolean get() = lanes.all { it.opened }
+    /** A lane has answered its first request, so there may be cards to deal; lanes that answer later join in. */
+    val ready: Boolean get() = lanes.any { it.opened }
+
+    /** Some lane has not answered its first request yet. */
+    val opening: Boolean get() = lanes.any { !it.opened }
     private val running: List<MixLane> get() = lanes.filter { only == null || it.origin.laneId == only }
 
     fun isDealt(id: PostId): Boolean = id in dealt
 
-    /** Deals up to [size] cards nobody has [seen], once every lane has opened. */
+    /** Deals up to [size] cards nobody has [seen], once a lane has opened. */
     fun deal(size: Int, seen: Set<PostId>) {
         if (!ready) {
             wanted = true
@@ -145,6 +150,18 @@ internal class ForYouMix(lanes: List<ForYouLane>) {
         if (shown.none { it.origin.laneId == only }) only = null
     }
 
+    /**
+     * Adds the lanes of [plan] this Mix does not have, at the end. A label another lane already uses gains its source.
+     * Returns whether any was added.
+     */
+    fun addLanes(plan: List<ForYouLane>): Boolean {
+        val known = all.mapTo(mutableSetOf()) { it.lane.id }
+        val added = plan.filter { known.add(it.id) }.map { lane -> MixLane(lane, lane.labelAmong(all.map(MixLane::lane) + lane)) }
+        all = all + added
+        lanes = lanes + added
+        return added.isNotEmpty()
+    }
+
     /** Drops the posts waiting to be dealt that the deck may no longer show. */
     fun keepWaiting(shown: (Post) -> Boolean) {
         lanes.forEach { it.keep(shown) }
@@ -179,3 +196,7 @@ internal class ForYouMix(lanes: List<ForYouLane>) {
         const val LOW_WATER = 6
     }
 }
+
+/** This lane's label, with its source's name when another of [lanes] reads the same: "fog · Pixiv". */
+private fun ForYouLane.labelAmong(lanes: List<ForYouLane>): String =
+    if (lanes.count { it.label == label } > 1) "$label · ${source.displayName()}" else label

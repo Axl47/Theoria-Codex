@@ -58,7 +58,9 @@ internal fun ForYouBody(
     onLongPress: (Post) -> Unit,
 ) {
     val feed by level.feed.collectAsStateWithLifecycle()
-    val end: @Composable () -> Unit = { ForYouEnd(state.mix.takeIf { level.fork == null }, feed.posts.isEmpty(), owner::rebuild) }
+    val end: @Composable () -> Unit = {
+        ForYouEnd(state.mix.takeIf { level.fork == null }, feed.posts.isEmpty(), owner::rebuild, callbacks.onGoToSearch)
+    }
     when {
         feed.posts.isEmpty() && feed.pageFailed && !feed.loadingMore -> Column(Modifier.padding(16.dp)) {
             // The tile words a lost connection itself.
@@ -97,7 +99,7 @@ private fun ForYouDeck(
         support = config.support,
         callbacks = deckCallbacks,
         // The screen's own bar sits above the deck and the grid alike.
-        topBar = { _, _ -> },
+        showTopBar = false,
         cardFooter = { post -> ForYouCardFooter(owner, level, post, feedShare, config.creatorBrowsingSources) },
         endContent = end,
     )
@@ -184,7 +186,7 @@ private fun GridPositionEffect(levelId: String, positioned: MutableState<String>
  * never had a post to show.
  */
 @Composable
-private fun ForYouEnd(mix: ForYouMixState?, empty: Boolean, onStartOver: () -> Unit) {
+private fun ForYouEnd(mix: ForYouMixState?, empty: Boolean, onStartOver: () -> Unit, onGoToSearch: () -> Unit) {
     Column(
         Modifier.fillMaxSize().padding(16.dp).testTag(FOR_YOU_END_TAG),
         verticalArrangement = Arrangement.Center,
@@ -192,7 +194,10 @@ private fun ForYouEnd(mix: ForYouMixState?, empty: Boolean, onStartOver: () -> U
     ) {
         when {
             mix == ForYouMixState.NoSources -> FeedEmptyTile("No sources enabled")
-            mix == ForYouMixState.NoLanes -> FeedEmptyTile("No recommendations yet")
+            mix == ForYouMixState.NoLanes -> {
+                FeedEmptyTile("No recommendations yet")
+                TextButton(onGoToSearch) { Text("Go to Search") }
+            }
             mix == null -> FeedEmptyTile(if (empty) "No posts found" else "No more posts")
             else -> {
                 FeedEmptyTile("No more posts")

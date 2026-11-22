@@ -42,6 +42,8 @@ internal data class ForYouRouteConfig(
     /** The active profile's marks: the Mix does not deal a post it already liked or saved. */
     val marks: FeedMarks,
     val resolveUnknownAnimatedDurations: Boolean,
+    /** Whether a tag trail's search is already a saved search. */
+    val isSearchSaved: (Query) -> Boolean,
 )
 
 /** What the owner and its cards are built with. */
@@ -126,6 +128,7 @@ internal fun ForYouRoute(
         owner = owner,
         config = ForYouScreenConfig(
             sortMode, fabRestoreState.animatedOnly, fabRestoreState.grid, liked, config.creatorBrowsingSources, durations, support,
+            config.isSearchSaved,
         ),
         related = related,
         callbacks = deckCallbacks(callbacks, fabRestoreState, onFabRestoreStateChange),
@@ -154,6 +157,8 @@ private fun deckCallbacks(
     onSelectSource = { source -> onRestoreChange(restore.copy(source = source?.id)) },
     onSelectSort = { sort -> onRestoreChange(restore.copy(sortMode = sort.name)) },
     onAnimatedOnlyChange = { animatedOnly -> onRestoreChange(restore.copy(animatedOnly = animatedOnly)) },
+    // One change: two would each start from the state before the other.
+    onResetFilters = { onRestoreChange(restore.copy(sortMode = null, animatedOnly = false)) },
     onGridChange = { grid -> onRestoreChange(restore.copy(grid = grid)) },
     onOpenPost = callbacks.onOpenPost,
     onPickCodex = callbacks.onPickCodex,

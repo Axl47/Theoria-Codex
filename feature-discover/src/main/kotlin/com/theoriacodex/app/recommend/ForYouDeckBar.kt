@@ -1,17 +1,24 @@
 package com.theoriacodex.app.recommend
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -19,7 +26,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.search.sortModeLabel
@@ -35,10 +44,11 @@ import com.theoriacodex.domain.model.SortMode
 internal fun ForYouBar(
     state: ForYouDeckUiState,
     level: ForYouLevel,
-    grid: Boolean,
+    config: ForYouScreenConfig,
     callbacks: ForYouDeckCallbacks,
     onShowFilters: () -> Unit,
 ) {
+    val grid = config.grid
     val deck by level.deck.state.collectAsStateWithLifecycle()
     var showSources by remember { mutableStateOf(false) }
     Row(
@@ -73,7 +83,17 @@ internal fun ForYouBar(
             IconButton({ callbacks.onGridChange(!grid) }, Modifier.testTag(FOR_YOU_VIEW_TOGGLE_TAG)) {
                 if (grid) Icon(Icons.Filled.Style, contentDescription = "Deck") else Icon(Icons.Filled.GridView, contentDescription = "Grid")
             }
-            IconButton(onShowFilters, Modifier.testTag(FOR_YOU_FILTERS_TAG)) { Icon(Icons.Filled.Tune, contentDescription = "Filters") }
+            FiltersButton(config.filtered, onShowFilters)
+        }
+    }
+}
+
+/** Opens the filters; a dot marks it while Sort or Animated only is off its default. */
+@Composable
+private fun FiltersButton(active: Boolean, onClick: () -> Unit) {
+    IconButton(onClick, Modifier.testTag(FOR_YOU_FILTERS_TAG)) {
+        BadgedBox(badge = { if (active) Badge(Modifier.testTag(FOR_YOU_FILTERS_ACTIVE_TAG)) }) {
+            Icon(Icons.Filled.Tune, contentDescription = if (active) "Filters, active" else "Filters")
         }
     }
 }
@@ -82,11 +102,7 @@ internal fun ForYouBar(
 @Composable
 internal fun ForYouFilterSheet(config: ForYouScreenConfig, callbacks: ForYouDeckCallbacks, onDismiss: () -> Unit) {
     val hiddenTags = LocalHiddenTagsOpener.current
-    val reset = {
-        callbacks.onSelectSort(SortMode.NEWEST)
-        callbacks.onAnimatedOnlyChange(false)
-    }
-    FeedFilterSheet(onDismiss = onDismiss, onReset = reset) {
+    FeedFilterSheet(onDismiss = onDismiss, onReset = callbacks.onResetFilters) {
         FilterSection("Sort") {
             SortMode.entries.forEach { mode ->
                 FilterChoiceChip(sortModeLabel(mode), config.sortMode == mode) { callbacks.onSelectSort(mode) }
@@ -94,10 +110,21 @@ internal fun ForYouFilterSheet(config: ForYouScreenConfig, callbacks: ForYouDeck
         }
         FilterSection("Show") {
             FilterChoiceChip("Animated only", config.animatedOnly) { callbacks.onAnimatedOnlyChange(!config.animatedOnly) }
-            FilterChoiceChip("Hidden tags", selected = false) {
-                onDismiss()
-                hiddenTags.openHiddenTags()
-            }
+        }
+        // Not a filter: it opens the list of the profile's hidden tags.
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(role = Role.Button) {
+                    onDismiss()
+                    hiddenTags.openHiddenTags()
+                }
+                .padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Hidden tags", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -105,3 +132,4 @@ internal fun ForYouFilterSheet(config: ForYouScreenConfig, callbacks: ForYouDeck
 const val FOR_YOU_UNDO_TAG = "for-you-undo"
 const val FOR_YOU_VIEW_TOGGLE_TAG = "for-you-view-toggle"
 const val FOR_YOU_FILTERS_TAG = "for-you-filters"
+const val FOR_YOU_FILTERS_ACTIVE_TAG = "for-you-filters-active"

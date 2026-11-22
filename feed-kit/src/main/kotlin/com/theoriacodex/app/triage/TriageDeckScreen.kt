@@ -55,9 +55,9 @@ class TriageCardSupport(
  * and Undo. Drag the card right to like, left to skip (on a Codex: right keeps, left removes), up to save, down to hide;
  * [query] is the origin feed's search, which ranks Codices and keeps its own tags out of what the deck offers to hide.
  *
- * An owner that dresses the deck differently replaces the bar with [topBar], draws [cardFooter] under each card's
- * media (in a band [TRIAGE_CARD_FOOTER_HEIGHT] tall, so cards keep their size), and replaces "No more posts" with
- * [endContent]. Without them the deck closes through [TriageDeckCallbacks.onClose].
+ * An owner that dresses the deck differently draws its own bar above it ([showTopBar] false), draws [cardFooter] under
+ * each card's media (in a band [TRIAGE_CARD_FOOTER_HEIGHT] tall, so cards keep their size), and replaces "No more
+ * posts" with [endContent]. Without them the deck closes through [TriageDeckCallbacks.onClose].
  */
 @Composable
 fun TriageDeckScreen(
@@ -66,14 +66,14 @@ fun TriageDeckScreen(
     support: TriageCardSupport,
     callbacks: TriageDeckCallbacks,
     modifier: Modifier = Modifier,
-    topBar: (@Composable (deck: TriageDeckState, onUndo: () -> Unit) -> Unit)? = null,
+    showTopBar: Boolean = true,
     cardFooter: (@Composable (Post) -> Unit)? = null,
     endContent: (@Composable () -> Unit)? = null,
 ) {
     val state by deck.state.collectAsStateWithLifecycle()
     // The shell's scaffold already insets its content for the system bars.
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        if (topBar != null) topBar(state, deck::undo) else TriageTopBar(state, callbacks.onClose, deck::undo)
+        if (showTopBar) TriageTopBar(state, callbacks.onClose, deck::undo)
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
                 state.current != null -> TriageDeckArea(state, deck, query, support, callbacks, cardFooter)

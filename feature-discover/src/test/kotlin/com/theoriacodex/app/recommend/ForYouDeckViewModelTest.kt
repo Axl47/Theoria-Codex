@@ -1,12 +1,16 @@
 package com.theoriacodex.app.recommend
 
 import com.theoriacodex.app.codex.ChosenCodex
+import com.theoriacodex.app.feed.FeedCursor
+import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.triage.TriageChoice
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -110,7 +114,7 @@ class ForYouDeckViewModelTest {
         assertEquals(listOf("a", "b", "c", "a", "s", "s"), owner.posts.lanes().take(6))
         assertEquals(fresh.take(2), owner.posts.subList(4, 6))
         assertEquals(DeckOrigin.Similar(liked.id), owner.originOf(fresh[0].id))
-        assertEquals("Similar", owner.originOf(fresh[0].id)?.label())
+        assertEquals("Like one you liked", owner.originOf(fresh[0].id)?.label())
         assertEquals(listOf(liked.id), actions.liked)
     }
 
@@ -121,6 +125,7 @@ class ForYouDeckViewModelTest {
         owner.skip(1)
 
         assertEquals(DeckOrigin.Creator(saved.id, "artist"), owner.originOf(owner.posts[4].id))
+        assertEquals("More by artist", owner.originOf(owner.posts[4].id)?.label())
         assertEquals(listOf(saved.id), quickSave.saved)
         assertTrue(quickSave.fromForYou)
     }
@@ -196,12 +201,76 @@ class ForYouDeckViewModelTest {
         assertEquals(4, owner.posts.size)
     }
 
-    @Test fun `hiding the lane its chip shows widens the deck to the Mix`() {
+    @Test fun `hiding the tag of the chip's lane widens the same deck to the Mix, and Undo brings the card back`() {
         val owner = owner()
         owner.selectChip(laneId("b"))
+        val level = owner.top
+        val hid = owner.decide(TriageChoice.Hide("b"))
+        assertEquals(listOf(DECK_SOURCE to "b"), actions.hidden)
+        // The hide reaches the owner through the profile's settings.
         owner.synchronize(deckEnvironment(hiding("b")))
+
+        assertSame(level, owner.top)
         assertNull(owner.state.value.only)
+        assertEquals(listOf("a", "c"), owner.state.value.chips.map(ForYouChip::label))
         assertEquals(setOf("a", "c"), owner.posts.lanes().toSet())
+        // The deck moved on to a card the hidden tag does not hide.
+        assertTrue(owner.current in owner.posts)
+
+        level.deck.undo()
+        assertSame(hid, owner.current)
+        assertTrue(actions.hidden.isEmpty())
+        owner.synchronize(deckEnvironment())
+        assertSame(level, owner.top)
+        assertSame(hid, owner.current)
+        assertEquals(listOf("a", "b", "c"), owner.state.value.chips.map(ForYouChip::label))
+    }
+
+    @Test fun `removing a hide the Mix was built under brings its lane in and keeps the deck`() {
+        val owner = owner(deckEnvironment(hiding("b")))
+        assertEquals(listOf("a", "c"), owner.state.value.chips.map(ForYouChip::label))
+        owner.skip(1)
+        val level = owner.top
+        val card = owner.current
+
+        owner.synchronize(deckEnvironment())
+        assertSame(level, owner.top)
+        assertSame(card, owner.current)
+        assertEquals(listOf("a", "c", "b"), owner.state.value.chips.map(ForYouChip::label))
+        owner.skip(4)
+        assertTrue("b" in owner.posts.lanes())
+    }
+
+    @Test fun `removing the hide that left the Mix without lanes builds it`() {
+        engine.tags = listOf("b")
+        val owner = owner(deckEnvironment(hiding("b")))
+        assertEquals(ForYouMixState.NoLanes, owner.state.value.mix)
+
+        owner.synchronize(deckEnvironment())
+        assertEquals(ForYouMixState.Dealing, owner.state.value.mix)
+        assertEquals(listOf("b", "b", "b", "b"), owner.posts.lanes())
+    }
+
+    @Test fun `the first lane to answer deals, and lanes that answer later join the rotation`() {
+        engine.hold("a", "b", "c")
+        val owner = owner()
+        assertTrue(owner.posts.isEmpty() && owner.top.feed.value.loadingMore)
+
+        engine.release("b")
+        assertEquals(listOf("b", "b", "b", "b"), owner.posts.lanes())
+        engine.release("a")
+        engine.release("c")
+        owner.skip(2)
+        assertEquals(listOf("a", "b", "c", "a"), owner.posts.lanes().drop(4))
+    }
+
+    @Test fun `lanes with the same tag on two sources say which source each is`() {
+        val cursor = FeedCursor(Query.newest(DECK_SOURCE))
+        val mix = ForYouMix(listOf(ForYouLane(DECK_SOURCE, listOf("fog"), cursor), ForYouLane(SourceKey.PIXIV, listOf("fog"), cursor), ForYouLane(SourceKey.PIXIV, listOf("sea"), cursor)))
+        assertEquals(
+            listOf("fog · ${DECK_SOURCE.displayName()}", "fog · ${SourceKey.PIXIV.displayName()}", "sea"),
+            mix.lanes.map { it.origin.label },
+        )
     }
 
     @Test fun `a fork opens a trail on top and leaving it returns to the Mix where it was`() {
@@ -213,7 +282,7 @@ class ForYouDeckViewModelTest {
         val card = owner.current
         owner.fork(TrailRequest.Tag("sea", DECK_SOURCE, context = null, from = card))
 
-        assertEquals(listOf("For You", "sea"), owner.levels.value.map(ForYouLevel::label))
+        assertEquals(listOf("Mix", "sea"), owner.levels.value.map(ForYouLevel::label))
         assertEquals(trail, owner.posts)
         assertEquals(owner.top.id, owner.viewerFeed.queryHash)
         assertEquals(listOf("sea"), owner.top.query?.includeTags)
@@ -230,6 +299,48 @@ class ForYouDeckViewModelTest {
         owner.skip(7)
         assertTrue(owner.posts.size >= 12)
         assertFalse(trail[0] in owner.posts)
+    }
+
+    @Test fun `a trail leaves out what was decided or kept before it opened, and keeps the cards decided on it`() {
+        val keptBefore = testPost(DECK_SOURCE, "t-kept")
+        val fresh = listOf(testPost(DECK_SOURCE, "t-1"), testPost(DECK_SOURCE, "t-2"))
+        val owner = owner(deckEnvironment(kept = setOf(keptBefore.id)))
+        val skipped = owner.decide(TriageChoice.Skip)
+        trails.tag = listOf(skipped, keptBefore) + fresh
+        owner.fork(TrailRequest.Tag("sea", DECK_SOURCE, context = null, from = owner.current))
+        assertEquals(fresh, owner.posts)
+
+        val liked = owner.decide(TriageChoice.Like)
+        // The like reaches the owner as a kept post; the trail still holds its card for Undo.
+        owner.synchronize(deckEnvironment(kept = setOf(keptBefore.id, liked.id)))
+        assertEquals(fresh, owner.posts)
+        owner.top.deck.undo()
+        assertSame(liked, owner.current)
+    }
+
+    @Test fun `a second fork while one resolves does nothing`() {
+        trails.tag = listOf(testPost(DECK_SOURCE, "t-1"))
+        val gate = CompletableDeferred<Unit>().also { trails.gate = it }
+        val owner = owner()
+        val request = TrailRequest.Tag("sea", DECK_SOURCE, context = null, from = owner.current)
+        owner.fork(request)
+        owner.fork(request)
+        gate.complete(Unit)
+
+        assertEquals(1, trails.asked.size)
+        assertEquals(listOf("Mix", "sea"), owner.levels.value.map(ForYouLevel::label))
+    }
+
+    @Test fun `a fork that resolves after its level was replaced is dropped`() {
+        trails.tag = listOf(testPost(DECK_SOURCE, "t-1"))
+        val gate = CompletableDeferred<Unit>().also { trails.gate = it }
+        val owner = owner()
+        owner.fork(TrailRequest.Tag("sea", DECK_SOURCE, context = null, from = owner.current))
+        owner.selectChip(laneId("b"))
+        gate.complete(Unit)
+
+        assertEquals(listOf("Mix"), owner.levels.value.map(ForYouLevel::label))
+        assertEquals(laneId("b"), owner.state.value.only)
     }
 
     @Test fun `a fork that cannot open says so and stays on the Mix`() = runTest {

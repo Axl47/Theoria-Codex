@@ -22,6 +22,12 @@ class ForYouBlacklistMatchTest {
         assertFalse(combo.hidesSeed(SourceKey.GELBOORU, listOf("boats", "sea")))
     }
 
+    @Test fun `tags match however their case, underscores and spacing are written`() {
+        val hidden = listOf(ForYouBlacklistEntry(SourceKey.PIXIV, listOf("Blue_Hair")))
+        assertTrue(hidden.hidesSeed(SourceKey.PIXIV, listOf("blue  hair")))
+        assertFalse(hidden.hidesSeed(SourceKey.PIXIV, listOf("blue")))
+    }
+
     @Test fun `an entry without tags hides nothing`() {
         assertFalse(listOf(ForYouBlacklistEntry(SourceKey.PIXIV, listOf(" "))).hidesSeed(SourceKey.PIXIV, listOf("boats")))
     }

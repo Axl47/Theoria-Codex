@@ -31,6 +31,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -83,6 +84,9 @@ class ForYouDeckViewModel(
     private var inputs: MixInputs? = null
     private var hidden: List<ForYouBlacklistEntry> = emptyList()
 
+    /** The hides the Mix's lanes were planned under: when one of them goes, lanes it kept out of the plan may return. */
+    private var plannedUnder: List<ForYouBlacklistEntry> = emptyList()
+
     /** The profile's single hidden tags by source, as [normalizeMatchToken] spells them; no level shows a post carrying one. */
     private val hiddenTokens = MutableStateFlow(emptyMap<SourceKey, Set<String>>())
     private var kept: Set<PostId> = emptySet()
@@ -110,6 +114,10 @@ class ForYouDeckViewModel(
     /** The Mix's latest decision and the steering before it, for Undo. */
     private var lastDecision: Pair<PostId, DeckSteering>? = null
     private val asking = mutableMapOf<PostId, Job>()
+
+    /** A fresh Mix is asking its lanes for their first pages, and deals once it has asked them all. */
+    private var opening = false
+    private var forking: Job? = null
 
     private val relatedState = MutableStateFlow<RelatedPostsUiState>(RelatedPostsUiState.Idle)
     private val relatedPosts = RelatedPostsRouteController(
@@ -140,7 +148,8 @@ class ForYouDeckViewModel(
 
     /**
      * Takes the route's current [environment]. A new profile, source, sort, media filter or set of runnable sources
-     * starts a fresh Mix; a change to the hidden tags only leaves out what they now hide.
+     * starts a fresh Mix; a change to the hidden tags only leaves out what they now hide and brings back what they no
+     * longer do.
      */
     fun synchronize(environment: ForYouEnvironment) {
         val settings = environment.settings
@@ -163,6 +172,7 @@ class ForYouDeckViewModel(
         val previous = inputs
         inputs = next
         val hiddenChanged = blacklist != hidden
+        val unhidden = hidden - blacklist.toSet()
         if (hiddenChanged) {
             hidden = blacklist
             hiddenTokens.value = blacklist.filter { it.tags.size == 1 }
@@ -173,22 +183,24 @@ class ForYouDeckViewModel(
                 if (previous?.profileId != next.profileId) seen.clear()
                 rebuild()
             }
-            hiddenChanged -> dropHidden()
+            hiddenChanged -> {
+                dropHidden()
+                if (unhidden.any { it in plannedUnder }) restoreLanes(unhidden)
+            }
         }
     }
 
     /** Starts a fresh Mix for the current inputs: every level closes, and steering starts over. */
     fun rebuild() {
-        val inputs = inputs ?: return
-        val settings = settings ?: return
+        val request = request() ?: return
         work.cancelChildren()
         asking.clear()
         mix = null
         lastDecision = null
+        plannedUnder = hidden
         resetLevels()
         ui.update { it.copy(mix = ForYouMixState.Dealing, failure = null, chips = emptyList(), only = null, failures = emptyList()) }
-        if (inputs.sources.isEmpty()) return settle(ForYouMixState.NoSources)
-        val request = ForYouFeedRequest(settings, inputs.sources, inputs.source, inputs.sort, inputs.animatedOnly)
+        if (request.availableSources.isEmpty()) return settle(ForYouMixState.NoSources)
         workScope.launch {
             val lanes = runCatchingPreservingCancellation { engine.lanes(request) }.getOrElse { error ->
                 Diagnostics.report("for-you", "For You could not build its lanes", error)
@@ -197,8 +209,20 @@ class ForYouDeckViewModel(
             if (lanes.isEmpty()) return@launch settle(ForYouMixState.NoLanes)
             val built = ForYouMix(lanes)
             mix = built
+            // Every lane is asked before the first deal, so lanes that answer without waiting are dealt in turn; after
+            // that the first lane to answer deals, and a slow source does not hold the first card back.
+            opening = true
             refill(built)
+            opening = false
+            if (built.wanted) deal()
         }
+    }
+
+    /** What the lanes are planned for now; null before the route has synchronized. */
+    private fun request(): ForYouFeedRequest? {
+        val inputs = inputs ?: return null
+        val settings = settings ?: return null
+        return ForYouFeedRequest(settings, inputs.sources, inputs.source, inputs.sort, inputs.animatedOnly)
     }
 
     /** Narrows the Mix to the lane [laneId], or widens it again for null. The dealt cards nobody decided are dealt again. */
@@ -219,12 +243,21 @@ class ForYouDeckViewModel(
         publish()
     }
 
-    /** Opens the trail [request] asks for as a new level on top. */
+    /**
+     * Opens the trail [request] asks for as a new level on top. A second tap while it resolves does nothing, and a
+     * trail that resolves after its level was left, or covered, is dropped.
+     */
     fun fork(request: TrailRequest) {
+        if (forking?.isActive == true) return
+        val from = top
         val animatedOnly = inputs?.animatedOnly == true
-        workScope.launch {
+        forking = workScope.launch {
             val spec = runCatchingPreservingCancellation { wiring.trails(request, animatedOnly) }.getOrNull()
-            if (spec == null) messageChannel.trySend("Couldn't open ${request.name()}") else push(request, spec)
+            when {
+                top !== from -> Unit
+                spec == null -> messageChannel.trySend("Couldn't open ${request.name()}")
+                else -> push(request, spec)
+            }
         }
     }
 
@@ -279,24 +312,35 @@ class ForYouDeckViewModel(
         mixFeed.value = TriageFeedSnapshot(emptyList(), canLoadMore = false, pageFailed = state == ForYouMixState.Failed)
     }
 
+    /**
+     * Asks [lane] for its next page. The request starts in place, so a lane that answers without waiting has answered
+     * by the time this returns.
+     */
     private fun load(mix: ForYouMix, lane: MixLane) {
         val cursor = lane.cursor ?: return
         lane.loading = true
-        workScope.launch {
+        workScope.launch(start = CoroutineStart.UNDISPATCHED) {
             val page = runCatchingPreservingCancellation { engine.loadPage(cursor, setOf(lane.lane.source)) }
             lane.loading = false
             page.onSuccess { lane.accept(cursor, it, it.items.filter(::shows)) }.onFailure { error ->
                 Diagnostics.report("for-you", "A For You lane failed to load", error)
                 lane.fail(error.message)
             }
-            if (mix.wanted) deal() else refill(mix)
+            when {
+                opening -> Unit
+                mix.wanted -> deal()
+                else -> refill(mix)
+            }
         }
     }
 
-    /** Deals the next batch, then asks the lanes that ran low for more. */
+    /**
+     * Deals the next batch, then asks the lanes that ran low for more. While lanes are still opening a batch is small
+     * even in the grid, so the lanes that answer next get their turn soon.
+     */
     private fun deal() {
         val mix = mix ?: return
-        mix.deal(dealSize, seen + kept)
+        mix.deal(if (mix.opening) DECK_DEAL else dealSize, seen + kept)
         refill(mix)
     }
 
@@ -320,14 +364,28 @@ class ForYouDeckViewModel(
 
     /**
      * Leaves out the lanes and drops the waiting posts the hidden tags now hide, and brings back the lanes they no
-     * longer hide; a chip whose lane went widens to the Mix.
+     * longer hide. A chip whose lane went widens to the Mix in place: the levels, the deck and its Undo stay, and the
+     * decks pass over the cards the tag hides.
      */
     private fun dropHidden() {
         val mix = mix ?: return
-        val chip = mix.only
         mix.hideLanes { hidden.hidesSeed(it.source, it.tags) }
         mix.keepWaiting(::shows)
-        if (chip != mix.only) restartMixLevel(mix) else refill(mix)
+        if (mix.wanted) deal() else refill(mix)
+    }
+
+    /**
+     * Plans the lanes again after the hides [removed] went, and adds the lanes they had kept out of this Mix; the
+     * levels stay. Without a Mix to add to, it starts a fresh one.
+     */
+    private fun restoreLanes(removed: List<ForYouBlacklistEntry>) {
+        plannedUnder = plannedUnder - removed.toSet()
+        val mix = mix ?: return rebuild()
+        val request = request() ?: return
+        workScope.launch {
+            val plan = runCatchingPreservingCancellation { engine.lanes(request) }.getOrNull() ?: return@launch
+            if (mix.addLanes(plan.filter { removed.hidesSeed(it.source, it.tags) })) refill(mix)
+        }
     }
 
     /** Replaces the Mix's deck after its chip changed. The new deck opens on its first batch, so it does not ask for one. */
@@ -360,19 +418,23 @@ class ForYouDeckViewModel(
                 if (ui.value.mix == ForYouMixState.Failed) rebuild() else retrySource()
             }
         }
-        return level("for_you:$session:mix:$level", "For You", fork = null, query = null, source, DECK_PAGE_AHEAD) { event -> onMixDecision(level, event) }
+        return level("for_you:$session:mix:$level", "Mix", fork = null, query = null, source, DECK_PAGE_AHEAD) { event -> onMixDecision(level, event) }
     }
 
+    /** Opens [spec] as a level. It leaves out what was decided, liked or saved before it opened, and what is hidden. */
     private fun push(request: TrailRequest, spec: TrailSpec) {
         val scope = levelScope()
-        val source = spec.pager.asTriageFeed(scope) { posts -> posts.filter(::shows) }
+        // Not read live: a card decided on this trail must stay in its deck for Undo.
+        val known = seen + kept
+        val source = spec.pager.asTriageFeed(scope) { posts -> posts.filter { it.id !in known && shows(it) } }
         relatedPosts.clear("level opened")
         stack.update { it + level("for_you:$session:trail:${++trailCount}", spec.label, request, spec.query, source, scope = scope, onDecision = ::onTrailDecision) }
     }
 
     /**
      * A level over [source]: its feed, shared by the deck, the grid and the Viewer, without the posts a hidden tag now
-     * hides and with the fuller copies of posts the Viewer resolved, and its deck.
+     * hides and with the fuller copies of posts the Viewer resolved, and its deck, which passes over the same posts
+     * ([hiddenTokens] is the one list for all three).
      */
     private fun level(
         id: String,
@@ -396,7 +458,7 @@ class ForYouDeckViewModel(
         }
         val deck = TriageDeck(
             scope, shared, wiring.actions, wiring.quickSave, query, fromForYou = true, wiring.writeScope,
-            pageAhead = pageAhead, onDecision = onDecision,
+            pageAhead = pageAhead, onDecision = onDecision, ownerHidden = hiddenTokens,
         )
         return ForYouLevel(id, label, fork, query, deck, feed, shared, scope) { post -> resolved.update { it + (post.id to post) } }
     }

@@ -25,6 +25,7 @@ import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.domain.orchestration.UnifiedSearchResult
 import kotlin.coroutines.EmptyCoroutineContext
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,11 +51,22 @@ internal fun hiding(vararg tags: String): AppSettings = AppSettings().let { sett
     settings.copy(forYouBlacklistByProfile = mapOf(settings.activeProfileId to tags.map { ForYouBlacklistEntry(DECK_SOURCE, listOf(it)) }))
 }
 
-/** One single-tag lane per entry of [tags], each [pages] pages of [PAGE] posts, answered at once. */
+/**
+ * One single-tag lane per entry of [tags] the profile does not hide, each [pages] pages of [PAGE] posts, answered at
+ * once unless the lane is on [hold].
+ */
 internal class FakeForYouEngine(var tags: List<String>, private val pages: Int = 4) : ForYouRouteEngine {
     var sources = listOf(DECK_SOURCE)
     val failing = mutableSetOf<String>()
     var failLanes = false
+    private val held = mutableMapOf<String, CompletableDeferred<Unit>>()
+
+    /** Makes the pages of [tags]' lanes wait for [release]. */
+    fun hold(vararg tags: String) = tags.forEach { held[it] = CompletableDeferred() }
+
+    fun release(tag: String) {
+        held.remove(tag)?.complete(Unit)
+    }
 
     /** Every page asked for, as `tag:page`. */
     val requests = mutableListOf<String>()
@@ -65,7 +77,8 @@ internal class FakeForYouEngine(var tags: List<String>, private val pages: Int =
     override suspend fun lanes(request: ForYouFeedRequest): List<ForYouLane> {
         builds++
         check(!failLanes) { "down" }
-        return tags.map { tag ->
+        val hidden = request.settings.forYouBlacklistByProfile[request.settings.activeProfileId].orEmpty()
+        return tags.filterNot { hidden.hidesSeed(DECK_SOURCE, listOf(it)) }.map { tag ->
             val query = forYouSourceQuery(DECK_SOURCE, listOf(tag), SortMode.NEWEST)
             ForYouLane(DECK_SOURCE, listOf(tag), FeedCursor(query, mapOf(DECK_SOURCE to query), pageTokens = mapOf(DECK_SOURCE to null)))
         }
@@ -75,6 +88,7 @@ internal class FakeForYouEngine(var tags: List<String>, private val pages: Int =
         val tag = continuation.query.includeTags.single()
         val page = continuation.pageTokens[DECK_SOURCE]?.toInt() ?: 0
         requests += "$tag:$page"
+        held[tag]?.await()
         if (tag in failing) {
             return UnifiedSearchResult(emptyList(), emptyMap(), listOf(SourceRunStatus(DECK_SOURCE, SourceRunState.FAILED, errorMessage = "down")))
         }
@@ -92,16 +106,21 @@ internal class FakeForYouEngine(var tags: List<String>, private val pages: Int =
     }
 }
 
-/** The app's trails: [similar] and [creator] answer a like or a fork, [tag] a tag fork; an absent one cannot open. */
+/**
+ * The app's trails: [similar] and [creator] answer a like or a fork, [tag] a tag fork; an absent one cannot open.
+ * While [gate] is set, a request waits for it.
+ */
 internal class FakeTrails(
     var similar: List<Post>? = null,
     var creator: List<Post>? = null,
     var tag: List<Post>? = null,
 ) {
     val asked = mutableListOf<TrailRequest>()
+    var gate: CompletableDeferred<Unit>? = null
 
     suspend fun open(request: TrailRequest, @Suppress("UNUSED_PARAMETER") animatedOnly: Boolean): TrailSpec? {
         asked += request
+        gate?.await()
         return when (request) {
             is TrailRequest.Similar -> similar?.let { spec("Similar", null, it) }
             is TrailRequest.Creator -> creator?.let { spec(request.creator.displayName, null, it) }

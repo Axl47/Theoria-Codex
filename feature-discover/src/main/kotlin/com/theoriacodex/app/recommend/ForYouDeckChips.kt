@@ -13,11 +13,13 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,16 +55,24 @@ private fun InterestChip(label: String, selected: Boolean, onClick: () -> Unit) 
     )
 }
 
-/** The trail so far, "For You › tag › Similar": a crumb returns to its level, and a tag trail offers Save search. */
+/**
+ * The trail so far, "Mix › tag › Similar": a crumb returns to its level. A tag trail offers Save search ([onSaveSearch]),
+ * and shows a filled bookmark instead once its search is [saved].
+ */
 @Composable
-internal fun ForYouCrumbs(levels: List<ForYouLevel>, onCrumb: (depth: Int) -> Unit, onSaveSearch: (() -> Unit)?) {
+internal fun ForYouCrumbs(levels: List<ForYouLevel>, onCrumb: (depth: Int) -> Unit, saved: Boolean, onSaveSearch: (() -> Unit)?) {
     Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         LazyRow(Modifier.weight(1f).testTag(FOR_YOU_CRUMBS_TAG), verticalAlignment = Alignment.CenterVertically) {
             itemsIndexed(levels, key = { _, level -> level.id }) { depth, level ->
                 Crumb(level.label, depth, current = depth == levels.lastIndex) { onCrumb(depth) }
             }
         }
-        if (onSaveSearch != null) TextButton(onSaveSearch, Modifier.testTag(FOR_YOU_SAVE_SEARCH_TAG)) { Text("Save search") }
+        if (onSaveSearch != null) {
+            IconButton(onSaveSearch, Modifier.testTag(FOR_YOU_SAVE_SEARCH_TAG), enabled = !saved) {
+                val tint = MaterialTheme.colorScheme.primary
+                if (saved) Icon(Icons.Filled.Bookmark, "Saved", tint = tint) else Icon(Icons.Filled.BookmarkBorder, "Save search", tint = tint)
+            }
+        }
     }
 }
 

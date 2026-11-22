@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.viewModelScope
 import com.theoriacodex.app.codex.LocalQuickSave
 import com.theoriacodex.app.codex.QuickSave
 import com.theoriacodex.app.media.reconnections
@@ -14,20 +15,8 @@ import com.theoriacodex.app.recommend.ForYouLevel
 import com.theoriacodex.app.related.relatedViewerContext
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.searchExecutionKey
-import com.theoriacodex.app.search.state.SearchSourceScope
-import com.theoriacodex.app.ui.routes.ForYouRouteServices
-import com.theoriacodex.app.ui.trails.shellTrailSources
-import com.theoriacodex.app.ui.trails.trailSpec
-import com.theoriacodex.data.repository.MAX_SAVED_SEARCH_NAME_LENGTH
-import com.theoriacodex.data.repository.RecentSearchEntry
-import com.theoriacodex.data.repository.ViewerLaunchContext
-import com.theoriacodex.domain.model.Post
-import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.Query
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
-import androidx.lifecycle.viewModelScope
 import com.theoriacodex.app.search.state.SearchEffect
+import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.source.creatorBrowsingSources
 import com.theoriacodex.app.ui.components.FOR_YOU_FEED_FAB_CONTEXT
@@ -37,14 +26,26 @@ import com.theoriacodex.app.ui.routes.BrowsingDestinationStateBoundary
 import com.theoriacodex.app.ui.routes.ForYouRoute
 import com.theoriacodex.app.ui.routes.ForYouRouteCallbacks
 import com.theoriacodex.app.ui.routes.ForYouRouteConfig
+import com.theoriacodex.app.ui.routes.ForYouRouteServices
 import com.theoriacodex.app.ui.routes.SearchRoute
 import com.theoriacodex.app.ui.routes.SearchRouteCallbacks
 import com.theoriacodex.app.ui.routes.SearchRouteConfig
+import com.theoriacodex.app.ui.trails.shellTrailSources
+import com.theoriacodex.app.ui.trails.trailSpec
 import com.theoriacodex.data.repository.CodexSortMode
+import com.theoriacodex.data.repository.MAX_SAVED_SEARCH_NAME_LENGTH
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
+import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
+import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.data.repository.savedFor
+import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.Query
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 /**
  * The top-level tabs, side by side. They change from the bottom bar only: For You, the middle tab, is a swipe deck, so
@@ -147,6 +148,7 @@ private fun ForYouDestination(shell: TheoriaShell) {
                 creatorBrowsingSources = state.creatorBrowsingSources,
                 marks = state.feedMarks(shell.pendingLikePostIds[state.activeProfile.profileId].orEmpty()),
                 resolveUnknownAnimatedDurations = state.settings.contentFilters.resolveUnknownAnimatedDurations,
+                isSearchSaved = { query -> shell.savedSearches.savedFor(trailSearchEntry(query)) != null },
             ),
             fabRestoreState = fabRestoreState,
             onFabRestoreStateChange = { updated -> shell.feedFabRestoreRegistry.update(FOR_YOU_FEED_FAB_CONTEXT, updated) },
@@ -213,8 +215,12 @@ private fun TheoriaShell.openForYouRelated(seed: Post, posts: List<Post>, index:
     }
 }
 
+/** A tag trail's search as History would record it, which is what a saved search of it holds. */
+private fun trailSearchEntry(query: Query) =
+    RecentSearchEntry(query, searchExecutionKey(query, SearchSourceScope.fromQuery(query)), System.currentTimeMillis())
+
 /** Saves a tag trail's search as a saved search, named as Recents would title it. */
 private fun TheoriaShell.saveTrailSearch(query: Query) {
-    val entry = RecentSearchEntry(query, searchExecutionKey(query, SearchSourceScope.fromQuery(query)), System.currentTimeMillis())
+    val entry = trailSearchEntry(query)
     owners.savedSearches.save(recentSearchPresentation(entry).title.take(MAX_SAVED_SEARCH_NAME_LENGTH), entry)
 }

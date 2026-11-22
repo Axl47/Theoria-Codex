@@ -55,8 +55,11 @@ class TriageDeckTest {
         Dispatchers.resetMain()
     }
 
+    /** What the deck's owner hides, for the decks that have such an owner. */
+    private val ownerHidden = MutableStateFlow(emptyMap<SourceKey, Set<String>>())
+
     private fun deck(source: TriageFeed = feed, removal: TriageRemoval? = null, query: Query? = null, fromForYou: Boolean = false) =
-        TriageDeck(deckScope, source, actions, quickSave, query, fromForYou, writeScope, removal, onDecision = events::add)
+        TriageDeck(deckScope, source, actions, quickSave, query, fromForYou, writeScope, removal, onDecision = events::add, ownerHidden = ownerHidden)
 
     /** A deck on a Codex, where left removes through [removal]. */
     private fun removingDeck(removal: TriageRemoval) = deck(removal = removal)
@@ -149,6 +152,50 @@ class TriageDeckTest {
         assertEquals(emptyList<Pair<SourceKey, String>>(), actions.hidden)
         assertEquals(0, deck.state.value.index)
         assertEquals(tagged[1], deck.state.value.next)
+    }
+
+    @Test fun `a hide passes over the tag only on the source it was hidden on`() = runTest {
+        val elsewhere = testPost(SourceKey.GELBOORU, "g", canonicalTags = listOf("cat"))
+        val tagged = listOf(testPost(sourcePostId = "a", canonicalTags = listOf("cat")), testPost(sourcePostId = "b", canonicalTags = listOf("cat")), elsewhere)
+        val deck = deck(FakeFeed(tagged, canLoadMore = false))
+        deck.decideCurrent(TriageChoice.Hide("cat"))
+        assertEquals(elsewhere, deck.state.value.current)
+    }
+
+    @Test fun `tags the owner hides pass their cards over, also the one on top`() = runTest {
+        val tagged = listOf(testPost(sourcePostId = "a", canonicalTags = listOf("Big_Cat")), testPost(sourcePostId = "b", canonicalTags = listOf("big cat")), posts[2])
+        val deck = deck(FakeFeed(tagged, canLoadMore = false))
+        assertEquals(tagged[0], deck.state.value.current)
+        ownerHidden.value = mapOf(SourceKey.GELBOORU to setOf("big cat"))
+        assertEquals(tagged[0], deck.state.value.current)
+        ownerHidden.value = mapOf(SourceKey.PIXIV to setOf("big cat"))
+        assertEquals(posts[2], deck.state.value.current)
+    }
+
+    @Test fun `the card Undo brings back stays while the owner still hides its tag`() = runTest {
+        val tagged = listOf(testPost(sourcePostId = "a", canonicalTags = listOf("cat")), testPost(sourcePostId = "b", canonicalTags = listOf("cat")), posts[2])
+        val deck = deck(FakeFeed(tagged, canLoadMore = false))
+        deck.decideCurrent(TriageChoice.Hide("cat"))
+        // The owner learns of the stored hide, and of its removal, some time after the deck.
+        ownerHidden.value = mapOf(SourceKey.PIXIV to setOf("cat"))
+        deck.undo()
+        assertEquals(tagged[0], deck.state.value.current)
+        ownerHidden.value = mapOf(SourceKey.PIXIV to setOf("cat", "dog"))
+        assertEquals(tagged[0], deck.state.value.current)
+        assertEquals(posts[2], deck.state.value.next)
+        ownerHidden.value = emptyMap()
+        assertEquals(tagged[0], deck.state.value.current)
+        assertEquals(tagged[1], deck.state.value.next)
+    }
+
+    @Test fun `a write goes to the profile that was active when its card was decided`() = runTest {
+        actions.hold = CompletableDeferred()
+        val deck = deck()
+        deck.decideCurrent(TriageChoice.Like)
+        actions.profile = "alt"
+        deck.decideCurrent(TriageChoice.Hide("cat"))
+        actions.hold!!.complete(Unit)
+        assertEquals(listOf("main", "alt"), actions.wroteTo)
     }
 
     @Test fun `undo during a running save reverses it once it commits and never confirms it`() = runTest {
@@ -465,7 +512,19 @@ class TriageDeckTest {
         var failHide = false
         var hold: CompletableDeferred<Unit>? = null
         var unlikeHold: CompletableDeferred<Unit>? = null
+
+        /** The active profile, and the profile each write went to. */
+        var profile = "main"
+        val wroteTo = mutableListOf<String>()
         override val hiddenTags: Flow<Set<HiddenTag>> = flowOf(emptySet())
+        override fun atDecision(): TriageActions {
+            val bound = profile
+            val actions = this
+            return object : TriageActions by actions {
+                override suspend fun like(post: Post) = actions.like(post).also { wroteTo += bound }
+                override suspend fun hide(source: SourceKey, tag: String) = actions.hide(source, tag).also { wroteTo += bound }
+            }
+        }
         override suspend fun like(post: Post): TriageReversal? {
             hold?.await()
             check(!failLike)

@@ -10,7 +10,8 @@ import com.theoriacodex.domain.recommendation.CrossSourceTraining
 import com.theoriacodex.domain.recommendation.LikedTagDocument
 import com.theoriacodex.domain.recommendation.PixivTagDictionary
 
-fun forYouSourceQuery(
+/** The search one For You lane runs on [source]. */
+internal fun forYouSourceQuery(
     source: SourceKey,
     includeTags: List<String>,
     sortMode: SortMode,
@@ -24,7 +25,7 @@ fun forYouSourceQuery(
 )
 
 /** Lets Likes on one tag-compatible source train the others, using learned Pixiv translations. */
-suspend fun crossSourceTraining(likes: List<LikedPost>, store: TagSuggestionStore): CrossSourceTraining {
+internal suspend fun crossSourceTraining(likes: List<LikedPost>, store: TagSuggestionStore): CrossSourceTraining {
     store.awaitLoaded()
     val pixivPairs = store.get(SourceKey.PIXIV, Int.MAX_VALUE)
         .mapNotNull { suggestion -> suggestion.alternateText?.let { suggestion.text to it } }
@@ -32,13 +33,4 @@ suspend fun crossSourceTraining(likes: List<LikedPost>, store: TagSuggestionStor
         likes = likes.map { liked -> LikedTagDocument(liked.postId.source, liked.tags) },
         dictionary = PixivTagDictionary.from(pixivPairs),
     )
-}
-
-fun buildForYouSeedId(seed: Map<SourceKey, List<String>>): String {
-    if (seed.isEmpty()) return "none"
-    return seed.entries
-        .sortedBy { it.key.id }
-        .joinToString(separator = "|") { (source, tags) ->
-            "${source.id}:${tags.joinToString(separator = "+")}"
-        }
 }
