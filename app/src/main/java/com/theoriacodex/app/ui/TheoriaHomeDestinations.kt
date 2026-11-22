@@ -4,6 +4,9 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewModelScope
 import com.theoriacodex.app.codex.LocalQuickSave
@@ -129,6 +132,8 @@ private suspend fun TheoriaShell.openSearchViewer(effect: SearchEffect.OpenViewe
 private fun ForYouDestination(shell: TheoriaShell) {
     val quickSave = LocalQuickSave.current
     val writes = rememberTriageHandOff()
+    val pager = shell.navigation.pagerState
+    val shown by remember(pager) { derivedStateOf { forYouShown(pager.targetPage, pager.settledPage) } }
     BrowsingDestinationStateBoundary(shell.data, shell.sources) { state ->
         val fabRestoreState = shell.feedFabRestoreRegistry.state(FOR_YOU_FEED_FAB_CONTEXT) ?: return@BrowsingDestinationStateBoundary
         ForYouRoute(
@@ -147,6 +152,7 @@ private fun ForYouDestination(shell: TheoriaShell) {
                 marks = state.feedMarks(shell.pendingLikePostIds[state.activeProfile.profileId].orEmpty()),
                 resolveUnknownAnimatedDurations = state.settings.contentFilters.resolveUnknownAnimatedDurations,
                 isSearchSaved = { query -> shell.savedSearches.savedFor(trailSearchEntry(query)) != null },
+                shown = shown,
             ),
             fabRestoreState = fabRestoreState,
             onFabRestoreStateChange = { updated -> shell.feedFabRestoreRegistry.update(FOR_YOU_FEED_FAB_CONTEXT, updated) },

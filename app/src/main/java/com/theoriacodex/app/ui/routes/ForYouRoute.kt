@@ -44,6 +44,11 @@ internal data class ForYouRouteConfig(
     val resolveUnknownAnimatedDurations: Boolean,
     /** Whether a tag trail's search is already a saved search. */
     val isSearchSaved: (Query) -> Boolean,
+    /**
+     * Whether For You is on screen or the tabs are heading to it. The owner is told what to deal from only then, so a
+     * tab change that merely passes over For You asks the sources for nothing.
+     */
+    val shown: Boolean,
 )
 
 /** What the owner and its cards are built with. */
@@ -135,12 +140,13 @@ internal fun ForYouRoute(
     )
 }
 
-/** Hands the owner what it deals from, again whenever any of it changes. */
+/** Hands the owner what it deals from, again whenever any of it changes, while For You is [ForYouRouteConfig.shown]. */
 @Composable
 private fun FollowForYouEnvironment(owner: ForYouDeckViewModel, config: ForYouRouteConfig, restore: FeedFabRestoreState, sortMode: SortMode) {
     val selectedSource = remember(restore.source, config.availableSources) { config.availableSources.firstOrNull { it.id == restore.source } }
     val kept = remember(config.marks) { config.marks.liked + config.marks.saved + config.marks.pendingLikes }
-    LaunchedEffect(owner, config.settings, config.availableSources, selectedSource, sortMode, restore.animatedOnly, restore.grid, kept) {
+    LaunchedEffect(owner, config.shown, config.settings, config.availableSources, selectedSource, sortMode, restore.animatedOnly, restore.grid, kept) {
+        if (!config.shown) return@LaunchedEffect
         owner.synchronize(
             ForYouEnvironment(config.settings, selectedSource, sortMode, restore.animatedOnly, restore.grid, kept, config.creatorBrowsingSources),
         )
