@@ -216,18 +216,29 @@ private fun SortRows(filter: SeriesFilter.Sort, onChange: (SeriesFilter) -> Unit
     Column {
         FilterLabel(filter.name)
         filter.options.forEachIndexed { index, option ->
-            val selection = filter.selection?.takeIf { it.index == index }
-            OptionRow(
-                option,
-                Modifier
-                    .selectable(selection != null, role = Role.RadioButton) {
-                        onChange(filter.copy(selection = SeriesFilter.Sort.Selection(index, ascending = selection?.ascending == false)))
-                    }
-                    .semantics { if (selection != null) stateDescription = if (selection.ascending) "Ascending" else "Descending" },
-            ) {
-                selection?.let { Icon(if (it.ascending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+            // The chosen order's direction, null for the others; a newly chosen order starts descending.
+            val ascending = filter.selection?.takeIf { it.index == index }?.ascending
+            SortOption(option, ascending) {
+                onChange(filter.copy(selection = SeriesFilter.Sort.Selection(index, ascending = ascending == false)))
             }
         }
+    }
+}
+
+@Composable
+private fun SortOption(label: String, ascending: Boolean?, onClick: () -> Unit) {
+    val direction = when (ascending) {
+        null -> null
+        true -> "Ascending" to Icons.Default.ArrowUpward
+        false -> "Descending" to Icons.Default.ArrowDownward
+    }
+    OptionRow(
+        label,
+        Modifier
+            .selectable(direction != null, role = Role.RadioButton, onClick = onClick)
+            .semantics { direction?.let { stateDescription = it.first } },
+    ) {
+        direction?.let { Icon(it.second, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
     }
 }
 
