@@ -98,13 +98,13 @@ private fun ExtensionRow(extension: InstalledExtension, onOpen: (String) -> Unit
     )
 }
 
-/** The one place a mistake is costly: what turning an extension on lets it do, how far that reaches, and who signed it. */
+/** The one place a mistake is costly: what turning an extension on lets it do, and who signed it. */
 @Composable
 private fun TurnOnDialog(extension: InstalledExtension, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Turn on ${extension.name}?") },
-        text = { Text("Its code runs inside this app and can read this app's data. This also turns on every other extension signed with the same key.\n\nSigned by ${extension.signer}") },
+        text = { Text("Its code runs inside this app and can read this app's data.\n\nSigned by ${extension.signer}") },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
         confirmButton = { TextButton(onClick = onConfirm) { Text("Turn on") } },
     )
@@ -122,7 +122,6 @@ private fun ExtensionPage(extension: InstalledExtension, settings: List<Extensio
                 ExtensionSettingRows(source.settings) { setting -> viewModel.change(extension.id, source.sourceId, setting) }
             }
         }
-        // Shown for a single language too: with several extensions on one key, it is the way to turn off just this one.
         if (extension.languages.isNotEmpty()) {
             SettingsGroup("Languages") {
                 extension.languages.forEachIndexed { index, language ->
@@ -137,13 +136,10 @@ private fun ExtensionPage(extension: InstalledExtension, settings: List<Extensio
 /** Whether tapping the row leads anywhere: only an extension that is on and loaded has languages or settings to show. */
 private val InstalledExtension.hasPage: Boolean get() = on && languages.isNotEmpty()
 
-/**
- * Off, what there is to judge it by: its version and the start of its signer, which the question asked before it is
- * turned on shows whole. On, its version and what it offers.
- */
+/** Its version, then why it offers nothing or, once on, the languages it offers. Who signed it is in the question asked before it is turned on. */
 internal fun extensionSummary(extension: InstalledExtension): String = when {
     extension.problem != null -> listOf(extension.versionName, extension.problem).joinToString(SEPARATOR)
-    !extension.on -> listOf(extension.versionName, extension.signer.orEmpty().take(SIGNER_START) + "…").joinToString(SEPARATOR)
+    !extension.on -> extension.versionName
     else -> (listOf(extension.versionName) + extension.languages.filter(ExtensionLanguage::on).map { languageName(it.code) }).joinToString(SEPARATOR)
 }
 
@@ -155,4 +151,3 @@ internal fun languageName(code: String): String = when (code) {
 }
 
 private const val SEPARATOR = " · "
-private const val SIGNER_START = 16

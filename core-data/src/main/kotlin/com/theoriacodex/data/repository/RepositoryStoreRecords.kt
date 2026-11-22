@@ -63,7 +63,7 @@ internal data class SettingsStoreRecord(
     val favoriteTagsByProfile: Map<String, List<FavoriteTagEntryRecord>>? = null,
     @SerialName("providerHealth")
     val providerHealth: List<ProviderHealthSnapshotRecord>? = null,
-    @SerialName("trustedExtensionSigners") val trustedExtensionSigners: List<String>? = null,
+    @SerialName("trustedExtensions") val trustedExtensions: Map<String, String>? = null,
     @SerialName("extensionLanguages") val extensionLanguages: Map<String, List<String>>? = null,
 ) {
     fun toDomain(): AppSettings {
@@ -119,7 +119,7 @@ internal data class SettingsStoreRecord(
                     }
                     .toMap(),
                 extensions = ExtensionChoices(
-                    trustedSigners = trustedExtensionSigners.orEmpty().toSet(),
+                    trusted = trustedExtensions.orEmpty(),
                     languages = extensionLanguages.orEmpty().mapValues { (_, languages) -> languages.toSet() },
                 ),
             )
@@ -200,7 +200,7 @@ internal data class SettingsStoreRecord(
                 providerHealth = settings.providerHealth.values
                     .sortedBy { snapshot -> snapshot.source.id }
                     .map(ProviderHealthSnapshotRecord::fromDomain),
-                trustedExtensionSigners = settings.extensions.trustedSigners.sorted().takeIf { it.isNotEmpty() },
+                trustedExtensions = settings.extensions.trusted.toSortedMap().takeIf { it.isNotEmpty() },
                 extensionLanguages = settings.extensions.languages.mapValues { (_, languages) -> languages.sorted() }.takeIf { it.isNotEmpty() },
             )
         }

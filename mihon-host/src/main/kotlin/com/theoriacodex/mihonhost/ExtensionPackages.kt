@@ -23,6 +23,11 @@ data class ExtensionPackage(
     val apk: File,
     val installed: Boolean,
     val sourceClasses: List<String>,
+    /**
+     * What the user's choice to turn it on is kept under: the package name, so an update is the same extension and
+     * another extension is not. A file in the folder is named by its file name instead, apart from any package.
+     */
+    val identity: String = if (installed) packageName else "file:${apk.name}",
     /** The APK's length in bytes and when it was last written, as read when it was listed. */
     val size: Long = apk.length(),
     val modified: Long = apk.lastModified(),
@@ -41,9 +46,20 @@ class ExtensionPackages(private val context: Context, private val folder: () -> 
         val installed = context.packageManager.getInstalledPackages(PackageManager.PackageInfoFlags.of(FLAGS)).mapNotNull { info ->
             info.applicationInfo?.sourceDir?.let { apk -> extension(info, File(apk), installed = true) }
         }
-        val files = folder()?.listFiles { file -> file.extension == "apk" }.orEmpty().sortedBy(File::getName).mapNotNull(::read)
+        val files = apkFiles().mapNotNull(::read)
         return installed.sortedBy(ExtensionPackage::name) + files
     }
+
+    /**
+     * Changes whenever [list] would answer differently, and reads no APK to tell: every package's name and last
+     * update, and the folder's file names, lengths and write times. Cheap enough to ask before every use.
+     */
+    fun stamp(): Any {
+        val installed = context.packageManager.getInstalledPackages(PackageManager.PackageInfoFlags.of(0)).mapTo(HashSet()) { "${it.packageName} ${it.lastUpdateTime}" }
+        return installed to apkFiles().map { "${it.name} ${it.length()} ${it.lastModified()}" }
+    }
+
+    private fun apkFiles(): List<File> = folder()?.listFiles { file -> file.extension == "apk" }.orEmpty().sortedBy(File::getName)
 
     /** The extension in the file [apk]; null when the file is not one. */
     fun read(apk: File): ExtensionPackage? {

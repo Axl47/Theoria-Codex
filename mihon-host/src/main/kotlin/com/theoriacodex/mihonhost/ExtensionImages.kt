@@ -5,6 +5,7 @@ import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.online.HttpSource
 import java.io.IOException
 import java.util.Collections
+import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
@@ -31,7 +32,9 @@ internal inline fun <T> failingAsIo(block: () -> T): T = try {
  * headers, access tokens and descrambling that source needs. MangaDex, for one, answers any other client's cover
  * request with a bot check.
  *
- * Every address handed to the app ends in a fragment naming its source. The app requests it like any other image;
+ * Every address handed to the app ends in a fragment naming its source. A page whose source has not named its image
+ * yet is handed out as the address of the page that names it, marked as such; the image's address is asked for here,
+ * when that image is requested. The app requests it like any other image;
  * this interceptor, placed on the app's media client, answers tagged addresses through that source and passes every
  * other request on. The tag travels with the address, so a cover the app stored still loads after a restart.
  *
@@ -63,13 +66,19 @@ class ExtensionImages(private val ensureLoaded: () -> Unit = {}) : Interceptor {
     }
 
     /**
-     * The tagged address the source would request for [page]. A page's own `imageUrl` is not always that address:
-     * MangaDex keeps a bare path there and adds the image server per request.
+     * The tagged address the source would request for [page]; null when the page names neither an image nor where to
+     * find one. A page's own `imageUrl` is not always that address: MangaDex keeps a bare path there and adds the
+     * image server per request. Makes no request.
      */
-    internal fun pageAddress(source: HttpSource, page: Page): String {
-        val address = source.imageCall(page).request().url.tagged(source).toString()
-        pages[address] = page
-        return address
+    internal fun pageAddress(source: HttpSource, page: Page): String? {
+        val address = if (page.imageUrl != null) {
+            source.imageCall(page).request().url.tagged(source)
+        } else {
+            val names = page.url.takeIf(String::isNotBlank)?.let { it.toHttpUrlOrNull() ?: source.baseUrl.toHttpUrlOrNull()?.resolve(it) }
+            names?.tagged(source, UNRESOLVED_TAG) ?: return null
+        }
+        pages[address.toString()] = page
+        return address.toString()
     }
 
     internal fun coverAddress(source: HttpSource, address: String): String =
@@ -77,20 +86,33 @@ class ExtensionImages(private val ensureLoaded: () -> Unit = {}) : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val url = chain.request().url
-        val sourceId = url.fragment?.takeIf { it.startsWith(TAG) }?.removePrefix(TAG)?.toLongOrNull()
+        val fragment = url.fragment.orEmpty()
+        val unresolved = fragment.startsWith(UNRESOLVED_TAG)
+        val sourceId = fragment.takeIf { unresolved || it.startsWith(TAG) }?.substringAfter('=')?.toLongOrNull()
             ?: return chain.proceed(chain.request())
         val source = sources[sourceId] ?: loaded(sourceId) ?: return chain.proceed(chain.request())
-        val page = pages[url.toString()]
+        val bare = url.newBuilder().fragment(null).build().toString()
+        // A page from an earlier run whose image was never named is asked about again by its address.
+        val page = pages[url.toString()] ?: if (unresolved) Page(0, bare).also { pages[url.toString()] = it } else null
         return failingAsIo {
-            val call = if (page != null) source.imageCall(page) else source.imageCall(url.newBuilder().fragment(null).build().toString())
+            val call = if (page != null) source.imageCall(page.named(source)) else source.imageCall(bare)
             call.execute()
         }
     }
 
-    private fun HttpUrl.tagged(source: HttpSource): HttpUrl = newBuilder().fragment("$TAG${source.id}").build()
+    /** This page once the source has named its image, asking it the first time; a failure is this page's alone and is asked again next time. */
+    private fun Page.named(source: HttpSource): Page = synchronized(this) {
+        if (imageUrl == null) imageUrl = runBlocking { source.getImageUrl(this@named) }
+        this
+    }
+
+    private fun HttpUrl.tagged(source: HttpSource, tag: String = TAG): HttpUrl = newBuilder().fragment("$tag${source.id}").build()
 
     internal companion object {
         private const val TAG = "mihon="
+
+        /** Marks the address of a page that names an image, in place of the image's own. */
+        private const val UNRESOLVED_TAG = "mihon-page="
 
         /** Where the tag starts in a tagged address. */
         const val FRAGMENT = "#$TAG"

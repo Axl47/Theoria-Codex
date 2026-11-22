@@ -21,6 +21,8 @@ import eu.kanade.tachiyomi.source.online.HttpSource
 import java.io.IOException
 import java.util.Collections
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * One Mihon extension source as the app's [SeriesSource]: a Mihon manga is a series, a chapter an entry, and a
@@ -121,17 +123,23 @@ class MihonSeriesSource(
         status = seriesStatus(status),
     )
 
-    /** Some sources name each image only on a page of its own; those cost one more request per page here. */
-    private suspend fun pageImage(page: Page): ImageRef? {
-        if (source !is HttpSource) return page.imageUrl?.let { ImageRef(url = it, localPath = null, mime = null) }
-        if (page.imageUrl == null) page.imageUrl = source.getImageUrl(page)
-        return ImageRef(url = images.pageAddress(source, page), localPath = null, mime = null)
+    /**
+     * Nothing is requested here. Some sources name each image only on a page of its own; [images] asks for that when
+     * the image itself is requested, so a chapter shows at once and a page that fails is the only one that does.
+     */
+    private fun pageImage(page: Page): ImageRef? {
+        val address = if (source is HttpSource) images.pageAddress(source, page) else page.imageUrl
+        return address?.let { ImageRef(url = it, localPath = null, mime = null) }
     }
 
-    /** Reports an extension's failures the way built-in sources report theirs. */
+    /**
+     * Runs an extension call off the caller's thread, which is often the main one: extensions parse there and some
+     * block on the network. Its failures are reported the way built-in sources report theirs, with the failure's own
+     * message and never its class name, which screens would show.
+     */
     @Suppress("TooGenericExceptionCaught")
     private suspend fun <T> calling(block: suspend () -> T): T = try {
-        block()
+        withContext(Dispatchers.IO) { block() }
     } catch (error: CancellationException) {
         throw error
     } catch (error: HttpException) {
@@ -144,9 +152,9 @@ class MihonSeriesSource(
     } catch (error: LinkageError) {
         // The extension called a part of Mihon's host API this module does not provide.
         log("${source.name} needs host API this module lacks: $error")
-        throw SourceAdapterException(SourceFailureReason.UNKNOWN, error.toString(), error)
+        throw SourceAdapterException(SourceFailureReason.UNKNOWN, error.message, error)
     } catch (error: Exception) {
-        throw SourceAdapterException(SourceFailureReason.PARSE, error.toString(), error)
+        throw SourceAdapterException(SourceFailureReason.PARSE, error.message, error)
     }
 
     companion object {

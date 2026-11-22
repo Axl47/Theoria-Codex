@@ -22,33 +22,25 @@ works"), and release size is still open:
 - **Release size.** Extensions call OkHttp, Okio, kotlinx and Jsoup by name, so R8 must keep those libraries whole.
   Measured on the release build: 10.3 MB grows to 15.0 MB (+46%), or 17.8 MB (+73%) if the Kotlin standard library
   is kept whole too. About 3 MB of that is the zstd decoder Mihon's HTTP client includes.
-- **Trust.** Extension code runs inside the app with its files, cookies and saved keys, and nothing checks who
-  signed it. A real feature needs a trusted-signer list at least.
-
-Running extensions in a separate companion app, reached over IPC, would answer trust and release size structurally
-and give settings screens a home. It was not built or costed here and is worth costing before building in-process.
-
-The product is built on top: the Series tab, a series page with its chapter list, reading with progress and resume in
-the Viewer, a Following shelf, and the Extensions page with the trust step, language choice and extension settings.
-"What is missing" lists what is not.
-
-## How it works
-
-A Mihon extension is an APK with no screens of its own. Mihon installs it as an ordinary Android package, marked
-with the feature `tachiyomi.extension`, and never starts it: the host app reads its manifest, loads its classes into
-its own process, and calls them through a small API (`eu.kanade.tachiyomi.*`, plus a service locator,
-`uy.kohesive.injekt.*`, and `androidx.preference.*` for settings). The extension is compiled against those names, so
-the host must provide classes with exactly those packages, names and signatures.
-
-**Trust.** Extension code runs with the app's permissions and can read its data, so none runs until the user turns
-that extension on in the Extensions page. What is stored is the SHA-256 of the signing certificate
-(`ExtensionChoices.trustedSigners`, in the settings store): an update signed with the same key stays on, a copy
-signed with another key is off, and every extension from one signer goes on and off together. An APK with no
-readable signing certificate, or with several signers, can never be turned on. The question asked before turning one
-on shows the fingerprint, and only that fingerprint is trusted: a file replaced while the question was open is asked
+- **Trust.** Extension code runs with the app's permissions and can read its data, so none runs until the user turns
+that extension on in the Extensions page. What is stored is the extension's package name with the SHA-256 of the
+signing certificate it had then (`ExtensionChoices.trusted`, in the settings store): an update signed with the same
+key stays on, a copy signed with another key is off, and so is every other extension, whoever signed it, since
+nearly all Mihon extensions share one key. A file in the debug folder is its own extension, named by its file name.
+An APK with no readable signing certificate, or with several signers, can never be turned on. Until an extension is
+on, its name, version and fingerprint come from the package manager alone. The question asked before turning one on
+shows the fingerprint, and only that fingerprint is trusted: a file replaced while the question was open is asked
 about again. Loaded code is kept per listed file, signer, version, length and write time included, so a file replaced
-in place loads anew, from a private copy of its own, and never runs under another file's signer or name. Until an extension is on, its name,
-version and fingerprint come from the package manager alone. Trust is never written to or read from a profile backup.
+in place loads anew, from a private copy of its own, and never runs under another file's signer or name. Trust is
+never written to or read from a profile backup.
+
+**Changes on the device.** Every source lookup first compares a cheap stamp of the device's packages and the folder's
+files; an extension installed, updated or removed since then is listed again and only what changed is loaded. Debug
+builds also listen for package changes while the app runs, so the Series tab follows without a restart.
+
+**Pages.** A chapter's pages are handed out without further requests. Where a source names each image on a page of
+its own, the address handed out is that page's, marked `#mihon-page=`, and the image's address is asked for when the
+image is requested, so one page failing fails only that page. Extension calls run off the main thread.
 
 **Languages.** An extension can ship one source per language (MangaDex ships 62). The ones on by default are those
 matching a device language, else English, else the first; the Extensions page switches each on and off.
@@ -125,8 +117,9 @@ run ExtensionSourceLiveTest#aSeriesIsBrowsedReadResumedAndFollowed
 run ExtensionSourceLiveTest#aFollowedSeriesIsOnTheShelfAfterARestart
 ```
 
-`ExtensionsLiveTest#aCopySignedWithAnotherKeyIsOff` runs after the package is replaced by the same APK signed with
-another key (`apksigner sign` with a fresh keystore, uninstall, install), with no file of the first key in the folder.
+`ExtensionsLiveTest#anUninstalledExtensionLeavesTheSeriesTab` removes the package itself while the app runs, so it
+goes after those. `ExtensionsLiveTest#aCopySignedWithAnotherKeyIsOff` runs after the same APK, signed with another key
+(`apksigner sign` with a fresh keystore), is installed in its place.
 
 Followed series are checked for new chapters, in the sources of extensions that are on, by pulling down on the Series
 tab and by a periodic background job

@@ -73,7 +73,7 @@ class ExtensionRegistryTest {
     fun `turning an extension on loads it once and offers its sources`() = runBlocking {
         registry.setOn("/a.apk", "key-1", true)
 
-        assertEquals(setOf("key-1"), store.choices.trustedSigners)
+        assertEquals(mapOf("a" to "key-1"), store.choices.trusted)
         assertEquals(listOf("custom_mihon_1"), registry.sources().map { it.key.id })
         assertTrue(registry.installed().single().on)
         assertEquals(listOf("/a.apk"), loads)
@@ -83,6 +83,42 @@ class ExtensionRegistryTest {
 
         assertTrue(registry.sources().isEmpty())
         assertFalse(registry.installed().single().on)
+    }
+
+    @Test
+    fun `turning one extension on leaves another with the same key off`() = runBlocking {
+        // Another package, and a file of the same extension in the debug folder: each is turned on by itself.
+        onDevice = listOf(extension("a", signer = "key-1"), extension("b", signer = "key-1"), extension("a", signer = "key-1", apk = "/files/a.apk", installed = false))
+
+        val listed = registry.setOn("/a.apk", "key-1", true)
+
+        assertEquals(listOf(true, false, false), listed.map { it.on })
+        assertEquals(listOf("/a.apk"), loads)
+
+        registry.setOn("/files/a.apk", "key-1", true)
+        assertEquals(listOf(true, false, true), registry.setOn("/b.apk", "key-1", false).map { it.on })
+    }
+
+    @Test
+    fun `an extension removed, replaced or installed later is picked up by the next lookup`() = runBlocking {
+        store.choices = ExtensionChoices(trusted = mapOf("a" to "key-1", "b" to "key-1"))
+        val first = registry.sources().single()
+        assertTrue(registry.sources().single() === first)
+        assertEquals(1, registry.revision.value)
+
+        onDevice = emptyList()
+        assertTrue(registry.sources().isEmpty())
+        assertEquals(2, registry.revision.value)
+
+        onDevice = listOf(extension("a", signer = "key-1").copy(modified = 2))
+        assertTrue(registry.sources().single() !== first)
+
+        sourcesOf = { listOf(StubSource(if (it.name == "a") 1 else 2, "en")) }
+        onDevice = onDevice + extension("b", signer = "key-1")
+        assertEquals(listOf("custom_mihon_1", "custom_mihon_2"), registry.sources().map { it.key.id })
+        // Only what changed was loaded each time.
+        assertEquals(listOf("/a.apk", "/a.apk", "/b.apk"), loads)
+        assertEquals(4, registry.revision.value)
     }
 
     @Test
@@ -107,7 +143,7 @@ class ExtensionRegistryTest {
         val listed = registry.setOn("/a.apk", shown, true).single()
 
         assertEquals(listOf<Any?>("key-2", false), listOf(listed.signer, listed.on))
-        assertTrue(store.choices.trustedSigners.isEmpty())
+        assertTrue(store.choices.trusted.isEmpty())
         assertTrue(loads.isEmpty())
     }
 
@@ -163,7 +199,7 @@ class ExtensionRegistryTest {
     fun `an extension without a signing certificate cannot be turned on`() = runBlocking {
         onDevice = listOf(extension("a", signer = null))
         // Even a store that somehow holds an empty fingerprint trusts nothing.
-        store.choices = ExtensionChoices(trustedSigners = setOf(""))
+        store.choices = ExtensionChoices(trusted = mapOf("a" to ""))
 
         registry.setOn("/a.apk", "key-1", true)
         val listed = registry.installed().single()
@@ -203,7 +239,7 @@ class ExtensionRegistryTest {
             }
         }
 
-        registry.setOn("/works.apk", "key-1", true)
+        listOf("hangs", "fails", "works").forEach { registry.setOn("/$it.apk", "key-1", true) }
         val listed = registry.installed().associate { it.name to it.problem }
 
         assertEquals(mapOf("hangs" to "Took longer than 0 s", "fails" to "androidx/missing/Thing", "works" to null), listed)
@@ -221,8 +257,8 @@ class ExtensionRegistryTest {
         assertNull(registry.installed().last().problem)
     }
 
-    private fun extension(name: String, signer: String?, apk: String = "/$name.apk") =
-        ExtensionPackage(packageName = name, name = name, versionName = "1.0", versionCode = 1, signer = signer, apk = File(apk), installed = true, sourceClasses = listOf(".Source"))
+    private fun extension(name: String, signer: String?, apk: String = "/$name.apk", installed: Boolean = true) =
+        ExtensionPackage(packageName = name, name = name, versionName = "1.0", versionCode = 1, signer = signer, apk = File(apk), installed = installed, sourceClasses = listOf(".Source"))
 }
 
 /** A source that is only ever named, never asked for anything. */

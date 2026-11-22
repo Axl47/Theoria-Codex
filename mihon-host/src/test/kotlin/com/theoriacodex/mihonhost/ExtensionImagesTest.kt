@@ -1,11 +1,15 @@
 package com.theoriacodex.mihonhost
 
+import com.theoriacodex.domain.series.SeriesEntry
 import eu.kanade.tachiyomi.source.model.Page
+import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.online.HttpSource
 import java.io.IOException
 import okhttp3.Headers
 import okhttp3.OkHttpClient
+import kotlinx.coroutines.test.runTest
 import okhttp3.Request
+import okhttp3.Response
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Test
@@ -22,7 +26,7 @@ class ExtensionImagesTest {
 
     @Test
     fun `a page is fetched by the source's client with the request the source builds`() {
-        val address = images.pageAddress(source, page)
+        val address = images.pageAddress(source, page)!!
 
         assertEquals("source-token page-request", fetch(address))
     }
@@ -52,7 +56,7 @@ class ExtensionImagesTest {
 
     @Test
     fun `an extension failure that is not an IOException still reaches the caller as one`() {
-        val address = images.pageAddress(source, page)
+        val address = images.pageAddress(source, page)!!
         val missingHostClass = NoClassDefFoundError("androidx/preference/PreferenceScreen")
         source.failure = missingHostClass
 
@@ -78,6 +82,38 @@ class ExtensionImagesTest {
         assertEquals("source-token https://covers.test/1.jpg", fetch("https://covers.test/1.jpg#mihon=1", loading))
     }
 
+    @Test
+    fun `a chapter's pages are handed out without asking where each image is`() = runTest {
+        val reader = PagePerImageSource().also { images.publish(listOf(it)) }
+
+        val pages = MihonSeriesSource(reader, images).pages(SeriesEntry("/c/1", "Chapter 1"))
+
+        assertEquals(listOf("https://reader.test/p/1#mihon-page=2", "https://reader.test/p/broken#mihon-page=2", "https://reader.test/p/3#mihon-page=2"), pages.map { it.url })
+        assertEquals(emptyList<String>(), reader.asked)
+    }
+
+    @Test
+    fun `an image's address is asked for when the image is, and one page failing leaves the others`() = runTest {
+        val reader = PagePerImageSource().also { images.publish(listOf(it)) }
+        val (first, broken, third) = MihonSeriesSource(reader, images).pages(SeriesEntry("/c/1", "Chapter 1")).map { it.url!! }
+
+        assertEquals("image https://img.test/3.jpg", fetch(third))
+        assertFailsWith<IOException> { fetch(broken) }
+        assertEquals("image https://img.test/1.jpg", fetch(first))
+        fetch(first)
+
+        // Asked once per page that answered, in the order the images were requested.
+        assertEquals(listOf("/p/3", "/p/broken", "/p/1"), reader.asked)
+    }
+
+    @Test
+    fun `a page saved before its image was named is asked about by its address`() {
+        val reader = PagePerImageSource().also { images.publish(listOf(it)) }
+
+        assertEquals("image https://img.test/9.jpg", fetch("https://reader.test/p/9#mihon-page=2"))
+        assertEquals(listOf("/p/9"), reader.asked)
+    }
+
     private fun fetch(address: String, images: ExtensionImages = this.images): String =
         appClient(images).newCall(Request.Builder().url(address).build()).execute().body.string()
 
@@ -86,6 +122,29 @@ class ExtensionImagesTest {
         .addInterceptor(images)
         .addInterceptor(answering { request -> cannedResponse(request, body = "app ${request.url}") })
         .build()
+
+    /** Names each image only on a page of its own, which [asked] records; the page `broken` names none. */
+    private class PagePerImageSource : HttpSource() {
+        override val id = 2L
+        override val name = "Reader"
+        override val lang = "en"
+        override val baseUrl = "https://reader.test"
+        override val supportsLatest = false
+        val asked = mutableListOf<String>()
+
+        override val client: OkHttpClient = OkHttpClient.Builder().addInterceptor(answering { request -> cannedResponse(request, body = "image ${request.url}") }).build()
+
+        override fun headersBuilder() = Headers.Builder()
+
+        override suspend fun getPageList(chapter: SChapter) = listOf("1", "broken", "3").mapIndexed { index, page -> Page(index, "$baseUrl/p/$page") }
+
+        override fun imageUrlParse(response: Response): String {
+            val path = response.request.url.encodedPath
+            asked += path
+            check(!path.endsWith("broken")) { "No image on this page" }
+            return "https://img.test/${path.substringAfterLast('/')}.jpg"
+        }
+    }
 
     /** Builds its image address from `page.url` and `page.imageUrl`, as MangaDex does, and holds a token only its client adds. */
     private class ImageServerSource : HttpSource() {

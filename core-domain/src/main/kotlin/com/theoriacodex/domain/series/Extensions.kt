@@ -5,11 +5,12 @@ import kotlinx.coroutines.flow.StateFlow
 /** What the user decided about extensions; kept in the app's settings store. */
 data class ExtensionChoices(
     /**
-     * SHA-256 fingerprints (lowercase hex) of the signing certificates the user turned on. An extension runs only
-     * while its certificate is here, so an update signed with the same key stays on and a copy signed with another
-     * key is off.
+     * The extensions the user turned on: per extension (its package name, or for a file in the debug folder a name
+     * that stands in for one), the SHA-256 fingerprint (lowercase hex) of the signing certificate it had then. An
+     * extension runs only while it is here with its certificate, so an update signed with the same key stays on, a
+     * copy signed with another key is off, and so is any other extension, whoever signed it.
      */
-    val trustedSigners: Set<String> = emptySet(),
+    val trusted: Map<String, String> = emptyMap(),
     /** Per extension package, the source languages the user chose; a package not named here uses [defaultLanguages]. */
     val languages: Map<String, Set<String>> = emptyMap(),
 )
@@ -94,9 +95,9 @@ interface SeriesExtensions {
     suspend fun installed(): List<InstalledExtension>
 
     /**
-     * Turning one on trusts its signing certificate, and with it every extension signed by the same key. [signer] is
-     * the fingerprint the user was shown: when the extension's is another by now, because its file was replaced
-     * meanwhile, nothing is turned on and the returned list shows the new one to ask about.
+     * Turns that one extension on or off. [signer] is the fingerprint the user was shown: when the extension's is
+     * another by now, because its file was replaced meanwhile, nothing is turned on and the returned list shows the
+     * new one to ask about.
      */
     suspend fun setOn(id: String, signer: String, on: Boolean): List<InstalledExtension>
 
@@ -109,8 +110,8 @@ interface SeriesExtensions {
     suspend fun change(id: String, sourceId: String, setting: ExtensionSetting): List<ExtensionSourceSettings>
 }
 
-/** An extension runs only when it has a signing certificate and the user turned that certificate on. */
-fun ExtensionChoices.trusts(signer: String?): Boolean = !signer.isNullOrBlank() && signer in trustedSigners
+/** An extension runs only when it has a signing certificate and the user turned it on while it had that certificate. */
+fun ExtensionChoices.trusts(extension: String, signer: String?): Boolean = !signer.isNullOrBlank() && trusted[extension] == signer
 
 /**
  * The languages of an extension that are on before the user chooses: those among [offered] that one of the device's

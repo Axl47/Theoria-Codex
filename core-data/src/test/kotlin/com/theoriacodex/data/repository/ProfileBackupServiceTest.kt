@@ -113,7 +113,7 @@ class ProfileBackupServiceTest {
 
     @Test fun `a backup carries no extension trust`() {
         val backup = backup()
-        val trusting = backup.copy(settings = backup.settings.copy(extensions = ExtensionChoices(setOf("signer-key"), mapOf("extension.a" to setOf("en")))))
+        val trusting = backup.copy(settings = backup.settings.copy(extensions = ExtensionChoices(mapOf("extension.a" to "signer-key"), mapOf("extension.a" to setOf("en")))))
 
         val bytes = codec.encode(trusting)
 
