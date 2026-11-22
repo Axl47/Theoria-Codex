@@ -12,6 +12,8 @@ import com.theoriacodex.data.repository.continueEntry
 import com.theoriacodex.data.repository.refresh
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesSource
+import com.theoriacodex.domain.diagnostics.Diagnostics
+import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -109,24 +111,25 @@ class SeriesPageViewModel(
         refresh.update { it.copy(refreshing = false, failure = failure) }
     }
 
-    /** The chapter row's download mark: downloads the chapter, stops its download, or deletes it from the device. */
-    fun toggleDownload(entry: String) {
+    /** The chapter row's download mark: downloads the chapter, or stops its download or deletes it from the device. */
+    fun toggleDownload(entry: String) = changeDownloads {
+        if (state.value.downloads[entry] == null) download(id, listOf(entry)) else delete(id, entry)
+    }
+
+    fun download(choice: DownloadChoice) = changeDownloads { download(id, choice) }
+
+    fun deleteDownloads() = changeDownloads { deleteSeries(id) }
+
+    /** Runs [change]; one the disk refuses, when it is full say, is reported and changes nothing on screen. */
+    private fun changeDownloads(change: suspend SeriesDownloads.() -> Unit) {
         val downloads = downloads ?: return
         viewModelScope.launch {
-            when (state.value.downloads[entry]) {
-                null -> downloads.download(id, listOf(entry))
-                is ChapterDownload.Queued -> downloads.cancel(id, entry)
-                ChapterDownload.OnDevice -> downloads.delete(id, entry)
+            try {
+                downloads.change()
+            } catch (error: IOException) {
+                Diagnostics.report("series", "Downloads could not change", error)
             }
         }
-    }
-
-    fun download(choice: DownloadChoice) {
-        viewModelScope.launch { downloads?.download(id, choice) }
-    }
-
-    fun deleteDownloads() {
-        viewModelScope.launch { downloads?.deleteSeries(id) }
     }
 
     fun setDownloadNewChapters(on: Boolean) {

@@ -13,6 +13,8 @@ import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
@@ -43,24 +45,55 @@ class SeriesDownloadsTest {
         assertNull(store.pages(id, "/c1"))
         assertEquals(emptySet<String>(), store.downloaded(id))
 
-        store.write(id, "/c1") { staging -> (1 downTo 0).forEach { page(staging, it) } }
+        store.write(id, "/c1") { staging -> listOf(page(staging, 0), page(staging, 1)) }
         val pages = checkNotNull(store.pages(id, "/c1"))
         assertEquals(listOf("0001.png", "0002.png"), pages.map { File(checkNotNull(it.localPath)).name })
         assertEquals(listOf("image/png", "image/png"), pages.map { it.mime })
         assertTrue(pages.all { it.url == null })
+        assertFalse(root().walk().any { it.name.startsWith(".partial-") })
+    }
 
-        // What a process that died right before the rename leaves: complete pages and address, under the staging name.
+    @Test fun `a cancelled write never appears, even with every page in`() = runTest {
+        val store = store()
+        val write = launch { store.write(id, "/c1") { staging -> listOf(page(staging, 0)).also { coroutineContext.cancel() } } }
+        write.join()
+        assertTrue(write.isCancelled)
+        assertEquals(emptySet<String>(), store.downloaded(id))
+        assertFalse(root().walk().any { it.name.startsWith(".partial-") })
+    }
+
+    @Test fun `a chapter whose files do not match its marker is not on the device`() = runTest {
+        val store = store()
+        listOf("/c1", "/c2").forEach { address -> store.write(id, address) { staging -> listOf(page(staging, 0), page(staging, 1)) } }
+
+        // What a disk that lost data or a delete from outside the app can leave: a page missing, a page cut short.
+        File(chapterFolder("/c1"), "0002.png").delete()
+        File(chapterFolder("/c2"), "0001.png").writeBytes(byteArrayOf(1))
+
+        assertEquals(emptySet<String>(), store.downloaded(id))
+        assertNull(store.pages(id, "/c1"))
+        assertNull(store.pages(id, "/c2"))
+    }
+
+    @Test fun `what stopped downloads and deletes leave is swept`() = runTest {
+        val store = store()
+        store.write(id, "/c1") { staging -> listOf(page(staging, 0)) }
         val seriesFolder = root().listFiles().orEmpty().single()
-        File(seriesFolder, ".partial-left").apply { mkdirs() }.resolve("address").writeText("/c2")
+        // Left by a process that ended mid-download, mid-delete of a chapter, and mid-delete of a series.
+        listOf(File(seriesFolder, ".partial-a"), File(seriesFolder, ".deleted-b"), File(root(), ".deleted-c")).forEach {
+            it.mkdirs()
+            it.resolve("chapter.json").writeText("""{"address":"/c2","pages":[]}""")
+        }
         assertEquals(setOf("/c1"), store.downloaded(id))
         store.removeUnfinished()
-        assertEquals(listOf("/c1"), seriesFolder.walk().filter { it.name == "address" }.map { it.readText() }.toList())
+        assertEquals(listOf(seriesFolder.name), root().list().orEmpty().toList())
+        assertEquals(setOf("/c1"), store.downloaded(id))
     }
 
     @Test fun `deleting a chapter, a series or everything leaves the rest and the size follows`() = runTest {
         val store = store()
         val other = SeriesId(source, "/title/2")
-        listOf(id to "/c1", id to "/c2", other to "/c1").forEach { (series, entry) -> store.write(series, entry) { page(it, 0) } }
+        listOf(id to "/c1", id to "/c2", other to "/c1").forEach { (series, entry) -> store.write(series, entry) { listOf(page(it, 0)) } }
         assertTrue(store.sizeBytes() >= 3 * PAGE.size)
 
         store.delete(id, "/c1")
@@ -78,7 +111,7 @@ class SeriesDownloadsTest {
         assertEquals(emptyMap<String, ChapterDownload>(), harness.downloads.states(id).first())
 
         // Files a profile restore finds show as downloaded with no queue or database record of them.
-        harness.store.write(id, "/c2") { page(it, 0) }
+        harness.store.write(id, "/c2") { listOf(page(it, 0)) }
         assertEquals(mapOf("/c2" to ChapterDownload.OnDevice), Harness(this).downloads.states(id).first())
     }
 
@@ -87,25 +120,25 @@ class SeriesDownloadsTest {
         harness.downloads.download(id, listOf("/c1", "/c2", "/c3"))
         assertEquals(listOf("schedule user"), harness.scheduled)
 
-        assertEquals(DrainResult(downloaded = 3, failed = 0), harness.downloads.drain(unmetered = { false }))
+        assertEquals(DrainResult(downloaded = 3, failed = 0), harness.downloads.drain(automatic = false))
         assertEquals(listOf("/c1", "/c1", "/c2", "/c2", "/c3", "/c3"), harness.fetched.map { it.substringBeforeLast('/').removePrefix(PAGES) })
         assertEquals(setOf("/c1", "/c2", "/c3"), harness.store.downloaded(id))
         assertEquals(emptyMap<String, ChapterDownload>() + chapters.associate { it.entry.address to ChapterDownload.OnDevice }, harness.downloads.states(id).first())
     }
 
-    @Test fun `cancelling the chapter being fetched stops it and the queue goes on`() = runTest {
+    @Test fun `cancelling the chapter being fetched stops it, leaves nothing and the queue goes on`() = runTest {
         val harness = Harness(this)
         val never = CompletableDeferred<Unit>()
         harness.onFetch = { url -> if ("/c1/" in url) never.await() }
         harness.downloads.download(id, listOf("/c1", "/c2"))
 
-        val drain = async { harness.downloads.drain(unmetered = { true }) }
+        val drain = async { harness.downloads.drain(automatic = false) }
         advanceUntilIdle()
         assertEquals(ChapterDownload.Queued(0f), harness.downloads.states(id).first()["/c1"])
-        harness.downloads.cancel(id, "/c1")
+        harness.downloads.delete(id, "/c1")
 
         assertEquals(DrainResult(downloaded = 1, failed = 0), drain.await())
-        assertEquals(setOf("/c2"), harness.store.downloaded(id))
+        assertEquals(mapOf("/c2" to ChapterDownload.OnDevice), harness.downloads.states(id).first())
         assertFalse(root().walk().any { it.name.startsWith(".partial-") })
     }
 
@@ -119,7 +152,7 @@ class SeriesDownloadsTest {
         }
         harness.downloads.download(id, listOf("/c1", "/c2"))
 
-        assertEquals(DrainResult(downloaded = 1, failed = 1), harness.downloads.drain(unmetered = { true }))
+        assertEquals(DrainResult(downloaded = 1, failed = 1), harness.downloads.drain(automatic = false))
         assertEquals(SeriesDownloads.PAGE_ATTEMPTS, attempts["$PAGES/c1/1"])
         assertEquals(SeriesDownloads.PAGE_ATTEMPTS, attempts["$PAGES/c2/1"])
         assertEquals(mapOf("/c1" to ChapterDownload.OnDevice), harness.downloads.states(id).first())
@@ -134,20 +167,25 @@ class SeriesDownloadsTest {
         restarted.downloads.resume()
         assertEquals(listOf("ensure user"), restarted.scheduled)
         assertFalse(File(root(), "series/.partial-left").exists())
-        assertEquals(DrainResult(downloaded = 1, failed = 0), restarted.downloads.drain(unmetered = { true }))
+        assertEquals(DrainResult(downloaded = 1, failed = 0), restarted.downloads.drain(automatic = false))
     }
 
-    @Test fun `chapters the check queued wait for an unmetered network`() = runTest {
+    @Test fun `each lane has its own job, and a running one never holds back the other`() = runTest {
         val harness = Harness(this)
-        harness.downloads.download(id, listOf("/c1"), automatic = true)
-        assertEquals(listOf("schedule automatic"), harness.scheduled)
+        val held = CompletableDeferred<Unit>()
+        harness.onFetch = { url -> if ("/c1/" in url) held.await() }
+        harness.downloads.download(id, listOf("/c1"))
+        val user = async { harness.downloads.drain(automatic = false) }
+        advanceUntilIdle()
 
-        assertEquals(DrainResult(downloaded = 0, failed = 0), harness.downloads.drain(unmetered = { false }))
-        assertEquals(mapOf("/c1" to ChapterDownload.Queued(null)), harness.downloads.states(id).first())
-        // Left behind by a drain on a metered network, they get a run of their own.
-        assertEquals(listOf("schedule automatic", "schedule automatic"), harness.scheduled)
-
-        assertEquals(DrainResult(downloaded = 1, failed = 0), harness.downloads.drain(unmetered = { true }))
+        // While the user's lane runs, a chapter the check queues still gets the job that waits for an unmetered network.
+        harness.downloads.download(id, listOf("/c2"), automatic = true)
+        assertEquals(listOf("schedule user", "schedule automatic"), harness.scheduled)
+        held.complete(Unit)
+        // The user's job leaves it to that one.
+        assertEquals(DrainResult(downloaded = 1, failed = 0), user.await())
+        assertEquals(mapOf("/c1" to ChapterDownload.OnDevice, "/c2" to ChapterDownload.Queued(null)), harness.downloads.states(id).first())
+        assertEquals(DrainResult(downloaded = 1, failed = 0), harness.downloads.drain(automatic = true))
     }
 
     @Test fun `new chapters download by themselves only for a followed series set to`() = runTest {
@@ -158,7 +196,7 @@ class SeriesDownloadsTest {
 
         val on = Harness(this, StoredSeries(Series(id, "Title"), followed = true, downloadNewChapters = true))
         on.downloads.downloadNew(update)
-        on.downloads.drain(unmetered = { true })
+        on.downloads.drain(automatic = true)
         // Oldest first.
         assertEquals(listOf("/c2", "/c2", "/c3", "/c3"), on.fetched.map { it.substringBeforeLast('/').removePrefix(PAGES) })
     }
@@ -179,9 +217,13 @@ class SeriesDownloadsTest {
 
     private fun root() = folder.root.resolve("downloads")
 
+    /** The folder of the downloaded chapter at [address]. */
+    private fun chapterFolder(address: String) =
+        root().walk().single { it.name == "chapter.json" && "\"address\":\"$address\"" in it.readText() }.parentFile
+
     private fun TestScope.store() = SeriesDownloadStore(root(), StandardTestDispatcher(testScheduler))
 
-    private fun page(staging: File, index: Int) = File(staging, SeriesDownloadStore.pageFileName(index, "png")).writeBytes(PAGE)
+    private fun page(staging: File, index: Int) = File(staging, SeriesDownloadStore.pageFileName(index, "png")).apply { writeBytes(PAGE) }
 
     /** Downloads over this test's folder, with a source of two pages per chapter and a fetch that records each page. */
     private inner class Harness(scope: TestScope, stored: StoredSeries = StoredSeries(Series(id, "Title"))) {

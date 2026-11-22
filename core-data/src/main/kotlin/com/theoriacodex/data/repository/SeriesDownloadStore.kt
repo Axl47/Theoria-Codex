@@ -1,64 +1,83 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.mediaTypeOfExtension
 import com.theoriacodex.data.storage.sha256
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.series.SeriesId
 import java.io.File
 import java.io.IOException
+import java.util.UUID
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 
 /**
  * Downloaded chapters on disk, and the only record of which chapters are downloaded: a chapter is on the device exactly
- * when its folder is, and a folder is only ever there complete. Pages are written into a staging folder, the chapter's
- * address last, and the folder is then renamed into place in one step. A download stopped at any point leaves at most
- * a staging folder, which nothing reads and the next download of that chapter or [removeUnfinished] removes.
+ * when its folder holds a marker naming it and every page file the marker lists, at the size it lists.
+ *
+ * A download writes its pages into a staging folder of its own, then the marker, and renames the folder into place in
+ * one step. A delete first renames the folder out of place in one step, then removes it. A download or delete stopped
+ * at any point therefore leaves at most a staging or deleted folder, which nothing reads and [removeUnfinished]
+ * removes.
  *
  * Neither the database nor a backup says anything about downloads, so they cannot disagree with the files: a database
  * that returns without them (Android's backup, a device transfer) shows nothing downloaded, and a profile-backup restore
  * shows the chapters whose files are here.
  *
- * Layout: `root/<series>/<chapter>/0001.jpg …` and an `address` file naming the chapter. Folder names are digests,
- * since addresses can be any text.
+ * Layout: `root/<series>/<chapter>/0001.jpg …` and a `chapter.json` marker. Folder names are digests, since addresses
+ * can be any text.
  */
 class SeriesDownloadStore(private val root: File, private val io: CoroutineDispatcher = Dispatchers.IO) {
+    /** Publishing a chapter and deleting take turns, so neither acts on the other's half-done work. */
+    private val lock = Mutex()
+
     /** The addresses of [id]'s chapters on the device. */
     suspend fun downloaded(id: SeriesId): Set<String> = withContext(io) {
-        seriesDirectory(id).listFiles().orEmpty().mapNotNullTo(HashSet()) { it.completedAddress() }
+        seriesDirectory(id).listFiles().orEmpty().mapNotNullTo(HashSet()) { it.marker()?.address }
     }
 
     /** The pages of the chapter at [entry] in reading order, as files; null when it is not on the device. */
     suspend fun pages(id: SeriesId, entry: String): List<ImageRef>? = withContext(io) {
         val folder = chapterDirectory(id, entry)
-        if (folder.completedAddress() != entry) return@withContext null
-        folder.listFiles().orEmpty().filter { it.name != ADDRESS_FILE }
-            .sortedBy { it.nameWithoutExtension.toIntOrNull() ?: Int.MAX_VALUE }
-            .map { ImageRef(url = null, localPath = it.absolutePath, mime = mediaTypeOfExtension(it.extension)) }
-            .ifEmpty { null }
+        val marker = folder.marker()?.takeIf { it.address == entry } ?: return@withContext null
+        marker.pages.map { page ->
+            val file = File(folder, page.name)
+            ImageRef(url = null, localPath = file.absolutePath, mime = mediaTypeOfExtension(file.extension))
+        }
     }
 
     /**
-     * Downloads the chapter at [entry]: [fill] writes its pages into the folder it is handed, named [pageFileName], and
-     * the chapter appears on the device only once [fill] returns. A failed or cancelled [fill] leaves nothing behind,
-     * and a chapter already on the device stays as it was until the new copy replaces it.
+     * Downloads the chapter at [entry]: [fill] writes its pages into the folder it is handed and returns them in reading
+     * order, and the chapter appears on the device only once [fill] returns. A failed or cancelled download leaves
+     * nothing behind, a cancelled one never appears even with every page in, and a chapter already on the device stays
+     * as it was until the new copy replaces it.
      */
-    suspend fun write(id: SeriesId, entry: String, fill: suspend (staging: File) -> Unit) {
+    suspend fun write(id: SeriesId, entry: String, fill: suspend (staging: File) -> List<File>) {
         val folder = chapterDirectory(id, entry)
-        val staging = File(folder.parentFile, STAGING_PREFIX + folder.name)
-        withContext(io) {
-            staging.deleteRecursively()
-            if (!staging.mkdirs()) throw IOException("Could not create a folder for the chapter")
-        }
+        // Each attempt has its own folder, so nothing an earlier attempt still writes can land in this one.
+        val staging = File(folder.parentFile, "$STAGING_PREFIX${UUID.randomUUID()}")
         try {
-            fill(staging)
-            // Once the pages are in, the chapter is committed whole, even by a caller cancelled meanwhile.
-            withContext(io + NonCancellable) {
-                File(staging, ADDRESS_FILE).writeText(entry)
-                folder.deleteRecursively()
-                if (!staging.renameTo(folder)) throw IOException("Could not finish saving the chapter")
+            withContext(io) {
+                if (!staging.mkdirs()) throw IOException("Could not create a folder for the chapter")
+            }
+            val pages = fill(staging).ifEmpty { throw IOException("The chapter has no pages") }
+            lock.withLock {
+                currentCoroutineContext().ensureActive()
+                withContext(io + NonCancellable) {
+                    val marker = ChapterMarker(entry, pages.map { ChapterPageFile(it.name, it.length()) })
+                    File(staging, MARKER_FILE).writeText(DurableJson.encodeToString(ChapterMarker.serializer(), marker))
+                    discard(folder)
+                    if (!staging.renameTo(folder)) throw IOException("Could not finish saving the chapter")
+                }
             }
         } finally {
             withContext(io + NonCancellable) { staging.deleteRecursively() }
@@ -66,39 +85,55 @@ class SeriesDownloadStore(private val root: File, private val io: CoroutineDispa
     }
 
     suspend fun delete(id: SeriesId, entry: String) {
-        withContext(io) { chapterDirectory(id, entry).deleteRecursively() }
+        lock.withLock { withContext(io) { discard(chapterDirectory(id, entry)) } }
     }
 
     /** Deletes everything downloaded for [id], chapters its source no longer lists included. */
     suspend fun deleteSeries(id: SeriesId) {
-        withContext(io) { seriesDirectory(id).deleteRecursively() }
+        lock.withLock { withContext(io) { discard(seriesDirectory(id)) } }
     }
 
+    /** Deletes every series' downloads; one stopped midway leaves each series either whole or gone. */
     suspend fun deleteAll() {
-        withContext(io) { root.deleteRecursively() }
+        lock.withLock { withContext(io) { root.listFiles().orEmpty().forEach(::discard) } }
     }
 
-    /** The bytes every download takes, staging folders included. */
+    /** The bytes every download takes, unfinished ones included. */
     suspend fun sizeBytes(): Long = withContext(io) { root.walk().filter(File::isFile).sumOf(File::length) }
 
-    /** Deletes what downloads stopped midway left, such as by the process ending. Call while none is running. */
+    /** Deletes what stopped downloads and deletes left, such as by the process ending. Call while no download runs. */
     suspend fun removeUnfinished() {
         withContext(io) {
-            root.listFiles().orEmpty().flatMap { it.listFiles().orEmpty().asList() }
-                .filter { it.name.startsWith(STAGING_PREFIX) }
-                .forEach(File::deleteRecursively)
+            val folders = root.listFiles().orEmpty().flatMap { listOf(it) + it.listFiles().orEmpty() }
+            folders.filter { it.name.startsWith(STAGING_PREFIX) || it.name.startsWith(DELETED_PREFIX) }.forEach(File::deleteRecursively)
         }
+    }
+
+    /** Moves [folder] out of place in one step, then deletes it. */
+    private fun discard(folder: File) {
+        if (!folder.exists()) return
+        val deleted = File(folder.parentFile, "$DELETED_PREFIX${UUID.randomUUID()}")
+        if (!folder.renameTo(deleted)) throw IOException("Could not delete the download")
+        deleted.deleteRecursively()
     }
 
     private fun seriesDirectory(id: SeriesId) = File(root, "${id.source.id}\n${id.address}".toByteArray().sha256())
 
     private fun chapterDirectory(id: SeriesId, entry: String) = File(seriesDirectory(id), entry.toByteArray().sha256())
 
-    /** The chapter this folder completes; null for a staging folder or one that is not a chapter's. */
-    private fun File.completedAddress(): String? {
-        if (name.startsWith(STAGING_PREFIX)) return null
-        val address = File(this, ADDRESS_FILE)
-        return if (address.isFile) address.readText() else null
+    /** The marker of the chapter this folder holds whole; null for any other folder. */
+    private fun File.marker(): ChapterMarker? {
+        if (name.startsWith(STAGING_PREFIX) || name.startsWith(DELETED_PREFIX)) return null
+        val file = File(this, MARKER_FILE)
+        if (!file.isFile) return null
+        val marker = try {
+            DurableJson.decodeFromString(ChapterMarker.serializer(), file.readText())
+        } catch (_: SerializationException) {
+            return null
+        } catch (_: IllegalArgumentException) {
+            return null
+        }
+        return marker.takeIf { it.pages.isNotEmpty() && it.pages.all { page -> File(this, page.name).length() == page.bytes } }
     }
 
     companion object {
@@ -106,7 +141,18 @@ class SeriesDownloadStore(private val root: File, private val io: CoroutineDispa
         fun pageFileName(index: Int, extension: String): String = "${(index + 1).toString().padStart(PAGE_DIGITS, '0')}.$extension"
 
         private const val PAGE_DIGITS = 4
-        private const val ADDRESS_FILE = "address"
+        private const val MARKER_FILE = "chapter.json"
         private const val STAGING_PREFIX = ".partial-"
+        private const val DELETED_PREFIX = ".deleted-"
     }
 }
+
+/** What a finished chapter folder holds: the chapter's address and its pages in reading order, each with its size. */
+@Serializable
+private data class ChapterMarker(
+    @SerialName("address") val address: String,
+    @SerialName("pages") val pages: List<ChapterPageFile>,
+)
+
+@Serializable
+private data class ChapterPageFile(@SerialName("name") val name: String, @SerialName("bytes") val bytes: Long)

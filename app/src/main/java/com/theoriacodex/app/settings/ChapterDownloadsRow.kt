@@ -17,6 +17,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import com.theoriacodex.app.ui.components.SettingsRow
 import com.theoriacodex.data.repository.SeriesDownloads
+import com.theoriacodex.domain.diagnostics.Diagnostics
+import java.io.IOException
 import kotlinx.coroutines.launch
 
 /**
@@ -47,7 +49,11 @@ internal fun ChapterDownloadsRow(downloads: SeriesDownloads) {
                     onClick = {
                         confirming = false
                         scope.launch {
-                            downloads.deleteAll()
+                            try {
+                                downloads.deleteAll()
+                            } catch (error: IOException) {
+                                Diagnostics.report("series", "Downloaded chapters could not be deleted", error)
+                            }
                             measured++
                         }
                     },

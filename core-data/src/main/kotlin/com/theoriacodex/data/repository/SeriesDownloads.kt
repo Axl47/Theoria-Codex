@@ -14,6 +14,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -61,12 +63,13 @@ enum class DownloadChoice {
 /** Runs [SeriesDownloads.drain] when the system lets it; the app's job scheduler. */
 interface DownloadScheduler {
     /**
-     * Has a drain run soon: on any network for chapters the user queued, only on an unmetered one for [automatic]
-     * ones. Replaces a run that has not started draining.
+     * Has the drain of one lane run soon: on any network for chapters the user queued, only on an unmetered one for
+     * [automatic] ones. Each lane is its own job, so neither stops or holds up the other's; this replaces a run of the
+     * same lane that has not started draining.
      */
     fun schedule(automatic: Boolean)
 
-    /** As [schedule], unless a run is already scheduled or running, which this must not stop. */
+    /** As [schedule], unless that lane's run is already scheduled or running, which this must not stop. */
     fun ensureScheduled(automatic: Boolean)
 }
 
@@ -75,11 +78,12 @@ interface DownloadScheduler {
  * [queueFile] (under `noBackupFilesDir`, like the files, so a restored database never brings back a queue without its
  * downloads or the other way round). [store] is the truth for what is on the device.
  *
- * [drain] fetches the queue in order, one chapter at a time, which also keeps each source to one chapter at a time. A
- * chapter's pages are asked for right before it is fetched, since their addresses expire, and fetched a few at a time
- * through [fetch], each tried [PAGE_ATTEMPTS] times; a chapter that still fails leaves the queue, not downloaded.
- * [scheduler] runs drains: queuing a chapter while none runs schedules one, and [resume] does after the process
- * restarts.
+ * The queue has two lanes: chapters the user queued, and [automatic][QueuedChapter.automatic] ones the check for new
+ * chapters queued, each drained by its own job ([drain]). Drains fetch in queue order, one chapter at a time across
+ * both lanes, which also keeps each source to one chapter at a time. A chapter's pages are asked for right before it
+ * is fetched, since their addresses expire, and fetched a few at a time through [fetch], each tried [PAGE_ATTEMPTS]
+ * times; a chapter that still fails leaves the queue, not downloaded. [scheduler] runs drains: queuing a chapter while
+ * its lane has none running schedules one, and [resume] does after the process restarts.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SeriesDownloads(
@@ -87,7 +91,7 @@ class SeriesDownloads(
     private val queueFile: File,
     private val repository: SeriesRepository,
     private val sources: suspend () -> List<SeriesSource>,
-    /** Writes the image at an address into a file and returns its media type; throws when it does not arrive whole. */
+    /** Writes the image at an address into a file and returns its media type; throws unless a whole image arrived. */
     private val fetch: suspend (url: String, into: File) -> String?,
     private val scheduler: DownloadScheduler,
     private val files: AtomicJsonFileStore = AtomicJsonFileStore(),
@@ -95,6 +99,8 @@ class SeriesDownloads(
 ) {
     /** Guards the queue, its file, [draining] and [active]. */
     private val lock = Mutex()
+
+    /** Held while a chapter is fetched, so the lanes take turns chapter by chapter. */
     private val drains = Mutex()
     private val queue = MutableStateFlow<List<QueuedChapter>>(emptyList())
     private val fetching = MutableStateFlow<Pair<QueuedChapter, Float>?>(null)
@@ -102,7 +108,9 @@ class SeriesDownloads(
     /** Moves whenever chapters arrive on the device or leave it. */
     private val changes = MutableStateFlow(0)
     private var loaded = false
-    private var draining = false
+
+    /** The lanes with a drain under way, by [QueuedChapter.automatic]. */
+    private val draining = mutableSetOf<Boolean>()
     private var active: Pair<QueuedChapter, Job>? = null
 
     /** Each chapter of [id] that is queued or on the device, by address. */
@@ -122,11 +130,14 @@ class SeriesDownloads(
     /** The pages of the chapter at [entry] as files, in reading order; null when it is not on the device. */
     suspend fun pages(id: SeriesId, entry: String) = store.pages(id, entry)
 
+    /** The addresses of [id]'s chapters on the device. */
+    suspend fun downloaded(id: SeriesId): Set<String> = store.downloaded(id)
+
     /** Loads the saved queue, clears what stopped downloads left, and has the queue drained. Call once per process. */
     suspend fun resume() {
         val queued = lock.withLock {
             load()
-            if (!draining) store.removeUnfinished()
+            if (draining.isEmpty()) store.removeUnfinished()
             queue.value
         }
         queued.map { it.automatic }.distinct().forEach(scheduler::ensureScheduled)
@@ -144,7 +155,7 @@ class SeriesDownloads(
             val added = entries.distinct().filter { it !in onDevice && (id to it) !in queued }.map { QueuedChapter(id, it, automatic) }
             if (added.isEmpty()) return@withContext
             save(queue.value + added)
-            !draining
+            automatic !in draining
         }
         if (schedule) scheduler.schedule(automatic)
     }
@@ -163,12 +174,12 @@ class SeriesDownloads(
         download(update.series.id, update.newEntries.asReversed().map { it.address }, automatic = true)
     }
 
-    /** Takes the chapter at [entry] out of the queue, stopping it if it is being fetched. */
-    suspend fun cancel(id: SeriesId, entry: String) = withContext(NonCancellable) { remove { it.series == id && it.entry == entry } }
-
-    /** Deletes the chapter at [entry] from the device, or stops its download. */
+    /**
+     * Deletes the chapter at [entry] from the device, or cancels its download: a chapter being fetched stops, and
+     * whatever it got as far as is gone too.
+     */
     suspend fun delete(id: SeriesId, entry: String) = withContext(NonCancellable) {
-        cancel(id, entry)
+        remove { it.series == id && it.entry == entry }
         store.delete(id, entry)
         changes.update { it + 1 }
     }
@@ -193,38 +204,42 @@ class SeriesDownloads(
     suspend fun sizeBytes(): Long = store.sizeBytes()
 
     /**
-     * Downloads the queue in order until nothing is left that may download now: [automatic][QueuedChapter.automatic]
-     * chapters only while [unmetered]. One drain runs at a time. Cancelling it stops the chapter being fetched, which
-     * stays queued for the next drain. Automatic chapters left behind get a drain of their own scheduled.
+     * Downloads one lane of the queue, chapters the user queued or [automatic] ones, in order until it is empty.
+     * Cancelling it stops the chapter being fetched, which stays queued for the next drain.
      */
-    suspend fun drain(unmetered: () -> Boolean, onProgress: (DrainProgress) -> Unit = {}): DrainResult = drains.withLock {
+    suspend fun drain(automatic: Boolean, onProgress: (DrainProgress) -> Unit = {}): DrainResult {
         lock.withLock {
             load()
-            draining = true
+            draining += automatic
         }
         var downloaded = 0
         var failed = 0
-        val leftAutomatic = try {
+        try {
             while (true) {
-                val next = lock.withLock {
-                    queue.value.firstOrNull { !it.automatic || unmetered() }.also { if (it == null) draining = false }
-                } ?: break
-                val remaining = lock.withLock { queue.value.count { !it.automatic || unmetered() } }
-                val number = downloaded + failed + 1
-                val (series, chapter) = names(next)
-                val report = { pages: Int, of: Int -> onProgress(DrainProgress(series, chapter, next.series, number, number + remaining - 1, pages, of)) }
-                when (fetchQueued(next, report)) {
-                    true -> downloaded++
-                    false -> failed++
-                    null -> Unit
+                val tookOne = drains.withLock {
+                    // The lane stops draining in the same step that finds it empty, so a chapter queued after is scheduled.
+                    val (next, remaining) = lock.withLock {
+                        val lane = queue.value.filter { it.automatic == automatic }
+                        if (lane.isEmpty()) draining -= automatic
+                        lane.firstOrNull() to lane.size
+                    }
+                    if (next == null) return@withLock false
+                    val number = downloaded + failed + 1
+                    val (series, chapter) = names(next)
+                    val report = { pages: Int, of: Int -> onProgress(DrainProgress(series, chapter, next.series, number, number + remaining - 1, pages, of)) }
+                    when (fetchQueued(next, report)) {
+                        true -> downloaded++
+                        false -> failed++
+                        null -> Unit
+                    }
+                    true
                 }
+                if (!tookOne) break
             }
-            lock.withLock { queue.value.any { it.automatic } }
         } finally {
-            withContext(NonCancellable) { lock.withLock { draining = false } }
+            withContext(NonCancellable) { lock.withLock { draining -= automatic } }
         }
-        if (leftAutomatic) scheduler.schedule(automatic = true)
-        DrainResult(downloaded, failed)
+        return DrainResult(downloaded, failed)
     }
 
     /**
@@ -271,27 +286,29 @@ class SeriesDownloads(
         val gate = Semaphore(PARALLEL_PAGES)
         store.write(chapter.series, chapter.entry) { staging ->
             coroutineScope {
-                pages.forEachIndexed { index, page ->
-                    launch {
-                        gate.withPermit {
+                pages.mapIndexed { index, page ->
+                    async {
+                        val file = gate.withPermit {
                             val url = page.url ?: throw IOException("A page has no address")
                             attempts { fetchPage(url, staging, index) }
                         }
                         val count = done.incrementAndGet()
                         fetching.value = chapter to count.toFloat() / pages.size
                         onPage(count, pages.size)
+                        file
                     }
-                }
+                }.awaitAll()
             }
         }
     }
 
-    private suspend fun fetchPage(url: String, staging: File, index: Int) {
+    /** Page [index] at [url], saved in [staging] under its name in the chapter. */
+    private suspend fun fetchPage(url: String, staging: File, index: Int): File {
         val partial = File(staging, "$index.part")
         val type = fetch(url, partial)
-        if (!partial.renameTo(File(staging, SeriesDownloadStore.pageFileName(index, mediaFileExtension(type, url))))) {
-            throw IOException("Could not save a page")
-        }
+        val page = File(staging, SeriesDownloadStore.pageFileName(index, mediaFileExtension(type, url)))
+        if (!partial.renameTo(page)) throw IOException("Could not save a page")
+        return page
     }
 
     /** [block], tried up to [PAGE_ATTEMPTS] times, waiting longer before each retry. */

@@ -7,10 +7,10 @@ import android.app.job.JobService
 import android.content.ComponentName
 import android.content.Context
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
-import com.theoriacodex.app.media.isMediaNetworkMetered
 import com.theoriacodex.data.repository.DownloadScheduler
 import com.theoriacodex.data.repository.DrainProgress
 import com.theoriacodex.domain.diagnostics.Diagnostics
+import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -57,8 +57,10 @@ internal class SeriesDownloadScheduler(private val context: Context) : DownloadS
 }
 
 /**
- * Drains the chapter download queue while the system lets it, with one ongoing notification for the queue. Either job
- * drains everything it may; when both run, the second waits for the first and then finds nothing left.
+ * Drains the chapter download queue while the system lets it, with one ongoing notification for the queue. Each job
+ * drains its own lane: the user's job the chapters the user queued, the automatic job those the check queued, so
+ * automatic chapters only ever download while the system sees an unmetered network. When both run they take turns
+ * chapter by chapter. A chapter in flight when the network changes finishes on the new one.
  */
 class SeriesDownloadJobService : JobService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -68,19 +70,25 @@ class SeriesDownloadJobService : JobService() {
         // A user-initiated job must name its notification at once.
         showProgress(params, null)
         runs[params.jobId] = scope.launch {
-            try {
+            // A full disk, say, while the queue is saved: the system runs the job again after a growing wait.
+            val retry = try {
                 val downloads = (application as TheoriaAppContainerOwner).awaitAppContainer().series?.downloads
-                val result = downloads?.drain(unmetered = { !isMediaNetworkMetered() }) { showProgress(params, it) }
+                val result = downloads?.drain(automatic = params.jobId == AUTOMATIC_DOWNLOAD_JOB_ID) { showProgress(params, it) }
                 if (result != null && result.failed > 0) notifyDownloadsFailed(this@SeriesDownloadJobService, result.failed)
+                false
             } catch (error: CancellationException) {
                 // onStopJob ended this run; what is left stays queued for the next.
                 throw error
+            } catch (error: IOException) {
+                Diagnostics.report("series", "Chapter downloads paused", error)
+                true
             } catch (error: Exception) {
                 Diagnostics.report("series", "Chapter downloads stopped", error)
+                false
             }
             if (!params.isUserInitiatedJob) cancelDownloadProgress(this@SeriesDownloadJobService)
             runs.remove(params.jobId)
-            jobFinished(params, false)
+            jobFinished(params, retry)
         }
         return true
     }
