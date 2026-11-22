@@ -13,10 +13,9 @@
 -keep class okhttp3.* { public protected *; }
 -keep class okhttp3.brotli.* { public protected *; }
 -keep class okhttp3.zstd.* { public protected *; }
--keep class com.squareup.zstd.okio.* { public protected *; }
 # The zstd decoder's native library finds these classes and their private members by name, which no dex reference
 # shows, so the symbol check cannot see them. Without them a zstd-compressed answer aborts the whole process.
--keep class com.squareup.zstd.* { *; }
+-keep class com.squareup.zstd.** { *; }
 -keep class okio.* { public protected *; }
 # Two internals, each used by one extension of the sample.
 -keep class okhttp3.internal._UtilCommonKt { public static void closeQuietly(java.io.Closeable); }
