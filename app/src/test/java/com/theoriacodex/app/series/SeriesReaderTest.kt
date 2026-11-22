@@ -133,19 +133,21 @@ class SeriesReaderTest {
     }
 
     @Test
-    fun deleteAfterReadingDeletesAReadChapterOnlyOnceTheReaderLeavesIt() = runTest {
+    fun deleteAfterReadingDeletesTheReadChaptersShownOnceTheViewerCloses() = runTest {
         val reader = readerOverDownloadedChapters(deleteAfterReading = true)
         val session = checkNotNull(reader.session(id, "/c1"))
+        val other = checkNotNull(reader.session(id, "/c3"))
 
-        reader.show(session, "/c1")
-        // Read, but still open.
+        reader.show(other, "/c3")
+        listOf("/c1", "/c2", "/c3").forEach { reader.show(session, it) }
+        // Moving on deletes nothing.
         assertEquals(listOf("/c1", "/c2", "/c3"), onDevice())
-        reader.show(session, "/c2")
-        assertEquals(listOf("/c2", "/c3"), onDevice())
-        reader.show(session, "/c3")
-        // Chapter 2 was left unfinished.
-        assertEquals(listOf("/c2", "/c3"), onDevice())
+
         reader.closed(session)
+        advanceUntilIdle()
+        // Chapter 2 is unread, and the other session still shows chapter 3.
+        assertEquals(listOf("/c2", "/c3"), onDevice())
+        reader.closed(other)
         advanceUntilIdle()
         assertEquals(listOf("/c2"), onDevice())
     }
@@ -183,7 +185,7 @@ class SeriesReaderTest {
 
     /** Puts two solid pages of the chapter at [address] on the device. */
     private suspend fun TestScope.download(address: String) = store().write(id, address) { staging ->
-        repeat(2) { File(staging, SeriesDownloadStore.pageFileName(it, "png")).writeBytes(byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47)) }
+        List(2) { File(staging, SeriesDownloadStore.pageFileName(it, "png")).apply { writeBytes(byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47)) } }
     }
 
     /** The reader's dependencies over [repository], with downloads in this test's folder that never fetch. */

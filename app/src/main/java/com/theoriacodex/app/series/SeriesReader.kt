@@ -17,6 +17,7 @@ import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.seriesReadingMode
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -30,8 +31,8 @@ import kotlinx.coroutines.launch
  * A downloaded chapter's pages are its files, so it reads with no connection and without its extension.
  */
 internal class SeriesReader(private val series: SeriesDependencies) {
-    /** The chapter each open session shows, by session id, so leaving one is noticed. */
-    private val showing = ConcurrentHashMap<String, String>()
+    /** The chapters each open session has shown, by session id, in the order last shown: the last is showing now. */
+    private val shown = ConcurrentHashMap<String, Set<String>>()
 
     /**
      * A session over [id]'s stored entries opening at [entryAddress], on [pageIndex] or, without one, where the user
@@ -76,26 +77,29 @@ internal class SeriesReader(private val series: SeriesDependencies) {
      */
     suspend fun recordProgress(session: ViewerSession, post: Post, mediaNumber: Int) {
         val id = seriesIdOf(session.context.queryHash) ?: return
-        showing.put(session.sessionId, post.id.sourcePostId)?.takeIf { it != post.id.sourcePostId }?.let { left(id, it) }
+        val chapter = post.id.sourcePostId
+        shown.merge(session.sessionId, setOf(chapter)) { before, _ -> before - chapter + chapter }
         if (post.media.isEmpty()) return
         series.repository.recordProgress(id, post.id.sourcePostId, mediaNumber, post.media.size)
     }
 
-    /** [session] closed: the chapter it showed is left, which can delete it; see [left]. Returns at once. */
+    /**
+     * [session] closed. With Delete after reading on, the downloaded chapters it showed that are read are deleted now,
+     * except one another open session shows. Returns at once.
+     */
     fun closed(session: ViewerSession) {
         val id = seriesIdOf(session.context.queryHash) ?: return
-        val chapter = showing.remove(session.sessionId) ?: return
-        series.scope.launch { runCatchingPreservingCancellation { left(id, chapter) } }
+        val left = shown.remove(session.sessionId) ?: return
+        series.scope.launch {
+            runCatchingPreservingCancellation { if (series.deleteAfterReading()) deleteRead(id, left) }
+                .onFailure { Diagnostics.report("series", "Read chapters could not be deleted", it) }
+        }
     }
 
-    /**
-     * The reader moved off the chapter at [entryAddress] to another or closed it. With Delete after reading on, a read
-     * chapter is deleted now: never while it is open, and never one left unfinished.
-     */
-    private suspend fun left(id: SeriesId, entryAddress: String) {
-        if (!series.deleteAfterReading()) return
-        val entry = series.repository.entries(id).firstOrNull { it.entry.address == entryAddress } ?: return
-        if (entry.read) series.downloads.delete(id, entryAddress)
+    private suspend fun deleteRead(id: SeriesId, chapters: Set<String>) {
+        val read = series.repository.entries(id).filter { it.read }.mapTo(HashSet()) { it.entry.address }
+        val open = shown.values.mapTo(HashSet()) { it.last() }
+        (chapters intersect read intersect series.downloads.downloaded(id)).minus(open).forEach { series.downloads.delete(id, it) }
     }
 
     /** A mode chosen in any chapter is the series' mode. */
