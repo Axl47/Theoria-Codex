@@ -3,6 +3,7 @@ package com.theoriacodex.app.series
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theoriacodex.data.repository.SeriesRepository
+import com.theoriacodex.domain.adapter.BrowserCheck
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.data.repository.continueEntry
@@ -33,6 +34,8 @@ data class SeriesPageState(
     val source: SeriesSource? = null,
     val refreshing: Boolean = true,
     val failure: String? = null,
+    /** Where the browser check that stopped the refresh can be passed, when one did. */
+    val browserCheck: BrowserCheck? = null,
     /**
      * No source on offer is the series' own. The app cannot tell why: its extension may be off, removed or blocked,
      * or the source's language off.
@@ -72,7 +75,7 @@ class SeriesPageViewModel(
     }
 
     private suspend fun refreshNow() {
-        refresh.update { it.copy(refreshing = true, failure = null) }
+        refresh.update { it.copy(refreshing = true, failure = null, browserCheck = null) }
         val source = loadSources().firstOrNull { it.key == id.source }
         if (source == null) {
             refresh.update { it.copy(refreshing = false, source = null, sourceMissing = true) }
@@ -85,9 +88,9 @@ class SeriesPageViewModel(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            failureLine(error)
+            error
         }
-        refresh.update { it.copy(refreshing = false, failure = failure) }
+        refresh.update { it.copy(refreshing = false, failure = failure?.let(::failureLine), browserCheck = failure?.let(::browserCheckOf)) }
     }
 
     /** Follows or unfollows the series; [onFollowed] runs once it is followed. */

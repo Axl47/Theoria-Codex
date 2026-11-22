@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.util.Log
 import com.theoriacodex.app.BuildConfig
+import com.theoriacodex.app.network.AndroidBrowserCookieStore
 import com.theoriacodex.domain.series.ExtensionChoiceStore
 import com.theoriacodex.domain.series.ExtensionChoices
 import com.theoriacodex.domain.series.SeriesExtensions
@@ -60,7 +61,7 @@ internal class MihonExtensionSourceHost {
         packages = ExtensionPackages(application) { if (BuildConfig.DEBUG) application.getExternalFilesDir(DIRECTORY) else null }
         val loader = ExtensionLoader(application, packages)
         // What extensions ask their host for is set up when the first one loads, not at startup.
-        val hostInstalled = lazy { MihonHost.install(application, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE) }
+        val hostInstalled = lazy { MihonHost.install(application, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, AndroidBrowserCookieStore) }
         registry = ExtensionRegistry(
             packages = packages::list,
             stamp = packages::stamp,

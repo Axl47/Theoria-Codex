@@ -35,7 +35,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.ui.components.EmptyState
-import com.theoriacodex.app.ui.components.ErrorState
 import com.theoriacodex.app.ui.components.LoadingState
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.data.repository.StoredSeries
@@ -80,8 +79,11 @@ fun SeriesPageScreen(
             val failure = state.failure
             when {
                 missing -> item("missing") { MissingSourceRow(onOpenExtensions) }
-                failure != null && state.entries.isEmpty() -> item("failure") { ErrorState(failure, onRetry = viewModel::refresh) }
-                failure != null -> item("failure") { FailureRow(viewModel::refresh, Modifier.padding(horizontal = 16.dp), failure) }
+                failure != null -> item("failure") {
+                    val compact = state.entries.isNotEmpty()
+                    val padding = if (compact) Modifier.padding(horizontal = 16.dp) else Modifier
+                    SourceLoadFailure(failure, state.browserCheck, state.sourceName, viewModel::refresh, padding, compact)
+                }
                 state.refreshing && state.entries.isEmpty() -> item("loading") { LoadingState() }
                 state.entries.isEmpty() -> item("empty") { EmptyState("No chapters") }
             }
