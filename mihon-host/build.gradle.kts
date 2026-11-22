@@ -29,6 +29,8 @@ extensions.configure<LibraryExtension> {
 
 dependencies {
     implementation(project(":core-domain"))
+    // The browser cookie store and cookie jar the app's own clients share.
+    implementation(project(":core-sources"))
     // Extension binaries link against these at run time, so they are part of this module's public surface.
     api(libs.okhttp)
     api(libs.kotlinx.coroutines.core)

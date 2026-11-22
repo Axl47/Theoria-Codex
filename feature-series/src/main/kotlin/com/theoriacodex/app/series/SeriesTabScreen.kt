@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -47,7 +48,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
 import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.app.ui.components.EmptyState
-import com.theoriacodex.app.ui.components.ErrorState
 import com.theoriacodex.app.ui.components.FilterChoiceChip
 import com.theoriacodex.app.ui.components.LoadingState
 import com.theoriacodex.data.repository.FollowedSeries
@@ -61,7 +61,7 @@ import com.theoriacodex.domain.series.SeriesId
  * row of results per source until it is cleared. Pulling down checks the followed series for new chapters.
  */
 @Composable
-fun SeriesTabScreen(viewModel: SeriesTabViewModel, onOpenSeries: (SeriesId) -> Unit, onOpenExtensions: () -> Unit, modifier: Modifier = Modifier) {
+fun SeriesTabScreen(viewModel: SeriesTabViewModel, onOpenSeries: (SeriesId) -> Unit, onOpenExtensions: () -> Unit, modifier: Modifier = Modifier) = BrowserCheckScope {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val followed by viewModel.followed.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
@@ -178,12 +178,16 @@ private fun LazyGridScope.browse(
 private fun LazyGridScope.browseListing(browse: SeriesSourceListing, run: Int, viewModel: SeriesTabViewModel, open: (Series) -> Unit) {
     when (val listing = browse.listing) {
         SeriesListing.Loading -> fullWidth("browse-loading") { LoadingState() }
-        is SeriesListing.Failed -> fullWidth("browse-failed") { ErrorState(listing.message, onRetry = viewModel::retryBrowse) }
+        is SeriesListing.Failed -> fullWidth("browse-failed") {
+            SourceLoadFailure(listing.message, listing.browserCheck, browse.name, onRetry = viewModel::retryBrowse)
+        }
         is SeriesListing.Loaded -> {
             if (listing.series.isEmpty()) fullWidth("browse-empty") { EmptyState("No series") }
             items(listing.series, key = { it.id.toString() }) { series -> SeriesCard(series, { open(series) }) }
             when {
-                listing.moreFailed -> fullWidth("browse-more-failed") { FailureRow(viewModel::browseMore) }
+                listing.moreFailed -> fullWidth("browse-more-failed") {
+                    SourceLoadFailure(LOAD_FAILED, listing.moreCheck, browse.name, viewModel::browseMore, compact = true)
+                }
                 listing.nextPage != null -> fullWidth("browse-more") {
                     LaunchedEffect(run, listing.nextPage) { viewModel.browseMore() }
                     LoadingState()
@@ -219,10 +223,10 @@ private fun LazyGridScope.searchResults(
         fullWidth("search-${result.key.id}") {
             when (listing) {
                 SeriesListing.Loading -> LoadingState()
-                is SeriesListing.Failed -> FailureRow({ retry(result.key) }, message = listing.message)
+                is SeriesListing.Failed -> SourceLoadFailure(listing.message, listing.browserCheck, result.name, { retry(result.key) }, compact = true)
                 is SeriesListing.Loaded ->
                     if (listing.series.isEmpty()) Text("No results", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    else SeriesRow(listing.series, key = { it.id.toString() }, after = moreResults(listing) { more(result.key) }) { series ->
+                    else SeriesRow(listing.series, key = { it.id.toString() }, after = moreResults(listing, result.name) { more(result.key) }) { series ->
                         SeriesCard(series, { open(series) }, Modifier.width(CARD_WIDTH))
                     }
             }
@@ -231,8 +235,10 @@ private fun LazyGridScope.searchResults(
 }
 
 /** What ends a source's row of results: its next page's button or progress; null once the source has no more. */
-private fun moreResults(listing: SeriesListing.Loaded, onMore: () -> Unit): (@Composable () -> Unit)? = when {
+private fun moreResults(listing: SeriesListing.Loaded, sourceName: String, onMore: () -> Unit): (@Composable () -> Unit)? = when {
     listing.loadingMore -> { { CircularProgressIndicator(Modifier.padding(horizontal = 16.dp).size(24.dp), strokeWidth = 2.dp) } }
+    // Bounded, so the line can wrap at a row's end.
+    listing.moreCheck != null -> { { SourceLoadFailure(LOAD_FAILED, listing.moreCheck, sourceName, onMore, Modifier.widthIn(max = CHECK_WIDTH), compact = true) } }
     listing.nextPage != null -> { { TextButton(onClick = onMore) { Text(if (listing.moreFailed) "Retry" else "More") } } }
     else -> null
 }
@@ -256,10 +262,10 @@ private fun SectionTitle(title: String, count: Int? = null) {
 
 /** One line for a source that failed, where a full-height failure would push the other sources away. */
 @Composable
-internal fun FailureRow(onRetry: () -> Unit, modifier: Modifier = Modifier, message: String = LOAD_FAILED) {
+internal fun FailureRow(onRetry: () -> Unit, modifier: Modifier = Modifier, message: String = LOAD_FAILED, actionLabel: String = "Retry") {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Text(message, Modifier.weight(1f, fill = false), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = onRetry) { Text("Retry") }
+        TextButton(onClick = onRetry) { Text(actionLabel) }
     }
 }
 
@@ -268,4 +274,5 @@ private fun LazyGridScope.fullWidth(key: String, content: @Composable () -> Unit
 }
 
 private val CARD_WIDTH = 104.dp
+private val CHECK_WIDTH = 280.dp
 private const val NO_EXTENSIONS_ON = "No extensions on"

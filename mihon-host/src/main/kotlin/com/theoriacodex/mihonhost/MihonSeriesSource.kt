@@ -168,19 +168,26 @@ class MihonSeriesSource(
         withContext(Dispatchers.IO) { block() }
     } catch (error: CancellationException) {
         throw error
-    } catch (error: HttpException) {
-        // A refusal (401, 403) is not reported as a missing key: the app holds no key for an extension source, and
-        // would point the user at a Settings field that does not exist. Most are a browser challenge.
-        val reason = if (error.code == HTTP_TOO_MANY_REQUESTS) SourceFailureReason.RATE_LIMITED else SourceFailureReason.NETWORK
-        throw SourceAdapterException(reason, error.message, error)
-    } catch (error: IOException) {
-        throw SourceAdapterException(SourceFailureReason.NETWORK, error.message, error)
+    } catch (error: Exception) {
+        throw failure(error)
     } catch (error: LinkageError) {
         // The extension called a part of Mihon's host API this module does not provide.
         log("${source.name} needs host API this module lacks: $error")
         throw SourceAdapterException(SourceFailureReason.UNKNOWN, error.message, error)
-    } catch (error: Exception) {
-        throw SourceAdapterException(SourceFailureReason.PARSE, error.message, error)
+    }
+
+    private fun failure(error: Exception): SourceAdapterException {
+        // Extensions sometimes wrap what the client threw, so the check is looked for among the causes.
+        val check = generateSequence<Throwable>(error) { it.cause }.firstNotNullOfOrNull { it as? BrowserCheckException }
+        if (check != null) return SourceAdapterException(SourceFailureReason.BROWSER_CHECK, check.message, check, check.check)
+        val reason = when (error) {
+            // A refusal (401, 403) is not reported as a missing key: the app holds no key for an extension source, and
+            // would point the user at a Settings field that does not exist.
+            is HttpException -> if (error.code == HTTP_TOO_MANY_REQUESTS) SourceFailureReason.RATE_LIMITED else SourceFailureReason.NETWORK
+            is IOException -> SourceFailureReason.NETWORK
+            else -> SourceFailureReason.PARSE
+        }
+        return SourceAdapterException(reason, error.message, error)
     }
 
     companion object {

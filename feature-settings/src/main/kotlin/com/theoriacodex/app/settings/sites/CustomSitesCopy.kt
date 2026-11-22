@@ -42,9 +42,6 @@ internal fun verificationAlreadyOpenMessage(host: String): String =
 
 internal const val VERIFICATION_INSTRUCTION =
     "Complete the site's check above. This closes by itself when Theoria gets through."
-internal const val BROWSER_UNAVAILABLE_MESSAGE = "The system browser isn't available right now."
-
-internal fun verificationLoadFailedMessage(host: String): String = "Couldn't load $host. Check your connection and try again."
 
 /** Names the shipped source when the id parses, e.g. "Danbooru is already built into Theoria." */
 internal fun alreadyBuiltInMessage(builtInSourceId: String): String =

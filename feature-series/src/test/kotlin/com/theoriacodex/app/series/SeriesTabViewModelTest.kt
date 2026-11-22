@@ -4,6 +4,9 @@ import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
+import com.theoriacodex.domain.adapter.BrowserCheck
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
@@ -28,6 +31,7 @@ import kotlinx.coroutines.test.setMain
 import androidx.lifecycle.SavedStateHandle
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -143,6 +147,43 @@ class SeriesTabViewModelTest {
     }
 
     @Test
+    fun aNextPageBehindABrowserCheckKeepsWhatLoadedAndSaysWhereToPassIt() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val check = BrowserCheck("https://site.test/search?page=2", "agent/1")
+        val source = Answering(pages = 2)
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) {}
+        advanceUntilIdle()
+        viewModel.search("one punch")
+        advanceUntilIdle()
+
+        source.failure = SourceAdapterException(SourceFailureReason.BROWSER_CHECK, browserCheck = check)
+        viewModel.searchMore(source.key)
+        advanceUntilIdle()
+
+        val listing = viewModel.state.value.search?.single()?.listing as SeriesListing.Loaded
+        assertEquals(listOf("/found"), listing.series.map { it.id.address })
+        assertEquals(check, listing.moreCheck)
+    }
+
+    @Test
+    fun aSourceBehindABrowserCheckSaysWhereItCanBePassedAndRetriesAfterIt() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val check = BrowserCheck("https://site.test/search", "agent/1")
+        val source = Answering().apply { failure = SourceAdapterException(SourceFailureReason.BROWSER_CHECK, browserCheck = check) }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) {}
+        advanceUntilIdle()
+        viewModel.search("one punch")
+        advanceUntilIdle()
+        assertEquals(check, (viewModel.state.value.search?.single()?.listing as SeriesListing.Failed).browserCheck)
+
+        source.failure = null
+        viewModel.retrySearch(source.key)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.state.value.search?.single()?.listing is SeriesListing.Loaded)
+    }
+
+    @Test
     fun theFilteredListingPagesLikePopularAndCountsWhatChanged() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val source = Answering(pages = 2)
@@ -245,6 +286,37 @@ class SeriesTabViewModelTest {
     }
 
     @Test
+    fun aBrowsedListingBehindABrowserCheckIsRetriedAsTheSameKindAndPage() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val check = BrowserCheck("https://site.test/latest", "agent/1")
+        val source = Answering(pages = 2)
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) {}
+        advanceUntilIdle()
+        source.failure = SourceAdapterException(SourceFailureReason.BROWSER_CHECK, browserCheck = check)
+        viewModel.choose(BrowseKind.Latest)
+        advanceUntilIdle()
+        assertEquals(check, (viewModel.state.value.browse?.listing as SeriesListing.Failed).browserCheck)
+
+        source.failure = null
+        viewModel.retryBrowse()
+        advanceUntilIdle()
+        assertEquals(listOf("latest"), browsed(viewModel))
+
+        source.failure = SourceAdapterException(SourceFailureReason.BROWSER_CHECK, browserCheck = check)
+        viewModel.browseMore()
+        advanceUntilIdle()
+        assertEquals(check, (viewModel.state.value.browse?.listing as SeriesListing.Loaded).moreCheck)
+
+        source.failure = null
+        viewModel.browseMore()
+        advanceUntilIdle()
+        val listing = viewModel.state.value.browse?.listing as SeriesListing.Loaded
+        assertEquals(listOf("latest", "latest"), browsed(viewModel))
+        assertEquals(null, listing.moreCheck)
+        assertEquals(false, listing.moreFailed)
+    }
+
+    @Test
     fun switchingSourceOrLeavingTheTabDropsTheFilters() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val offered = listOf(Answering(), Answering("custom_mihon_8"))
@@ -330,12 +402,16 @@ private class Answering(id: String = "custom_mihon_7", private val pages: Int = 
 
     /** What a page after the first waits for, when set. */
     var laterPagesWait: CompletableDeferred<Unit>? = null
+
+    /** What every listing throws, when set. */
+    var failure: Exception? = null
     override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>): SeriesPage {
         searchedWith += filters
         return listed(text, page)
     }
 
     private suspend fun listed(title: String, page: Int): SeriesPage {
+        failure?.let { throw it }
         if (page > 1) laterPagesWait?.await()
         return SeriesPage(listOf(Series(SeriesId(key, if (page == 1) "/found" else "/found$page"), title)), hasNextPage = page < pages)
     }

@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.customsites.CustomSiteSummary
 import com.theoriacodex.app.settings.ExpandableSection
+import com.theoriacodex.app.ui.components.AnnouncedText
 import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.domain.source.ProtocolFamily
 import com.theoriacodex.domain.source.SiteProfile
@@ -299,17 +300,6 @@ internal fun Progress(text: String) {
         CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
         Text(text, style = MaterialTheme.typography.bodyMedium)
     }
-}
-
-/** Status text that TalkBack reads when it appears or changes. */
-@Composable
-internal fun AnnouncedText(text: String, modifier: Modifier = Modifier, error: Boolean = false) {
-    Text(
-        text,
-        modifier = modifier.semantics { liveRegion = LiveRegionMode.Polite },
-        style = MaterialTheme.typography.bodyMedium,
-        color = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-    )
 }
 
 private val AddStage.knownFamily: ProtocolFamily?

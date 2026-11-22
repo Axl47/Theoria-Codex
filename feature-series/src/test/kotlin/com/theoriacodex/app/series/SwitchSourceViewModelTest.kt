@@ -1,6 +1,9 @@
 package com.theoriacodex.app.series
 
 import com.theoriacodex.data.repository.NoChaptersToMoveToException
+import com.theoriacodex.domain.adapter.BrowserCheck
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
@@ -72,6 +75,24 @@ class SwitchSourceViewModelTest {
 
         val found = viewModel.state.value.sheet!!.results.single().listing as SwitchListing.Found
         assertEquals(listOf("Hero"), found.matches.map { it.series.title })
+    }
+
+    @Test
+    fun aSourceBehindABrowserCheckSaysSoAndCanBeRetried() = runTest {
+        val checked = Finding("custom_mihon_2", listOf("Hero")).apply {
+            failure = SourceAdapterException(SourceFailureReason.BROWSER_CHECK, browserCheck = BrowserCheck("https://site.test/", "agent/1"))
+        }
+        val viewModel = viewModel(checked)
+        advanceUntilIdle()
+        viewModel.open("Hero")
+        advanceUntilIdle()
+        assertEquals(SwitchListing.Failed("Needs a browser check."), viewModel.state.value.sheet!!.results.single().listing)
+
+        checked.failure = null
+        viewModel.retry(checked.key)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.state.value.sheet!!.results.single().listing is SwitchListing.Found)
     }
 
     @Test
@@ -160,6 +181,9 @@ private class Finding(
     override val key = SourceKey.parseOrThrow(id)
     var chapters = 1
     var fails = false
+
+    /** What a search throws, when set. */
+    var failure: Exception? = null
     var counted = 0
 
     /** What a search waits for, when set; [cancelled] says whether a waiting search was cancelled. */
@@ -175,6 +199,7 @@ private class Finding(
             throw error
         }
         check(!fails)
+        failure?.let { throw it }
         return SeriesPage(titles.mapIndexed { index, title -> Series(SeriesId(key, "/$index"), title) }, hasNextPage = false)
     }
     override suspend fun details(series: Series) = series
