@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.ImageSearch
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.BugReport
@@ -89,6 +90,7 @@ fun SettingsScreen(
     storageSummary: String? = null,
     sites: SettingsSitesEntry? = null,
     backup: SettingsBackupEntry? = null,
+    pictures: SettingsPicturesEntry? = null,
     statsActions: StatsActions = StatsActions(),
     diagnostics: SettingsDiagnosticsEntry? = null,
     storageTools: (@Composable () -> Unit)? = null,
@@ -111,7 +113,9 @@ fun SettingsScreen(
         label = "Settings page",
     ) { page ->
         when (page) {
-            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, storageSummary, sites, backup, diagnostics != null, seriesUpdates, onClose, onOpenExtensions)
+            SettingsPage.HOME -> SettingsHome(
+                state, statistics, onAction, storageSummary, sites, backup, pictures, diagnostics != null, seriesUpdates, onClose, onOpenExtensions,
+            )
             SettingsPage.SITES -> sites?.page?.invoke(
                 openHome,
                 BuiltInAccounts(
@@ -137,6 +141,7 @@ fun SettingsScreen(
                 )
             }
             SettingsPage.DIAGNOSTICS -> diagnostics?.let { DiagnosticsPage(it, openHome) }
+            SettingsPage.PICTURE_TAGS -> pictures?.page?.invoke(openHome)
         }
     }
     ProfileDeleteDialog(state, onAction)
@@ -150,6 +155,7 @@ private fun SettingsHome(
     storageSummary: String?,
     sites: SettingsSitesEntry?,
     backup: SettingsBackupEntry?,
+    pictures: SettingsPicturesEntry?,
     showDiagnostics: Boolean,
     seriesUpdates: Boolean,
     onClose: () -> Unit,
@@ -175,7 +181,9 @@ private fun SettingsHome(
                 open(SettingsPage.STATS_COMPARE)
             })
         }
-        SettingsHomeGroups(state, onAction, storageSummary, sites, backup, showDiagnostics, seriesUpdates, onOpenExtensions) { sheet -> onAction(SettingsAction.OpenPage(SettingsPage.HOME, sheet)) }
+        SettingsHomeGroups(state, onAction, storageSummary, sites, backup, pictures, showDiagnostics, seriesUpdates, onOpenExtensions) { sheet ->
+            onAction(SettingsAction.OpenPage(SettingsPage.HOME, sheet))
+        }
         if (state.showDeveloperScenarios) DeveloperScenarios(state, onAction)
     }
     if (showAddProfile) {
@@ -279,6 +287,7 @@ private fun SettingsHomeGroups(
     storageSummary: String?,
     sites: SettingsSitesEntry?,
     backup: SettingsBackupEntry?,
+    pictures: SettingsPicturesEntry?,
     showDiagnostics: Boolean,
     seriesUpdates: Boolean,
     onOpenExtensions: (() -> Unit)?,
@@ -290,6 +299,12 @@ private fun SettingsHomeGroups(
         SettingsRow(SettingDestinations.Controls.title, "Search bar, seeking, swipes, rotation", Icons.Default.TouchApp, onClick = {
             onSheet(SettingsSheet.CONTROLS)
         })
+        pictures?.let {
+            SettingsRowDivider()
+            SettingsRow(SettingDestinations.PictureTags.title, it.summary, Icons.Default.ImageSearch, onClick = {
+                open(SettingsPage.PICTURE_TAGS)
+            })
+        }
     }
     SettingsGroup("Storage & app") {
         SettingsRow(

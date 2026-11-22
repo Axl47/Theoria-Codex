@@ -6,9 +6,11 @@ import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.media.LibraryPictureBackfill
 import com.theoriacodex.app.media.loadPreviewStill
 import com.theoriacodex.app.media.postPreviewImageCandidate
+import com.theoriacodex.data.repository.VisionProgress
 import com.theoriacodex.data.repository.VisualSignatureRepository
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.Flow
 import okhttp3.OkHttpClient
 
 /**
@@ -20,6 +22,8 @@ class AppPictures(
     val tagger: PictureTagger,
     private val hashes: LibraryPictureBackfill,
     val tags: LibraryVisionBackfill,
+    /** How many Library posts the current model has analysed, out of how many. */
+    val progress: Flow<VisionProgress>,
 ) {
     /** Hashes, then tags, the Library's pictures that lack either; returns whether tagging has more left. */
     suspend fun indexLibrary(): Boolean {
@@ -57,7 +61,7 @@ fun appPictures(
     )
     val power = app.getSystemService(PowerManager::class.java)
     val tags = LibraryVisionBackfill(tagger, signatures) { power.currentThermalStatus >= PowerManager.THERMAL_STATUS_MODERATE }
-    return AppPictures(model, tagger, hashes, tags)
+    return AppPictures(model, tagger, hashes, tags, signatures.observeVisionProgress(model.id))
 }
 
 /** The model reads 448 px squares; decoding the preview larger only costs memory. */
