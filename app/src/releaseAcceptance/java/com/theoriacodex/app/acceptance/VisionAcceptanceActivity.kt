@@ -21,6 +21,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.normalizeMatchToken
+import com.theoriacodex.domain.vision.PictureLook
 import com.theoriacodex.domain.vision.PredictedTagIndex
 import com.theoriacodex.domain.vision.PredictedTagUse
 import com.theoriacodex.domain.vision.tokens
@@ -127,7 +128,7 @@ private class VisionPhases(private val container: TheoriaAppContainer, private v
         check(untagged.canonicalTags.isEmpty() && untagged.rawTags.isEmpty())
         val rules = mapOf(SourceKey.DANBOORU to setOf(normalizeMatchToken("no_humans")))
         check(!untagged.hiddenBy(rules, null)) { "hidden without a prediction" }
-        val predicted = pictures.tagger.tagsFor(untagged)
+        val predicted = (pictures.tagger.look(untagged) as? PictureLook.Seen)?.tags.orEmpty()
         check(untagged.hiddenBy(rules, predicted)) { "not hidden; ${predicted.size} predictions" }
         return "hiddenPredictions=${predicted.size}"
     }

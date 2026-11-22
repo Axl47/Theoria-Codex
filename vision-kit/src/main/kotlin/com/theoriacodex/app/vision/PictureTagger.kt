@@ -8,6 +8,7 @@ import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.tags.normalizeMatchToken
+import com.theoriacodex.domain.vision.PictureLook
 import com.theoriacodex.domain.vision.PictureTags
 import com.theoriacodex.domain.vision.PredictedTag
 import com.theoriacodex.domain.vision.PredictedTagIndex
@@ -107,7 +108,12 @@ class PictureTagger(
         }
     }
 
-    override suspend fun tagsFor(post: Post): List<PredictedTag> = (analyze(post) as? PictureResult.Analysed)?.tags.orEmpty()
+    override suspend fun look(post: Post): PictureLook = when (val result = analyze(post)) {
+        is PictureResult.Analysed -> PictureLook.Seen(result.tags)
+        PictureResult.Unanalysable -> PictureLook.Seen(emptyList())
+        PictureResult.Unreachable -> PictureLook.Unseen
+        PictureResult.Unavailable -> PictureLook.Blind
+    }
 
     /** What this session already learned about [postId]'s picture, without analysing it. */
     fun remembered(postId: PostId): PictureResult? = session.value[postId]

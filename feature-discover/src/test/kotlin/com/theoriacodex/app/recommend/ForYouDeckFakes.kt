@@ -26,6 +26,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.domain.orchestration.UnifiedSearchResult
+import com.theoriacodex.domain.vision.PictureLook
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CompletableDeferred
@@ -203,7 +204,8 @@ internal fun deckWiring(
 
 /**
  * A picture tagger that predicts [predicted] for a post (nothing for the rest) and answers at once, or once [release]d
- * while [held]. [asked] lists every post it tagged, in order.
+ * while [held]. Posts in [unseen] fail to load and, while [blind], the model will not load. [asked] lists every post it
+ * tagged, in order.
  */
 internal class FakePictureTags(ready: Boolean = true, private val predicted: Map<String, List<PredictedTag>> = emptyMap()) : PictureTags {
     override val ready = MutableStateFlow(ready)
@@ -211,16 +213,19 @@ internal class FakePictureTags(ready: Boolean = true, private val predicted: Map
     override val library = MutableStateFlow(PredictedTagIndex.Empty)
     val asked = mutableListOf<String>()
     var held: CompletableDeferred<Unit>? = null
+    var unseen: Set<String> = emptySet()
+    var blind = false
 
     fun release() = held?.complete(Unit)
 
-    override suspend fun tagsFor(post: Post): List<PredictedTag> {
-        if (!ready.value) return emptyList()
+    override suspend fun look(post: Post): PictureLook {
+        if (!ready.value || blind) return PictureLook.Blind
         held?.await()
+        if (post.id.sourcePostId in unseen) return PictureLook.Unseen
         asked += post.id.sourcePostId
         val tags = predicted[post.id.sourcePostId].orEmpty()
         index.value = index.value.copy(byPost = index.value.byPost + (post.id to tags))
-        return tags
+        return PictureLook.Seen(tags)
     }
 }
 

@@ -33,6 +33,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.normalizeMatchToken
+import com.theoriacodex.domain.vision.PictureLook
 import com.theoriacodex.domain.vision.PredictedTag
 import java.util.IdentityHashMap
 import java.util.UUID
@@ -43,6 +44,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -388,15 +390,23 @@ class ForYouDeckViewModel(
     /**
      * Tags the pictures [mix]'s lanes hold, the lane with the fewest vetted posts first, [VET_AHEAD] posts ahead of the
      * deal (all of them while a deal waits). Each tagged post joins its lane's buffer unless a hidden tag now catches it,
-     * and a deal that came up short deals again. Once vetting stops ([vetsPictures]) what is left passes on what is
-     * known. Does nothing while it already runs; every [refill] starts it again.
+     * and a deal that came up short deals again. A post whose preview did not load is left out, since its picture may
+     * carry a hidden tag; while the model will not load, vetting waits and tries again rather than pass anything. Once
+     * vetting stops ([vetsPictures]) what is left passes on what is known. Does nothing while it already runs; every
+     * [refill] starts it again.
      */
     private fun vet(mix: ForYouMix) {
         if (vetting?.isActive == true) return
         vetting = workScope.launch {
             while (true) {
                 val (lane, post) = mix.nextToVet(VET_AHEAD) ?: break
-                lane.vetted(post, shows(post, if (vetsPictures) wiring.pictures.tagsFor(post) else wiring.pictures.index.value[post.id]))
+                if (!vetsPictures) {
+                    lane.vetted(post, shows(post))
+                } else when (val look = wiring.pictures.look(post)) {
+                    is PictureLook.Seen -> lane.vetted(post, shows(post, look.tags))
+                    PictureLook.Unseen -> lane.vetted(post, shows = false)
+                    PictureLook.Blind -> delay(BLIND_RETRY_MS)
+                }
                 if (mix.wanted) makeUp(mix) else publish()
             }
         }
@@ -653,13 +663,17 @@ class ForYouDeckViewModel(
         val fresh = mutableListOf<DeckCard>()
         for (card in candidates) {
             if (fresh.size == INJECTED) break
-            if (shows(card.post, wiring.pictures.tagsFor(card.post))) fresh += card
+            val look = wiring.pictures.look(card.post)
+            if (look is PictureLook.Seen && shows(card.post, look.tags)) fresh += card
         }
         return fresh
     }
 
     private companion object {
         const val DECK_DEAL = 4
+
+        /** How long vetting waits before asking a model that would not load again. */
+        const val BLIND_RETRY_MS = 5_000L
         const val GRID_DEAL = 12
 
         /** The Mix deck asks for the next deal with this many cards left. */

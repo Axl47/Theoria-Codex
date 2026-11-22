@@ -22,7 +22,9 @@ import org.junit.Test
 class ForYouDeckVettingTest {
     private val engine = FakeForYouEngine(listOf("a", "b", "c"))
 
-    @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
+    private val main = UnconfinedTestDispatcher()
+
+    @Before fun setUp() = Dispatchers.setMain(main)
 
     private val writeScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
@@ -96,6 +98,24 @@ class ForYouDeckVettingTest {
 
         assertTrue(owner.posts.isNotEmpty())
         assertFalse("b-0-0" in owner.ids)
+    }
+
+    @Test fun `a post whose preview did not load is left out, since its picture may carry a hidden tag`() {
+        val pictures = FakePictureTags().apply { unseen = setOf("a-0-1") }
+        val owner = owner(pictures)
+        assertEquals(4, owner.posts.size)
+        assertFalse("a-0-1" in owner.ids)
+    }
+
+    @Test fun `nothing is dealt while the model will not load, and dealing resumes once it does`() {
+        val pictures = FakePictureTags().apply { blind = true }
+        val owner = owner(pictures)
+        assertEquals(emptyList<Post>(), owner.posts)
+
+        pictures.blind = false
+        main.scheduler.advanceTimeBy(10_000)
+        main.scheduler.runCurrent()
+        assertEquals(4, owner.posts.size)
     }
 
     @Test fun `without the tagger the Mix deals as before and tags nothing`() {

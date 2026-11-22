@@ -21,9 +21,21 @@ data class PredictedTagIndex(
     }
 }
 
+/** What the picture tagger could tell about one post's picture. */
+sealed interface PictureLook {
+    /** The picture's predicted tags; empty when there is no still picture to read. */
+    data class Seen(val tags: List<PredictedTag>) : PictureLook
+
+    /** The preview did not load, so nothing is known about the picture now. */
+    data object Unseen : PictureLook
+
+    /** The model is absent or would not load: no picture can be read now. */
+    data object Blind : PictureLook
+}
+
 /**
  * The opt-in picture tagger as features see it. While its model is absent, [ready] is false, [index] is empty and
- * [tagsFor] answers nothing, so every feature behaves as it did before the tagger existed.
+ * [look] is [PictureLook.Blind], so every feature behaves as it did before the tagger existed.
  */
 interface PictureTags {
     /** Whether the model is downloaded and verified. */
@@ -36,16 +48,16 @@ interface PictureTags {
     val library: StateFlow<PredictedTagIndex>
 
     /**
-     * [post]'s predicted tags, analysing its picture when this session has not yet (about half a second). Empty when
-     * the model is absent or the picture cannot be read, so a caller waiting on it never waits twice for one post.
+     * What [post]'s picture shows, analysing it when this session has not yet (about half a second); an answer other
+     * than [PictureLook.Seen] is not remembered, so asking again tries again.
      */
-    suspend fun tagsFor(post: Post): List<PredictedTag>
+    suspend fun look(post: Post): PictureLook
 
     /** No tagger: for builds and tests without one. */
     object None : PictureTags {
         override val ready: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
         override val index: StateFlow<PredictedTagIndex> = MutableStateFlow(PredictedTagIndex.Empty).asStateFlow()
         override val library: StateFlow<PredictedTagIndex> get() = index
-        override suspend fun tagsFor(post: Post): List<PredictedTag> = emptyList()
+        override suspend fun look(post: Post): PictureLook = PictureLook.Blind
     }
 }
