@@ -51,6 +51,7 @@ suspend fun SeriesRepository.switchSource(
 fun StoredSeries.withSettingsOf(from: StoredSeries): StoredSeries = copy(
     followed = followed || from.followed,
     readingMode = from.readingMode ?: readingMode,
+    downloadNewChapters = downloadNewChapters || from.downloadNewChapters,
 )
 
 /**
