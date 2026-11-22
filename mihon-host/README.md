@@ -4,6 +4,25 @@ A debug-only experiment: load a [Mihon](https://github.com/mihonapp/mihon) manga
 Theoria source. It exists to answer one question: how much of Mihon's run-time must Theoria provide before the
 extension ecosystem works here? The answer and the measurements are below. Release builds contain none of this.
 
+## Verdict
+
+Hosting the ecosystem is feasible, and the host is small: about 1,000 lines, of which 450 are Theoria's own and the
+rest is Mihon's API trimmed to what extensions call. An unmodified MangaDex extension lists series, opens one and
+shows its pages in the real Viewer. Of 10 other extensions tried, 7 listed, opened and fetched a page unchanged.
+
+Three costs decide whether to build it, and none of them is solved here:
+
+- **Settings.** 30% of extensions have a settings screen built on `androidx.preference`, which Theoria does not
+  ship. They cannot load until the host provides it, and some need their settings to work at all (a site address, a
+  login).
+- **Release size.** Extensions call OkHttp, Okio, kotlinx and Jsoup by name, so R8 must keep those libraries whole.
+  Measured on the release build: 10.3 MB grows to 15.0 MB (+46%), or 17.8 MB (+73%) if the Kotlin standard library
+  is kept whole too. About 3 MB of that is the zstd decoder Mihon's HTTP client includes.
+- **Trust.** Extension code runs inside the app with its files, cookies and saved keys, and nothing checks who
+  signed it. A real feature needs a trusted-signer list at least.
+
+The product work is on top: a series is a single post here, with no chapter list, progress or library.
+
 ## How it works
 
 A Mihon extension is an APK that is never installed. The host app reads its manifest, loads its classes, and calls
@@ -83,29 +102,37 @@ source's client; so does this host.
 
 **Timings on an emulator (MangaDex).** Load the APK: 45 ms. Popular listing: 1 request, about 1 s. Open a series
 (details, chapter list, page list): 4 requests, about 1.5 s alone. In the app, opening a series right after a listing
-took 7 to 10 s: the 20 covers go through the same rate-limited client, and the Viewer also resolves the next post.
+took 4 to 12 s: the covers go through the same rate-limited client, and the Viewer also resolves the next post.
+
+**Ten more extensions through the harness.** Seven listed, opened a series and fetched a page image. One more did
+after a host fix (its details page returns no title, which Mihon tolerates), though the site's own image link was
+dead. One sits behind a browser challenge, which needs the missing Cloudflare support. One gets HTTP 403 for page
+images through its own client while a plain request succeeds; whether Mihon gets the same was not checked.
+
+**How the sample was measured.** The 300 were drawn at random from the index (seed 20261122). Each APK's references
+to classes, methods and fields outside itself were resolved against the debug app's own code and the Android
+framework. The scripts are not in the repository: they depend on the index, which is not linked here.
 
 ## What is missing
 
-This is what a real feature would have to add; none of it is needed to answer the spike's question.
+Besides the three costs above, this is what a real feature would have to add.
 
 - **A series model.** A series here is one post showing its first chapter. No chapter list, no reading progress, no
   library, no updates.
 - **Search filters.** Each extension defines its own filters (genre, status, sort). Only popular, latest and free
   text are used. Posts carry no tags.
-- **Extension settings.** `androidx.preference` is absent, so the 30% of extensions with a settings screen fail to
-  load, and the rest run on their defaults. MangaDex writes its settings into the app's default preferences file.
+- **Extension settings.** The extensions that do load run on their defaults. MangaDex writes its settings into the
+  app's default preferences file.
 - **Cloudflare.** `CloudflareInterceptor` is an empty stand-in. A site behind a browser challenge answers 403.
 - **A JavaScript engine, protobuf and extra image decoders**, used by about 2% of extensions.
-- **Installing, updating and trusting extensions.** There is no repository browser, no update check, and no signer
-  check beyond logging the fingerprint. Extension code is unsandboxed: it can read the app's files and cookies.
-- **Release builds.** R8 would rename or remove the libraries extensions link against (OkHttp, Okio, kotlinx,
-  Jsoup). Shipping this needs keep rules for their public API and a size measurement.
+- **Installing and updating extensions.** There is no repository browser and no update check.
+- **Other extension API versions.** Only extension API 1.6 loads, which is all the index held.
 - **Saved posts.** A page address can expire within minutes (MangaDex). A post reopened later from history keeps its
   old page addresses; it would have to be resolved again.
 - **The source logo.** The picker's icon is the site's favicon, fetched by the app's own client; MangaDex bot-checks
   it, so the text logo shows instead.
 - **Cancellation.** An image fetch that the app cancels still runs to completion on the extension's client.
+- **Pages that share an address.** A source whose pages differ only in the request body would show one image for all.
 
 ## Removing it
 
