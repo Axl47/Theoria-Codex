@@ -165,6 +165,8 @@ test_tasks=(
   :app-logic:test
   :core-data-android:testDebugUnitTest
   :core-data-android:compileDebugAndroidTestKotlin
+  :mihon-host:testDebugUnitTest
+  :mihon-host:compileDebugAndroidTestKotlin
   :ui-kit:testDebugUnitTest
   :media-kit:testDebugUnitTest
   :feed-kit:testDebugUnitTest
@@ -183,6 +185,7 @@ detekt_tasks=(
   :app:detektDebug
   :app-logic:detektMain
   :core-data-android:detektDebug
+  :mihon-host:detektDebug
   :ui-kit:detektDebug
   :media-kit:detektDebug
   :feed-kit:detektDebug
@@ -196,7 +199,7 @@ detekt_tasks=(
   :core-sources:detektMain
   :core-stubs:detektMain
 )
-lint_tasks=(:app:lint :core-data-android:lintDebug :ui-kit:lintDebug :media-kit:lintDebug :feed-kit:lintDebug :feature-viewer:lintDebug :feature-search:lintDebug :feature-library:lintDebug :feature-discover:lintDebug :feature-settings:lintDebug)
+lint_tasks=(:app:lint :core-data-android:lintDebug :mihon-host:lintDebug :ui-kit:lintDebug :media-kit:lintDebug :feed-kit:lintDebug :feature-viewer:lintDebug :feature-search:lintDebug :feature-library:lintDebug :feature-discover:lintDebug :feature-settings:lintDebug)
 # Everything lint shares with the tests and Detekt: all compilation and code generation. Once these
 # are built, a lint build and a tests-and-Detekt build have no task left in common, so the two can
 # run at the same time without writing the same output or reading sources mid-generation.
@@ -210,6 +213,10 @@ shared_tasks=(
   :core-data-android:compileDebugUnitTestJavaWithJavac
   :core-data-android:compileDebugAndroidTestKotlin
   :core-data-android:bundleLibRuntimeToJarDebug
+  :mihon-host:compileDebugUnitTestKotlin
+  :mihon-host:compileDebugUnitTestJavaWithJavac
+  :mihon-host:compileDebugAndroidTestKotlin
+  :mihon-host:bundleLibRuntimeToJarDebug
   :ui-kit:compileDebugUnitTestKotlin
   :ui-kit:compileDebugUnitTestJavaWithJavac
   :ui-kit:bundleLibRuntimeToJarDebug

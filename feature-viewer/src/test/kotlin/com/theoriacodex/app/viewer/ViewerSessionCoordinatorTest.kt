@@ -75,6 +75,15 @@ class ViewerSessionCoordinatorTest {
     }
 
     @Test
+    fun `a gallery of unknown length resolves lazily whatever its source until it has a media url`() {
+        val listing = samplePost(source = SourceKey.PIXIV).copy(galleryLengthUnknown = true)
+        val opened = listing.copy(full = ImageRef(url = "https://example.com/1.jpg", localPath = null, mime = "image/jpeg"))
+
+        assertTrue(requiresLazyMediaResolution(listing))
+        assertFalse(requiresLazyMediaResolution(opened))
+    }
+
+    @Test
     fun `requires lazy media resolution for refreshable remote video posts`() {
         assertTrue(
             requiresLazyMediaResolution(

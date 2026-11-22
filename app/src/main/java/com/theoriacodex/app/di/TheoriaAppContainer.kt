@@ -1,5 +1,6 @@
 package com.theoriacodex.app.di
 
+import android.app.Application
 import com.theoriacodex.app.media.NetworkMonitor
 import com.theoriacodex.app.network.AppHttpClients
 import android.content.Context
@@ -114,10 +115,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -218,6 +223,7 @@ internal class DefaultTheoriaAppContainer(
     context: Context,
     private val cookieBridge: SiteCookieBridge,
     private val httpClients: AppHttpClients,
+    private val extensionHost: ExtensionSourceHost? = null,
 ) : TheoriaAppContainer {
     private val appContext = context.applicationContext
     private val storageDirectory = File(appContext.filesDir, "theoria_codex")
@@ -292,6 +298,7 @@ internal class DefaultTheoriaAppContainer(
         ),
         scope = durableStoreScope,
         publishMediaKeys = cookieBridge::updateMediaKeys,
+        extensionSources = extensionSources(extensionHost, appContext),
     )
     /** Opened at the end of [awaitDurableStores]: restored downloads and offline jobs wait on it. */
     private val sourceReadiness = SourceReadiness(accountStore::refreshAvailability) { customSourceRuntime.awaitFirstBuild() }
@@ -564,6 +571,8 @@ internal class DefaultTheoriaAppContainer(
         offlineCatalogReady.await()
         // Registers the saved offline queue before any screen can add to it; its jobs wait on sourceReadiness.
         offlineMedia.recoverPendingJobs()
+        // Search restores its last source as soon as the app is ready, so extension sources must be registered by then.
+        if (extensionHost != null) customSourceRuntime.awaitFirstBuild()
         sourceReadiness.open()
         // Off the startup path: searched-tag suggestions start from what Recents remembers.
         durableStoreScope.launch {
@@ -578,3 +587,12 @@ private fun siteHosts(profiles: List<SiteProfile>): Set<String> = profiles.mapTo
 
 /** Matches the built-in client's read timeout; probes keep the custom client's 10 s default. */
 private const val CUSTOM_SITE_READ_TIMEOUT_MS = 20_000
+
+/**
+ * Extension code loads off the main thread. The first source snapshot waits for it, so a search or download restored
+ * at startup finds its extension source already registered.
+ */
+private fun extensionSources(host: ExtensionSourceHost?, appContext: Context): Flow<List<ExtensionSource>> {
+    if (host == null) return flowOf(emptyList())
+    return flow { emit(host.load(appContext as Application)) }.flowOn(Dispatchers.IO)
+}
