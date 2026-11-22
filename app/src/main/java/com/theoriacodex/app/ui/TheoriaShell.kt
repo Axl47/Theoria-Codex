@@ -387,7 +387,7 @@ internal class TheoriaShell(
         val origin = if (navigation.currentRoute == AppRoute.CreatorProfile) {
             "Creator profile"
         } else when (navigation.homeTabRoute) {
-            TopLevelDestination.ForYou.route -> "FYP"
+            TopLevelDestination.ForYou.route -> "For You"
             TopLevelDestination.Library.route -> "Library"
             else -> "Search"
         }

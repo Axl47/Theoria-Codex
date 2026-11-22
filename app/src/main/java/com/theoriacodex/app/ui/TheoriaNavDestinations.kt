@@ -367,7 +367,7 @@ private suspend fun TheoriaShell.viewerDownloadOrigin(): String {
     val launch = routes.viewer.current?.session?.value?.context
     return when (launch?.streamSource) {
         ViewerStreamSource.SEARCH, ViewerStreamSource.TRAIL -> "Search"
-        ViewerStreamSource.FOR_YOU -> "FYP"
+        ViewerStreamSource.FOR_YOU -> "For You"
         ViewerStreamSource.CODEX -> {
             val id = launch.queryHash.removePrefix("codex:")
             val name = data.codexRepository.observeCodices().first().firstOrNull { it.codexId == id }?.name
