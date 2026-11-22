@@ -20,6 +20,7 @@ import com.theoriacodex.domain.series.Series
 import java.util.regex.Pattern
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -67,8 +68,11 @@ class ExtensionSourceLiveTest {
 
         val chapter = continueChapter(listed)
         tap("the button that starts reading", By.text(Pattern.compile("Start|Continue · .*")))
-        waitFor("the chapter's name as the Viewer's title", By.text("${listed.title} · ${chapter.entry.name}"), RESULTS_TIMEOUT_MS)
+        viewerControl("the chapter's name as the Viewer's title", By.text("${listed.title} · ${chapter.entry.name}"))
         val pages = pageTile(1).contentDescription.substringAfterLast(' ').toInt()
+        // The controls are showing here; a chapter is not a post to like or save to a Codex.
+        assertNull("A chapter offers no Like", device.findObject(By.desc("Like post")))
+        assertNull("A chapter offers no Save", device.findObject(By.desc("Save to Codex")))
         report("viewer", "title names \"${chapter.entry.name}\" pages=$pages")
         assertTrue("A chapter has pages", pages > 0)
 
@@ -78,7 +82,8 @@ class ExtensionSourceLiveTest {
         device.pressBack()
 
         tap("Continue naming the chapter left unfinished", By.text("Continue · ${chapter.entry.name}"))
-        assertTrue("Continue resumes on page $target", pageTile(target).isSelected)
+        // The top bar counts the page on screen; the chapter opens on its first page until its pages arrive.
+        viewerControl("page $target as the page Continue resumes on", By.textEndsWith("$target / $pages"))
         report("resume", "Continue reopened \"${chapter.entry.name}\" on page $target of $pages")
         device.pressBack()
 
@@ -128,17 +133,20 @@ class ExtensionSourceLiveTest {
         }
     }
 
+    /** The page strip's tile for [page] of the open chapter. */
+    private fun pageTile(page: Int): UiObject2 = viewerControl("the tile for page $page", By.descStartsWith("Go to page $page of "))
+
     /**
-     * The page strip's tile for [page] of the open chapter. The Viewer hides its controls after a few seconds, often
-     * before a chapter's pages have arrived, so each wait that finds no tile taps the page to bring them back.
+     * One of the Viewer's controls. The Viewer hides them after a few seconds, often before a chapter's pages have
+     * arrived, so each wait that finds none taps the page to bring them back.
      */
-    private fun pageTile(page: Int): UiObject2 {
+    private fun viewerControl(what: String, selector: BySelector): UiObject2 {
         val deadline = System.currentTimeMillis() + RESULTS_TIMEOUT_MS
         while (System.currentTimeMillis() < deadline) {
-            device.wait(Until.findObject(By.descStartsWith("Go to page $page of ")), CONTROLS_WAIT_MS)?.let { return it }
+            device.wait(Until.findObject(selector), CONTROLS_WAIT_MS)?.let { return it }
             device.click(device.displayWidth / 2, device.displayHeight / 2)
         }
-        error("The Viewer showed no tile for page $page; on screen: ${screenText()}")
+        error("The Viewer did not show $what; on screen: ${screenText()}")
     }
 
     private fun waitFor(what: String, selector: BySelector, timeoutMs: Long = UI_TIMEOUT_MS): UiObject2 =

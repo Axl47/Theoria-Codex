@@ -312,7 +312,7 @@ private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
         { owner -> if (owner != null) routes.viewer.publish(owner.also { published = it }) else published?.let(routes.viewer::withdraw) }
     }
     // A series session reads every chapter in the series' mode and shows none of the collecting controls.
-    val seriesSession = shell.viewerSessions.session.value?.takeIf { it.context.streamSource == ViewerStreamSource.SERIES }
+    val seriesSession = routes.viewer.current?.session?.collectAsState()?.value?.takeIf { it.context.streamSource == ViewerStreamSource.SERIES }
     val seriesMode by remember(seriesSession?.context?.queryHash) {
         seriesSession?.let { shell.seriesReader?.readingMode(it) } ?: emptyFlow()
     }.collectAsState(initial = null)
