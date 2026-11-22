@@ -23,6 +23,7 @@ import com.theoriacodex.app.codex.LocalQuickSave
 import com.theoriacodex.app.codex.NewCodexOpener
 import com.theoriacodex.app.triage.TriageCardSupport
 import com.theoriacodex.app.triage.TriageChoice
+import com.theoriacodex.app.triage.TriageDeck
 import com.theoriacodex.app.triage.TriageDeckCallbacks
 import com.theoriacodex.app.triage.TriageDeckScreen
 import com.theoriacodex.app.triage.TriageDeckViewModel
@@ -135,7 +136,7 @@ internal fun TriageDestination(shell: TheoriaShell, request: TriageRequest) {
             feed, ShellTriageActions(shell), quickSave, query, fromForYou, handOff.viewModelScope, shell.triageRemoval(request),
         )
     }
-    val deck by owner.state.collectAsStateWithLifecycle()
+    val deck by owner.deck.state.collectAsStateWithLifecycle()
     // While the grid filters by length, the deck resolves the lengths of the owner's posts it has yet to show.
     val candidates by remember(feed, seed) { if (seed.lengthFilterActive) feed.candidates else flowOf(emptyList()) }
         .collectAsStateWithLifecycle(emptyList())
@@ -166,10 +167,10 @@ internal fun TriageDestination(shell: TheoriaShell, request: TriageRequest) {
             recoverPostMedia = shell.features.search::recoverPostMedia,
         )
         TriageDeckScreen(
-            viewModel = owner,
+            deck = owner.deck,
             query = query,
             support = support,
-            callbacks = shell.triageCallbacks(request, seed, query, owner, LocalNewCodexOpener.current),
+            callbacks = shell.triageCallbacks(request, seed, query, owner.deck, LocalNewCodexOpener.current),
         )
     }
 }
@@ -183,7 +184,7 @@ private fun TheoriaShell.triageCallbacks(
     request: TriageRequest,
     seed: TriageSeed,
     query: Query?,
-    deck: TriageDeckViewModel,
+    deck: TriageDeck,
     newCodex: NewCodexOpener,
 ): TriageDeckCallbacks {
     val save = { post: Post -> { codex: ChosenCodex -> deck.decide(TriageChoice.Save(codex), post.id) } }

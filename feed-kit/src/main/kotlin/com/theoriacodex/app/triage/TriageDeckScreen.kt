@@ -54,26 +54,34 @@ class TriageCardSupport(
  * The triage deck: one full-width feed card at a time under a bar with a close control, the position ("14 / 60")
  * and Undo. Drag the card right to like, left to skip (on a Codex: right keeps, left removes), up to save, down to hide;
  * [query] is the origin feed's search, which ranks Codices and keeps its own tags out of what the deck offers to hide.
+ *
+ * An owner that dresses the deck differently replaces the bar with [topBar], draws [cardFooter] under each card's
+ * media (in a band [TRIAGE_CARD_FOOTER_HEIGHT] tall, so cards keep their size), and replaces "No more posts" with
+ * [endContent]. Without them the deck closes through [TriageDeckCallbacks.onClose].
  */
 @Composable
 fun TriageDeckScreen(
-    viewModel: TriageDeckViewModel,
+    deck: TriageDeck,
     query: Query?,
     support: TriageCardSupport,
     callbacks: TriageDeckCallbacks,
+    modifier: Modifier = Modifier,
+    topBar: (@Composable (deck: TriageDeckState, onUndo: () -> Unit) -> Unit)? = null,
+    cardFooter: (@Composable (Post) -> Unit)? = null,
+    endContent: (@Composable () -> Unit)? = null,
 ) {
-    val deck by viewModel.state.collectAsStateWithLifecycle()
+    val state by deck.state.collectAsStateWithLifecycle()
     // The shell's scaffold already insets its content for the system bars.
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        TriageTopBar(deck, callbacks.onClose, viewModel::undo)
+    Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        if (topBar != null) topBar(state, deck::undo) else TriageTopBar(state, callbacks.onClose, deck::undo)
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
-                deck.current != null -> TriageDeckArea(deck, viewModel, query, support, callbacks)
-                deck.finished -> TriageEnd(callbacks.onClose)
-                deck.needsRetry -> TriageRetry(viewModel::retryPage)
+                state.current != null -> TriageDeckArea(state, deck, query, support, callbacks, cardFooter)
+                state.finished -> if (endContent != null) endContent() else TriageEnd(callbacks.onClose)
+                state.needsRetry -> TriageRetry(deck::retryPage)
                 else -> CircularProgressIndicator(Modifier.align(Alignment.Center))
             }
-            TriageConfirmation(deck.notice)
+            TriageConfirmation(state.notice)
         }
     }
 }
