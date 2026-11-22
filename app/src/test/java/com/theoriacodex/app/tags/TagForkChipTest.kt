@@ -1,6 +1,7 @@
 package com.theoriacodex.app.tags
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithText
@@ -10,7 +11,10 @@ import com.theoriacodex.app.search.state.emptySearchQuery
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -49,14 +53,32 @@ class TagForkChipTest {
         assertEquals(listOf("cat") to listOf("cat"), forked to included)
     }
 
-    private fun post() = Post(
+    @Test
+    fun `a forking chip for a tag the level searches shows as required, and the others as not in search`() {
+        val level = Query(QueryMode.Unified, listOf("cat"), listOf("dog"), SortMode.NEWEST, null, null)
+        compose.setContent {
+            MaterialTheme {
+                PostTagActionSection(
+                    post = post(listOf("cat", "dog", "fox")),
+                    draftQuery = emptySearchQuery(),
+                    onFavoriteTagLongPress = null,
+                    sheetExtras = PostTagSheetExtras(tagsInitiallyCollapsed = false, onFork = {}, levelQuery = level),
+                )
+            }
+        }
+
+        fun state(tag: String) = compose.onNodeWithText(tag).fetchSemanticsNode().config[SemanticsProperties.StateDescription]
+        assertEquals(listOf("Required", "Excluded", "Not in search"), listOf(state("cat"), state("dog"), state("fox")))
+    }
+
+    private fun post(tags: List<String> = listOf("cat")) = Post(
         id = PostId(SourceKey.GELBOORU, "1"),
         preview = ImageRef("https://example.test/preview.jpg", null, "image/jpeg"),
         full = null,
         pageUrl = null,
         width = null,
         height = null,
-        canonicalTags = listOf("cat"),
+        canonicalTags = tags,
         rawTags = emptyList(),
         authorName = null,
         createdAtEpochMs = null,

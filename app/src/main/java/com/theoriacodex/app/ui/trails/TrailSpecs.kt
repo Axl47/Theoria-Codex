@@ -5,6 +5,7 @@ import com.theoriacodex.app.codex.SavedSearchFeedLoader
 import com.theoriacodex.app.codex.SavedSearchQueryBranch
 import com.theoriacodex.app.related.RelatedPostsLoading
 import com.theoriacodex.app.media.AnimatedDurationRange
+import com.theoriacodex.app.post.PostTagSelection
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.ui.navigation.TrailRequest
@@ -16,6 +17,8 @@ import com.theoriacodex.domain.model.MediaFilter
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.query.SearchTermLimit
@@ -54,10 +57,15 @@ internal fun trailSpec(
 }
 
 /**
- * One tag, searched where the level it came from searched (everywhere for a Unified level, else the post's own source)
- * and under that level's filters: its sort, dates and, where it searched the same place, its exclusions. It asks for
- * animated posts when the level's query did or the level shows only animated posts ([animatedOnly]); a Creator or
- * Similar level has no query to say so. A single-source trail drops the exclusions that would overrun [termLimit].
+ * The level's search narrowed by one more tag: [tag], ahead of the include groups of the [context] level it came from
+ * (nothing is added twice), searched where that level searched (everywhere for a Unified level, else the post's own
+ * source) under its filters: sort, dates and, where it searched the same place, its exclusions, minus [tag] itself. A
+ * tag forked again from the trail narrows again. It asks for animated posts when the level's query did or the level
+ * shows only animated posts ([animatedOnly]); a Creator or Similar level has no query, so it searches [tag] alone.
+ *
+ * [tag] leads because a term limit keeps the leading groups: a single-source trail over [termLimit] keeps [tag], then
+ * the level's groups in order, then the exclusions that fit, and each source of a Unified trail does the same with its
+ * own limit.
  */
 internal fun trailTagQuery(
     tag: String,
@@ -67,15 +75,18 @@ internal fun trailTagQuery(
     termLimit: SearchTermLimit? = null,
 ): Query {
     val mode = if (context?.mode == QueryMode.Unified) QueryMode.Unified else QueryMode.Source(source)
-    // Another source's exclusions may name tags this one spells differently, so they stay with their level.
-    val excluded = if (context != null && context.mode == mode) {
-        context.excludeTerms.filterNot { it.value.equals(tag, ignoreCase = true) }
-    } else {
-        emptyList()
-    }
+    // Another source's terms may name tags this one spells differently, so they stay with their level.
+    val level = context?.takeIf { it.mode == mode }
+    val tapped = SearchTerm(tag)
+    // Matched as the source matches terms, so a typed term such as artist:foo is not taken for a plain foo.
+    val selection = level?.let { PostTagSelection(source, it.includeTerms, it.excludeTerms) }
+    val excluded = level?.excludeTerms.orEmpty() - listOfNotNull(selection?.excluded(tapped)).toSet()
+    val alreadySearched = selection?.included(tapped)?.let(SearchTermGroup::single)
+    val earlier = level?.includeTermGroups.orEmpty().filterNot { it == alreadySearched }
     val media = if (animatedOnly || context?.media == MediaFilter.ANIMATED) MediaFilter.ANIMATED else MediaFilter.ANY
     return Query(mode, listOf(tag), emptyList(), context?.sort ?: SortMode.NEWEST, context?.dateRange, null)
         .copy(excludeTerms = excluded, media = media)
+        .withIncludeTermGroups(listOf(SearchTermGroup.single(tapped)) + earlier)
         .withinTermLimit(termLimit.takeIf { mode is QueryMode.Source })
 }
 

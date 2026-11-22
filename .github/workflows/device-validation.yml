@@ -76,11 +76,15 @@ jobs:
       - name: Build isolated test APKs before starting the emulator
         run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest :core-data-android:assembleDebugAndroidTest --console=plain
 
+      # The wrapper records a verdict only when the emulator outlives the tests. An attempt without one lost
+      # its emulator (a corrupt SDK download, a failed boot, or a crash) and runs once more on a fresh one.
       - name: Run connected device tests
+        id: device-tests
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
-        env:
+        env: &connected-env
           DEVICE_TEST_SHARD: ${{ matrix.shard }}/2
-        with:
+        with: &connected-emulator
           api-level: ${{ matrix.api-level }}
           target: google_apis
           arch: x86_64
@@ -99,6 +103,17 @@ jobs:
             -noaudio
             -no-boot-anim
           script: bash scripts/verify_ci_emulator.sh debug
+
+      - name: Retry connected device tests on a fresh emulator
+        id: device-tests-retry
+        if: steps.device-tests.outcome == 'failure' && hashFiles('build/reports/ci-emulator/debug/verdict') == ''
+        uses: reactivecircus/android-emulator-runner@v2
+        env: *connected-env
+        with: *connected-emulator
+
+      - name: Fail on connected-test failures
+        if: steps.device-tests.outcome == 'failure' && steps.device-tests-retry.outcome == 'skipped'
+        run: exit 1
 
       - name: Upload connected-test reports
         if: always()
@@ -167,9 +182,12 @@ jobs:
       - name: Update Android command-line tools for minor API versions
         run: bash scripts/prepare_ci_android_sdk.sh
 
+      # Retried like the connected tests when the emulator, not the APK, failed.
       - name: Run minified release acceptance
+        id: acceptance
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
-        with:
+        with: &acceptance-emulator
           api-level: ${{ matrix.api-level }}
           target: google_apis
           arch: x86_64
@@ -187,6 +205,16 @@ jobs:
             -noaudio
             -no-boot-anim
           script: bash scripts/verify_ci_emulator.sh acceptance
+
+      - name: Retry minified release acceptance on a fresh emulator
+        id: acceptance-retry
+        if: steps.acceptance.outcome == 'failure' && hashFiles('build/reports/ci-emulator/acceptance/verdict') == ''
+        uses: reactivecircus/android-emulator-runner@v2
+        with: *acceptance-emulator
+
+      - name: Fail on release-acceptance failures
+        if: steps.acceptance.outcome == 'failure' && steps.acceptance-retry.outcome == 'skipped'
+        run: exit 1
 
       - name: Upload release-acceptance reports
         if: always()
