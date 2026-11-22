@@ -13,8 +13,9 @@ import com.theoriacodex.domain.model.SearchTermGroup
 fun Query.withMediaTerms(capabilities: SourceCapabilities): Query {
     if (media != MediaFilter.ANIMATED) return this
     val animated = capabilities.animatedTerm ?: return this
-    val alreadyAsked = includeTerms.any { term ->
-        term.tagType == animated.term.tagType && term.value.equals(animated.term.value, ignoreCase = true)
+    // Only a group that requires the term asks for it; one alternative of an OR group leaves the others mixed.
+    val alreadyAsked = includeTermGroups.any { group ->
+        group.terms.all { term -> term.tagType == animated.term.tagType && term.value.equals(animated.term.value, ignoreCase = true) }
     }
     if (alreadyAsked) return this
     val fits = capabilities.searchTermLimit?.let { limit -> requestTermCount < limit.budgetFor(sort) } ?: true

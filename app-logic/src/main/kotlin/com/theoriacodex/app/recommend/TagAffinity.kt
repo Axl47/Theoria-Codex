@@ -4,6 +4,7 @@ import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.LifetimeStatistics
 import com.theoriacodex.data.repository.LikedPost
 import com.theoriacodex.data.repository.LikesRepository
+import com.theoriacodex.data.repository.ProfileLibraryIds
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.data.repository.SavedSearchRepository
 import com.theoriacodex.data.repository.SettingsRepository
@@ -93,9 +94,14 @@ fun observeTagAffinityInputs(
     val profile = settings.observeSettings()
         .map { it.activeProfileId to it.favoriteTagsByProfile[it.activeProfileId].orEmpty().flatMap { entry -> entry.tags } }
         .distinctUntilChanged()
-    val profileLikes = profile.map { it.first }.distinctUntilChanged().flatMapLatest(likes::observeLikes)
-    val codexPosts = codex.observeCodices().map { codices -> codices.mapTo(mutableSetOf()) { it.codexId } }
-        .distinctUntilChanged().flatMapLatest(codex::observeLibraryPosts)
+    val activeProfile = profile.map { it.first }.distinctUntilChanged()
+    val profileLikes = activeProfile.flatMapLatest(likes::observeLikes)
+    // The profile's own Codices; its Likes collection is left out, since Likes already count once.
+    val codexPosts = combine(activeProfile, codex.observeCodices()) { profileId, codices ->
+        codices.mapNotNullTo(mutableSetOf()) { entry ->
+            entry.codexId.takeIf { id -> ProfileLibraryIds.belongsTo(id, profileId) && !id.startsWith(ProfileLibraryIds.LIKES_PREFIX) }
+        }
+    }.distinctUntilChanged().flatMapLatest(codex::observeLibraryPosts)
     return combine(profile, profileLikes, codexPosts, savedSearches.observeSavedSearches(), statistics.observeStatistics()) {
             (_, savedTags), liked, posts, searches, stats ->
         tagAffinityInputs(liked, posts, savedTags, searches, stats)

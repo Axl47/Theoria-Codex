@@ -103,8 +103,9 @@ class DanbooruSourceAdapter(
         supportsSortRandom = false,
         supportsExcludeTagsServerSide = true,
         searchTermLimit = site.searchTermLimit,
-        // `animated` covers video, ugoira and GIFs; `filetype:` costs no term, so it serves when the guest limit is full.
-        animatedTerm = AnimatedSearchTerm(SearchTerm("animated"), overLimit = SearchTerm("filetype:mp4,webm,zip")),
+        // `animated` covers video, ugoira and GIFs; `filetype:` costs no term, so it serves when the guest limit is full
+        // (static GIFs it lets through are left to the phone-side filter).
+        animatedTerm = AnimatedSearchTerm(SearchTerm("animated"), overLimit = SearchTerm("filetype:gif,mp4,webm,zip")),
     )
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> = sourceCall {
