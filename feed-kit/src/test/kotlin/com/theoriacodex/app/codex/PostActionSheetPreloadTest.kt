@@ -31,6 +31,11 @@ class PostActionSheetPreloadTest {
         runBlocking { repository.ensureCodex("target", "Target") }
         val post = testPost()
         val query = emptySearchQuery()
+        // An unrelated post beside the match keeps the post's tag rare enough in the library to count.
+        val library = listOf(
+            testPost(sourcePostId = "saved"),
+            testPost(sourcePostId = "other", canonicalTags = listOf("bird")),
+        )
         var lookups = 0
         var saves = 0
         lateinit var loader: CodexSaveRelevanceLoader
@@ -40,7 +45,7 @@ class PostActionSheetPreloadTest {
                 CodexSaveRelevanceLoader(repository, scope, Dispatchers.Unconfined) { ids ->
                     assertEquals(setOf("target"), ids)
                     lookups++
-                    flowOf(mapOf("target" to listOf(testPost(sourcePostId = "saved"))))
+                    flowOf(mapOf("target" to library))
                 }
             }
             CompositionLocalProvider(LocalCodexSaveRelevanceLoader provides loader) {
@@ -55,7 +60,8 @@ class PostActionSheetPreloadTest {
         compose.runOnIdle {
             assertEquals(1, lookups)
             assertEquals(0, saves)
-            assertEquals(mapOf("target" to 1.0), loader.latest(listOf(post), query))
+            val expected = CodexSaveRelevance(listOf(post)).score(library, TagRarity.of(library))
+            assertEquals(mapOf("target" to expected), loader.latest(listOf(post), query))
         }
         compose.onNodeWithText("Save to Codex").performClick()
         compose.runOnIdle { assertEquals(1, saves) }

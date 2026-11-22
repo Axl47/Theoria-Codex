@@ -30,7 +30,8 @@ class CodexSaveRelevanceTest {
         val generic = collection(200, listOf("common", "popular"))
         assertTrue(relevance.score(specialized) > relevance.score(generic))
         assertEquals(0.95, relevance.score(specialized), 0.000001)
-        assertEquals(0.05, relevance.score(generic), 0.000001)
+        // Every incoming tag on all 200 posts: full density but for the three posts every Codex is padded by.
+        assertEquals(0.05 * 400.0 / 203 / 2, relevance.score(generic), 0.000001)
         assertEquals(relevance.score(specialized), relevance.score(collection(200, listOf("yellow"))), 0.000001)
     }
 
@@ -55,8 +56,9 @@ class CodexSaveRelevanceTest {
         val relevance = CodexSaveRelevance(listOf(incoming, incoming))
         val one = post("one", listOf("blue_hair", "CAT", "cat"))
         val two = post("two", listOf("cat"))
-        assertEquals(0.75, relevance.score(listOf(one, two, one)), 0.000001)
-        assertEquals(1.0, relevance.score(listOf(one.copy(id = PostId(SourceKey.PIXIV, "one")))), 0.000001)
+        // Three matches of two tags over two posts, padded by three: duplicates count once.
+        assertEquals(3.0 / 5 / 2, relevance.score(listOf(one, two, one)), 0.000001)
+        assertEquals(2.0 / 4 / 2, relevance.score(listOf(one.copy(id = PostId(SourceKey.PIXIV, "one")))), 0.000001)
         assertTrue(relevance.score(collection(10, listOf("blue_hair", "cat"))) >
             relevance.score(collection(200, listOf("cat"))))
         assertEquals(0.0, relevance.score(emptyList()), 0.000001)
@@ -69,7 +71,7 @@ class CodexSaveRelevanceTest {
         assertTrue(relevance.hasSignals)
         assertEquals(0.95, relevance.score(collection(10, listOf("yellow"))), 0.000001)
         val incoming = empty.copy(rawTags = listOf("cat"))
-        assertEquals(1.0, CodexSaveRelevance(listOf(incoming)).score(collection(10, listOf("cat"))), 0.000001)
+        assertEquals(10.0 / 13, CodexSaveRelevance(listOf(incoming)).score(collection(10, listOf("cat"))), 0.000001)
         assertEquals(0.0, CodexSaveRelevance(listOf(empty)).score(collection(10, listOf("cat"))), 0.000001)
     }
 
@@ -80,6 +82,23 @@ class CodexSaveRelevanceTest {
         val artist = post("artist", emptyList()).copy(taxonomy = listOf(PostTaxonomyTerm("yellow", SearchFacet.ARTIST, "artist")))
         assertEquals(0.95, relevance.score(listOf(artist)), 0.000001)
         assertEquals(0.0, relevance.score(listOf(post("tag", listOf("yellow", "cat")))), 0.000001)
+    }
+
+    @Test fun `a rare shared tag outweighs many common ones, and one lucky match does not make a tiny Codex lead`() {
+        val relevance = CodexSaveRelevance(listOf(post("incoming", listOf("miku", "1girl", "blush"))))
+        val library = mapOf(
+            "miku" to collection(6, listOf("miku", "1girl"), "miku"),
+            "generic" to collection(40, listOf("1girl", "blush"), "generic"),
+            "lucky" to collection(1, listOf("miku"), "lucky"),
+        )
+
+        val rarity = TagRarity.of(library.values.flatten())
+        val scores = library.mapValues { (_, saved) -> relevance.score(saved, rarity) }
+
+        assertTrue(scores.getValue("miku") > scores.getValue("generic"))
+        assertTrue(scores.getValue("miku") > scores.getValue("lucky"))
+        // Without the library's rarity every tag weighs alike, and the generic Codex wins on two shared tags.
+        assertTrue(relevance.score(library.getValue("generic")) > relevance.score(library.getValue("miku")))
     }
 
     private fun query(vararg tags: String) = emptySearchQuery().withIncludeTermsAsRequired(tags.map(::SearchTerm))

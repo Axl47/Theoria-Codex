@@ -23,7 +23,7 @@ class CodexSaveRelevanceLoaderTest {
         val posts = listOf(testPost(canonicalTags = listOf("cat")))
         val query = emptySearchQuery()
         var lookups = 0
-        val library = MutableStateFlow(mapOf("target" to listOf(testPost(sourcePostId = "saved", canonicalTags = listOf("cat")))))
+        val library = MutableStateFlow(mapOf("target" to saved("cat")))
         val loader = CodexSaveRelevanceLoader(repository, backgroundScope, StandardTestDispatcher(testScheduler)) { ids ->
             assertEquals(setOf("target"), ids)
             lookups++
@@ -31,18 +31,18 @@ class CodexSaveRelevanceLoaderTest {
         }
         val menu = backgroundScope.launch { loader.observe(posts, query).collect() }
         runCurrent()
-        assertEquals(mapOf("target" to 1.0), loader.latest(posts, query))
+        assertEquals(mapOf("target" to match), loader.latest(posts, query))
         menu.cancel()
         advanceTimeBy(250)
 
-        assertEquals(mapOf("target" to 1.0), loader.latest(posts, query))
+        assertEquals(mapOf("target" to match), loader.latest(posts, query))
         val pickerScores = mutableListOf<Map<String, Double>>()
         val picker = backgroundScope.launch { loader.observe(posts, query).collect { pickerScores += it } }
         runCurrent()
         assertEquals(1, lookups)
-        library.value = mapOf("target" to listOf(testPost(sourcePostId = "saved", canonicalTags = listOf("dog"))))
+        library.value = mapOf("target" to saved("dog"))
         runCurrent()
-        assertEquals(listOf(mapOf("target" to 1.0), mapOf("target" to 0.0)), pickerScores)
+        assertEquals(listOf(mapOf("target" to match), mapOf("target" to 0.0)), pickerScores)
 
         picker.cancel()
         advanceTimeBy(10_001)
@@ -54,7 +54,7 @@ class CodexSaveRelevanceLoaderTest {
     @Test fun `concurrent requests for different posts all stay live on one library lookup`() = runTest {
         val repository = InMemoryCodexRepository()
         repository.ensureCodex("target", "Target")
-        val library = MutableStateFlow(mapOf("target" to listOf(testPost(sourcePostId = "saved", canonicalTags = listOf("cat")))))
+        val library = MutableStateFlow(mapOf("target" to saved("cat")))
         var lookups = 0
         val loader = CodexSaveRelevanceLoader(repository, backgroundScope, StandardTestDispatcher(testScheduler)) { _ ->
             lookups++
@@ -65,14 +65,22 @@ class CodexSaveRelevanceLoaderTest {
         backgroundScope.launch { loader.observe(listOf(post("one", "cat")), null).collect { cat += it } }
         backgroundScope.launch { loader.observe(listOf(post("two", "dog")), null).collect { dog += it } }
         runCurrent()
-        library.value = mapOf("target" to listOf(testPost(sourcePostId = "saved", canonicalTags = listOf("dog"))))
+        library.value = mapOf("target" to saved("dog"))
         runCurrent()
 
-        assertEquals(listOf(mapOf("target" to 1.0), mapOf("target" to 0.0)), cat)
-        assertEquals(listOf(mapOf("target" to 0.0), mapOf("target" to 1.0)), dog)
+        assertEquals(listOf(mapOf("target" to match), mapOf("target" to 0.0)), cat)
+        assertEquals(listOf(mapOf("target" to 0.0), mapOf("target" to match)), dog)
         assertEquals(1, lookups)
         assertEquals(1, library.subscriptionCount.value)
     }
 
     private fun post(id: String, tag: String): Post = testPost(sourcePostId = id, canonicalTags = listOf(tag))
+
+    /** A Codex holding a post tagged [tag] beside an unrelated one, so [tag] is rare enough in the library to count. */
+    private fun saved(tag: String) = listOf(post("saved", tag), post("other", "bird"))
+
+    /** The score when one of the Codex's two posts matches, weighed by the library's rarity as the loader weighs it. */
+    private val match = saved("cat").let { library ->
+        CodexSaveRelevance(listOf(post("one", "cat"))).score(library, TagRarity.of(library))
+    }
 }
