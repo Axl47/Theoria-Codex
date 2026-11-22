@@ -258,39 +258,6 @@ private suspend fun loadReleaseHistory(shell: TheoriaShell, latestInstalledChang
     }
 }
 
-/** Decides the Series tab again on each return to the app, and settles a saved Series tab that startup could not show. */
-@Composable
-private fun SeriesTabEffects(shell: TheoriaShell, onHome: Boolean) {
-    val navigation = shell.navigation
-    val pagerState = navigation.pagerState
-    val series = shell.container.series
-    // Installing or removing an extension happens in another app, so the Series tab is decided again on each return.
-    LifecycleStartEffect(series, shell.navReady) {
-        if (shell.navReady) shell.scope.launch { series?.findExtensions() }
-        onStopOrDispose {}
-    }
-    // A saved Series tab that startup could not show is taken up once the first look finds an extension, unless the
-    // user moved meanwhile.
-    val onHomeNow by rememberUpdatedState(onHome)
-    LaunchedEffect(series, navigation.awaitedSeries) {
-        val awaited = navigation.awaitedSeries ?: return@LaunchedEffect
-        series?.looked?.first { it }
-        val target = awaited.resolved(seriesShows = series?.tab?.first() == true, current = navigation.homeTabRoute)
-        if (target != null) {
-            snapshotFlow { navigation.homeTabs }.first { tabs -> tabs.any { it.route == target } }
-            if (navigation.homeTabRoute == awaited.standIn) {
-                navigation.homeTabRoute = target
-                if (onHomeNow) pagerState.scrollToRoute(target)
-            }
-        }
-        navigation.awaitedSeries = null
-    }
-    // A tab that went away is not the selected one: the pager already rests on the last tab left.
-    LaunchedEffect(navigation.homeTabs) {
-        if (navigation.homeTabs.none { it.route == navigation.homeTabRoute }) navigation.homeTabRoute = navigation.homeTabs.last().route
-    }
-}
-
 /** Shows the selected home tab whenever Home is on top, and saves the tab once the pager rests. */
 @Composable
 internal fun HomeTabEffects(shell: TheoriaShell, currentRoute: String?) {
@@ -299,20 +266,15 @@ internal fun HomeTabEffects(shell: TheoriaShell, currentRoute: String?) {
     val onHome = shell.navReady && currentRoute == AppRoute.Home
     var homeTabRestoreComplete by remember { mutableStateOf(false) }
     var persistedHomeTabRoute by rememberSaveable { mutableStateOf<String?>(null) }
-    SeriesTabEffects(shell, onHome)
     LaunchedEffect(shell.navReady, currentRoute) {
         if (!onHome) return@LaunchedEffect
         pagerState.scrollToRoute(navigation.homeTabRoute)
         homeTabRestoreComplete = true
     }
-    LaunchedEffect(
-        shell.navReady, currentRoute, homeTabRestoreComplete, pagerState.currentPage, pagerState.isScrollInProgress, navigation.awaitedSeries,
-    ) {
+    LaunchedEffect(shell.navReady, currentRoute, homeTabRestoreComplete, pagerState.currentPage, pagerState.isScrollInProgress) {
         if (!onHome || !homeTabRestoreComplete || pagerState.isScrollInProgress) return@LaunchedEffect
         val route = TopLevelDestination.entries[pagerState.currentPage.coerceIn(0, TopLevelDestination.entries.lastIndex)].route
         navigation.homeTabRoute = route
-        // The stand-in for a Series tab still awaited is not saved; any other tab is the user's choice and ends the wait.
-        navigation.awaitedSeries?.let { awaited -> if (awaited.saves(route)) navigation.awaitedSeries = null else return@LaunchedEffect }
         if (persistedHomeTabRoute != route) {
             shell.data.uiRestoreRepository.setLastTab(route)
             persistedHomeTabRoute = route

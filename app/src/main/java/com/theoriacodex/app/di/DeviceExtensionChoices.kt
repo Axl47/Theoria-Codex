@@ -25,13 +25,7 @@ import kotlinx.serialization.json.Json
 internal class DeviceExtensionChoices(private val file: File) : ExtensionChoiceStore {
     private val lock = Mutex()
 
-    // Read when the app's data opens: the Series tab needs `extensionSeen` before the first frame.
     @Volatile private var stored: Record? = runCatching { json.decodeFromString(Record.serializer(), file.readText()) }.getOrNull()
-
-    /** Whether an extension was on the device when the app last looked, so startup need not look. */
-    val extensionSeen: Boolean get() = stored?.extensionSeen == true
-
-    suspend fun rememberExtensionSeen(seen: Boolean) = change { it.copy(extensionSeen = seen) }
 
     override suspend fun choices(): ExtensionChoices = lock.withLock { load() }.let { record ->
         ExtensionChoices(record.trusted, record.languages.mapValues { (_, languages) -> languages.toSet() })
@@ -61,7 +55,6 @@ internal class DeviceExtensionChoices(private val file: File) : ExtensionChoiceS
     private data class Record(
         val trusted: Map<String, String> = emptyMap(),
         val languages: Map<String, List<String>> = emptyMap(),
-        val extensionSeen: Boolean = false,
     )
 
     companion object {

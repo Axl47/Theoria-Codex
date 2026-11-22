@@ -36,7 +36,6 @@ import okhttp3.Interceptor
  * asked for an image only an extension can fetch.
  */
 internal class MihonExtensionSourceHost {
-    private lateinit var packages: ExtensionPackages
     private lateinit var registry: ExtensionRegistry
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var watching: Lazy<Unit>
@@ -57,7 +56,7 @@ internal class MihonExtensionSourceHost {
     fun attach(application: Application) {
         // Release builds run installed packages only; the folder is how tests hand a debug build an APK.
         images = ExtensionImages(lazy { MihonHost.imageKey(application) }) { runBlocking { registry.sources() } }
-        packages = ExtensionPackages(application) { if (BuildConfig.DEBUG) application.getExternalFilesDir(DIRECTORY) else null }
+        val packages = ExtensionPackages(application) { if (BuildConfig.DEBUG) application.getExternalFilesDir(DIRECTORY) else null }
         val loader = ExtensionLoader(application, packages)
         // What extensions ask their host for is set up when the first one loads, not at startup.
         val hostInstalled = lazy { MihonHost.install(application, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE) }
@@ -114,9 +113,6 @@ internal class MihonExtensionSourceHost {
         watching.value
         return registry.sources()
     }
-
-    /** Whether any extension is on the device, on or off. Asks the package manager; runs no extension code. */
-    fun anyOnDevice(): Boolean = packages.any()
 
     private companion object {
         const val TAG = "MihonHost"
