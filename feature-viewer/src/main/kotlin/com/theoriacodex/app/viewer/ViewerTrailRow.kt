@@ -1,12 +1,10 @@
 package com.theoriacodex.app.viewer
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -16,9 +14,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.outlined.GridView
-import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -42,6 +37,9 @@ import com.theoriacodex.app.recommend.LocalTagAffinityInputs
 import com.theoriacodex.app.recommend.feedTagShare
 import com.theoriacodex.app.recommend.tagAffinities
 import com.theoriacodex.app.related.LocalRelatedPostsSupport
+import com.theoriacodex.app.ui.components.TrailChip
+import com.theoriacodex.app.ui.components.TrailChipGap
+import com.theoriacodex.app.ui.components.TrailChipIcons
 import com.theoriacodex.app.ui.navigation.LocalTrailOpener
 import com.theoriacodex.app.ui.navigation.TrailOpener
 import com.theoriacodex.domain.model.Post
@@ -83,7 +81,7 @@ internal fun ViewerTrailRow(
     LazyRow(
         modifier.fillMaxWidth().testTag("viewer-trail-row"),
         contentPadding = PaddingValues(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(TrailChipGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         itemsIndexed(crumbs) { index, crumb ->
@@ -124,35 +122,21 @@ private fun ViewerCrumbChip(crumb: ViewerCrumb, index: Int, current: Boolean, on
 
 @Composable
 private fun ViewerForkChip(chip: ViewerTrailChip, busy: Boolean, failed: Boolean, onClick: () -> Unit) {
-    Row(
-        Modifier
-            .height(32.dp)
-            .clip(RoundedCornerShape(50))
-            .background(ViewerVeil.Capsule)
-            .clickable(enabled = !busy, role = Role.Button, onClickLabel = "Start a trail", onClick = onClick)
-            .padding(horizontal = 12.dp)
-            .testTag("viewer-trail-chip-${chip.key}"),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        when {
-            busy -> CircularProgressIndicator(Modifier.size(14.dp), color = Color.White, strokeWidth = 2.dp)
-            else -> chip.icon()?.let { Icon(it, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp)) }
-        }
-        Text(
-            if (failed) "No posts" else chip.label,
-            style = MaterialTheme.typography.labelLarge,
-            color = Color.White,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.widthIn(max = 160.dp),
-        )
-    }
+    TrailChip(
+        if (failed) "No posts" else chip.label,
+        chip.icon(),
+        container = ViewerVeil.Capsule,
+        content = Color.White,
+        onClickLabel = "Start a trail",
+        onClick = onClick,
+        modifier = Modifier.testTag("viewer-trail-chip-${chip.key}"),
+        busy = busy,
+    )
 }
 
 private fun ViewerTrailChip.icon(): ImageVector? = when (this) {
-    is ViewerTrailChip.Creator -> Icons.Outlined.Person
-    ViewerTrailChip.Similar -> Icons.Outlined.GridView
+    is ViewerTrailChip.Creator -> TrailChipIcons.Creator
+    ViewerTrailChip.Similar -> TrailChipIcons.Similar
     is ViewerTrailChip.Tag -> null
 }
 
