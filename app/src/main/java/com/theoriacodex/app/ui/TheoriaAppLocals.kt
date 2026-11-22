@@ -15,7 +15,6 @@ import com.theoriacodex.app.lift.LocalLiftUgoiraClient
 import com.theoriacodex.app.lift.rememberLiftSession
 import com.theoriacodex.app.recommend.LocalTagAffinityInputs
 import com.theoriacodex.app.recommend.TagAffinityInputs
-import com.theoriacodex.app.recommend.observeTagAffinityInputs
 import com.theoriacodex.app.related.LocalRelatedPostsSupport
 import com.theoriacodex.app.search.LocalPostWatchPresentation
 import com.theoriacodex.app.search.rememberPostWatchPresentation
@@ -71,12 +70,10 @@ private fun rememberCodexSaveRelevanceLoader(shell: TheoriaShell): CodexSaveRele
     CodexSaveRelevanceLoader(shell.data.codexRepository, shell.scope, observeLibrary = source::observeSavedLibrary)
 }
 
-/** The active profile's tag affinity inputs, kept from the first collector on for the app session. */
+/** The app session's shared tag affinity inputs, held as state for the Trails and cards that read them. */
 @Composable
 private fun rememberTagAffinityInputs(shell: TheoriaShell): StateFlow<TagAffinityInputs> = remember(shell) {
-    with(shell.data) {
-        observeTagAffinityInputs(settingsRepository, likesRepository, codexRepository, savedSearches, statisticsRepository)
-    }.stateIn(shell.scope, SharingStarted.Lazily, TagAffinityInputs.Empty)
+    shell.features.tagAffinity.stateIn(shell.scope, SharingStarted.Lazily, TagAffinityInputs.Empty)
 }
 
 /** The app-wide in-a-Codex set behind [LocalCodexPostIds], read from the shared browsing metadata. */

@@ -30,7 +30,7 @@ import com.theoriacodex.app.media.OfflineMediaCoordinator
 import com.theoriacodex.app.media.downloadablePages
 import com.theoriacodex.app.media.validateOfflineMediaFile
 import com.theoriacodex.app.recommend.ForYouCoordinator
-import com.theoriacodex.app.recommend.observeTagAffinityInputs
+import com.theoriacodex.app.recommend.shareTagAffinityInputs
 import com.theoriacodex.app.comments.CommentsLoader
 import com.theoriacodex.app.related.RelatedPostsLoader
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
@@ -153,11 +153,12 @@ class JourneyAppContainer(
                 override fun launchInstaller(apkFile: File): Result<Unit> = error("Fixture cannot install APKs")
             }, updateState, updateCheckTimeoutMs = 1_000L),
     )
+    private val tagAffinity = shareTagAffinityInputs(ownerScope, settings, content, content, data.savedSearches, statistics)
     override val features = FeatureDependencies(
         search = SearchCoordinator(registry, data.queryRepository, settings, restore, data.recentsRepository,
             statisticsRepository = statistics, tagSuggestionStore = tags),
-        forYou = ForYouCoordinator(registry, content, statistics,
-            observeTagAffinityInputs(settings, content, content, data.savedSearches, statistics), tagSuggestionStore = tags),
+        forYou = ForYouCoordinator(registry, content, statistics, tagAffinity, tagSuggestionStore = tags),
+        tagAffinity = tagAffinity,
         relatedPosts = RelatedPostsLoader(registry),
         comments = CommentsLoader(registry),
         creatorProfile = CreatorProfileCoordinator(registry),

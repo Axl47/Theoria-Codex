@@ -29,7 +29,7 @@ class ForYouCoordinator(
     private val registry: SourceAdapterRegistry,
     likesRepository: LikesRepository,
     private val statisticsRepository: StatisticsRepository,
-    /** The active profile's tag affinity, which ranks each source's interests; see [observeTagAffinityInputs]. */
+    /** The active profile's tag affinity, which ranks each source's interests; see [shareTagAffinityInputs]. */
     tagAffinity: Flow<TagAffinityInputs>,
     tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
     computationDispatcher: CoroutineDispatcher = Dispatchers.Default,

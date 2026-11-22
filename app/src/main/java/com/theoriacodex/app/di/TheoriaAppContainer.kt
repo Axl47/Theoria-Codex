@@ -24,7 +24,8 @@ import com.theoriacodex.app.media.codexOfflineOwner
 import com.theoriacodex.app.codex.LikesCodexSyncService
 import com.theoriacodex.app.codex.transfer.CodexTransferService
 import com.theoriacodex.app.recommend.ForYouCoordinator
-import com.theoriacodex.app.recommend.observeTagAffinityInputs
+import com.theoriacodex.app.recommend.TagAffinityInputs
+import com.theoriacodex.app.recommend.shareTagAffinityInputs
 import com.theoriacodex.app.comments.CommentsLoader
 import com.theoriacodex.app.comments.CommentsLoading
 import com.theoriacodex.app.related.RelatedPostsLoader
@@ -117,6 +118,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -177,6 +179,8 @@ data class UpdateDependencies(
 data class FeatureDependencies(
     val search: SearchCoordinator,
     val forYou: ForYouCoordinator,
+    /** The active profile's tag affinity, built once for the app session; see [shareTagAffinityInputs]. */
+    val tagAffinity: SharedFlow<TagAffinityInputs>,
     val relatedPosts: RelatedPostsLoader,
     val comments: CommentsLoading,
     val creatorProfile: CreatorProfileCoordinator,
@@ -463,6 +467,10 @@ internal class DefaultTheoriaAppContainer(
         startupUpdater = startupUpdater,
     )
 
+    private val tagAffinity = shareTagAffinityInputs(
+        durableStoreScope, settingsRepository, likesRepository, codexRepository, savedSearches, statisticsRepository,
+    )
+
     override val features = FeatureDependencies(
         search = SearchCoordinator(
             registry = sourceRegistry,
@@ -480,13 +488,12 @@ internal class DefaultTheoriaAppContainer(
             registry = sourceRegistry,
             likesRepository = likesRepository,
             statisticsRepository = statisticsRepository,
-            tagAffinity = observeTagAffinityInputs(
-                settingsRepository, likesRepository, codexRepository, savedSearches, statisticsRepository,
-            ),
+            tagAffinity = tagAffinity,
             tagSuggestionStore = tagSuggestionStore,
             postResolutions = postResolutions,
             fileMirrors = data.fileMirrors,
         ),
+        tagAffinity = tagAffinity,
         relatedPosts = RelatedPostsLoader(sourceRegistry, data.fileMirrors),
         comments = CommentsLoader(sourceRegistry),
         creatorProfile = CreatorProfileCoordinator(registry = sourceRegistry,
