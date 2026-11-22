@@ -1,6 +1,7 @@
 package com.theoriacodex.app.media
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import coil.decode.BitmapFactoryDecoder
 import coil.imageLoader
@@ -111,18 +112,7 @@ class PreviewPictureHasher(
             val permits = Semaphore(CONCURRENT_LOADS)
             return { candidate ->
                 permits.withPermit {
-                    val request = MediaRequestFactory.imageRequest(
-                        context, candidate.url, candidate.source, crossfade = false, allowHardware = false,
-                        targetWidthPx = DECODE_PX, targetHeightPx = DECODE_PX,
-                    ).newBuilder()
-                        // A still first frame of any format, never an animation, and no tiny bitmap in the memory cache.
-                        .decoderFactory(BitmapFactoryDecoder.Factory())
-                        .memoryCachePolicy(CachePolicy.DISABLED)
-                        // Coil starts requests on the main thread by default; this one has no view, so it never
-                        // waits for a busy frame.
-                        .interceptorDispatcher(Dispatchers.Default)
-                        .build()
-                    val bitmap = ((context.imageLoader.execute(request) as? SuccessResult)?.drawable as? BitmapDrawable)?.bitmap
+                    val bitmap = loadPreviewStill(context, candidate, DECODE_PX)
                     if (bitmap == null) PictureHashResult.Unavailable else withContext(Dispatchers.Default) {
                         val pixels = IntArray(bitmap.width * bitmap.height)
                         bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
@@ -133,4 +123,23 @@ class PreviewPictureHasher(
             }
         }
     }
+}
+
+/**
+ * [candidate]'s still first frame, decoded to about [sizePx] on its long edge, or null when it could not be loaded. It
+ * goes through the app's image loader with the card's own address, so it reads and fills the disk cache cards use, and
+ * keeps the bitmap out of the memory cache. Picture hashing and the picture tagger both read previews this way.
+ */
+suspend fun loadPreviewStill(context: Context, candidate: PostMediaCandidate, sizePx: Int): Bitmap? {
+    val request = MediaRequestFactory.imageRequest(
+        context, candidate.url, candidate.source, crossfade = false, allowHardware = false,
+        targetWidthPx = sizePx, targetHeightPx = sizePx,
+    ).newBuilder()
+        // A still first frame of any format, never an animation, and no bitmap in the memory cache.
+        .decoderFactory(BitmapFactoryDecoder.Factory())
+        .memoryCachePolicy(CachePolicy.DISABLED)
+        // Coil starts requests on the main thread by default; this one has no view, so it never waits for a busy frame.
+        .interceptorDispatcher(Dispatchers.Default)
+        .build()
+    return ((context.imageLoader.execute(request) as? SuccessResult)?.drawable as? BitmapDrawable)?.bitmap
 }
