@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import com.theoriacodex.app.codex.LocalQuickSave
+import com.theoriacodex.app.codex.SAVE_MENU_CODICES
 import com.theoriacodex.app.codex.SaveSuggestions
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -52,12 +53,11 @@ internal fun rememberTriageSuggestions(posts: List<Post>, query: Query?): Triage
         key(post.id) {
             DisposableEffect(suggestions) { onDispose { suggestions.forget(post.id) } }
             LaunchedEffect(suggestions) {
-                quickSave.suggestions(post, query, TRIAGE_SUGGESTIONS).collect { suggestions.put(post.id, it) }
+                quickSave.suggestions(post, query, SAVE_MENU_CODICES).collect { suggestions.put(post.id, it) }
             }
         }
     }
     return suggestions
 }
 
-private const val TRIAGE_SUGGESTIONS = 3
 private const val SUGGESTIONS_WAIT_MS = 3_000L

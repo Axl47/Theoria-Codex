@@ -8,7 +8,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material.icons.outlined.RemoveCircleOutline
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -38,8 +37,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.theoriacodex.app.codex.SaveSuggestion
+import com.theoriacodex.app.codex.SaveTarget
 import com.theoriacodex.app.codex.SaveSuggestions
+import com.theoriacodex.app.codex.saveMenuTargets
 import com.theoriacodex.app.recommend.LocalTagAffinityInputs
 import com.theoriacodex.app.search.previewAspectRatio
 import com.theoriacodex.app.ui.components.CollectTarget
@@ -68,7 +68,7 @@ internal fun TriageDeckArea(
     val suggestions = rememberTriageSuggestions(listOfNotNull(post, deck.next), query)
     val targets = rememberTriageTargets(post, suggestions[post.id], query, viewModel)
     val drag = remember(post.id) { TriageDrag() }
-    val saveState = remember(post.id) { CollectTargetsState<TriageSaveTarget>() }
+    val saveState = remember(post.id) { CollectTargetsState<SaveTarget>() }
     val hideState = remember(post.id) { CollectTargetsState<String>() }
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
@@ -83,20 +83,15 @@ internal fun TriageDeckArea(
         val thresholds = with(density) { SwipeThresholds(maxWidth.toPx() * COMMIT_FRACTION, FLING_SPEED.toPx(), CUE_DISTANCE.toPx()) }
         val ratioFloor = maxWidth / (maxHeight - CAPTION_ALLOWANCE)
         val area = with(density) { Size(maxWidth.toPx(), maxHeight.toPx()) }
-        // A save swiped before the card's targets load waits for them rather than reading "none" and opening the picker.
-        // Dropped on More, it names no Codex, so the picker opens.
-        val choose: suspend (SwipeDirection) -> TriageChoice? = { direction ->
-            val saveTarget = if (direction != SwipeDirection.Up) null else when (val hovered = saveState.hovered?.payload) {
-                TriageSaveTarget.More -> null
-                is TriageSaveTarget.Codex -> hovered.suggestion
-                null -> (suggestions[post.id] ?: suggestions.await(post.id))?.targets?.firstOrNull()
-            }
-            choiceFor(direction, saveTarget, hideState.hovered?.payload ?: targets.hide.firstOrNull()?.payload, viewModel.removes)
-        }
-        // The gesture outlives recompositions that bring new targets, so it calls through the latest release.
+        // The gesture outlives recompositions that bring new targets, so it calls through the latest release. The targets
+        // the finger let go on are read now, before the lifted pointer clears them.
         val release by rememberUpdatedState { velocity: Velocity? ->
+            val released = ReleasedOn(saveState.hovered?.payload, hideState.hovered?.payload ?: targets.hide.firstOrNull()?.payload)
             drag.releaseIn(scope) {
-                this.release(velocity, thresholds, area, choose, { choice -> onDecide(choice, post.id) }) { callbacks.onOpenSavePicker(post) }
+                val choose: suspend (SwipeDirection) -> TriageChoice? = { released.choice(it, post, suggestions, viewModel.removes) }
+                this.release(velocity, thresholds, area, choose, { choice -> onDecide(choice, post.id) }) {
+                    callbacks.saveElsewhere(post, released.save)
+                }
             }
         }
         var origin by remember { mutableStateOf(Offset.Zero) }
@@ -106,9 +101,8 @@ internal fun TriageDeckArea(
                 .onGloballyPositioned { origin = it.positionInWindow() }
                 .triageSwipe(drag, { origin }) { velocity -> release(velocity) }
                 .semantics {
-                    customActions = triageActions(targets, viewModel.removes, { callbacks.onOpenSavePicker(post) }) { choice ->
-                        onDecide(choice, post.id)
-                    }
+                    val saveElsewhere = { target: SaveTarget -> callbacks.saveElsewhere(post, target) }
+                    customActions = triageActions(targets, viewModel.removes, saveElsewhere) { choice -> onDecide(choice, post.id) }
                 },
         ) {
             TriageCards(deck, drag, support, thresholds, ratioFloor) {
@@ -120,17 +114,31 @@ internal fun TriageDeckArea(
     }
 }
 
-/** Where an upward drag can land: a suggested Codex, or More, which opens the picker; the app saves what is picked there. */
-private sealed interface TriageSaveTarget {
-    data class Codex(val suggestion: SaveSuggestion) : TriageSaveTarget
-    data object More : TriageSaveTarget
+/** The save and hide targets a drag was let go on, if any; [hide] falls back to the first tag offered. */
+private class ReleasedOn(val save: SaveTarget?, val hide: String?) {
+    /**
+     * What a release in [direction] chooses. A save swiped before the card's targets load waits for them rather than
+     * reading "none"; let go on New or More, it names no Codex, so the card springs back for [saveElsewhere].
+     */
+    suspend fun choice(direction: SwipeDirection, post: Post, suggestions: TriageSuggestions, removes: Boolean): TriageChoice? {
+        val saveTarget = if (direction != SwipeDirection.Up) null else when (save) {
+            SaveTarget.New, SaveTarget.More -> null
+            is SaveTarget.Codex -> save.suggestion
+            null -> (suggestions[post.id] ?: suggestions.await(post.id))?.targets?.firstOrNull()
+        }
+        return choiceFor(direction, saveTarget, hide, removes)
+    }
 }
 
+/** A save that names no Codex: New asks for a new one's name, anything else opens the picker. */
+private fun TriageDeckCallbacks.saveElsewhere(post: Post, target: SaveTarget?) =
+    if (target == SaveTarget.New) onNewCodex(post) else onOpenSavePicker(post)
+
 /**
- * The edge targets for the current card: Codices to save to (best first, then More once they have loaded, even when
- * there are none) and tags to hide (least liked first).
+ * The edge targets for the current card: the shared save menu ([saveMenuTargets]) once its suggestions have loaded, even
+ * when there are none, and tags to hide (least liked first).
  */
-private class TriageTargets(val save: List<CollectTarget<TriageSaveTarget>>, val hide: List<CollectTarget<String>>)
+private class TriageTargets(val save: List<CollectTarget<SaveTarget>>, val hide: List<CollectTarget<String>>)
 
 @Composable
 private fun rememberTriageTargets(
@@ -148,14 +156,7 @@ private fun rememberTriageTargets(
     }
     return remember(suggestions, candidates) {
         TriageTargets(
-            save = suggestions?.let { loaded ->
-                loaded.targets.map { target ->
-                    CollectTarget<TriageSaveTarget>(
-                        "codex:${target.codexId}", target.name,
-                        CollectTargetVisual.Cover(target.cover, Icons.Outlined.CollectionsBookmark), TriageSaveTarget.Codex(target),
-                    )
-                } + CollectTarget("more", "More", CollectTargetVisual.Icon(Icons.Filled.MoreHoriz), TriageSaveTarget.More)
-            }.orEmpty(),
+            save = suggestions?.let { loaded -> saveMenuTargets(loaded.targets) { it } }.orEmpty(),
             hide = candidates.map { tag -> CollectTarget(tag, tagLabel(tag), CollectTargetVisual.Icon(Icons.Outlined.VisibilityOff), tag) },
         )
     }
@@ -226,23 +227,24 @@ internal fun TriageCards(
 }
 
 /**
- * Lets TalkBack users decide without dragging; when the deck [removes], right is Keep and left Remove. Choose Codex
- * opens the picker, as dropping on More does.
+ * Lets TalkBack users decide without dragging; when the deck [removes], right is Keep and left Remove. New Codex and
+ * Choose Codex do what dropping on New and More do, through [onSaveElsewhere].
  */
 private fun triageActions(
     targets: TriageTargets,
     removes: Boolean,
-    onOpenSavePicker: () -> Unit,
+    onSaveElsewhere: (SaveTarget) -> Unit,
     onDecide: (TriageChoice) -> Unit,
 ): List<CustomAccessibilityAction> = listOfNotNull(
     if (removes) CustomAccessibilityAction("Keep") { onDecide(TriageChoice.Keep); true }
     else CustomAccessibilityAction("Like") { onDecide(TriageChoice.Like); true },
     if (removes) CustomAccessibilityAction("Remove") { onDecide(TriageChoice.Remove); true }
     else CustomAccessibilityAction("Skip") { onDecide(TriageChoice.Skip); true },
-    (targets.save.firstOrNull()?.payload as? TriageSaveTarget.Codex)?.suggestion?.let { target ->
+    (targets.save.firstOrNull()?.payload as? SaveTarget.Codex)?.suggestion?.let { target ->
         CustomAccessibilityAction("Save to ${target.name}") { onDecide(TriageChoice.Save(target.codexId, target.name)); true }
     },
-    CustomAccessibilityAction("Choose Codex") { onOpenSavePicker(); true },
+    CustomAccessibilityAction("New Codex") { onSaveElsewhere(SaveTarget.New); true },
+    CustomAccessibilityAction("Choose Codex") { onSaveElsewhere(SaveTarget.More); true },
     targets.hide.firstOrNull()?.payload?.let { tag ->
         CustomAccessibilityAction("Hide ${tagLabel(tag)}") { onDecide(TriageChoice.Hide(tag)); true }
     },
@@ -256,7 +258,7 @@ private fun triageActions(
 private fun TriageDragOverlays(
     drag: TriageDrag,
     targets: TriageTargets,
-    saveState: CollectTargetsState<TriageSaveTarget>,
+    saveState: CollectTargetsState<SaveTarget>,
     hideState: CollectTargetsState<String>,
     thresholds: SwipeThresholds,
     removes: Boolean,

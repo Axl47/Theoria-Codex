@@ -3,6 +3,9 @@ package com.theoriacodex.app.viewer
 import com.theoriacodex.app.codex.QuickSaveRecord
 import com.theoriacodex.app.codex.SaveSuggestion
 import com.theoriacodex.app.codex.SaveSuggestions
+import com.theoriacodex.app.codex.SaveTarget
+import com.theoriacodex.app.codex.saveMenuTargets
+import com.theoriacodex.app.ui.components.CollectTarget
 import com.theoriacodex.domain.model.PostId
 
 /** How long the dock's Save button keeps "Saved · Undo" after a one-tap save. */
@@ -43,12 +46,6 @@ internal sealed interface ViewerSaveCommand {
     data object NewCodex : ViewerSaveCommand
 }
 
-/** A target in the Save button's hold fan: one more suggestion, or a new Codex. */
-internal sealed interface ViewerSaveFanTarget {
-    data class Codex(val suggestion: SaveSuggestion) : ViewerSaveFanTarget
-    data object New : ViewerSaveFanTarget
-}
-
 /**
  * The Save button's state for [postId]. [latest] are the latest suggestions that arrived, possibly still another post's
  * while this post's load; [lastSave] is the app's latest one-tap save, shown for [VIEWER_SAVED_UNDO_MS] when it was this post.
@@ -80,15 +77,19 @@ internal fun ViewerSaveButtonState.tapCommand(): ViewerSaveCommand = when (this)
     is ViewerSaveButtonState.NoTarget -> if (inAnyCodex) ViewerSaveCommand.OpenPicker else ViewerSaveCommand.NewCodex
 }
 
-/** The hold fan for [postId]: the suggestions after the top one (at most three) when they are this post's, then New. */
-internal fun viewerSaveFanTargets(postId: PostId, latest: ViewerPostSuggestions?): List<ViewerSaveFanTarget> =
-    latest?.takeIf { it.postId == postId }?.suggestions?.targets.orEmpty().drop(1).take(VIEWER_SAVE_FAN_CODICES).map(ViewerSaveFanTarget::Codex) + ViewerSaveFanTarget.New
+/**
+ * The hold fan for [postId]: the shared save menu ([saveMenuTargets]) over the suggestions after the top one, which the
+ * button itself saves to, when they are this post's; otherwise only New and More.
+ */
+internal fun viewerSaveFanTargets(postId: PostId, latest: ViewerPostSuggestions?): List<CollectTarget<SaveTarget>> =
+    saveMenuTargets(latest?.takeIf { it.postId == postId }?.suggestions?.targets.orEmpty().drop(1)) { it }
 
-/** Releasing the fan on [target] saves there, or on New names a new Codex; off every target it opens the full picker. */
-internal fun viewerSaveFanRelease(target: ViewerSaveFanTarget?): ViewerSaveCommand = when (target) {
-    is ViewerSaveFanTarget.Codex -> ViewerSaveCommand.QuickSave(target.suggestion.codexId)
-    ViewerSaveFanTarget.New -> ViewerSaveCommand.NewCodex
-    null -> ViewerSaveCommand.OpenPicker
+/**
+ * Releasing the fan on [target] saves there, on New names a new Codex, and on More, like off every target, opens the
+ * full picker.
+ */
+internal fun viewerSaveFanRelease(target: SaveTarget?): ViewerSaveCommand = when (target) {
+    is SaveTarget.Codex -> ViewerSaveCommand.QuickSave(target.suggestion.codexId)
+    SaveTarget.New -> ViewerSaveCommand.NewCodex
+    SaveTarget.More, null -> ViewerSaveCommand.OpenPicker
 }
-
-private const val VIEWER_SAVE_FAN_CODICES = 3

@@ -28,7 +28,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.codex.LocalQuickSave
 import com.theoriacodex.app.codex.QuickSave
 import com.theoriacodex.app.codex.QuickSaveRecord
+import com.theoriacodex.app.codex.SAVE_MENU_CODICES
 import com.theoriacodex.app.codex.SaveSuggestions
+import com.theoriacodex.app.ui.navigation.CodexChosen
 import com.theoriacodex.app.related.LocalRelatedPostsSupport
 import com.theoriacodex.app.ui.components.CollectTargetVisual
 import com.theoriacodex.app.ui.components.CollectTargets
@@ -40,6 +42,7 @@ import com.theoriacodex.app.ui.navigation.LocalTrailOpener
 import com.theoriacodex.app.ui.navigation.TrailOpener
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.Query
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -47,19 +50,21 @@ import kotlinx.coroutines.launch
 /**
  * Draws [session]'s lift above the navigation host and acts on its drops. Mount it once, above everything the
  * cards live in. Saves go through [LocalQuickSave], Like through the card's own toggle, and Similar opens a trail
- * through [LocalTrailOpener], with its target showing progress until the opener returns; New hands the post to
- * [onNewCodex]. [onFailure] gets a message when a drop could not act. [onSaved] confirms a save that can be
- * undone, suspending until the confirmation goes away, and returns true when the user chose Undo. Nothing is
- * composed while no lift is in progress.
+ * through [LocalTrailOpener], with its target showing progress until the opener returns. New hands the post to
+ * [onNewCodex] and More, with the lift's search, to [onOpenPicker]; each hands back the Codex chosen there, which is
+ * saved and confirmed like a drop on a Codex. [onFailure] gets a message when a drop could not act. [onSaved] confirms
+ * a save that can be undone, suspending until the confirmation goes away, and returns true when the user chose Undo.
+ * Nothing is composed while no lift is in progress.
  */
 @Composable
 fun LiftOverlay(
     session: LiftSession,
-    onNewCodex: (Post) -> Unit,
+    onNewCodex: (Post, CodexChosen) -> Unit,
+    onOpenPicker: (Post, Query?, CodexChosen) -> Unit,
     onFailure: (String) -> Unit,
     onSaved: suspend (QuickSaveRecord) -> Boolean,
 ) {
-    LiftDropEffect(session, onNewCodex, onFailure, onSaved)
+    LiftDropEffect(session, LiftSaveRoutes(onNewCodex, onOpenPicker), onFailure, onSaved)
     val (lift, settling) = when (val phase = session.phase) {
         LiftPhase.Idle -> return
         is LiftPhase.Lifted -> phase.lift to null
@@ -68,48 +73,64 @@ fun LiftOverlay(
     key(lift) { LiftStage(session, lift, settling) }
 }
 
+/** Where the save edge's New and More send the lifted post. */
+private class LiftSaveRoutes(val newCodex: (Post, CodexChosen) -> Unit, val openPicker: (Post, Query?, CodexChosen) -> Unit)
+
 @Composable
 private fun LiftDropEffect(
     session: LiftSession,
-    onNewCodex: (Post) -> Unit,
+    routes: LiftSaveRoutes,
     onFailure: (String) -> Unit,
     onSaved: suspend (QuickSaveRecord) -> Boolean,
 ) {
     val quickSave = LocalQuickSave.current
     val trails = LocalTrailOpener.current
-    val newCodex by rememberUpdatedState(onNewCodex)
+    val saveRoutes by rememberUpdatedState(routes)
     val failure by rememberUpdatedState(onFailure)
     val saved by rememberUpdatedState(onSaved)
     // Drops outlive the overlay's phases: a save or trail keeps running after the copy has landed.
     val scope = rememberCoroutineScope()
     LaunchedEffect(session, quickSave, trails) {
         session.drops.collect { drop ->
-            scope.launch { failureOf(drop, session, quickSave, trails, newCodex, saved)?.let(failure) }
+            val saveTo: CodexChosen = { codexId, name -> scope.launch { saveFailure(drop, codexId, name, quickSave, saved)?.let(failure) } }
+            when (drop.action) {
+                LiftAction.NewCodex -> saveRoutes.newCodex(drop.lift.post, saveTo)
+                LiftAction.OpenPicker -> saveRoutes.openPicker(drop.lift.post, drop.lift.query, saveTo)
+                else -> scope.launch { failureOf(drop, session, quickSave, trails, saved)?.let(failure) }
+            }
         }
     }
 }
 
-/** Acts on [drop] and returns why it failed, or null. */
+/** Acts on [drop] and returns why it failed, or null. New and More hand off to their routes instead. */
 private suspend fun failureOf(
     drop: LiftDrop,
     session: LiftSession,
     quickSave: QuickSave,
     trails: TrailOpener,
-    onNewCodex: (Post) -> Unit,
     onSaved: suspend (QuickSaveRecord) -> Boolean,
 ): String? {
     val post = drop.lift.post
     when (val action = drop.action) {
-        is LiftAction.Save -> {
-            val record = quickSave.quickSave(post, action.codexId, drop.lift.query)
-                ?: return "Could not save to ${action.codexName}"
-            // Undo reverses exactly this save, even when a later save has replaced it as the last one.
-            if (record.undoable && onSaved(record)) quickSave.undoQuickSave(record)
-        }
-        LiftAction.NewCodex -> onNewCodex(post)
+        is LiftAction.Save -> return saveFailure(drop, action.codexId, action.codexName, quickSave, onSaved)
+        LiftAction.NewCodex, LiftAction.OpenPicker -> Unit
         LiftAction.ToggleLike -> drop.lift.like?.toggle?.invoke()
         LiftAction.Similar -> if (!session.whilePending { trails.openTrail(TrailRequest.Similar(post)) }) return "No similar posts found"
     }
+    return null
+}
+
+/** Saves [drop]'s post to Codex [codexId] and offers Undo; returns why it failed, or null. */
+private suspend fun saveFailure(
+    drop: LiftDrop,
+    codexId: String,
+    codexName: String,
+    quickSave: QuickSave,
+    onSaved: suspend (QuickSaveRecord) -> Boolean,
+): String? {
+    val record = quickSave.quickSave(drop.lift.post, codexId, drop.lift.query) ?: return "Could not save to $codexName"
+    // Undo reverses exactly this save, even when a later save has replaced it as the last one.
+    if (record.undoable && onSaved(record)) quickSave.undoQuickSave(record)
     return null
 }
 
@@ -119,7 +140,7 @@ private fun LiftStage(session: LiftSession, lift: LiftedPost, settling: LiftPhas
     val quickSave = LocalQuickSave.current
     // Null until the first ranking arrives: the end edge's targets shift then, so it takes no hover before.
     val suggestions by remember(lift.post.id, lift.query, quickSave) {
-        quickSave.suggestions(lift.post, lift.query, LIFT_SAVE_SUGGESTIONS)
+        quickSave.suggestions(lift.post, lift.query, SAVE_MENU_CODICES)
     }.collectAsStateWithLifecycle<SaveSuggestions?>(null)
     val similarAvailable = LocalRelatedPostsSupport.current(lift.post.id.source)
     val targets = remember(suggestions, lift.like, similarAvailable) {

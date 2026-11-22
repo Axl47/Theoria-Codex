@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -43,6 +44,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.codex.CodexCoverCandidate
 import com.theoriacodex.app.codex.CodexCoverImage
@@ -114,7 +116,7 @@ fun <T> CollectTargets(
     val haptics = LocalHapticFeedback.current
     LaunchedEffect(hovered?.key) { if (hovered != null) haptics.performHapticFeedback(TheoriaHaptics.Threshold) }
     var origin by remember { mutableStateOf(Offset.Zero) }
-    Box(modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInWindow() }) {
+    BoxWithConstraints(modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInWindow() }) {
         val stack: @Composable (Modifier, List<CollectTarget<T>>) -> Unit = { placement, shown ->
             Column(placement, Arrangement.spacedBy(12.dp), Alignment.CenterHorizontally) {
                 shown.forEach { target -> CollectTargetBubble(target, target.key == hovered?.key, state) }
@@ -125,12 +127,16 @@ fun <T> CollectTargets(
                 Modifier.align(if (layout.atEnd) Alignment.CenterEnd else Alignment.CenterStart).padding(horizontal = 12.dp),
                 targets,
             )
-            is CollectTargetsLayout.EdgeRow -> Row(
-                Modifier.align(if (layout.atTop) Alignment.TopCenter else Alignment.BottomCenter).padding(vertical = 12.dp),
-                Arrangement.spacedBy(16.dp),
-                Alignment.Top,
-            ) {
-                targets.forEach { target -> CollectTargetBubble(target, target.key == hovered?.key, state) }
+            is CollectTargetsLayout.EdgeRow -> {
+                // Labels narrow before a full row would overflow, so every target stays reachable on a narrow screen.
+                val labelWidth = minOf(LABEL_WIDTH, (maxWidth - ROW_GAP * (targets.size - 1)) / targets.size.coerceAtLeast(1))
+                Row(
+                    Modifier.align(if (layout.atTop) Alignment.TopCenter else Alignment.BottomCenter).padding(vertical = 12.dp),
+                    Arrangement.spacedBy(ROW_GAP),
+                    Alignment.Top,
+                ) {
+                    targets.forEach { target -> CollectTargetBubble(target, target.key == hovered?.key, state, labelWidth) }
+                }
             }
             is CollectTargetsLayout.Rising -> stack(Modifier.risingFrom(layout.anchor - origin), targets.asReversed())
         }
@@ -147,7 +153,12 @@ private fun Modifier.risingFrom(anchor: Offset): Modifier = layout { measurable,
 }
 
 @Composable
-private fun <T> CollectTargetBubble(target: CollectTarget<T>, hovered: Boolean, state: CollectTargetsState<T>) {
+private fun <T> CollectTargetBubble(
+    target: CollectTarget<T>,
+    hovered: Boolean,
+    state: CollectTargetsState<T>,
+    labelWidth: Dp = LABEL_WIDTH,
+) {
     val scale by animateFloatAsState(if (hovered) HOVERED_SCALE else 1f, label = "collect-target-scale")
     val colors = MaterialTheme.colorScheme
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -180,12 +191,14 @@ private fun <T> CollectTargetBubble(target: CollectTarget<T>, hovered: Boolean, 
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
-            modifier = Modifier.widthIn(max = TARGET_SIZE + 16.dp).padding(top = 4.dp),
+            modifier = Modifier.widthIn(max = labelWidth).padding(top = 4.dp),
         )
     }
 }
 
 private val TARGET_SIZE = 56.dp
+private val LABEL_WIDTH = TARGET_SIZE + 16.dp
+private val ROW_GAP = 12.dp
 private val HIT_SLOP = 12.dp
 private val RISING_GAP = 12.dp
 private const val HOVERED_SCALE = 1.2f

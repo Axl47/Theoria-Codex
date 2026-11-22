@@ -15,6 +15,7 @@ import com.theoriacodex.app.lift.LiftPhase
 import com.theoriacodex.app.lift.LiftSession
 import com.theoriacodex.app.ui.components.NameEntryDialog
 import com.theoriacodex.app.ui.navigation.LocalLiftController
+import com.theoriacodex.app.ui.navigation.CodexChosen
 import com.theoriacodex.app.ui.navigation.LocalNewCodexOpener
 import com.theoriacodex.app.ui.navigation.NewCodexOpener
 import com.theoriacodex.app.ui.undo.LocalUndoSlot
@@ -23,18 +24,25 @@ import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.launch
 
-/** Holds the post waiting for a new Codex's name, and opens the dialog that asks for it; see [ShellLiftOverlay]. */
+/**
+ * Holds the post waiting for a new Codex's name, and who saves it ([onCreated], or the dialog when null); see
+ * [ShellLiftOverlay].
+ */
 @Stable
 internal class NewCodexRequests : NewCodexOpener {
     var post by mutableStateOf<Post?>(null)
         private set
+    var onCreated by mutableStateOf<CodexChosen?>(null)
+        private set
 
-    override fun openNewCodex(post: Post) {
+    override fun openNewCodex(post: Post, onCreated: CodexChosen?) {
         this.post = post
+        this.onCreated = onCreated
     }
 
     fun dismiss() {
         post = null
+        onCreated = null
     }
 }
 
@@ -54,31 +62,51 @@ internal fun ShellLiftOverlay(shell: TheoriaShell) {
         LifecycleEventEffect(Lifecycle.Event.ON_STOP) { session.cancel() }
         LiftOverlay(
             session,
-            onNewCodex = newCodex::openNewCodex,
+            onNewCodex = { post, saveTo -> newCodex.openNewCodex(post, onCreated = saveTo) },
+            onOpenPicker = { post, query, saveTo -> shell.pendingSave.request(listOf(post), searchQuery = query, onPick = saveTo) },
             onFailure = shell::toast,
             onSaved = { record -> undo.awaitAction("Saved to ${record.codexName}", UndoAnchor.App) },
         )
     }
     (newCodex as? NewCodexRequests)?.let { requests ->
-        requests.post?.let { post -> CreateCodexForPostDialog(shell, post, requests::dismiss) }
+        requests.post?.let { post -> CreateCodexForPostDialog(shell, post, requests.onCreated, requests::dismiss) }
     }
 }
 
-/** Create Codex for the active profile, then quick-save [post] into it so each surface confirms as for any quick save. */
+/**
+ * Create Codex for the active profile, then quick-save [post] into it so each surface confirms as for any quick save;
+ * with [onCreated], hand the new Codex there instead and let the caller save.
+ */
 @Composable
-private fun CreateCodexForPostDialog(shell: TheoriaShell, post: Post, onDone: () -> Unit) {
+private fun CreateCodexForPostDialog(
+    shell: TheoriaShell,
+    post: Post,
+    onCreated: CodexChosen?,
+    onDone: () -> Unit,
+) {
     val quickSave = LocalQuickSave.current
     NameEntryDialog(
         title = "Create Codex",
         initialName = "",
         onDismiss = onDone,
         onSave = { name ->
-            val codexId = profileScopedCodexId(shell.owners.settings.state.value.activeProfile.profileId)
             shell.scope.launch {
-                val created = runCatchingPreservingCancellation { shell.data.codexRepository.ensureCodex(codexId, name) }
-                if (created.isFailure || quickSave.quickSave(post, codexId) == null) shell.toast("Could not save to $name")
+                val codexId = shell.createCodex(name) ?: return@launch shell.toast("Could not save to $name")
+                when {
+                    onCreated != null -> onCreated(codexId, name)
+                    quickSave.quickSave(post, codexId) == null -> shell.toast("Could not save to $name")
+                }
             }
             onDone()
         },
     )
+}
+
+/** Creates a Codex named [name] in [profileId]; returns its id, or null when it could not be created. */
+internal suspend fun TheoriaShell.createCodex(
+    name: String,
+    profileId: String = owners.settings.state.value.activeProfile.profileId,
+): String? {
+    val codexId = profileScopedCodexId(profileId)
+    return runCatchingPreservingCancellation { data.codexRepository.ensureCodex(codexId, name) }.map { codexId }.getOrNull()
 }

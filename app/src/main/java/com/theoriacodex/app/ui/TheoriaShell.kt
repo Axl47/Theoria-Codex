@@ -82,6 +82,7 @@ import com.theoriacodex.app.source.unaddedBooruPostHost
 import com.theoriacodex.app.source.ExternalPostDeepLink
 import com.theoriacodex.app.ui.components.FeedFabRestoreRegistry
 import com.theoriacodex.app.ui.components.rememberFeedFabRestoreRegistry
+import com.theoriacodex.app.ui.navigation.CodexChosen
 import com.theoriacodex.app.ui.routes.CreatorProfileStateSaver
 import com.theoriacodex.app.ui.routes.PendingRouteActions
 import com.theoriacodex.app.ui.routes.RouteOwnerSlot
@@ -222,10 +223,10 @@ internal class PendingCodexSave {
         private set
 
     /**
-     * Set by a requester that saves a picked existing Codex itself, as the triage deck does so its Undo covers the
-     * save; the sheet then hands over the Codex's id and name instead of saving. A new Codex the sheet still saves.
+     * Set by a requester that saves the picked Codex itself, as the lift and the triage deck do so their Undo covers
+     * the save; the sheet then hands over the id and name of the Codex picked or created instead of saving.
      */
-    var onPickExisting by mutableStateOf<((codexId: String, name: String) -> Unit)?>(null)
+    var onPick by mutableStateOf<CodexChosen?>(null)
         private set
 
     fun request(
@@ -233,7 +234,7 @@ internal class PendingCodexSave {
         fromForYou: Boolean = false,
         excludedCodexId: String? = null,
         searchQuery: Query? = null,
-        onPickExisting: ((codexId: String, name: String) -> Unit)? = null,
+        onPick: CodexChosen? = null,
     ) {
         val uniquePosts = posts.distinctBy(Post::id)
         if (uniquePosts.isEmpty()) return
@@ -241,7 +242,7 @@ internal class PendingCodexSave {
         query = searchQuery
         this.fromForYou = fromForYou
         excludedCodexIds = setOfNotNull(excludedCodexId)
-        this.onPickExisting = onPickExisting
+        this.onPick = onPick
         visible = true
     }
 
@@ -251,7 +252,7 @@ internal class PendingCodexSave {
         query = null
         fromForYou = false
         excludedCodexIds = emptySet()
-        onPickExisting = null
+        onPick = null
     }
 }
 
