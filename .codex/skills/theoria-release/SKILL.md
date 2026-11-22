@@ -18,7 +18,7 @@ Treat these as one release unit:
 
 Never use a low sequential Android code: the updater compares against the high SemVer-derived range. Never move, delete, or reuse a published release tag.
 
-Only `vX.Y.Z` tags are app releases. Other tags, such as `vision-models-N` (model files the app downloads on demand), are not: never use them as the previous release, and never move or delete them.
+Only `vX.Y.Z` tags are app releases. Other tags, such as `models-vision-N` (model files the app downloads on demand), are not: never use them as the previous release.
 
 ## Who Does What
 
