@@ -81,7 +81,7 @@ once more.
 | `ExtensionLoader` | same | Loads an installed package's code from its own APK; a folder file is first copied to a private read-only file (Android refuses writable code) and the copy's signer checked again. |
 | `SourceSettings`, `androidx/preference` | same | Reads a source's settings out of the holder classes and stores a changed value where the source reads it. |
 | `MihonHost` | same | Gives extensions what they ask the service locator for: the application, a `Json`, and an HTTP client. |
-| `MihonSeriesSource` | same | Presents one extension source as the app's `SeriesSource` (`core-domain`): popular and text search list series, a series has details and chapters, and a chapter gives its pages when it is opened. |
+| `MihonSeriesSource` | same | Presents one extension source as the app's `SeriesSource` (`core-domain`): popular, latest and search list series, a series has details and chapters, and a chapter gives its pages when it is opened. A source's search filters become the app's `SeriesFilter`s (`MihonFilters.kt`); a search sets the values chosen onto a list the source makes afresh, matching each by place, kind and name, and leaves one that no longer lines up at the source's default; later pages of the same search reuse that list, as Mihon does. |
 | `ExtensionImages` | same | Fetches covers and pages through the extension's own HTTP client. Each address handed to the image loader ends in a `#mihon=` tag naming the source, with a code only this install can compute; an interceptor on the app's media client answers those. Stored covers are plain addresses: the series' source tags one each time it is drawn (`SeriesSource.coverAddress`), and without its source a cover loads as an ordinary request. |
 | App seam | `app/.../extensions/MihonExtensionSourceHost.kt`, `app/.../di/ExtensionSources.kt` | The application creates the host. Nothing loads at startup: the extensions that are on load once, off the main thread, the first time the Series tab asks for sources or an image address ending in `#mihon=` is requested. The manifest holds `QUERY_ALL_PACKAGES`, as Mihon does: extension packages share only a declared feature, which a `<queries>` element cannot match. |
 | Series | `feature-series`, `app/.../series/`, `core-data` `SeriesRepository` | The Series tab and series page, the Extensions page (also reached from Settings), the Viewer session over a series' chapters, and the `series` and `series_entries` tables that keep followed series, read state and progress. Pages are never stored. |
@@ -152,8 +152,8 @@ to `/sdcard/Android/data/com.theoriacodex.debug/files/mihon-extensions/`):
 adb -s <emulator> install -r extension.apk
 ```
 
-Open the Series tab, go to Extensions and turn the extension on. The tab then browses its popular series, searches
-every source that is on at once, and opens a series' page, from which a chapter opens in the Viewer. Two live tests
+Open the Series tab, go to Extensions and turn the extension on. The tab then browses its popular or latest series, searches
+one source with its own filters or every source that is on at once, and opens a series' page, from which a chapter opens in the Viewer. Two live tests
 in `app/src/androidTest` do this through the real UI on `com.theoriacodex.debug.test`, with
 `-e extensionSourceLive true`. Each method is its own run, because the next one checks what survived the app's
 process restarting. `ExtensionsLiveTest` first, since it is what turns the extension on:
@@ -232,8 +232,6 @@ framework. The scripts are not in the repository: they depend on the index, whic
 
 What the feature still lacks.
 
-- **Search filters.** Each extension defines its own filters (genre, status, sort). Only popular, latest and free
-  text are used. Posts carry no tags.
 - **Unloading.** Loaded code cannot be unloaded. Turning an extension off stops its sources and images at once; its
   code stays idle in memory until the app's process ends.
 - **Extensions outside the sample.** The keep rules cover the packages 300 extensions used. One that calls a class in

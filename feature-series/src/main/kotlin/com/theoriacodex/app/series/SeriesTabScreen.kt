@@ -56,9 +56,9 @@ import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
 
 /**
- * The Series tab: a search across every source, the followed series, and one source's popular series to browse. A
- * search replaces the shelf and the browse grid with one row of results per source until it is cleared. Pulling down
- * checks the followed series for new chapters.
+ * The Series tab: a search across every source, the followed series, and one source's popular or latest series, or
+ * its own search with its filters, to browse. A search across sources replaces the shelf and the browse grid with one
+ * row of results per source until it is cleared. Pulling down checks the followed series for new chapters.
  */
 @Composable
 fun SeriesTabScreen(viewModel: SeriesTabViewModel, onOpenSeries: (SeriesId) -> Unit, onOpenExtensions: () -> Unit, modifier: Modifier = Modifier) {
@@ -93,11 +93,16 @@ fun SeriesTabScreen(viewModel: SeriesTabViewModel, onOpenSeries: (SeriesId) -> U
                     else if (search != null) searchResults(search, open, viewModel::retrySearch, viewModel::searchMore)
                     else {
                         followingShelf(followed, open)
-                        browse(state, viewModel, open, onOpenExtensions)
+                        browse(state, viewModel, open, onOpenExtensions, onFilter = viewModel::openFilters)
                     }
                 }
             }
         }
+    }
+    val sheet = state.filterSheet
+    val browsed = state.browse
+    if (sheet != null && browsed != null) {
+        SeriesFilterSheet(browsed.name, sheet, viewModel::editFilters, onDismiss = viewModel::closeFilters, onSearch = viewModel::searchSource)
     }
 }
 
@@ -139,7 +144,13 @@ private fun LazyGridScope.followingShelf(followed: List<FollowedSeries>, open: (
     }
 }
 
-private fun LazyGridScope.browse(state: SeriesTabState, viewModel: SeriesTabViewModel, open: (Series) -> Unit, onOpenExtensions: () -> Unit) {
+private fun LazyGridScope.browse(
+    state: SeriesTabState,
+    viewModel: SeriesTabViewModel,
+    open: (Series) -> Unit,
+    onOpenExtensions: () -> Unit,
+    onFilter: () -> Unit,
+) {
     val sources = state.sources
     when {
         sources == null -> fullWidth("sources-loading") { LoadingState() }
@@ -153,26 +164,43 @@ private fun LazyGridScope.browse(state: SeriesTabState, viewModel: SeriesTabView
                     }
                 }
             }
-            state.browse?.let { browse -> browseListing(browse, viewModel, open) }
+            state.browse?.let { browse ->
+                fullWidth("browse-kinds") {
+                    BrowseKinds(state.browseKind, latest = sources.firstOrNull { it.key == browse.key }?.supportsLatest == true, viewModel::choose, onFilter)
+                }
+                browseListing(browse, state.browseRun, viewModel, open)
+            }
         }
     }
 }
 
-private fun LazyGridScope.browseListing(browse: SeriesSourceListing, viewModel: SeriesTabViewModel, open: (Series) -> Unit) {
+/** [run] keys the next page's request, so a listing that replaced another with the same next page still asks for it. */
+private fun LazyGridScope.browseListing(browse: SeriesSourceListing, run: Int, viewModel: SeriesTabViewModel, open: (Series) -> Unit) {
     when (val listing = browse.listing) {
         SeriesListing.Loading -> fullWidth("browse-loading") { LoadingState() }
-        is SeriesListing.Failed -> fullWidth("browse-failed") { ErrorState(listing.message, onRetry = { viewModel.browse(browse.key) }) }
+        is SeriesListing.Failed -> fullWidth("browse-failed") { ErrorState(listing.message, onRetry = viewModel::retryBrowse) }
         is SeriesListing.Loaded -> {
             if (listing.series.isEmpty()) fullWidth("browse-empty") { EmptyState("No series") }
             items(listing.series, key = { it.id.toString() }) { series -> SeriesCard(series, { open(series) }) }
             when {
                 listing.moreFailed -> fullWidth("browse-more-failed") { FailureRow(viewModel::browseMore) }
                 listing.nextPage != null -> fullWidth("browse-more") {
-                    LaunchedEffect(listing.nextPage) { viewModel.browseMore() }
+                    LaunchedEffect(run, listing.nextPage) { viewModel.browseMore() }
                     LoadingState()
                 }
             }
         }
+    }
+}
+
+/** The browsed source's listings; Filter opens its sheet and counts what the filtered listing changed. */
+@Composable
+private fun BrowseKinds(kind: BrowseKind, latest: Boolean, onChoose: (BrowseKind) -> Unit, onFilter: () -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilterChoiceChip("Popular", selected = kind == BrowseKind.Popular) { onChoose(BrowseKind.Popular) }
+        if (latest) FilterChoiceChip("Latest", selected = kind == BrowseKind.Latest) { onChoose(BrowseKind.Latest) }
+        val changed = (kind as? BrowseKind.Filtered)?.active ?: 0
+        FilterChoiceChip(if (changed > 0) "$FILTER · $changed" else FILTER, selected = kind is BrowseKind.Filtered, onClick = onFilter)
     }
 }
 

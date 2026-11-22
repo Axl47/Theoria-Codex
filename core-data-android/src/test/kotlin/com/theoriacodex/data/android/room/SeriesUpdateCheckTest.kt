@@ -9,6 +9,7 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
+import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
@@ -155,7 +156,7 @@ private class FakeSource(id: String, private val fails: Boolean = false) : Serie
     override val name = id
     override val language = "en"
     override suspend fun popular(page: Int) = SeriesPage(emptyList(), false)
-    override suspend fun search(text: String, page: Int) = popular(page)
+    override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>) = popular(page)
 
     /** What a page's refresh waits for in [details]; a check asks for chapters only. */
     var detailsWait: CompletableDeferred<Unit>? = null
