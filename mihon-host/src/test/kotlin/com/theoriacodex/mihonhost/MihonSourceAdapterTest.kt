@@ -145,7 +145,7 @@ class MihonSourceAdapterTest {
     @Test
     fun `failures map to the reasons built-in sources report`() = runTest {
         assertEquals(SourceFailureReason.RATE_LIMITED, failureOf(HttpException(429)))
-        assertEquals(SourceFailureReason.AUTH_REQUIRED, failureOf(HttpException(403)))
+        assertEquals(SourceFailureReason.NETWORK, failureOf(HttpException(403)))
         assertEquals(SourceFailureReason.NETWORK, failureOf(HttpException(500)))
         assertEquals(SourceFailureReason.NETWORK, failureOf(IOException("offline")))
         assertEquals(SourceFailureReason.UNKNOWN, failureOf(NoSuchMethodError("missing")))

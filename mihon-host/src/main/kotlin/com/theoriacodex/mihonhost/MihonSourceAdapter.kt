@@ -155,11 +155,9 @@ class MihonSourceAdapter(
     } catch (error: CancellationException) {
         throw error
     } catch (error: HttpException) {
-        val reason = when (error.code) {
-            HTTP_TOO_MANY_REQUESTS -> SourceFailureReason.RATE_LIMITED
-            HTTP_UNAUTHORIZED, HTTP_FORBIDDEN -> SourceFailureReason.AUTH_REQUIRED
-            else -> SourceFailureReason.NETWORK
-        }
+        // A refusal (401, 403) is not reported as a missing key: the app holds no key for an extension source, and
+        // would point the user at a Settings field that does not exist. Most are a browser challenge.
+        val reason = if (error.code == HTTP_TOO_MANY_REQUESTS) SourceFailureReason.RATE_LIMITED else SourceFailureReason.NETWORK
         throw SourceAdapterException(reason, error.message, error)
     } catch (error: IOException) {
         throw SourceAdapterException(SourceFailureReason.NETWORK, error.message, error)
@@ -182,8 +180,6 @@ class MihonSourceAdapter(
         internal fun mangaUrl(id: PostId): String = String(Base64.getUrlDecoder().decode(id.sourcePostId))
 
         private const val MAX_LISTED = 2_048
-        private const val HTTP_UNAUTHORIZED = 401
-        private const val HTTP_FORBIDDEN = 403
         private const val HTTP_TOO_MANY_REQUESTS = 429
     }
 }
