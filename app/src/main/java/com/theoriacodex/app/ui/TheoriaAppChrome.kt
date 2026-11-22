@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -61,6 +62,7 @@ internal fun TheoriaBottomNavigation(
     height: Dp,
     iconSize: Dp,
     windowInsets: WindowInsets,
+    destinations: List<TopLevelDestination>,
     onDestinationSelected: (TopLevelDestination) -> Unit,
     marked: Set<TopLevelDestination> = emptySet(),
 ) {
@@ -68,7 +70,7 @@ internal fun TheoriaBottomNavigation(
         modifier = Modifier.height(height),
         windowInsets = windowInsets,
     ) {
-        TopLevelDestination.entries.forEachIndexed { index, destination ->
+        destinations.forEachIndexed { index, destination ->
             NavigationBarItem(
                 selected = selectedIndex == index,
                 onClick = { onDestinationSelected(destination) },
@@ -96,4 +98,5 @@ internal fun TopLevelDestination.icon() = when (this) {
     // Sparkles rather than a heart, which would read as Likes.
     TopLevelDestination.ForYou -> Icons.Default.AutoAwesome
     TopLevelDestination.Library -> Icons.Default.Collections
+    TopLevelDestination.Series -> Icons.AutoMirrored.Filled.MenuBook
 }

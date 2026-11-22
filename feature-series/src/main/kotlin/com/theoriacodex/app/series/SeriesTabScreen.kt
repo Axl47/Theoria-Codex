@@ -1,0 +1,207 @@
+package com.theoriacodex.app.series
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridScope
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
+import com.theoriacodex.app.ui.TopLevelDestination
+import com.theoriacodex.app.ui.components.EmptyState
+import com.theoriacodex.app.ui.components.ErrorState
+import com.theoriacodex.app.ui.components.FilterChoiceChip
+import com.theoriacodex.app.ui.components.LoadingState
+import com.theoriacodex.data.repository.FollowedSeries
+import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesId
+
+/**
+ * The Series tab: a search across every source, the followed series, and one source's popular series to browse. A
+ * search replaces the shelf and the browse grid with one row of results per source until it is cleared.
+ */
+@Composable
+fun SeriesTabScreen(viewModel: SeriesTabViewModel, onOpenSeries: (SeriesId) -> Unit, modifier: Modifier = Modifier) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val followed by viewModel.followed.collectAsStateWithLifecycle()
+    var query by rememberSaveable { mutableStateOf("") }
+    val grid = rememberLazyGridState()
+    val open: (Series) -> Unit = { viewModel.open(it, onOpenSeries) }
+    val clearSearch = {
+        query = ""
+        viewModel.clearSearch()
+    }
+    ScrollToTopOnTabReselect(TopLevelDestination.Series) { grid.animateScrollToItem(0) }
+    BackHandler(enabled = state.search != null, onBack = clearSearch)
+    Column(modifier.fillMaxSize()) {
+        SeriesSearchField(query, searching = state.search != null, onQueryChange = { query = it }, onSearch = viewModel::search, onClear = clearSearch)
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(CARD_WIDTH),
+            state = grid,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            val search = state.search
+            if (search != null) searchResults(search, open, viewModel::retrySearch)
+            else {
+                followingShelf(followed, open)
+                browse(state, viewModel, open)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SeriesSearchField(query: String, searching: Boolean, onQueryChange: (String) -> Unit, onSearch: (String) -> Unit, onClear: () -> Unit) {
+    val focus = LocalFocusManager.current
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        placeholder = { Text("Search all sources") },
+        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+        trailingIcon = {
+            if (query.isNotEmpty() || searching) IconButton(onClick = onClear) { Icon(Icons.Default.Close, contentDescription = "Clear") }
+        },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(
+            onSearch = {
+                focus.clearFocus()
+                onSearch(query)
+            },
+        ),
+    )
+}
+
+private fun LazyGridScope.followingShelf(followed: List<FollowedSeries>, open: (Series) -> Unit) {
+    if (followed.isEmpty()) return
+    fullWidth("following-title") { SectionTitle("Following") }
+    fullWidth("following") {
+        SeriesRow(followed, key = { it.series.id.toString() }) { item -> SeriesCard(item.series, { open(item.series) }, Modifier.width(CARD_WIDTH), item.unreadCount) }
+    }
+}
+
+private fun LazyGridScope.browse(state: SeriesTabState, viewModel: SeriesTabViewModel, open: (Series) -> Unit) {
+    val sources = state.sources
+    when {
+        sources == null -> fullWidth("sources-loading") { LoadingState() }
+        sources.isEmpty() -> fullWidth("sources-empty") { EmptyState("No extensions installed") }
+        else -> {
+            fullWidth("browse-title") { SectionTitle("Browse") }
+            fullWidth("browse-sources") {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(sources, key = { it.key.id }) { source ->
+                        FilterChoiceChip(source.name, selected = source.key == state.browse?.key) { viewModel.browse(source.key) }
+                    }
+                }
+            }
+            state.browse?.let { browse -> browseListing(browse, viewModel, open) }
+        }
+    }
+}
+
+private fun LazyGridScope.browseListing(browse: SeriesSourceListing, viewModel: SeriesTabViewModel, open: (Series) -> Unit) {
+    when (val listing = browse.listing) {
+        SeriesListing.Loading -> fullWidth("browse-loading") { LoadingState() }
+        is SeriesListing.Failed -> fullWidth("browse-failed") { ErrorState(listing.message, onRetry = { viewModel.browse(browse.key) }) }
+        is SeriesListing.Loaded -> {
+            if (listing.series.isEmpty()) fullWidth("browse-empty") { EmptyState("No series") }
+            items(listing.series, key = { it.id.toString() }) { series -> SeriesCard(series, { open(series) }) }
+            when {
+                listing.moreFailed -> fullWidth("browse-more-failed") { FailureRow(viewModel::browseMore) }
+                listing.nextPage != null -> fullWidth("browse-more") {
+                    LaunchedEffect(listing.nextPage) { viewModel.browseMore() }
+                    LoadingState()
+                }
+            }
+        }
+    }
+}
+
+private fun LazyGridScope.searchResults(results: List<SeriesSourceListing>, open: (Series) -> Unit, retry: (SourceKey) -> Unit) {
+    if (results.isEmpty()) fullWidth("search-no-sources") { EmptyState("No extensions installed") }
+    results.forEach { result ->
+        val listing = result.listing
+        fullWidth("search-title-${result.key.id}") {
+            SectionTitle(result.name, count = (listing as? SeriesListing.Loaded)?.series?.size)
+        }
+        fullWidth("search-${result.key.id}") {
+            when (listing) {
+                SeriesListing.Loading -> LoadingState()
+                is SeriesListing.Failed -> FailureRow({ retry(result.key) })
+                is SeriesListing.Loaded ->
+                    if (listing.series.isEmpty()) Text("No results", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    else SeriesRow(listing.series, key = { it.id.toString() }) { series -> SeriesCard(series, { open(series) }, Modifier.width(CARD_WIDTH)) }
+            }
+        }
+    }
+}
+
+/** A sideways row of cards, running to the screen's edges past the grid's padding. */
+@Composable
+private fun <T> SeriesRow(items: List<T>, key: (T) -> Any, card: @Composable (T) -> Unit) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        items(items, key = key) { item -> card(item) }
+    }
+}
+
+@Composable
+private fun SectionTitle(title: String, count: Int? = null) {
+    Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        if (count != null) Text("$count", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** One line for a source that failed, where a full-height failure would push the other sources away. */
+@Composable
+internal fun FailureRow(onRetry: () -> Unit, modifier: Modifier = Modifier) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Text(LOAD_FAILED, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        TextButton(onClick = onRetry) { Text("Retry") }
+    }
+}
+
+private fun LazyGridScope.fullWidth(key: String, content: @Composable () -> Unit) {
+    item(key = key, span = { GridItemSpan(maxLineSpan) }) { content() }
+}
+
+private val CARD_WIDTH = 104.dp

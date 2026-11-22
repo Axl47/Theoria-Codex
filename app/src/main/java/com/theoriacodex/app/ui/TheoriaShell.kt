@@ -351,6 +351,9 @@ internal class TheoriaShell(
     private val fileCopies = FileCopyLookup(sources.registry)
     val savedSearchOpens = SavedSearchOpenMarks(data.uiRestoreRepository)
     val recentsClearWorkflow = RecentsClearWorkflow(data.recentsRepository)
+    /** The tabs this build shows; Series only with extensions. */
+    val homeTabs = homeTabs(container.series != null)
+
     /** Reads series chapters in the Viewer; null in a build without extensions. */
     val seriesReader = container.series?.let(::SeriesReader)
     val viewerRouteWorkflow = ViewerRouteWorkflow(
@@ -733,7 +736,7 @@ internal fun rememberTheoriaShell(
     val pendingLikePostIds = owners.postMutations.pendingLikePostIds.collectAsStateWithLifecycle()
     val homeTabRoute = rememberSaveable { mutableStateOf(TopLevelDestination.Search.route) }
     val pendingCreatorProfile = rememberSaveable(stateSaver = CreatorProfileStateSaver) { mutableStateOf<CreatorProfile?>(null) }
-    val pagerState = rememberPagerState(pageCount = { TopLevelDestination.entries.size })
+    val pagerState = rememberPagerState(pageCount = { homeTabs(container.series != null).size })
     val routes = remember { RouteOwners() }
     val pendingSave = remember { PendingCodexSave() }
     val overlays = remember { ShellOverlays() }

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.domain.series.SeriesId
 import android.net.Uri
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -29,6 +30,11 @@ internal object AppRoute {
     const val Viewer = "viewer"
     const val CodexDetail = "codex/detail/{codexId}"
     const val Settings = "settings-screen"
+
+    /** One series' page, named by its [SeriesId]. */
+    const val Series = "series?source={source}&address={address}"
+
+    fun series(id: SeriesId): String = "series?source=${id.source.id}&address=${Uri.encode(id.address)}"
 
     /** The triage deck over one feed, named by a [TriageRequest]; [triageArguments] reads it back. */
     const val Triage = "triage/{source}?feedKey={feedKey}&removes={removes}&alsoIn={alsoIn}"

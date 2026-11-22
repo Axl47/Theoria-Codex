@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.app.series.SeriesTabDestination
 import android.widget.Toast
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
@@ -65,6 +66,7 @@ internal fun HomePager(shell: TheoriaShell) {
             TopLevelDestination.Search -> SearchDestination(shell)
             TopLevelDestination.ForYou -> ForYouDestination(shell)
             TopLevelDestination.Library -> LibraryDestination(shell)
+            TopLevelDestination.Series -> SeriesTabDestination(shell)
         }
     }
 }

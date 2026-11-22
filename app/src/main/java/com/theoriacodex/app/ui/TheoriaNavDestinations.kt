@@ -1,5 +1,7 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.app.series.seriesArguments
+import com.theoriacodex.app.series.SeriesPageDestination
 import kotlinx.coroutines.flow.emptyFlow
 import androidx.compose.runtime.collectAsState
 import com.theoriacodex.app.ui.components.feedDurations
@@ -117,6 +119,7 @@ internal fun NavGraphBuilder.theoriaDestinations(shell: TheoriaShell, sharedScop
         }
     }
     composable(AppRoute.Settings) { SettingsScreenDestination(shell) }
+    composable(AppRoute.Series, arguments = seriesArguments) { entry -> SeriesPageDestination(shell, entry) }
     composable(AppRoute.Triage, arguments = triageArguments) { entry -> TriageDestination(shell, entry.triageRequest()) }
 }
 
