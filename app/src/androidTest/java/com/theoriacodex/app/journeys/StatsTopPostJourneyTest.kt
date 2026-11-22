@@ -2,8 +2,8 @@ package com.theoriacodex.app.journeys
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
-import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.isDisplayed
+import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -65,7 +65,8 @@ class StatsTopPostJourneyTest : AppJourneyFixture() {
         // Overall stats alone still make a file, so the button disables only once they are left out too.
         compose.onNodeWithText("Share file").assertIsEnabled()
         activate(compose.onNodeWithContentDescription("Include overall stats").performScrollTo())
-        compose.onNodeWithText("Share file").assertIsNotEnabled()
+        val shareFile = compose.onNodeWithText("Share file")
+        compose.waitUntil(10_000) { !isEnabled().matches(shareFile.fetchSemanticsNode()) }
     }
 
     private fun openFromTopPosts(label: String, post: Post, returnTo: String = "Top posts") {
