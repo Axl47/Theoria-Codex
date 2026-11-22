@@ -210,6 +210,12 @@ class RoomCodexLikesRepository(
         snapshot
     }
 
+    override suspend fun deleteCodexIfEmpty(codexId: String): Boolean = database.withTransaction {
+        if (dao.codex(codexId) == null || dao.itemsForCodex(codexId).isNotEmpty()) return@withTransaction false
+        deleteCodex(codexId)
+        true
+    }
+
     override suspend fun restoreDeletedCodex(snapshot: DeletedCodexSnapshot) {
         database.withTransaction {
             val codex = snapshot.codex

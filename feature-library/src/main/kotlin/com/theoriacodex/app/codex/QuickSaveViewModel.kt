@@ -35,9 +35,12 @@ class QuickSaveViewModel(
 
     private suspend fun save(post: Post, codexId: String, fromForYou: Boolean, newName: String?): QuickSaveRecord? = viewModelScope.async {
         val result = saver.save(codexId, listOf(post), cacheFullImage(), fromForYou, newCollectionName = newName)
+        // A failed save leaves no Codex behind that it created.
+        if (result !is CodexSaveResult.Success && newName != null) runCatchingPreservingCancellation { codices.deleteCodexIfEmpty(codexId) }
         (result as? CodexSaveResult.Success)?.let { saved ->
             val membership = if (saved.inserted == 1) membershipSavedAt(codexId, post.id) else null
-            val name = newName ?: saver.codexName(codexId) ?: "Codex"
+            // The stored name, which a clash with an existing Codex may have suffixed.
+            val name = saver.codexName(codexId) ?: newName ?: "Codex"
             QuickSaveRecord(post, codexId, name, saved.inserted, clock(), membership, createdCodex = newName != null)
                 .also { last.value = it }
         }
@@ -56,7 +59,7 @@ class QuickSaveViewModel(
         viewModelScope.async {
             runCatchingPreservingCancellation {
                 if (membershipSavedAt(record.codexId, record.post.id) == savedAt) codices.removeItems(record.codexId, setOf(record.post.id))
-                if (record.createdCodex && codices.observeCodexItems(record.codexId).first().isEmpty()) codices.deleteCodexForUndo(record.codexId)
+                if (record.createdCodex) codices.deleteCodexIfEmpty(record.codexId)
             }
         }.await()
     }

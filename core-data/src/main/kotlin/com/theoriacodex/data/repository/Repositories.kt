@@ -27,6 +27,8 @@ interface CodexRepository {
     /** Deletes atomically and returns what Undo needs, or null when the Codex is already gone. */
     suspend fun deleteCodexForUndo(codexId: String): DeletedCodexSnapshot?
     suspend fun restoreDeletedCodex(snapshot: DeletedCodexSnapshot)
+    /** Deletes the Codex only while it holds no posts, checked in the same transaction; returns whether it did. */
+    suspend fun deleteCodexIfEmpty(codexId: String): Boolean
     fun observeCodexItems(codexId: String): Flow<List<CodexItem>>
     /** Orders by save time, or by source then save time; any other [sort] comes back newest saved first. */
     fun observeCodexPosts(codexId: String, sort: CodexSortMode): Flow<List<Post>>

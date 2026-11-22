@@ -152,6 +152,12 @@ class InMemoryCodexRepository : CodexRepository {
         snapshot
     }
 
+    override suspend fun deleteCodexIfEmpty(codexId: String): Boolean = mutex.withLock {
+        if (codices.value.none { it.codexId == codexId } || itemsByCodex.value[codexId].orEmpty().isNotEmpty()) return@withLock false
+        removeCodex(codexId)
+        true
+    }
+
     override suspend fun restoreDeletedCodex(snapshot: DeletedCodexSnapshot) {
         mutex.withLock {
             val current = codices.value
