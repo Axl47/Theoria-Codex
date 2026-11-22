@@ -153,8 +153,23 @@ internal fun ViewerInfoSheet(
         AdaptiveViewerInfo(onDismiss = { controls.setInfoSheetVisible(false) }) {
             ViewerChapterActions(post) { controls.jumpToMedia(post.id, 0) }
         }
-        return
+    } else {
+        PostInfoSheet(selection, controls, host, config, saveToCodexQuery, contextActions, comments)
     }
+}
+
+/** A post's sheet: its actions, tags and comments. A series chapter has none of these, so it never gets this sheet. */
+@Composable
+private fun PostInfoSheet(
+    selection: ViewerSelection,
+    controls: ViewerControls,
+    host: ViewerScreenHost,
+    config: ViewerScreenConfig,
+    saveToCodexQuery: Query?,
+    contextActions: ViewerContextActions,
+    comments: ViewerComments,
+) {
+    val post = selection.post
     val onAction = host.onAction
     val searchActions = LocalPostTagSearchActions.current
     PreloadCodexSaveRelevance(post, saveToCodexQuery)
