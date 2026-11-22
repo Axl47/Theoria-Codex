@@ -9,6 +9,7 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
+import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
@@ -127,20 +128,117 @@ class SeriesTabViewModelTest {
         assertEquals(listOf("/found"), listing.series.map { it.id.address })
         assertEquals(2, listing.nextPage)
     }
+
+    @Test
+    fun theFilteredListingPagesLikePopularAndCountsWhatChanged() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val source = Answering(pages = 2)
+        val defaults = listOf(SeriesFilter.Check("Completed", false), SeriesFilter.Check("Colored", false))
+        source.offered = { defaults }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) {}
+        advanceUntilIdle()
+        viewModel.loadFilters()
+        advanceUntilIdle()
+        assertEquals(defaults, viewModel.state.value.filters)
+
+        val chosen = listOf(SeriesFilter.Check("Completed", true), SeriesFilter.Check("Colored", false))
+        viewModel.searchSource(" one punch ", chosen)
+        advanceUntilIdle()
+        viewModel.browseMore()
+        advanceUntilIdle()
+
+        assertEquals(BrowseKind.Filtered("one punch", chosen, changed = 2), viewModel.state.value.browseKind)
+        assertEquals(listOf("one punch", "one punch"), browsed(viewModel))
+        assertEquals(listOf(chosen, chosen), source.searchedWith)
+
+        viewModel.choose(BrowseKind.Latest)
+        advanceUntilIdle()
+        assertEquals(listOf("latest"), browsed(viewModel))
+    }
+
+    @Test
+    fun aPageAskedForUnderAnEarlierListingIsDropped() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val source = Answering(pages = 2)
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) {}
+        advanceUntilIdle()
+        val more = CompletableDeferred<Unit>()
+        source.laterPagesWait = more
+        viewModel.browseMore()
+        advanceUntilIdle()
+
+        viewModel.choose(BrowseKind.Latest)
+        advanceUntilIdle()
+        more.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(listOf("latest"), browsed(viewModel))
+    }
+
+    @Test
+    fun switchingSourceOrLeavingTheTabDropsTheFilters() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val offered = listOf(Answering(), Answering("custom_mihon_8"))
+        val viewModel = SeriesTabViewModel(NothingStored, { offered }) {}
+        advanceUntilIdle()
+        viewModel.searchSource("one punch", emptyList())
+        advanceUntilIdle()
+
+        viewModel.dropFilters()
+        advanceUntilIdle()
+        assertEquals(BrowseKind.Popular, viewModel.state.value.browseKind)
+        assertEquals(listOf("popular"), browsed(viewModel))
+
+        viewModel.searchSource("one punch", emptyList())
+        viewModel.browse(offered[1].key)
+        advanceUntilIdle()
+        assertEquals(BrowseKind.Popular, viewModel.state.value.browseKind)
+        assertEquals(listOf("popular"), browsed(viewModel))
+    }
+
+    @Test
+    fun filtersThatFailToLoadOfferNone() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val source = Answering().apply { offered = { error("no filters") } }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) {}
+        advanceUntilIdle()
+
+        viewModel.loadFilters()
+        advanceUntilIdle()
+
+        assertEquals(emptyList<SeriesFilter>(), viewModel.state.value.filters)
+    }
+
+    private fun browsed(viewModel: SeriesTabViewModel) = (viewModel.state.value.browse?.listing as SeriesListing.Loaded).series.map { it.title }
 }
 
-/** Answers a search with one series a page, titled by the text searched for, over [pages] pages. */
+/**
+ * Answers each listing with one series a page over [pages] pages, titled `popular`, `latest` or by the text searched
+ * for, and keeps the filters each search was given in [searchedWith].
+ */
 private class Answering(id: String = "custom_mihon_7", private val pages: Int = 1) : SeriesSource {
     override val key = SourceKey.parseOrThrow(id)
     override val name = "Fake"
     override val language = "en"
-    override suspend fun popular(page: Int) = SeriesPage(emptyList(), hasNextPage = false)
+    override val supportsLatest = true
+    override suspend fun popular(page: Int) = listed("popular", page)
+    override suspend fun latest(page: Int) = listed("latest", page)
+
+    var offered: suspend () -> List<SeriesFilter> = { emptyList() }
+    override suspend fun filters() = offered()
+
+    val searchedWith = mutableListOf<List<SeriesFilter>>()
 
     /** What a page after the first waits for, when set. */
     var laterPagesWait: CompletableDeferred<Unit>? = null
-    override suspend fun search(text: String, page: Int): SeriesPage {
+    override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>): SeriesPage {
+        searchedWith += filters
+        return listed(text, page)
+    }
+
+    private suspend fun listed(title: String, page: Int): SeriesPage {
         if (page > 1) laterPagesWait?.await()
-        return SeriesPage(listOf(Series(SeriesId(key, if (page == 1) "/found" else "/found$page"), text)), hasNextPage = page < pages)
+        return SeriesPage(listOf(Series(SeriesId(key, if (page == 1) "/found" else "/found$page"), title)), hasNextPage = page < pages)
     }
     override suspend fun details(series: Series) = series
     override suspend fun entries(series: Series) = emptyList<SeriesEntry>()
