@@ -73,7 +73,8 @@ data class TagAffinityInputs(
  * [TagAffinityInputs.lift] once the source has the history, else by [interest] shrinking as the tag gets common in what
  * the profile watches. A [universal] tag (on most watched posts of its source, or on nearly every post of the feed at
  * hand) narrows nothing and is offered neither to follow nor to hide. An [informative] tag is worth offering to follow:
- * one the profile chose, or one clearly more common in what it kept than in what it watched.
+ * one the profile chose, one clearly more common in what it kept than in what it watched, or one too rare in what it
+ * watches to tell yet.
  */
 data class TagAffinity(
     val tag: String,
@@ -166,11 +167,29 @@ private fun TagAffinityInputs.affinity(source: SourceKey, tag: String, feedShare
     val universal = common || (feedShare[token] ?: 0.0) >= UNIVERSAL_FEED_SHARE
     val lift = lift(source, token)
         ?: return TagAffinity(tag, interest, (interest + UNKNOWN_TAG_INTEREST) * (1.0 - (watched ?: 0.0)), universal)
+    val (score, worthOffering) = historyScore(source, token, lift, chosen, watched ?: 0.0)
+    return TagAffinity(tag, interest, score, universal, informative = !universal && worthOffering)
+}
+
+/**
+ * A tag's score and whether it is worth offering, on a source with the history for [lift]. It is when [chosen] or
+ * clearly more common in what was kept, and also, after those, when too rare in what was watched ([watched], a share)
+ * for its absence from what was kept to count against it.
+ */
+private fun TagAffinityInputs.historyScore(
+    source: SourceKey,
+    token: String,
+    lift: Double,
+    chosen: Boolean,
+    watched: Double,
+): Pair<Double, Boolean> {
     val kept = keptByTag[source]?.get(token) ?: 0
     // How much more common, times how many kept posts say so; a tag kept once is still a guess.
     val score = ln(lift) * ln(1.0 + kept) + if (chosen) EXPLICIT_BONUS else 0.0
-    val informative = !universal && (chosen || (kept >= MIN_KEPT_FOR_TAG && lift >= MIN_INFORMATIVE_LIFT))
-    return TagAffinity(tag, interest, score, universal, informative)
+    if (chosen || (kept >= MIN_KEPT_FOR_TAG && lift >= MIN_INFORMATIVE_LIFT)) return score to true
+    val tooRareToJudge = kept < MIN_KEPT_FOR_TAG && watched * (keptBySource[source] ?: 0) < MIN_KEPT_FOR_TAG
+    // Rarest first, below every proven tag.
+    return if (tooRareToJudge) -watched to true else score to false
 }
 
 /** Each tag's share of [posts], or nothing below [MIN_FEED_POSTS], where a share says little. */

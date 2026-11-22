@@ -104,6 +104,18 @@ class TagAffinityTest {
     }
 
     @Test
+    fun `a tag too rare in what was watched to judge is still offered, after the proven ones`() {
+        val likes = List(40) { index -> like(listOfNotNull("miku".takeIf { index % 4 == 0 }, "tree"), "$index") }
+        // At these rates 40 kept posts would hold about 0.1 fox and 4 dog: missing dog says something, missing fox does not.
+        val watched = statistics(watched = 400, "miku" to 12, "tree" to 400, "fox" to 1, "dog" to 40, "owl" to 2)
+        val inputs = tagAffinityInputs(likes, emptyList(), emptyList(), emptyList(), watched)
+
+        val offered = tagAffinities(post("dog", "owl", "fox", "miku"), inputs).filter { it.informative }.map { it.tag }
+
+        assertEquals(listOf("miku", "fox", "owl"), offered)
+    }
+
+    @Test
     fun `lift compares each source with itself, and a chosen tag on most watched posts is still universal`() {
         val kept = List(30) { index -> like(listOf("tree", "moth"), "$index") }
         val watched = statistics(watched = 300, "tree" to 280, "moth" to 3)

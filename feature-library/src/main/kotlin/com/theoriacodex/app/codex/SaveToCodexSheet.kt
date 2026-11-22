@@ -79,6 +79,7 @@ fun SaveToCodexSheet(
     relevanceScores: Map<String, Double> = emptyMap(),
     librarySort: CodexLibrarySort = CodexLibrarySort.MANUAL,
     libraryUsage: Map<String, CodexUsage> = emptyMap(),
+    lastSavedAt: Map<String, Long> = emptyMap(),
     containingCodexIds: Set<String> = emptySet(),
     excludedCodexIds: Set<String> = emptySet(),
     onCreateCodex: (String, String) -> Unit,
@@ -122,6 +123,7 @@ fun SaveToCodexSheet(
         relevanceScores = relevanceScores,
         librarySort = librarySort,
         libraryUsage = libraryUsage,
+        lastSavedAt = lastSavedAt,
         containingCodexIds = containingCodexIds,
         onSelectCodex = onSelectCodex,
         onCycleProfile = {
@@ -158,6 +160,7 @@ private fun SaveToCodexSheetContent(
     relevanceScores: Map<String, Double>,
     librarySort: CodexLibrarySort,
     libraryUsage: Map<String, CodexUsage>,
+    lastSavedAt: Map<String, Long>,
     containingCodexIds: Set<String>,
     onSelectCodex: (String) -> Unit,
     onCycleProfile: () -> Unit,
@@ -173,10 +176,17 @@ private fun SaveToCodexSheetContent(
         sortCodicesForLibrary(pickableCodices, librarySort, codexItemCounts, likesCodexId = null, libraryUsage)
     }
     val profileId = selectedProfile?.profileId.orEmpty()
-    val matchingCodices = remember(rootCodices, profileId, searchText, sortByRelevance, relevanceScores, containingCodexIds) {
-        val scores = if (sortByRelevance) relevanceScores else emptyMap()
+    val matchingCodices = remember(
+        rootCodices, profileId, searchText, sortByRelevance, relevanceScores, lastSavedAt, containingCodexIds,
+    ) {
         val query = searchText.trim()
-        rankSaveTargets(rootCodices, profileId, containingCodexIds, scores).ordered
+        // Ranked like the one-tap suggestions; the library sort alone otherwise.
+        val ranked = if (sortByRelevance) {
+            rankSaveTargets(rootCodices, profileId, containingCodexIds, relevanceScores, lastSavedAt = lastSavedAt)
+        } else {
+            rankSaveTargets(rootCodices, profileId, containingCodexIds)
+        }
+        ranked.ordered
             .filter { codex -> codex.name.contains(query, ignoreCase = true) }
     }
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE

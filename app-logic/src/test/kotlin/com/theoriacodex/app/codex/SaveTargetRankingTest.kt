@@ -59,6 +59,19 @@ class SaveTargetRankingTest {
         assertEquals("b", rankSaveTargets(listOf(a, b), profile, emptySet(), relevance, lastSavedAt = lastSavedAt, nowEpochMs = now + 3 * HOUR).suggestions.first().codexId)
     }
 
+    @Test fun `a recent save never lifts a strong match over a Codex this search already saved into`() {
+        val now = 10 * HOUR
+        val search = emptySearchQuery().withIncludeTermsAsRequired(listOf(SearchTerm("sky")))
+        val memory = SearchSaveMemory().apply { record(search, "a") }
+        val lastSavedAt = mapOf("b" to now - 2 * MINUTE)
+
+        val ranked = rankSaveTargets(listOf(a, b), profile, emptySet(), mapOf("b" to 0.95), memory, search, lastSavedAt, nowEpochMs = now)
+        assertEquals(listOf("a", "b"), ranked.suggestions.ids())
+        // The picker passes relevance the search already lifted, and ranks the same.
+        val picker = rankSaveTargets(listOf(a, b), profile, emptySet(), memory.boost(search, mapOf("b" to 0.95)), lastSavedAt = lastSavedAt, nowEpochMs = now)
+        assertEquals(listOf("a", "b"), picker.ordered.ids())
+    }
+
     private fun codex(id: String) = Codex(id, id.uppercase(), 0)
     private fun List<Codex>.ids() = map(Codex::codexId)
 

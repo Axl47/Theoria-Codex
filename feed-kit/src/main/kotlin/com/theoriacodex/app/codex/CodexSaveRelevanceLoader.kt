@@ -36,8 +36,8 @@ val LocalCodexSaveRelevanceLoader = staticCompositionLocalOf<CodexSaveRelevanceL
  * Codex relevance for save surfaces, shared by every surface asking about the same posts and search.
  *
  * Requests are keyed by posts and search, so the hold menu, info sheet and one-tap save surfaces can observe
- * different posts at once. The saved library is observed once and shared: each request only rescores the
- * retained snapshot when the library changes. A request stays warm for 5 s after its last collector leaves,
+ * different posts at once. The saved library and its tag rarity are observed once and shared: each request only
+ * rescores the retained snapshot when the library changes. A request stays warm for 5 s after its last collector leaves,
  * which carries the scores from the hold menu into the picker; the library stops 5 s after the last request.
  */
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -47,10 +47,12 @@ class CodexSaveRelevanceLoader(
     private val scoringDispatcher: CoroutineDispatcher = Dispatchers.Default,
     observeLibrary: (Set<String>) -> Flow<Map<String, List<Post>>>,
 ) {
-    private val library: SharedFlow<Map<String, List<Post>>> = repository.observeCodices()
+    private val library: SharedFlow<SavedLibrary> = repository.observeCodices()
         .map { codices -> codices.mapTo(linkedSetOf(), Codex::codexId) }
         .distinctUntilChanged()
         .flatMapLatest(observeLibrary)
+        .map(::SavedLibrary)
+        .flowOn(scoringDispatcher)
         .shareIn(scope, SharingStarted.WhileSubscribed(stopTimeoutMillis = RETAIN_MS), replay = 1)
     private val requests = HashMap<Request, Lookup>()
 

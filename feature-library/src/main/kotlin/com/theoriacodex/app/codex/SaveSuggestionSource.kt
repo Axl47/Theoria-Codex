@@ -80,6 +80,6 @@ class SaveSuggestionSource(
         val items: Map<String, List<CodexItem>>,
         val covers: Map<String, List<CodexCoverCandidate>>,
     ) {
-        val lastSavedAt: Map<String, Long> = items.mapValues { (_, saved) -> saved.maxOfOrNull(CodexItem::savedAtEpochMs) ?: 0L }
+        val lastSavedAt: Map<String, Long> = latestSaveTimes(items)
     }
 }
