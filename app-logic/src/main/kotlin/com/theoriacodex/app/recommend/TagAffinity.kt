@@ -33,7 +33,8 @@ import kotlin.math.ln
  *   as a tag, searches it in a saved search, or searched it at least twice;
  * - [explicit]: the tags with that explicit weight;
  * - [watchedByTag] and [watchedBySource]: how many watched posts of each source carried each tag, out of how many;
- * - [keptByTag] and [keptBySource]: the same for the posts the profile kept (Liked or put in a Codex, each once).
+ * - [keptByTag] and [keptBySource]: the same for the posts the profile kept (Liked or put in a Codex, each once);
+ * - [profileId]: the profile they describe, set by [shareTagAffinityInputs], so a reader can wait out a profile switch.
  */
 data class TagAffinityInputs(
     val likedCounts: Map<String, Int> = emptyMap(),
@@ -44,6 +45,7 @@ data class TagAffinityInputs(
     val watchedBySource: Map<SourceKey, Long> = emptyMap(),
     val keptByTag: Map<SourceKey, Map<String, Int>> = emptyMap(),
     val keptBySource: Map<SourceKey, Int> = emptyMap(),
+    val profileId: String? = null,
 ) {
     /** The share of [source]'s watched posts that carried [token], or null before there are enough to say. */
     fun watchedShare(source: SourceKey, token: String): Double? {
@@ -165,7 +167,7 @@ fun TagAffinityInputs.respellChosen(spell: (String) -> String?): TagAffinityInpu
 }
 
 /**
- * The active profile's [TagAffinityInputs], following profile switches; a read failure gives no inputs. Built once per
+ * The active profile's [TagAffinityInputs], following profile switches; a read failure gives that profile no inputs. Built once per
  * app session in [scope], from the first collector on, and shared: For You's lanes and every Trail and card read it.
  * A new subscriber gets the latest inputs, or waits for the first.
  */
@@ -178,27 +180,27 @@ fun shareTagAffinityInputs(
     savedSearches: SavedSearchRepository,
     statistics: StatisticsRepository,
 ): SharedFlow<TagAffinityInputs> {
-    val profile = settings.observeSettings()
-        .map { it.activeProfileId to it.favoriteTagsByProfile[it.activeProfileId].orEmpty().flatMap { entry -> entry.tags } }
-        .distinctUntilChanged()
-    val activeProfile = profile.map { it.first }.distinctUntilChanged()
-    val profileLikes = activeProfile.flatMapLatest(likes::observeLikes)
-    // The profile's own Codices; its Likes collection is left out, since Likes already count once.
-    val codexPosts = combine(activeProfile, codex.observeCodices()) { profileId, codices ->
-        codices.mapNotNullTo(mutableSetOf()) { entry ->
-            entry.codexId.takeIf { id -> ProfileLibraryIds.belongsTo(id, profileId) && !id.startsWith(ProfileLibraryIds.LIKES_PREFIX) }
-        }
-    }.distinctUntilChanged().flatMapLatest(codex::observeLibraryPosts)
-    val kept = combine(profile, profileLikes, codexPosts, savedSearches.observeSavedSearches()) { (_, savedTags), liked, posts, searches ->
-        keptTagEvidence(liked, posts, savedTags, searches)
-    }.distinctUntilChanged()
     // Only the counters affinity reads, so a write of usage time or any other counter rebuilds nothing.
     val watched = statistics.observeStatistics()
         .map { LifetimeStatistics(watchedBySource = it.watchedBySource, watchedByTag = it.watchedByTag, searchesByTag = it.searchesByTag) }
         .distinctUntilChanged()
-    return combine(kept, watched, KeptTagEvidence::withStatistics)
-        .distinctUntilChanged().catch { emit(TagAffinityInputs.Empty) }.flowOn(Dispatchers.Default)
-        .shareIn(scope, SharingStarted.Lazily, replay = 1)
+    // Everything kept is read under one profile, so a switch never pairs one profile's saved tags with another's Likes.
+    return settings.observeSettings().map { it.activeProfileId }.distinctUntilChanged().flatMapLatest { profileId ->
+        val savedTags = settings.observeSettings()
+            .map { it.favoriteTagsByProfile[profileId].orEmpty().flatMap { entry -> entry.tags } }.distinctUntilChanged()
+        // The profile's own Codices; its Likes collection is left out, since Likes already count once.
+        val codexPosts = codex.observeCodices().map { codices ->
+            codices.mapNotNullTo(mutableSetOf()) { entry ->
+                entry.codexId.takeIf { id -> ProfileLibraryIds.belongsTo(id, profileId) && !id.startsWith(ProfileLibraryIds.LIKES_PREFIX) }
+            }
+        }.distinctUntilChanged().flatMapLatest(codex::observeLibraryPosts)
+        val kept = combine(savedTags, likes.observeLikes(profileId), codexPosts, savedSearches.observeSavedSearches()) {
+                tags, liked, posts, searches ->
+            keptTagEvidence(liked, posts, tags, searches)
+        }.distinctUntilChanged()
+        combine(kept, watched) { evidence, statistics -> evidence.withStatistics(statistics).copy(profileId = profileId) }
+            .catch { emit(TagAffinityInputs(profileId = profileId)) }
+    }.distinctUntilChanged().flowOn(Dispatchers.Default).shareIn(scope, SharingStarted.Lazily, replay = 1)
 }
 
 /**

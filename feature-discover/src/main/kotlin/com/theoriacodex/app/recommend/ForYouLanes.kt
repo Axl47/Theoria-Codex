@@ -45,14 +45,20 @@ internal class ForYouLanesLoader(
             .inPresentationOrder()
         val profile = request.settings.activeProfileId
         val blocked = request.settings.forYouBlacklistByProfile[profile].orEmpty()
-        val interests = interestSeeds(sources, likes.observeLikes(profile).first(), blocked)
+        val interests = interestSeeds(sources, profile, likes.observeLikes(profile).first(), blocked)
         val seeds = interests.ifEmpty { trendingSeeds(sources, blocked) }
         seeds.inTurnBySource().take(LANE_LIMIT).map { (source, tags) -> lane(source, tags, request) }
     }
 
     /** Each source's interests, strongest first, ending with a guess to explore. */
-    private suspend fun interestSeeds(sources: List<SourceKey>, liked: List<LikedPost>, blocked: List<ForYouBlacklistEntry>): List<LaneSeed> {
-        val affinity = tagAffinity.first()
+    private suspend fun interestSeeds(
+        sources: List<SourceKey>,
+        profile: String,
+        liked: List<LikedPost>,
+        blocked: List<ForYouBlacklistEntry>,
+    ): List<LaneSeed> {
+        // Right after a profile switch the shared inputs can still be the last profile's.
+        val affinity = tagAffinity.first { it.profileId == profile }
         if (liked.isEmpty() && affinity.keptBySource.isEmpty() && affinity.explicit.isEmpty()) return emptyList()
         val training = crossSourceTraining(liked, store)
         return sources.mapConcurrent { source ->

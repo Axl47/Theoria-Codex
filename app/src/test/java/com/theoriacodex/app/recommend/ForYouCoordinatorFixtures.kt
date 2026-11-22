@@ -2,6 +2,7 @@ package com.theoriacodex.app.recommend
 
 import com.theoriacodex.app.search.NoOpTagSuggestionStore
 import com.theoriacodex.app.search.TagSuggestionStore
+import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.InMemoryLikesRepository
 import com.theoriacodex.data.repository.InMemoryStatisticsRepository
 import com.theoriacodex.data.repository.LikesRepository
@@ -21,7 +22,7 @@ internal fun testForYouCoordinator(
     registry = registry,
     likesRepository = likesRepository,
     statisticsRepository = statisticsRepository,
-    tagAffinity = flowOf(tagAffinity),
+    tagAffinity = flowOf(tagAffinity.copy(profileId = AppSettings().activeProfileId)),
     tagSuggestionStore = tagSuggestionStore,
     computationDispatcher = Dispatchers.Unconfined,
     random = { null },
