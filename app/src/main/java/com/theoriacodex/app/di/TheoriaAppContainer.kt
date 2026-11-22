@@ -24,6 +24,7 @@ import com.theoriacodex.app.media.codexOfflineOwner
 import com.theoriacodex.app.codex.LikesCodexSyncService
 import com.theoriacodex.app.codex.transfer.CodexTransferService
 import com.theoriacodex.app.recommend.ForYouCoordinator
+import com.theoriacodex.app.recommend.PictureEvidence
 import com.theoriacodex.app.recommend.SharedTagAffinity
 import com.theoriacodex.app.recommend.shareTagAffinityInputs
 import com.theoriacodex.app.comments.CommentsLoader
@@ -524,7 +525,10 @@ internal class DefaultTheoriaAppContainer(
             registry = sourceRegistry,
             likesRepository = likesRepository,
             statisticsRepository = statisticsRepository,
-            tagAffinity = tagAffinity::forProfile,
+            // Deleting the model plans lanes again at once, before the shared inputs drop its evidence.
+            tagAffinity = { profile ->
+                tagAffinity.forProfile(profile).let { if (pictures.tagger.ready.value) it else it.copy(pictures = PictureEvidence()) }
+            },
             tagSuggestionStore = tagSuggestionStore,
             postResolutions = postResolutions,
             fileMirrors = data.fileMirrors,

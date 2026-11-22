@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlin.coroutines.coroutineContext
@@ -135,7 +136,7 @@ class VisualModelStore(
             val call = client.newCall(request)
             coroutineScope {
                 // A blocking read cannot see cancellation; this child sees it at once and cancels the call, which throws.
-                val watcher = launch { try { awaitCancellation() } finally { call.cancel() } }
+                val watcher = launch(start = CoroutineStart.UNDISPATCHED) { try { awaitCancellation() } finally { call.cancel() } }
                 try {
                     call.execute().use { response -> receive(response, file, part, progress) }
                 } finally {

@@ -85,6 +85,19 @@ class ForYouDeckVettingTest {
         assertEquals(emptyList<String>(), pictures.asked)
     }
 
+    @Test fun `cards dealt before the first hidden tag are vetted when a chip deals them again`() {
+        val pictures = FakePictureTags(predicted = mapOf("b-0-0" to seen("x")))
+        val owner = owner(pictures, deckEnvironment())
+        assertTrue("b-0-0" in owner.ids)
+
+        owner.synchronize(deckEnvironment(hiding("x")))
+        owner.selectChip(laneId("b"))
+        owner.selectChip(null)
+
+        assertTrue(owner.posts.isNotEmpty())
+        assertFalse("b-0-0" in owner.ids)
+    }
+
     @Test fun `without the tagger the Mix deals as before and tags nothing`() {
         val pictures = FakePictureTags(ready = false, predicted = mapOf("b-0-0" to seen("x")))
         val owner = owner(pictures)

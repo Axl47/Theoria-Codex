@@ -40,7 +40,10 @@ sealed interface PictureResult {
     /** The post has no still preview, or the model could not read it; asking again gives the same answer. */
     data object Unanalysable : PictureResult
 
-    /** The preview could not be loaded, or the model is not ready; it may work later. */
+    /** The preview could not be loaded; it may load later. */
+    data object Unreachable : PictureResult
+
+    /** The model is not ready, or would not load; nothing can be read until it does. */
     data object Unavailable : PictureResult
 }
 
@@ -65,6 +68,10 @@ class PictureTagger(
     private var vocabulary: TagVocabulary? = null
     private val holder = PictureModelHolder(scope) { WdTaggerRunner(store.modelFile, checkNotNull(vocabulary).size, threads) }
     private val session = MutableStateFlow(SessionAnalyses())
+
+    // Held while results are kept and while a deleted model's are forgotten, so none outlive the delete.
+    private val commits = Mutex()
+    private val current: Boolean get() = store.states.value == ModelState.Ready
 
     val modelId: String get() = store.id
 
@@ -93,10 +100,11 @@ class PictureTagger(
         session.value[post.id]?.let { return it }
         if (!ready.value) return PictureResult.Unavailable
         val result = if (!hasStill(post)) PictureResult.Unanalysable else read(post)
-        // A model deleted while this ran must not leave its answer behind.
-        if (!ready.value) return PictureResult.Unavailable
-        if (remember && result != PictureResult.Unavailable) session.update { it.with(post.id, result) }
-        return result
+        if (!remember || result == PictureResult.Unavailable || result == PictureResult.Unreachable) return result
+        return commits.withLock {
+            // A model deleted while this ran must not leave its answer behind.
+            if (current) result.also { session.update { it.with(post.id, result) } } else PictureResult.Unavailable
+        }
     }
 
     override suspend fun tagsFor(post: Post): List<PredictedTag> = (analyze(post) as? PictureResult.Analysed)?.tags.orEmpty()
@@ -110,20 +118,32 @@ class PictureTagger(
     /** Frees the loaded model now, as under memory pressure; the next analysis loads it again. */
     suspend fun release() = holder.release()
 
-    /** Forgets everything after the model was deleted: the loaded model, the vocabulary and this session's analyses. */
-    suspend fun forget() {
+    /**
+     * Forgets everything after the model was deleted: the loaded model, the vocabulary, this session's analyses and what
+     * the Library stored.
+     */
+    suspend fun forget() = commits.withLock {
         holder.release()
         vocabularyLock.withLock { vocabulary = null }
         session.value = SessionAnalyses()
+        signatures.clearVision()
     }
 
-    /** [results] as stored analyses for [modelId]; [PictureResult.Unavailable] results are left out. */
-    fun visions(results: Map<PostId, PictureResult>): List<PictureVision> = results.mapNotNull { (id, result) ->
-        when (result) {
-            is PictureResult.Analysed -> PictureVision(id, store.id, result.embedding, result.tags)
-            PictureResult.Unanalysable -> PictureVision(id, store.id, embedding = null, tags = null)
-            PictureResult.Unavailable -> null
+    /**
+     * Stores [results] for the Library's posts, leaving out pictures that could not be read now; returns false, storing
+     * nothing, once the model was deleted.
+     */
+    suspend fun store(results: Map<PostId, PictureResult>): Boolean = commits.withLock {
+        if (!current) return@withLock false
+        val visions = results.mapNotNull { (id, result) ->
+            when (result) {
+                is PictureResult.Analysed -> PictureVision(id, store.id, result.embedding, result.tags)
+                PictureResult.Unanalysable -> PictureVision(id, store.id, embedding = null, tags = null)
+                PictureResult.Unreachable, PictureResult.Unavailable -> null
+            }
         }
+        if (visions.isNotEmpty()) signatures.putVision(visions)
+        true
     }
 
     /**
@@ -131,7 +151,7 @@ class PictureTagger(
      * fails to load (low memory, say) leaves it [PictureResult.Unavailable] for a later try.
      */
     private suspend fun read(post: Post): PictureResult {
-        val picture = runCatchingPreservingCancellation { loadStill(post) }.getOrNull() ?: return PictureResult.Unavailable
+        val picture = runCatchingPreservingCancellation { loadStill(post) }.getOrNull() ?: return PictureResult.Unreachable
         return runCatchingPreservingCancellation {
             val words = vocabulary()
             val analysis = holder.use { model -> model.analyze(picture) }

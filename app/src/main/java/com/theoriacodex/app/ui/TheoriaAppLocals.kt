@@ -64,7 +64,8 @@ internal fun ShellCompositionLocals(shell: TheoriaShell, content: @Composable ()
 private fun rememberCodexSaveRelevanceLoader(shell: TheoriaShell): CodexSaveRelevanceLoader = remember(shell) {
     val source = CodexCollectionSource(shell.data.codexRepository, shell.data.storageDirectory, shell.data.cacheRepository)
     CodexSaveRelevanceLoader(
-        shell.data.codexRepository, shell.scope, predicted = shell.features.pictureTags.library, observeLibrary = source::observeSavedLibrary,
+        shell.data.codexRepository, shell.scope, predicted = shell.features.pictureTags.library,
+        incoming = shell.features.pictureTags.index, observeLibrary = source::observeSavedLibrary,
     )
 }
 

@@ -474,7 +474,7 @@ class ForYouDeckViewModel(
 
     /** Replaces the Mix's deck after its chip changed. The new deck opens on its first batch, so it does not ask for one. */
     private fun restartMixLevel(mix: ForYouMix) {
-        mix.takeBack(seen)
+        mix.takeBack(seen, vetsPictures)
         lastDecision = null
         mix.deal(dealSize, seen + kept)
         resetLevels()

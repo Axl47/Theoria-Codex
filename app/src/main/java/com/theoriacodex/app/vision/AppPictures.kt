@@ -48,10 +48,7 @@ fun appPictures(
     lateinit var tagger: PictureTagger
     val model = VisualModelStore(
         VisualModelSpec.wdVitTaggerV3(BuildConfig.VISION_MODEL_BASE_URL), File(app.noBackupFilesDir, "models"), client, scope,
-    ) {
-        tagger.forget()
-        signatures.clearVision()
-    }
+    ) { tagger.forget() }
     tagger = PictureTagger(
         model,
         signatures,

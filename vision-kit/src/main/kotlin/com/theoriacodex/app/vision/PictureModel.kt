@@ -38,10 +38,17 @@ class WdTaggerRunner(modelFile: File, private val vocabularySize: Int, threads: 
             environment.close()
             throw error
         }
+        inputs = try {
+            model.createInputBuffers()
+        } catch (error: Exception) {
+            model.close()
+            environment.close()
+            throw error
+        }
         try {
-            inputs = model.createInputBuffers()
             outputs = model.createOutputBuffers()
         } catch (error: Exception) {
+            inputs.forEach(TensorBuffer::close)
             model.close()
             environment.close()
             throw error

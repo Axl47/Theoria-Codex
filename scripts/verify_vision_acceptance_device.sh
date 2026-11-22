@@ -73,7 +73,10 @@ phase idle
 printf 'Job on battery: %s\n' "$(job_state)"
 # Asked to run unplugged, the job must not start: the same process still has nothing tagged. (-s honours every
 # constraint; without it, the command ignores charging.)
-printf 'Run on battery: %s\n' "$(adb_run shell cmd jobscheduler run -s "$package_name" "$job_id" 2>&1 | tr -d '\r' || true)"
+# Forcing the job without --force must be refused while its charging constraint is unmet.
+on_battery="$(adb_run shell cmd jobscheduler run -s "$package_name" "$job_id" 2>&1 | tr -d '\r' || true)"
+printf 'Run on battery: %s\n' "$on_battery"
+[[ "$on_battery" == *"functional constraints"* ]] || { echo "The indexing job ran on battery." >&2; exit 1; }
 phase idle same
 adb_run shell dumpsys battery set ac 1
 adb_run shell dumpsys battery set status 2

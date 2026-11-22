@@ -69,8 +69,9 @@ internal class MixLane(val lane: ForYouLane, label: String = lane.label) {
         buffer = buffer.drop(count)
     }
 
-    fun putBack(posts: List<Post>) {
-        buffer = posts + buffer
+    /** Returns [posts] to the front of the lane; they are vetted again first when [vetting]. */
+    fun putBack(posts: List<Post>, vetting: Boolean) {
+        if (vetting) unvetted = posts + unvetted else buffer = posts + buffer
     }
 
     fun keep(shown: (Post) -> Boolean) {
@@ -155,11 +156,12 @@ internal class ForYouMix(lanes: List<ForYouLane>, private val copiesOf: (Post) -
 
     /**
      * Starts the dealt list over, as a chip change does: the cards nobody has [decided] go back to the front of the
-     * lanes (or the pending cards) they came from, so the next deal can give them again.
+     * lanes (or the pending cards) they came from, so the next deal can give them again. When [vetting], lane cards are
+     * vetted again first, since a hidden tag added after they were dealt may catch them by their pictures.
      */
-    fun takeBack(decided: Set<PostId>) {
+    fun takeBack(decided: Set<PostId>, vetting: Boolean) {
         val back = released.filterNot { it.id in decided }.groupBy { (origins[it.id] as? DeckOrigin.Lane)?.laneId }
-        lanes.forEach { lane -> back[lane.origin.laneId]?.let(lane::putBack) }
+        lanes.forEach { lane -> back[lane.origin.laneId]?.let { lane.putBack(it, vetting) } }
         val asked = back[null].orEmpty().mapNotNull { post -> origins[post.id]?.let { DeckCard(post, it) } }
         steering = steering.copy(pending = asked + steering.pending)
         released = emptyList()
