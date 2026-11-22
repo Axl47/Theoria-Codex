@@ -37,6 +37,7 @@ import com.theoriacodex.app.codex.CodexCommandViewModel
 import com.theoriacodex.app.codex.CodexSaveViewModel
 import com.theoriacodex.app.codex.FOLLOWED_CODEX_ID
 import com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID
+import com.theoriacodex.app.codex.CodexChosen
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.codex.transfer.CodexExportResult
 import com.theoriacodex.app.codex.transfer.CodexImportViewModel
@@ -82,7 +83,6 @@ import com.theoriacodex.app.source.unaddedBooruPostHost
 import com.theoriacodex.app.source.ExternalPostDeepLink
 import com.theoriacodex.app.ui.components.FeedFabRestoreRegistry
 import com.theoriacodex.app.ui.components.rememberFeedFabRestoreRegistry
-import com.theoriacodex.app.ui.navigation.CodexChosen
 import com.theoriacodex.app.ui.routes.CreatorProfileStateSaver
 import com.theoriacodex.app.ui.routes.PendingRouteActions
 import com.theoriacodex.app.ui.routes.RouteOwnerSlot
@@ -224,7 +224,7 @@ internal class PendingCodexSave {
 
     /**
      * Set by a requester that saves the picked Codex itself, as the lift and the triage deck do so their Undo covers
-     * the save; the sheet then hands over the id and name of the Codex picked or created instead of saving.
+     * the save; the sheet then hands over the Codex picked, or the new one named, instead of saving.
      */
     var onPick by mutableStateOf<CodexChosen?>(null)
         private set

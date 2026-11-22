@@ -63,6 +63,7 @@
 
 ### Fixed
 
+- Undoing a save to a Codex you just created with New also removes that Codex, instead of leaving it behind empty.
 - History was blank while it loaded. It now shows that it is loading.
 - The offline storage error told you to reopen storage. It now has a Retry button.
 - A Codex's tag list could show a post's raw ID. It no longer does.

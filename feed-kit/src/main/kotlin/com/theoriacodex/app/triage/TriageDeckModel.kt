@@ -1,5 +1,6 @@
 package com.theoriacodex.app.triage
 
+import com.theoriacodex.app.codex.ChosenCodex
 import com.theoriacodex.app.codex.SaveSuggestion
 import com.theoriacodex.app.ui.components.FeedView
 import com.theoriacodex.app.ui.navigation.TriageSeed
@@ -98,7 +99,8 @@ sealed interface TriageChoice {
     /** Leaves the post in the deck's Codex; like [Skip] it writes nothing, but the card says so. */
     data object Keep : TriageChoice
     data object Remove : TriageChoice
-    data class Save(val codexId: String, val codexName: String) : TriageChoice
+    /** Saves to [codex]; a new one is created by the save, so Undo removes it again while it is empty. */
+    data class Save(val codex: ChosenCodex) : TriageChoice
     data class Hide(val tag: String) : TriageChoice
 }
 
@@ -177,6 +179,6 @@ internal fun choiceFor(
 ): TriageChoice? = when (direction) {
     SwipeDirection.Right -> if (removes) TriageChoice.Keep else TriageChoice.Like
     SwipeDirection.Left -> if (removes) TriageChoice.Remove else TriageChoice.Skip
-    SwipeDirection.Up -> saveTarget?.let { TriageChoice.Save(it.codexId, it.name) }
+    SwipeDirection.Up -> saveTarget?.let { TriageChoice.Save(ChosenCodex.Existing(it.codexId, it.name)) }
     SwipeDirection.Down -> hideTag?.let(TriageChoice::Hide) ?: TriageChoice.Skip
 }

@@ -60,6 +60,7 @@ import com.theoriacodex.app.appshell.AppShellViewModel
 import com.theoriacodex.app.appshell.StartupUpdateChoice
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.codex.SaveToCodexSheet
+import com.theoriacodex.app.codex.ChosenCodex
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.ui.undo.ProvideUndoSlot
@@ -394,9 +395,7 @@ private fun SaveToCodexOverlay(shell: TheoriaShell) {
             onCreateCodex = { profileId, name ->
                 val pick = pendingSave.onPick
                 if (pick != null) {
-                    shell.scope.launch {
-                        shell.createCodex(name, profileId)?.let { codexId -> pick(codexId, name) } ?: shell.toast("Could not save to $name")
-                    }
+                    pick(ChosenCodex.New(name, profileId))
                 } else {
                     val codexId = profileScopedCodexId(profileId)
                     shell.owners.codexSaves.save(
@@ -414,7 +413,7 @@ private fun SaveToCodexOverlay(shell: TheoriaShell) {
                 val pick = pendingSave.onPick
                 val name = state.codicesByProfile.values.flatten().firstOrNull { it.codexId == codexId }?.name
                 if (pick != null && name != null) {
-                    pick(codexId, name)
+                    pick(ChosenCodex.Existing(codexId, name))
                 } else {
                     shell.owners.codexSaves.save(
                         codexId = codexId,

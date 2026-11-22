@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.app.codex.LocalNewCodexOpener
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.State
@@ -22,7 +23,6 @@ import com.theoriacodex.app.source.LocalSourceHealth
 import com.theoriacodex.app.ui.components.LocalPostMenuActions
 import com.theoriacodex.app.ui.navigation.LocalHiddenTagsOpener
 import com.theoriacodex.app.ui.navigation.LocalLiftController
-import com.theoriacodex.app.ui.navigation.LocalNewCodexOpener
 import com.theoriacodex.app.ui.navigation.LocalTrailOpener
 import com.theoriacodex.app.ui.navigation.LocalTriageOpener
 import com.theoriacodex.app.ui.trails.rememberTrailOpener

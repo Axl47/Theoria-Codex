@@ -1,5 +1,6 @@
 package com.theoriacodex.app.triage
 
+import com.theoriacodex.app.codex.ChosenCodex
 import com.theoriacodex.app.codex.SaveSuggestion
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.filterSearchResults
@@ -18,7 +19,7 @@ class TriageDeckPresentationTest {
     @Test fun `each direction asks for its action`() {
         assertEquals(TriageChoice.Like, choiceFor(SwipeDirection.Right, skies, "cat"))
         assertEquals(TriageChoice.Skip, choiceFor(SwipeDirection.Left, skies, "cat"))
-        assertEquals(TriageChoice.Save("codex-1", "Skies"), choiceFor(SwipeDirection.Up, skies, "cat"))
+        assertEquals(TriageChoice.Save(ChosenCodex.Existing("codex-1", "Skies")), choiceFor(SwipeDirection.Up, skies, "cat"))
         assertEquals(TriageChoice.Hide("cat"), choiceFor(SwipeDirection.Down, skies, "cat"))
     }
 

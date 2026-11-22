@@ -53,6 +53,7 @@ class ViewerSaveButtonTest {
         private var scored = false
         override val lastQuickSave: StateFlow<QuickSaveRecord?> = MutableStateFlow(null)
         override suspend fun quickSave(post: Post, codexId: String, query: Query?, fromForYou: Boolean): QuickSaveRecord? = null
+        override suspend fun saveToNew(post: Post, name: String, profileId: String, query: Query?, fromForYou: Boolean): QuickSaveRecord? = null
         override suspend fun undoQuickSave(record: QuickSaveRecord) = Unit
         override fun suggestions(post: Post, query: Query?, limit: Int): Flow<SaveSuggestions> = flow {
             if (scored) awaitCancellation()

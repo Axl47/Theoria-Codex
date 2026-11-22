@@ -8,41 +8,30 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
-import com.theoriacodex.app.codex.LocalQuickSave
-import com.theoriacodex.app.codex.profileScopedCodexId
+import com.theoriacodex.app.codex.ChosenCodex
+import com.theoriacodex.app.codex.LocalNewCodexOpener
+import com.theoriacodex.app.codex.NewCodexOpener
 import com.theoriacodex.app.lift.LiftOverlay
 import com.theoriacodex.app.lift.LiftPhase
 import com.theoriacodex.app.lift.LiftSession
 import com.theoriacodex.app.ui.components.NameEntryDialog
 import com.theoriacodex.app.ui.navigation.LocalLiftController
-import com.theoriacodex.app.ui.navigation.CodexChosen
-import com.theoriacodex.app.ui.navigation.LocalNewCodexOpener
-import com.theoriacodex.app.ui.navigation.NewCodexOpener
 import com.theoriacodex.app.ui.undo.LocalUndoSlot
 import com.theoriacodex.app.ui.undo.UndoAnchor
-import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
-import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.launch
 
-/**
- * Holds the post waiting for a new Codex's name, and who saves it ([onCreated], or the dialog when null); see
- * [ShellLiftOverlay].
- */
+/** Holds who is waiting for a new Codex's name while the Create Codex dialog is up; see [ShellLiftOverlay]. */
 @Stable
 internal class NewCodexRequests : NewCodexOpener {
-    var post by mutableStateOf<Post?>(null)
-        private set
-    var onCreated by mutableStateOf<CodexChosen?>(null)
+    var onChosen by mutableStateOf<(suspend (ChosenCodex.New) -> Unit)?>(null)
         private set
 
-    override fun openNewCodex(post: Post, onCreated: CodexChosen?) {
-        this.post = post
-        this.onCreated = onCreated
+    override fun openNewCodex(onChosen: suspend (ChosenCodex.New) -> Unit) {
+        this.onChosen = onChosen
     }
 
     fun dismiss() {
-        post = null
-        onCreated = null
+        onChosen = null
     }
 }
 
@@ -50,8 +39,7 @@ internal class NewCodexRequests : NewCodexOpener {
  * The lift overlay and the Create Codex dialog, mounted once above the navigation host. The lift draws the
  * [LiftSession] that [ShellCompositionLocals] provides and is cancelled on Back or when the app leaves the
  * foreground; Back also stops a Similar lookup it started. A save it makes offers Undo in the app's undo pill.
- * The dialog names a Codex and saves the post that the lift's New target, or the Viewer dock, passed to
- * [LocalNewCodexOpener].
+ * The dialog names a new Codex for whoever asked through [LocalNewCodexOpener], in the active profile.
  */
 @Composable
 internal fun ShellLiftOverlay(shell: TheoriaShell) {
@@ -62,51 +50,24 @@ internal fun ShellLiftOverlay(shell: TheoriaShell) {
         LifecycleEventEffect(Lifecycle.Event.ON_STOP) { session.cancel() }
         LiftOverlay(
             session,
-            onNewCodex = { post, saveTo -> newCodex.openNewCodex(post, onCreated = saveTo) },
-            onOpenPicker = { post, query, saveTo -> shell.pendingSave.request(listOf(post), searchQuery = query, onPick = saveTo) },
+            onNewCodex = newCodex::openNewCodex,
+            onOpenPicker = { post, query, onChosen -> shell.pendingSave.request(listOf(post), searchQuery = query, onPick = onChosen) },
             onFailure = shell::toast,
             onSaved = { record -> undo.awaitAction("Saved to ${record.codexName}", UndoAnchor.App) },
         )
     }
     (newCodex as? NewCodexRequests)?.let { requests ->
-        requests.post?.let { post -> CreateCodexForPostDialog(shell, post, requests.onCreated, requests::dismiss) }
+        requests.onChosen?.let { onChosen ->
+            NameEntryDialog(
+                title = "Create Codex",
+                initialName = "",
+                onDismiss = requests::dismiss,
+                onSave = { name ->
+                    val codex = ChosenCodex.New(name, shell.owners.settings.state.value.activeProfile.profileId)
+                    shell.scope.launch { onChosen(codex) }
+                    requests.dismiss()
+                },
+            )
+        }
     }
-}
-
-/**
- * Create Codex for the active profile, then quick-save [post] into it so each surface confirms as for any quick save;
- * with [onCreated], hand the new Codex there instead and let the caller save.
- */
-@Composable
-private fun CreateCodexForPostDialog(
-    shell: TheoriaShell,
-    post: Post,
-    onCreated: CodexChosen?,
-    onDone: () -> Unit,
-) {
-    val quickSave = LocalQuickSave.current
-    NameEntryDialog(
-        title = "Create Codex",
-        initialName = "",
-        onDismiss = onDone,
-        onSave = { name ->
-            shell.scope.launch {
-                val codexId = shell.createCodex(name) ?: return@launch shell.toast("Could not save to $name")
-                when {
-                    onCreated != null -> onCreated(codexId, name)
-                    quickSave.quickSave(post, codexId) == null -> shell.toast("Could not save to $name")
-                }
-            }
-            onDone()
-        },
-    )
-}
-
-/** Creates a Codex named [name] in [profileId]; returns its id, or null when it could not be created. */
-internal suspend fun TheoriaShell.createCodex(
-    name: String,
-    profileId: String = owners.settings.state.value.activeProfile.profileId,
-): String? {
-    val codexId = profileScopedCodexId(profileId)
-    return runCatchingPreservingCancellation { data.codexRepository.ensureCodex(codexId, name) }.map { codexId }.getOrNull()
 }
