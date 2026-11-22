@@ -7,7 +7,11 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.vision.PictureLook
+import com.theoriacodex.domain.vision.PictureTags
 import com.theoriacodex.domain.vision.PredictedTag
+import com.theoriacodex.domain.vision.PredictedTagIndex
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -84,24 +88,49 @@ class TriageRulesTest {
         assertEquals(emptyList<String>(), hideCandidates(post("cat"), counts, listOf("cat")))
     }
 
-    @Test fun `a predicted tag hides an untagged post when confident enough, through any booru source's hidden tags`() {
-        val untagged = post().copy(id = PostId(SourceKey.NHENTAI, "n"))
-        val hidden = mapOf(SourceKey.DANBOORU to setOf("furry"), SourceKey.HITOMI to setOf("tail"))
-        fun predicted(tag: String, score: Float, kind: PredictedTag.Kind = PredictedTag.Kind.GENERAL) = listOf(PredictedTag(tag, score, kind))
-
-        assertTrue(untagged.hiddenBy(hidden, predicted("furry", 0.4f)))
-        assertFalse(untagged.hiddenBy(hidden, predicted("furry", 0.3f)))
-        assertFalse(untagged.hiddenBy(hidden, predicted("furry", 0.45f, PredictedTag.Kind.CHARACTER)))
-        // Hitomi does not share booru vocabulary, so only its own posts' predictions meet its hidden tags.
-        assertFalse(untagged.hiddenBy(hidden, predicted("tail", 0.9f)))
-        assertTrue(untagged.copy(id = PostId(SourceKey.HITOMI, "h")).hiddenBy(hidden, predicted("tail", 0.9f)))
-        assertFalse(untagged.hiddenBy(hidden, predicted = null))
+    /** A tagger whose vocabulary is [vocabulary] and which saw [seen] in every post's picture. */
+    private class Seen(private val seen: List<PredictedTag>?, vocabulary: List<String> = WORDS) : PictureTags {
+        override val ready = MutableStateFlow(true)
+        override val library = MutableStateFlow(PredictedTagIndex(baseRates = vocabulary.associateWith { 0.01 }))
+        override fun known(id: PostId) = seen
+        override suspend fun look(post: Post) = PictureLook.Blind
     }
 
-    @Test fun `a provider tag still hides only through its own source's hidden tags`() {
-        val tagged = post("furry")
-        assertTrue(tagged.hiddenBy(mapOf(SourceKey.GELBOORU to setOf("furry")), predicted = null))
-        assertFalse(tagged.hiddenBy(mapOf(SourceKey.DANBOORU to setOf("furry")), predicted = null))
+    private fun seen(tag: String, score: Float, kind: PredictedTag.Kind = PredictedTag.Kind.GENERAL) =
+        Seen(listOf(PredictedTag(tag, score, kind)))
+
+    @Test fun `a predicted tag hides a sparsely tagged post when confident enough, through any booru source's hidden tags`() {
+        val untagged = post().copy(id = PostId(SourceKey.NHENTAI, "n"))
+        val hidden = mapOf(SourceKey.DANBOORU to setOf("furry"), SourceKey.HITOMI to setOf("tail"))
+
+        assertTrue(untagged.hiddenBy(hidden, seen("furry", 0.4f)))
+        assertFalse(untagged.hiddenBy(hidden, seen("furry", 0.3f)))
+        assertFalse(untagged.hiddenBy(hidden, seen("furry", 0.45f, PredictedTag.Kind.CHARACTER)))
+        // Hitomi does not share booru vocabulary, so its hidden tags meet only its own posts.
+        assertFalse(untagged.hiddenBy(hidden, seen("tail", 0.9f)))
+        assertTrue(untagged.copy(id = PostId(SourceKey.HITOMI, "h")).hiddenBy(hidden, seen("tail", 0.9f)))
+        assertFalse(untagged.hiddenBy(hidden, Seen(seen = null)))
+    }
+
+    @Test fun `a post its provider tagged well is left to its own tags, whatever its picture shows`() {
+        val hidden = mapOf(SourceKey.GELBOORU to setOf("furry"))
+        assertFalse(post(*WORDS.toTypedArray()).hiddenBy(hidden, seen("furry", 0.9f)))
+        assertTrue(post(*WORDS.drop(1).toTypedArray()).hiddenBy(hidden, seen("furry", 0.9f)))
+        // Tags outside the tagger's vocabulary do not count toward a well-tagged post.
+        assertTrue(post(*Array(WELL_TAGGED) { "other $it" }).hiddenBy(hidden, seen("furry", 0.9f)))
+        // Until the vocabulary is known every post counts as sparsely tagged.
+        assertTrue(post(*WORDS.toTypedArray()).hiddenBy(hidden, Seen(listOf(PredictedTag("furry", 0.9f, PredictedTag.Kind.GENERAL)), emptyList())))
+    }
+
+    @Test fun `a provider tag meets the hidden tags written in its vocabulary`() {
+        val booru = post("Furry")
+        assertTrue(booru.hiddenBy(mapOf(SourceKey.GELBOORU to setOf("furry"))))
+        assertTrue(booru.hiddenBy(mapOf(SourceKey.DANBOORU to setOf("furry"))))
+        assertFalse(booru.hiddenBy(mapOf(SourceKey.HITOMI to setOf("furry"))))
+        // A Hitomi tag is in Hitomi's vocabulary, so booru hidden tags leave it alone.
+        val hitomi = booru.copy(id = PostId(SourceKey.HITOMI, "x"))
+        assertFalse(hitomi.hiddenBy(mapOf(SourceKey.DANBOORU to setOf("furry"))))
+        assertTrue(hitomi.hiddenBy(mapOf(SourceKey.HITOMI to setOf("furry"))))
     }
 
     private fun post(vararg tags: String) = Post(
@@ -109,4 +138,9 @@ class TriageRulesTest {
         pageUrl = null, width = null, height = null, canonicalTags = tags.toList(), rawTags = emptyList(),
         authorName = null, createdAtEpochMs = null,
     )
+
+    private companion object {
+        /** The tagger's vocabulary, as many words as a well-tagged post carries. */
+        val WORDS = List(WELL_TAGGED) { "word $it" }
+    }
 }

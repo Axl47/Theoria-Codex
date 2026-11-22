@@ -41,11 +41,20 @@ import com.theoriacodex.domain.vision.PredictedTagIndex
 
 internal val DECK_SOURCE = SourceKey.GELBOORU
 
-/** The post lane [tag] gives at [index] of [page]: `sea-0-3`, tagged with the lane's tag and drawn by "artist". */
+/** A lane whose posts are tagged richly in the fake tagger's [VOCABULARY]. */
+internal const val RICH = "rich"
+
+/** The words [FakePictureTags] knows, as many as a richly tagged post needs. */
+internal val VOCABULARY = List(10) { "word $it" }
+
+/**
+ * The post lane [tag] gives at [index] of [page]: `sea-0-3`, tagged with the lane's tag and drawn by "artist". The
+ * [RICH] lane's posts also carry every [VOCABULARY] tag, so a picture check leaves them to their own tags.
+ */
 internal fun lanePost(tag: String, page: Int, index: Int): Post = testPost(
     source = DECK_SOURCE,
     sourcePostId = "$tag-$page-$index",
-    canonicalTags = listOf(tag),
+    canonicalTags = if (tag == RICH) listOf(tag) + VOCABULARY else listOf(tag),
     creatorProfile = CreatorProfile(DECK_SOURCE, "artist", uploadsQuery = "user:artist"),
 )
 
@@ -205,12 +214,12 @@ internal fun deckWiring(
 /**
  * A picture tagger that predicts [predicted] for a post (nothing for the rest) and answers at once, or once [release]d
  * while [held]. Posts in [unseen] fail to load and, while [blind], the model will not load. [asked] lists every post it
- * tagged, in order.
+ * tagged, in order. Its vocabulary is [VOCABULARY].
  */
 internal class FakePictureTags(ready: Boolean = true, private val predicted: Map<String, List<PredictedTag>> = emptyMap()) : PictureTags {
     override val ready = MutableStateFlow(ready)
-    override val index = MutableStateFlow(PredictedTagIndex.Empty)
-    override val library = MutableStateFlow(PredictedTagIndex.Empty)
+    override val library = MutableStateFlow(PredictedTagIndex(baseRates = VOCABULARY.associateWith { 0.01 }))
+    private val seen = HashMap<PostId, List<PredictedTag>>()
     val asked = mutableListOf<String>()
     var held: CompletableDeferred<Unit>? = null
     var unseen: Set<String> = emptySet()
@@ -224,9 +233,11 @@ internal class FakePictureTags(ready: Boolean = true, private val predicted: Map
         if (post.id.sourcePostId in unseen) return PictureLook.Unseen
         asked += post.id.sourcePostId
         val tags = predicted[post.id.sourcePostId].orEmpty()
-        index.value = index.value.copy(byPost = index.value.byPost + (post.id to tags))
+        seen[post.id] = tags
         return PictureLook.Seen(tags)
     }
+
+    override fun known(id: PostId): List<PredictedTag>? = seen[id]
 }
 
 /** A confident general prediction of [tag]. */

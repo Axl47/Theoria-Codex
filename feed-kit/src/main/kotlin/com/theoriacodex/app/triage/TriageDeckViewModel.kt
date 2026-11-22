@@ -4,10 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theoriacodex.app.codex.QuickSave
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.vision.PredictedTagIndex
+import com.theoriacodex.domain.vision.PictureTags
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
 
 /**
  * Keeps a pushed Triage route's [TriageDeck] across rotation: the deck collects its feed in [viewModelScope] and
@@ -20,10 +18,10 @@ class TriageDeckViewModel(
     query: Query?,
     writeScope: CoroutineScope,
     removal: TriageRemoval? = null,
-    predicted: Flow<PredictedTagIndex> = emptyFlow(),
+    pictures: PictureTags = PictureTags.None,
 ) : ViewModel() {
     val deck = TriageDeck(
-        viewModelScope, feed, actions, quickSave, query, fromForYou = false, writeScope, removal, predicted = predicted,
+        viewModelScope, feed, actions, quickSave, query, fromForYou = false, writeScope, removal, pictures = pictures,
     )
 
     override fun onCleared() = deck.close()

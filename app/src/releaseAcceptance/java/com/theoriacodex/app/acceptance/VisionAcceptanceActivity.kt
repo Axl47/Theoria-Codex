@@ -60,6 +60,9 @@ private class VisionPhases(private val container: TheoriaAppContainer, private v
     // Not in the Library and without provider tags, like a For You candidate a source left untagged.
     private val untagged = fixturePost("vision-untagged", FIXTURES)
 
+    // The same picture, tagged as richly as a booru post (none of the tags is hidden).
+    private val wellTagged = fixturePost("vision-well-tagged", FIXTURES).copy(canonicalTags = WELL_TAGGED_TAGS)
+
     suspend fun run(phase: String): String = when (phase) {
         "download" -> download()
         "seed" -> seed()
@@ -98,7 +101,7 @@ private class VisionPhases(private val container: TheoriaAppContainer, private v
 
     private suspend fun check(): String {
         val progress = pictures.progress.first { it.analysed >= FIXTURES }
-        val index = pictures.tagger.index.first { index -> library.all { index[it.id] != null } }
+        val index = pictures.tagger.library.first { index -> library.all { index[it.id] != null } }
         // The line drawings read as monochrome and greyscale; the colour pictures do not.
         val expected = listOf("monochrome", "greyscale").map(::normalizeMatchToken)
         val (drawings, colour) = library.partition { post -> index[post.id].orEmpty().tokens(PredictedTagUse.EVIDENCE).keys.containsAll(expected) }
@@ -123,21 +126,27 @@ private class VisionPhases(private val container: TheoriaAppContainer, private v
         return "candidates=${inputs.pictures.candidates.size} score=${"%.2f".format(java.util.Locale.ROOT, affinity.score)} lanes=${interests.size}"
     }
 
-    /** An untagged post is caught by a hidden tag only through what the tagger sees in its picture. */
+    /**
+     * An untagged post is caught by a hidden tag only through what the tagger sees in its picture; the same picture on a
+     * post its provider tagged richly is left to its own tags.
+     */
     private suspend fun hidden(): String {
         check(untagged.canonicalTags.isEmpty() && untagged.rawTags.isEmpty())
         val rules = mapOf(SourceKey.DANBOORU to setOf(normalizeMatchToken("no_humans")))
-        check(!untagged.hiddenBy(rules, null)) { "hidden without a prediction" }
-        val predicted = (pictures.tagger.look(untagged) as? PictureLook.Seen)?.tags.orEmpty()
-        check(untagged.hiddenBy(rules, predicted)) { "not hidden; ${predicted.size} predictions" }
-        return "hiddenPredictions=${predicted.size}"
+        check(!untagged.hiddenBy(rules)) { "hidden without the tagger" }
+        check(pictures.tagger.look(untagged) is PictureLook.Seen) { "picture not seen" }
+        val predicted = pictures.tagger.known(untagged.id).orEmpty()
+        check(untagged.hiddenBy(rules, pictures.tagger)) { "not hidden; ${predicted.size} predictions" }
+        check(pictures.tagger.look(wellTagged) is PictureLook.Seen) { "well-tagged picture not seen" }
+        check(!wellTagged.hiddenBy(rules, pictures.tagger)) { "a well-tagged post was hidden by its picture" }
+        return "hiddenPredictions=${predicted.size} wellTaggedKept=true"
     }
 
     private suspend fun delete(): String {
         pictures.model.delete()
         check(pictures.model.states.value == ModelState.Absent)
         check(!pictures.model.modelFile.exists() && !pictures.model.vocabularyFile.exists())
-        check(pictures.tagger.index.first() == PredictedTagIndex.Empty)
+        check(pictures.tagger.library.first() == PredictedTagIndex.Empty)
         val progress = pictures.progress.first()
         check(progress.analysed == 0) { "after delete: $progress" }
         checkNotNull(container.data.codexRepository.deleteCodexForUndo(codexId()))
@@ -170,6 +179,10 @@ private fun fixturePost(id: String, picture: Int): Post {
  * monochrome is on three quarters of it: common, not universal. One more line drawing is the untagged candidate.
  */
 private const val FIXTURES = 24
+private val WELL_TAGGED_TAGS = listOf(
+    "1girl", "solo", "long_hair", "smile", "looking_at_viewer", "monochrome", "greyscale", "lineart", "white_background",
+    "simple_background", "sketch",
+)
 private const val COLOUR_FROM = 18
 private const val TAG = "TheoriaVision"
 private const val PHASE_TIMEOUT_MS = 300_000L

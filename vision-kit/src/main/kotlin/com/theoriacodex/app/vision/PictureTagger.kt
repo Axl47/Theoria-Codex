@@ -17,7 +17,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -28,7 +27,6 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -50,9 +48,9 @@ sealed interface PictureResult {
 
 /**
  * The picture tagger, whatever the source: [analyze] reads a post's still preview with the downloaded model, and
- * [index] holds every predicted tag known now, from Room for library posts and from this session's analyses for For You
- * candidates. While the model is absent [index] is empty and [analyze] answers [PictureResult.Unavailable], so every
- * consumer behaves as before the tagger existed.
+ * [library] holds what Room stores for library posts, while [known] also answers from this session's analyses of For You
+ * candidates without anything observing them. While the model is absent [library] is empty and [analyze] answers
+ * [PictureResult.Unavailable], so every consumer behaves as before the tagger existed.
  *
  * [loadStill] decodes a post's still preview (null when it has none or it failed to load: [hasStill] tells them apart).
  */
@@ -68,7 +66,7 @@ class PictureTagger(
     private val vocabularyLock = Mutex()
     private var vocabulary: TagVocabulary? = null
     private val holder = PictureModelHolder(scope) { WdTaggerRunner(store.modelFile, checkNotNull(vocabulary).size, threads) }
-    private val session = MutableStateFlow(SessionAnalyses())
+    private val session = SessionAnalyses()
 
     // Held while results are kept and while a deleted model's are forgotten, so none outlive the delete.
     private val commits = Mutex()
@@ -84,9 +82,22 @@ class PictureTagger(
         if (!ready) flowOf(PredictedTagIndex.Empty) else combine(stored(), flow { emit(baseRates()) }, ::PredictedTagIndex)
     }.distinctUntilChanged().stateIn(scope, SharingStarted.Eagerly, PredictedTagIndex.Empty)
 
-    override val index: StateFlow<PredictedTagIndex> = combine(library, session) { library, analysed ->
-        if (!ready.value) PredictedTagIndex.Empty else library.copy(byPost = library.byPost + analysed.tags())
-    }.distinctUntilChanged().stateIn(scope, SharingStarted.Eagerly, PredictedTagIndex.Empty)
+    override fun known(id: PostId): List<PredictedTag>? {
+        if (!ready.value) return null
+        return when (val result = session[id]) {
+            is PictureResult.Analysed -> result.tags
+            PictureResult.Unanalysable -> emptyList()
+            else -> library.value[id]
+        }
+    }
+
+    override suspend fun prepare() {
+        if (!ready.value) return
+        runCatchingPreservingCancellation {
+            vocabulary()
+            holder.use { }
+        }
+    }
 
     private fun stored(): Flow<Map<PostId, List<PredictedTag>>> {
         var first = true
@@ -98,25 +109,28 @@ class PictureTagger(
      * load is not remembered, so the next call tries again. The Library's indexing does not remember, since it stores.
      */
     suspend fun analyze(post: Post, remember: Boolean = true): PictureResult {
-        session.value[post.id]?.let { return it }
+        session[post.id]?.let { return it }
         if (!ready.value) return PictureResult.Unavailable
         val result = if (!hasStill(post)) PictureResult.Unanalysable else read(post)
         if (!remember || result == PictureResult.Unavailable || result == PictureResult.Unreachable) return result
         return commits.withLock {
             // A model deleted while this ran must not leave its answer behind.
-            if (current) result.also { session.update { it.with(post.id, result) } } else PictureResult.Unavailable
+            if (current) result.also { session[post.id] = result } else PictureResult.Unavailable
         }
     }
 
-    override suspend fun look(post: Post): PictureLook = when (val result = analyze(post)) {
-        is PictureResult.Analysed -> PictureLook.Seen(result.tags)
-        PictureResult.Unanalysable -> PictureLook.Seen(emptyList())
-        PictureResult.Unreachable -> PictureLook.Unseen
-        PictureResult.Unavailable -> PictureLook.Blind
+    override suspend fun look(post: Post): PictureLook {
+        library.value[post.id]?.let { return PictureLook.Seen(it) }
+        return when (val result = analyze(post)) {
+            is PictureResult.Analysed -> PictureLook.Seen(result.tags)
+            PictureResult.Unanalysable -> PictureLook.Seen(emptyList())
+            PictureResult.Unreachable -> PictureLook.Unseen
+            PictureResult.Unavailable -> PictureLook.Blind
+        }
     }
 
     /** What this session already learned about [postId]'s picture, without analysing it. */
-    fun remembered(postId: PostId): PictureResult? = session.value[postId]
+    fun remembered(postId: PostId): PictureResult? = session[postId]
 
     private suspend fun baseRates(): Map<String, Double> =
         if (!ready.value) emptyMap() else runCatchingPreservingCancellation { vocabulary().baseRates().mapKeys { normalizeMatchToken(it.key) } }.getOrDefault(emptyMap())
@@ -131,7 +145,7 @@ class PictureTagger(
     suspend fun forget() = commits.withLock {
         holder.release()
         vocabularyLock.withLock { vocabulary = null }
-        session.value = SessionAnalyses()
+        session.clear()
         signatures.clearVision()
     }
 
@@ -177,20 +191,20 @@ class PictureTagger(
     }
 }
 
-/** This session's analyses, the most recent [LIMIT] kept. Immutable, so [PictureTagger.index] can compare snapshots. */
-private class SessionAnalyses(private val byPost: LinkedHashMap<PostId, PictureResult> = LinkedHashMap()) {
-    operator fun get(id: PostId): PictureResult? = byPost[id]
-
-    fun with(id: PostId, result: PictureResult): SessionAnalyses {
-        val next = LinkedHashMap(byPost)
-        next.remove(id)
-        next[id] = result
-        while (next.size > LIMIT) next.remove(next.keys.first())
-        return SessionAnalyses(next)
+/** This session's analyses, the most recent [LIMIT] kept; read and written from any thread. */
+private class SessionAnalyses {
+    private val byPost = object : LinkedHashMap<PostId, PictureResult>() {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<PostId, PictureResult>) = size > LIMIT
     }
 
-    fun tags(): Map<PostId, List<PredictedTag>> =
-        byPost.mapNotNull { (id, result) -> (result as? PictureResult.Analysed)?.let { id to it.tags } }.toMap()
+    operator fun get(id: PostId): PictureResult? = synchronized(byPost) { byPost[id] }
+
+    operator fun set(id: PostId, result: PictureResult) = synchronized(byPost) {
+        byPost.remove(id)
+        byPost[id] = result
+    }
+
+    fun clear() = synchronized(byPost) { byPost.clear() }
 
     private companion object {
         const val LIMIT = 2_048

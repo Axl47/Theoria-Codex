@@ -12,8 +12,9 @@ import com.theoriacodex.domain.orchestration.UnifiedSearchResult
 
 /**
  * One lane of a Mix: its feed's posts not dealt yet, and where the feed continues. [label] is what its chip and cards say.
- * While the picture tagger is ready, a page's posts wait in [unvetted] until their pictures are tagged and only then join
- * [buffer], the posts the deal takes from, so a post a hidden tag catches by its picture is never dealt.
+ * While vetting runs, a page's sparsely tagged posts wait in [unvetted] until their pictures are tagged and only then
+ * join [buffer], the posts the deal takes from, so a post a hidden tag catches by its picture is never dealt. The rest
+ * join [buffer] at once.
  */
 internal class MixLane(val lane: ForYouLane, label: String = lane.label) {
     val origin = DeckOrigin.Lane(lane.id, label)
@@ -40,15 +41,17 @@ internal class MixLane(val lane: ForYouLane, label: String = lane.label) {
     val canPage: Boolean get() = cursor != null && !failed && !loading
 
     /**
-     * Folds in the page asked for at [asked]; [fresh] are its posts the deck may show and has not been given, which wait
-     * in [unvetted] when [vetting].
+     * Folds in the page asked for at [asked]; [fresh] are its posts the deck may show and has not been given. Those that
+     * [needLook] wait in [unvetted]; the rest may be dealt at once.
      */
-    fun accept(asked: FeedCursor, page: UnifiedSearchResult, fresh: List<Post>, vetting: Boolean = false) {
+    fun accept(asked: FeedCursor, page: UnifiedSearchResult, fresh: List<Post>, needLook: (Post) -> Boolean = { false }) {
         val source = lane.source
         opened = true
         status = page.statuses.firstOrNull { it.source == source }
         if (failed) return
-        if (vetting) unvetted = unvetted + fresh else buffer = buffer + fresh
+        val (unchecked, clean) = fresh.partition(needLook)
+        unvetted = unvetted + unchecked
+        buffer = buffer + clean
         emptyPages = if (fresh.isEmpty()) emptyPages + 1 else 0
         // A feed that keeps answering with nothing the deck can show is treated as ended, so it is not paged forever.
         cursor = asked.accept(page, setOf(source)).takeIf { source in it.pageTokens && emptyPages < EMPTY_PAGE_LIMIT }
@@ -69,17 +72,11 @@ internal class MixLane(val lane: ForYouLane, label: String = lane.label) {
         buffer = buffer.drop(count)
     }
 
-    /**
-     * Returns [posts] to the front of the lane. When [vetting] they are vetted again, and the buffer waits behind them so
-     * the deal keeps their order (its tags are remembered, so it passes again at once).
-     */
-    fun putBack(posts: List<Post>, vetting: Boolean) {
-        if (!vetting) {
-            buffer = posts + buffer
-            return
-        }
-        unvetted = posts + buffer + unvetted
-        buffer = emptyList()
+    /** Returns [posts] to the front of the lane; those that [needLook] are vetted again first. */
+    fun putBack(posts: List<Post>, needLook: (Post) -> Boolean) {
+        val (unchecked, clean) = posts.partition(needLook)
+        unvetted = unchecked + unvetted
+        buffer = clean + buffer
     }
 
     fun keep(shown: (Post) -> Boolean) {
@@ -94,10 +91,11 @@ internal class MixLane(val lane: ForYouLane, label: String = lane.label) {
         if (shows) buffer = buffer + post
     }
 
-    /** Sends the buffer back to be vetted, as when the picture tagger has just become ready. */
-    fun revet() {
-        unvetted = buffer + unvetted
-        buffer = emptyList()
+    /** Sends what in the buffer [needLook]s back to be vetted, as when the first hidden tag arrives. */
+    fun revet(needLook: (Post) -> Boolean) {
+        val (unchecked, clean) = buffer.partition(needLook)
+        unvetted = unchecked + unvetted
+        buffer = clean
     }
 
     /** Posts the lane holds, vetted or not. */
@@ -164,12 +162,12 @@ internal class ForYouMix(lanes: List<ForYouLane>, private val copiesOf: (Post) -
 
     /**
      * Starts the dealt list over, as a chip change does: the cards nobody has [decided] go back to the front of the
-     * lanes (or the pending cards) they came from, so the next deal can give them again. When [vetting], lane cards are
+     * lanes (or the pending cards) they came from, so the next deal can give them again. Lane cards that [needLook] are
      * vetted again first, since a hidden tag added after they were dealt may catch them by their pictures.
      */
-    fun takeBack(decided: Set<PostId>, vetting: Boolean) {
+    fun takeBack(decided: Set<PostId>, needLook: (Post) -> Boolean) {
         val back = released.filterNot { it.id in decided }.groupBy { (origins[it.id] as? DeckOrigin.Lane)?.laneId }
-        lanes.forEach { lane -> back[lane.origin.laneId]?.let { lane.putBack(it, vetting) } }
+        lanes.forEach { lane -> back[lane.origin.laneId]?.let { lane.putBack(it, needLook) } }
         val asked = back[null].orEmpty().mapNotNull { post -> origins[post.id]?.let { DeckCard(post, it) } }
         steering = steering.copy(pending = asked + steering.pending)
         released = emptyList()
@@ -220,8 +218,8 @@ internal class ForYouMix(lanes: List<ForYouLane>, private val copiesOf: (Post) -
         running.filter { it.unvetted.isNotEmpty() && (wanted || it.buffer.size < lookAhead) }
             .minByOrNull { it.buffer.size }?.let { it to it.unvetted.first() }
 
-    /** Sends every lane's buffer back to be vetted. */
-    fun revet() = all.forEach(MixLane::revet)
+    /** Sends what every lane's buffer [needLook]s back to be vetted. */
+    fun revet(needLook: (Post) -> Boolean) = all.forEach { it.revet(needLook) }
 
     /** The failed lanes of [source], or of every source for null. */
     fun failedLanes(source: SourceKey? = null): List<MixLane> = lanes.filter { it.failed && (source == null || it.lane.source == source) }

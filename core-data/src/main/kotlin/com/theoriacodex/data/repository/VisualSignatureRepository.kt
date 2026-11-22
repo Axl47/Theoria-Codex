@@ -44,7 +44,8 @@ interface VisualSignatureRepository {
 
 /**
  * What one tagger model saw in a stored post's picture. A null [embedding] and null [tags] mean it could not be
- * analysed, so it is not tried again. The embedding is opaque bytes here.
+ * analysed, so it is not tried again. The embedding is opaque bytes here; nothing reads it yet. It is stored now so
+ * the swipe-trained taste scorer and "Similar in your library" can use the Library without tagging it again.
  */
 data class PictureVision(val postId: PostId, val modelId: String, val embedding: ByteArray?, val tags: List<PredictedTag>?) {
     override fun equals(other: Any?): Boolean = other is PictureVision && postId == other.postId && modelId == other.modelId &&

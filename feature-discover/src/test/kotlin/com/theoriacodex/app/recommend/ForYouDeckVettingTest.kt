@@ -80,6 +80,20 @@ class ForYouDeckVettingTest {
         assertTrue(owner.posts.size > 20)
     }
 
+    @Test fun `posts their provider tagged richly are dealt without a picture check while sparse ones wait for theirs`() {
+        val rich = FakeForYouEngine(listOf(RICH, "a"))
+        val pictures = FakePictureTags().apply { held = CompletableDeferred() }
+        val owner = ForYouDeckViewModel(rich, deckWiring(writeScope, pictures = pictures)).also { it.synchronize(deckEnvironment(hiding("x"))) }
+
+        assertTrue(owner.ids.isNotEmpty())
+        assertTrue(owner.ids.all { it.startsWith(RICH) })
+        assertTrue(pictures.asked.none { it.startsWith(RICH) })
+        pictures.release()
+        val deck = owner.levels.value.last().deck
+        repeat(6) { deck.decide(com.theoriacodex.app.triage.TriageChoice.Skip, checkNotNull(deck.state.value.current).id) }
+        assertTrue(owner.ids.any { it.startsWith("a-") })
+    }
+
     @Test fun `a profile that hides nothing is dealt without tagging`() {
         val pictures = FakePictureTags()
         val owner = owner(pictures, deckEnvironment())

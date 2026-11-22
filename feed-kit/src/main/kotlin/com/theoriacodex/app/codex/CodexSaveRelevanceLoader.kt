@@ -7,7 +7,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.vision.PredictedTag
 import com.theoriacodex.domain.vision.PredictedTagIndex
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -42,7 +44,7 @@ val LocalCodexSaveRelevanceLoader = staticCompositionLocalOf<CodexSaveRelevanceL
  * rescores the retained snapshot when the library changes. A request stays warm for 5 s after its last collector leaves,
  * which carries the scores from the hold menu into the picker; the library stops 5 s after the last request.
  * [predicted] is the picture tagger's index for the saved library, whose tags count beside the provider's; [incoming]
- * also holds what it tagged this session, read only for the posts being saved.
+ * answers what it knows about the posts being saved, read once when a request starts.
  */
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class CodexSaveRelevanceLoader(
@@ -50,7 +52,7 @@ class CodexSaveRelevanceLoader(
     private val scope: CoroutineScope,
     private val scoringDispatcher: CoroutineDispatcher = Dispatchers.Default,
     predicted: Flow<PredictedTagIndex> = flowOf(PredictedTagIndex.Empty),
-    private val incoming: Flow<PredictedTagIndex> = predicted,
+    private val incoming: (PostId) -> List<PredictedTag>? = { null },
     observeLibrary: (Set<String>) -> Flow<Map<String, List<Post>>>,
 ) {
     private val library: SharedFlow<SavedLibrary> = repository.observeCodices()
@@ -103,10 +105,8 @@ class CodexSaveRelevanceLoader(
 
     private fun start(request: Request): Lookup {
         val lookupScope = CoroutineScope(scope.coroutineContext + Job(scope.coroutineContext[Job]))
-        // Rebuilt with each snapshot: predicted tags for the incoming posts may arrive after the request.
-        val ids = request.posts.mapTo(HashSet(), Post::id)
-        val tagged = incoming.map { index -> index.byPost.filterKeys { it in ids } }.distinctUntilChanged()
-        val scored = library.combine(tagged) { saved, own ->
+        val own = request.posts.mapNotNull { post -> incoming(post.id)?.let { post.id to it } }.toMap()
+        val scored = library.map { saved ->
             val predicted = saved.predicted.copy(byPost = saved.predicted.byPost + own)
             CodexSaveRelevance(request.posts, request.query, predicted).takeIf { it.hasSignals }?.scoreEach(saved).orEmpty()
         }.flowOn(scoringDispatcher)

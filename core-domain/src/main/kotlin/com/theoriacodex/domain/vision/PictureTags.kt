@@ -34,18 +34,24 @@ sealed interface PictureLook {
 }
 
 /**
- * The opt-in picture tagger as features see it. While its model is absent, [ready] is false, [index] is empty and
- * [look] is [PictureLook.Blind], so every feature behaves as it did before the tagger existed.
+ * The opt-in picture tagger as features see it. While its model is absent, [ready] is false, [library] is empty,
+ * [known] knows nothing and [look] is [PictureLook.Blind], so every feature behaves as it did before the tagger existed.
  */
 interface PictureTags {
     /** Whether the model is downloaded and verified. */
     val ready: StateFlow<Boolean>
 
-    /** Every predicted tag known now: library posts' stored ones and this session's analyses. */
-    val index: StateFlow<PredictedTagIndex>
-
-    /** The Library's stored predictions only, which change when the Library is indexed, not with every card vetted. */
+    /**
+     * The Library's stored predictions and the vocabulary's base rates. The only index that changes as a flow: it moves
+     * when the Library is indexed, never with a card analysed this session (see [known]).
+     */
     val library: StateFlow<PredictedTagIndex>
+
+    /** What is known now about [id]'s picture, stored for the Library or analysed this session; never analyses. */
+    fun known(id: PostId): List<PredictedTag>?
+
+    /** Loads the model ahead of a first [look], as when a deck that vets opens; does nothing while it is absent. */
+    suspend fun prepare() = Unit
 
     /**
      * What [post]'s picture shows, analysing it when this session has not yet (about half a second); an answer other
@@ -56,8 +62,8 @@ interface PictureTags {
     /** No tagger: for builds and tests without one. */
     object None : PictureTags {
         override val ready: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
-        override val index: StateFlow<PredictedTagIndex> = MutableStateFlow(PredictedTagIndex.Empty).asStateFlow()
-        override val library: StateFlow<PredictedTagIndex> get() = index
+        override val library: StateFlow<PredictedTagIndex> = MutableStateFlow(PredictedTagIndex.Empty).asStateFlow()
+        override fun known(id: PostId): List<PredictedTag>? = null
         override suspend fun look(post: Post): PictureLook = PictureLook.Blind
     }
 }
