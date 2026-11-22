@@ -55,7 +55,7 @@ fun SeriesPageScreen(
     onOpenEntry: (String) -> Unit,
     onOpenExtensions: () -> Unit,
     modifier: Modifier = Modifier,
-) {
+) = BrowserCheckScope {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     // New chapters of followed series are announced, so each follow asks for the permission while it is missing.
@@ -80,9 +80,7 @@ fun SeriesPageScreen(
             when {
                 missing -> item("missing") { MissingSourceRow(onOpenExtensions) }
                 failure != null -> item("failure") {
-                    val compact = state.entries.isNotEmpty()
-                    val padding = if (compact) Modifier.padding(horizontal = 16.dp) else Modifier
-                    SourceLoadFailure(failure, state.browserCheck, state.sourceName, viewModel::refresh, padding, compact)
+                    SourceLoadFailure(failure, state.browserCheck, state.sourceName, viewModel::refresh, Modifier.padding(horizontal = 16.dp), compact = state.entries.isNotEmpty())
                 }
                 state.refreshing && state.entries.isEmpty() -> item("loading") { LoadingState() }
                 state.entries.isEmpty() -> item("empty") { EmptyState("No chapters") }

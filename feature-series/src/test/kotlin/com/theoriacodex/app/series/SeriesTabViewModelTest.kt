@@ -133,6 +133,25 @@ class SeriesTabViewModelTest {
     }
 
     @Test
+    fun aNextPageBehindABrowserCheckKeepsWhatLoadedAndSaysWhereToPassIt() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val check = BrowserCheck("https://site.test/search?page=2", "agent/1")
+        val source = Answering(pages = 2)
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) {}
+        advanceUntilIdle()
+        viewModel.search("one punch")
+        advanceUntilIdle()
+
+        source.failure = SourceAdapterException(SourceFailureReason.BROWSER_CHECK, browserCheck = check)
+        viewModel.searchMore(source.key)
+        advanceUntilIdle()
+
+        val listing = viewModel.state.value.search?.single()?.listing as SeriesListing.Loaded
+        assertEquals(listOf("/found"), listing.series.map { it.id.address })
+        assertEquals(check, listing.moreCheck)
+    }
+
+    @Test
     fun aSourceBehindABrowserCheckSaysWhereItCanBePassedAndRetriesAfterIt() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val check = BrowserCheck("https://site.test/search", "agent/1")

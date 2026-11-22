@@ -31,12 +31,16 @@ sealed interface SeriesListing {
     /** [browserCheck] is where the source's browser check can be passed, when one is what failed. */
     data class Failed(val message: String, val browserCheck: BrowserCheck? = null) : SeriesListing
 
-    /** [nextPage] is null once the source has no more; [moreFailed] holds the next page back until Retry. */
+    /**
+     * [nextPage] is null once the source has no more; [moreFailed] holds the next page back until Retry, and
+     * [moreCheck] says where its browser check can be passed when one is what failed.
+     */
     data class Loaded(
         val series: List<Series>,
         val nextPage: Int?,
         val loadingMore: Boolean = false,
         val moreFailed: Boolean = false,
+        val moreCheck: BrowserCheck? = null,
     ) : SeriesListing
 }
 
@@ -138,7 +142,7 @@ class SeriesTabViewModel(
         val loaded = browse.listing as? SeriesListing.Loaded ?: return
         val page = loaded.nextPage?.takeUnless { loaded.loadingMore } ?: return
         val source = source(browse.key) ?: return
-        updateBrowse(browse.key) { loaded.copy(loadingMore = true, moreFailed = false) }
+        updateBrowse(browse.key) { loaded.copy(loadingMore = true, moreFailed = false, moreCheck = null) }
         viewModelScope.launch {
             val next = loaded.withPage(page) { source.popular(it) }
             updateBrowse(browse.key) { next }
@@ -152,7 +156,7 @@ class SeriesTabViewModel(
         val page = loaded.nextPage?.takeUnless { loaded.loadingMore } ?: return
         val source = source(key) ?: return
         val run = searchRun
-        updateSearch(key, run, loaded.copy(loadingMore = true, moreFailed = false))
+        updateSearch(key, run, loaded.copy(loadingMore = true, moreFailed = false, moreCheck = null))
         viewModelScope.launch {
             val next = loaded.withPage(page) { source.search(query, it) }
             if (source(key) === source) updateSearch(key, run, next)
@@ -230,8 +234,8 @@ private suspend fun SeriesListing.Loaded.withPage(page: Int, load: suspend (Int)
     copy(series = (series + more.series).distinctBy(Series::id), nextPage = (page + 1).takeIf { more.hasNextPage }, loadingMore = false)
 } catch (error: CancellationException) {
     throw error
-} catch (_: Exception) {
-    copy(loadingMore = false, moreFailed = true)
+} catch (error: Exception) {
+    copy(loadingMore = false, moreFailed = true, moreCheck = browserCheckOf(error))
 }
 
 /** What the screen says about [error]: a line for its reason, never the exception's own text. */

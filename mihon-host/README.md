@@ -69,14 +69,19 @@ for the app's own.
 **Browser checks.** The extensions' HTTP client keeps its cookies in the system WebView's store, for every host, as
 Mihon's does: extensions are written against that, and many keep a session in cookies. It is not limited to the hosts
 the app's own clients may send browser cookies to (`SiteCookieBridge`), since extension code runs in the app's process
-and could read the store anyway. When Cloudflare's server answers 403 or 503, `CloudflareInterceptor` does what Mihon's
-does: it drops the refused `cf_clearance` cookie, loads the request in a WebView no one sees, with the request's agent
-and headers, waits up to 10 s for a new clearance cookie, and sends the request once more. A check it cannot pass
-fails with `BrowserCheckException`, which the source reports as `BROWSER_CHECK` with the address and agent; the Series
-tab, its search results and the series page then offer Open check, a full-screen in-app browser with that agent, which
-closes itself and loads again once a new clearance cookie appears. A host whose check failed out of sight fails at once
-for five minutes, or until it answers without a challenge, so a screen of covers or the background chapter check does
-not wait once per request. A missing or updating WebView counts as a failed check, never a crash.
+and could read the store anyway. When Cloudflare answers with its challenge (403 or 503 from its server, marked
+`cf-mitigated: challenge`; a hard block or a maintenance page passes through untouched), `CloudflareInterceptor` does
+what Mihon's does: it drops the clearance cookie the challenged request carried, loads the challenged address in a
+WebView no one sees, with the request's agent and only the headers a browser would send itself (language, referrer),
+waits up to 10 s for a new clearance cookie, stores it to disk, and sends the original request once more. A check it
+cannot pass fails with `BrowserCheckException`, which the source reports as `BROWSER_CHECK` with the address and agent.
+The Series tab, its search results (first and later pages) and the series page then offer Open check: a full-screen
+in-app browser with that agent, showing the host it is on, which closes itself and loads again once the site lets a
+page through. If the site let the browser through but still refuses the app, the failure shows as an ordinary one for
+five minutes, since a browser cannot help. A host whose check failed out of sight fails at once for five minutes, or
+until it answers without a challenge, so a screen of covers or the background chapter check does not wait once per
+request. Every wait ends when the call is cancelled. A missing or updating WebView, or one whose renderer dies, counts
+as a failed check, never a crash.
 
 **Android's backup and device transfer.** Neither carries extension data. The choices (which extensions are on, their
 languages) and every extension's preferences, which can hold a server's address and password, are in
@@ -254,6 +259,8 @@ What the feature still lacks.
   extension builds its requests from addresses as it likes and may talk to several hosts, so the app has no origin to
   check them against. A backup edited by hand can thus make an approved extension request another host; the boundary
   is trust in the extension and in the file being restored.
+- **One browser identity.** Extensions, Custom Sites and the in-app browser share the WebView's one cookie store, so
+  an extension and a Custom Site on the same host share that host's cookies.
 - **Browser checks in the background and in the Viewer.** The new-chapter job cannot show a check, so a followed series
   behind one is skipped that round; a chapter page that fails a check inside the Viewer shows the Viewer's usual
   failure.

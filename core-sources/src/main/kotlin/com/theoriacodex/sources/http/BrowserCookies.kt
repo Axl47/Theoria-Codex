@@ -26,10 +26,11 @@ interface BrowserCookieStore {
 const val CLEARANCE_COOKIE = "cf_clearance"
 
 /** The value of the cookie called [name] that [url] would send; null when there is none or the store cannot answer. */
-fun BrowserCookieStore.cookie(url: String, name: String): String? =
-    runCatching { cookieHeader(url) }.getOrNull()
-        ?.split(';')
-        ?.firstNotNullOfOrNull { pair -> pair.trim().takeIf { it.substringBefore('=') == name }?.substringAfter('=') }
+fun BrowserCookieStore.cookie(url: String, name: String): String? = cookieValue(runCatching { cookieHeader(url) }.getOrNull(), name)
+
+/** The value of the cookie called [name] in a `Cookie` header; null when the header has none. */
+fun cookieValue(header: String?, name: String): String? =
+    header?.split(';')?.firstNotNullOfOrNull { pair -> pair.trim().takeIf { it.substringBefore('=') == name }?.substringAfter('=') }
 
 /**
  * Whether [url] now carries a clearance cookie other than [old], the sign that its browser check was passed. Only a

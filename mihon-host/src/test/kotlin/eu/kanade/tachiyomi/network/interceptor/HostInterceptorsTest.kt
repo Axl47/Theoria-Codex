@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.network.interceptor
 
+import com.theoriacodex.mihonhost.ChallengeBrowser
 import com.theoriacodex.mihonhost.MihonHost
 import com.theoriacodex.mihonhost.answering
 import com.theoriacodex.mihonhost.cannedResponse
@@ -31,7 +32,7 @@ class HostInterceptorsTest {
     fun `the client extensions rebuild carries the interceptor names they require, in Mihon's order`() {
         assertEquals(
             listOf("UncaughtExceptionInterceptor", "UserAgentInterceptor", "CloudflareInterceptor"),
-            MihonHost.extensionClient(NoCookies, { _, _ -> false }).interceptors.map { it.javaClass.simpleName },
+            MihonHost.extensionClient(NoCookies, NoBrowser).interceptors.map { it.javaClass.simpleName },
         )
     }
 
@@ -76,6 +77,12 @@ class HostInterceptorsTest {
         override fun flush() = Unit
 
         override fun expire(url: String, name: String?) = Unit
+    }
+
+    private object NoBrowser : ChallengeBrowser {
+        override fun mayWait() = true
+
+        override fun pass(request: Request, passed: () -> Boolean, cancelled: () -> Boolean) = false
     }
 
     private fun clientOf(vararg interceptors: Interceptor) = OkHttpClient.Builder().apply { interceptors.forEach(::addInterceptor) }.build()

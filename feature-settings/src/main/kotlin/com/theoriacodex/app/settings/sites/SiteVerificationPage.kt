@@ -38,7 +38,7 @@ internal fun SiteVerificationPage(verification: SiteVerification, siteName: Stri
     BackHandler(onBack = cancel)
     val bridge = (LocalContext.current.applicationContext as SiteCookieBridgeOwner).siteCookieBridge
     val currentOnAction by rememberUpdatedState(onAction)
-    val browser = rememberBrowserState("https://$host/") { userAgent ->
+    val browser = rememberBrowserState("https://$host/") { userAgent, _ ->
         currentOnAction(CustomSitesAction.VerificationPageLoaded(userAgent, bridge.cookiesFor("https://$host/")))
     }
     BrowserPage(
