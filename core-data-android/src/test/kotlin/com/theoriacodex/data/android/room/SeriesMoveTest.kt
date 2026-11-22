@@ -116,6 +116,15 @@ class SeriesMoveTest {
     }
 
     @Test
+    fun `progress on chapters the old source no longer lists also refuses a series without chapters`() = runTest {
+        readOld()
+        repository.store(old, listOf(SeriesEntry("/o4", "Chapter 4", 4f)))
+
+        assertTrue(runCatching { repository.switchSource(old.id, source, new) }.exceptionOrNull() is NoChaptersToMoveToException)
+        assertTrue(repository.series(old.id)!!.followed)
+    }
+
+    @Test
     fun `of two switches of one series, the second moves nothing and leaves the downloads to the first`() = runTest {
         readOld()
         source.chapters = listOf(SeriesEntry("/n1", "Ch. 1", 1f))

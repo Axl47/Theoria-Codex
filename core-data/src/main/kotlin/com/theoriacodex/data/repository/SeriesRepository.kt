@@ -86,6 +86,7 @@ interface SeriesRepository {
      * [entries] as [store] does, carries [from]'s settings and progress over by [carryProgress], and removes [from] with
      * its entries. [to]'s entries are all stored as seen, so only entries listed after the move count as new. Returns
      * whether it moved: nothing changes when [from] is not stored, as when another move took it first, or is [to].
+     * Throws [NoChaptersToMoveToException], changing nothing, when [entries] is empty while [from] has progress.
      */
     suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>): Boolean
 }

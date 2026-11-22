@@ -2,6 +2,7 @@ package com.theoriacodex.data.android.room
 
 import androidx.room.withTransaction
 import com.theoriacodex.data.repository.FollowedSeries
+import com.theoriacodex.data.repository.NoChaptersToMoveToException
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
@@ -118,6 +119,8 @@ class RoomSeriesRepository(
         return database.withTransaction {
             val old = dao.series(from.source.id, from.address)?.toStored() ?: return@withTransaction false
             val oldEntries = dao.allEntries(from.source.id, from.address).map(SeriesEntryEntity::toStored)
+            // All stored entries count, also ones the old source no longer lists: their progress goes with the series.
+            if (entries.isEmpty() && oldEntries.any { it.read || it.lastPage > 0 }) throw NoChaptersToMoveToException()
             write(to, entries)
             val target = dao.series(to.id.source.id, to.id.address).toStored()
             val (moved, changed) = carryProgress(old, oldEntries, target, dao.entries(to.id.source.id, to.id.address).map(SeriesEntryEntity::toStored))

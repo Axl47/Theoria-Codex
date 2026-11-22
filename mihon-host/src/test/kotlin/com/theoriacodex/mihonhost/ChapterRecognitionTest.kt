@@ -28,6 +28,13 @@ class ChapterRecognitionTest {
     }
 
     @Test
+    fun `a series titled with a number leaves chapter numbers whole`() {
+        assertEquals(186f, ChapterRecognition.parseChapterNumber("86", "Chapter 186"))
+        assertEquals(86f, ChapterRecognition.parseChapterNumber("86", "Chapter 86"))
+        assertEquals(12f, ChapterRecognition.parseChapterNumber("86", "86 Chapter 12"))
+    }
+
+    @Test
     fun `a name without a number has none`() {
         assertNull(ChapterRecognition.parseChapterNumber("Series", "Oneshot"))
     }

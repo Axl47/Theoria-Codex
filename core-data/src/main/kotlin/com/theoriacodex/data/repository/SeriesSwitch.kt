@@ -16,8 +16,8 @@ class NoChaptersToMoveToException : Exception("The series switched to lists no c
  * repository [SeriesRepository.moveSeries] in one step. Returns whether this call moved it: false when [to] is [from],
  * or when [from] is no longer stored, as when another switch moved it first.
  *
- * Changes nothing and throws when the fetch fails, with what the source throws, or when [to] lists no entries while
- * [from] has progress, with [NoChaptersToMoveToException]. Once a move is stored, [removeDownloads] gets [from] so its
+ * Changes nothing and throws when the fetch fails, with what the source throws, or when the move is refused, with
+ * [NoChaptersToMoveToException]. Once a move is stored, [removeDownloads] gets [from] so its
  * downloaded chapters can go; its failure leaves the move as it is.
  */
 suspend fun SeriesRepository.switchSource(
@@ -31,7 +31,6 @@ suspend fun SeriesRepository.switchSource(
     val moved = refreshLocks.getOrPut(source.key, ::Mutex).withLock {
         val details = source.details(to)
         val entries = source.entries(details)
-        if (entries.isEmpty() && entries(from).any { it.read || it.lastPage > 0 }) throw NoChaptersToMoveToException()
         moveSeries(from, details, entries)
     }
     if (!moved) return false

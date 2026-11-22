@@ -23,8 +23,11 @@ internal object ChapterRecognition {
 
     /** The number in [chapterName], leaving out [seriesTitle] where it repeats; null when the name has none. */
     fun parseChapterNumber(seriesTitle: String, chapterName: String): Float? {
-        val name = chapterName.lowercase()
-            .replace(seriesTitle.lowercase(), "").trim()
+        val lower = chapterName.lowercase()
+        // Only the title standing alone goes: for the series "86", "Chapter 186" keeps its digits. A name that is
+        // left without a number had the title as its number ("Chapter 86"), so it is read whole.
+        val untitled = lower.replace(Regex("""(?<![\p{L}\p{N}])${Regex.escape(seriesTitle.lowercase())}(?![\p{L}\p{N}])"""), "")
+        val name = (if (number.containsMatchIn(untitled)) untitled else lower).trim()
             .replace(',', '.')
             .replace('-', '.')
             .replace(unwantedWhiteSpace, "")
