@@ -41,6 +41,11 @@ androidx.preference.SwitchPreferenceCompat: SwitchPreferenceCompat(android.conte
 androidx.preference.TwoStatePreference
 androidx.preference.TwoStatePreference: void setSummaryOff(java.lang.CharSequence)
 androidx.preference.TwoStatePreference: void setSummaryOn(java.lang.CharSequence)
+# Not from an extension: the zstd decoder's native library looks these up by name, so no dex shows the reference.
+com.squareup.zstd.JniZstdCompressor
+com.squareup.zstd.JniZstdDecompressor
+com.squareup.zstd.ZstdCompressor
+com.squareup.zstd.ZstdDecompressor
 com.squareup.zstd.okio.OkioZstd
 com.squareup.zstd.okio.OkioZstd: okio.Sink zstdCompress(okio.Sink)
 com.squareup.zstd.okio.OkioZstd: okio.Source zstdDecompress(okio.Source)
