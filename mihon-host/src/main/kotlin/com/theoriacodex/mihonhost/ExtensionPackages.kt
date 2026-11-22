@@ -25,9 +25,15 @@ data class ExtensionPackage(
     val sourceClasses: List<String>,
     /**
      * What the user's choice to turn it on is kept under: the package name, so an update is the same extension and
-     * another extension is not. A file in the folder is named by its file name instead, apart from any package.
+     * another extension is not. A file in the folder is named by its file name and the package inside it, apart from
+     * any installed package: another extension put there under the same file name is not the one that was turned on.
      */
-    val identity: String = if (installed) packageName else "file:${apk.name}",
+    val identity: String = if (installed) packageName else "file:${apk.name}:$packageName",
+    /**
+     * Names this copy on the Extensions page. An installed package's path already holds its package name; a folder
+     * file's id adds it, so a question asked about one extension cannot be answered for another put in its place.
+     */
+    val id: String = if (installed) apk.path else "${apk.path}#$packageName",
     /** The APK's length in bytes and when it was last written, as read when it was listed. */
     val size: Long = apk.length(),
     val modified: Long = apk.lastModified(),

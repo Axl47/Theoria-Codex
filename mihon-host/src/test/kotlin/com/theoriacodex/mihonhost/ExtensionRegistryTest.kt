@@ -19,6 +19,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.util.concurrent.CountDownLatch
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -34,7 +35,10 @@ class ExtensionRegistryTest {
     private val store = object : ExtensionChoiceStore {
         var choices = ExtensionChoices()
 
-        override suspend fun choices() = choices
+        /** Thrown by the next [choices] in place of an answer, once. */
+        var interruption: Throwable? = null
+
+        override suspend fun choices() = interruption?.let { interruption = null; throw it } ?: choices
 
         override suspend fun update(transform: (ExtensionChoices) -> ExtensionChoices) {
             choices = transform(choices)
@@ -95,7 +99,7 @@ class ExtensionRegistryTest {
         assertEquals(listOf(true, false, false), listed.map { it.on })
         assertEquals(listOf("/a.apk"), loads)
 
-        registry.setOn("/files/a.apk", "key-1", true)
+        registry.setOn(listed[2].id, "key-1", true)
         assertEquals(listOf(true, false, true), registry.setOn("/b.apk", "key-1", false).map { it.on })
     }
 
@@ -119,6 +123,34 @@ class ExtensionRegistryTest {
         // Only what changed was loaded each time.
         assertEquals(listOf("/a.apk", "/a.apk", "/b.apk"), loads)
         assertEquals(4, registry.revision.value)
+    }
+
+    @Test
+    fun `a lookup interrupted after a change on the device leaves the change for the next one`() = runBlocking {
+        store.choices = ExtensionChoices(trusted = mapOf("a" to "key-1"))
+        registry.sources()
+
+        onDevice = emptyList()
+        store.interruption = CancellationException("the caller left")
+        assertFailsWith<CancellationException> { registry.sources() }
+
+        assertTrue(registry.sources().isEmpty())
+    }
+
+    @Test
+    fun `another extension put under a folder file's name with the same key is not the one asked about or turned on`() = runBlocking {
+        val first = listOf(extension("a", signer = "key-1", apk = "/x.apk", installed = false))
+        val other = listOf(extension("b", signer = "key-1", apk = "/x.apk", installed = false))
+        onDevice = first
+        val asked = registry.installed().single().id
+
+        onDevice = other
+        assertFalse(registry.setOn(asked, "key-1", true).single().on)
+        onDevice = first
+        assertTrue(registry.setOn(asked, "key-1", true).single().on)
+        onDevice = other
+        assertFalse(registry.installed().single().on)
+        assertEquals(1, loads.size)
     }
 
     @Test

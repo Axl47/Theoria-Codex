@@ -41,7 +41,7 @@ internal class MihonExtensionSourceHost : ExtensionSourceHost {
     /** The settings store, which opens after the HTTP clients that already hold [mediaInterceptor]. */
     private val choices = CompletableDeferred<ExtensionChoiceStore>()
 
-    // Runs on an HTTP client's thread, for an image of a source that is not on: loads the extensions if nothing has yet.
+    // Runs on an HTTP client's thread before each extension image: loads the extensions the first time, then only checks the stamp.
     private val images = ExtensionImages { runBlocking { registry.sources() } }
 
     override val mediaInterceptor: Interceptor get() = images
