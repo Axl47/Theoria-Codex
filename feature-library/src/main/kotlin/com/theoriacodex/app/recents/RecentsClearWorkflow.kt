@@ -3,7 +3,6 @@ package com.theoriacodex.app.recents
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchEntry
-import com.theoriacodex.data.repository.RecentSearchSection
 import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.app.ui.undo.UndoAction
 import com.theoriacodex.app.ui.undo.UndoAnchor
@@ -15,7 +14,6 @@ enum class RecentsClearTarget(
 ) {
     WATCHED("Watched history cleared", "watched history"),
     CODEX("Codex history cleared", "Codex history"),
-    FYP("For You history cleared", "For You history"),
     SEARCHES("Search history cleared", "search history"),
     ALL("All history cleared", "all history"),
 }
@@ -35,7 +33,6 @@ class RecentsClearWorkflow(
         watchedPosts: List<RecentPostEntry>,
         codexPosts: List<RecentPostEntry>,
         searches: List<RecentSearchEntry>,
-        fypSearches: List<RecentSearchEntry>,
         showActionableFeedback: suspend (message: String, action: UndoAction) -> Boolean,
     ) {
         var removedSearches: List<RecentSearchEntry>
@@ -52,13 +49,12 @@ class RecentsClearWorkflow(
         val watchedSnapshot = when (target) {
             RecentsClearTarget.WATCHED -> watchedPosts
             RecentsClearTarget.CODEX -> codexPosts
-            RecentsClearTarget.FYP,
             RecentsClearTarget.SEARCHES -> emptyList()
             RecentsClearTarget.ALL -> watchedPosts + codexPosts
         }
         val searchSnapshot = when (target) {
-            RecentsClearTarget.FYP, RecentsClearTarget.SEARCHES -> removedSearches
-            RecentsClearTarget.ALL -> searches + fypSearches
+            RecentsClearTarget.SEARCHES -> removedSearches
+            RecentsClearTarget.ALL -> searches
             else -> emptyList()
         }
         while (true) {
@@ -71,8 +67,7 @@ class RecentsClearWorkflow(
     }
 
     private suspend fun clearTarget(target: RecentsClearTarget): List<RecentSearchEntry> = when (target) {
-        RecentsClearTarget.FYP -> repository.clearSearches(RecentSearchSection.FYP)
-        RecentsClearTarget.SEARCHES -> repository.clearSearches(RecentSearchSection.SEARCHES)
+        RecentsClearTarget.SEARCHES -> repository.clearSearches()
         RecentsClearTarget.WATCHED -> { repository.clearWatchedPosts(RecentPostSection.WATCHED); emptyList() }
         RecentsClearTarget.CODEX -> { repository.clearWatchedPosts(RecentPostSection.CODEX); emptyList() }
         RecentsClearTarget.ALL -> { repository.clearAll(); emptyList() }

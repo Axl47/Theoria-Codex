@@ -1,5 +1,7 @@
 package com.theoriacodex.app.ui.trails
 
+import com.theoriacodex.app.trails.TrailPage
+import com.theoriacodex.app.trails.TrailPager
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.app.ui.trails.TrailTestData.post
 import com.theoriacodex.app.ui.trails.TrailTestData.related

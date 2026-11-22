@@ -14,8 +14,6 @@ import com.theoriacodex.app.ui.routes.BrowsingDestinationState
 import com.theoriacodex.app.ui.routes.rememberCodexCollection
 import com.theoriacodex.app.ui.routes.rememberRetained
 import com.theoriacodex.data.repository.RecentPostEntry
-import com.theoriacodex.data.repository.RecentSearchEntry
-import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.data.repository.SettingDestinations
 import com.theoriacodex.domain.model.CreatorProfile
@@ -62,7 +60,7 @@ internal fun rememberSearchOmniboxEntries(shell: TheoriaShell, state: BrowsingDe
             }
             recents.mapTo(this) { entry ->
                 val presentation = recentSearchPresentation(entry)
-                OmniboxEntry.Action(OmniboxKind.RECENT_SEARCH, presentation.title, presentation.subtitle) { shell.openSearchEntry(entry) }
+                OmniboxEntry.Action(OmniboxKind.RECENT_SEARCH, presentation.title, presentation.subtitle) { shell.openHistoricalSearch(entry) }
             }
             val hidden = setOfNotNull(SettingDestinations.Diagnostics.id.takeIf { shell.diagnosticsEntry == null })
             addAll(searchSettingEntries(state.settings, hidden, shell.owners.settings::onAction) { binding ->
@@ -87,20 +85,8 @@ internal fun recentCreators(
         .toList()
 }
 
-/** Runs a saved or recent search where it belongs: For You searches in For You, the rest in Search. */
-internal fun TheoriaShell.openSearchEntry(entry: RecentSearchEntry) {
-    if (entry.kind == RecentSearchKind.FYP) openHistoricalForYouSearch(entry) else openHistoricalSearch(entry)
-}
-
-/**
- * Opens a saved search. Its "new posts" count is read once Search reports the results it showed
- * ([SavedSearchOpenMarks]); a For You search never reaches Search, so it is read at once.
- */
+/** Opens a saved search. Its "new posts" count is read once Search reports the results it showed ([SavedSearchOpenMarks]). */
 internal fun TheoriaShell.openSavedSearch(entry: SavedSearchEntry) {
-    openSearchEntry(entry.search)
-    if (entry.search.kind == RecentSearchKind.FYP) {
-        scope.launch { data.uiRestoreRepository.markSavedSearchesSeen(setOf(entry.id)) }
-    } else {
-        savedSearchOpens.opened(entry)
-    }
+    openHistoricalSearch(entry.search)
+    savedSearchOpens.opened(entry)
 }

@@ -1,6 +1,7 @@
 package com.theoriacodex.app.ui
 
 import android.app.Application
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
@@ -24,12 +25,18 @@ import org.robolectric.annotation.Config
 class TabSwipeCommitTest {
     @get:Rule val compose = createComposeRule()
 
-    private fun slowDrag(fraction: Float): Int {
+    /** Drags slowly leftwards from tab [from] across [fraction] of the width and returns the tab it lands on. */
+    private fun slowDrag(fraction: Float, from: Int = 0, forYouGrid: Boolean = false): Int {
         lateinit var pager: PagerState
         compose.setContent {
-            pager = rememberPagerState(pageCount = { 3 })
-            HorizontalPager(pager, Modifier.fillMaxSize().testTag("tabs"), flingBehavior = topLevelPagerFling(pager)) {
-                Box(Modifier.fillMaxSize())
+            pager = rememberPagerState(initialPage = from, pageCount = { 3 })
+            HorizontalPager(
+                pager, Modifier.fillMaxSize().testTag("tabs"),
+                userScrollEnabled = tabSwipeEnabled(pager.settledPage, forYouGrid),
+                flingBehavior = topLevelPagerFling(pager),
+            ) {
+                // Takes taps, as a row or a card does: only a pager that scrolls keeps a drag from ending as one.
+                Box(Modifier.fillMaxSize().clickable { taps++ })
             }
         }
         compose.onNodeWithTag("tabs").performTouchInput {
@@ -46,7 +53,21 @@ class TabSwipeCommitTest {
         return pager.currentPage
     }
 
+    private var taps = 0
+
     @Test fun `a slow drag past the commit point changes tab`() = assertEquals(1, slowDrag(0.28f))
 
     @Test fun `a slow drag short of the commit point stays`() = assertEquals(0, slowDrag(0.05f))
+
+    @Test fun `a sideways drag on For You's deck never changes tab`() =
+        assertEquals(FOR_YOU, slowDrag(0.6f, from = FOR_YOU))
+
+    @Test fun `For You's grid swipes like the other tabs, so a drag there is not a tap`() {
+        assertEquals(FOR_YOU + 1, slowDrag(0.6f, from = FOR_YOU, forYouGrid = true))
+        assertEquals(0, taps)
+    }
+
+    private companion object {
+        val FOR_YOU = TopLevelDestination.ForYou.ordinal
+    }
 }

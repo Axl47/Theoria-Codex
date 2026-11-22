@@ -5,7 +5,7 @@ fun mergeRecentActivity(
     watched: List<RecentPostEntry>,
     searches: List<RecentSearchEntry>,
 ): List<RecentActivityEntry> = buildList {
-    watched.filterNot { it.section == RecentPostSection.FYP }.sortedByDescending { it.viewedAtEpochMs }.distinctBy { it.post.id }
+    watched.sortedByDescending { it.viewedAtEpochMs }.distinctBy { it.post.id }
         .forEach { add(RecentActivityEntry.Watched(it)) }
     searches.forEach { add(RecentActivityEntry.Search(it)) }
 }.sortedWith(compareByDescending<RecentActivityEntry> { it.occurredAtEpochMs }

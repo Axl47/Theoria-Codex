@@ -1,6 +1,5 @@
 package com.theoriacodex.data.repository
 
-import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.SavedSearchSnapshot
 import com.theoriacodex.data.storage.SavedSearchSnapshotSerializer
@@ -27,29 +26,19 @@ import org.junit.Test
 
 internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFixture() {
     @Test
-    fun `pin and rename survive restart with exact grouped Multi-Search and FYP execution`() = runTest {
+    fun `pin and rename survive restart with exact grouped Multi-Search execution`() = runTest {
         val directory = tempDir("pinned-search-replay")
         val repository = FileBackedSavedSearchRepository(directory, now = { 300 })
         val multi = execution().copy(query = execution().query.withIncludeTermGroups(listOf(
             SearchTermGroup(listOf(SearchTerm("cat"), SearchTerm("dog"))),
             SearchTermGroup.single(SearchTerm("night")),
         )))
-        val fyp = multi.copy(
-            queryHash = "for_you:seed-identity",
-            kind = RecentSearchKind.FYP,
-            sourceTags = mapOf(SourceKey.GELBOORU to listOf("cat"), SourceKey.PIXIV to listOf("猫", "夜")),
-        )
         val multiPin = repository.save("  Evening search  ", multi)
-        val fypPin = repository.save("For You", fyp)
         repository.rename(multiPin.id, "Cats or dogs at night")
-        repository.rename(fypPin.id, "Exact recommendation")
 
         val restored = FileBackedSavedSearchRepository(directory).observeSavedSearches().first()
 
-        assertEquals(listOf("Exact recommendation", "Cats or dogs at night"), restored.map { it.name })
-        assertEquals(listOf(fyp, multi), restored.map { it.search })
-        assertEquals(listOf(fypPin.id, multiPin.id), restored.map { it.id })
-        assertTrue(restored.all { it.savedAtEpochMs == 300L })
+        assertEquals(listOf(SavedSearchEntry(multiPin.id, "Cats or dogs at night", multi, 300)), restored)
     }
 
     @Test
@@ -92,6 +81,28 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
         val oversized = List(MAX_SAVED_SEARCHES) { index -> imported.copy(id = "next-import:$index") }
         assertTrue(runCatching { repository.merge(oversized) }.isFailure)
         assertEquals(2, repository.observeSavedSearches().first().size)
+    }
+
+    @Test
+    fun `a backup's For You pin is imported as source searches`() = runTest {
+        val repository = FileBackedSavedSearchRepository(tempDir("pin-backup-for-you"), sourceName = { it.id.lowercase() })
+
+        repository.merge(goldenPins())
+
+        assertEquals(goldenPins().withForYouSearchesConverted { it.id.lowercase() }, repository.observeSavedSearches().first())
+        assertTrue(repository.observeSavedSearches().first().none { it.search.isRetiredForYouSearch })
+    }
+
+    @Test
+    fun `a backup's For You pin never replaces the local search with its ID`() = runTest {
+        val repository = FileBackedSavedSearchRepository(tempDir("pin-backup-for-you-id"), sourceName = { it.id.lowercase() })
+        val forYouPin = goldenPins().first { it.search.isRetiredForYouSearch }
+        val local = SavedSearchEntry(forYouPin.id, "Mine", execution(), 1)
+        repository.replaceAll(listOf(local))
+
+        repository.merge(goldenPins())
+
+        assertEquals(local, repository.observeSavedSearches().first().single { it.id == local.id })
     }
 
     @Test
@@ -145,16 +156,20 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
     }
 
     @Test
-    fun `a file the Gson store wrote loads, and rewriting it keeps the same document`() = runTest {
+    fun `a file the Gson store wrote loads with its For You pin as source searches, rewritten once`() = runTest {
         val directory = tempDir("pin-golden")
         val storage = directory.resolve("pinned_searches.json")
-        val golden = goldenPinnedSearchesFile()
-        storage.writeText(golden)
-        val repository = FileBackedSavedSearchRepository(directory)
+        storage.writeText(goldenPinnedSearchesFile())
+        val open = { FileBackedSavedSearchRepository(directory, sourceName = { it.id.lowercase() }) }
 
-        assertEquals(goldenPins(), repository.observeSavedSearches().first())
-        repository.rename("pin-fyp", goldenPins().first().name)
-        assertEquals(DurableJson.parseToJsonElement(golden), DurableJson.parseToJsonElement(storage.readText()))
+        val loaded = open().observeSavedSearches().first()
+
+        assertEquals(goldenPins().withForYouSearchesConverted { it.id.lowercase() }, loaded)
+        assertEquals(listOf("For 'you' = 猫 · gelbooru", "For 'you' = 猫 · pixiv", "Cats & dogs <night>"), loaded.map { it.name })
+        assertFalse(storage.readText().contains("FYP"))
+        val rewritten = storage.readText()
+        assertEquals(loaded, open().observeSavedSearches().first())
+        assertEquals(rewritten, storage.readText())
     }
 
     // The golden is the Gson store's own output.
@@ -193,7 +208,7 @@ internal fun goldenPinnedSearchesFile(): String = checkNotNull(
     FileBackedSavedSearchRepositoryTest::class.java.classLoader.getResource("golden/pinned-searches/gson-written.json"),
 ).readText()
 
-/** The pins behind the golden file; never edit to follow a refactor. */
+/** The pins behind the golden file, as it decodes: its For You pin reads as a Unified search with source tags. */
 internal fun goldenPins(): List<SavedSearchEntry> {
     val tricky = "a&b=c<d>'e"
     val query = Query(
@@ -207,7 +222,7 @@ internal fun goldenPins(): List<SavedSearchEntry> {
     val multi = RecentSearchEntry(query, "multi-hash", 100, RecentSearchKind.MULTI_SEARCH, listOf(SourceKey.GELBOORU, SourceKey.PIXIV))
     val fyp = multi.copy(
         queryHash = "for_you:seed",
-        kind = RecentSearchKind.FYP,
+        kind = RecentSearchKind.UNIFIED,
         sourceTags = mapOf(SourceKey.GELBOORU to listOf(tricky), SourceKey.PIXIV to listOf("猫", "夜")),
     )
     return listOf(SavedSearchEntry("pin-fyp", "For 'you' = 猫", fyp, 300), SavedSearchEntry("pin-multi", "Cats & dogs <night>", multi, 300))

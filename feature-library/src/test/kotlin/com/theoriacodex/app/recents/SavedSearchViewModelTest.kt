@@ -152,7 +152,6 @@ class SavedSearchViewModelTest {
             watchedPosts = emptyList(),
             codexPosts = emptyList(),
             searches = recents.observeSearches().first(),
-            fypSearches = emptyList(),
             showActionableFeedback = { _, _ -> false },
         )
 

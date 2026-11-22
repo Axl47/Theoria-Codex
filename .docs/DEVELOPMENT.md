@@ -19,9 +19,9 @@ Kotlin package names predate the module split and do not name the module: `com.t
 
 `TheoriaApplication` creates one asynchronous `TheoriaAppContainer` in `app/src/main/java/com/theoriacodex/app/di/TheoriaAppContainer.kt`. That container owns repositories, source clients, credentials, updates, coordinators, and cross-repository workflows; Compose only resolves the ready container.
 
-Search, Viewer, For You, and Creator each have a navigation-scoped ViewModel that owns immutable UI state, request identity, paging, and effects. Their composables render state and forward typed actions. `TheoriaApp.kt` remains the navigation and Android-effect host, and cross-route access uses weak ViewModel-lifetime handles rather than a second mutable state owner.
+Search, Viewer, and Creator each have a navigation-scoped ViewModel that owns immutable UI state, request identity, paging, and effects. Their composables render state and forward typed actions. For You's `ForYouDeckViewModel` owns the Mix and a stack of levels (the Mix, then each trail forked from a card) with one swipe deck each; its screen shows the top level as a deck or a grid over the same posts. `TheoriaApp.kt` remains the navigation and Android-effect host, and cross-route access uses weak ViewModel-lifetime handles rather than a second mutable state owner.
 
-Search, For You, and Creator execution services return immutable results to those route owners. Failed provider pages retain their exact continuation for in-place Retry while healthy posts keep their order. Shared browsing metadata observes membership IDs once across routes. Viewer sends stable controls to separate image/video/animation renderers; frame timing stays inside each renderer.
+Search and Creator execution services return immutable results to those route owners, and For You's engine returns its lanes and their pages. Failed provider pages retain their exact continuation for in-place Retry while healthy posts keep their order. Shared browsing metadata observes membership IDs once across routes. Viewer sends stable controls to separate image/video/animation renderers; frame timing stays inside each renderer.
 
 ## Local Persistence
 
@@ -179,7 +179,7 @@ from production coverage. Hotspot, duplication and non-growing Detekt debt budge
 
 The fixture-backed device journeys use actual screens, navigation, owners, Room and DataStore.
 They cover grouped Search, Viewer return, Activity recreation, cold graph reopen, exact Multi-Search
-and FYP Recents replay, collection actions, Undo, related shelves and Creator navigation. Cold graph
+Recents replay, the For You deck and its grid, collection actions, Undo, related shelves and Creator navigation. Cold graph
 reopen creates fresh application dependencies over the same files; it is distinct from killing the
 instrumented process. External provider responses and local media are controlled. Structural tests
 are reserved for narrow architecture and packaged-artifact boundaries, not counted as feature proof.

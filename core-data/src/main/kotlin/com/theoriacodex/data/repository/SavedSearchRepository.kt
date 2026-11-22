@@ -5,6 +5,7 @@ import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.RecentSearchPayloadCodec
 import com.theoriacodex.data.storage.SavedSearchSnapshot
 import com.theoriacodex.data.storage.SavedSearchSnapshotSerializer
+import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.CoroutineDispatcher
@@ -44,6 +45,9 @@ interface SavedSearchRepository {
 
     /** Adds imported pins atomically, replacing only matching imported IDs and rejecting overflow. */
     suspend fun merge(entries: List<SavedSearchEntry>)
+
+    /** The library [merge] would store for [entries], unchecked and unsaved, for a restore to test against the limit first. */
+    suspend fun merged(entries: List<SavedSearchEntry>): List<SavedSearchEntry>
 }
 
 class FileBackedSavedSearchRepository private constructor(repository: SavedSearchRepository) :
@@ -54,14 +58,16 @@ class FileBackedSavedSearchRepository private constructor(repository: SavedSearc
         recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
         now: () -> Long = System::currentTimeMillis,
         newId: () -> String = { UUID.randomUUID().toString() },
-    ) : this(fileBackedSavedSearches(baseDirectory, ioDispatcher, recoveryRegistry, now, newId))
+        /** Names the per-source searches a saved For You mix splits into; see [withForYouSearchesConverted]. */
+        sourceName: (SourceKey) -> String = SourceKey::id,
+    ) : this(fileBackedSavedSearches(baseDirectory, ioDispatcher, recoveryRegistry, now, newId, sourceName))
 }
 
 class InMemorySavedSearchRepository(
     initialEntries: List<SavedSearchEntry> = emptyList(),
     now: () -> Long = System::currentTimeMillis,
     newId: () -> String = { UUID.randomUUID().toString() },
-) : SavedSearchRepository by MutableSavedSearchRepository(initialEntries, now, newId, writeSnapshot = {})
+) : SavedSearchRepository by MutableSavedSearchRepository(initialEntries, now, newId, SourceKey::id, writeSnapshot = {})
 
 private fun fileBackedSavedSearches(
     baseDirectory: File,
@@ -69,6 +75,7 @@ private fun fileBackedSavedSearches(
     recoveryRegistry: FileStoreRecoveryRegistry,
     now: () -> Long,
     newId: () -> String,
+    sourceName: (SourceKey) -> String,
 ): SavedSearchRepository {
     val storageFile = baseDirectory.resolve("pinned_searches.json")
     val fileStore = AtomicJsonFileStore(ioDispatcher = ioDispatcher)
@@ -82,19 +89,27 @@ private fun fileBackedSavedSearches(
             onRecovery = recoveryRegistry::record,
         )
     }
-    return MutableSavedSearchRepository(snapshot.entries, now, newId) {
+    val entries = snapshot.entries.withForYouSearchesConverted(sourceName)
+    if (entries != snapshot.entries) {
+        runBlocking { fileStore.write(storageFile, SavedSearchSnapshot.validated(entries), SavedSearchSnapshotSerializer) }
+    }
+    return MutableSavedSearchRepository(entries, now, newId, sourceName) {
         fileStore.write(storageFile, it, SavedSearchSnapshotSerializer)
     }
 }
 
+/** Converts saved For You searches ([withForYouSearchesConverted]) when the library loads and when a backup lands. */
 private class MutableSavedSearchRepository(
     initialEntries: List<SavedSearchEntry>,
     private val now: () -> Long,
     private val newId: () -> String,
+    private val sourceName: (SourceKey) -> String,
     private val writeSnapshot: suspend (SavedSearchSnapshot) -> Unit,
 ) : SavedSearchRepository {
     private val mutex = Mutex()
-    private val savedSearches = MutableStateFlow(SavedSearchSnapshot.validated(initialEntries).entries)
+    private val savedSearches = MutableStateFlow(
+        SavedSearchSnapshot.validated(initialEntries.withForYouSearchesConverted(sourceName)).entries,
+    )
 
     override fun observeSavedSearches(): Flow<List<SavedSearchEntry>> = savedSearches.asStateFlow()
 
@@ -128,13 +143,20 @@ private class MutableSavedSearchRepository(
     }
 
     override suspend fun replaceAll(entries: List<SavedSearchEntry>) = mutex.withLock {
-        persist(entries)
+        persist(entries.withForYouSearchesConverted(sourceName))
     }
 
-    override suspend fun merge(entries: List<SavedSearchEntry>) = mutex.withLock {
-        val imported = SavedSearchSnapshot.validated(entries).entries
-        val importedIds = imported.mapTo(mutableSetOf(), SavedSearchEntry::id)
-        persist(imported + savedSearches.value.filterNot { it.id in importedIds })
+    override suspend fun merge(entries: List<SavedSearchEntry>) = mutex.withLock { persist(mergedWith(entries)) }
+
+    override suspend fun merged(entries: List<SavedSearchEntry>) = mutex.withLock { mergedWith(entries) }
+
+    /**
+     * Only an incoming ordinary search replaces the local one with its ID. A For You search is converted together
+     * with the existing searches, so what it generates gives way to them and takes only slots that are still free.
+     */
+    private fun mergedWith(entries: List<SavedSearchEntry>): List<SavedSearchEntry> {
+        val replacedIds = entries.filterNot { it.search.isRetiredForYouSearch }.mapTo(mutableSetOf(), SavedSearchEntry::id)
+        return (entries + savedSearches.value.filterNot { it.id in replacedIds }).withForYouSearchesConverted(sourceName)
     }
 
     private suspend fun persist(entries: List<SavedSearchEntry>) {

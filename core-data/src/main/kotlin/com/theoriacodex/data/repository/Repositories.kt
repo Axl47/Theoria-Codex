@@ -97,8 +97,6 @@ interface QueryRepository {
 enum class RecentPostSection {
     WATCHED,
     CODEX,
-    /** Read compatibility for builds that briefly persisted recommendation result posts. */
-    FYP,
     ;
 
     companion object {
@@ -126,14 +124,17 @@ data class RecentSearchEntry(
     val searchedAtEpochMs: Long,
     val kind: RecentSearchKind = query.defaultRecentSearchKind(),
     val sources: List<SourceKey> = query.defaultRecentSearchSources(),
+    /** Each source's tags; only a For You search read from old data has them, until it is converted. */
     val sourceTags: Map<SourceKey, List<String>> = emptyMap(),
-)
+) {
+    /** A For You search from before the shelves page was removed; saved ones become source searches on load. */
+    val isRetiredForYouSearch: Boolean get() = sourceTags.isNotEmpty()
+}
 
 enum class RecentSearchKind {
     SOURCE,
     UNIFIED,
     MULTI_SEARCH,
-    FYP,
 }
 
 fun Query.defaultRecentSearchKind(): RecentSearchKind = when (mode) {
@@ -185,7 +186,6 @@ interface RecentsRepository {
         queryHash: String,
         kind: RecentSearchKind = query.defaultRecentSearchKind(),
         sources: List<SourceKey> = query.defaultRecentSearchSources(),
-        sourceTags: Map<SourceKey, List<String>> = emptyMap(),
     )
     suspend fun restoreEntries(
         watchedPosts: List<RecentPostEntry> = emptyList(),
@@ -196,15 +196,9 @@ interface RecentsRepository {
     /** Removes one search; [restoreEntries] with the removed entry puts it back. */
     suspend fun removeSearch(queryHash: String)
     suspend fun clearWatchedPosts(section: RecentPostSection)
-    /** Remove only this section and capture the exact Undo payload in the same transaction. */
-    suspend fun clearSearches(section: RecentSearchSection): List<RecentSearchEntry>
+    /** Removes every search and captures the exact Undo payload in the same transaction. */
+    suspend fun clearSearches(): List<RecentSearchEntry>
     suspend fun clearAll()
-}
-
-enum class RecentSearchSection {
-    SEARCHES, FYP;
-
-    fun contains(entry: RecentSearchEntry): Boolean = (entry.kind == RecentSearchKind.FYP) == (this == FYP)
 }
 
 data class StatisticsTagKey(
@@ -290,7 +284,6 @@ interface StatisticsRepository {
     suspend fun recordSearch(sources: Set<SourceKey>, terms: Set<SearchTerm> = emptySet())
     /** Once per kind of term, counts the terms of [recentSearches] into [LifetimeStatistics.searchesByTag]. */
     suspend fun seedSearchedTags(recentSearches: List<RecentSearchEntry>)
-    suspend fun recordForYouSearch()
     suspend fun recordForYouSave()
     suspend fun recordPostUrlCopy()
     suspend fun recordCodexEntry(codexId: String)
@@ -613,7 +606,6 @@ internal fun decodeRestoredRecentsSection(
     if (decoded != null || streamSource != ViewerStreamSource.RECENTS) return decoded
     return when (queryHash) {
         "recents:codex" -> RecentPostSection.CODEX
-        "recents:fyp" -> RecentPostSection.FYP
         "recents:watched" -> RecentPostSection.WATCHED
         else -> null
     }
@@ -639,6 +631,8 @@ data class FeedFabRestoreState(
     @SerialName("source") val source: String? = null,
     @SerialName("language") val language: String? = null,
     @SerialName("fullColorOnly") val fullColorOnly: Boolean = false,
+    /** For You shows its posts as a grid instead of the swipe deck. */
+    @SerialName("grid") val grid: Boolean = false,
     @SerialName("searchAnimationByScope")
     val searchAnimationByScope: Map<String, SearchAnimationFilterRestoreState> = emptyMap(),
 )

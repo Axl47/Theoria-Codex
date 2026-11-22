@@ -62,7 +62,7 @@ class RecentsViewerReturnTest {
             CompositionLocalProvider(LocalViewerReturnTransition provides transition) {
                 feed.Content {
                     RecentsScreen(
-                        watchedPosts = watched, codexPosts = emptyList(), searches = listOf(search), fypSearches = emptyList(),
+                        watchedPosts = watched, codexPosts = emptyList(), searches = listOf(search),
                         activity = listOf(
                             RecentActivityEntry.Watched(first), RecentActivityEntry.Watched(neighbor),
                             RecentActivityEntry.Search(search), RecentActivityEntry.Watched(otherRow),
@@ -70,7 +70,7 @@ class RecentsViewerReturnTest {
                         onRequestSaveToCodex = {}, onSaveToDevice = {},
                        
                         onGoToSearch = {},
-                        onOpenWatchedPost = { _, _ -> }, onOpenCodexPost = { _, _ -> }, onOpenSearch = {}, onOpenFypSearch = {}, onClear = {},
+                        onOpenWatchedPost = { _, _ -> }, onOpenCodexPost = { _, _ -> }, onOpenSearch = {}, onClear = {},
                     )
                 }
             }

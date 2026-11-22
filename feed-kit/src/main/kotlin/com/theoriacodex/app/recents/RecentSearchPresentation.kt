@@ -24,7 +24,6 @@ fun recentSearchPresentation(entry: RecentSearchEntry): RecentSearchPresentation
         RecentSearchKind.SOURCE -> null
         RecentSearchKind.UNIFIED -> sourceList
         RecentSearchKind.MULTI_SEARCH -> sourceList?.let { "Multi-Search · $it" } ?: "Multi-Search"
-        RecentSearchKind.FYP -> sourceList
     }
     return RecentSearchPresentation(title, subtitle)
 }

@@ -15,8 +15,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.search.state.SearchContentUiState
 import com.theoriacodex.app.search.state.SearchUiState
-import com.theoriacodex.app.recommend.ForYouScreen
-import com.theoriacodex.app.recommend.state.ForYouUiState
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.ReadingPosition
 import com.theoriacodex.data.repository.RecentPostEntry
@@ -36,15 +34,6 @@ class SearchWatchedPresentationTest {
 
     @Test
     fun `visible watched search result shares Recents progress and latest watched time`() {
-        assertWatchedPresentation(forYou = false)
-    }
-
-    @Test
-    fun `visible watched FYP result shares Recents progress and latest watched time`() {
-        assertWatchedPresentation(forYou = true)
-    }
-
-    private fun assertWatchedPresentation(forYou: Boolean) {
         val post = testPost(SourceKey.PIXIV, "watched").copy(mediaCount = 12)
         val now = System.currentTimeMillis()
         val presentation = postWatchPresentation(
@@ -55,14 +44,7 @@ class SearchWatchedPresentationTest {
             CompositionLocalProvider(LocalPostWatchPresentation provides androidx.compose.runtime.rememberUpdatedState(presentation)) {
                 MaterialTheme {
                     Box(Modifier.size(400.dp, 700.dp)) {
-                        if (forYou) {
-                            ForYouScreen(
-                                state = ForYouUiState(results = listOf(post)), related = testRelatedShelf(), likedPostIds = emptySet(),
-                                onToggleLike = {}, onAction = {}, onRequestSaveToCodex = {}, onSaveToDevice = {},
-                               
-                                onGoToSearch = {},
-                            )
-                        } else SearchScreen(
+                        SearchScreen(
                             state = SearchUiState(content = SearchContentUiState(results = listOf(post), hasExecutedSearch = true)),
                             related = testRelatedShelf(),
                             creatorBrowsingSources = emptySet(), onAction = {},

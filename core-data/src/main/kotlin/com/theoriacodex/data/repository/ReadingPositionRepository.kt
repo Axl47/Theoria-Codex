@@ -176,7 +176,6 @@ class InMemoryReadingPositionRepository :
     ReadingPositionRepository by CellReadingPositionRepository(MemoryStateCell(emptyList()))
 
 private fun normalizeReadingPositions(positions: List<ReadingPosition>, limit: Int): List<ReadingPosition> = positions
-    .filter { it.section != RecentPostSection.FYP }
     .sortedByDescending(ReadingPosition::lastViewedAt)
     .distinctBy { it.postId to it.section }
     .take(limit)

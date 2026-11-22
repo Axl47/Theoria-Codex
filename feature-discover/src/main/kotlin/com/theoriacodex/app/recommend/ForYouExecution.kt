@@ -2,61 +2,39 @@ package com.theoriacodex.app.recommend
 
 import com.theoriacodex.app.feed.FeedCursor
 import com.theoriacodex.data.repository.AppSettings
-import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchResult
 
+/** What a Mix is built for: the active profile's settings, the sources that can run, and the bar's choices. */
 data class ForYouFeedRequest(
     val settings: AppSettings,
     val availableSources: List<SourceKey>,
     val selectedSource: SourceKey?,
     val sortMode: SortMode,
-    val shuffle: Boolean,
-    val likesCount: Int,
-    val historicalSeed: Map<SourceKey, List<String>>? = null,
-    val excludedSectionIds: Set<String> = emptySet(),
-    val additionalSection: Boolean = false,
+    val animatedOnly: Boolean = false,
 )
 
-data class ForYouFeedResult(
-    val seed: Map<SourceKey, List<String>>,
-    val seedId: String,
-    val likesCount: Int,
-    val page: UnifiedSearchResult,
-    val continuation: FeedCursor?,
-) {
-    /** Names this feed for the Viewer and the triage deck while it is the grid's feed. */
-    val queryHash: String get() = forYouQueryHash(seedId)
+/**
+ * One feed the Mix draws from: an interest of the profile on one source, or a trending tag for a profile with no
+ * likes. [cursor] opens its first page through [ForYouRouteEngine.loadPage] and is folded forward with each page.
+ */
+data class ForYouLane(val source: SourceKey, val tags: List<String>, val cursor: FeedCursor) {
+    val id: String get() = "${source.id}:${tags.sorted().joinToString("+")}"
 
-    companion object {
-        fun empty(seedId: String, likesCount: Int): ForYouFeedResult = ForYouFeedResult(
-            emptyMap(), seedId, likesCount, UnifiedSearchResult(emptyList(), emptyMap(), emptyList()), null,
-        )
-    }
+    /** "fog + sea": what the lane's chip and its cards say. */
+    val label: String get() = tags.joinToString(" + ") { it.replace('_', ' ') }
 }
 
-/** The key the Viewer and the triage deck find the For You feed by while it shows seed [seedId]. */
-internal fun forYouQueryHash(seedId: String): String = "for_you:$seedId"
-
-data class ForYouBlacklistChange(val settings: AppSettings, val entries: List<ForYouBlacklistEntry>)
-
+/** What the For You deck needs from the sources: the profile's lanes and their pages. */
 interface ForYouRouteEngine {
-    suspend fun loadSections(request: ForYouFeedRequest): List<ForYouSection> = emptyList()
-    suspend fun pinSection(section: ForYouSection, pinned: Boolean): String? = error("Section pins unavailable")
     fun availableSources(settings: AppSettings): List<SourceKey>
-    suspend fun execute(request: ForYouFeedRequest): ForYouFeedResult
+
+    /** The lanes of a fresh Mix, none of them hidden by the profile's hidden tags; empty when there is nothing to show. */
+    suspend fun lanes(request: ForYouFeedRequest): List<ForYouLane>
+
     suspend fun loadPage(continuation: FeedCursor, sources: Set<SourceKey>): UnifiedSearchResult
-    suspend fun updateBlacklist(profileId: String, entries: List<ForYouBlacklistEntry>, hidden: Boolean): ForYouBlacklistChange
-    suspend fun recordAccepted(result: ForYouFeedResult)
     suspend fun resolvePost(postId: PostId): Post?
 }
-
-internal fun forYouBaseQuery(sort: SortMode): Query = Query(
-    mode = QueryMode.Unified, includeTags = emptyList(), excludeTags = emptyList(),
-    sort = sort, dateRange = null, minScore = null,
-)

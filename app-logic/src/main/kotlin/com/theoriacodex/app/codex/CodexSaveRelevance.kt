@@ -11,20 +11,13 @@ import kotlin.math.ln
  * tags its posts carry, each weighted by [TagRarity] so a tag on half the library counts for little, over the Codex's
  * size plus a few posts, so a two-post Codex needs more than one lucky match to lead.
  */
-class CodexSaveRelevance private constructor(rawTags: Iterable<String>, searchQuery: Query?) {
-    constructor(posts: List<Post>, searchQuery: Query? = null) :
-        this(posts.flatMap { it.matchingTags() }, searchQuery)
+class CodexSaveRelevance(posts: List<Post>, searchQuery: Query? = null) {
     private val groupQueries = searchQuery?.effectiveIncludeTermGroups.orEmpty()
         .filter { group -> group.terms.any { it.value.isNotBlank() } }
         .map { group -> requireNotNull(searchQuery).copy(includeTermGroups = listOf(group)) }
     private val searchTags = groupQueries.flatMap { it.includeTags }.map(::normalizeMatchToken).toSet()
-    private val tags = rawTags.map(::normalizeMatchToken).filter(String::isNotBlank).toSet() - searchTags
+    private val tags = posts.flatMap { it.matchingTags() }.map(::normalizeMatchToken).filter(String::isNotBlank).toSet() - searchTags
     val hasSignals: Boolean = tags.isNotEmpty() || groupQueries.isNotEmpty()
-
-    companion object {
-        /** The same local tag lookup for interests that do not have full Post snapshots. */
-        fun fromTags(tags: Iterable<String>): CodexSaveRelevance = CodexSaveRelevance(tags, null)
-    }
 
     fun score(savedPosts: List<Post>, rarity: TagRarity = TagRarity.Uniform): Double {
         val unique = savedPosts.distinctBy(Post::id)

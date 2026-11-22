@@ -22,7 +22,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
 import com.theoriacodex.app.ui.TopLevelDestination
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -42,7 +41,6 @@ import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchEntry
-import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.app.search.rememberPostWatchEntry
@@ -66,8 +64,6 @@ internal class RecentsRowActions(
 @Composable
 internal fun RecentsTab(
     filter: RecentsFilter,
-    searchFilter: RecentSearchFilter,
-    onSearchFilterChange: (RecentSearchFilter) -> Unit,
     visible: VisibleRecents,
     now: Long,
     cards: RecentsPostCards,
@@ -76,7 +72,6 @@ internal fun RecentsTab(
     openWatchedPost: (Int) -> Unit,
     openCodexPost: (Int) -> Unit,
     onOpenSearch: (RecentSearchEntry) -> Unit,
-    onOpenFypSearch: (RecentSearchEntry) -> Unit,
     rows: RecentsRowActions,
 ) {
     when (filter) {
@@ -91,16 +86,10 @@ internal fun RecentsTab(
             emptyMessage = "No Codex activity",
         )
         RecentsFilter.SEARCHES -> SearchHistoryList(
-            searches = when (searchFilter) {
-                RecentSearchFilter.ALL -> (visible.searches + visible.fypSearches).sortedByDescending { it.searchedAtEpochMs }
-                RecentSearchFilter.SEARCH -> visible.searches
-                RecentSearchFilter.FOR_YOU -> visible.fypSearches
-            },
-            selectedFilter = searchFilter,
-            onFilterSelected = onSearchFilterChange,
-            shows = { visible.shows(it) && searchFilter.accepts(it) },
+            searches = visible.searches,
+            shows = visible::shows,
             now = now,
-            onOpenSearch = { entry -> if (entry.kind == RecentSearchKind.FYP) onOpenFypSearch(entry) else onOpenSearch(entry) },
+            onOpenSearch = onOpenSearch,
             rows = rows,
         )
         RecentsFilter.ALL -> ActivityList(
@@ -108,7 +97,7 @@ internal fun RecentsTab(
             now = now,
             onOpenWatchedPost = openWatchedPost,
             onOpenCodexPost = openCodexPost,
-            onOpenSearch = { entry -> if (entry.kind == RecentSearchKind.FYP) onOpenFypSearch(entry) else onOpenSearch(entry) },
+            onOpenSearch = onOpenSearch,
             rows = rows,
         )
     }
@@ -238,23 +227,12 @@ private fun RecentPostCard(
 @Composable
 private fun SearchHistoryList(
     searches: List<RecentSearchEntry>,
-    selectedFilter: RecentSearchFilter,
-    onFilterSelected: (RecentSearchFilter) -> Unit,
     now: Long,
     onOpenSearch: (RecentSearchEntry) -> Unit,
     rows: RecentsRowActions,
     shows: (RecentSearchEntry) -> Boolean,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            RecentSearchFilter.entries.forEach { option ->
-                FilterChip(
-                    selected = selectedFilter == option,
-                    onClick = { onFilterSelected(option) },
-                    label = { Text(option.label) },
-                )
-            }
-        }
         val removed = rows.removedSearch
         val shown = remember(searches, removed, shows) { searches.withRemovedInPlace(removed?.takeIf(shows)) }
         if (shown.isEmpty()) {
@@ -408,14 +386,12 @@ private fun openRecentPost(
     val sourcePosts = when (postEntry.section) {
         RecentPostSection.WATCHED -> watchedPosts
         RecentPostSection.CODEX -> codexPosts
-        RecentPostSection.FYP -> return
     }
     val index = sourcePosts.indexOfFirst { candidate -> candidate.post.id == postEntry.post.id }
     if (index < 0) return
     when (postEntry.section) {
         RecentPostSection.WATCHED -> onOpenWatchedPost(index)
         RecentPostSection.CODEX -> onOpenCodexPost(index)
-        RecentPostSection.FYP -> Unit
     }
 }
 
@@ -451,16 +427,4 @@ internal const val REMOVE_FROM_HISTORY = "Remove from History"
 @Composable
 private fun EmptyRecentState(message: String) {
     EmptyState(message, Modifier.fillMaxSize())
-}
-
-internal enum class RecentSearchFilter(val label: String) {
-    ALL("All"),
-    SEARCH("Search"),
-    FOR_YOU("For You");
-
-    fun accepts(entry: RecentSearchEntry): Boolean = when (this) {
-        ALL -> true
-        SEARCH -> entry.kind != RecentSearchKind.FYP
-        FOR_YOU -> entry.kind == RecentSearchKind.FYP
-    }
 }

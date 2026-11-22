@@ -252,6 +252,23 @@ class ProfileBackupServiceTest {
         assertFalse(harness.journal.exists())
     }
 
+    @Test fun `a backup whose For You pins convert to fit the limit restores, and restores again`() = runTest {
+        val harness = harness()
+        val ordinary = List(MAX_SAVED_SEARCHES - 2) { SavedSearchEntry("pin-$it", "Pin $it", search().copy(queryHash = "hash-$it"), 5L) }
+        // Converted, the mix takes its own slot and the one the tagless pin leaves, under an ID the backup does not have.
+        val mix = forYouPin("mix", listOf(SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.DANBOORU).associateWith { listOf("cat") })
+        val tagless = forYouPin("tagless", mapOf(SourceKey.PIXIV to listOf(" ")))
+        val bytes = codec.encode(backup().copy(savedSearches = ordinary + mix + tagless))
+
+        harness.service.restore(bytes)
+        val restored = harness.pins.observeSavedSearches().first()
+        assertEquals(MAX_SAVED_SEARCHES, restored.size)
+        assertFalse(restored.any { it.id == "tagless" })
+
+        harness.service.restore(bytes)
+        assertEquals(restored, harness.pins.observeSavedSearches().first())
+    }
+
     @Test fun `invalid backup and capacity overflow fail before any durable restore mutation`() = runTest {
         val harness = harness()
         val tree = encodedTree(backup())
@@ -351,6 +368,16 @@ private fun backup(): ProfileBackup {
         listOf(ReadingPosition(post.id, RecentPostSection.WATCHED, 4, 6L)),
     )
 }
+
+/** A saved For You search over [tags], as backups made before the deck hold them. */
+private fun forYouPin(id: String, tags: Map<SourceKey, List<String>>) = SavedSearchEntry(
+    id, id,
+    RecentSearchEntry(
+        Query(QueryMode.Unified, tags.values.flatten().filter(String::isNotBlank), emptyList(), SortMode.TOP, null, null),
+        "for_you:$id", 5L, kind = RecentSearchKind.UNIFIED, sources = tags.keys.toList(), sourceTags = tags,
+    ),
+    5L,
+)
 
 private fun search(): RecentSearchEntry {
     val terms = listOf(SearchTerm("cat"), SearchTerm("dog"))

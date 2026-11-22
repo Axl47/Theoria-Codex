@@ -43,7 +43,7 @@ import org.junit.Test
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class SavedSearchesCodexViewModelTest {
-    @Test fun `saved FYP keeps native per-source tags and union preserves canonical identities without Search writes`() = runTest {
+    @Test fun `saved searches on different sources merge by canonical identity without Search writes`() = runTest {
         val calls = mutableListOf<Query>()
         val adapters = listOf(SourceKey.PIXIV, SourceKey.AIBOORU).map { source -> adapter(source) { query, _ ->
             calls += query
@@ -59,12 +59,10 @@ class SavedSearchesCodexViewModelTest {
                 excludeTerms = listOf(SearchTerm("rain")), sort = SortMode.POPULAR,
             )
             val ordinary = entry("normal", "ordinary").let { it.copy(search = it.search.copy(query = grouped)) }
-            val fyp = entry("fyp", "unused").copy(search = RecentSearchEntry(
-                query("unused", QueryMode.Unified), "fyp-seed", 1, RecentSearchKind.FYP,
-                listOf(SourceKey.AIBOORU, SourceKey.PIXIV),
-                linkedMapOf(SourceKey.AIBOORU to listOf("native_b"), SourceKey.PIXIV to listOf("native a")),
-            ))
-            owner.synchronize(listOf(ordinary, fyp), AppSettings(), adapters.map { it.sourceKey }.toSet())
+            val pixiv = entry("pixiv", "native a")
+            val aibooru = SavedSearchEntry("aibooru", "aibooru",
+                RecentSearchEntry(query("native_b", QueryMode.Source(SourceKey.AIBOORU)), "aibooru", 1), 1)
+            owner.synchronize(listOf(ordinary, pixiv, aibooru), AppSettings(), adapters.map { it.sourceKey }.toSet())
             advanceUntilIdle()
             assertEquals(setOf(SourceKey.PIXIV, SourceKey.AIBOORU), owner.state.value.posts.map { it.id.source }.toSet())
             assertEquals(2, owner.state.value.posts.size)

@@ -106,17 +106,16 @@ class SavedSearchControlsTest {
     }
 
     @Test
-    fun `source dropdown filters searches and FYP without changing multi-source replay`() {
+    fun `source dropdown filters searches without changing multi-source replay`() {
         val pixiv = search(RecentSearchKind.SOURCE)
         val gelbooru = pixiv.copy(
             query = pixiv.query.copy(mode = QueryMode.Source(SourceKey.GELBOORU)),
             queryHash = "gelbooru", sources = listOf(SourceKey.GELBOORU),
         )
         val multi = search(RecentSearchKind.MULTI_SEARCH)
-        val fyp = search(RecentSearchKind.FYP)
         var opened: RecentSearchEntry? = null
         compose.setContent { MaterialTheme {
-            TestRecents(searches = listOf(pixiv, gelbooru, multi), fyp = listOf(fyp), onOpen = { opened = it })
+            TestRecents(searches = listOf(pixiv, gelbooru, multi), onOpen = { opened = it })
         } }
         compose.onNodeWithContentDescription("Filter History by source").performClick()
         compose.onNodeWithContentDescription("Pixiv").performClick()
@@ -125,13 +124,6 @@ class SavedSearchControlsTest {
         compose.onNodeWithTag("Recent search:${gelbooru.queryHash}").assertDoesNotExist()
         compose.onNodeWithTag("Recent search:${multi.queryHash}").performClick()
         assertEquals(multi, opened)
-        compose.onNodeWithTag("Recent search:${fyp.queryHash}").assertExists()
-        compose.onNodeWithText("Search", substring = false).performClick()
-        compose.onNodeWithTag("Recent search:${fyp.queryHash}").assertDoesNotExist()
-        compose.onNodeWithText("For You", substring = false).performClick()
-        compose.onNodeWithTag("Recent search:${fyp.queryHash}").assertExists()
-        compose.onNodeWithTag("Recent search:${pixiv.queryHash}").assertDoesNotExist()
-        compose.onNodeWithText("All", substring = false).performClick()
         compose.onNodeWithContentDescription("Filter History by source").performClick()
         compose.onNodeWithContentDescription("All sources").performClick()
         compose.onNodeWithTag("Recent search:${gelbooru.queryHash}").assertExists()
@@ -167,20 +159,18 @@ class SavedSearchControlsTest {
     private fun TestRecents(
         searches: List<RecentSearchEntry> = emptyList(),
         watched: List<RecentPostEntry> = emptyList(),
-        fyp: List<RecentSearchEntry> = emptyList(),
         activity: List<RecentActivityEntry> = emptyList(),
         onOpenPost: (List<RecentPostEntry>, Int) -> Unit = { _, _ -> },
         saves: RecentSearchSaves? = null,
         onOpen: (RecentSearchEntry) -> Unit = {},
-        onOpenFyp: (RecentSearchEntry) -> Unit = {},
     ) {
         RecentsScreen(
             watchedPosts = watched, codexPosts = emptyList(), searches = searches,
-            fypSearches = fyp, activity = activity,
+            activity = activity,
             saves = saves,
             onRequestSaveToCodex = {}, onSaveToDevice = {},
             onGoToSearch = {},
-            onOpenWatchedPost = onOpenPost, onOpenCodexPost = { _, _ -> }, onOpenSearch = onOpen, onOpenFypSearch = onOpenFyp, onClear = {},
+            onOpenWatchedPost = onOpenPost, onOpenCodexPost = { _, _ -> }, onOpenSearch = onOpen, onClear = {},
         )
     }
 

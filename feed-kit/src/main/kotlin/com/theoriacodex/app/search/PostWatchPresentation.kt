@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.flowOn
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.theoriacodex.data.repository.ReadingPosition
 import com.theoriacodex.data.repository.RecentPostEntry
-import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.app.media.postMediaItems
@@ -75,7 +74,7 @@ fun postWatchPresentation(
     watched: List<RecentPostEntry>,
 ): PostWatchPresentation = PostWatchPresentation(
     positions = positions.sortedByDescending { it.lastViewedAt }.distinctBy { it.postId }.associateBy { it.postId },
-    watched = watched.filter { it.section != RecentPostSection.FYP }
+    watched = watched
         .sortedByDescending { it.viewedAtEpochMs }.distinctBy { it.post.id }.associateBy { it.post.id },
 )
 

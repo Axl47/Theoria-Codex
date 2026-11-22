@@ -27,7 +27,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.recommend.ForYouSourceSelector
+import com.theoriacodex.app.ui.components.SourceSelector
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsScreen
@@ -84,13 +84,18 @@ class CompactControlAccessibilityDeviceTest {
         var expanded by mutableStateOf(false)
         composeRule.setContent {
             MaterialTheme {
-                ForYouSourceSelector(
+                // As For You's bar draws it: shorter than its touch target.
+                SourceSelector(
                     selectedSource = SourceKey.PIXIV,
                     availableSources = listOf(SourceKey.PIXIV, SourceKey.GELBOORU),
+                    allSourcesLabel = "Unified",
+                    accessibilityLabel = "Select For You source",
                     enabled = true,
                     expanded = expanded,
                     onExpandedChange = { expanded = it },
                     onSourceSelected = {},
+                    minimumHeight = 33.dp,
+                    verticalPadding = 1.dp,
                 )
             }
         }

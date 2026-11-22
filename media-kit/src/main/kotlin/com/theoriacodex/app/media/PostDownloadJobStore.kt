@@ -111,7 +111,8 @@ internal data class DownloadItemRecord(
             PostDownloadRequest(post, selected, marker, restored = true,
                 untrackedPreparation = untrackedPreparation == true ||
                     version == 1 && status in setOf(PostDownloadStatus.PREPARING, PostDownloadStatus.FAILED),
-                originLabel = origin?.take(200) ?: "Downloads"),
+                // Downloads queued from For You were stored under its old short name.
+                originLabel = origin?.take(200)?.let { if (it == "FYP") "For You" else it } ?: "Downloads"),
             restoredStatus, downloadId, enqueuePending = enqueuePending ?: false)
     }
 

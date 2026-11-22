@@ -23,6 +23,7 @@ import com.theoriacodex.app.codex.LocalQuickSave
 import com.theoriacodex.app.codex.NewCodexOpener
 import com.theoriacodex.app.triage.TriageCardSupport
 import com.theoriacodex.app.triage.TriageChoice
+import com.theoriacodex.app.triage.TriageDeck
 import com.theoriacodex.app.triage.TriageDeckCallbacks
 import com.theoriacodex.app.triage.TriageDeckScreen
 import com.theoriacodex.app.triage.TriageDeckViewModel
@@ -79,12 +80,12 @@ internal class TriageHandOffViewModel : ViewModel() {
 
 /** The activity's [TriageHandOffViewModel], the same instance from the shell and from the deck's entry. */
 @Composable
-private fun rememberTriageHandOff(): TriageHandOffViewModel =
+internal fun rememberTriageHandOff(): TriageHandOffViewModel =
     viewModel(viewModelStoreOwner = LocalContext.current.findActivity() as ComponentActivity)
 
 /**
  * Opens the triage deck by pushing [AppRoute.Triage]. A feed's menu calls it with the feed's own source and key
- * (Search, For You and a Creator page with their query hash, a Codex or Likes with `codex:<id>`) and what its grid
+ * (Search and a Creator page with their query hash, a Codex or Likes with `codex:<id>`) and what its grid
  * shows. A second tap meanwhile replaces the first.
  */
 @Composable
@@ -130,12 +131,11 @@ internal fun TriageDestination(shell: TheoriaShell, request: TriageRequest) {
     val query = shell.triageQuery(request)
     val quickSave = LocalQuickSave.current
     val owner = viewModel<TriageDeckViewModel> {
-        val fromForYou = request.source == ViewerStreamSource.FOR_YOU
         TriageDeckViewModel(
-            feed, ShellTriageActions(shell), quickSave, query, fromForYou, handOff.viewModelScope, shell.triageRemoval(request),
+            feed, ShellTriageActions(shell), quickSave, query, handOff.viewModelScope, shell.triageRemoval(request),
         )
     }
-    val deck by owner.state.collectAsStateWithLifecycle()
+    val deck by owner.deck.state.collectAsStateWithLifecycle()
     // While the grid filters by length, the deck resolves the lengths of the owner's posts it has yet to show.
     val candidates by remember(feed, seed) { if (seed.lengthFilterActive) feed.candidates else flowOf(emptyList()) }
         .collectAsStateWithLifecycle(emptyList())
@@ -166,10 +166,10 @@ internal fun TriageDestination(shell: TheoriaShell, request: TriageRequest) {
             recoverPostMedia = shell.features.search::recoverPostMedia,
         )
         TriageDeckScreen(
-            viewModel = owner,
+            deck = owner.deck,
             query = query,
             support = support,
-            callbacks = shell.triageCallbacks(request, seed, query, owner, LocalNewCodexOpener.current),
+            callbacks = shell.triageCallbacks(request, seed, query, owner.deck, LocalNewCodexOpener.current),
         )
     }
 }
@@ -183,14 +183,14 @@ private fun TheoriaShell.triageCallbacks(
     request: TriageRequest,
     seed: TriageSeed,
     query: Query?,
-    deck: TriageDeckViewModel,
+    deck: TriageDeck,
     newCodex: NewCodexOpener,
 ): TriageDeckCallbacks {
     val save = { post: Post -> { codex: ChosenCodex -> deck.decide(TriageChoice.Save(codex), post.id) } }
     return TriageDeckCallbacks(
         onOpenPost = { posts, index -> openTriagePost(request, seed, query, posts, index) },
         onOpenSavePicker = { post ->
-            pendingSave.request(listOf(post), fromForYou = request.source == ViewerStreamSource.FOR_YOU, searchQuery = query, onPick = save(post))
+            pendingSave.request(listOf(post), searchQuery = query, onPick = save(post))
         },
         onNewCodex = { post -> newCodex.openNewCodex { codex -> save(post)(codex) } },
         onClose = { navController.popBackStack() },

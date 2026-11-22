@@ -1,40 +1,30 @@
 package com.theoriacodex.app.journeys
 
-import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
-import com.theoriacodex.app.library.LibrarySection
-import com.theoriacodex.app.source.displayName
-import com.theoriacodex.data.repository.ForYouBlacklistEntry
-import com.theoriacodex.data.repository.RecentSearchKind
-import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
-import com.theoriacodex.domain.model.SortMode
-import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.app.recommend.FOR_YOU_UNDO_TAG
 import kotlinx.coroutines.flow.first
+import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ForYouHideTagJourneyTest : AppJourneyFixture() {
     @Test
-    fun strikingATagHidesItForTheProfileAndUndoInThePanelRestoresIt() {
-        io {
-            container.data.recentsRepository.recordSearch(
-                Query(QueryMode.Unified, listOf("pixiv_seed"), emptyList(), SortMode.NEWEST, null, null),
-                "for_you:hide", RecentSearchKind.FYP, listOf(SourceKey.PIXIV),
-                mapOf(SourceKey.PIXIV to listOf("pixiv_seed")),
-            )
-        }
+    fun hidingATagFromTheDeckHidesItForTheProfileAndUndoRestoresIt() {
         launch()
-        library(LibrarySection.History)
-        openRecentsSection("Searches")
-        activate(compose.onNodeWithTag("Recent search:for_you:hide"))
-        activate(compose.onNodeWithText("${SourceKey.PIXIV.displayName()}: pixiv_seed"))
-        activate(compose.onNodeWithContentDescription("Hide pixiv_seed"))
-        compose.waitUntil(10_000) { hidden() == listOf(ForYouBlacklistEntry(SourceKey.PIXIV, listOf("pixiv_seed"))) }
-        // The Undo offer follows the settings write on a background dispatcher that Compose's idling does not track.
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("Hid pixiv_seed").fetchSemanticsNodes().isNotEmpty() }
-        activate(compose.onNodeWithText("Undo"))
+        tab("For You")
+        // The deck gives TalkBack what a pull down onto a tag does.
+        val offersHide = SemanticsMatcher("offers to hide a tag") { node ->
+            node.config.getOrNull(SemanticsActions.CustomActions).orEmpty().any { it.label.startsWith("Hide ") }
+        }
+        compose.waitUntil(15_000) { compose.onAllNodes(offersHide).fetchSemanticsNodes().isNotEmpty() }
+        val hide = compose.onNode(offersHide).fetchSemanticsNode().config[SemanticsActions.CustomActions].first { it.label.startsWith("Hide ") }
+        compose.runOnUiThread { hide.action() }
+        compose.waitUntil(10_000) { hidden().size == 1 }
+        assertEquals(1, hidden().single().tags.size)
+
+        activate(compose.onNodeWithTag(FOR_YOU_UNDO_TAG))
         compose.waitUntil(10_000) { hidden().isEmpty() }
     }
 

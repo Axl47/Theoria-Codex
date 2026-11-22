@@ -80,6 +80,12 @@ interface TriageActions {
 
     /** Adds [tag] to the active profile's hide list; returns how to remove exactly that entry, or null when it was there. */
     suspend fun hide(source: SourceKey, tag: String): TriageReversal?
+
+    /**
+     * The writes for a decision made now. A deck asks when the card commits and runs them later, in order, so actions
+     * that write to "the active profile" return ones bound to the profile that is active at this call.
+     */
+    fun atDecision(): TriageActions = this
 }
 
 /**
@@ -121,7 +127,9 @@ data class TriageNotice(val decision: TriageDecision, val failed: Boolean)
 
 /**
  * The deck's position over the posts it has been given, its last decision, and the tags hidden in it. Cards that
- * carry a [passedOverTags] tag are passed over, so [current] and [next] are never one of them.
+ * carry a tag of [passedOverTags] or [ownerHiddenTags] for their source are passed over, so [current] and [next] are
+ * never one of them. The card Undo or a failed write brought back ([restored]) is the exception: it stays until it is
+ * decided again, even while the hide it reverses is still stored.
  */
 data class TriageDeckState(
     val posts: List<Post> = emptyList(),
@@ -133,8 +141,11 @@ data class TriageDeckState(
     /** The decision Undo reverses; null when there is nothing to undo. */
     val last: TriageDecision? = null,
     val notice: TriageNotice? = null,
-    /** Tags hidden from this deck, as [normalizeMatchToken] spells them. */
-    val passedOverTags: Set<String> = emptySet(),
+    /** Tags this deck's own swipes hid, by the source of the card they were hidden on, as [normalizeMatchToken] spells them. */
+    val passedOverTags: Map<SourceKey, Set<String>> = emptyMap(),
+    /** Tags the deck's owner hides, by source and spelled the same way; empty for a deck whose owner hides none. */
+    val ownerHiddenTags: Map<SourceKey, Set<String>> = emptyMap(),
+    val restored: PostId? = null,
     /** Posts a left swipe took out of the deck's Codex, until Undo or a failed write puts them back. */
     val removed: Set<PostId> = emptySet(),
 ) {
@@ -159,8 +170,14 @@ data class TriageDeckState(
     /** The first card at or after [from] that is not passed over; the end of [posts] when there is none. */
     fun shownFrom(from: Int): Int {
         var at = from
-        while (at < posts.size && posts[at].carriesAnyTag(passedOverTags)) at++
+        while (at < posts.size && passesOver(posts[at])) at++
         return at
+    }
+
+    private fun passesOver(post: Post): Boolean {
+        if (post.id == restored) return false
+        val source = post.id.source
+        return post.carriesAnyTag(passedOverTags[source].orEmpty()) || post.carriesAnyTag(ownerHiddenTags[source].orEmpty())
     }
 }
 

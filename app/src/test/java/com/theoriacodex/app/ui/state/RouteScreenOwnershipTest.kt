@@ -2,8 +2,6 @@ package com.theoriacodex.app.ui.state
 
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
 import com.theoriacodex.app.creator.state.CreatorUiState
-import com.theoriacodex.app.recommend.ForYouCoordinator
-import com.theoriacodex.app.recommend.state.ForYouUiState
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.settings.SettingsUiState
@@ -22,12 +20,6 @@ class RouteScreenOwnershipTest {
             methodName = "SearchScreen",
             stateType = SearchUiState::class.java,
             forbiddenType = SearchCoordinator::class.java,
-        )
-        assertSingleStateScreen(
-            className = "com.theoriacodex.app.recommend.ForYouScreenKt",
-            methodName = "ForYouScreen",
-            stateType = ForYouUiState::class.java,
-            forbiddenType = ForYouCoordinator::class.java,
         )
         assertSingleStateScreen(
             className = "com.theoriacodex.app.creator.CreatorProfileScreenKt",

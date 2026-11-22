@@ -32,6 +32,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeWithVelocity
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.UiDevice
 import com.theoriacodex.app.fixtures.JourneyAppContainer
 import com.theoriacodex.app.fixtures.JourneyTestActivity
 import com.theoriacodex.app.search.searchCardTestTag
@@ -261,6 +262,17 @@ abstract class AppJourneyFixture {
             val bounds = node.boundsInRoot
             bounds.height > 0f && bounds.bottom > viewport.top && bounds.top < viewport.bottom
         }
+    }
+
+    /**
+     * Saves the screen as `journey-shots/<name>.png` in the app's external files, where `adb pull` reaches it, for a
+     * look at a journey's key moment. Only for screens of fixture media.
+     */
+    protected fun saveScreenshot(name: String) {
+        compose.waitForIdle()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val shots = checkNotNull(instrumentation.targetContext.getExternalFilesDir("journey-shots"))
+        check(UiDevice.getInstance(instrumentation).takeScreenshot(shots.resolve("$name.png"))) { "No screenshot for $name" }
     }
 
     protected fun <T> io(block: suspend () -> T): T = runBlocking(Dispatchers.IO) { block() }

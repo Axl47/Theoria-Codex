@@ -1,16 +1,8 @@
 package com.theoriacodex.app.di
 
 import com.theoriacodex.app.search.SearchCoordinator
-import androidx.lifecycle.SavedStateHandle
-import com.theoriacodex.app.recommend.ForYouViewModel
-import com.theoriacodex.app.recommend.state.ForYouAction
-import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import com.theoriacodex.app.recommend.testForYouCoordinator
 import com.theoriacodex.app.search.testSearchCoordinator
-import com.theoriacodex.data.repository.InMemoryLikesRepository
-import com.theoriacodex.data.repository.InMemorySettingsRepository
-import com.theoriacodex.data.repository.defaultRecommendationProfiles
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
@@ -82,7 +74,7 @@ class CompositeSourceAdapterRegistryTest {
     }
 
     @Test
-    fun `capability removal normalizes active search and feed selections without reconstruction`() = runTest {
+    fun `capability removal normalizes the active search's sources without reconstruction`() = runTest {
         val pixiv = FakeAdapter(SourceKey.PIXIV)
         val rule34 = FakeAdapter(SourceKey.RULE34XXX)
         val capabilities = MutableStateFlow(setOf(SourceKey.PIXIV, SourceKey.RULE34XXX))
@@ -94,30 +86,9 @@ class CompositeSourceAdapterRegistryTest {
         val search = testSearchCoordinator(registry)
         search.initializeRoute()
 
-        val likes = InMemoryLikesRepository()
-        val profileId = defaultRecommendationProfiles().first().profileId
-        likes.toggleLike(
-            profileId = profileId,
-            postId = PostId(SourceKey.RULE34XXX, "liked"),
-            tags = listOf("tag"),
-        )
-        val forYouService = testForYouCoordinator(
-            registry = registry,
-            settingsRepository = InMemorySettingsRepository(),
-            likesRepository = likes,
-        )
-        val forYou = ForYouViewModel(engine = forYouService, savedStateHandle = SavedStateHandle(), coroutineScope = this)
-        forYou.synchronizeEnvironment(com.theoriacodex.data.repository.AppSettings(), 1)
-        advanceUntilIdle()
-        forYou.onAction(ForYouAction.SelectSource(SourceKey.RULE34XXX))
-        advanceUntilIdle()
-
         capabilities.value = setOf(SourceKey.PIXIV)
 
         assertEquals(listOf(SourceKey.PIXIV), search.availableSources)
-        forYou.onSourceAvailabilityChanged()
-        advanceUntilIdle()
-        assertNull(forYou.state.value.selectedSource)
     }
 }
 

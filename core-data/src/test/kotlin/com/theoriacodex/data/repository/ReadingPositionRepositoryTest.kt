@@ -59,11 +59,11 @@ class ReadingPositionRepositoryTest {
     }
 
     @Test
-    fun `replace supports exact rollback and ignores obsolete FYP post membership`() = runTest {
+    fun `replace supports exact rollback`() = runTest {
         val repository = FileBackedReadingPositionRepository(temporary.newFolder())
         val initial = listOf(position("one", 3, 10))
         repository.replace(initial)
-        repository.merge(listOf(position("one", 9, 100), position("retired", 1, 90, RecentPostSection.FYP)))
+        repository.merge(listOf(position("one", 9, 100)))
         assertEquals(1, repository.snapshot().size)
         repository.replace(initial)
         assertEquals(initial, repository.snapshot())

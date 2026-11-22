@@ -1,7 +1,6 @@
 package com.theoriacodex.app.codex
 
 import com.theoriacodex.app.source.displayName
-import com.theoriacodex.app.recommend.forYouSourceQuery
 import com.theoriacodex.app.search.SearchContinuation
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.search.SearchExecutionResult
@@ -86,13 +85,7 @@ class SavedSearchFeedLoader(
 
     private fun plans(entry: SavedSearchEntry): List<SavedSearchQueryBranch> {
         val search = entry.search
-        return if (search.kind == RecentSearchKind.FYP) {
-            check(search.sources.isNotEmpty()) { "Saved For You search has no sources" }
-            search.sources.map { source ->
-                val tags = checkNotNull(search.sourceTags[source]) { "Saved For You query is missing" }
-                SavedSearchQueryBranch(forYouSourceQuery(source, tags, search.query.sort), SearchSourceScope.Single(source))
-            }
-        } else listOf(SavedSearchQueryBranch(search.query,
+        return listOf(SavedSearchQueryBranch(search.query,
             if (search.kind == RecentSearchKind.MULTI_SEARCH) SearchSourceScope.fromSources(search.sources)
             else SearchSourceScope.fromQuery(search.query),
         ))

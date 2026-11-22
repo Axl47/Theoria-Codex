@@ -5,7 +5,6 @@ import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
-import com.theoriacodex.data.repository.RecentSearchSection
 import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.storage.RecentSearchPayloadCodec
@@ -117,12 +116,11 @@ class RoomRecentsRepository(
         queryHash: String,
         kind: RecentSearchKind,
         sources: List<SourceKey>,
-        sourceTags: Map<SourceKey, List<String>>,
     ) {
         val normalized = queryHash.trim()
         if (normalized.isBlank()) return
         database.withTransaction {
-            writer.upsertSearch(normalized, RecentSearchPayloadCodec.encodeJson(query, kind, sources, sourceTags), clock())
+            writer.upsertSearch(normalized, RecentSearchPayloadCodec.encodeJson(query, kind, sources), clock())
             writer.trimSearches(searchLimit)
         }
     }
@@ -182,9 +180,9 @@ class RoomRecentsRepository(
         }
     }
 
-    override suspend fun clearSearches(section: RecentSearchSection): List<RecentSearchEntry> =
+    override suspend fun clearSearches(): List<RecentSearchEntry> =
         database.withTransaction {
-            val removed = dao.searches().map(RecentSearchEntity::toDomain).filter(section::contains)
+            val removed = dao.searches().map(RecentSearchEntity::toDomain)
             dao.deleteSearchesByHashes(removed.map { it.queryHash })
             removed
         }

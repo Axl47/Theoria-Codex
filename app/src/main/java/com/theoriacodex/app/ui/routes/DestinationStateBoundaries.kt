@@ -91,7 +91,6 @@ internal data class RecentsDestinationState(
     val watchedPosts: List<RecentPostEntry>,
     val codexPosts: List<RecentPostEntry>,
     val searches: List<RecentSearchEntry>,
-    val fypSearches: List<RecentSearchEntry>,
     val activity: List<RecentActivityEntry>,
     val likedPostIds: Set<PostId>,
 )

@@ -20,6 +20,7 @@ import com.theoriacodex.app.triage.settled
 import com.theoriacodex.app.ui.navigation.TriageMode
 import com.theoriacodex.app.ui.navigation.TriageRequest
 import com.theoriacodex.app.ui.navigation.TriageSeed
+import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.Post
@@ -60,7 +61,7 @@ internal class SeededTriageFeed(
  * no longer shows that query.
  */
 internal fun TheoriaShell.triageFeed(request: TriageRequest, seed: TriageSeed): SeededTriageFeed? = when (request.source) {
-    ViewerStreamSource.SEARCH, ViewerStreamSource.FOR_YOU, ViewerStreamSource.CREATOR_PROFILE ->
+    ViewerStreamSource.SEARCH, ViewerStreamSource.CREATOR_PROFILE ->
         routes.feed(request.source)?.takeIf { it.viewerFeed.queryHash == request.feedKey }
             ?.seededTriageFeed(request.feedKey, seed, features.mediaDurationCoordinator.states)
     ViewerStreamSource.CODEX -> request.codexId?.let { codexId ->
@@ -69,7 +70,8 @@ internal fun TheoriaShell.triageFeed(request: TriageRequest, seed: TriageSeed): 
         else cleaningReviewSnapshots(codexId, alsoIn)
         SeededTriageFeed(snapshots, flowOf(emptyList()), nextPage = {})
     }
-    ViewerStreamSource.RELATED, ViewerStreamSource.RECENTS, ViewerStreamSource.TRAIL -> null
+    // For You is a deck itself and offers no Triage.
+    ViewerStreamSource.FOR_YOU, ViewerStreamSource.RELATED, ViewerStreamSource.RECENTS, ViewerStreamSource.TRAIL -> null
 }
 
 /** What the deck's left swipe removes through when [request] opens it on a Codex to remove from; null otherwise. */
@@ -151,6 +153,7 @@ private fun decidedLengths(posts: List<Post>, decided: Map<MediaDurationKey, Med
 internal class ShellTriageActions(private val shell: TheoriaShell) : TriageActions {
     private val settings get() = shell.data.settingsRepository
     private val likes get() = shell.workflows.likesCodexSync
+    private val activeProfile get() = shell.owners.settings.state.value.activeProfile
 
     override val hiddenTags: Flow<Set<HiddenTag>> = settings.observeSettings().map { app ->
         app.forYouBlacklistByProfile[app.activeProfileId].orEmpty()
@@ -158,15 +161,27 @@ internal class ShellTriageActions(private val shell: TheoriaShell) : TriageActio
             .mapTo(mutableSetOf()) { entry -> HiddenTag(entry.source, entry.tags.single()) }
     }.distinctUntilChanged()
 
-    override suspend fun like(post: Post): TriageReversal? {
-        val profile = shell.owners.settings.state.value.activeProfile
+    override suspend fun like(post: Post): TriageReversal? = like(activeProfile, post)
+
+    override suspend fun hide(source: SourceKey, tag: String): TriageReversal? = hide(activeProfile.profileId, source, tag)
+
+    /** A swipe's write runs after earlier ones, by when the active profile may have changed; these keep the one it was made in. */
+    override fun atDecision(): TriageActions {
+        val profile = activeProfile
+        val actions = this
+        return object : TriageActions by actions {
+            override suspend fun like(post: Post) = actions.like(profile, post)
+            override suspend fun hide(source: SourceKey, tag: String) = actions.hide(profile.profileId, source, tag)
+        }
+    }
+
+    private suspend fun like(profile: RecommendationProfile, post: Post): TriageReversal? {
         val tags = withContext(Dispatchers.Default) { trainingTagsFor(post) }
         val like = likes.likeIfAbsent(profile, post, tags) ?: return null
         return { likes.removeLike(profile, post, like) }
     }
 
-    override suspend fun hide(source: SourceKey, tag: String): TriageReversal? {
-        val profileId = settings.observeSettings().first().activeProfileId
+    private suspend fun hide(profileId: String, source: SourceKey, tag: String): TriageReversal? {
         if (!settings.addForYouBlacklistEntry(profileId, source, listOf(tag))) return null
         return { settings.removeForYouBlacklistEntry(profileId, source, listOf(tag)) }
     }

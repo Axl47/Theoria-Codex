@@ -340,7 +340,10 @@ class InstalledJsonCompatibilityDeviceTest {
         val gsonRow = """{"recentSearchSchemaVersion":1,"query":{"schemaVersion":2,"modeType":"unified",""" +
             """"includeTags":["x"],"excludeTags":[],"sort":"TOP"},"kind":"FYP","sources":["PIXIV"],""" +
             """"sourceTags":{"PIXIV":["rock \u0026 roll"]}}"""
-        assertEquals(mapOf(SourceKey.PIXIV to listOf("rock & roll")), RecentSearchPayloadCodec.decodeJson(gsonRow).sourceTags)
+        // A For You row from before the shelves page reads as Unified with its tags, for the saved-search conversion.
+        val retired = RecentSearchPayloadCodec.decodeJson(gsonRow)
+        assertEquals(RecentSearchKind.UNIFIED, retired.kind)
+        assertEquals(mapOf(SourceKey.PIXIV to listOf("rock & roll")), retired.sourceTags)
     }
 
     private fun assertVariantWire(wire: JSONObject, expected: VideoVariant) {

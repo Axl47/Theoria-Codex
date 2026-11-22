@@ -14,6 +14,9 @@ import kotlinx.serialization.json.JsonObject
 
 private const val CURRENT_RECENT_SEARCH_PAYLOAD_VERSION = 1
 
+/** The stored kind of a For You search, from before the shelves page was removed; see [RecentSearchPayloadCodec.decode]. */
+private const val RETIRED_FOR_YOU_KIND = "FYP"
+
 @Serializable
 internal data class RecentSearchPayloadRecord(
     @SerialName("recentSearchSchemaVersion") val recentSearchSchemaVersion: Int? = null,
@@ -84,6 +87,12 @@ object RecentSearchPayloadCodec {
 
     fun decodeJson(payload: String): RecentSearchPayload = decode(DurableJson.parseToJsonElement(payload))
 
+    /**
+     * Reads any payload this app has stored. A retired For You search ([RETIRED_FOR_YOU_KIND]) reads as a Unified
+     * search that keeps an entry of tags for every source it searched, even an empty one, so the saved-search
+     * library can convert it
+     * ([com.theoriacodex.data.repository.RecentSearchEntry.isRetiredForYouSearch]) instead of failing.
+     */
     fun decode(root: JsonElement): RecentSearchPayload {
         require(root is JsonObject) { "Stored recent search root must be an object" }
         if (!root.containsKey("recentSearchSchemaVersion")) {
@@ -104,16 +113,20 @@ object RecentSearchPayloadCodec {
             "Unsupported stored recent-search version: ${record.recentSearchSchemaVersion}"
         }
         val query = QueryStorageCodec.decode(requireNotNull(record.query) { "Stored recent search has no query" })
-        val kind = record.kind?.let { runCatching { RecentSearchKind.valueOf(it) }.getOrNull() }
-            ?: error("Stored recent search has an invalid kind")
+        val retired = record.kind == RETIRED_FOR_YOU_KIND
+        val kind = record.kind?.let { stored ->
+            if (retired) RecentSearchKind.UNIFIED
+            else runCatching { RecentSearchKind.valueOf(stored) }.getOrNull()
+        } ?: error("Stored recent search has an invalid kind")
         val rawSources = record.sources ?: error("Stored recent search has no sources")
         val sources = rawSources.map { raw ->
             SourceKey.parse(raw) ?: error("Stored recent search has an invalid source")
         }
         require(sources == sources.distinct()) { "Stored recent search sources must be distinct" }
-        val sourceTags = record.sourceTags.orEmpty().mapKeys { (rawSource, _) ->
+        val storedTags = record.sourceTags.orEmpty().mapKeys { (rawSource, _) ->
             SourceKey.parse(rawSource) ?: error("Stored recent search has an invalid source-tag source")
         }
+        val sourceTags = if (retired) sources.associateWith { storedTags[it].orEmpty() } else storedTags
         validate(query, kind, sources, sourceTags)
         return RecentSearchPayload(query, kind, sources, sourceTags)
     }
@@ -139,10 +152,6 @@ object RecentSearchPayloadCodec {
             RecentSearchKind.MULTI_SEARCH -> {
                 require(query.mode == QueryMode.Unified) { "Multi-Search requires a Unified query" }
                 require(sources.size >= 2) { "Multi-Search requires at least two sources" }
-            }
-            RecentSearchKind.FYP -> {
-                require(query.mode == QueryMode.Unified) { "FYP requires a Unified query" }
-                require(sources.isNotEmpty()) { "FYP requires at least one source" }
             }
         }
     }

@@ -66,7 +66,7 @@ object RoomUpgradeScenario {
                 recents.recordSearch(query(), "new-search", RecentSearchKind.SOURCE, listOf(SourceKey.PIXIV))
                 RoomMediaDurationRepository(database).put(durationKey, duration)
                 RoomViewerTranslationCacheRepository(database, clock = { 100L }).putAll(mapOf(translationKey to "Blue sky"))
-                assertEquals(11, database.openHelper.readableDatabase.version)
+                assertEquals(12, database.openHelper.readableDatabase.version)
                 database.openHelper.readableDatabase.query(
                     "SELECT name FROM sqlite_master WHERE name IN ('migration_metadata','recents_migration_metadata')",
                 ).use { assertFalse(it.moveToFirst()) }
@@ -176,6 +176,12 @@ object RoomUpgradeScenario {
                     "VALUES('PIXIV',?,${30 + index},${index + 1},?,'search:sky'$sectionValue$progressValue)", arrayOf(id, origin))
             }
             database.execSQL("INSERT INTO recent_searches VALUES('old-search',?,32,1)", arrayOf(LEGACY_QUERY))
+            // For You history; the v12 migration deletes it, so only the rows above survive.
+            database.execSQL("INSERT INTO recent_searches VALUES('for_you:seed',?,33,2)", arrayOf(FOR_YOU_SEARCH))
+            if (version >= 3) {
+                database.execSQL("INSERT INTO recent_watched(source,source_post_id,viewed_at_epoch_ms,sort_sequence,origin,origin_query_hash,section) " +
+                    "VALUES('PIXIV','other',34,3,'SEARCH','for_you:seed','FYP')")
+            }
             database.execSQL("INSERT INTO recents_migration_metadata VALUES('recents','s',1,1,0,'d',1,1,'p',1,1)")
         }
         if (version >= 4) {
@@ -203,6 +209,9 @@ object RoomUpgradeScenario {
 
     private fun query() = Query(QueryMode.Source(SourceKey.PIXIV), includeTags = listOf("sky"),
         excludeTags = listOf("comic"), sort = SortMode.NEWEST, dateRange = null, minScore = null)
+
+    private const val FOR_YOU_SEARCH = """{"recentSearchSchemaVersion":1,"query":{"schemaVersion":1,"modeType":"unified",""" +
+        """"includeTags":["sky"],"excludeTags":[],"sort":"TOP"},"kind":"FYP","sources":["PIXIV"],"sourceTags":{"PIXIV":["sky"]}}"""
 
     private const val LEGACY_QUERY = """{"schemaVersion":1,"modeType":"source","modeSource":"PIXIV","includeTags":["sky"],"excludeTags":["comic"],"sort":"NEWEST"}"""
 }

@@ -8,7 +8,7 @@ import kotlin.math.ln
 import kotlin.math.sqrt
 import kotlin.random.Random
 
-data class ForYouInterest(val tags: List<String>, val discovery: Boolean = false)
+data class ForYouInterest(val tags: List<String>)
 
 /** Keep co-occurring interests together; provider counts reduce the influence of broad tags. */
 object ForYouInterests {
@@ -50,7 +50,7 @@ object ForYouInterests {
         val adjacent = anchors.asReversed().firstOrNull { tag ->
             chosen.none { tag in it.tags } && !stats.isBroadTag(tag)
         }
-        if (adjacent != null) chosen += ForYouInterest(listOf(adjacent), discovery = true)
+        if (adjacent != null) chosen += ForYouInterest(listOf(adjacent))
         return chosen
     }
 }

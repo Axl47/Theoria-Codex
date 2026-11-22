@@ -20,7 +20,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
                 MediaDurationEntity.class,
                 ViewerTranslationCacheEntity.class
         },
-        version = 11,
+        version = 12,
         exportSchema = true
 )
 public abstract class TheoriaRoomDatabase extends RoomDatabase {
@@ -95,6 +95,13 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             database.execSQL("DROP TABLE IF EXISTS `recents_migration_metadata`");
         }
     };
+    // The For You shelves page is gone: drop its search history and the posts some builds briefly kept from it.
+    public static final Migration MIGRATION_11_12 = new Migration(11, 12) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("DELETE FROM `recent_searches` WHERE `query_payload_json` LIKE '%\"kind\":\"FYP\"%'");
+            database.execSQL("DELETE FROM `recent_watched` WHERE `section` = 'FYP'");
+        }
+    };
     public static final Migration[] MIGRATIONS = new Migration[] {
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -105,7 +112,8 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             MIGRATION_7_8,
             MIGRATION_8_9,
             MIGRATION_9_10,
-            MIGRATION_10_11
+            MIGRATION_10_11,
+            MIGRATION_11_12
     };
 
     public abstract CodexLikesDao codexLikesDao();

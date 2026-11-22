@@ -87,7 +87,7 @@ class ProfileBackupCodec {
                 SavedSearchEntry(entry.backupString("id"), entry.backupString("name"),
                     entry.backupObject("search").readBackupSearch(), entry.backupLong("savedAt"))
             },
-            readingPositions = root.backupObjects("readingPositions", MAX_READING_POSITIONS).map { entry ->
+            readingPositions = root.backupObjects("readingPositions", MAX_READING_POSITIONS).withoutForYouSection().map { entry ->
                 ReadingPosition(entry.backupId(), RecentPostSection.valueOf(entry.backupString("section")),
                     entry.backupInt("mediaNumber"), entry.backupLong("lastViewedAt"))
             },
@@ -161,13 +161,14 @@ class ProfileBackupCodec {
             likes = root.backupObjects("likes").map {
                 LikedPost(it.backupString("profileId"), it.backupId(), it.backupLong("likedAt"), it.backupStrings("tags"))
             },
-            watched = root.backupObjects("watched", 2_000).map {
+            watched = root.backupObjects("watched", 2_000).withoutForYouSection().map {
                 RecentPostEntry(requireNotNull(postsById[it.backupId()]) { "Recent post missing from backup" },
                     it.backupLong("viewedAt"), ViewerStreamSource.valueOf(it.backupString("origin")),
                     it["queryHash"]?.takeUnless { value -> value is JsonNull }?.jsonPrimitive?.content,
                     RecentPostSection.valueOf(it.backupString("section")), it.backupInt("highestMedia"))
             },
-            searches = root.backupObjects("searches", 2_000).map { it.readBackupSearch() },
+            searches = root.backupObjects("searches", 2_000).map { it.readBackupSearch() }
+                .filterNot(RecentSearchEntry::isRetiredForYouSearch),
         )
     }
 
@@ -227,3 +228,6 @@ private fun validate(backup: ProfileBackup) {
         "Backup contains duplicate sites"
     }
 }
+
+/** Older backups can hold rows of the retired For You history section; they are dropped on import. */
+private fun List<JsonObject>.withoutForYouSection(): List<JsonObject> = filterNot { it.backupString("section") == "FYP" }

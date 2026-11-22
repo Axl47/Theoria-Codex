@@ -353,7 +353,6 @@ internal object StatisticsPolicies {
             if (term.isPortableGeneralTag) !current.searchesByTagSeeded else !current.searchesByTypedTagSeeded
         }
         val seeded = recentSearches
-            .filter { entry -> entry.kind != RecentSearchKind.FYP }
             .fold(emptyMap<SearchedTagKey, Long>()) { counts, entry ->
                 counts.incrementTerms(entry.sources.toSet(), entry.query.searchedTerms().filterTo(mutableSetOf(), unseeded))
             }
@@ -362,10 +361,6 @@ internal object StatisticsPolicies {
             searchesByTagSeeded = true,
             searchesByTypedTagSeeded = true,
         )
-    }
-
-    fun recordForYouSearch(current: LifetimeStatistics): LifetimeStatistics {
-        return current.copy(forYouSearchCount = current.forYouSearchCount.saturatingAdd(1L))
     }
 
     fun recordForYouSave(current: LifetimeStatistics): LifetimeStatistics {
@@ -459,7 +454,6 @@ internal class CellStatisticsRepository(
         StatisticsPolicies.seedSearchedTags(current, recentSearches)
     }
 
-    override suspend fun recordForYouSearch() = mutate(StatisticsPolicies::recordForYouSearch)
 
     override suspend fun recordForYouSave() = mutate(StatisticsPolicies::recordForYouSave)
 

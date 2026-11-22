@@ -1,10 +1,6 @@
 package com.theoriacodex.app.triage
 
 import com.theoriacodex.app.codex.ChosenCodex
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.ViewModelStore
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.app.codex.QuickSave
 import com.theoriacodex.app.codex.QuickSaveRecord
 import com.theoriacodex.app.codex.SaveSuggestions
@@ -36,7 +32,7 @@ import org.junit.Before
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class TriageDeckViewModelTest {
+class TriageDeckTest {
     private val posts = (1..8).map { testPost(sourcePostId = "p$it") }
     private val actions = FakeActions()
     private val quickSave = FakeQuickSave()
@@ -44,20 +40,29 @@ class TriageDeckViewModelTest {
 
     @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
 
+    /** Collects each deck's feed, as its owner's scope does. */
+    private val deckScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
     /** Outlives every deck, as the activity's scope does. */
     private val writeScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
+    /** Every decision event the decks report, in order. */
+    private val events = mutableListOf<TriageDecisionEvent>()
+
     @After fun tearDown() {
+        deckScope.cancel()
         writeScope.cancel()
         Dispatchers.resetMain()
     }
 
-    private fun deck(source: TriageFeed = feed) =
-        TriageDeckViewModel(source, actions, quickSave, query = null, fromForYou = false, writeScope = writeScope)
+    /** What the deck's owner hides, for the decks that have such an owner. */
+    private val ownerHidden = MutableStateFlow(emptyMap<SourceKey, Set<String>>())
+
+    private fun deck(source: TriageFeed = feed, removal: TriageRemoval? = null, query: Query? = null, fromForYou: Boolean = false) =
+        TriageDeck(deckScope, source, actions, quickSave, query, fromForYou, writeScope, removal, onDecision = events::add, ownerHidden = ownerHidden)
 
     /** A deck on a Codex, where left removes through [removal]. */
-    private fun removingDeck(removal: TriageRemoval) =
-        TriageDeckViewModel(feed, actions, quickSave, query = null, fromForYou = false, writeScope = writeScope, removal = removal)
+    private fun removingDeck(removal: TriageRemoval) = deck(removal = removal)
 
     @Test fun `like moves on, likes the post once and confirms once committed`() = runTest {
         val deck = deck()
@@ -65,6 +70,7 @@ class TriageDeckViewModelTest {
         assertEquals(1, deck.state.value.index)
         assertEquals(listOf(posts[0].id), actions.liked)
         assertEquals(TriageNotice(TriageDecision.Liked(posts[0]), failed = false), deck.state.value.notice)
+        assertEquals(listOf(TriageDecisionEvent.Decided(TriageDecision.Liked(posts[0]))), events)
     }
 
     @Test fun `an already liked post stays liked and undo leaves it so`() = runTest {
@@ -97,7 +103,7 @@ class TriageDeckViewModelTest {
 
     @Test fun `save goes to the chosen Codex with the feed's query and undo removes exactly that save`() = runTest {
         val query = Query.newest(SourceKey.PIXIV)
-        val deck = TriageDeckViewModel(feed, actions, quickSave, query, fromForYou = true, writeScope = writeScope)
+        val deck = deck(query = query, fromForYou = true)
         deck.decideCurrent(TriageChoice.Save(ChosenCodex.Existing("codex-1", "Skies")))
         assertEquals(listOf(Triple(posts[0].id, "codex-1", query)), quickSave.saved)
         assertTrue(quickSave.fromForYou)
@@ -146,6 +152,60 @@ class TriageDeckViewModelTest {
         assertEquals(emptyList<Pair<SourceKey, String>>(), actions.hidden)
         assertEquals(0, deck.state.value.index)
         assertEquals(tagged[1], deck.state.value.next)
+    }
+
+    @Test fun `a hide passes over the tag only on the source it was hidden on`() = runTest {
+        val elsewhere = testPost(SourceKey.GELBOORU, "g", canonicalTags = listOf("cat"))
+        val tagged = listOf(testPost(sourcePostId = "a", canonicalTags = listOf("cat")), testPost(sourcePostId = "b", canonicalTags = listOf("cat")), elsewhere)
+        val deck = deck(FakeFeed(tagged, canLoadMore = false))
+        deck.decideCurrent(TriageChoice.Hide("cat"))
+        assertEquals(elsewhere, deck.state.value.current)
+    }
+
+    @Test fun `tags the owner hides pass their cards over, also the one on top`() = runTest {
+        val tagged = listOf(testPost(sourcePostId = "a", canonicalTags = listOf("Big_Cat")), testPost(sourcePostId = "b", canonicalTags = listOf("big cat")), posts[2])
+        val deck = deck(FakeFeed(tagged, canLoadMore = false))
+        assertEquals(tagged[0], deck.state.value.current)
+        ownerHidden.value = mapOf(SourceKey.GELBOORU to setOf("big cat"))
+        assertEquals(tagged[0], deck.state.value.current)
+        ownerHidden.value = mapOf(SourceKey.PIXIV to setOf("big cat"))
+        assertEquals(posts[2], deck.state.value.current)
+    }
+
+    @Test fun `a card whose newer copy from the feed carries a hidden tag is passed over, in place`() = runTest {
+        val source = FakeFeed(posts, canLoadMore = false)
+        val deck = deck(source)
+        ownerHidden.value = mapOf(SourceKey.PIXIV to setOf("cat"))
+        deck.decideCurrent(TriageChoice.Skip)
+        source.emit(posts.map { if (it == posts[1]) it.copy(canonicalTags = listOf("cat")) else it }, canLoadMore = false)
+        assertEquals(posts[2], deck.state.value.current)
+        assertEquals(posts.size, deck.state.value.posts.size)
+    }
+
+    @Test fun `the card Undo brings back stays while the owner still hides its tag`() = runTest {
+        val tagged = listOf(testPost(sourcePostId = "a", canonicalTags = listOf("cat")), testPost(sourcePostId = "b", canonicalTags = listOf("cat")), posts[2])
+        val deck = deck(FakeFeed(tagged, canLoadMore = false))
+        deck.decideCurrent(TriageChoice.Hide("cat"))
+        // The owner learns of the stored hide, and of its removal, some time after the deck.
+        ownerHidden.value = mapOf(SourceKey.PIXIV to setOf("cat"))
+        deck.undo()
+        assertEquals(tagged[0], deck.state.value.current)
+        ownerHidden.value = mapOf(SourceKey.PIXIV to setOf("cat", "dog"))
+        assertEquals(tagged[0], deck.state.value.current)
+        assertEquals(posts[2], deck.state.value.next)
+        ownerHidden.value = emptyMap()
+        assertEquals(tagged[0], deck.state.value.current)
+        assertEquals(tagged[1], deck.state.value.next)
+    }
+
+    @Test fun `a write goes to the profile that was active when its card was decided`() = runTest {
+        actions.hold = CompletableDeferred()
+        val deck = deck()
+        deck.decideCurrent(TriageChoice.Like)
+        actions.profile = "alt"
+        deck.decideCurrent(TriageChoice.Hide("cat"))
+        actions.hold!!.complete(Unit)
+        assertEquals(listOf("main", "alt"), actions.wroteTo)
     }
 
     @Test fun `undo during a running save reverses it once it commits and never confirms it`() = runTest {
@@ -361,11 +421,10 @@ class TriageDeckViewModelTest {
 
     @Test fun `closing the deck still runs a pending save and then the undo asked for it`() = runTest {
         quickSave.hold = CompletableDeferred()
-        val store = ViewModelStore()
-        val deck = ViewModelProvider.create(store, viewModelFactory { initializer { deck() } })[TriageDeckViewModel::class]
+        val deck = deck()
         deck.decideCurrent(TriageChoice.Save(ChosenCodex.Existing("codex-1", "Skies")))
         deck.undo()
-        store.clear()
+        deck.close()
         quickSave.hold!!.complete(Unit)
         assertEquals(1, quickSave.records.size)
         assertEquals(quickSave.records, quickSave.undone)
@@ -373,18 +432,50 @@ class TriageDeckViewModelTest {
 
     @Test fun `closing a Codex deck still runs a pending removal and then the undo asked for it`() = runTest {
         val removal = FakeRemoval(removeHold = CompletableDeferred())
-        val store = ViewModelStore()
-        val deck = ViewModelProvider.create(store, viewModelFactory { initializer { removingDeck(removal) } })[TriageDeckViewModel::class]
+        val deck = removingDeck(removal)
         deck.decideCurrent(TriageChoice.Remove)
         deck.undo()
-        store.clear()
+        deck.close()
         removal.removeHold!!.complete(Unit)
         assertEquals(listOf(posts[0].id), removal.removed)
         assertEquals(listOf(posts[0].id), removal.restored)
     }
 
+    @Test fun `a decision is reported when made, before its write commits, and again as reverted by Undo`() = runTest {
+        actions.hold = CompletableDeferred()
+        val deck = deck()
+        deck.decideCurrent(TriageChoice.Like)
+        assertEquals(listOf(TriageDecisionEvent.Decided(TriageDecision.Liked(posts[0]))), events)
+        deck.undo()
+        actions.hold!!.complete(Unit)
+        assertEquals(TriageDecisionEvent.Reverted(TriageDecision.Liked(posts[0])), events.last())
+        assertEquals(2, events.size)
+    }
+
+    @Test fun `a failed write reports its decision reverted, whether or not newer swipes kept its card away`() = runTest {
+        actions.failLike = true
+        val deck = deck()
+        deck.decideCurrent(TriageChoice.Like)
+        assertEquals(TriageDecisionEvent.Reverted(TriageDecision.Liked(posts[0])), events.last())
+
+        actions.hold = CompletableDeferred()
+        deck.decideCurrent(TriageChoice.Like)
+        deck.decideCurrent(TriageChoice.Skip)
+        actions.hold!!.complete(Unit)
+        assertEquals(
+            listOf(
+                TriageDecisionEvent.Decided(TriageDecision.Liked(posts[0])),
+                TriageDecisionEvent.Reverted(TriageDecision.Liked(posts[0])),
+                TriageDecisionEvent.Decided(TriageDecision.Liked(posts[0])),
+                TriageDecisionEvent.Decided(TriageDecision.Skipped(posts[1])),
+                TriageDecisionEvent.Reverted(TriageDecision.Liked(posts[0])),
+            ),
+            events,
+        )
+    }
+
     /** Decides for whichever card is current, as a swipe that finishes on its own card does. */
-    private fun TriageDeckViewModel.decideCurrent(choice: TriageChoice) = decide(choice, checkNotNull(state.value.current).id)
+    private fun TriageDeck.decideCurrent(choice: TriageChoice) = decide(choice, checkNotNull(state.value.current).id)
 
     private class FakeFeed(initial: List<Post>, canLoadMore: Boolean) : TriageFeed {
         private val flow = MutableStateFlow(TriageFeedSnapshot(initial, canLoadMore))
@@ -431,7 +522,19 @@ class TriageDeckViewModelTest {
         var failHide = false
         var hold: CompletableDeferred<Unit>? = null
         var unlikeHold: CompletableDeferred<Unit>? = null
+
+        /** The active profile, and the profile each write went to. */
+        var profile = "main"
+        val wroteTo = mutableListOf<String>()
         override val hiddenTags: Flow<Set<HiddenTag>> = flowOf(emptySet())
+        override fun atDecision(): TriageActions {
+            val bound = profile
+            val actions = this
+            return object : TriageActions by actions {
+                override suspend fun like(post: Post) = actions.like(post).also { wroteTo += bound }
+                override suspend fun hide(source: SourceKey, tag: String) = actions.hide(source, tag).also { wroteTo += bound }
+            }
+        }
         override suspend fun like(post: Post): TriageReversal? {
             hold?.await()
             check(!failLike)

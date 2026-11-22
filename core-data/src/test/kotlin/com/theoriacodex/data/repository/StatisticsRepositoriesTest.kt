@@ -40,7 +40,6 @@ class StatisticsRepositoriesTest {
         )
         repository.recordWatchedPost(SourceKey.PIXIV, setOf(" blue_hair ", "blue_hair", ""))
         repository.recordSearch(setOf(SourceKey.PIXIV, SourceKey.GELBOORU), setOf(SearchTerm(" animation "), SearchTerm("animation"), SearchTerm("")))
-        repository.recordForYouSearch()
         repository.recordForYouSave()
         repository.recordPostUrlCopy()
         repository.recordCodexEntry(" codex-1 ")
@@ -62,7 +61,6 @@ class StatisticsRepositoriesTest {
             mapOf(searched(SourceKey.PIXIV, "animation") to 1L, searched(SourceKey.GELBOORU, "animation") to 1L),
             statistics.searchesByTag,
         )
-        assertEquals(1L, statistics.forYouSearchCount)
         assertEquals(1L, statistics.forYouSaveCount)
         assertEquals(1L, statistics.postUrlCopyCount)
         assertEquals(mapOf("codex-1" to 1L), statistics.codexEntryCounts)
@@ -85,7 +83,6 @@ class StatisticsRepositoriesTest {
         val recents = listOf(
             entry(listOf("animation", "sky"), RecentSearchKind.UNIFIED, listOf(SourceKey.PIXIV, SourceKey.GELBOORU)),
             entry(listOf("sky"), RecentSearchKind.SOURCE, listOf(SourceKey.GELBOORU)),
-            entry(listOf("seed"), RecentSearchKind.FYP, listOf(SourceKey.PIXIV)),
         )
 
         repository.seedSearchedTags(recents)
