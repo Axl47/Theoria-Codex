@@ -30,7 +30,7 @@ import com.theoriacodex.app.media.OfflineMediaCoordinator
 import com.theoriacodex.app.media.downloadablePages
 import com.theoriacodex.app.media.validateOfflineMediaFile
 import com.theoriacodex.app.recommend.ForYouCoordinator
-import com.theoriacodex.app.recommend.observeTagAffinityInputs
+import com.theoriacodex.app.recommend.shareTagAffinityInputs
 import com.theoriacodex.app.comments.CommentsLoader
 import com.theoriacodex.app.related.RelatedPostsLoader
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
@@ -46,7 +46,11 @@ import com.theoriacodex.app.update.RemoteUpdate
 import com.theoriacodex.app.update.StartupUpdater
 import com.theoriacodex.app.update.UpdateFeedClient
 import com.theoriacodex.app.viewer.PixivUgoiraClient
+import com.theoriacodex.app.di.ListingPictures
+import com.theoriacodex.app.post.FileMirrorIndex
 import com.theoriacodex.data.android.room.RoomCodexLikesRepository
+import com.theoriacodex.data.android.room.RoomForYouVerdictRepository
+import com.theoriacodex.data.android.room.RoomVisualSignatureRepository
 import com.theoriacodex.data.android.room.RoomMediaDurationRepository
 import com.theoriacodex.data.android.room.RoomRecentsRepository
 import com.theoriacodex.data.android.room.TheoriaRoomDatabase
@@ -95,9 +99,13 @@ class JourneyAppContainer(
     private val ownerJob = SupervisorJob(scope.coroutineContext[Job])
     private val ownerScope = CoroutineScope(scope.coroutineContext + ownerJob + Dispatchers.IO)
     override val applicationScope: CoroutineScope get() = ownerScope
+    private val fileMirrors = FileMirrorIndex()
+    // Journeys check what hashes do, not how fast a busy test device makes them, so a listing waits for its fixtures.
+    private val listingPictures = ListingPictures(appContext, ownerScope, fileMirrors, budgetMs = 10_000)
     val registry = JourneySourceRegistry(
         postsBySource, pageSize,
         providerShapedSources.associateWith { ProviderShapedSource(postsBySource.getValue(it), httpClient) },
+        annotateListing = listingPictures::annotate,
     )
     val database = TheoriaRoomDatabase.create(appContext, storageDirectory.resolve("journey.db").absolutePath)
     private val profileWriteGuard = ProfileLibraryWriteGuard()
@@ -141,6 +149,9 @@ class JourneyAppContainer(
         readingPositions = FileBackedReadingPositionRepository(storageDirectory),
         galleryReadingModes = FileBackedGalleryReadingModeRepository(storageDirectory),
         savedSearches = FileBackedSavedSearchRepository(storageDirectory),
+        forYouVerdicts = RoomForYouVerdictRepository(database, profileWriteGuard),
+        visualSignatures = RoomVisualSignatureRepository(database),
+        fileMirrors = fileMirrors,
     )
     override val sources = SourceDependencies(
         httpClient, accounts, auth, PixivPkceController(auth, accounts, InMemoryPixivPkceSessionStore()),
@@ -153,11 +164,12 @@ class JourneyAppContainer(
                 override fun launchInstaller(apkFile: File): Result<Unit> = error("Fixture cannot install APKs")
             }, updateState, updateCheckTimeoutMs = 1_000L),
     )
+    private val tagAffinity = shareTagAffinityInputs(ownerScope, settings, content, content, data.savedSearches, statistics)
     override val features = FeatureDependencies(
         search = SearchCoordinator(registry, data.queryRepository, settings, restore, data.recentsRepository,
             statisticsRepository = statistics, tagSuggestionStore = tags),
-        forYou = ForYouCoordinator(registry, content, statistics,
-            observeTagAffinityInputs(settings, content, content, data.savedSearches, statistics), tagSuggestionStore = tags),
+        forYou = ForYouCoordinator(registry, content, statistics, tagAffinity::forProfile, tagSuggestionStore = tags),
+        tagAffinity = tagAffinity,
         relatedPosts = RelatedPostsLoader(registry),
         comments = CommentsLoader(registry),
         creatorProfile = CreatorProfileCoordinator(registry),

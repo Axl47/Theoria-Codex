@@ -13,6 +13,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.distinctByFile
+import com.theoriacodex.domain.model.plusDistinctFiles
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.domain.query.QueryHash
 
@@ -300,12 +301,21 @@ object SearchStateReducer {
         return SearchReduction(state.withRequest(request.copy(cachedFirstPage = CachedFirstPage.SCROLLED)))
     }
 
-    /** Someone who has scrolled the cached page keeps their place: its posts stay put and new ones go below. */
+    /**
+     * Someone who has scrolled the cached page keeps their place: its posts stay put, even one the refresh shows is a
+     * copy of another, and new ones go below unless they copy a post above.
+     */
     private fun SearchRequest.refreshed(shown: List<Post>, fresh: List<Post>): List<Post> {
         if (cachedFirstPage != CachedFirstPage.SCROLLED) return fresh
         val freshById = fresh.associateBy(Post::id)
-        return (shown.map { post -> freshById[post.id] ?: post } + fresh).distinctByFile()
+        return shown.map { post -> freshById[post.id]?.withPictureHashOf(post) ?: post }.plusDistinctFiles(fresh)
     }
+
+    /** [this] fresh post, with [cached]'s picture hash when its own missed the listing's wait for the same preview. */
+    private fun Post.withPictureHashOf(cached: Post): Post =
+        if (pictureHash == null && preview == cached.preview && cached.pictureHash != null) {
+            copy(pictureHash = cached.pictureHash)
+        } else this
 
     private fun SearchUiState.withPublishedResults(
         applied: AppliedSearch,
@@ -353,7 +363,7 @@ object SearchStateReducer {
             is SearchPageResult.Success -> SearchReduction(
                 state.copy(
                     content = state.content.copy(
-                        results = (state.content.results + result.posts).distinctByFile(),
+                        results = state.content.results.plusDistinctFiles(result.posts),
                         statuses = mergeFeedStatuses(state.content.statuses, result.statuses),
                         canLoadMore = result.continuation.canLoadMore,
                         error = null,

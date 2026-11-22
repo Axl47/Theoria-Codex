@@ -25,8 +25,9 @@ data class DeckLane(val origin: DeckOrigin.Lane, val posts: List<Post>)
 enum class DeckSignal { Liked, Saved, Skipped, Hid }
 
 /**
- * How this session's swipes bend the mix. It lives in memory only, so nothing here trains the profile: a run of skips
- * lowers a lane's share until a like or save restores it, and [pending] holds the cards a like or save asked for.
+ * How this session's swipes bend the mix. It lives in memory only: a run of skips lowers a lane's share until a like or
+ * save restores it, and [pending] holds the cards a like or save asked for. The swipes themselves are also logged per
+ * profile (`ForYouVerdictRepository`) for a future taste model, but nothing reads that log back into steering yet.
  */
 data class DeckSteering(
     val weights: Map<String, Double> = emptyMap(),
@@ -88,15 +89,32 @@ data class DeckBatch(val cards: List<DeckCard>, val steering: DeckSteering, val 
  * Up to [size] cards nobody has [seen]: the pending cards a like or save asked for first, then the lanes in turn, each
  * as often as its weight says. It is deterministic, and a lane running out simply gives its turns to the others.
  * [only] names the one lane an interest chip picked; pending cards still come first. A lane's seen posts count as
- * [DeckBatch.taken] too, so the caller drops them from its buffer.
+ * [DeckBatch.taken] too, so the caller drops them from its buffer. [copiesOf] names the posts that hold the same file
+ * or picture as a post, itself included: a post counts as seen when any copy is, and dealing it uses all of them, so
+ * one picture on several sites is dealt once.
  */
-fun nextBatch(lanes: List<DeckLane>, steering: DeckSteering, seen: Set<PostId>, size: Int, only: String? = null): DeckBatch {
+fun nextBatch(
+    lanes: List<DeckLane>,
+    steering: DeckSteering,
+    seen: Set<PostId>,
+    size: Int,
+    only: String? = null,
+    copiesOf: (Post) -> Set<PostId> = { setOf(it.id) },
+): DeckBatch {
     val used = seen.toMutableSet()
+    fun isUsed(post: Post) = post.id in used || copiesOf(post).any(used::contains)
+    fun use(post: Post) {
+        used += post.id
+        used += copiesOf(post)
+    }
     val cards = mutableListOf<DeckCard>()
     val pending = steering.pending.toMutableList()
     while (cards.size < size && pending.isNotEmpty()) {
         val card = pending.removeAt(0)
-        if (used.add(card.post.id)) cards += card
+        if (!isUsed(card.post)) {
+            use(card.post)
+            cards += card
+        }
     }
     val running = lanes.filter { only == null || it.origin.laneId == only }
     val cursor = running.associateTo(mutableMapOf()) { it.origin.laneId to 0 }
@@ -105,7 +123,7 @@ fun nextBatch(lanes: List<DeckLane>, steering: DeckSteering, seen: Set<PostId>, 
         // Skip what another lane or an injection already gave, so a lane's turn always yields a card.
         val ready = running.filter { lane ->
             var at = cursor.getValue(lane.origin.laneId)
-            while (at < lane.posts.size && lane.posts[at].id in used) at++
+            while (at < lane.posts.size && isUsed(lane.posts[at])) at++
             cursor[lane.origin.laneId] = at
             at < lane.posts.size
         }
@@ -116,7 +134,7 @@ fun nextBatch(lanes: List<DeckLane>, steering: DeckSteering, seen: Set<PostId>, 
         credit[id] = credit.getValue(id) - ready.sumOf { steering.weight(it.origin.laneId) }
         val post = pick.posts[cursor.getValue(id)]
         cursor[id] = cursor.getValue(id) + 1
-        used += post.id
+        use(post)
         cards += DeckCard(post, pick.origin)
     }
     return DeckBatch(cards, steering.copy(pending = pending, credit = credit), cursor.filterValues { it > 0 })

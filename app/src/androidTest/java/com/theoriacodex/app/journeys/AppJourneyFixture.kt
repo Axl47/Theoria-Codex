@@ -5,6 +5,7 @@ import com.theoriacodex.app.library.LibrarySection
 import com.theoriacodex.app.library.librarySectionTag
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.net.Uri
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsActions
@@ -105,6 +106,24 @@ abstract class AppJourneyFixture {
         image.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()
         return ImageRef(null, image.absolutePath, "image/png")
+    }
+
+    /**
+     * A patterned image on disk, addressed by a file URL as provider media is by its URL, so the app hashes its picture
+     * ([com.theoriacodex.app.di.ListingPictures]); solid images are too flat to hash.
+     */
+    protected fun patternImage(name: String): ImageRef {
+        val image = directory.resolve("$name.png")
+        val size = 320
+        val pixels = IntArray(size * size) { i ->
+            val x = i % size
+            val y = i / size
+            Color.rgb((x * 7 + y * 3) % 256, (x * y / 64) % 256, if ((x / 40 + y / 40) % 2 == 0) 40 else 220)
+        }
+        val bitmap = Bitmap.createBitmap(pixels, size, size, Bitmap.Config.ARGB_8888)
+        image.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        bitmap.recycle()
+        return ImageRef(Uri.fromFile(image).toString(), null, "image/png")
     }
 
     private fun openGraph() {

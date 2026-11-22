@@ -64,6 +64,11 @@ class UnifiedSearchOrchestrator(
      * Tests pass [kotlin.coroutines.EmptyCoroutineContext] to keep those calls on their own dispatcher.
      */
     private val providerContext: CoroutineContext = Dispatchers.Default,
+    /**
+     * Adds what the app derives from each source's page before it is merged with the others, such as every post's
+     * [Post.pictureHash], so copies are collapsed where pages meet. It must return the posts in their order.
+     */
+    private val annotateListing: suspend (List<Post>) -> List<Post> = { it },
 ) {
     suspend fun search(
         query: Query,
@@ -215,20 +220,39 @@ class UnifiedSearchOrchestrator(
         val sourceQuery = if (clientSideExclude) {
             sourceBaseQuery.copy(excludeTerms = emptyList())
         } else sourceBaseQuery
-        return withTimeoutOrNull(sourceTimeoutMs) {
+        val page = withTimeoutOrNull(sourceTimeoutMs) {
             val prepared = prepareQuery(source, sourceQuery)
             preparedQueries[source] = if (clientSideExclude) {
                 prepared.copy(excludeTerms = sourceBaseQuery.excludeTerms)
             } else prepared
-            val page = searchSource(adapter, prepared, pageToken).inDateRange(sourceBaseQuery.dateRange)
+            val page = fetchSource(adapter, prepared, pageToken).inDateRange(sourceBaseQuery.dateRange)
             if (clientSideExclude) {
                 val hydrated = listOf(page).withSearchMetadata(adapter).single()
                 hydrated.copy(items = applyClientSideExcludeFilter(hydrated.items, sourceBaseQuery.excludeTags))
             } else page
         } ?: throw SourceAdapterException(SourceFailureReason.NETWORK, "Source timed out")
+        // Outside the source's timeout: annotating has its own budget, and a page that arrived in time stays answered.
+        return page.copy(items = annotateListing(page.items))
     }
 
+    /**
+     * One page of [adapter]'s results for [query], annotated like every page the orchestrator serves. [timeoutMs] limits
+     * the source's answer only, not the annotating after it.
+     */
     suspend fun searchSource(
+        adapter: SourceAdapter,
+        query: Query,
+        pageToken: String?,
+        timeoutMs: Long? = null,
+    ): Page<Post> {
+        val page = if (timeoutMs == null) fetchSource(adapter, query, pageToken) else {
+            withTimeoutOrNull(timeoutMs) { fetchSource(adapter, query, pageToken) }
+                ?: throw SourceAdapterException(SourceFailureReason.NETWORK, "Source timed out")
+        }
+        return page.copy(items = annotateListing(page.items))
+    }
+
+    private suspend fun fetchSource(
         adapter: SourceAdapter,
         query: Query,
         pageToken: String?,

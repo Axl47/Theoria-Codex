@@ -26,10 +26,12 @@ import org.json.JSONObject;
                 RecentSearchEntity.class,
                 MediaDurationEntity.class,
                 ViewerTranslationCacheEntity.class,
+                ForYouVerdictEntity.class,
+                VisualSignatureEntity.class,
                 SeriesEntity.class,
                 SeriesEntryEntity.class
         },
-        version = 13,
+        version = 14,
         exportSchema = true
 )
 public abstract class TheoriaRoomDatabase extends RoomDatabase {
@@ -111,15 +113,23 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             database.execSQL("DELETE FROM `recent_watched` WHERE `section` = 'FYP'");
         }
     };
+    // Logs For You swipes per profile and keeps each stored post's perceptual hash.
+    public static final Migration MIGRATION_12_13 = new Migration(12, 13) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("CREATE TABLE IF NOT EXISTS `for_you_verdicts` (`profile_id` TEXT NOT NULL, `source` TEXT NOT NULL, `source_post_id` TEXT NOT NULL, `decision` TEXT NOT NULL, `decided_at_epoch_ms` INTEGER NOT NULL, `preview_url` TEXT, PRIMARY KEY(`profile_id`, `source`, `source_post_id`))");
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_for_you_verdicts_profile_id_decided_at_epoch_ms` ON `for_you_verdicts` (`profile_id`, `decided_at_epoch_ms`)");
+            database.execSQL("CREATE TABLE IF NOT EXISTS `post_visual_signatures` (`source` TEXT NOT NULL, `source_post_id` TEXT NOT NULL, `phash` INTEGER, `indexed_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`source`, `source_post_id`), FOREIGN KEY(`source`, `source_post_id`) REFERENCES `posts`(`source`, `source_post_id`) ON UPDATE NO ACTION ON DELETE CASCADE )");
+        }
+    };
     // Series from extensions get tables of their own. The spike that showed a series as a post stored those posts
     // under `custom_mihon_` source ids, which no source answers for any more: they are deleted from every table here.
     // Preferences are not touched.
-    public static final Migration MIGRATION_12_13 = new Migration(12, 13) {
+    public static final Migration MIGRATION_13_14 = new Migration(13, 14) {
         @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
             database.execSQL("CREATE TABLE IF NOT EXISTS `series` (`source` TEXT NOT NULL, `address` TEXT NOT NULL, `title` TEXT NOT NULL, `cover_url` TEXT, `author` TEXT, `genres` TEXT NOT NULL, `language` TEXT NOT NULL, `followed` INTEGER NOT NULL, `reading_mode` TEXT, `last_opened_entry` TEXT, `last_checked_at_epoch_ms` INTEGER, `description` TEXT, `status` TEXT, PRIMARY KEY(`source`, `address`))");
             database.execSQL("CREATE TABLE IF NOT EXISTS `series_entries` (`source` TEXT NOT NULL, `series_address` TEXT NOT NULL, `address` TEXT NOT NULL, `name` TEXT NOT NULL, `number` REAL, `translator_group` TEXT, `uploaded_at_epoch_ms` INTEGER, `source_order` INTEGER NOT NULL, `first_seen_at_epoch_ms` INTEGER NOT NULL, `read` INTEGER NOT NULL, `last_page` INTEGER NOT NULL, `page_count` INTEGER, PRIMARY KEY(`source`, `series_address`, `address`), FOREIGN KEY(`source`, `series_address`) REFERENCES `series`(`source`, `address`) ON UPDATE NO ACTION ON DELETE CASCADE )");
             // Rows that point at a post go before the post itself.
-            for (String table : new String[] {"codex_items", "liked_posts", "recent_watched", "media_durations", "codex_automatic_tags", "posts"}) {
+            for (String table : new String[] {"codex_items", "liked_posts", "recent_watched", "media_durations", "codex_automatic_tags", "post_visual_signatures", "posts"}) {
                 database.execSQL("DELETE FROM `" + table + "` WHERE " + SPIKE_SOURCE);
             }
             deleteSpikeSearches(database);
@@ -175,13 +185,16 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             MIGRATION_9_10,
             MIGRATION_10_11,
             MIGRATION_11_12,
-            MIGRATION_12_13
+            MIGRATION_12_13,
+            MIGRATION_13_14
     };
 
     public abstract CodexLikesDao codexLikesDao();
     public abstract RecentsDao recentsDao();
     public abstract MediaDurationDao mediaDurationDao();
     public abstract ViewerTranslationCacheDao viewerTranslationCacheDao();
+    public abstract ForYouVerdictDao forYouVerdictDao();
+    public abstract VisualSignatureDao visualSignatureDao();
     public abstract SeriesDao seriesDao();
 
     @NonNull

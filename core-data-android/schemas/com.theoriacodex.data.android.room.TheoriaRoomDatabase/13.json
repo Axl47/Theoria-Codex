@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 13,
-    "identityHash": "c7d9f36873aca0bcff6bf63d50a5dd2c",
+    "identityHash": "b9b7a076a25a57cefbdde07e155b31b0",
     "entities": [
       {
         "tableName": "codices",
@@ -575,9 +575,15 @@
         ]
       },
       {
-        "tableName": "series",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`source` TEXT NOT NULL, `address` TEXT NOT NULL, `title` TEXT NOT NULL, `cover_url` TEXT, `author` TEXT, `genres` TEXT NOT NULL, `language` TEXT NOT NULL, `followed` INTEGER NOT NULL, `reading_mode` TEXT, `last_opened_entry` TEXT, `last_checked_at_epoch_ms` INTEGER, `description` TEXT, `status` TEXT, PRIMARY KEY(`source`, `address`))",
+        "tableName": "for_you_verdicts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`profile_id` TEXT NOT NULL, `source` TEXT NOT NULL, `source_post_id` TEXT NOT NULL, `decision` TEXT NOT NULL, `decided_at_epoch_ms` INTEGER NOT NULL, `preview_url` TEXT, PRIMARY KEY(`profile_id`, `source`, `source_post_id`))",
         "fields": [
+          {
+            "fieldPath": "profileId",
+            "columnName": "profile_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
           {
             "fieldPath": "source",
             "columnName": "source",
@@ -585,82 +591,53 @@
             "notNull": true
           },
           {
-            "fieldPath": "address",
-            "columnName": "address",
+            "fieldPath": "sourcePostId",
+            "columnName": "source_post_id",
             "affinity": "TEXT",
             "notNull": true
           },
           {
-            "fieldPath": "title",
-            "columnName": "title",
+            "fieldPath": "decision",
+            "columnName": "decision",
             "affinity": "TEXT",
             "notNull": true
           },
           {
-            "fieldPath": "coverUrl",
-            "columnName": "cover_url",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "author",
-            "columnName": "author",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "genres",
-            "columnName": "genres",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "language",
-            "columnName": "language",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "followed",
-            "columnName": "followed",
+            "fieldPath": "decidedAtEpochMs",
+            "columnName": "decided_at_epoch_ms",
             "affinity": "INTEGER",
             "notNull": true
           },
           {
-            "fieldPath": "readingMode",
-            "columnName": "reading_mode",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "lastOpenedEntry",
-            "columnName": "last_opened_entry",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "lastCheckedAtEpochMs",
-            "columnName": "last_checked_at_epoch_ms",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "description",
-            "columnName": "description",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "status",
-            "columnName": "status",
+            "fieldPath": "previewUrl",
+            "columnName": "preview_url",
             "affinity": "TEXT"
           }
         ],
         "primaryKey": {
           "autoGenerate": false,
           "columnNames": [
+            "profile_id",
             "source",
-            "address"
+            "source_post_id"
           ]
-        }
+        },
+        "indices": [
+          {
+            "name": "index_for_you_verdicts_profile_id_decided_at_epoch_ms",
+            "unique": false,
+            "columnNames": [
+              "profile_id",
+              "decided_at_epoch_ms"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_for_you_verdicts_profile_id_decided_at_epoch_ms` ON `${TABLE_NAME}` (`profile_id`, `decided_at_epoch_ms`)"
+          }
+        ]
       },
       {
-        "tableName": "series_entries",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`source` TEXT NOT NULL, `series_address` TEXT NOT NULL, `address` TEXT NOT NULL, `name` TEXT NOT NULL, `number` REAL, `translator_group` TEXT, `uploaded_at_epoch_ms` INTEGER, `source_order` INTEGER NOT NULL, `first_seen_at_epoch_ms` INTEGER NOT NULL, `read` INTEGER NOT NULL, `last_page` INTEGER NOT NULL, `page_count` INTEGER, PRIMARY KEY(`source`, `series_address`, `address`), FOREIGN KEY(`source`, `series_address`) REFERENCES `series`(`source`, `address`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "tableName": "post_visual_signatures",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`source` TEXT NOT NULL, `source_post_id` TEXT NOT NULL, `phash` INTEGER, `indexed_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`source`, `source_post_id`), FOREIGN KEY(`source`, `source_post_id`) REFERENCES `posts`(`source`, `source_post_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "source",
@@ -669,88 +646,42 @@
             "notNull": true
           },
           {
-            "fieldPath": "seriesAddress",
-            "columnName": "series_address",
+            "fieldPath": "sourcePostId",
+            "columnName": "source_post_id",
             "affinity": "TEXT",
             "notNull": true
           },
           {
-            "fieldPath": "address",
-            "columnName": "address",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "name",
-            "columnName": "name",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "number",
-            "columnName": "number",
-            "affinity": "REAL"
-          },
-          {
-            "fieldPath": "translatorGroup",
-            "columnName": "translator_group",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "uploadedAtEpochMs",
-            "columnName": "uploaded_at_epoch_ms",
+            "fieldPath": "phash",
+            "columnName": "phash",
             "affinity": "INTEGER"
           },
           {
-            "fieldPath": "sourceOrder",
-            "columnName": "source_order",
+            "fieldPath": "indexedAtEpochMs",
+            "columnName": "indexed_at_epoch_ms",
             "affinity": "INTEGER",
             "notNull": true
-          },
-          {
-            "fieldPath": "firstSeenAtEpochMs",
-            "columnName": "first_seen_at_epoch_ms",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "read",
-            "columnName": "read",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "lastPage",
-            "columnName": "last_page",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "pageCount",
-            "columnName": "page_count",
-            "affinity": "INTEGER"
           }
         ],
         "primaryKey": {
           "autoGenerate": false,
           "columnNames": [
             "source",
-            "series_address",
-            "address"
+            "source_post_id"
           ]
         },
         "foreignKeys": [
           {
-            "table": "series",
+            "table": "posts",
             "onDelete": "CASCADE",
             "onUpdate": "NO ACTION",
             "columns": [
               "source",
-              "series_address"
+              "source_post_id"
             ],
             "referencedColumns": [
               "source",
-              "address"
+              "source_post_id"
             ]
           }
         ]
@@ -758,7 +689,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c7d9f36873aca0bcff6bf63d50a5dd2c')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'b9b7a076a25a57cefbdde07e155b31b0')"
     ]
   }
 }

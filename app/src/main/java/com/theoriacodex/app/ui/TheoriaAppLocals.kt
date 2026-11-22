@@ -14,8 +14,6 @@ import com.theoriacodex.app.codex.LocalQuickSave
 import com.theoriacodex.app.lift.LocalLiftUgoiraClient
 import com.theoriacodex.app.lift.rememberLiftSession
 import com.theoriacodex.app.recommend.LocalTagAffinityInputs
-import com.theoriacodex.app.recommend.TagAffinityInputs
-import com.theoriacodex.app.recommend.observeTagAffinityInputs
 import com.theoriacodex.app.related.LocalRelatedPostsSupport
 import com.theoriacodex.app.search.LocalPostWatchPresentation
 import com.theoriacodex.app.search.rememberPostWatchPresentation
@@ -30,11 +28,8 @@ import com.theoriacodex.app.ui.routes.browsingMetadataOwner
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
 import com.theoriacodex.app.viewer.ViewerReturnTransition
 import com.theoriacodex.domain.model.PostId
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 
 /** Every app-wide CompositionLocal the shell provides to its overlays and destinations. */
 @Composable
@@ -49,7 +44,7 @@ internal fun ShellCompositionLocals(shell: TheoriaShell, content: @Composable ()
         LocalPostWatchPresentation provides watchPresentation,
         LocalCodexSaveRelevanceLoader provides saveRelevanceLoader,
         LocalQuickSave provides rememberQuickSave(shell, saveRelevanceLoader),
-        LocalTagAffinityInputs provides rememberTagAffinityInputs(shell),
+        LocalTagAffinityInputs provides shell.features.tagAffinity.latest,
         LocalViewerReturnTransition provides viewerReturnTransition,
         LocalPostMenuActions provides rememberPostMenuActions(shell),
         LocalLiftController provides rememberLiftSession(),
@@ -69,14 +64,6 @@ internal fun ShellCompositionLocals(shell: TheoriaShell, content: @Composable ()
 private fun rememberCodexSaveRelevanceLoader(shell: TheoriaShell): CodexSaveRelevanceLoader = remember(shell) {
     val source = CodexCollectionSource(shell.data.codexRepository, shell.data.storageDirectory, shell.data.cacheRepository)
     CodexSaveRelevanceLoader(shell.data.codexRepository, shell.scope, observeLibrary = source::observeSavedLibrary)
-}
-
-/** The active profile's tag affinity inputs, kept from the first collector on for the app session. */
-@Composable
-private fun rememberTagAffinityInputs(shell: TheoriaShell): StateFlow<TagAffinityInputs> = remember(shell) {
-    with(shell.data) {
-        observeTagAffinityInputs(settingsRepository, likesRepository, codexRepository, savedSearches, statisticsRepository)
-    }.stateIn(shell.scope, SharingStarted.Lazily, TagAffinityInputs.Empty)
 }
 
 /** The app-wide in-a-Codex set behind [LocalCodexPostIds], read from the shared browsing metadata. */

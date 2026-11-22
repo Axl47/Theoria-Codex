@@ -33,7 +33,10 @@ interface CodexRepository {
     fun observeCodexItems(codexId: String): Flow<List<CodexItem>>
     /** Orders by save time, or by source then save time; any other [sort] comes back newest saved first. */
     fun observeCodexPosts(codexId: String, sort: CodexSortMode): Flow<List<Post>>
-    /** A unique saved-library snapshot for read models that do not need per-collection memberships. */
+    /**
+     * A unique saved-library snapshot for read models that do not need per-collection memberships. It may refresh only
+     * when membership changes, so a later edit to a saved post's stored data can wait for the next save or removal.
+     */
     fun observeLibraryPosts(codexIds: Set<String>): Flow<List<Post>> = if (codexIds.isEmpty()) flowOf(emptyList()) else
         combine(codexIds.sorted().map { observeCodexPosts(it, CodexSortMode.NEWEST_SAVED) }) { lists ->
             lists.flatMap { it }.distinctBy(Post::id)

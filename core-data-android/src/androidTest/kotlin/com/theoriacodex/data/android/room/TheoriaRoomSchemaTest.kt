@@ -203,6 +203,37 @@ class TheoriaRoomSchemaTest {
         database.close()
     }
 
+    @Test
+    fun migrationTwelveToThirteenAddsVerdictLogAndSignaturesThatFollowTheirPost() {
+        migrationHelper.createDatabase(TEST_DATABASE_NAME, 12).apply {
+            execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('PIXIV','1','{}')")
+            close()
+        }
+
+        val database = migrationHelper.runMigrationsAndValidate(
+            TEST_DATABASE_NAME,
+            13,
+            true,
+            TheoriaRoomDatabase.MIGRATION_12_13,
+        )
+        database.execSQL(
+            "INSERT INTO for_you_verdicts(profile_id,source,source_post_id,decision,decided_at_epoch_ms,preview_url) " +
+                "VALUES('default','PIXIV','2','SKIPPED',1,NULL)",
+        )
+        database.execSQL("INSERT INTO post_visual_signatures(source,source_post_id,phash,indexed_at_epoch_ms) VALUES('PIXIV','1',94,1)")
+        database.execSQL("PRAGMA foreign_keys=ON")
+        database.execSQL("DELETE FROM posts WHERE source='PIXIV' AND source_post_id='1'")
+        database.query("SELECT COUNT(*) FROM post_visual_signatures").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0, cursor.getInt(0))
+        }
+        database.query("SELECT decision FROM for_you_verdicts").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("SKIPPED", cursor.getString(0))
+        }
+        database.close()
+    }
+
     companion object {
         private const val TEST_DATABASE_NAME = "theoria-room-schema-test"
     }

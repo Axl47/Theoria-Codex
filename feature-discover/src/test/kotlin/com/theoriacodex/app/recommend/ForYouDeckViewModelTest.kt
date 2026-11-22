@@ -6,7 +6,11 @@ import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.triage.TriageChoice
 import com.theoriacodex.app.ui.navigation.TrailRequest
+import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.data.repository.ForYouVerdictKind
+import com.theoriacodex.data.repository.InMemoryForYouVerdictRepository
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
@@ -38,6 +42,7 @@ class ForYouDeckViewModelTest {
     private val trails = FakeTrails()
     private val actions = FakeDeckActions()
     private val quickSave = FakeDeckQuickSave()
+    private val verdicts = InMemoryForYouVerdictRepository()
 
     @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
 
@@ -49,8 +54,8 @@ class ForYouDeckViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun owner(environment: ForYouEnvironment = deckEnvironment()) =
-        ForYouDeckViewModel(engine, deckWiring(writeScope, trails, actions, quickSave)).also { it.synchronize(environment) }
+    private fun owner(environment: ForYouEnvironment = deckEnvironment(), copiesOf: (Post) -> Set<PostId> = { setOf(it.id) }) =
+        ForYouDeckViewModel(engine, deckWiring(writeScope, trails, actions, quickSave, verdicts, copiesOf)).also { it.synchronize(environment) }
 
     private val ForYouDeckViewModel.top get() = levels.value.last()
     private val ForYouDeckViewModel.posts get() = top.feed.value.posts
@@ -156,6 +161,31 @@ class ForYouDeckViewModelTest {
         owner.decide(TriageChoice.Like)
         owner.decide(TriageChoice.Like)
         assertEquals(listOf("a", "b", "a", "b"), owner.posts.lanes().subList(8, 12))
+    }
+
+    @Test fun `every swipe is logged under the profile with its preview, and undo removes it`() = runTest {
+        val owner = owner()
+        val liked = owner.decide(TriageChoice.Like)
+        val skipped = owner.decide(TriageChoice.Skip)
+        val undone = owner.decide(TriageChoice.Skip)
+        owner.top.deck.undo()
+
+        val profile = AppSettings().activeProfileId
+        assertEquals(
+            listOf(skipped.id to ForYouVerdictKind.SKIPPED, liked.id to ForYouVerdictKind.LIKED),
+            verdicts.verdicts(profile).map { it.postId to it.kind },
+        )
+        assertEquals(liked.preview.url, verdicts.verdicts(profile).last().previewUrl)
+        assertFalse(verdicts.verdicts(profile).any { it.postId == undone.id })
+    }
+
+    @Test fun `a copy of a kept post on another site is not dealt, nor a second copy of a dealt one`() {
+        val kept = testPost(SourceKey.PIXIV, "kept")
+        // b-0-0 is a repost of the kept post; c-0-0 is the same picture as a-0-0.
+        val copies = mapOf("b-0-0" to setOf(kept.id), "c-0-0" to setOf(testPost(DECK_SOURCE, "a-0-0").id))
+        val owner = owner(deckEnvironment(kept = setOf(kept.id))) { post -> copies[post.id.sourcePostId].orEmpty() + post.id }
+
+        assertEquals(listOf("a-0-0", "b-0-1", "c-0-1", "a-0-1"), owner.posts.map { it.id.sourcePostId })
     }
 
     @Test fun `undoing a like takes back the posts it asked for`() {

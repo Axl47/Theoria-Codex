@@ -23,10 +23,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
@@ -52,7 +54,8 @@ internal data class BrowsingMetadata(
 
 /**
  * One activity-owned read model is shared by every destination. Badges and filters read IDs only. Stored posts are
- * read beside that, once each, to teach [FileMirrorIndex] their file hashes, so mirrors appear shortly after the IDs.
+ * read beside that, once each, to teach [FileMirrorIndex] their file and picture hashes, so mirrors appear shortly after
+ * the IDs.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 internal class BrowsingMetadataViewModel(
@@ -64,6 +67,7 @@ internal class BrowsingMetadataViewModel(
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val mirrors: FileMirrorIndex = FileMirrorIndex(),
     galleryReadingModes: GalleryReadingModeRepository = InMemoryGalleryReadingModeRepository(),
+    private val pictureHashes: Flow<Map<PostId, Long>> = emptyFlow(),
 ) : ViewModel() {
     private val scope = scopeOverride ?: viewModelScope
     private val started = SharingStarted.WhileSubscribed(5_000L)
@@ -79,10 +83,12 @@ internal class BrowsingMetadataViewModel(
 
     /**
      * [FileMirrorIndex.links], while teaching the index the stored posts for as long as metadata is observed: the watch
-     * history and the Library once, then only the posts stored since. No decoded Library stays in memory for this.
+     * history and the Library once, then only the posts stored since, and the Library's stored picture hashes. No
+     * decoded Library stays in memory for this.
      */
     private val mirrorLinks = channelFlow {
         launch { mirrors.learn(recentsRepository.observeWatchedPosts().first().map(RecentPostEntry::post)) }
+        launch { pictureHashes.collect(mirrors::learnPictures) }
         launch {
             val taught = HashSet<PostId>()
             combine(profileLikes, saved) { liked, savedIds -> liked.ids + savedIds.all }.collect { stored ->

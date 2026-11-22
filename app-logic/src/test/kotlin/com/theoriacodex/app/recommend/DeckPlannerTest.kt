@@ -61,6 +61,17 @@ class DeckPlannerTest {
         assertEquals(listOf("a1", "b1"), first.cards.map { it.post.id.sourcePostId } + nextBatch(rest, first.steering, setOf(id("a1")), 1).cards.map { it.post.id.sourcePostId })
     }
 
+    @Test fun `one picture is dealt once, and not at all when a copy was seen`() {
+        // a1 and b1 are one picture on two sites; b2 is a copy of the kept k.
+        val copies = mapOf("a1" to setOf("a1", "b1"), "b1" to setOf("a1", "b1"), "b2" to setOf("b2", "k"))
+        val batch = nextBatch(
+            listOf(lane(a, "a1", "a2"), lane(b, "b1", "b2", "b3")), DeckSteering(), setOf(id("k")), size = 4,
+        ) { post -> copies[post.id.sourcePostId].orEmpty().mapTo(mutableSetOf(), ::id) + post.id }
+
+        assertEquals(listOf("a1", "b3", "a2"), batch.cards.map { it.post.id.sourcePostId })
+        assertEquals(mapOf("a" to 2, "b" to 3), batch.taken)
+    }
+
     private fun lane(origin: DeckOrigin.Lane, vararg ids: String) = DeckLane(origin, ids.map(::post))
     private fun id(value: String) = PostId(SourceKey.PIXIV, value)
     private fun post(value: String) = Post(
