@@ -24,7 +24,7 @@ import com.theoriacodex.app.media.codexOfflineOwner
 import com.theoriacodex.app.codex.LikesCodexSyncService
 import com.theoriacodex.app.codex.transfer.CodexTransferService
 import com.theoriacodex.app.recommend.ForYouCoordinator
-import com.theoriacodex.app.recommend.TagAffinityInputs
+import com.theoriacodex.app.recommend.SharedTagAffinity
 import com.theoriacodex.app.recommend.shareTagAffinityInputs
 import com.theoriacodex.app.comments.CommentsLoader
 import com.theoriacodex.app.comments.CommentsLoading
@@ -118,7 +118,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -180,7 +179,7 @@ data class FeatureDependencies(
     val search: SearchCoordinator,
     val forYou: ForYouCoordinator,
     /** The active profile's tag affinity, built once for the app session; see [shareTagAffinityInputs]. */
-    val tagAffinity: SharedFlow<TagAffinityInputs>,
+    val tagAffinity: SharedTagAffinity,
     val relatedPosts: RelatedPostsLoader,
     val comments: CommentsLoading,
     val creatorProfile: CreatorProfileCoordinator,
@@ -488,7 +487,7 @@ internal class DefaultTheoriaAppContainer(
             registry = sourceRegistry,
             likesRepository = likesRepository,
             statisticsRepository = statisticsRepository,
-            tagAffinity = tagAffinity,
+            tagAffinity = tagAffinity::forProfile,
             tagSuggestionStore = tagSuggestionStore,
             postResolutions = postResolutions,
             fileMirrors = data.fileMirrors,

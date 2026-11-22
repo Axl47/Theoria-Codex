@@ -2,14 +2,12 @@ package com.theoriacodex.app.recommend
 
 import com.theoriacodex.app.search.NoOpTagSuggestionStore
 import com.theoriacodex.app.search.TagSuggestionStore
-import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.InMemoryLikesRepository
 import com.theoriacodex.data.repository.InMemoryStatisticsRepository
 import com.theoriacodex.data.repository.LikesRepository
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.flowOf
 
 /** A coordinator that builds lanes inline and keeps interests in weight order. */
 internal fun testForYouCoordinator(
@@ -22,7 +20,7 @@ internal fun testForYouCoordinator(
     registry = registry,
     likesRepository = likesRepository,
     statisticsRepository = statisticsRepository,
-    tagAffinity = flowOf(tagAffinity.copy(profileId = AppSettings().activeProfileId)),
+    tagAffinity = { tagAffinity },
     tagSuggestionStore = tagSuggestionStore,
     computationDispatcher = Dispatchers.Unconfined,
     random = { null },

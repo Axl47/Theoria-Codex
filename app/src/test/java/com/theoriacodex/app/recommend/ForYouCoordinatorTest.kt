@@ -6,7 +6,6 @@ import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.InMemoryLikesRepository
-import com.theoriacodex.data.repository.InMemoryStatisticsRepository
 import com.theoriacodex.data.repository.LikesRepository
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.SourceAdapter
@@ -22,9 +21,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import kotlin.coroutines.EmptyCoroutineContext
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -120,16 +117,6 @@ class ForYouCoordinatorTest {
 
         assertEquals(listOf(listOf("cloud")), service.lanes(request(service)).map { it.tags })
         assertEquals(0, adapter.trendingRequests)
-    }
-
-    @Test fun `right after a profile switch the lanes wait for the new profile's inputs`() = runTest {
-        fun keeps(tag: String, profileId: String) = TagAffinityInputs(interest = mapOf(tag to 3.0),
-            keptByTag = mapOf(SourceKey.GELBOORU to mapOf(tag to 3)), keptBySource = mapOf(SourceKey.GELBOORU to 3), profileId = profileId)
-        val service = ForYouCoordinator(registryOf(FakeAdapter(SourceKey.GELBOORU)), InMemoryLikesRepository(),
-            InMemoryStatisticsRepository(), flowOf(keeps("sky", "profile-before"), keeps("cloud", PROFILE)),
-            computationDispatcher = Dispatchers.Unconfined, random = { null })
-
-        assertEquals(listOf(listOf("cloud")), service.lanes(request(service)).map { it.tags })
     }
 
     @Test fun `a tag the source has no posts for gives up its slot, not its partner's`() = runTest {

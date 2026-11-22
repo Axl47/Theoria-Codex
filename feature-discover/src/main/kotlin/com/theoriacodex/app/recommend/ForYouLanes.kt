@@ -19,7 +19,6 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.recommendation.CrossSourceTraining
 import kotlin.random.Random
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -34,7 +33,7 @@ internal class ForYouLanesLoader(
     private val registry: SourceAdapterRegistry,
     private val store: TagSuggestionStore,
     private val likes: LikesRepository,
-    private val tagAffinity: Flow<TagAffinityInputs>,
+    private val tagAffinity: suspend (profileId: String) -> TagAffinityInputs,
     private val computation: CoroutineDispatcher,
     private val random: () -> Random?,
 ) {
@@ -57,8 +56,7 @@ internal class ForYouLanesLoader(
         liked: List<LikedPost>,
         blocked: List<ForYouBlacklistEntry>,
     ): List<LaneSeed> {
-        // Right after a profile switch the shared inputs can still be the last profile's.
-        val affinity = tagAffinity.first { it.profileId == profile }
+        val affinity = tagAffinity(profile)
         if (liked.isEmpty() && affinity.keptBySource.isEmpty() && affinity.explicit.isEmpty()) return emptyList()
         val training = crossSourceTraining(liked, store)
         return sources.mapConcurrent { source ->

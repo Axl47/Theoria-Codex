@@ -14,16 +14,20 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.shareIn
+import kotlinx.coroutines.flow.stateIn
 import kotlin.math.ln
 
 /**
@@ -33,8 +37,7 @@ import kotlin.math.ln
  *   as a tag, searches it in a saved search, or searched it at least twice;
  * - [explicit]: the tags with that explicit weight;
  * - [watchedByTag] and [watchedBySource]: how many watched posts of each source carried each tag, out of how many;
- * - [keptByTag] and [keptBySource]: the same for the posts the profile kept (Liked or put in a Codex, each once);
- * - [profileId]: the profile they describe, set by [shareTagAffinityInputs], so a reader can wait out a profile switch.
+ * - [keptByTag] and [keptBySource]: the same for the posts the profile kept (Liked or put in a Codex, each once).
  */
 data class TagAffinityInputs(
     val likedCounts: Map<String, Int> = emptyMap(),
@@ -45,7 +48,6 @@ data class TagAffinityInputs(
     val watchedBySource: Map<SourceKey, Long> = emptyMap(),
     val keptByTag: Map<SourceKey, Map<String, Int>> = emptyMap(),
     val keptBySource: Map<SourceKey, Int> = emptyMap(),
-    val profileId: String? = null,
 ) {
     /** The share of [source]'s watched posts that carried [token], or null before there are enough to say. */
     fun watchedShare(source: SourceKey, token: String): Double? {
@@ -167,9 +169,20 @@ fun TagAffinityInputs.respellChosen(spell: (String) -> String?): TagAffinityInpu
 }
 
 /**
- * The active profile's [TagAffinityInputs], following profile switches; a read failure gives that profile no inputs. Built once per
- * app session in [scope], from the first collector on, and shared: For You's lanes and every Trail and card read it.
- * A new subscriber gets the latest inputs, or waits for the first.
+ * The active profile's [TagAffinityInputs] for the app session, built once by [shareTagAffinityInputs]: For You's lanes
+ * ask [forProfile]; Trails and cards read [latest].
+ */
+class SharedTagAffinity internal constructor(private val byProfile: SharedFlow<Pair<String, TagAffinityInputs>>, scope: CoroutineScope) {
+    /** The newest inputs, empty until the first are built; for a moment after a profile switch, the last profile's. */
+    val latest: StateFlow<TagAffinityInputs> = byProfile.map { it.second }.stateIn(scope, SharingStarted.Lazily, TagAffinityInputs.Empty)
+
+    /** [profileId]'s inputs, waiting out a profile switch that has not reached them yet. */
+    suspend fun forProfile(profileId: String): TagAffinityInputs = byProfile.first { it.first == profileId }.second
+}
+
+/**
+ * Builds [SharedTagAffinity] in [scope], from its first reader on, following profile switches. A failed read gives the
+ * profile empty inputs and is retried with backoff.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 fun shareTagAffinityInputs(
@@ -179,13 +192,13 @@ fun shareTagAffinityInputs(
     codex: CodexRepository,
     savedSearches: SavedSearchRepository,
     statistics: StatisticsRepository,
-): SharedFlow<TagAffinityInputs> {
+): SharedTagAffinity {
     // Only the counters affinity reads, so a write of usage time or any other counter rebuilds nothing.
     val watched = statistics.observeStatistics()
         .map { LifetimeStatistics(watchedBySource = it.watchedBySource, watchedByTag = it.watchedByTag, searchesByTag = it.searchesByTag) }
         .distinctUntilChanged()
     // Everything kept is read under one profile, so a switch never pairs one profile's saved tags with another's Likes.
-    return settings.observeSettings().map { it.activeProfileId }.distinctUntilChanged().flatMapLatest { profileId ->
+    val byProfile = settings.observeSettings().map { it.activeProfileId }.distinctUntilChanged().flatMapLatest { profileId ->
         val savedTags = settings.observeSettings()
             .map { it.favoriteTagsByProfile[profileId].orEmpty().flatMap { entry -> entry.tags } }.distinctUntilChanged()
         // The profile's own Codices; its Likes collection is left out, since Likes already count once.
@@ -198,10 +211,24 @@ fun shareTagAffinityInputs(
                 tags, liked, posts, searches ->
             keptTagEvidence(liked, posts, tags, searches)
         }.distinctUntilChanged()
-        combine(kept, watched) { evidence, statistics -> evidence.withStatistics(statistics).copy(profileId = profileId) }
-            .catch { emit(TagAffinityInputs(profileId = profileId)) }
-    }.distinctUntilChanged().flowOn(Dispatchers.Default).shareIn(scope, SharingStarted.Lazily, replay = 1)
+        combine(kept, watched) { evidence, statistics -> profileId to evidence.withStatistics(statistics) }
+            .retryWhen { _, attempt ->
+                emit(profileId to TagAffinityInputs.Empty)
+                delay(retryDelayMs(attempt))
+                true
+            }
+    }.retryWhen { _, attempt ->
+        delay(retryDelayMs(attempt))
+        true
+    }
+    return SharedTagAffinity(byProfile.distinctUntilChanged().flowOn(Dispatchers.Default).shareIn(scope, SharingStarted.Lazily, replay = 1), scope)
 }
+
+/** 1 s after the first failure, doubling to about a minute. */
+private fun retryDelayMs(attempt: Long): Long = RETRY_BASE_MS shl attempt.coerceAtMost(RETRY_MAX_DOUBLINGS).toInt()
+
+private const val RETRY_BASE_MS = 1_000L
+private const val RETRY_MAX_DOUBLINGS = 6L
 
 /**
  * [post]'s tags, most characteristic of the profile first: Trails take the first informative ones as chips. Tags on at
