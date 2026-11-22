@@ -1,4 +1,7 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <!-- To find the extensions Mihon installed. They are ordinary packages that share only a declared feature, which a
+         <queries> element cannot match; Mihon holds the same permission for the same reason. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission" />
     <queries><package android:name="com.theoriacodex" /></queries>
     <application android:networkSecurityConfig="@xml/debug_network_security_config">
         <activity android:name="com.theoriacodex.app.developercopy.DeveloperCopyActivity"

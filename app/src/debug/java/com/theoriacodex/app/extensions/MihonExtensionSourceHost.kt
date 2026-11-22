@@ -4,74 +4,67 @@ import android.app.Application
 import android.util.Log
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.di.ExtensionSourceHost
-import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.ExtensionChoiceStore
+import com.theoriacodex.domain.series.ExtensionChoices
+import com.theoriacodex.domain.series.SeriesExtensions
 import com.theoriacodex.domain.series.SeriesSource
 import com.theoriacodex.mihonhost.ExtensionImages
 import com.theoriacodex.mihonhost.ExtensionLoader
+import com.theoriacodex.mihonhost.ExtensionPackages
+import com.theoriacodex.mihonhost.ExtensionRegistry
 import com.theoriacodex.mihonhost.MihonHost
-import com.theoriacodex.mihonhost.MihonSeriesSource
-import java.io.File
+import com.theoriacodex.mihonhost.SourceSettings
+import eu.kanade.tachiyomi.source.sourcePreferences
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 
 /**
- * Debug builds only: turns Mihon extension APKs into series sources. There is no install screen; push an APK with
- * `adb push <apk> /sdcard/Android/data/com.theoriacodex.debug/files/mihon-extensions/` and restart the app.
- * The APK's code then runs inside the app, so push only extensions you trust.
+ * Debug builds only: turns Mihon extensions into series sources. It finds the extensions Mihon installed as packages,
+ * and APK files pushed for tests with
+ * `adb push <apk> /sdcard/Android/data/com.theoriacodex.debug/files/mihon-extensions/`.
+ * None of them runs until the user turns it on in the Extensions page; [ExtensionRegistry] holds that rule.
  */
 internal class MihonExtensionSourceHost : ExtensionSourceHost {
-    private lateinit var application: Application
+    private lateinit var registry: ExtensionRegistry
 
-    /** Loaded once, by whichever comes first: the Series tab or an extension image request. Later callers wait for it. */
-    private val loaded: List<SeriesSource> by lazy(::load)
-    private val images = ExtensionImages { loaded }
+    /** The settings store, which opens after the HTTP clients that already hold [mediaInterceptor]. */
+    private val choices = CompletableDeferred<ExtensionChoiceStore>()
+
+    // Runs on an HTTP client's thread, for an image of a source that is not on: loads the extensions if nothing has yet.
+    private val images = ExtensionImages { runBlocking { registry.sources() } }
 
     override val mediaInterceptor: Interceptor get() = images
+    override val extensions: SeriesExtensions get() = registry
 
     override fun attach(application: Application) {
-        this.application = application
+        val packages = ExtensionPackages(application) { application.getExternalFilesDir(DIRECTORY) }
+        val loader = ExtensionLoader(application, packages)
+        // What extensions ask their host for is set up when the first one loads, not at startup.
+        val hostInstalled = lazy { MihonHost.install(application, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE) }
+        registry = ExtensionRegistry(
+            packages = packages::list,
+            load = { extension ->
+                hostInstalled.value
+                loader.load(extension)
+            },
+            choices = object : ExtensionChoiceStore {
+                override suspend fun choices(): ExtensionChoices = choices.await().choices()
+
+                override suspend fun update(transform: (ExtensionChoices) -> ExtensionChoices) = choices.await().update(transform)
+            },
+            images = images,
+            settings = { source -> SourceSettings(application, source, source.sourcePreferences()) },
+            deviceLanguages = { application.resources.configuration.locales.toLanguageTags().split(',') },
+            log = { Log.i(TAG, it) },
+        )
     }
 
-    override fun sources(): List<SeriesSource> = loaded
-
-    /** Never throws: an extension that fails is logged and left out. */
-    private fun load(): List<SeriesSource> = try {
-        val apks = application.getExternalFilesDir(DIRECTORY)?.listFiles { file -> file.extension == "apk" }.orEmpty()
-        if (apks.isNotEmpty()) MihonHost.install(application, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
-        val loader = ExtensionLoader(application)
-        val keys = HashSet<SourceKey>()
-        apks.sortedBy { it.name }.mapNotNull { apk -> source(loader, apk, keys) }
-    } catch (@Suppress("TooGenericExceptionCaught") error: Exception) {
-        Log.w(TAG, "No extensions loaded", error)
-        emptyList()
+    override fun bind(choices: ExtensionChoiceStore) {
+        this.choices.complete(choices)
     }
 
-    /**
-     * An extension can offer one source per language; one is enough here: English, else the first. Reading a source's
-     * name or id already runs its code, which can fail like any other call into it.
-     */
-    private fun source(loader: ExtensionLoader, apk: File, keys: MutableSet<SourceKey>): SeriesSource? = try {
-        val extension = loader.load(apk)
-        Log.i(TAG, "Loaded ${extension.name} ${extension.versionName}: ${extension.sources.size} sources, signer ${extension.signatureSha256}")
-        val source = extension.sources.firstOrNull { it.lang == "en" } ?: extension.sources.first()
-        val name = source.name
-        if (keys.add(MihonSeriesSource.sourceKey(source))) {
-            MihonSeriesSource(source, images) { Log.i(TAG, it) }
-        } else {
-            // The same extension under a second file name. Only the first one's source may answer image requests.
-            Log.w(TAG, "Skipped ${apk.name}: $name is already loaded")
-            null
-        }
-    } catch (@Suppress("TooGenericExceptionCaught") error: Exception) {
-        skipped(apk, error)
-    } catch (error: LinkageError) {
-        // The extension needs a part of Mihon's host API this module lacks.
-        skipped(apk, error)
-    }
-
-    private fun skipped(apk: File, error: Throwable): SeriesSource? {
-        Log.w(TAG, "Skipped ${apk.name}: ${error.message}", error)
-        return null
-    }
+    override suspend fun sources(): List<SeriesSource> = registry.sources()
 
     private companion object {
         const val TAG = "MihonHost"

@@ -5,6 +5,7 @@ import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.series.ExtensionChoices
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
@@ -108,6 +109,16 @@ class ProfileBackupServiceTest {
         assertNull(restored.library.posts.single().media.single().localPath)
         assertFalse(restored.settings.viewer.automaticTextTranslationEnabled)
         assertEquals(ScenarioPreset.NORMAL, restored.settings.scenarioPreset)
+    }
+
+    @Test fun `a backup carries no extension trust`() {
+        val backup = backup()
+        val trusting = backup.copy(settings = backup.settings.copy(extensions = ExtensionChoices(setOf("signer-key"), mapOf("extension.a" to setOf("en")))))
+
+        val bytes = codec.encode(trusting)
+
+        assertFalse(bytes.toString(Charsets.UTF_8).contains("signer-key"))
+        assertEquals(ExtensionChoices(), codec.decode(bytes).settings.extensions)
     }
 
     @Test fun `restore merges into matching profiles and preserves current preferences and content`() = runTest {

@@ -44,6 +44,8 @@ class DataStoreFormatTest {
                 "profile-main" to listOf(FavoriteTagEntryRecord("GELBOORU", "cat_ears", listOf("cat_ears", "fox_ears"), "Ears")),
             ),
             providerHealth = listOf(ProviderHealthSnapshotRecord("PIXIV", "DEGRADED", 1L, 2L, "timeout", "slow")),
+            trustedExtensionSigners = listOf("ab12"),
+            extensionLanguages = mapOf("extension.a" to listOf("en", "es")),
         )
         val full = SettingsDataStoreFile(settings = settings)
         assertStoredFormat(golden("settings-full.json") to full)

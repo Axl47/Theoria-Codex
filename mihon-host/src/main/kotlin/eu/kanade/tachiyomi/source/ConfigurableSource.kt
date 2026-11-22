@@ -5,14 +5,17 @@ package eu.kanade.tachiyomi.source
 import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.preference.PreferenceScreen
 import uy.kohesive.injekt.Injekt
 
 /**
- * A source with user settings. Mihon's `setupPreferenceScreen` is absent: this host shows no settings screen, so
- * sources run on their default preferences.
+ * A source with user settings. It describes them by adding to [setupPreferenceScreen]'s screen, which here is a
+ * holder the host reads rather than a drawn screen, and keeps their values in a preferences file named after it.
  */
 interface ConfigurableSource : Source {
     fun getSourcePreferences(): SharedPreferences = sourcePreferences(preferenceKey())
+
+    fun setupPreferenceScreen(screen: PreferenceScreen)
 }
 
 fun ConfigurableSource.preferenceKey(): String = "source_$id"

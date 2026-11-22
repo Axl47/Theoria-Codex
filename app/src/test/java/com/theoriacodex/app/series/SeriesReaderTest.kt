@@ -21,6 +21,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.theoriacodex.domain.series.ExtensionSetting
+import com.theoriacodex.domain.series.InstalledExtension
+import com.theoriacodex.domain.series.SeriesExtensions
+import kotlinx.coroutines.flow.MutableStateFlow
 
 class SeriesReaderTest {
     private val source = SourceKey.parseOrThrow("custom_mihon_2499283573021220255")
@@ -43,7 +47,7 @@ class SeriesReaderTest {
             StoredSeriesEntry(SeriesEntry("/c2", "Ch. 2"), sourceOrder = 1, firstSeenAtEpochMs = 0, lastPage = 7, pageCount = 18),
             StoredSeriesEntry(SeriesEntry("/c1", "Ch. 1"), sourceOrder = 2, firstSeenAtEpochMs = 0, read = true, lastPage = 20, pageCount = 20),
         )
-        val reader = SeriesReader(SeriesDependencies(StoredOnly(StoredSeries(Series(id, "Title")), entries)) { emptyList() })
+        val reader = SeriesReader(SeriesDependencies(StoredOnly(StoredSeries(Series(id, "Title")), entries), sources = { emptyList() }, extensions = NoExtensions))
 
         val session = checkNotNull(reader.session(id, "/c2"))
 
@@ -70,4 +74,17 @@ private class StoredOnly(private val stored: StoredSeries, private val entries: 
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) = Unit
+}
+
+/** The reader never asks about extensions. */
+private object NoExtensions : SeriesExtensions {
+    override val revision = MutableStateFlow(0)
+
+    override suspend fun installed(): List<InstalledExtension> = emptyList()
+
+    override suspend fun setOn(id: String, on: Boolean) = Unit
+
+    override suspend fun setLanguage(id: String, language: String, on: Boolean) = Unit
+
+    override suspend fun change(id: String, sourceId: String, setting: ExtensionSetting) = Unit
 }

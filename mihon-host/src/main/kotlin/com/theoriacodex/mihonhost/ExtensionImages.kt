@@ -1,5 +1,6 @@
 package com.theoriacodex.mihonhost
 
+import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.online.HttpSource
 import java.io.IOException
@@ -51,6 +52,13 @@ class ExtensionImages(private val ensureLoaded: () -> Unit = {}) : Interceptor {
 
     internal fun attach(source: HttpSource) {
         sources[source.id] = source
+    }
+
+    /** Makes [active] the only sources that fetch: one whose extension or language was turned off stops answering. */
+    internal fun only(active: List<Source>) {
+        val http = active.filterIsInstance<HttpSource>()
+        sources.keys.retainAll(http.mapTo(HashSet()) { it.id })
+        http.forEach(::attach)
     }
 
     /** The source once the extensions have loaded; null when its extension is not on the device. */
