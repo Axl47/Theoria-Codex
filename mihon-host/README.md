@@ -21,6 +21,9 @@ Three costs decide whether to build it, and none of them is solved here:
 - **Trust.** Extension code runs inside the app with its files, cookies and saved keys, and nothing checks who
   signed it. A real feature needs a trusted-signer list at least.
 
+Running extensions in a separate companion app, reached over IPC, would answer trust and release size structurally
+and give settings screens a home. It was not built or costed here and is worth costing before building in-process.
+
 The product work is on top: a series is a single post here, with no chapter list, progress or library.
 
 ## How it works
@@ -41,7 +44,9 @@ compiled against those names, so the host must provide classes with exactly thos
 ## Try it
 
 Use an emulator. The extension's code runs inside the app with the app's permissions, so load only extensions you
-trust, and follow `AGENTS.md` ("Personal-device Safety") before installing anything.
+trust, and follow `AGENTS.md` ("Personal-device Safety") before installing anything. Posts liked, saved or kept
+offline from an extension source stay in the app's data under the spike's ids (`custom_mihon_<id>`, image addresses
+ending in `#mihon=`), which a real feature would not keep; avoid that on an install whose data matters.
 
 Without the app, on any extension APK:
 
