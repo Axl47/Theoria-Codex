@@ -7,14 +7,13 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.Until
+import com.theoriacodex.app.di.DeviceExtensionChoices
 import com.theoriacodex.app.ui.TopLevelDestination
-import com.theoriacodex.domain.series.ExtensionChoices
 import com.theoriacodex.domain.series.ExtensionLanguage
 import com.theoriacodex.domain.series.ExtensionSetting
 import com.theoriacodex.domain.series.InstalledExtension
 import com.theoriacodex.mihonhost.MihonHost
 import java.util.Locale
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -51,7 +50,7 @@ class ExtensionsLiveTest {
     @Test
     fun anInstalledExtensionRunsOnlyOnceTurnedOn() {
         // Start from nothing turned on, before the host is asked anything.
-        runBlocking { settings.updateSettings { it.copy(extensions = ExtensionChoices()) } }
+        runBlocking { extensions.installed().filter { it.on }.forEach { extensions.setOn(it.id, checkNotNull(it.signer), false) } }
         val off = installedPackage()
         live.report("installed", "${off.name} ${off.versionName}, signer ${off.signer}, on=${off.on}, languages known=${off.languages.size}")
         assertFalse("An extension is off until the user turns it on", off.on)
@@ -109,9 +108,9 @@ class ExtensionsLiveTest {
         assertEquals("The changed setting kept its value", expected, stored.on)
         // The value is in the source's own preferences file, which the host names apart from the app's files.
         val sourceId = settingsOf(on).single().sourceId.substringAfterLast('_')
-        val file = live.context.getSharedPreferences("${MihonHost.PREFERENCES_PREFIX}source_$sourceId", Context.MODE_PRIVATE)
-        assertEquals("The source's preferences file holds the value", expected, file.all[key])
-        live.report("restart", "\"${stored.title}\" is still $expected, kept in ${MihonHost.PREFERENCES_PREFIX}source_$sourceId")
+        val file = MihonHost.preferencesFile(live.context, "source_$sourceId")
+        assertTrue("The source's preferences file holds the value", file.readText().contains("\"$key\":{\"b\":$expected}"))
+        live.report("restart", "\"${stored.title}\" is still $expected, kept in ${file.name} outside Android's backup")
 
         live.openSeriesTab()
         live.tap("the Extensions button", By.desc("Extensions"))
@@ -156,7 +155,7 @@ class ExtensionsLiveTest {
 
     @Test
     fun aCopySignedWithAnotherKeyIsOff() {
-        val trusted = runBlocking { settings.observeSettings().first() }.extensions.trusted.values
+        val trusted = runBlocking { DeviceExtensionChoices.on(live.context, settings).choices() }.trusted.values
         assertTrue("A signer was turned on before the package was replaced", trusted.isNotEmpty())
         val copy = installedPackage()
         live.report("copy", "${copy.name} ${copy.versionName}, signer ${copy.signer}, on=${copy.on}; turned on earlier: $trusted")

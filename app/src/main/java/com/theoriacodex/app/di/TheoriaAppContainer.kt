@@ -549,8 +549,12 @@ internal class DefaultTheoriaAppContainer(
     )
 
     override val series: SeriesDependencies? = extensionHost?.let { host ->
-        host.bind(SettingsExtensionChoices(settingsRepository))
-        SeriesDependencies(RoomSeriesRepository(contentDatabase), host::sources, host.extensions, host::anyOnDevice)
+        val choices = DeviceExtensionChoices.on(appContext, settingsRepository)
+        host.bind(choices)
+        SeriesDependencies(
+            RoomSeriesRepository(contentDatabase), host::sources, host.extensions, host::anyOnDevice,
+            extensionSeen = choices.extensionSeen, rememberExtensionSeen = choices::rememberExtensionSeen,
+        )
     }
 
     /** Keeps the new-chapter check scheduled; started by [awaitDurableStores], once. */

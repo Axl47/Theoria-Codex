@@ -8,6 +8,8 @@ import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.interceptor.CloudflareInterceptor
 import eu.kanade.tachiyomi.network.interceptor.UncaughtExceptionInterceptor
 import eu.kanade.tachiyomi.network.interceptor.UserAgentInterceptor
+import java.io.File
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.serialization.json.Json
@@ -50,20 +52,44 @@ object MihonHost {
         .build()
 
     /**
-     * The `Application` extensions are handed: the real one in everything but preference files, which get a name of
-     * their own. A source asks for `source_<id>`, as it does in Mihon, and so can never name one of the app's files.
-     * This keeps names apart; it is no barrier against code that runs in the app's process.
+     * The `Application` extensions are handed: the real one in everything but preferences, which are files of the
+     * host's own (see [FilePreferences]). A source asks for `source_<id>`, as it does in Mihon, and so can never name
+     * one of the app's files. This keeps names apart; it is no barrier against code that runs in the app's process.
      */
-    private class ExtensionApplication(base: Application) : Application() {
+    private class ExtensionApplication(private val base: Application) : Application() {
+        private val opened = HashMap<String, FilePreferences>()
+        private val legacyMoved by lazy { moveLegacyPreferences(base) }
+
         init {
             attachBaseContext(base)
         }
 
-        override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences = super.getSharedPreferences(PREFERENCES_PREFIX + name, mode)
+        override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences = synchronized(opened) {
+            legacyMoved
+            opened.getOrPut(name.orEmpty()) { FilePreferences(preferencesFile(base, name.orEmpty())) }
+        }
     }
 
-    /** Before the name an extension gives a preferences file. */
-    const val PREFERENCES_PREFIX = "mihon_"
+    /** Where the preferences an extension calls [name] are kept: under the directory Android never backs up or transfers. */
+    fun preferencesFile(context: Context, name: String): File =
+        File(File(context.noBackupFilesDir, PREFERENCES_DIRECTORY), URLEncoder.encode(name, "UTF-8") + ".json")
+
+    /**
+     * Until 1.9.2 extension preferences were `shared_prefs/mihon_<name>.xml`, which Android backs up. Each is moved
+     * once, the first time an extension asks for any preferences. Removable two releases after the one that added it.
+     */
+    internal fun moveLegacyPreferences(context: Context) {
+        val legacy = File(context.dataDir, "shared_prefs").list().orEmpty()
+            .filter { it.startsWith(LEGACY_PREFERENCES_PREFIX) && it.endsWith(".xml") }.map { it.removeSuffix(".xml") }
+        legacy.forEach { name ->
+            val target = preferencesFile(context, name.removePrefix(LEGACY_PREFERENCES_PREFIX))
+            if (!target.exists()) FilePreferences(target).takeAll(context.getSharedPreferences(name, Context.MODE_PRIVATE).all)
+            context.deleteSharedPreferences(name)
+        }
+    }
+
+    private const val PREFERENCES_DIRECTORY = "mihon_preferences"
+    private const val LEGACY_PREFERENCES_PREFIX = "mihon_"
 
     /** Mihon's default, the agent extensions are written and tested against. */
     private const val DEFAULT_USER_AGENT =

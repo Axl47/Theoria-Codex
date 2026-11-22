@@ -41,7 +41,7 @@ internal class MihonExtensionSourceHost {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var watching: Lazy<Unit>
 
-    /** The settings store, which opens after the HTTP clients that already hold [mediaInterceptor]. */
+    /** The user's choices, which open with the app's data, after the HTTP clients that already hold [mediaInterceptor]. */
     private val choices = CompletableDeferred<ExtensionChoiceStore>()
 
     // Runs on an HTTP client's thread before each extension image: loads the extensions the first time, then only checks the stamp.
