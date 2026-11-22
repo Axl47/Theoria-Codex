@@ -8,6 +8,8 @@ import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.post.PostTagSelection
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.state.SearchSourceScope
+import com.theoriacodex.app.trails.TrailPage
+import com.theoriacodex.app.trails.TrailPager
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.SavedSearchEntry

@@ -5,27 +5,18 @@ import com.theoriacodex.app.related.RelatedPostsRouteController
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.related.ViewerFeedOwner
 import com.theoriacodex.app.related.ViewerFeedSnapshot
+import com.theoriacodex.app.trails.TrailPager
+import com.theoriacodex.app.trails.nextOrNull
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.Post
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-
-/** A trail's posts so far, and whether it can give more. */
-internal data class TrailPage(val posts: List<Post>, val canLoadMore: Boolean)
-
-/** A trail's source of posts: each call loads one more page and returns everything so far. Throws when a page fails. */
-internal fun interface TrailPager {
-    suspend fun next(): TrailPage
-}
 
 /**
  * A trail fork's feed, which the Viewer level showing it follows as stream [ViewerStreamSource.TRAIL]. [start] loads the
@@ -74,18 +65,13 @@ internal class TrailFeed(
 
     fun close() = scope.cancel()
 
-    /**
-     * One page; a failure keeps what was loaded, so the Viewer can ask again later. A cancellation that is not this
-     * feed's own (the pager's timeout) is a failed page too.
-     */
-    private suspend fun step(): Boolean = try {
-        val page = pager.next()
-        snapshot.update { it.copy(results = page.posts, canLoadMore = page.canLoadMore, loadingMore = false) }
-        true
-    } catch (error: Exception) {
-        if (error is CancellationException) currentCoroutineContext().ensureActive()
-        snapshot.update { it.copy(loadingMore = false) }
-        false
+    /** One page; a failure keeps what was loaded, so the Viewer can ask again later. */
+    private suspend fun step(): Boolean {
+        val page = pager.nextOrNull()
+        snapshot.update { feed ->
+            if (page == null) feed.copy(loadingMore = false) else feed.copy(results = page.posts, canLoadMore = page.canLoadMore, loadingMore = false)
+        }
+        return page != null
     }
 
     private companion object {
