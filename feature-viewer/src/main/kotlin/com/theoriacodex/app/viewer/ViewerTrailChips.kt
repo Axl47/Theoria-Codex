@@ -47,7 +47,7 @@ internal sealed interface ViewerTrailChip {
 
 /**
  * The fork chips for [post]: its [creator] when browsable, Similar when its source answers it, then its most
- * characteristic tags ([affinities], most first) that are not universal and that [levelQuery] does not already
+ * characteristic tags ([affinities], most first) that are informative and that [levelQuery] does not already
  * search, at most [maxTags].
  */
 internal fun viewerTrailChips(
@@ -58,7 +58,7 @@ internal fun viewerTrailChips(
     maxTags: Int = VIEWER_TRAIL_TAG_CHIPS,
 ): List<ViewerTrailChip> {
     val searched = levelQuery?.includeTags.orEmpty().mapTo(mutableSetOf()) { it.lowercase() }
-    val tags = affinities.asSequence().filterNot { it.universal }.map { it.tag }
+    val tags = affinities.asSequence().filter { it.informative }.map { it.tag }
         .filter { it.lowercase() !in searched }.distinct().take(maxTags)
     return listOfNotNull(creator?.let(ViewerTrailChip::Creator), ViewerTrailChip.Similar.takeIf { similarSupported }) +
         tags.map(ViewerTrailChip::Tag).toList()
