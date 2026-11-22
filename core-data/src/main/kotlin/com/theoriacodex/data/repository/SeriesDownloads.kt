@@ -53,8 +53,8 @@ data class DrainProgress(val series: String, val chapter: String, val seriesId: 
 data class DrainResult(val downloaded: Int, val failed: Int, val retry: Boolean = false)
 
 /**
- * A chapter that cannot download however long one waits: its source no longer lists it, or a page is gone (404 or
- * 410) or is not an image. It leaves the queue; [SeriesDownloads]' fetch throws it for such a page.
+ * A chapter that cannot download however long one waits: its source no longer lists it, answers with no pages or a
+ * page without an address, or a page is gone (404 or 410) or is not an image. It leaves the queue; [SeriesDownloads]' fetch throws it for such a page.
  */
 class ChapterUnavailable(message: String) : IOException(message)
 
@@ -299,7 +299,7 @@ class SeriesDownloads(
         val entry = repository.entries(chapter.series).firstOrNull { it.entry.address == chapter.entry && it.sourceOrder >= 0 }?.entry
             ?: throw ChapterUnavailable("The source no longer lists this chapter")
         val source = sources().firstOrNull { it.key == chapter.series.source } ?: throw IOException("The series' source is not on")
-        val pages = attempts { source.pages(entry) }.ifEmpty { throw IOException("The chapter has no pages") }
+        val pages = attempts { source.pages(entry) }.ifEmpty { throw ChapterUnavailable("The chapter has no pages") }
         fetching.value = chapter to 0f
         onPage(0, pages.size)
         val done = AtomicInteger()
@@ -309,7 +309,7 @@ class SeriesDownloads(
                 pages.mapIndexed { index, page ->
                     async {
                         val file = gate.withPermit {
-                            val url = page.url ?: throw IOException("A page has no address")
+                            val url = page.url ?: throw ChapterUnavailable("A page has no address")
                             attempts { fetchPage(url, staging, index) }
                         }
                         val count = done.incrementAndGet()

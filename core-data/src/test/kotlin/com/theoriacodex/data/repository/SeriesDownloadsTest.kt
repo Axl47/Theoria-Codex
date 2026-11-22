@@ -180,6 +180,21 @@ class SeriesDownloadsTest {
         assertEquals(mapOf("/c2" to ChapterDownload.OnDevice), harness.downloads.states(id).first())
     }
 
+    @Test fun `a chapter its source answers with no pages, or a page without an address, leaves the queue`() = runTest {
+        val harness = Harness(this)
+        harness.pagesOf = { entry ->
+            when (entry.address) {
+                "/c1" -> emptyList()
+                "/c2" -> listOf(ImageRef(url = null, localPath = null, mime = null))
+                else -> twoPages(entry)
+            }
+        }
+        harness.downloads.download(id, listOf("/c1", "/c2", "/c3"))
+
+        assertEquals(DrainResult(downloaded = 1, failed = 2), harness.downloads.drain(automatic = false))
+        assertEquals(mapOf("/c3" to ChapterDownload.OnDevice), harness.downloads.states(id).first())
+    }
+
     @Test fun `delete after reading removes read chapters except where the series was last opened, also at start`() = runTest {
         // Chapters 1 and 2 are read, and the series was last opened at 2.
         val entries = (3 downTo 1).mapIndexed { order, number -> chapter(number, order, read = number != 3) }
@@ -258,7 +273,7 @@ class SeriesDownloadsTest {
 
     private fun page(staging: File, index: Int) = File(staging, SeriesDownloadStore.pageFileName(index, "png")).apply { writeBytes(PAGE) }
 
-    /** Downloads over this test's folder, with a source of two pages per chapter and a fetch that records each page. */
+    /** Downloads over this test's folder, with a source of two pages per chapter unless [pagesOf] says otherwise, and a fetch that records each page. */
     private inner class Harness(
         scope: TestScope,
         stored: StoredSeries = StoredSeries(Series(id, "Title")),
@@ -268,12 +283,13 @@ class SeriesDownloadsTest {
         val scheduled = mutableListOf<String>()
         val fetched = mutableListOf<String>()
         var onFetch: suspend (String) -> Unit = {}
+        var pagesOf: (SeriesEntry) -> List<ImageRef> = ::twoPages
         val store = scope.store()
         val downloads = SeriesDownloads(
             store = store,
             queueFile = folder.root.resolve("queue.json"),
             repository = Stored(stored, entries),
-            sources = { listOf(TwoPages(source)) },
+            sources = { listOf(FakeSource(source) { pagesOf(it) }) },
             fetch = { url, file ->
                 onFetch(url)
                 fetched += url
@@ -299,11 +315,14 @@ class SeriesDownloadsTest {
         val PAGE = byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47)
     }
 
-    /** A source whose every chapter has two pages, at addresses naming the chapter. */
-    private class TwoPages(override val key: SourceKey) : SeriesSource {
+    /** Two pages, at addresses naming the chapter. */
+    private fun twoPages(entry: SeriesEntry) = (1..2).map { ImageRef(url = "$PAGES${entry.address}/$it", localPath = null, mime = null) }
+
+    /** A source whose chapters have the pages [pagesOf] gives. */
+    private class FakeSource(override val key: SourceKey, private val pagesOf: (SeriesEntry) -> List<ImageRef>) : SeriesSource {
         override val name = "Fake"
         override val language = "en"
-        override suspend fun pages(entry: SeriesEntry) = (1..2).map { ImageRef(url = "$PAGES${entry.address}/$it", localPath = null, mime = null) }
+        override suspend fun pages(entry: SeriesEntry) = pagesOf(entry)
         override suspend fun popular(page: Int): SeriesPage = error("unused")
         override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>): SeriesPage = error("unused")
         override suspend fun details(series: Series): Series = series
