@@ -47,7 +47,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
 import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.app.ui.components.EmptyState
-import com.theoriacodex.app.ui.components.ErrorState
 import com.theoriacodex.app.ui.components.FilterChoiceChip
 import com.theoriacodex.app.ui.components.LoadingState
 import com.theoriacodex.data.repository.FollowedSeries
@@ -161,7 +160,9 @@ private fun LazyGridScope.browse(state: SeriesTabState, viewModel: SeriesTabView
 private fun LazyGridScope.browseListing(browse: SeriesSourceListing, viewModel: SeriesTabViewModel, open: (Series) -> Unit) {
     when (val listing = browse.listing) {
         SeriesListing.Loading -> fullWidth("browse-loading") { LoadingState() }
-        is SeriesListing.Failed -> fullWidth("browse-failed") { ErrorState(listing.message, onRetry = { viewModel.browse(browse.key) }) }
+        is SeriesListing.Failed -> fullWidth("browse-failed") {
+            SourceLoadFailure(listing.message, listing.browserCheck, browse.name, onRetry = { viewModel.browse(browse.key) })
+        }
         is SeriesListing.Loaded -> {
             if (listing.series.isEmpty()) fullWidth("browse-empty") { EmptyState("No series") }
             items(listing.series, key = { it.id.toString() }) { series -> SeriesCard(series, { open(series) }) }
@@ -191,7 +192,7 @@ private fun LazyGridScope.searchResults(
         fullWidth("search-${result.key.id}") {
             when (listing) {
                 SeriesListing.Loading -> LoadingState()
-                is SeriesListing.Failed -> FailureRow({ retry(result.key) }, message = listing.message)
+                is SeriesListing.Failed -> SourceLoadFailure(listing.message, listing.browserCheck, result.name, { retry(result.key) }, compact = true)
                 is SeriesListing.Loaded ->
                     if (listing.series.isEmpty()) Text("No results", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     else SeriesRow(listing.series, key = { it.id.toString() }, after = moreResults(listing) { more(result.key) }) { series ->
@@ -228,10 +229,10 @@ private fun SectionTitle(title: String, count: Int? = null) {
 
 /** One line for a source that failed, where a full-height failure would push the other sources away. */
 @Composable
-internal fun FailureRow(onRetry: () -> Unit, modifier: Modifier = Modifier, message: String = LOAD_FAILED) {
+internal fun FailureRow(onRetry: () -> Unit, modifier: Modifier = Modifier, message: String = LOAD_FAILED, actionLabel: String = "Retry") {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Text(message, Modifier.weight(1f, fill = false), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = onRetry) { Text("Retry") }
+        TextButton(onClick = onRetry) { Text(actionLabel) }
     }
 }
 

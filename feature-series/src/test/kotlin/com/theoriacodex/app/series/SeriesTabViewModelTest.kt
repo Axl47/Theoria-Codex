@@ -4,6 +4,9 @@ import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
+import com.theoriacodex.domain.adapter.BrowserCheck
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
@@ -26,6 +29,7 @@ import kotlinx.coroutines.test.setMain
 import androidx.lifecycle.SavedStateHandle
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -127,6 +131,24 @@ class SeriesTabViewModelTest {
         assertEquals(listOf("/found"), listing.series.map { it.id.address })
         assertEquals(2, listing.nextPage)
     }
+
+    @Test
+    fun aSourceBehindABrowserCheckSaysWhereItCanBePassedAndRetriesAfterIt() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val check = BrowserCheck("https://site.test/search", "agent/1")
+        val source = Answering().apply { failure = SourceAdapterException(SourceFailureReason.BROWSER_CHECK, browserCheck = check) }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) {}
+        advanceUntilIdle()
+        viewModel.search("one punch")
+        advanceUntilIdle()
+        assertEquals(check, (viewModel.state.value.search?.single()?.listing as SeriesListing.Failed).browserCheck)
+
+        source.failure = null
+        viewModel.retrySearch(source.key)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.state.value.search?.single()?.listing is SeriesListing.Loaded)
+    }
 }
 
 /** Answers a search with one series a page, titled by the text searched for, over [pages] pages. */
@@ -138,7 +160,11 @@ private class Answering(id: String = "custom_mihon_7", private val pages: Int = 
 
     /** What a page after the first waits for, when set. */
     var laterPagesWait: CompletableDeferred<Unit>? = null
+
+    /** What every search throws, when set. */
+    var failure: Exception? = null
     override suspend fun search(text: String, page: Int): SeriesPage {
+        failure?.let { throw it }
         if (page > 1) laterPagesWait?.await()
         return SeriesPage(listOf(Series(SeriesId(key, if (page == 1) "/found" else "/found$page"), text)), hasNextPage = page < pages)
     }
