@@ -33,6 +33,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.normalizeMatchToken
+import java.util.IdentityHashMap
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -119,8 +120,11 @@ class ForYouDeckViewModel(
     /** Posts decided on any level this session. */
     private val seen = mutableSetOf<PostId>()
 
-    /** The profile each logged verdict was recorded under, so Undo removes it there; writes run in order. */
-    private val loggedUnder = mutableMapOf<PostId, String>()
+    /**
+     * The profile each logged decision was recorded under, so its Undo removes it there and only there. Keyed by the
+     * decision itself: another deck may decide the same post under another profile. Writes run in order.
+     */
+    private val loggedUnder = IdentityHashMap<TriageDecision, String>()
     private val verdictWrites = Mutex()
 
     /** The Mix's latest decision and the steering before it, for Undo. */
@@ -500,13 +504,13 @@ class ForYouDeckViewModel(
                 seen += post.id
                 val kind = event.decision.signal()?.verdictKind() ?: return
                 val profileId = inputs?.profileId ?: return
-                loggedUnder[post.id] = profileId
+                loggedUnder[event.decision] = profileId
                 val verdict = ForYouVerdict(profileId, post.id, kind, wiring.clock(), postPreviewImageCandidate(post)?.url)
                 writeVerdict { record(verdict) }
             }
             is TriageDecisionEvent.Reverted -> {
                 seen -= post.id
-                val profileId = loggedUnder.remove(post.id) ?: return
+                val profileId = loggedUnder.remove(event.decision) ?: return
                 writeVerdict { remove(profileId, post.id) }
             }
         }

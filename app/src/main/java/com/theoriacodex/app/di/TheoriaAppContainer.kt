@@ -455,7 +455,7 @@ internal class DefaultTheoriaAppContainer(
         galleryReadingModes = FileBackedGalleryReadingModeRepository(storageDirectory),
         savedSearches = savedSearches,
         fileMirrors = fileMirrors,
-        forYouVerdicts = RoomForYouVerdictRepository(contentDatabase),
+        forYouVerdicts = RoomForYouVerdictRepository(contentDatabase, profileWriteGuard),
         visualSignatures = visualSignatures,
     )
 

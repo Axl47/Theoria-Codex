@@ -239,6 +239,10 @@ class SearchRequestReducerTest {
         assertEquals(fresh.posts, atTop.content.results)
         assertEquals(listOf(updated, second, newest), scrolled.content.results)
         assertSame(atTop, atTop.reduce(SearchStateChange.CachedFirstPageScrolled))
+        // The next page keeps them too.
+        val more = page(81L, scrolled)
+        val paged = scrolled.reduce(SearchStateChange.BeginRequest(more)).reduce(SearchStateChange.PageResult(81L, nextPage(more, emptyList())))
+        assertEquals(listOf(updated, second, newest), paged.content.results)
     }
 
     @Test

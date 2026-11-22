@@ -100,7 +100,8 @@ class JourneyAppContainer(
     private val ownerScope = CoroutineScope(scope.coroutineContext + ownerJob + Dispatchers.IO)
     override val applicationScope: CoroutineScope get() = ownerScope
     private val fileMirrors = FileMirrorIndex()
-    private val listingPictures = ListingPictures(appContext, ownerScope, fileMirrors)
+    // Journeys check what hashes do, not how fast a busy test device makes them, so a listing waits for its fixtures.
+    private val listingPictures = ListingPictures(appContext, ownerScope, fileMirrors, budgetMs = 10_000)
     val registry = JourneySourceRegistry(
         postsBySource, pageSize,
         providerShapedSources.associateWith { ProviderShapedSource(postsBySource.getValue(it), httpClient) },
@@ -148,7 +149,7 @@ class JourneyAppContainer(
         readingPositions = FileBackedReadingPositionRepository(storageDirectory),
         galleryReadingModes = FileBackedGalleryReadingModeRepository(storageDirectory),
         savedSearches = FileBackedSavedSearchRepository(storageDirectory),
-        forYouVerdicts = RoomForYouVerdictRepository(database),
+        forYouVerdicts = RoomForYouVerdictRepository(database, profileWriteGuard),
         visualSignatures = RoomVisualSignatureRepository(database),
         fileMirrors = fileMirrors,
     )

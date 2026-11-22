@@ -42,7 +42,9 @@ object PerceptualHash {
 
     /**
      * The hash of a [width]×[height] picture given as ARGB pixels row by row (Android's `Bitmap.getPixels` order). It
-     * is turned grey with the ITU-R 601 weights Pillow's "L" mode uses and averaged down (or spread up) to 32×32.
+     * is turned grey with the ITU-R 601 weights Pillow's "L" mode uses and averaged down (or spread up) to 32×32. Pillow
+     * resizes with Lanczos instead, so for other sizes a bit or two can differ from imagehash's; the app only compares
+     * hashes it made itself.
      */
     fun ofArgb(pixels: IntArray, width: Int, height: Int): Long? {
         require(width > 0 && height > 0 && pixels.size == width * height) { "Pixels do not fill $width×$height" }

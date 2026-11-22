@@ -11,10 +11,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class PreviewPictureHasherTest {
-    @Test fun `a listing waits for its previews only as long as the budget, and late hashes still arrive`() = runTest {
+    @Test fun `a listing waits for its previews only as long as the budget, and the next listing has the late hashes`() = runTest {
         val slow = CompletableDeferred<PictureHashResult>()
         val loads = mutableListOf<String>()
-        val late = mutableListOf<Post>()
         val hasher = PreviewPictureHasher(backgroundScope, { candidate ->
             loads += candidate.url
             when {
@@ -22,7 +21,7 @@ class PreviewPictureHasherTest {
                 "flat" in candidate.url -> PictureHashResult.Unhashable
                 else -> PictureHashResult.Hashed(candidate.url.length.toLong())
             }
-        }, onLateHash = late::add)
+        })
         val posts = listOf(post("quick"), post("slow"), post("flat"), post("video", mime = "video/mp4"))
 
         val annotated = hasher.annotate(posts, budgetMs = 100)
@@ -30,7 +29,6 @@ class PreviewPictureHasherTest {
         assertEquals(listOf(posts[0].preview.url!!.length.toLong(), null, null, null), annotated.map { it.pictureHash })
         slow.complete(PictureHashResult.Hashed(7))
         runCurrent()
-        assertEquals(listOf(posts[1].copy(pictureHash = 7)), late)
 
         // Answers are remembered by address, so the next listing of these posts loads nothing.
         assertEquals(listOf(posts[0].preview.url!!.length.toLong(), 7L, null, null), hasher.annotate(posts).map { it.pictureHash })

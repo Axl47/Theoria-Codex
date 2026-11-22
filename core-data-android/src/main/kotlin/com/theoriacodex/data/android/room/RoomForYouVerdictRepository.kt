@@ -5,19 +5,23 @@ import com.theoriacodex.data.repository.FOR_YOU_VERDICT_LIMIT
 import com.theoriacodex.data.repository.ForYouVerdict
 import com.theoriacodex.data.repository.ForYouVerdictKind
 import com.theoriacodex.data.repository.ForYouVerdictRepository
+import com.theoriacodex.data.repository.ProfileLibraryWriteGuard
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/** The verdict log in Room; a swipe that lands after its profile was deleted is refused ([writeGuard]). */
 class RoomForYouVerdictRepository(
     private val database: TheoriaRoomDatabase,
+    private val writeGuard: ProfileLibraryWriteGuard = ProfileLibraryWriteGuard(),
     private val limit: Int = FOR_YOU_VERDICT_LIMIT,
 ) : ForYouVerdictRepository {
     private val dao = database.forYouVerdictDao()
 
     override suspend fun record(verdict: ForYouVerdict) {
         database.withTransaction {
+            writeGuard.requireProfileWritable(verdict.profileId)
             dao.upsert(
                 ForYouVerdictEntity(
                     verdict.profileId, verdict.postId.source.id, verdict.postId.sourcePostId, verdict.kind.name,

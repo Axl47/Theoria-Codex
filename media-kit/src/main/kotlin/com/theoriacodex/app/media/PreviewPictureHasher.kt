@@ -17,7 +17,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -40,13 +39,13 @@ sealed interface PictureHashResult {
  * loader with the card's own address, so it also fills the disk cache the card then reads; only a small first-frame
  * bitmap is decoded, off the main thread. Answers are remembered by preview address for the process's life.
  *
- * Hashes started for a listing keep running in [scope] after the listing stopped waiting for them; [onLateHash] receives
- * each post whose hash arrived too late to travel with it.
+ * Hashes started for a listing keep running in [scope] after the listing stopped waiting for them, so the next listing
+ * of those posts has them at once. A late hash is not applied to the listing that missed it: a card on screen never
+ * collapses or hides because of it.
  */
 class PreviewPictureHasher(
     private val scope: CoroutineScope,
     private val load: suspend (PostMediaCandidate) -> PictureHashResult,
-    private val onLateHash: (Post) -> Unit = {},
 ) {
     private val known = object : LinkedHashMap<String, PictureHashResult>(REMEMBERED, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, PictureHashResult>) = size > REMEMBERED
@@ -54,8 +53,7 @@ class PreviewPictureHasher(
     private val flights = ConcurrentHashMap<String, Deferred<PictureHashResult>>()
 
     /** Hashes with the app's image loader; see [loadWithImageLoader]. */
-    constructor(context: Context, scope: CoroutineScope, onLateHash: (Post) -> Unit = {}) :
-        this(scope, loadWithImageLoader(context.applicationContext), onLateHash)
+    constructor(context: Context, scope: CoroutineScope) : this(scope, loadWithImageLoader(context.applicationContext))
 
     /**
      * [posts] in order, each with its picture hash when its preview hashed within [budgetMs]. The wait is shared, not
@@ -70,12 +68,7 @@ class PreviewPictureHasher(
         withTimeoutOrNull(budgetMs) { pending.map { it.second }.awaitAll() }
         val hashes = arrayOfNulls<Long>(posts.size)
         pending.forEach { (index, flight) ->
-            if (flight.isCompleted) {
-                hashes[index] = (flight.getCompleted() as? PictureHashResult.Hashed)?.hash
-            } else {
-                val post = posts[index]
-                scope.launch { (flight.await() as? PictureHashResult.Hashed)?.let { onLateHash(post.copy(pictureHash = it.hash)) } }
-            }
+            if (flight.isCompleted) hashes[index] = (flight.getCompleted() as? PictureHashResult.Hashed)?.hash
         }
         return posts.mapIndexed { index, post -> hashes[index]?.let { post.copy(pictureHash = it) } ?: post }
     }

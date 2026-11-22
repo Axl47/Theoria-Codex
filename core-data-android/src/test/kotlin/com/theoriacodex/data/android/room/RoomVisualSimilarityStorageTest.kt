@@ -5,6 +5,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.data.repository.ForYouVerdict
 import com.theoriacodex.data.repository.ForYouVerdictKind
+import com.theoriacodex.data.repository.ProfileLibraryWriteGuard
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -26,7 +27,8 @@ class RoomVisualSimilarityStorageTest {
     @After fun close() = database.close()
 
     @Test fun `a profile keeps its newest verdict per post up to the cap, and undo or removal forgets them`() = runTest {
-        val verdicts = RoomForYouVerdictRepository(database, limit = 2)
+        val guard = ProfileLibraryWriteGuard()
+        val verdicts = RoomForYouVerdictRepository(database, guard, limit = 2)
         verdicts.record(verdict("a", "1", ForYouVerdictKind.SKIPPED, at = 1))
         verdicts.record(verdict("a", "1", ForYouVerdictKind.LIKED, at = 2))
         verdicts.record(verdict("a", "2", ForYouVerdictKind.HID, at = 3))
@@ -37,7 +39,10 @@ class RoomVisualSimilarityStorageTest {
         verdicts.remove("a", id("3"))
         assertEquals(listOf("2"), verdicts.verdicts("a").map { it.postId.sourcePostId })
 
-        RoomCodexLikesRepository(database).removeProfileLibrary("a")
+        guard.retire("a")
+        RoomCodexLikesRepository(database, writeGuard = guard).removeProfileLibrary("a")
+        // A swipe still on its way when the profile was deleted does not bring it back.
+        assertTrue(runCatching { verdicts.record(verdict("a", "4", ForYouVerdictKind.LIKED, at = 6)) }.isFailure)
         assertTrue(verdicts.verdicts("a").isEmpty())
         assertEquals(listOf("1"), verdicts.verdicts("b").map { it.postId.sourcePostId })
     }
