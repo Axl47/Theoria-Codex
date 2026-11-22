@@ -44,7 +44,7 @@ class SeriesUpdateCheckTest {
         follow(series)
         source.chapters[series.id] = listOf(second, first)
 
-        assertEquals(emptyList<SeriesUpdate>(), repository.checkFollowed(listOf(source)))
+        assertEquals(emptyList<SeriesUpdate>(), repository.checkFollowed({ listOf(source) }))
         assertEquals(2, repository.observeFollowed().first().single().unreadCount)
         assertEquals(100L, repository.series(series.id)!!.lastCheckedAtEpochMs)
     }
@@ -53,14 +53,14 @@ class SeriesUpdateCheckTest {
     fun `a chapter at an address not stored before is new, and an unchanged list has none`() = runTest {
         follow(series)
         source.chapters[series.id] = listOf(first)
-        repository.checkFollowed(listOf(source))
+        repository.checkFollowed({ listOf(source) })
 
         now = 200L
         source.chapters[series.id] = listOf(second, first.copy(name = "Chapter 1, renamed"))
-        assertEquals(listOf(SeriesUpdate(series, listOf(second))), repository.checkFollowed(listOf(source)))
+        assertEquals(listOf(SeriesUpdate(series, listOf(second))), repository.checkFollowed({ listOf(source) }))
         assertEquals(200L, repository.series(series.id)!!.lastCheckedAtEpochMs)
 
-        assertEquals(emptyList<SeriesUpdate>(), repository.checkFollowed(listOf(source)))
+        assertEquals(emptyList<SeriesUpdate>(), repository.checkFollowed({ listOf(source) }))
     }
 
     @Test
@@ -70,10 +70,10 @@ class SeriesUpdateCheckTest {
         val uninstalled = Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_3"), "/series/c"), "Gone")
         listOf(series, onFailing, uninstalled).forEach { follow(it) }
         source.chapters[series.id] = listOf(first)
-        repository.checkFollowed(listOf(failing, source))
+        repository.checkFollowed({ listOf(failing, source) })
 
         source.chapters[series.id] = listOf(second, first)
-        assertEquals(listOf(SeriesUpdate(series, listOf(second))), repository.checkFollowed(listOf(failing, source)))
+        assertEquals(listOf(SeriesUpdate(series, listOf(second))), repository.checkFollowed({ listOf(failing, source) }))
     }
 
     @Test
@@ -81,14 +81,29 @@ class SeriesUpdateCheckTest {
         val later = Series(SeriesId(source.key, "/series/b"), "Zeta")
         listOf(series, later).forEach { follow(it) }
         source.chapters[series.id] = listOf(first)
-        repository.checkFollowed(listOf(source))
+        repository.checkFollowed({ listOf(source) })
 
         source.chapters[series.id] = listOf(second, first)
         source.stopsAt = later.id
         val reported = mutableListOf<SeriesUpdate>()
-        runCatching { repository.checkFollowed(listOf(source)) { reported += it } }
+        runCatching { repository.checkFollowed({ listOf(source) }) { reported += it } }
 
         assertEquals(listOf(SeriesUpdate(series, listOf(second))), reported)
+    }
+
+    @Test
+    fun `a source that goes away during a check is not asked for its later series`() = runTest {
+        val later = Series(SeriesId(source.key, "/series/b"), "Zeta")
+        listOf(series, later).forEach { follow(it) }
+        source.chapters[series.id] = listOf(first)
+        source.chapters[later.id] = listOf(first)
+        var asked = 0
+
+        // The source is on for the first series and gone by the second.
+        repository.checkFollowed({ if (asked++ == 0) listOf(source) else emptyList() })
+
+        assertEquals(1, repository.entries(series.id).size)
+        assertEquals(emptyList<Any>(), repository.entries(later.id))
     }
 
     @Test
@@ -96,7 +111,7 @@ class SeriesUpdateCheckTest {
         repository.store(series)
         source.chapters[series.id] = listOf(first)
 
-        repository.checkFollowed(listOf(source))
+        repository.checkFollowed({ listOf(source) })
 
         assertEquals(emptyList<Any>(), repository.entries(series.id))
     }
@@ -112,11 +127,11 @@ private class FakeSource(id: String, private val fails: Boolean = false) : Serie
     override val language = "en"
     override suspend fun popular(page: Int) = SeriesPage(emptyList(), false)
     override suspend fun search(text: String, page: Int) = popular(page)
-    override suspend fun details(series: Series) = when {
+    override suspend fun details(series: Series): Series = error("A check asks for chapters only")
+    override suspend fun entries(series: Series) = when {
         fails -> throw IllegalStateException("down")
         series.id == stopsAt -> throw CancellationException("stopped")
-        else -> series
+        else -> chapters[series.id].orEmpty()
     }
-    override suspend fun entries(series: Series) = chapters[series.id].orEmpty()
     override suspend fun pages(entry: SeriesEntry) = emptyList<ImageRef>()
 }

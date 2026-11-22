@@ -64,7 +64,7 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `a new listing keeps progress, follow and mode, adds new entries and forgets dropped ones`() = runTest {
+    fun `a new listing keeps progress, follow and mode, adds new entries and hides dropped ones`() = runTest {
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))
         repository.setFollowed(id, true)
         repository.setReadingMode(id, GalleryReadingMode.VERTICAL)
@@ -85,6 +85,37 @@ class RoomSeriesRepositoryTest {
         assertEquals("Chapter 2 (v2)", entries.last().entry.name)
         assertTrue(entries.last().read)
         assertEquals(1, repository.observeFollowed().first().single().unreadCount)
+    }
+
+    @Test
+    fun `a dropped chapter that returns is neither new nor unread`() = runTest {
+        val first = SeriesEntry("/c/1", "Chapter 1")
+        repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), first))
+        repository.recordProgress(id, "/c/2", page = 2, pageCount = 2)
+
+        assertEquals(emptyList<SeriesEntry>(), repository.store(series, listOf(first)))
+        assertEquals(listOf("/c/1"), repository.entries(id).map { it.entry.address })
+
+        assertEquals(emptyList<SeriesEntry>(), repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), first)))
+        assertEquals(listOf(true, false), repository.entries(id).map { it.read })
+    }
+
+    @Test
+    fun `a chapter that returns at a new address takes over its number's progress and is not new`() = runTest {
+        val first = SeriesEntry("/c/1", "Chapter 1", number = 1f)
+        repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2", number = 2f), first))
+        repository.recordProgress(id, "/c/2", page = 3, pageCount = 5)
+
+        val reuploaded = SeriesEntry("/c/2-v2", "Chapter 2", number = 2f)
+        val third = SeriesEntry("/c/3", "Chapter 3", number = 3f)
+        assertEquals(listOf(third), repository.store(series, listOf(third, reuploaded, first)))
+
+        val moved = repository.entries(id).single { it.entry.address == "/c/2-v2" }
+        assertEquals(3, moved.lastPage)
+        assertEquals(5, moved.pageCount)
+        assertEquals("/c/2-v2", repository.series(id)!!.lastOpenedEntry)
+        // The old address is gone for good: listed again, it is a chapter never stored.
+        assertEquals(3, repository.entries(id).size)
     }
 
     @Test

@@ -53,5 +53,5 @@ class SeriesDependencies(
      * time, so neither repeats the other's requests midway.
      */
     suspend fun checkFollowed(onUpdate: suspend (SeriesUpdate) -> Unit = {}): List<SeriesUpdate> =
-        checking.withLock { repository.checkFollowed(sources(), onUpdate) }
+        checking.withLock { repository.checkFollowed(sources, onUpdate) }
 }

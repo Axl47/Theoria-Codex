@@ -18,6 +18,12 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
+/**
+ * The `source_order` of an entry its source stopped listing. The row stays, hidden from every list and count, so the
+ * chapter is neither new nor unread again if the source lists it once more.
+ */
+private const val NOT_LISTED = -1
+
 class RoomSeriesRepository(
     private val database: TheoriaRoomDatabase,
     private val clock: () -> Long = System::currentTimeMillis,
@@ -46,26 +52,44 @@ class RoomSeriesRepository(
     override suspend fun store(series: Series, entries: List<SeriesEntry>?): List<SeriesEntry> {
         val id = series.id
         return database.withTransaction {
-            val stored = dao.series(id.source.id, id.address)?.toStored() ?: StoredSeries(series)
+            val before = dao.series(id.source.id, id.address)?.toStored() ?: StoredSeries(series)
             val listed = !entries.isNullOrEmpty()
-            dao.upsertSeries(
-                stored.copy(series = series, lastCheckedAtEpochMs = if (listed) clock() else stored.lastCheckedAtEpochMs).toEntity(),
-            )
+            val stored = before.copy(series = series, lastCheckedAtEpochMs = if (listed) clock() else before.lastCheckedAtEpochMs)
+            dao.upsertSeries(stored.toEntity())
             if (entries.isNullOrEmpty()) return@withTransaction emptyList()
-            val known = dao.entries(id.source.id, id.address).associateBy { it.address }
-            val now = clock()
-            // A source can list one address twice; the first is kept.
-            val current = entries.distinctBy { it.address }
-            dao.deleteEntriesExcept(id.source.id, id.address, current.map { it.address })
-            dao.upsertEntries(
-                current.mapIndexed { order, entry ->
-                    val before = known[entry.address]?.toStored()
-                    (before?.copy(entry = entry, sourceOrder = order) ?: StoredSeriesEntry(entry, order, firstSeenAtEpochMs = now))
-                        .toEntity(id)
-                },
-            )
-            if (stored.lastCheckedAtEpochMs == null) emptyList() else current.filter { it.address !in known }
+            val newEntries = storeEntries(stored, entries)
+            if (before.lastCheckedAtEpochMs == null) emptyList() else newEntries
         }
+    }
+
+    /**
+     * Replaces [stored]'s entry list with [entries] and returns the ones never stored before. Must run in a
+     * transaction.
+     */
+    private fun storeEntries(stored: StoredSeries, entries: List<SeriesEntry>): List<SeriesEntry> {
+        val id = stored.series.id
+        val now = clock()
+        // A source can list one address twice; the first is kept.
+        val current = entries.distinctBy { it.address }
+        val listed = current.mapTo(HashSet()) { it.address }
+        val known = dao.allEntries(id.source.id, id.address).map(SeriesEntryEntity::toStored).associateBy { it.entry.address }
+        // Entries the source does not list, by chapter number: a chapter that returns at a new address takes over the
+        // progress of the one it replaces.
+        val unlisted = known.values.filter { it.entry.address !in listed && it.entry.number != null }
+            .associateByTo(HashMap()) { it.entry.number }
+        val replaced = mutableMapOf<String, String>()
+        val newEntries = mutableListOf<SeriesEntry>()
+        val rows = current.mapIndexed { order, entry ->
+            val before = known[entry.address] ?: entry.number?.let(unlisted::remove)?.also { replaced[it.entry.address] = entry.address }
+            if (before == null) newEntries += entry
+            (before?.copy(entry = entry, sourceOrder = order) ?: StoredSeriesEntry(entry, order, firstSeenAtEpochMs = now))
+        }
+        val dropped = known.values.filter { it.entry.address !in listed && it.entry.address !in replaced && it.sourceOrder != NOT_LISTED }
+            .map { it.copy(sourceOrder = NOT_LISTED) }
+        if (replaced.isNotEmpty()) dao.deleteEntries(id.source.id, id.address, replaced.keys.toList())
+        dao.upsertEntries((rows + dropped).map { it.toEntity(id) })
+        stored.lastOpenedEntry?.let(replaced::get)?.let { dao.upsertSeries(stored.copy(lastOpenedEntry = it).toEntity()) }
+        return newEntries
     }
 
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = update(id) { it.copy(followed = followed) }

@@ -53,10 +53,13 @@ interface SeriesRepository {
     /**
      * Stores what the source says about [series], keeping what the user did with it. With [entries], the source's
      * current list replaces the stored one: entries it kept keep their progress and first-seen time, and ones it
-     * dropped are forgotten. An empty list changes nothing, since a source that fails quietly lists none.
+     * dropped leave the list but are remembered, so one that returns is as the user left it. An empty list changes
+     * nothing, since a source that fails quietly lists none.
      *
-     * Returns the new entries: those whose address was not stored before, in the source's order. The first list a
-     * series ever gets has none, because nothing was there to compare it with.
+     * Returns the new entries, in the source's order: those whose address was never stored, unless they have the
+     * chapter number of an entry the source dropped. Such an entry is the same chapter at a new address and takes
+     * over the dropped one's progress. The first list a series ever gets has no new entries, because nothing was
+     * there to compare it with.
      */
     suspend fun store(series: Series, entries: List<SeriesEntry>? = null): List<SeriesEntry>
 

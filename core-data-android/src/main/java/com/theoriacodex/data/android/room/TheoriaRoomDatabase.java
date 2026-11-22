@@ -1,12 +1,19 @@
 package com.theoriacodex.data.android.room;
 
 import android.content.Context;
+import android.database.Cursor;
 import androidx.annotation.NonNull;
 import androidx.room.Database;
 import androidx.room.Room;
 import androidx.room.RoomDatabase;
 import androidx.room.migration.Migration;
 import androidx.sqlite.db.SupportSQLiteDatabase;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Pattern;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 @Database(
         entities = {
@@ -112,11 +119,49 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             database.execSQL("CREATE TABLE IF NOT EXISTS `series_entries` (`source` TEXT NOT NULL, `series_address` TEXT NOT NULL, `address` TEXT NOT NULL, `name` TEXT NOT NULL, `number` REAL, `translator_group` TEXT, `uploaded_at_epoch_ms` INTEGER, `source_order` INTEGER NOT NULL, `first_seen_at_epoch_ms` INTEGER NOT NULL, `read` INTEGER NOT NULL, `last_page` INTEGER NOT NULL, `page_count` INTEGER, PRIMARY KEY(`source`, `series_address`, `address`), FOREIGN KEY(`source`, `series_address`) REFERENCES `series`(`source`, `address`) ON UPDATE NO ACTION ON DELETE CASCADE )");
             // Rows that point at a post go before the post itself.
             for (String table : new String[] {"codex_items", "liked_posts", "recent_watched", "media_durations", "codex_automatic_tags", "posts"}) {
-                database.execSQL("DELETE FROM `" + table + "` WHERE `source` LIKE 'custom\\_mihon\\_%' ESCAPE '\\'");
+                database.execSQL("DELETE FROM `" + table + "` WHERE " + SPIKE_SOURCE);
             }
-            database.execSQL("DELETE FROM `recent_searches` WHERE `query_payload_json` LIKE '%\"custom\\_mihon\\_%' ESCAPE '\\'");
+            deleteSpikeSearches(database);
         }
     };
+    // A spike id is `custom_mihon_` and digits only: a Custom Site can be named `custom_mihon_example_org`.
+    private static final String SPIKE_SOURCE = "`source` GLOB 'custom_mihon_[0-9]*' AND `source` NOT GLOB 'custom_mihon_*[^0-9]*'";
+    private static final Pattern SPIKE_SOURCE_ID = Pattern.compile("custom_mihon_[0-9]+");
+
+    /** Deletes the recent searches that name a spike source as a source; the same text in a tag is left alone. */
+    private static void deleteSpikeSearches(SupportSQLiteDatabase database) {
+        List<String> spikes = new ArrayList<>();
+        try (Cursor rows = database.query("SELECT `query_hash`, `query_payload_json` FROM `recent_searches` "
+                + "WHERE `query_payload_json` LIKE '%custom\\_mihon\\_%' ESCAPE '\\'")) {
+            while (rows.moveToNext()) {
+                if (namesSpikeSource(rows.getString(1))) spikes.add(rows.getString(0));
+            }
+        }
+        for (String hash : spikes) {
+            database.execSQL("DELETE FROM `recent_searches` WHERE `query_hash` = ?", new Object[] {hash});
+        }
+    }
+
+    /** Whether a recent search's payload has a spike id in a source field. Old payloads are the query alone. */
+    private static boolean namesSpikeSource(String payloadJson) {
+        try {
+            JSONObject payload = new JSONObject(payloadJson);
+            JSONObject query = payload.optJSONObject("query");
+            List<String> sources = new ArrayList<>();
+            sources.add(payload.optString("modeSource"));
+            if (query != null) sources.add(query.optString("modeSource"));
+            JSONArray searched = payload.optJSONArray("sources");
+            for (int index = 0; searched != null && index < searched.length(); index++) sources.add(searched.optString(index));
+            JSONObject sourceTags = payload.optJSONObject("sourceTags");
+            if (sourceTags != null) sourceTags.keys().forEachRemaining(sources::add);
+            for (String source : sources) {
+                if (SPIKE_SOURCE_ID.matcher(source).matches()) return true;
+            }
+            return false;
+        } catch (JSONException unreadable) {
+            return false;
+        }
+    }
     public static final Migration[] MIGRATIONS = new Migration[] {
             MIGRATION_1_2,
             MIGRATION_2_3,

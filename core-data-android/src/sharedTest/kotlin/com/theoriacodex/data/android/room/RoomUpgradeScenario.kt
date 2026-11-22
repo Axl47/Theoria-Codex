@@ -53,7 +53,7 @@ object RoomUpgradeScenario {
                     assertEquals(listOf(shared), collections.observeCodexPosts("likes-$profile", CodexSortMode.NEWEST_SAVED).first())
                 }
                 assertLegacyRecents(recents, startingVersion)
-                assertSpikeRowsDeleted(database)
+                assertSpikeRowsDeleted(database, startingVersion)
                 val expectedRules = if (startingVersion >= 4) {
                     listOf(CodexAutomaticTag(SourceKey.PIXIV, "cloud"), CodexAutomaticTag(SourceKey.PIXIV, "sky"))
                 } else emptyList()
@@ -133,10 +133,10 @@ object RoomUpgradeScenario {
     }
 
     /** The extension spike's posts are gone from every table, and the series tables that replace them open empty. */
-    private fun assertSpikeRowsDeleted(database: TheoriaRoomDatabase) {
+    private fun assertSpikeRowsDeleted(database: TheoriaRoomDatabase, startingVersion: Int) {
         val reader = database.openHelper.readableDatabase
         for (table in listOf("posts", "codex_items", "liked_posts", "recent_watched", "media_durations", "codex_automatic_tags")) {
-            reader.query("SELECT COUNT(*) FROM `$table` WHERE source LIKE 'custom\\_mihon\\_%' ESCAPE '\\'").use { rows ->
+            reader.query("SELECT COUNT(*) FROM `$table` WHERE source = 'custom_mihon_7'").use { rows ->
                 rows.moveToFirst()
                 assertEquals(table, 0, rows.getInt(0))
             }
@@ -145,10 +145,15 @@ object RoomUpgradeScenario {
             rows.moveToFirst()
             assertEquals(0, rows.getInt(0))
         }
-        // A real custom site's rows share the `custom_` prefix and stay.
-        reader.query("SELECT COUNT(*) FROM posts WHERE source = 'custom_mihonbooru_org'").use { rows ->
+        // Real custom sites' rows share the prefix and stay, as does a search for a tag that contains it.
+        reader.query("SELECT COUNT(*) FROM posts WHERE source IN ('custom_mihonbooru_org', 'custom_mihon_example_org')").use { rows ->
             rows.moveToFirst()
-            assertEquals(1, rows.getInt(0))
+            assertEquals(2, rows.getInt(0))
+        }
+        reader.query("SELECT COUNT(*) FROM recent_searches WHERE query_hash IN ('site-search', 'tag-search')").use { rows ->
+            rows.moveToFirst()
+            // Version 1 had no recent searches to seed.
+            assertEquals(if (startingVersion >= 2) 2 else 0, rows.getInt(0))
         }
         for (table in listOf("series", "series_entries")) {
             reader.query("SELECT COUNT(*) FROM `$table`").use { rows ->
@@ -170,11 +175,10 @@ object RoomUpgradeScenario {
         assertEquals(listOf(ViewerStreamSource.CODEX, ViewerStreamSource.SEARCH), watched.map { it.origin })
         assertEquals(listOf(31L, 30L), watched.map { it.viewedAtEpochMs })
         assertEquals(if (version >= 6) 2 else 1, watched.last().maxViewedMediaNumber)
-        val search = recents.observeSearches().first().single()
+        val search = recents.observeSearches().first().single { it.queryHash == "old-search" }
         assertEquals(query(), search.query)
         assertEquals(RecentSearchKind.SOURCE, search.kind)
         assertEquals(listOf(SourceKey.PIXIV), search.sources)
-        assertEquals("old-search", search.queryHash)
     }
 
     private fun seed(database: SupportSQLiteDatabase, version: Int) {
@@ -193,6 +197,7 @@ object RoomUpgradeScenario {
         // What the extension spike stored as posts; the v13 migration deletes it. A custom site with a similar id stays.
         database.execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('custom_mihon_7','L3M',?)", arrayOf(payload("spike")))
         database.execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('custom_mihonbooru_org','1',?)", arrayOf(payload("site")))
+        database.execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('custom_mihon_example_org','1',?)", arrayOf(payload("named-site")))
         database.execSQL("INSERT INTO codex_items VALUES('saved','custom_mihon_7','L3M',5)")
         database.execSQL("INSERT INTO liked_posts VALUES('a','custom_mihon_7','L3M',5,'[]')")
         // Proof rows the retired importers wrote; the v11 migration drops their tables.
@@ -210,6 +215,8 @@ object RoomUpgradeScenario {
             database.execSQL("INSERT INTO recent_watched(source,source_post_id,viewed_at_epoch_ms,sort_sequence,origin,origin_query_hash$sectionColumn$progressColumn) " +
                 "VALUES('custom_mihon_7','L3M',29,9,'SEARCH','search:spike'${if (version >= 3) ",'WATCHED'" else ""}${if (version >= 6) ",1" else ""})")
             database.execSQL("INSERT INTO recent_searches VALUES('spike-search',?,31,3)", arrayOf(LEGACY_QUERY.replace("PIXIV", "custom_mihon_7")))
+            database.execSQL("INSERT INTO recent_searches VALUES('site-search',?,34,4)", arrayOf(LEGACY_QUERY.replace("PIXIV", "custom_mihon_example_org")))
+            database.execSQL("INSERT INTO recent_searches VALUES('tag-search',?,35,5)", arrayOf(LEGACY_QUERY.replace("sky", "custom_mihon_7")))
             database.execSQL("INSERT INTO recent_searches VALUES('old-search',?,32,1)", arrayOf(LEGACY_QUERY))
             // For You history; the v12 migration deletes it, so only the rows above survive.
             database.execSQL("INSERT INTO recent_searches VALUES('for_you:seed',?,33,2)", arrayOf(FOR_YOU_SEARCH))
