@@ -199,6 +199,11 @@ class ForYouDeckScreenTest {
         assertEquals(bounds(similar, index = 1).width, bounds(similar).width)
     }
 
+    @Test fun `forks shorten only once the row is full, the longest first`() {
+        assertEquals(listOf(100, 30, 60), forkWidths(listOf(100, 30, 60), available = 300))
+        assertEquals(listOf(135, 30, 135), forkWidths(listOf(400, 30, 200), available = 300))
+    }
+
     @Test fun `a tag trail saves its search, and then shows it saved`() {
         trails.tag = listOf(testPost(DECK_SOURCE, "t-1"))
         val owner = render()
