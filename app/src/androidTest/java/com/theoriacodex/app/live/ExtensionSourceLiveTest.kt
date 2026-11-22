@@ -16,7 +16,9 @@ import com.theoriacodex.app.di.TheoriaAppContainerOwner
 import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.data.repository.continueEntry
+import com.theoriacodex.data.repository.inReadingOrder
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesSource
 import java.util.regex.Pattern
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -57,19 +59,20 @@ class ExtensionSourceLiveTest {
     fun aSeriesIsBrowsedReadResumedAndFollowed() {
         val source = runBlocking { series.sources() }.firstOrNull() ?: error("No extension loaded")
         // What the tab should list: the first source's popular series, asked for directly.
-        val listed = runBlocking { source.popular(1) }.series.first()
-        report("source", "${source.name} [${source.language}] lists \"${listed.title}\" first")
+        val listed = runBlocking { source.popular(1).series.take(CANDIDATES).first { readable(source, it) } }
+        report("source", "${source.name} [${source.language}] lists \"${listed.title}\"")
 
         openSeriesTab()
-        tap("the listed series", By.text(listed.title), RESULTS_TIMEOUT_MS)
+        searchEverySource(source, listed)
+        tap("the listed series", scrolledTo(By.text(listed.title)))
         val chapters = waitFor("the chapter count", By.text(CHAPTER_COUNT), RESULTS_TIMEOUT_MS).text.substringBefore(' ').toInt()
         report("series", "chapters=$chapters")
         assertTrue("A series lists more than one chapter", chapters > 1)
 
-        val chapter = continueChapter(listed)
+        val (chapter, next) = continueChapters(listed)
         tap("the button that starts reading", By.text(Pattern.compile("Start|Continue · .*")))
-        viewerControl("the chapter's name as the Viewer's title", By.text("${listed.title} · ${chapter.entry.name}"))
-        val pages = pageTile(1).contentDescription.substringAfterLast(' ').toInt()
+        viewerControl("the chapter's name as the Viewer's title", By.textStartsWith("${listed.title} · ${chapter.entry.name}"))
+        val pages = pageTile(1.coerceAtLeast(chapter.lastPage)).contentDescription.substringAfterLast(' ').toInt()
         // The controls are showing here; a chapter is not a post to like or save to a Codex.
         assertNull("A chapter offers no Like", device.findObject(By.desc("Like post")))
         assertNull("A chapter offers no Save", device.findObject(By.desc("Save to Codex")))
@@ -77,14 +80,33 @@ class ExtensionSourceLiveTest {
         assertTrue("A chapter has pages", pages > 0)
 
         val target = minOf(TARGET_PAGE, pages)
-        if (target > 1) pageTile(target).click()
-        awaitProgress(listed, chapter.entry.address, target)
+        pageTile(target).click()
+        awaitProgress(listed, chapter.entry.address) { it.lastPage == target }
         device.pressBack()
 
         tap("Continue naming the chapter left unfinished", By.text("Continue · ${chapter.entry.name}"))
         // The top bar counts the page on screen; the chapter opens on its first page until its pages arrive.
         viewerControl("page $target as the page Continue resumes on", By.textEndsWith("$target / $pages"))
         report("resume", "Continue reopened \"${chapter.entry.name}\" on page $target of $pages")
+
+        val mode = chooseOtherReadingMode()
+        val stored = runBlocking { series.repository.series(listed.id) }?.readingMode
+        report("mode", "chose \"$mode\", the series stores $stored")
+        assertTrue("The chosen mode is stored on the series", stored?.name.equals(mode.replace(' ', '_'), ignoreCase = true))
+
+        goToLastPage(pages)
+        awaitProgress(listed, chapter.entry.address) { it.read }
+        swipeToNextPost(mode)
+        viewerControl("the next chapter's name as the title", By.textStartsWith("${listed.title} · ${next.entry.name}"))
+        assertTrue("The next chapter reads in the chosen mode", readingModeChecked(mode))
+        report("next", "past the last page opened \"${next.entry.name}\", still \"$mode\"")
+        device.pressBack()
+
+        waitFor("the finished chapter marked Read on the series page", By.text("Read"))
+        tap("Continue naming the next chapter", By.text("Continue · ${next.entry.name}"))
+        viewerControl("the next chapter's name as the title", By.textStartsWith("${listed.title} · ${next.entry.name}"))
+        assertTrue("The series reopens in the chosen mode", readingModeChecked(mode))
+        report("reopen", "\"${chapter.entry.name}\" shows Read; the series reopened in \"$mode\"")
         device.pressBack()
 
         if (device.wait(Until.hasObject(By.text("Following")), SHORT_WAIT_MS) != true) tap("Follow", By.text("Follow"))
@@ -112,25 +134,108 @@ class ExtensionSourceLiveTest {
         waitFor("the Series tab's source list", By.text("Browse"), RESULTS_TIMEOUT_MS)
     }
 
-    /** The chapter the series page's button opens, read from what the page stored. */
-    private fun continueChapter(listed: Series): StoredSeriesEntry = runBlocking {
-        val stored = checkNotNull(series.repository.series(listed.id)) { "Opening the series did not store it" }
-        checkNotNull(continueEntry(stored, series.repository.entries(listed.id))) { "The series has no chapter to continue" }
+    /**
+     * Whether [listed] still has a chapter to continue and one after it, so the test can run again on an emulator that
+     * kept an earlier run's progress. A series never opened here is asked for its chapters directly.
+     */
+    private suspend fun readable(source: SeriesSource, listed: Series): Boolean {
+        val stored = series.repository.series(listed.id) ?: return source.entries(source.details(listed)).size > 1
+        val entries = series.repository.entries(listed.id).inReadingOrder()
+        val resume = continueEntry(stored, entries) ?: return false
+        return !resume.read && entries.last() != resume
     }
 
-    /** Waits until the series has recorded [page] of the chapter at [address]. */
-    private fun awaitProgress(listed: Series, address: String, page: Int) {
+    /** The chapter the series page's button opens and the one after it, read from what the page stored. */
+    private fun continueChapters(listed: Series): Pair<StoredSeriesEntry, StoredSeriesEntry> = runBlocking {
+        val stored = checkNotNull(series.repository.series(listed.id)) { "Opening the series did not store it" }
+        val entries = series.repository.entries(listed.id).inReadingOrder()
+        val resume = checkNotNull(continueEntry(stored, entries)) { "The series has no chapter to continue" }
+        resume to entries[entries.indexOf(resume) + 1]
+    }
+
+    /** Searches every source for the first word of [listed]'s title and checks each visible source answers in a group of its own. */
+    private fun searchEverySource(source: SeriesSource, listed: Series) {
+        val sources = runBlocking { series.sources() }
+        val field = waitFor("the search field", By.clazz("android.widget.EditText"))
+        field.text = listed.title.substringBefore(' ')
+        field.click()
+        device.pressEnter()
+        waitFor("a result count beside a source's name", By.text(Pattern.compile("\\d+")), RESULTS_TIMEOUT_MS)
+        val groups = device.findObjects(By.text(Pattern.compile(sources.map { Pattern.quote(it.name) }.distinct().joinToString("|")))).size
+        report("search", "sources=${sources.size} groups on screen=$groups, first is ${source.name}")
+        assertTrue("Each source answers in its own group", groups > 1 || sources.size == 1)
+        tap("Clear", By.desc("Clear"))
+        waitFor("the browse list back", By.text("Browse"))
+    }
+
+    /** [selector], after scrolling the list down until something matches it. */
+    private fun scrolledTo(selector: BySelector): BySelector {
+        repeat(SCROLLS) {
+            if (device.wait(Until.hasObject(selector), SHORT_WAIT_MS) == true) return selector
+            device.swipe(device.displayWidth / 2, device.displayHeight * 3 / 4, device.displayWidth / 2, device.displayHeight / 4, SWIPE_STEPS)
+        }
+        return selector
+    }
+
+    /** Waits until the series' record of the chapter at [address] satisfies [reached]. */
+    private fun awaitProgress(listed: Series, address: String, reached: (StoredSeriesEntry) -> Boolean) {
         val deadline = System.currentTimeMillis() + UI_TIMEOUT_MS
         while (true) {
             val entry = runBlocking { series.repository.entries(listed.id) }.first { it.entry.address == address }
-            if (entry.lastPage == page) {
+            if (reached(entry)) {
                 report("progress", "stored page ${entry.lastPage} of ${entry.pageCount}, read=${entry.read}")
-                assertTrue("The chapter's page count is stored with its progress", entry.pageCount != null)
                 return
             }
-            check(System.currentTimeMillis() < deadline) { "Progress stayed at page ${entry.lastPage}, expected $page" }
+            check(System.currentTimeMillis() < deadline) { "Progress stayed at page ${entry.lastPage} of ${entry.pageCount}, read=${entry.read}" }
             Thread.sleep(POLL_MS)
         }
+    }
+
+    /** Opens the page overview, picks whichever sideways mode is not the current one, and returns its label. */
+    private fun chooseOtherReadingMode(): String {
+        viewerControl("the overview button", By.desc("Open media overview")).click()
+        val mode = SIDEWAYS_MODES.first { it != checkedReadingMode() }
+        tap("the mode \"$mode\"", By.text(mode))
+        device.pressBack()
+        return mode
+    }
+
+    /** Whether the page overview shows [mode] as the one in use. */
+    private fun readingModeChecked(mode: String): Boolean {
+        viewerControl("the overview button", By.desc("Open media overview")).click()
+        val checked = checkedReadingMode()
+        device.pressBack()
+        return checked == mode
+    }
+
+    /** The label of the checked button in the open overview's mode switch; the label is the button's own text or its child's. */
+    private fun checkedReadingMode(): String? {
+        waitFor("the reading mode switch", By.text(SIDEWAYS_MODES[0]))
+        return device.findObjects(By.checked(true))
+            .flatMap { button -> runCatching { listOfNotNull(button.text) + button.children.mapNotNull { it.text } }.getOrDefault(emptyList()) }
+            .firstOrNull { it in READING_MODES }
+    }
+
+    /** Hops along the page strip, a few tiles at a time, until the top bar counts the last page. */
+    private fun goToLastPage(pages: Int) {
+        repeat(pages * 2) {
+            if (device.hasObject(By.textEndsWith("$pages / $pages"))) return
+            viewerControl("the page strip", PAGE_TILE)
+            // The strip scrolls as pages are picked; a tile that has gone is skipped and the next round finds it again.
+            val farthest = device.findObjects(PAGE_TILE)
+                .mapNotNull { tile -> runCatching { tile.contentDescription }.getOrNull() }
+                .maxByOrNull { it.removePrefix("Go to page ").substringBefore(' ').toInt() }
+            runCatching { farthest?.let { device.findObject(By.desc(it))?.click() } }
+            Thread.sleep(POLL_MS)
+        }
+        viewerControl("the last page", By.textEndsWith("$pages / $pages"))
+    }
+
+    /** Swipes past the last page: a finger moving left reads on left to right, and moving right reads on right to left. */
+    private fun swipeToNextPost(mode: String) {
+        val y = device.displayHeight / 2
+        val (from, to) = (device.displayWidth * 4 / 5 to device.displayWidth / 5).let { if (mode == SIDEWAYS_MODES[0]) it else it.second to it.first }
+        device.swipe(from, y, to, y, SWIPE_STEPS)
     }
 
     /** The page strip's tile for [page] of the open chapter. */
@@ -173,6 +278,14 @@ class ExtensionSourceLiveTest {
 
         /** The page the test stops on, far enough in that resuming there cannot be the start by accident. */
         const val TARGET_PAGE = 3
+
+        /** How many popular series are tried for one with chapters left to read. */
+        const val CANDIDATES = 10
+        val SIDEWAYS_MODES = listOf("Left to right", "Right to left")
+        val READING_MODES = SIDEWAYS_MODES + "Vertical"
+        val PAGE_TILE: BySelector = By.descStartsWith("Go to page ")
+        const val SCROLLS = 6
+        const val SWIPE_STEPS = 20
 
         const val LAUNCH_TIMEOUT_MS = 30_000L
         const val RESULTS_TIMEOUT_MS = 45_000L
