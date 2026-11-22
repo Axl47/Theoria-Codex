@@ -18,9 +18,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
                 RecentWatchedEntity.class,
                 RecentSearchEntity.class,
                 MediaDurationEntity.class,
-                ViewerTranslationCacheEntity.class
+                ViewerTranslationCacheEntity.class,
+                SeriesEntity.class,
+                SeriesEntryEntity.class
         },
-        version = 12,
+        version = 13,
         exportSchema = true
 )
 public abstract class TheoriaRoomDatabase extends RoomDatabase {
@@ -102,6 +104,19 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             database.execSQL("DELETE FROM `recent_watched` WHERE `section` = 'FYP'");
         }
     };
+    // Series from extensions get tables of their own. The spike that showed a series as a post stored those posts
+    // under `custom_mihon_` source ids, which no source answers for any more: they are deleted wherever they were kept.
+    public static final Migration MIGRATION_12_13 = new Migration(12, 13) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("CREATE TABLE IF NOT EXISTS `series` (`source` TEXT NOT NULL, `address` TEXT NOT NULL, `title` TEXT NOT NULL, `cover_url` TEXT, `author` TEXT, `genres` TEXT NOT NULL, `language` TEXT NOT NULL, `followed` INTEGER NOT NULL, `reading_mode` TEXT, `last_opened_entry` TEXT, `last_checked_at_epoch_ms` INTEGER, PRIMARY KEY(`source`, `address`))");
+            database.execSQL("CREATE TABLE IF NOT EXISTS `series_entries` (`source` TEXT NOT NULL, `series_address` TEXT NOT NULL, `address` TEXT NOT NULL, `name` TEXT NOT NULL, `number` REAL, `translator_group` TEXT, `uploaded_at_epoch_ms` INTEGER, `source_order` INTEGER NOT NULL, `first_seen_at_epoch_ms` INTEGER NOT NULL, `read` INTEGER NOT NULL, `last_page` INTEGER NOT NULL, `page_count` INTEGER, PRIMARY KEY(`source`, `series_address`, `address`), FOREIGN KEY(`source`, `series_address`) REFERENCES `series`(`source`, `address`) ON UPDATE NO ACTION ON DELETE CASCADE )");
+            // Rows that point at a post go before the post itself.
+            for (String table : new String[] {"codex_items", "liked_posts", "recent_watched", "media_durations", "codex_automatic_tags", "posts"}) {
+                database.execSQL("DELETE FROM `" + table + "` WHERE `source` LIKE 'custom\\_mihon\\_%' ESCAPE '\\'");
+            }
+            database.execSQL("DELETE FROM `recent_searches` WHERE `query_payload_json` LIKE '%\"custom\\_mihon\\_%' ESCAPE '\\'");
+        }
+    };
     public static final Migration[] MIGRATIONS = new Migration[] {
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -113,13 +128,15 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             MIGRATION_8_9,
             MIGRATION_9_10,
             MIGRATION_10_11,
-            MIGRATION_11_12
+            MIGRATION_11_12,
+            MIGRATION_12_13
     };
 
     public abstract CodexLikesDao codexLikesDao();
     public abstract RecentsDao recentsDao();
     public abstract MediaDurationDao mediaDurationDao();
     public abstract ViewerTranslationCacheDao viewerTranslationCacheDao();
+    public abstract SeriesDao seriesDao();
 
     @NonNull
     public static TheoriaRoomDatabase create(@NonNull Context context) {

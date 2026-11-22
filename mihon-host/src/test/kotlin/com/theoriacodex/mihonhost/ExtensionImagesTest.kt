@@ -3,7 +3,6 @@ package com.theoriacodex.mihonhost
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.online.HttpSource
 import java.io.IOException
-import java.util.concurrent.CompletableFuture
 import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -12,7 +11,7 @@ import org.junit.Assert.assertSame
 import org.junit.Test
 
 class ExtensionImagesTest {
-    private val images = ExtensionImages(loadWaitMs = 0)
+    private val images = ExtensionImages()
     private val source = ImageServerSource().also(images::attach)
     private val page = Page(0, url = "chapter-hash", imageUrl = "/data/1.jpg")
 
@@ -62,22 +61,19 @@ class ExtensionImagesTest {
         assertSame(missingHostClass, failure.cause)
     }
 
-    @Test(timeout = TEST_TIMEOUT_MS)
-    fun `a loaded source answers while other extensions are still loading`() {
-        val loading = ExtensionImages(loadWaitMs = LONG_WAIT_MS).also { it.attach(source) }
+    @Test
+    fun `a loaded source answers without loading the extensions again`() {
+        var loads = 0
+        val loading = ExtensionImages { loads++ }.also { it.attach(source) }
 
         assertEquals("source-token https://covers.test/1.jpg", fetch("https://covers.test/1.jpg#mihon=1", loading))
+        assertEquals(0, loads)
     }
 
-    @Test(timeout = TEST_TIMEOUT_MS)
-    fun `a request for a source that has not loaded yet waits for it`() {
-        val loading = ExtensionImages(loadWaitMs = LONG_WAIT_MS)
-        // The source arrives after the request below has started; without the wait the request would pass it by.
-        CompletableFuture.runAsync {
-            Thread.sleep(LOAD_DELAY_MS)
-            loading.attach(source)
-            loading.finishedLoading()
-        }
+    @Test
+    fun `a request for a source that has not loaded yet loads the extensions first`() {
+        lateinit var loading: ExtensionImages
+        loading = ExtensionImages { loading.attach(source) }
 
         assertEquals("source-token https://covers.test/1.jpg", fetch("https://covers.test/1.jpg#mihon=1", loading))
     }
@@ -123,11 +119,5 @@ class ExtensionImagesTest {
             const val TOKEN_HEADER = "X-Source-Token"
             const val PAGE_HEADER = "X-Page"
         }
-    }
-
-    private companion object {
-        const val LONG_WAIT_MS = 60_000L
-        const val LOAD_DELAY_MS = 200L
-        const val TEST_TIMEOUT_MS = 10_000L
     }
 }

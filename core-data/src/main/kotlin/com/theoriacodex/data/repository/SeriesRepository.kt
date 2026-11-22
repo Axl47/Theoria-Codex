@@ -1,0 +1,93 @@
+package com.theoriacodex.data.repository
+
+import com.theoriacodex.domain.model.GalleryReadingMode
+import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesEntry
+import com.theoriacodex.domain.series.SeriesId
+import kotlinx.coroutines.flow.Flow
+
+/** A series as stored: what its source said, and what the user did with it. */
+data class StoredSeries(
+    val series: Series,
+    val followed: Boolean = false,
+    /** The reading mode the user chose for this series; null follows the guess. */
+    val readingMode: GalleryReadingMode? = null,
+    /** The address of the entry opened last. */
+    val lastOpenedEntry: String? = null,
+    /** When the source last listed this series' entries. */
+    val lastCheckedAtEpochMs: Long? = null,
+)
+
+/** An entry as stored, with the user's progress through it. */
+data class StoredSeriesEntry(
+    val entry: SeriesEntry,
+    /** The entry's place in its source's list, which runs newest first. */
+    val sourceOrder: Int,
+    val firstSeenAtEpochMs: Long,
+    val read: Boolean = false,
+    /** The page the user was on when they left, counted from 1; 0 before the entry was ever opened. */
+    val lastPage: Int = 0,
+    /** Known once the entry has been opened. */
+    val pageCount: Int? = null,
+)
+
+data class FollowedSeries(val series: Series, val unreadCount: Int)
+
+/**
+ * Stored series, their entries and reading progress. A series is stored when its page is opened; following only
+ * flags it. Pages are never stored: their addresses expire.
+ */
+interface SeriesRepository {
+    /** By title. */
+    fun observeFollowed(): Flow<List<FollowedSeries>>
+
+    fun observeSeries(id: SeriesId): Flow<StoredSeries?>
+
+    /** In the source's order, newest first. */
+    fun observeEntries(id: SeriesId): Flow<List<StoredSeriesEntry>>
+
+    suspend fun series(id: SeriesId): StoredSeries?
+
+    suspend fun entries(id: SeriesId): List<StoredSeriesEntry>
+
+    /**
+     * Stores what the source says about [series], keeping what the user did with it. With [entries], the source's
+     * current list replaces the stored one: entries it kept keep their progress and first-seen time, and ones it
+     * dropped are forgotten. An empty list changes nothing, since a source that fails quietly lists none.
+     */
+    suspend fun store(series: Series, entries: List<SeriesEntry>? = null)
+
+    suspend fun setFollowed(id: SeriesId, followed: Boolean)
+
+    suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode)
+
+    /**
+     * The user is on [page] (from 1) of the entry at [entryAddress]. [pageCount] is null while the entry's pages are
+     * still loading, when only the series' last opened entry is recorded.
+     */
+    suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?)
+}
+
+/** [this] after the user reached [page] of [pageCount]: an entry is read once its last page was reached, and stays read. */
+fun StoredSeriesEntry.withProgress(page: Int, pageCount: Int): StoredSeriesEntry {
+    val reached = page.coerceIn(1, pageCount.coerceAtLeast(1))
+    return copy(lastPage = reached, pageCount = pageCount, read = read || reached >= pageCount)
+}
+
+/** [entries] oldest first, the order they are read in. */
+fun List<StoredSeriesEntry>.inReadingOrder(): List<StoredSeriesEntry> = sortedByDescending { it.sourceOrder }
+
+/**
+ * Where Continue resumes: the entry opened last while it is unfinished; else the first unread entry in reading order;
+ * else, with everything read, the entry opened last. Null when the series has no entries.
+ */
+fun continueEntry(series: StoredSeries, entries: List<StoredSeriesEntry>): StoredSeriesEntry? {
+    val lastOpened = entries.firstOrNull { it.entry.address == series.lastOpenedEntry }
+    return lastOpened?.takeIf { !it.read }
+        ?: entries.inReadingOrder().firstOrNull { !it.read }
+        ?: lastOpened
+        ?: entries.inReadingOrder().lastOrNull()
+}
+
+/** The page (from 0) an entry opens at: where the user left an unfinished entry, the start otherwise. */
+fun StoredSeriesEntry.resumePageIndex(): Int = if (read) 0 else (lastPage - 1).coerceAtLeast(0)

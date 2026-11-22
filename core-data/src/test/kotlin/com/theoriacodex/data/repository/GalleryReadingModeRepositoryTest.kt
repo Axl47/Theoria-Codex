@@ -41,12 +41,13 @@ class GalleryReadingModeRepositoryTest {
     }
 
     @Test
-    fun `unreadable entries are skipped and a newer schema fails without touching the file`() = runTest {
+    fun `unreadable and extension-source entries are skipped and a newer schema fails without touching the file`() = runTest {
         val directory = temporary.newFolder()
         val file = directory.resolve(GALLERY_READING_MODES_FILE_NAME)
         file.writeText(
             """{"schemaVersion":1,"choices":[{"source":"PIXIV","postId":"valid","mode":"VERTICAL"},""" +
-                """{"source":"PIXIV","postId":"future","mode":"SPREAD"},{"source":"FUTURE","postId":"x","mode":"VERTICAL"},"junk",null]}""",
+                """{"source":"PIXIV","postId":"future","mode":"SPREAD"},{"source":"FUTURE","postId":"x","mode":"VERTICAL"},""" +
+                """{"source":"custom_mihon_7","postId":"L3M","mode":"VERTICAL"},"junk",null]}""",
         )
         assertEquals(mapOf(id("valid") to GalleryReadingMode.VERTICAL), FileBackedGalleryReadingModeRepository(directory).observe().first())
 

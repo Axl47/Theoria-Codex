@@ -5,8 +5,6 @@ import eu.kanade.tachiyomi.source.online.HttpSource
 import java.io.IOException
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
@@ -35,11 +33,14 @@ internal inline fun <T> failingAsIo(block: () -> T): T = try {
  *
  * Every address handed to the app ends in a fragment naming its source. The app requests it like any other image;
  * this interceptor, placed on the app's media client, answers tagged addresses through that source and passes every
- * other request on. The tag travels with the address, so a post the app saved still loads after a restart.
+ * other request on. The tag travels with the address, so a cover the app stored still loads after a restart.
+ *
+ * [ensureLoaded] loads the device's extensions, attaching their sources, and returns once that is done; it must not
+ * throw. It runs on an HTTP client's thread, the first time a tagged address names a source that is not attached:
+ * a stored cover can be asked for before anything else has needed the extensions.
  */
-class ExtensionImages(private val loadWaitMs: Long = LOAD_WAIT_MS) : Interceptor {
+class ExtensionImages(private val ensureLoaded: () -> Unit = {}) : Interceptor {
     private val sources = ConcurrentHashMap<Long, HttpSource>()
-    private val loaded = CountDownLatch(1)
 
     /** Pages whose request only the source can build; a page from an earlier run is fetched by its address alone. */
     private val pages = Collections.synchronizedMap(
@@ -52,12 +53,9 @@ class ExtensionImages(private val loadWaitMs: Long = LOAD_WAIT_MS) : Interceptor
         sources[source.id] = source
     }
 
-    /** Call once every extension has been loaded; until then a tagged request whose source is missing waits for it. */
-    fun finishedLoading() = loaded.countDown()
-
-    /** The source once loading has finished; null when its extension is not on the device, or loading takes too long. */
-    private fun awaitLoaded(sourceId: Long): HttpSource? {
-        loaded.await(loadWaitMs, TimeUnit.MILLISECONDS)
+    /** The source once the extensions have loaded; null when its extension is not on the device. */
+    private fun loaded(sourceId: Long): HttpSource? {
+        ensureLoaded()
         return sources[sourceId]
     }
 
@@ -78,8 +76,7 @@ class ExtensionImages(private val loadWaitMs: Long = LOAD_WAIT_MS) : Interceptor
         val url = chain.request().url
         val sourceId = url.fragment?.takeIf { it.startsWith(TAG) }?.removePrefix(TAG)?.toLongOrNull()
             ?: return chain.proceed(chain.request())
-        // A feed restored at launch can ask for its covers before the extensions have loaded.
-        val source = sources[sourceId] ?: awaitLoaded(sourceId) ?: return chain.proceed(chain.request())
+        val source = sources[sourceId] ?: loaded(sourceId) ?: return chain.proceed(chain.request())
         val page = pages[url.toString()]
         return failingAsIo {
             val call = if (page != null) source.imageCall(page) else source.imageCall(url.newBuilder().fragment(null).build().toString())
@@ -89,11 +86,13 @@ class ExtensionImages(private val loadWaitMs: Long = LOAD_WAIT_MS) : Interceptor
 
     private fun HttpUrl.tagged(source: HttpSource): HttpUrl = newBuilder().fragment("$TAG${source.id}").build()
 
-    private companion object {
-        const val TAG = "mihon="
+    internal companion object {
+        private const val TAG = "mihon="
+
+        /** Where the tag starts in a tagged address. */
+        const val FRAGMENT = "#$TAG"
 
         /** A few hundred chapters' worth. */
-        const val MAX_PAGES = 8_192
-        const val LOAD_WAIT_MS = 10_000L
+        private const val MAX_PAGES = 8_192
     }
 }

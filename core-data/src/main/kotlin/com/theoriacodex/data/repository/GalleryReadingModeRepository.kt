@@ -10,6 +10,7 @@ import com.theoriacodex.data.storage.update
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.EXTENSION_SOURCE_ID_PREFIX
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -86,7 +87,10 @@ internal data class GalleryReadingModeRecord(
     val mode: String,
 )
 
-/** A newer schema fails rather than being read as, or rewritten to, this one; one unreadable entry is skipped. */
+/**
+ * A newer schema fails rather than being read as, or rewritten to, this one; one unreadable entry is skipped. So is one
+ * for an extension source: the extension spike kept series here as posts, and a series now keeps its mode with itself.
+ */
 internal fun decodeGalleryReadingModes(
     document: GalleryReadingModesFile,
     entryLimit: Int = MAX_GALLERY_READING_MODES,
@@ -94,6 +98,7 @@ internal fun decodeGalleryReadingModes(
     require(document.schemaVersion == 1) { "Unsupported gallery reading mode schema ${document.schemaVersion}" }
     val entries = requireNotNull(document.choices as? JsonArray) { "Gallery reading modes are not a list" }
     val decoded = entries.decodeEachOrSkip<GalleryReadingModeRecord>().mapNotNull { record ->
+        if (record.source.startsWith(EXTENSION_SOURCE_ID_PREFIX)) return@mapNotNull null
         runCatching {
             GalleryReadingModeChoice(PostId(SourceKey.parseOrThrow(record.source), record.postId), GalleryReadingMode.valueOf(record.mode))
         }.getOrNull()
