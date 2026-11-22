@@ -64,6 +64,31 @@ class ForYouSavedSearchConversionTest {
     }
 
     @Test
+    fun `an ordinary search wins a collision with a converted one, whichever comes first`() {
+        val query = sourceQuery(SourceKey.PIXIV, listOf("forest"))
+        val ordinary = SavedSearchEntry("mine", "My forest", RecentSearchEntry(query, QueryHash.from(query), 5), 7)
+        val shelf = saved("shelf", "Forest", mapOf(SourceKey.PIXIV to listOf("forest")))
+        // A backup can carry an ordinary search under the ID a For You search also has.
+        val sameId = SavedSearchEntry("shelf", "Other", RecentSearchEntry(sourceQuery(SourceKey.PIXIV, listOf("x")), "h", 1), 1)
+
+        assertEquals(listOf(ordinary), listOf(shelf, ordinary).withForYouSearchesConverted(sourceName))
+        assertEquals(listOf(ordinary), listOf(ordinary, shelf).withForYouSearchesConverted(sourceName))
+        assertEquals(listOf(sameId), listOf(shelf, sameId).withForYouSearchesConverted(sourceName))
+    }
+
+    @Test
+    fun `a mix that loses one source's search to an ordinary one keeps the other`() {
+        val query = sourceQuery(SourceKey.GELBOORU, listOf("sky"))
+        val ordinary = SavedSearchEntry("mine", "Sky", RecentSearchEntry(query, QueryHash.from(query), 5), 7)
+        val mix = saved("mix", "Evening", linkedMapOf(SourceKey.GELBOORU to listOf("sky"), SourceKey.PIXIV to listOf("空")))
+
+        val converted = listOf(mix, ordinary).withForYouSearchesConverted(sourceName)
+
+        assertEquals(listOf("Evening · pixiv", "Sky"), converted.map { it.name })
+        assertEquals(ordinary, converted.last())
+    }
+
+    @Test
     fun `a library without For You searches comes back as it is`() {
         val library = listOf(SavedSearchEntry("a", "A", RecentSearchEntry(sourceQuery(SourceKey.PIXIV, listOf("a")), "h", 1), 1))
 
