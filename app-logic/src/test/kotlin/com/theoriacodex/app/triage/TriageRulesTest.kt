@@ -60,6 +60,10 @@ class TriageRulesTest {
         assertEquals(listOf("wolf", "artist_name", "highres"), hideCandidates(tagged, counts, emptyList()))
     }
 
+    @Test fun `among equals text on the image comes after content, even where the source gives no tag types`() {
+        assertEquals(listOf("tree", "watermark", "bluesky_username"), hideCandidates(post("watermark", "bluesky_username", "tree"), counts, emptyList()))
+    }
+
     @Test fun `hide candidates skip query tags and hidden tags in any spelling`() {
         val candidates = hideCandidates(post("cat", "Blue_Sky", "tree", "dog"), counts, listOf("blue sky", "DOG"))
         assertEquals(listOf("tree", "cat"), candidates)

@@ -74,7 +74,7 @@ data class TagAffinityInputs(
  * the profile watches. A [universal] tag (on most watched posts of its source, or on nearly every post of the feed at
  * hand) narrows nothing and is offered neither to follow nor to hide. An [informative] tag is worth offering to follow:
  * one the profile chose, one clearly more common in what it kept than in what it watched, or one too rare in what it
- * watches to tell yet.
+ * watches to tell yet, but never one for text on the image ([isImageTextTag]) that the profile did not choose.
  */
 data class TagAffinity(
     val tag: String,
@@ -165,10 +165,13 @@ private fun TagAffinityInputs.affinity(source: SourceKey, tag: String, feedShare
     // A tag on most of what the profile watches narrows nothing even when chosen; Likes alone are weaker evidence.
     val common = if (watched != null) watched >= UNIVERSAL_WATCHED_SHARE else likedShare > UNIVERSAL_LIKED_SHARE && !chosen
     val universal = common || (feedShare[token] ?: 0.0) >= UNIVERSAL_FEED_SHARE
-    val lift = lift(source, token)
-        ?: return TagAffinity(tag, interest, (interest + UNKNOWN_TAG_INTEREST) * (1.0 - (watched ?: 0.0)), universal)
+    // Text drawn on the image says nothing about what it shows, though it can be as specific as a series.
+    val offerable = !universal && (chosen || !isImageTextTag(token))
+    val lift = lift(source, token) ?: return TagAffinity(
+        tag, interest, (interest + UNKNOWN_TAG_INTEREST) * (1.0 - (watched ?: 0.0)), universal, informative = offerable,
+    )
     val (score, worthOffering) = historyScore(source, token, lift, chosen, watched ?: 0.0)
-    return TagAffinity(tag, interest, score, universal, informative = !universal && worthOffering)
+    return TagAffinity(tag, interest, score, universal, informative = offerable && worthOffering)
 }
 
 /**
@@ -216,6 +219,17 @@ private const val UNIVERSAL_WATCHED_SHARE = 0.5
 private const val MIN_LIKES_FOR_SHARE = 4
 private const val UNIVERSAL_LIKED_SHARE = 0.85
 private const val MIN_FEED_POSTS = 10
+
+/**
+ * Whether [token] ([normalizeMatchToken] spelling) tags text drawn on the image (a name, a watermark, a handle or logo)
+ * rather than what the image shows. Sources file these as ordinary tags, and on what a profile keeps they can be as much
+ * more common as a series it follows, so no count tells them apart. Handles and logos are matched by their ending, so a
+ * new platform's need no change.
+ */
+fun isImageTextTag(token: String): Boolean = token in IMAGE_TEXT_TAGS || IMAGE_TEXT_ENDINGS.any(token::endsWith)
+
+private val IMAGE_TEXT_TAGS = setOf("artist name", "character name", "copyright name", "signature", "watermark", "web address", "dated")
+private val IMAGE_TEXT_ENDINGS = listOf(" username", " logo", " watermark")
 private const val MIN_KEPT_FOR_LIFT = 20
 private const val MIN_KEPT_FOR_TAG = 2
 private const val MIN_INFORMATIVE_LIFT = 2.0
