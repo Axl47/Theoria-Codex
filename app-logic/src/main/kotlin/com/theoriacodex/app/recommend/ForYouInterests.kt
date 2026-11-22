@@ -4,6 +4,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.recommendation.RecommendationTagNormalization
 import com.theoriacodex.domain.recommendation.TagAffinityBuilder
 import com.theoriacodex.domain.recommendation.sharesBooruVocabulary
+import com.theoriacodex.domain.tags.normalizeMatchToken
 import kotlin.math.abs
 import kotlin.random.Random
 
@@ -42,7 +43,8 @@ object ForYouInterests {
         }
         val leads = mutableMapOf<String, Double>()
         val guesses = mutableMapOf<String, Double>()
-        for (tag in (counts.keys + ownTags).distinct() - unavailable) {
+        // One candidate per matching key, in the spelling a Like gave it when one did.
+        for (tag in (counts.keys + ownTags).distinctBy(::normalizeMatchToken) - unavailable) {
             val here = affinity.affinity(source, tag)
             if (here.universal) continue
             val evidence = when {

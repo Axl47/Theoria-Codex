@@ -50,6 +50,12 @@ class ForYouInterestsTest {
         assertEquals(listOf("hatsune_miku"), interests.first().tags)
     }
 
+    @Test fun `a liked tag and its kept spelling are one candidate`() {
+        val affinity = TagAffinityInputs(keptByTag = mapOf(SourceKey.PIXIV to mapOf("blue hair" to 1)), keptBySource = mapOf(SourceKey.PIXIV to 1))
+        val interests = ForYouInterests.generate(SourceKey.PIXIV, listOf(listOf("blue_hair")), affinity)
+        assertEquals(listOf(listOf("blue_hair")), interests.map { it.tags })
+    }
+
     @Test fun `a saved tag leads a lane without any Like carrying it`() {
         val affinity = TagAffinityInputs(interest = mapOf("fox ears" to EXPLICIT_WEIGHT), explicit = setOf("fox ears"))
         assertEquals(listOf(listOf("fox_ears")), ForYouInterests.generate(SourceKey.GELBOORU, emptyList(), affinity).map { it.tags })
