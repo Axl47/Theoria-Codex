@@ -58,7 +58,7 @@ class ExtensionSourceLiveTest {
     fun aSeriesIsBrowsedReadResumedAndFollowed() {
         val source = runBlocking { series.sources() }.firstOrNull() ?: error("No extension is on; run ExtensionsLiveTest first")
         // What the tab should list: the first source's popular series, asked for directly.
-        val listed = runBlocking { source.popular(1).series.take(CANDIDATES).first { readable(source, it) } }
+        val listed = unreadSeries(source)
         live.report("source", "${source.name} [${source.language}] lists \"${listed.title}\"")
 
         live.openSeriesTab()
@@ -127,7 +127,7 @@ class ExtensionSourceLiveTest {
     @Test
     fun aVerticalChapterReadsOnPastItsLastPage() {
         val source = runBlocking { series.sources() }.firstOrNull() ?: error("No extension is on; run ExtensionsLiveTest first")
-        val listed = runBlocking { source.popular(1).series.take(CANDIDATES).first { readable(source, it) } }
+        val listed = unreadSeries(source)
         live.openSeriesTab()
         live.tap("the listed series", scrolledTo(By.text(listed.title)))
         live.waitFor("the chapter count", By.text(CHAPTER_COUNT), SeriesLiveDriver.RESULTS_TIMEOUT_MS)
@@ -143,19 +143,43 @@ class ExtensionSourceLiveTest {
 
         val x = device.displayWidth / 2
         val pushUp = { device.swipe(x, device.displayHeight * 3 / 4, x, device.displayHeight / 4, SWIPE_STEPS) }
-        var card: UiObject2? = null
-        // A page can be several screens tall, so the end of the last one can be many pushes away. The last push is
-        // left to settle before the card is measured: one more push at the end would open the next chapter.
-        repeat(END_PUSHES) { if (card == null) { pushUp(); card = device.wait(Until.findObject(By.text("Next")), SeriesLiveDriver.POLL_MS * 3) } }
-        Thread.sleep(SeriesLiveDriver.SHORT_WAIT_MS)
-        val shown = checkNotNull(card) { "The end card did not show; on screen: ${live.screenText()}" }
-        // A card still cut off by the screen's edge has not reached the end.
-        if (shown.visibleBounds.bottom >= device.displayHeight * 19 / 20) { pushUp(); Thread.sleep(SeriesLiveDriver.SHORT_WAIT_MS) }
-        val cardBottom = shown.visibleBounds.bottom
+        val onChapter = { runBlocking { series.repository.series(listed.id) }?.lastOpenedEntry == chapter.entry.address }
+        val cardEdge = { device.findObject(By.text("Next"))?.let { runCatching { it.visibleBounds.bottom }.getOrNull() } }
+        // The jump to the last page already ends at the end card when the last pages are short, and a push there
+        // opens the next chapter. So the card is looked for before every push, with the controls hidden: an element
+        // they cover is left out of what UiAutomator can see. A page can also be several screens tall, so the card
+        // can be many pushes away.
+        val cardShown = {
+            repeat(CONTROL_TAPS) {
+                if (device.hasObject(By.desc("Info"))) {
+                    device.click(x, device.displayHeight / 4)
+                    device.wait(Until.gone(By.desc("Info")), CONTROLS_WAIT_MS)
+                }
+            }
+            device.wait(Until.hasObject(By.text("Next")), SeriesLiveDriver.SHORT_WAIT_MS) == true
+        }
+        var pushes = 0
+        while (!cardShown() && pushes < END_PUSHES) {
+            pushUp()
+            pushes++
+        }
+        // A push stops wherever its fling ends. Short slow drags scroll the rest of the way and, at the end, are too
+        // short and too slow to open the next chapter; the card is at the end once one of them leaves it in place.
+        val nudge = (NUDGE_DP * context.resources.displayMetrics.density).toInt()
+        var settled = cardEdge()
+        for (attempt in 0 until NUDGES) {
+            device.swipe(x, device.displayHeight / 2, x, device.displayHeight / 2 - nudge, NUDGE_STEPS)
+            Thread.sleep(SeriesLiveDriver.POLL_MS * 3)
+            val now = cardEdge()
+            if (now == settled) break
+            settled = now
+        }
+        assertTrue("The Viewer left \"${chapter.entry.name}\" before its end card was reached; on screen: ${live.screenText()}", onChapter())
+        val cardBottom = checkNotNull(settled) { "The end card did not show after $pushes pushes; on screen: ${live.screenText()}" }
         // Scrolling down hid the controls; a tap on the page above the card shows them over it.
         device.click(x, device.displayHeight / 4)
         val dockTop = live.waitFor("the dock", By.desc("Info")).visibleBounds.top
-        live.report("vertical", "the end card ends at y=$cardBottom, the dock starts at y=$dockTop")
+        live.report("vertical", "after $pushes pushes the end card ends at y=$cardBottom, the dock starts at y=$dockTop")
         assertTrue("The dock does not cover the end card", cardBottom <= dockTop)
 
         pushUp()
@@ -355,14 +379,24 @@ class ExtensionSourceLiveTest {
     }
 
     /**
-     * Whether [listed] still has a chapter to continue and one after it, so the test can run again on an emulator that
-     * kept an earlier run's progress. A series never opened here is asked for its chapters directly.
+     * A popular series with more than one chapter, as if never read here: earlier runs and other testers leave read
+     * chapters and a reading mode behind on the emulator, so what is stored of its progress is wiped first.
      */
-    private suspend fun readable(source: SeriesSource, listed: Series): Boolean {
-        val stored = series.repository.series(listed.id) ?: return source.entries(source.details(listed)).size > 1
-        val entries = series.repository.entries(listed.id).inReadingOrder()
-        val resume = continueEntry(stored, entries) ?: return false
-        return !resume.read && entries.last() != resume
+    private fun unreadSeries(source: SeriesSource): Series {
+        // A series stored here is counted from storage: the app may be refreshing the page an earlier run left open,
+        // and the source refuses two requests for one series at a time.
+        val listed = runBlocking {
+            source.popular(1).series.take(CANDIDATES).first { listed ->
+                val chapters = if (series.repository.series(listed.id) != null) series.repository.entries(listed.id) else source.entries(source.details(listed))
+                chapters.size > 1
+            }
+        }
+        val key = arrayOf(listed.id.source.id, listed.id.address)
+        SQLiteDatabase.openDatabase(context.getDatabasePath(TheoriaRoomDatabase.DEFAULT_DATABASE_NAME).path, null, SQLiteDatabase.OPEN_READWRITE).use { database ->
+            database.execSQL("UPDATE series_entries SET read = 0, last_page = 0, page_count = NULL WHERE source = ? AND series_address = ?", key)
+            database.execSQL("UPDATE series SET last_opened_entry = NULL, reading_mode = NULL WHERE source = ? AND address = ?", key)
+        }
+        return listed
     }
 
     /** The chapter the series page's button opens and the one after it, read from what the page stored. */
@@ -495,7 +529,7 @@ class ExtensionSourceLiveTest {
         /** The page the test stops on, far enough in that resuming there cannot be the start by accident. */
         const val TARGET_PAGE = 3
 
-        /** How many popular series are tried for one with chapters left to read. */
+        /** How many popular series are tried for one with more than one chapter. */
         const val CANDIDATES = 10
         val SIDEWAYS_MODES = listOf("Left to right", "Right to left")
         const val VERTICAL = "Vertical"
@@ -503,6 +537,14 @@ class ExtensionSourceLiveTest {
         val PAGE_TILE: BySelector = By.descStartsWith("Go to page ")
         const val SCROLLS = 6
         const val END_PUSHES = 60
+
+        /** A drag this short (under the Viewer's 64 dp) and this slow scrolls a vertical chapter but cannot leave it. */
+        const val NUDGE_DP = 40
+        const val NUDGE_STEPS = 40
+        const val NUDGES = 12
+
+        /** A tap can land while the controls are still appearing, so hiding them is tried more than once. */
+        const val CONTROL_TAPS = 3
         const val SWIPE_STEPS = 20
 
         const val CONTROLS_WAIT_MS = 2_500L
