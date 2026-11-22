@@ -5,10 +5,11 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.runtime.snapshots.Snapshot
@@ -166,7 +167,10 @@ class ViewerVerticalGalleryTest {
 
     @Test fun `a failed page's Retry goes through the Viewer's shared retry`() {
         show()
-        compose.onAllNodesWithText("Retry")[0].performClick() // page 1, the selected one
+        // Pages fail on Coil's background thread, which idling does not track. Until the Viewer holds page 1's
+        // error, its Retry only reloads the page locally, so wait for that before tapping.
+        compose.waitUntil { state.value.mediaError?.mediaKey == ViewerMediaKey(gallery.id, 0) }
+        compose.onNode(hasText("Retry") and hasAnyAncestor(hasContentDescription("Page 1"))).performClick()
         assertTrue(actions.any { it is ViewerAction.RetryMedia })
     }
 
