@@ -157,6 +157,8 @@ class SeriesDownloadStore(private val root: File, private val io: CoroutineDispa
     /** [index], read from the files the first time. Must hold [lock]. */
     private suspend fun loadLocked(): Map<SeriesId, Set<String>> = index.value ?: withContext(io) {
         root.listFiles().orEmpty().asSequence()
+            // A series folder a delete renamed still holds whole chapters until it is gone; none of them count.
+            .filterNot { it.name.startsWith(DELETED_PREFIX) }
             .flatMap { it.listFiles().orEmpty().asSequence() }
             .mapNotNull { folder -> folder.marker()?.let { marker -> marker.seriesId()?.let { it to marker.address } } }
             .groupBy({ it.first }, { it.second })

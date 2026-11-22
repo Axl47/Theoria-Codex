@@ -93,6 +93,14 @@ class SeriesDownloadsTest {
         assertEquals(setOf("/c1"), store.downloaded(id))
     }
 
+    @Test fun `a series folder left by a stopped delete holds no downloads`() = runTest {
+        store().write(id, "/c1") { staging -> listOf(page(staging, 0)) }
+        val seriesFolder = root().listFiles().orEmpty().single()
+        assertTrue(seriesFolder.renameTo(File(root(), ".deleted-a")))
+
+        assertEquals(emptySet<String>(), store().downloaded(id))
+    }
+
     @Test fun `deleting a chapter, a series or everything leaves the rest and the size follows`() = runTest {
         val store = store()
         val other = SeriesId(source, "/title/2")
