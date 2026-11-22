@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -137,23 +138,53 @@ class SeriesTabViewModelTest {
         source.offered = { defaults }
         val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) {}
         advanceUntilIdle()
-        viewModel.loadFilters()
+        viewModel.openFilters()
         advanceUntilIdle()
-        assertEquals(defaults, viewModel.state.value.filters)
+        assertEquals(defaults, viewModel.state.value.filterSheet?.draft)
 
         val chosen = listOf(SeriesFilter.Check("Completed", true), SeriesFilter.Check("Colored", false))
-        viewModel.searchSource(" one punch ", chosen)
+        viewModel.editFilters { it.copy(text = " one punch ", draft = chosen) }
+        viewModel.searchSource()
         advanceUntilIdle()
         viewModel.browseMore()
         advanceUntilIdle()
 
+        assertEquals(null, viewModel.state.value.filterSheet)
         assertEquals(BrowseKind.Filtered("one punch", chosen, changed = 2), viewModel.state.value.browseKind)
         assertEquals(listOf("one punch", "one punch"), browsed(viewModel))
         assertEquals(listOf(chosen, chosen), source.searchedWith)
 
+        // Opened again, the sheet starts at what the listing on screen chose.
+        viewModel.openFilters()
+        advanceUntilIdle()
+        assertEquals(FilterSheetState("one punch", defaults, chosen), viewModel.state.value.filterSheet)
+
+        viewModel.closeFilters()
         viewModel.choose(BrowseKind.Latest)
         advanceUntilIdle()
         assertEquals(listOf("latest"), browsed(viewModel))
+    }
+
+    @Test
+    fun filtersLoadedForASheetClosedMeanwhileNeverReachTheOneOpenNow() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val slow = CompletableDeferred<List<SeriesFilter>>()
+        val answers = ArrayDeque(listOf(slow, CompletableDeferred(listOf(SeriesFilter.Check("Completed", false)))))
+        val source = Answering().apply { offered = { answers.removeFirst().await() } }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) {}
+        advanceUntilIdle()
+        viewModel.openFilters()
+        advanceUntilIdle()
+        viewModel.closeFilters()
+        viewModel.openFilters()
+        advanceUntilIdle()
+        val edited = listOf(SeriesFilter.Check("Completed", true))
+        viewModel.editFilters { it.copy(draft = edited) }
+
+        slow.complete(listOf(SeriesFilter.Header("Stale")))
+        advanceUntilIdle()
+
+        assertEquals(edited, viewModel.state.value.filterSheet?.draft)
     }
 
     @Test
@@ -181,17 +212,38 @@ class SeriesTabViewModelTest {
         val offered = listOf(Answering(), Answering("custom_mihon_8"))
         val viewModel = SeriesTabViewModel(NothingStored, { offered }) {}
         advanceUntilIdle()
-        viewModel.searchSource("one punch", emptyList())
-        advanceUntilIdle()
+        searchFor(viewModel, "one punch")
 
+        viewModel.openFilters()
         viewModel.dropFilters()
         advanceUntilIdle()
+        assertEquals(null, viewModel.state.value.filterSheet)
         assertEquals(BrowseKind.Popular, viewModel.state.value.browseKind)
         assertEquals(listOf("popular"), browsed(viewModel))
 
-        viewModel.searchSource("one punch", emptyList())
+        searchFor(viewModel, "one punch")
+        viewModel.openFilters()
         viewModel.browse(offered[1].key)
         advanceUntilIdle()
+        assertEquals(null, viewModel.state.value.filterSheet)
+        assertEquals(BrowseKind.Popular, viewModel.state.value.browseKind)
+        assertEquals(listOf("popular"), browsed(viewModel))
+    }
+
+    @Test
+    fun aBrowsedSourceReplacedByAnUpdateIsBrowsedAfresh() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        var offered = listOf(Answering())
+        val changed = MutableStateFlow(0)
+        val viewModel = SeriesTabViewModel(NothingStored, { offered }, changed) {}
+        advanceUntilIdle()
+        viewModel.choose(BrowseKind.Latest)
+        advanceUntilIdle()
+
+        offered = listOf(Answering())
+        changed.value = 1
+        advanceUntilIdle()
+
         assertEquals(BrowseKind.Popular, viewModel.state.value.browseKind)
         assertEquals(listOf("popular"), browsed(viewModel))
     }
@@ -203,10 +255,18 @@ class SeriesTabViewModelTest {
         val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) {}
         advanceUntilIdle()
 
-        viewModel.loadFilters()
+        viewModel.openFilters()
         advanceUntilIdle()
 
-        assertEquals(emptyList<SeriesFilter>(), viewModel.state.value.filters)
+        assertEquals(emptyList<SeriesFilter>(), viewModel.state.value.filterSheet?.draft)
+    }
+
+    private fun TestScope.searchFor(viewModel: SeriesTabViewModel, text: String) {
+        viewModel.openFilters()
+        advanceUntilIdle()
+        viewModel.editFilters { it.copy(text = text) }
+        viewModel.searchSource()
+        advanceUntilIdle()
     }
 
     private fun browsed(viewModel: SeriesTabViewModel) = (viewModel.state.value.browse?.listing as SeriesListing.Loaded).series.map { it.title }

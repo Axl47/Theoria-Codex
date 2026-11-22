@@ -67,6 +67,22 @@ class SeriesFilterTest {
     }
 
     @Test
+    fun `an option whose label repeats keeps its own place, and moves only to a label that does not`() {
+        val options = listOf("Any", "Manga", "Any")
+        val chosen = listOf(Select("Type", options, 2))
+
+        assertEquals(chosen, listOf(Select("Type", options, 0)).withChoices(chosen))
+
+        val reordered = listOf("Any", "Any", "Manga")
+        assertEquals(listOf(Select("Type", reordered, 0)), listOf(Select("Type", reordered, 0)).withChoices(chosen))
+        assertEquals(
+            listOf(Sort("Order", listOf("Title", "Rating", "Title"), Sort.Selection(1, ascending = true))),
+            listOf(Sort("Order", listOf("Title", "Rating", "Title"), null))
+                .withChoices(listOf(Sort("Order", listOf("Rating", "Title", "Title"), Sort.Selection(0, ascending = true)))),
+        )
+    }
+
+    @Test
     fun `a shorter or longer list on either side keeps what lines up`() {
         val first = listOf(Header("Press reset to load tags"))
         val later = listOf(Header("Press reset to load tags"), Check("Completed", false))

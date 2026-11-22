@@ -35,7 +35,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,51 +55,45 @@ import com.theoriacodex.app.ui.components.SingleChoiceMenu
 import com.theoriacodex.domain.series.Inclusion
 import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.changedFrom
-import com.theoriacodex.domain.series.withChoices
 
 /**
- * Searches one source: a text field, then the source's own [defaults] (null while they load), which start at what
- * [applied] chose when it is on screen. Choices stay in the sheet until Search hands them to [onSearch].
+ * Searches one source: a text field, then the source's own filters, which load while a spinner shows. [sheet] holds
+ * what is chosen until Search; [onEdit] changes it.
  */
 @Composable
 internal fun SeriesFilterSheet(
     sourceName: String,
-    defaults: List<SeriesFilter>?,
-    applied: BrowseKind.Filtered?,
+    sheet: FilterSheetState,
+    onEdit: ((FilterSheetState) -> FilterSheetState) -> Unit,
     onDismiss: () -> Unit,
-    onSearch: (String, List<SeriesFilter>) -> Unit,
+    onSearch: () -> Unit,
 ) {
-    var text by rememberSaveable { mutableStateOf(applied?.text.orEmpty()) }
-    var draft by remember(defaults) { mutableStateOf(defaults?.withChoices(applied?.filters.orEmpty())) }
-    var expanded by remember { mutableStateOf(emptySet<String>()) }
-    val search = { onSearch(text, draft.orEmpty()) }
     ExpandedBottomSheet(onDismiss) {
         SheetHeader(FILTER, "Close filter", onDismiss) {
-            TextButton(
-                onClick = {
-                    text = ""
-                    draft = defaults
-                },
-            ) { Text("Reset") }
+            TextButton(onClick = { onEdit { it.copy(text = "", draft = it.defaults) } }) { Text("Reset") }
         }
         LazyColumn(Modifier.weight(1f, fill = false).padding(horizontal = 16.dp)) {
             item(key = "text") {
                 OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
+                    value = sheet.text,
+                    onValueChange = { text -> onEdit { it.copy(text = text) } },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                     placeholder = { Text("Search $sourceName") },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { search() }),
+                    keyboardActions = KeyboardActions(onSearch = { onSearch() }),
                 )
             }
-            val filters = draft
-            if (filters == null) item(key = "loading") { LoadingState() }
-            else filterItems(filters, defaults.orEmpty(), path = "", expanded, { expanded = it }) { draft = it }
+            val draft = sheet.draft
+            if (draft == null) {
+                item(key = "loading") { LoadingState() }
+            } else {
+                val onExpand = { expanded: Set<String> -> onEdit { it.copy(expanded = expanded) } }
+                filterItems(draft, sheet.defaults.orEmpty(), path = "", sheet.expanded, onExpand) { filters -> onEdit { it.copy(draft = filters) } }
+            }
         }
-        Button(onClick = search, modifier = Modifier.fillMaxWidth().padding(16.dp)) { Text("Search") }
+        Button(onClick = onSearch, modifier = Modifier.fillMaxWidth().padding(16.dp)) { Text("Search") }
     }
 }
 
@@ -190,7 +183,7 @@ private fun SelectRow(filter: SeriesFilter.Select, onChange: (SeriesFilter) -> U
     var open by remember { mutableStateOf(false) }
     Box {
         Row(
-            Modifier.fillMaxWidth().clickable(role = Role.DropdownList) { open = true }.padding(vertical = 14.dp),
+            Modifier.fillMaxWidth().clickable(enabled = filter.options.isNotEmpty(), role = Role.DropdownList) { open = true }.padding(vertical = 14.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

@@ -74,7 +74,6 @@ fun SeriesTabScreen(viewModel: SeriesTabViewModel, onOpenSeries: (SeriesId) -> U
         query = ""
         viewModel.clearSearch()
     }
-    var filtering by rememberSaveable { mutableStateOf(false) }
     ScrollToTopOnTabReselect(TopLevelDestination.Series) { grid.animateScrollToItem(0) }
     DropFiltersOnLeave(viewModel)
     BackHandler(enabled = state.search != null, onBack = clearSearch)
@@ -98,19 +97,16 @@ fun SeriesTabScreen(viewModel: SeriesTabViewModel, onOpenSeries: (SeriesId) -> U
                     else if (search != null) searchResults(search, open, viewModel::retrySearch, viewModel::searchMore)
                     else {
                         followingShelf(followed, open)
-                        browse(state, viewModel, open, onOpenExtensions, onFilter = { filtering = true })
+                        browse(state, viewModel, open, onOpenExtensions, onFilter = viewModel::openFilters)
                     }
                 }
             }
         }
     }
+    val sheet = state.filterSheet
     val browsed = state.browse
-    if (filtering && browsed != null) {
-        LaunchedEffect(browsed.key) { viewModel.loadFilters() }
-        SeriesFilterSheet(browsed.name, state.filters, state.browseKind as? BrowseKind.Filtered, onDismiss = { filtering = false }) { text, filters ->
-            filtering = false
-            viewModel.searchSource(text, filters)
-        }
+    if (sheet != null && browsed != null) {
+        SeriesFilterSheet(browsed.name, sheet, viewModel::editFilters, onDismiss = viewModel::closeFilters, onSearch = viewModel::searchSource)
     }
 }
 
@@ -188,13 +184,14 @@ private fun LazyGridScope.browse(
                 fullWidth("browse-kinds") {
                     BrowseKinds(state.browseKind, latest = sources.firstOrNull { it.key == browse.key }?.supportsLatest == true, viewModel::choose, onFilter)
                 }
-                browseListing(browse, viewModel, open)
+                browseListing(browse, state.browseRun, viewModel, open)
             }
         }
     }
 }
 
-private fun LazyGridScope.browseListing(browse: SeriesSourceListing, viewModel: SeriesTabViewModel, open: (Series) -> Unit) {
+/** [run] keys the next page's request, so a listing that replaced another with the same next page still asks for it. */
+private fun LazyGridScope.browseListing(browse: SeriesSourceListing, run: Int, viewModel: SeriesTabViewModel, open: (Series) -> Unit) {
     when (val listing = browse.listing) {
         SeriesListing.Loading -> fullWidth("browse-loading") { LoadingState() }
         is SeriesListing.Failed -> fullWidth("browse-failed") { ErrorState(listing.message, onRetry = viewModel::retryBrowse) }
@@ -204,7 +201,7 @@ private fun LazyGridScope.browseListing(browse: SeriesSourceListing, viewModel: 
             when {
                 listing.moreFailed -> fullWidth("browse-more-failed") { FailureRow(viewModel::browseMore) }
                 listing.nextPage != null -> fullWidth("browse-more") {
-                    LaunchedEffect(listing.nextPage) { viewModel.browseMore() }
+                    LaunchedEffect(run, listing.nextPage) { viewModel.browseMore() }
                     LoadingState()
                 }
             }

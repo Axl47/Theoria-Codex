@@ -48,16 +48,25 @@ private fun SeriesFilter.withChoice(chosen: SeriesFilter): SeriesFilter = when {
     this is SeriesFilter.Text && chosen is SeriesFilter.Text -> copy(value = chosen.value)
     this is SeriesFilter.Check && chosen is SeriesFilter.Check -> copy(checked = chosen.checked)
     this is SeriesFilter.TriState && chosen is SeriesFilter.TriState -> copy(state = chosen.state)
-    // Options are matched by label, so an option list that changed order still selects what was chosen.
     this is SeriesFilter.Select && chosen is SeriesFilter.Select ->
-        options.indexOf(chosen.options.getOrNull(chosen.selected)).takeIf { it >= 0 }?.let { copy(selected = it) } ?: this
+        options.placeOf(chosen.options, chosen.selected)?.let { copy(selected = it) } ?: this
     this is SeriesFilter.Sort && chosen is SeriesFilter.Sort -> when (val selection = chosen.selection) {
         null -> copy(selection = null)
-        else -> options.indexOf(chosen.options.getOrNull(selection.index)).takeIf { it >= 0 }
-            ?.let { copy(selection = SeriesFilter.Sort.Selection(it, selection.ascending)) } ?: this
+        else -> options.placeOf(chosen.options, selection.index)?.let { copy(selection = SeriesFilter.Sort.Selection(it, selection.ascending)) } ?: this
     }
     this is SeriesFilter.Group && chosen is SeriesFilter.Group -> copy(filters = filters.withChoices(chosen.filters))
     else -> this
+}
+
+/**
+ * Where these options hold the one [chosen] has at [index]: the same place while it still has that label, else the
+ * one place with that label, so a list that changed order still selects it. A label these options lack, or hold more
+ * than once elsewhere, has no place.
+ */
+private fun List<String>.placeOf(chosen: List<String>, index: Int): Int? {
+    val label = chosen.getOrNull(index) ?: return null
+    if (getOrNull(index) == label) return index
+    return indexOf(label).takeIf { it >= 0 && it == lastIndexOf(label) }
 }
 
 /** How many of these filters differ from [defaults], the list they were made from; a group counts each changed member. */
