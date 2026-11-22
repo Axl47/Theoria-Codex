@@ -86,7 +86,8 @@ class CiEmulatorEnvironmentTest(unittest.TestCase):
         self.assertEqual("all", (self.root / "delegated").read_text())
         self.assertTrue((self.root / "dialogs-hidden").exists())
         evidence = self.root / "build/reports/ci-emulator/debug"
-        for name in ("avd.ini", "avd-config.ini", "logcat.txt", "memory-before.txt", "memory-after.txt", "system-server-crash.txt"):
+        for name in ("avd.ini", "avd-config.ini", "logcat.txt", "memory-before.txt", "memory-after.txt", "system-server-crash.txt",
+                     "host-after.txt"):
             self.assertTrue((evidence / name).is_file(), name)
         self.assertEqual("23", (evidence / "verdict").read_text().strip())
         self.assertFalse((self.root / "dialogs-closed").exists())
@@ -96,12 +97,13 @@ class CiEmulatorEnvironmentTest(unittest.TestCase):
         self.assertEqual(1, result.returncode, result.stderr)
         evidence = self.root / "build/reports/ci-emulator/debug"
         self.assertFalse((evidence / "verdict").exists())
-        self.assertTrue((evidence / "host-after-emulator-loss.txt").is_file())
+        self.assertIn("::warning title=Emulator lost::", result.stdout)
         # The retry on a fresh emulator keeps this attempt's evidence and records its own verdict.
         result = self.run_wrapper()
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual("0", (evidence / "verdict").read_text().strip())
-        self.assertTrue((self.root / "build/reports/ci-emulator/debug-lost-attempt/host-after-emulator-loss.txt").is_file())
+        self.assertTrue((self.root / "build/reports/ci-emulator/debug-lost-attempt/host-after.txt").is_file())
+        self.assertNotIn("Emulator lost", result.stdout)
 
     def test_error_dialog_open_before_hiding_is_closed_before_tests(self):
         result = self.run_wrapper(FAKE_DIALOG="open")

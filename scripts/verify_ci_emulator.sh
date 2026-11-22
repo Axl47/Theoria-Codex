@@ -121,11 +121,16 @@ if [[ "$owner" == debug ]]; then
 else
   scripts/verify_release_acceptance_device.sh || test_status=$?
 fi
-# Only a run whose emulator outlived it speaks for the code. Without a verdict, the workflow repeats the
-# run once on a fresh emulator; host memory and kernel messages show whether the runner killed it.
+# Host memory and kernel messages, kept on every run as a baseline, show whether the runner killed a lost
+# emulator or it crashed.
+{ free -m; sudo -n dmesg -T | tail -n 80; } > "$evidence/host-after.txt" 2>&1 || true
+# A failed run speaks for the code only if its emulator outlived it. Without a verdict, the workflow repeats
+# a failed run once on a fresh emulator. Gradle exits 0 only after recording every result and tearing down,
+# so a pass stands even if the emulator dies right after.
 if [[ "$(finite_adb get-state 2>/dev/null | tr -d '\r')" == device ]]; then
   echo "$test_status" > "$evidence/verdict"
 else
-  { free -m; sudo -n dmesg -T | tail -n 80; } > "$evidence/host-after-emulator-loss.txt" 2>&1 || true
+  # Annotates the run even when the retry passes, so a lost emulator is never silent.
+  echo "::warning title=Emulator lost::The $owner emulator died during the run; see host-after.txt under ci-emulator/$owner (or $owner-lost-attempt after a retry) in the report artifact."
 fi
 exit "$test_status"
