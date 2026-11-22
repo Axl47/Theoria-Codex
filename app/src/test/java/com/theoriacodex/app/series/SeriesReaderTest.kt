@@ -25,6 +25,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
+import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
@@ -220,7 +221,7 @@ private class OnePage(override val key: SourceKey) : SeriesSource {
     override val language = "en"
     override suspend fun pages(entry: SeriesEntry) = listOf(ImageRef(url = "https://pages.test/${++asked}.jpg", localPath = null, mime = null))
     override suspend fun popular(page: Int): SeriesPage = error("unused")
-    override suspend fun search(text: String, page: Int): SeriesPage = error("unused")
+    override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>): SeriesPage = error("unused")
     override suspend fun details(series: Series): Series = series
     override suspend fun entries(series: Series): List<SeriesEntry> = emptyList()
 }

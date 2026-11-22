@@ -1,6 +1,8 @@
 package com.theoriacodex.app.series
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
@@ -8,6 +10,8 @@ import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import com.theoriacodex.app.ui.AppRoute
 import com.theoriacodex.app.ui.TheoriaShell
+import com.theoriacodex.app.ui.TopLevelDestination
+import com.theoriacodex.app.ui.tabShown
 import com.theoriacodex.app.ui.launchViewer
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.SeriesId
@@ -25,6 +29,10 @@ internal fun SeriesTabDestination(shell: TheoriaShell) {
     val series = shell.container.series ?: return
     val viewModel = viewModel {
         SeriesTabViewModel(series.repository, series.sources, series.extensions.revision, createSavedStateHandle()) { series.checkFollowed() }
+    }
+    val pager = shell.navigation.pagerState
+    LaunchedEffect(viewModel, pager) {
+        viewModel.followShown(snapshotFlow { tabShown(TopLevelDestination.Series, pager.targetPage, pager.settledPage) })
     }
     SeriesTabScreen(
         viewModel,

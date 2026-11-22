@@ -62,7 +62,17 @@ interface SeriesSource {
     /** Pages count from 1. */
     suspend fun popular(page: Int): SeriesPage
 
-    suspend fun search(text: String, page: Int): SeriesPage
+    /** Whether [latest] lists anything. */
+    val supportsLatest: Boolean get() = false
+
+    /** The series updated most recently; asked for only when [supportsLatest]. */
+    suspend fun latest(page: Int): SeriesPage = throw UnsupportedOperationException("$name lists no latest series")
+
+    /** The search options this source offers, at their defaults; empty when it offers none. */
+    suspend fun filters(): List<SeriesFilter> = emptyList()
+
+    /** [filters] are [SeriesSource.filters] with values chosen; empty searches with the defaults. */
+    suspend fun search(text: String, page: Int, filters: List<SeriesFilter> = emptyList()): SeriesPage
 
     /** [series] with what its own page adds; what the source leaves out keeps the value [series] has. */
     suspend fun details(series: Series): Series

@@ -83,7 +83,8 @@ data class TagAffinityInputs(
  * the profile watches. A [universal] tag (on most watched posts of its source, or on nearly every post of the feed at
  * hand) narrows nothing and is offered neither to follow nor to hide. An [informative] tag is worth offering to follow:
  * one the profile chose, one clearly more common in what it kept than in what it watched, or one too rare in what it
- * watches to tell yet, but never one for text on the image ([isImageTextTag]) that the profile did not choose. A
+ * watches to tell yet, but never one for text on the image ([isImageTextTag]) or about the file ([isFileTag]) that the
+ * profile did not choose. A
  * [proven] tag is informative for the first two reasons, not as a guess: For You seeds lanes only from proven tags.
  */
 data class TagAffinity(
@@ -253,8 +254,9 @@ fun TagAffinityInputs.affinity(source: SourceKey, tag: String, feedShare: Map<St
     // A tag on most of what the profile watches narrows nothing even when chosen; Likes alone are weaker evidence.
     val common = if (watched != null) watched >= UNIVERSAL_WATCHED_SHARE else likedShare > UNIVERSAL_LIKED_SHARE && !chosen
     val universal = common || (feedShare[token] ?: 0.0) >= UNIVERSAL_FEED_SHARE
-    // Text drawn on the image says nothing about what it shows, though it can be as specific as a series.
-    val offerable = !universal && (chosen || !isImageTextTag(token))
+    // Text drawn on the image, or how the file was made, says nothing about what it shows, though either can be as
+    // specific as a series in what the profile keeps.
+    val offerable = !universal && (chosen || !(isImageTextTag(token) || isFileTag(token)))
     val lift = lift(source, token) ?: return TagAffinity(
         tag, interest, (interest + UNKNOWN_TAG_INTEREST) * (1.0 - (watched ?: 0.0)), universal, informative = offerable,
         proven = offerable && chosen,
@@ -321,6 +323,30 @@ fun isImageTextTag(token: String): Boolean = token in IMAGE_TEXT_TAGS || IMAGE_T
 
 private val IMAGE_TEXT_TAGS = setOf("artist name", "character name", "copyright name", "signature", "watermark", "web address", "dated")
 private val IMAGE_TEXT_ENDINGS = listOf(" username", " logo", " watermark")
+
+/**
+ * Whether [token] ([normalizeMatchToken] spelling) tags the file rather than what it shows: its medium (3d), motion
+ * (animated gif), sound (audible music), length, resolution, or how the source files it (commentary). A profile that
+ * keeps mostly animations keeps these far more often than it watches them, so, like [isImageTextTag], no count tells them
+ * apart from an interest. Families of these are matched by their wording, so a new medium or length needs no change.
+ */
+fun isFileTag(token: String): Boolean =
+    token in FILE_TAGS || FILE_TAG_PREFIXES.any(token::startsWith) || FILE_TAG_ENDINGS.any(token::endsWith) ||
+        (token.startsWith("bad ") && token.endsWith(" id"))
+
+private val FILE_TAGS = setOf(
+    // Medium
+    "2d", "3d", "3dcg", "3d animation", "3d model", "cgi", "render", "source filmmaker", "sfm", "mmd", "blender", "koikatsu",
+    // Motion
+    "animated", "animation", "gif", "webm", "mp4", "video", "loop", "looping animation", "ugoira", "うごイラ", "60fps",
+    // Sound
+    "sound", "audio", "has audio", "no audio", "no sound", "sound effects", "voice acted", "voice acting",
+    // Resolution and filing
+    "lowres", "highres", "absurdres", "incredibly absurdres", "4k", "huge filesize", "tagme", "commentary", "translated",
+    "partially translated", "md5 mismatch", "duplicate",
+)
+private val FILE_TAG_PREFIXES = listOf("animated ", "audible ", "longer than ", "shorter than ")
+private val FILE_TAG_ENDINGS = listOf(" (medium)", " (software)", " (artwork)", " commentary", " request")
 private const val MIN_KEPT_FOR_LIFT = 20
 private const val MIN_KEPT_FOR_TAG = 2
 private const val MIN_INFORMATIVE_LIFT = 2.0

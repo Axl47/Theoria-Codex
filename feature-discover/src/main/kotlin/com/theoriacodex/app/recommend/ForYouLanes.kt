@@ -17,6 +17,7 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.recommendation.CrossSourceTraining
+import com.theoriacodex.domain.tags.normalizeMatchToken
 import kotlin.random.Random
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
@@ -86,7 +87,8 @@ internal class ForYouLanesLoader(
     /** One lane per trending tag, for a profile whose history gives no interests. */
     private suspend fun trendingSeeds(sources: List<SourceKey>, blocked: List<ForYouBlacklistEntry>): List<LaneSeed> =
         sources.mapConcurrent { source ->
-            trendingTags(source).map { LaneSeed(source, listOf(it)) }
+            // What trends on a source is often its medium (animated, 3d), which says nothing about an interest.
+            trendingTags(source).filterNot { isFileTag(normalizeMatchToken(it)) }.map { LaneSeed(source, listOf(it)) }
                 .filterNot { blocked.hidesSeed(it.source, it.tags) }.take(TRENDING_LANES_PER_SOURCE)
         }.flatten()
 
