@@ -103,6 +103,12 @@ class ExtensionSourceLiveTest {
         viewerControl("the next chapter's name as the title", By.textStartsWith("${listed.title} · ${next.entry.name}"))
         assertTrue("The next chapter reads in the chosen mode", readingModeChecked(mode))
         live.report("next", "past the last page opened \"${next.entry.name}\", still \"$mode\"")
+
+        // The chapter just finished was left on its last page; picked again, it starts over.
+        viewerControl("the finished chapter in the strip", By.desc("Open ${listed.title} · ${chapter.entry.name}")).click()
+        viewerControl("the finished chapter's name as the title", By.textStartsWith("${listed.title} · ${chapter.entry.name}"))
+        val reopenedOn = viewerControl("the finished chapter's first page", By.descStartsWith("Page 1 of ")).contentDescription
+        live.report("reread", "the finished \"${chapter.entry.name}\", picked from the strip, opened on \"$reopenedOn\"")
         device.pressBack()
 
         live.waitFor("the finished chapter marked Read on the series page", By.text("Read"))
