@@ -28,9 +28,11 @@ import com.theoriacodex.app.ui.components.SettingsHeader
 import com.theoriacodex.app.ui.components.SettingsPageColumn
 import com.theoriacodex.app.vision.AppPictures
 import com.theoriacodex.app.vision.ModelState
+import com.theoriacodex.app.vision.VisualModelStore
 import com.theoriacodex.data.repository.SettingDestinations
 import com.theoriacodex.data.repository.VisionProgress
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 
 /** Builds Settings' Picture tags row and page from the app's [pictures]; deleting runs in [scope], so leaving finishes it. */
@@ -44,38 +46,38 @@ internal fun rememberPictureTagsEntry(pictures: AppPictures, scope: CoroutineSco
         is ModelState.Failed -> "Download failed"
     }
     return remember(pictures, summary) {
-        SettingsPicturesEntry(summary) { onBack -> PictureTagsPage(pictures, scope, onBack) }
+        SettingsPicturesEntry(summary) { onBack -> PictureTagsPage(pictures.model, pictures.progress, scope, onBack) }
     }
 }
 
 @Composable
-private fun PictureTagsPage(pictures: AppPictures, scope: CoroutineScope, onBack: () -> Unit) {
+internal fun PictureTagsPage(model: VisualModelStore, library: Flow<VisionProgress>, scope: CoroutineScope, onBack: () -> Unit) {
     val context = LocalContext.current
-    val state by pictures.model.states.collectAsStateWithLifecycle()
-    val progress by pictures.progress.collectAsStateWithLifecycle(VisionProgress(0, 0))
+    val state by model.states.collectAsStateWithLifecycle()
+    val progress by library.collectAsStateWithLifecycle(VisionProgress(0, 0))
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
-    val size = Formatter.formatShortFileSize(context, pictures.model.totalBytes)
+    val size = Formatter.formatShortFileSize(context, model.totalBytes)
     SettingsPageColumn {
         SettingsHeader(SettingDestinations.PictureTags.title, onBack, SETTINGS_PATH)
         SettingsGroup(null) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Tags pictures on this phone, for hidden tags, For You and save suggestions.")
-                when (val model = state) {
-                    ModelState.Absent -> Button(onClick = pictures.model::download) { Text("Download ($size)") }
+                when (val download = state) {
+                    ModelState.Absent -> Button(onClick = model::download) { Text("Download ($size)") }
                     is ModelState.Downloading -> {
-                        LinearProgressIndicator(progress = { model.bytes.toFloat() / model.total }, Modifier.fillMaxWidth())
-                        Text("${Formatter.formatShortFileSize(context, model.bytes)} of $size", style = MaterialTheme.typography.bodySmall)
-                        OutlinedButton(onClick = { scope.launch { pictures.model.delete() } }) { Text("Cancel") }
+                        LinearProgressIndicator(progress = { download.bytes.toFloat() / download.total }, Modifier.fillMaxWidth())
+                        Text("${Formatter.formatShortFileSize(context, download.bytes)} of $size", style = MaterialTheme.typography.bodySmall)
+                        OutlinedButton(onClick = { scope.launch { model.delete() } }) { Text("Cancel") }
                     }
                     is ModelState.Failed -> {
                         Text(
-                            if (model.mismatch) "The download didn't match the expected file." else "Download failed.",
+                            if (download.mismatch) "The download didn't match the expected file." else "Download failed.",
                             color = MaterialTheme.colorScheme.error,
                         )
-                        Button(onClick = pictures.model::download) { Text("Try again") }
+                        Button(onClick = model::download) { Text("Try again") }
                     }
                     ModelState.Ready -> {
-                        Text(libraryProgress(progress))
+                        libraryProgress(progress)?.let { Text(it) }
                         OutlinedButton(onClick = { confirmDelete = true }) { Text("Delete") }
                     }
                 }
@@ -97,15 +99,16 @@ private fun PictureTagsPage(pictures: AppPictures, scope: CoroutineScope, onBack
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false
-                    scope.launch { pictures.model.delete() }
+                    scope.launch { model.delete() }
                 }) { Text("Delete") }
             },
         )
     }
 }
 
-/** "120 of 450 Library posts tagged", and when some are left, that the rest are tagged while charging. */
-private fun libraryProgress(progress: VisionProgress): String {
+/** "120 of 450 Library posts tagged", and when some are left, that the rest are tagged while charging; null for an empty Library. */
+private fun libraryProgress(progress: VisionProgress): String? {
+    if (progress.total == 0) return null
     val done = "${progress.analysed} of ${progress.total} Library posts tagged"
     return if (progress.analysed < progress.total) "$done. The rest are tagged while charging." else done
 }

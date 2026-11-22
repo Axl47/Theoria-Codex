@@ -181,9 +181,7 @@ private fun SettingsHome(
                 open(SettingsPage.STATS_COMPARE)
             })
         }
-        SettingsHomeGroups(state, onAction, storageSummary, sites, backup, pictures, showDiagnostics, seriesUpdates, onOpenExtensions) { sheet ->
-            onAction(SettingsAction.OpenPage(SettingsPage.HOME, sheet))
-        }
+        SettingsHomeGroups(state, onAction, storageSummary, sites, backup, pictures, showDiagnostics, seriesUpdates, onOpenExtensions) { onAction(SettingsAction.OpenPage(SettingsPage.HOME, it)) }
         if (state.showDeveloperScenarios) DeveloperScenarios(state, onAction)
     }
     if (showAddProfile) {

@@ -158,7 +158,7 @@ class VisualModelStore(
                 output.fd.sync()
             }
         }
-        val sha = digest.digest().joinToString("") { "%02x".format(it) }
+        val sha = digest.digest().toHexString()
         if (done != file.bytes || sha != file.sha256) throw MismatchException("${file.name}: $done bytes, sha256 $sha")
     }
 
