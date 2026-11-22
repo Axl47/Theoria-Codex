@@ -28,6 +28,16 @@ class CrossSourceTagsTest {
     }
 
     @Test
+    fun `a tag translates between sources the way Likes do`() {
+        val training = CrossSourceTraining(likes = emptyList(), dictionary = dictionary)
+
+        assertEquals("初音ミク", training.translate("hatsune_miku", SourceKey.GELBOORU, SourceKey.PIXIV))
+        assertEquals("hatsune_miku", training.translate("初音ミク", SourceKey.PIXIV, SourceKey.DANBOORU))
+        assertEquals(null, training.translate("未翻訳", SourceKey.PIXIV, SourceKey.DANBOORU))
+        assertEquals(null, training.translate("cat", SourceKey.GELBOORU, SourceKey.IWARA))
+    }
+
+    @Test
     fun `booru likes reach pixiv only through the dictionary and reach other boorus directly`() {
         val training = CrossSourceTraining(
             likes = listOf(LikedTagDocument(SourceKey.GELBOORU, listOf("hatsune_miku", "cat", "blue_hair"))),

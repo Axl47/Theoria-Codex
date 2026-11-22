@@ -84,6 +84,16 @@ class CrossSourceTraining(
         return native + foreign
     }
 
+    /** [tag], spelled in [from]'s vocabulary, spelled in [to]'s; null when it cannot be mapped. */
+    fun translate(tag: String, from: SourceKey, to: SourceKey): String? {
+        if (from == to) return tag
+        if (!to.sharesBooruVocabulary || !canMap(from, to)) return null
+        return conceptKey(tag, from)?.let { spell(it, to) }
+    }
+
+    private fun conceptKey(tag: String, source: SourceKey): String? =
+        (if (source == SourceKey.PIXIV) dictionary.conceptKey(tag) else crossSourceTagKey(tag))?.takeIf(String::isNotEmpty)
+
     private fun canMap(from: SourceKey, to: SourceKey): Boolean =
         from != to && from.sharesBooruVocabulary &&
             (!dictionary.isEmpty || (from != SourceKey.PIXIV && to != SourceKey.PIXIV))
@@ -92,11 +102,7 @@ class CrossSourceTraining(
         if (target == SourceKey.PIXIV) dictionary.nativeTag(conceptKey) else conceptKey.replace(' ', '_')
 
     private inner class Document(val like: LikedTagDocument) {
-        val conceptKeys: List<String> by lazy {
-            like.tags.mapNotNull { tag ->
-                if (like.source == SourceKey.PIXIV) dictionary.conceptKey(tag) else crossSourceTagKey(tag)
-            }.filter(String::isNotEmpty)
-        }
+        val conceptKeys: List<String> by lazy { like.tags.mapNotNull { tag -> conceptKey(tag, like.source) } }
     }
 
 }

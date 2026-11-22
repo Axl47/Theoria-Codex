@@ -1,6 +1,9 @@
 package com.theoriacodex.app.recommend
 
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.recommendation.CrossSourceTraining
+import com.theoriacodex.domain.recommendation.LikedTagDocument
+import com.theoriacodex.domain.recommendation.PixivTagDictionary
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -35,11 +38,15 @@ class ForYouInterestsTest {
         assertEquals(listOf(listOf("miku"), listOf("moth")), interests.map { it.tags })
     }
 
-    @Test fun `a tag proven on one booru leads a lane on another that has history of its own`() {
+    @Test fun `a tag proven on Pixiv leads a lane on a booru that has history of its own`() {
         val affinity = history(SourceKey.GELBOORU, mapOf("cloud" to 3), watched = mapOf("cloud" to 3L))
-            .merge(history(SourceKey.DANBOORU, mapOf("hatsune miku" to 15), watched = mapOf("hatsune miku" to 5L)))
-        val translated = List(15) { listOf("hatsune_miku") }
-        val interests = ForYouInterests.generate(SourceKey.GELBOORU, translated, affinity)
+            .merge(history(SourceKey.PIXIV, mapOf("初音ミク" to 15), watched = mapOf("初音ミク" to 5L)))
+        val training = CrossSourceTraining(
+            likes = List(15) { LikedTagDocument(SourceKey.PIXIV, listOf("初音ミク")) },
+            dictionary = PixivTagDictionary.from(listOf("初音ミク" to "Hatsune Miku")),
+        )
+        val interests = ForYouInterests.generate(SourceKey.GELBOORU, training.documentsFor(SourceKey.GELBOORU), affinity,
+            translate = { tag, into -> training.translate(tag, SourceKey.GELBOORU, into) })
         assertEquals(listOf("hatsune_miku"), interests.first().tags)
     }
 

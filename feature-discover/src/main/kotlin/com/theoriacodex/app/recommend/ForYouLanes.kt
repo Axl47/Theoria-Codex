@@ -16,6 +16,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.recommendation.CrossSourceTraining
 import kotlin.random.Random
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
@@ -49,19 +50,32 @@ internal class ForYouLanesLoader(
         seeds.inTurnBySource().take(LANE_LIMIT).map { (source, tags) -> lane(source, tags, request) }
     }
 
-    /**
-     * Each source's interests, strongest first, ending with a guess to explore. An interest with a tag the source reports
-     * no posts for is left out, since its lane would stay empty.
-     */
+    /** Each source's interests, strongest first, ending with a guess to explore. */
     private suspend fun interestSeeds(sources: List<SourceKey>, liked: List<LikedPost>, blocked: List<ForYouBlacklistEntry>): List<LaneSeed> {
         val affinity = tagAffinity.first()
         if (liked.isEmpty() && affinity.keptBySource.isEmpty() && affinity.explicit.isEmpty()) return emptyList()
         val training = crossSourceTraining(liked, store)
         return sources.mapConcurrent { source ->
-            val interests = ForYouInterests.generate(source, training.documentsFor(source), affinity, random())
-            val providerCounts = counts.fetch(source, interests.flatMap { it.tags })
-            interests.filter { interest -> interest.tags.none { providerCounts[it] == 0 } }.map { LaneSeed(source, it.tags) }
+            availableInterests(source, training, affinity).map { LaneSeed(source, it.tags) }
         }.flatten().filterNot { blocked.hidesSeed(it.source, it.tags) }
+    }
+
+    /**
+     * [source]'s interests, picked again without any tag the source reports no posts for, since its lane would stay
+     * empty. Counts are asked only for the picked tags; after [AVAILABILITY_ROUNDS] picks, interests with such tags drop.
+     */
+    private suspend fun availableInterests(source: SourceKey, training: CrossSourceTraining, affinity: TagAffinityInputs): List<ForYouInterest> {
+        val documents = training.documentsFor(source)
+        val translate = { tag: String, into: SourceKey -> training.translate(tag, source, into) }
+        var unavailable = emptySet<String>()
+        for (round in 1..AVAILABILITY_ROUNDS) {
+            val interests = ForYouInterests.generate(source, documents, affinity, translate, unavailable, random())
+            val providerCounts = counts.fetch(source, interests.flatMap { it.tags })
+            val missing = interests.flatMap { it.tags }.filterTo(mutableSetOf()) { providerCounts[it] == 0 }
+            if (missing.isEmpty() || round == AVAILABILITY_ROUNDS) return interests.filter { it.tags.none(missing::contains) }
+            unavailable += missing
+        }
+        return emptyList()
     }
 
     /** One lane per trending tag, for a profile whose history gives no interests. */
@@ -112,6 +126,9 @@ private fun forYouBaseQuery(sort: SortMode): Query = Query(
 
 /** The most lanes a Mix runs: each opens with its own request, and each gets a chip. */
 private const val LANE_LIMIT = 6
+
+/** How many times a source's interests are picked again around tags it has no posts for. */
+private const val AVAILABILITY_ROUNDS = 3
 private const val TRENDING_LANES_PER_SOURCE = 3
 private const val TRENDING_LIMIT = 20
 private const val TRENDING_TIMEOUT_MS = 4_000L

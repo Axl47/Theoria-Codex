@@ -102,6 +102,18 @@ class ForYouCoordinatorTest {
         assertEquals(0, adapter.trendingRequests)
     }
 
+    @Test fun `a tag the source has no posts for gives up its slot, not its partner's`() = runTest {
+        val likes = InMemoryLikesRepository().apply {
+            listOf("a", "b").forEach { id -> toggleLike(PROFILE, PostId(SourceKey.GELBOORU, id), listOf("cloud", "river")) }
+        }
+        val store = object : TagSuggestionStore by NoOpTagSuggestionStore {
+            override fun getCount(source: SourceKey, tag: String): Int? = 0.takeIf { tag == "cloud" }
+        }
+        val service = testForYouCoordinator(registryOf(FakeAdapter(SourceKey.GELBOORU)), likesRepository = likes, tagSuggestionStore = store)
+
+        assertEquals(listOf(listOf("river")), service.lanes(request(service)).map { it.tags })
+    }
+
     @Test fun `hidden tags drop their lanes and the media filter reaches each lane's query`() = runTest {
         val service = testForYouCoordinator(registryOf(FakeAdapter(SourceKey.GELBOORU)), likesRepository = liked(SourceKey.GELBOORU, "cloud", "river"))
         val hidden = AppSettings().let { it.copy(forYouBlacklistByProfile = mapOf(it.activeProfileId to listOf(ForYouBlacklistEntry(SourceKey.GELBOORU, listOf("cloud"))))) }
