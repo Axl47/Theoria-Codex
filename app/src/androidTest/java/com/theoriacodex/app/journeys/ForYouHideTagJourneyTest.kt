@@ -1,5 +1,6 @@
 package com.theoriacodex.app.journeys
 
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -31,7 +32,8 @@ class ForYouHideTagJourneyTest : AppJourneyFixture() {
         activate(compose.onNodeWithText("${SourceKey.PIXIV.displayName()}: pixiv_seed"))
         activate(compose.onNodeWithContentDescription("Hide pixiv_seed"))
         compose.waitUntil(10_000) { hidden() == listOf(ForYouBlacklistEntry(SourceKey.PIXIV, listOf("pixiv_seed"))) }
-        compose.onNodeWithText("Hid pixiv_seed").assertExists()
+        // The Undo offer follows the settings write on a background dispatcher that Compose's idling does not track.
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Hid pixiv_seed").fetchSemanticsNodes().isNotEmpty() }
         activate(compose.onNodeWithText("Undo"))
         compose.waitUntil(10_000) { hidden().isEmpty() }
     }
