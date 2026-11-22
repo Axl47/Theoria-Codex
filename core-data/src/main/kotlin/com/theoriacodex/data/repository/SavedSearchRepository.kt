@@ -45,6 +45,9 @@ interface SavedSearchRepository {
 
     /** Adds imported pins atomically, replacing only matching imported IDs and rejecting overflow. */
     suspend fun merge(entries: List<SavedSearchEntry>)
+
+    /** The library [merge] would store for [entries], unchecked and unsaved, for a restore to test against the limit first. */
+    suspend fun merged(entries: List<SavedSearchEntry>): List<SavedSearchEntry>
 }
 
 class FileBackedSavedSearchRepository private constructor(repository: SavedSearchRepository) :
@@ -143,11 +146,17 @@ private class MutableSavedSearchRepository(
         persist(entries.withForYouSearchesConverted(sourceName))
     }
 
-    override suspend fun merge(entries: List<SavedSearchEntry>) = mutex.withLock {
-        // Only an incoming ordinary search replaces the local one with its ID. A For You search is converted together
-        // with the existing searches, so what it generates gives way to them and takes only slots that are still free.
+    override suspend fun merge(entries: List<SavedSearchEntry>) = mutex.withLock { persist(mergedWith(entries)) }
+
+    override suspend fun merged(entries: List<SavedSearchEntry>) = mutex.withLock { mergedWith(entries) }
+
+    /**
+     * Only an incoming ordinary search replaces the local one with its ID. A For You search is converted together
+     * with the existing searches, so what it generates gives way to them and takes only slots that are still free.
+     */
+    private fun mergedWith(entries: List<SavedSearchEntry>): List<SavedSearchEntry> {
         val replacedIds = entries.filterNot { it.search.isRetiredForYouSearch }.mapTo(mutableSetOf(), SavedSearchEntry::id)
-        persist((entries + savedSearches.value.filterNot { it.id in replacedIds }).withForYouSearchesConverted(sourceName))
+        return (entries + savedSearches.value.filterNot { it.id in replacedIds }).withForYouSearchesConverted(sourceName)
     }
 
     private suspend fun persist(entries: List<SavedSearchEntry>) {

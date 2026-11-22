@@ -13,9 +13,10 @@ import java.util.UUID
  * searched several sources splits into one search per source, named "<name> · <source>".
  *
  * Ordinary searches always stay exactly as they are. A generated search gives way to them: one whose ID or search
- * an ordinary search (or an earlier generated one) already has is dropped, and a mix's extra searches take only
- * free slots below [MAX_SAVED_SEARCHES]. An entry without usable source tags is dropped. Lists without For You
- * searches come back unchanged, so applying it again is a no-op.
+ * an ordinary search (or an earlier generated one) already has is dropped. The search that keeps its entry's ID
+ * takes the entry's place; a mix's other searches take only free slots below [MAX_SAVED_SEARCHES], also when the
+ * one with its ID is already there, so importing the same backup again adds nothing. An entry without usable source
+ * tags is dropped. Lists without For You searches come back unchanged, so applying it again is a no-op.
  */
 internal fun List<SavedSearchEntry>.withForYouSearchesConverted(
     sourceName: (SourceKey) -> String,
@@ -29,12 +30,12 @@ internal fun List<SavedSearchEntry>.withForYouSearchesConverted(
         if (!entry.search.isRetiredForYouSearch) return@map null
         entry.asSourceSearches(sourceName).filter { ids.add(it.id) && searches.add(it.search.identity()) }
     }
-    var freeSlots = MAX_SAVED_SEARCHES - ordinary.size - generated.count { !it.isNullOrEmpty() }
+    var freeSlots = MAX_SAVED_SEARCHES - ordinary.size - indices.count { index -> generated[index]?.any { it.id == this[index].id } == true }
     return flatMapIndexed { index, entry ->
-        val replacements = generated[index] ?: return@flatMapIndexed listOf(entry)
-        val extra = replacements.drop(1).take(freeSlots.coerceAtLeast(0))
+        val (own, others) = (generated[index] ?: return@flatMapIndexed listOf(entry)).partition { it.id == entry.id }
+        val extra = others.take(freeSlots.coerceAtLeast(0))
         freeSlots -= extra.size
-        replacements.take(1) + extra
+        own + extra
     }
 }
 

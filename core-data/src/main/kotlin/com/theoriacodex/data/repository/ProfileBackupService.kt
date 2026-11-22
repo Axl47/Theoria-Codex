@@ -108,8 +108,8 @@ class ProfileBackupService(
 
     private suspend fun preflight(imported: ProfileBackup, applyPreferences: Boolean) {
         settings.observeSettings().first().mergeRestoredSettings(imported.settings, applyPreferences)
-        val existingPins = savedSearches.observeSavedSearches().first().mapTo(mutableSetOf()) { it.id }
-        require((existingPins + imported.savedSearches.map { it.id }).size <= MAX_SAVED_SEARCHES) {
+        // Counted as the merge would store them: For You pins convert, and some then give way or split.
+        require(savedSearches.merged(imported.savedSearches).size <= MAX_SAVED_SEARCHES) {
             "Restore would exceed the $MAX_SAVED_SEARCHES pinned-search limit. Remove some pins first."
         }
     }
