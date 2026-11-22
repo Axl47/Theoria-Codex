@@ -34,6 +34,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
+import com.theoriacodex.domain.vision.PictureTags
+import com.theoriacodex.domain.vision.PredictedTag
+import com.theoriacodex.domain.vision.PredictedTagIndex
 
 internal val DECK_SOURCE = SourceKey.GELBOORU
 
@@ -192,10 +195,36 @@ internal fun deckWiring(
     quickSave: FakeDeckQuickSave = FakeDeckQuickSave(),
     verdicts: ForYouVerdictRepository = InMemoryForYouVerdictRepository(),
     copiesOf: (Post) -> Set<PostId> = { setOf(it.id) },
+    pictures: PictureTags = PictureTags.None,
 ) = ForYouDeckWiring(
     actions, quickSave, trails::open, NoRelatedPosts, scope, fetchContext = EmptyCoroutineContext, verdicts = verdicts,
-    copiesOf = copiesOf, clock = AtomicLong()::incrementAndGet,
+    copiesOf = copiesOf, clock = AtomicLong()::incrementAndGet, pictures = pictures,
 )
+
+/**
+ * A picture tagger that predicts [predicted] for a post (nothing for the rest) and answers at once, or once [release]d
+ * while [held]. [asked] lists every post it tagged, in order.
+ */
+internal class FakePictureTags(ready: Boolean = true, private val predicted: Map<String, List<PredictedTag>> = emptyMap()) : PictureTags {
+    override val ready = MutableStateFlow(ready)
+    override val index = MutableStateFlow(PredictedTagIndex.Empty)
+    val asked = mutableListOf<String>()
+    var held: CompletableDeferred<Unit>? = null
+
+    fun release() = held?.complete(Unit)
+
+    override suspend fun tagsFor(post: Post): List<PredictedTag> {
+        if (!ready.value) return emptyList()
+        held?.await()
+        asked += post.id.sourcePostId
+        val tags = predicted[post.id.sourcePostId].orEmpty()
+        index.value = index.value.copy(byPost = index.value.byPost + (post.id to tags))
+        return tags
+    }
+}
+
+/** A confident general prediction of [tag]. */
+internal fun seen(tag: String) = listOf(PredictedTag(tag, 0.9f, PredictedTag.Kind.GENERAL))
 
 internal fun deckEnvironment(
     settings: AppSettings = AppSettings(),
