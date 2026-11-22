@@ -45,6 +45,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
@@ -68,6 +69,9 @@ import com.theoriacodex.app.ui.components.FeedFailureTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
 import com.theoriacodex.app.triage.triageSeed
+import com.theoriacodex.app.ui.navigation.LocalTriageOpener
+import com.theoriacodex.app.ui.navigation.TriageOpener
+import com.theoriacodex.app.ui.navigation.TriageRequest
 import com.theoriacodex.app.ui.navigation.rememberTriageAction
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.app.ui.components.FeedPageDemandControl
@@ -123,10 +127,9 @@ fun ForYouScreen(
     DurationRouteEnvironmentEffect(gridState, durations.onEnvironmentChanged)
     val filterScroll = rememberFeedScrollSignal()
     val filterLabels = forYouFilterLabels(state.sortMode, feed)
-    val clearFilters: () -> () -> Unit = {
-        clearForYouFilters(state.sortMode, fabRestoreState, onFabRestoreStateChange, onAction)
-    }
+    val clearFilters: () -> () -> Unit = { clearForYouFilters(state.sortMode, fabRestoreState, onFabRestoreStateChange, onAction) }
     val pageDemand = rememberForYouPageDemand(state, feed, gridState, onAction)
+    val triage = rememberForYouTriage(state, feed, onAction)
     val cards = rememberFeedCardEnvironment(
         pixivUgoiraClient, likedPostIds, feed.durations.knownDurationMsByPostId, durations, onToggleLike, resolvePostById,
     )
@@ -142,7 +145,7 @@ fun ForYouScreen(
                     ForYouHomeScreen(state, cards, feed::filterHomePosts,
                         { selectedActionPost = it }, onAction, { showSortSheet = true }, filterLabels, clearFilters,
                         onOpenPreview = { id, posts, index -> onAction(ForYouAction.OpenSectionResult(id, index, posts, feed.filters)) },
-                        onOpenWhy = { why = it }, onSelectProfile = onSelectProfile)
+                        onOpenWhy = { why = it }, onSelectProfile = onSelectProfile, onTriageShelf = triage.shelf)
                 }
             } else {
                 ForYouResults(
@@ -168,7 +171,7 @@ fun ForYouScreen(
             state.sortMode, fabRestoreState, feed, onFabRestoreStateChange, onAction,
             // The sheet reset has no undo affordance, so the undo callback is intentionally discarded.
             onReset = @Suppress("IgnoredReturnValue") { clearFilters() },
-            onTriage = rememberTriageAction(ViewerStreamSource.FOR_YOU, state.queryHash, feed.triageSeed()),
+            onTriage = triage.sheet,
             onDismiss = { showSortSheet = false },
         )
     }
@@ -263,6 +266,43 @@ private fun ForYouResults(
         }
     }
 }
+
+/** Triage from For You: over a home shelf ([shelf]; see [rememberShelfTriage]) and from the filter sheet ([sheet]). */
+private class ForYouTriage(val shelf: ((String?) -> Unit)?, val sheet: (() -> Unit)?)
+
+/** On home the sheet triages Your mix, home's own feed; the grid's results there are whichever shelf was open last. */
+@Composable
+private fun rememberForYouTriage(state: ForYouUiState, feed: FeedView, onAction: (ForYouAction) -> Unit): ForYouTriage {
+    val grid = rememberTriageAction(ViewerStreamSource.FOR_YOU, state.queryHash, feed.triageSeed())
+    val shelf = rememberShelfTriage(state, feed, onAction)
+    val mix = shelf?.takeIf { state.home.mixedFeed?.page?.items.orEmpty().isNotEmpty() }
+    return ForYouTriage(shelf, if (state.home.visible) mix?.let { triage -> { triage(null) } } else grid)
+}
+
+/**
+ * Triage over a home shelf: section `id`, or Your mix for null. It opens the shelf as the grid's feed, which the deck
+ * pages through and returns to, then the deck, seeded with the shelf's posts the grid's filters keep. Null when
+ * nothing in the app provides a deck.
+ */
+@Composable
+private fun rememberShelfTriage(state: ForYouUiState, feed: FeedView, onAction: (ForYouAction) -> Unit): ((String?) -> Unit)? {
+    val opener = LocalTriageOpener.current
+    val latestState by rememberUpdatedState(state)
+    val latestFeed by rememberUpdatedState(feed)
+    return remember(opener, onAction) {
+        if (opener === TriageOpener.None) return@remember null
+        triage@{ id: String? ->
+            val shelf = latestState.home.shelf(id) ?: return@triage
+            val posts = latestFeed.filterHomePosts(shelf.page.items).ifEmpty { return@triage }
+            onAction(if (id == null) ForYouAction.OpenMixedFeed else ForYouAction.OpenSection(id))
+            opener.openTriage(TriageRequest(ViewerStreamSource.FOR_YOU, shelf.queryHash), latestFeed.triageSeed().copy(posts = posts))
+        }
+    }
+}
+
+/** Home section [id]'s feed, or Your mix's for null. */
+private fun ForYouHomeState.shelf(id: String?): ForYouFeedResult? =
+    if (id == null) mixedFeed else sections.firstOrNull { it.id == id }?.feed
 
 /** Home shelves take the grid's media filters and known lengths; For You has no mark filters to apply. */
 private fun FeedView.filterHomePosts(posts: List<Post>): List<Post> = filterSearchResults(
