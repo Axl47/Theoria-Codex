@@ -202,14 +202,11 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
     }
 
     @Test
-    fun recentsDispatchesExactMultiSearchAndColdFypReplayThroughNavigation() {
+    fun recentsDispatchesExactMultiSearchThroughNavigation() {
         val multi = query(listOf("multi"), SortMode.POPULAR)
-        val sourceTags = linkedMapOf(SourceKey.GELBOORU to listOf("gelbooru_seed"), SourceKey.PIXIV to listOf("pixiv_seed"))
         io {
             container.data.recentsRepository.recordSearch(multi, "journey:multi", RecentSearchKind.MULTI_SEARCH,
                 listOf(SourceKey.GELBOORU, SourceKey.PIXIV))
-            container.data.recentsRepository.recordSearch(query(listOf("legacy_wrong_tag"), SortMode.TOP),
-                "for_you:journey", RecentSearchKind.FYP, sourceTags.keys.toList(), sourceTags)
         }
         launch()
         library(LibrarySection.History)
@@ -220,16 +217,6 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         assertEquals(setOf(SourceKey.GELBOORU, SourceKey.PIXIV), multiRequests.map { it.source }.toSet())
         assertTrue(multiRequests.all { it.query.includeTags == listOf("multi") && it.query.sort == SortMode.POPULAR })
         assertTrue(io { container.data.queryRepository.observeAppliedQuery("unified").first() == null })
-        container.registry.requests.clear()
-        library(LibrarySection.History)
-        openRecentsSection("Searches")
-        activate(compose.onNodeWithTag("Recent search:for_you:journey"))
-        compose.waitUntil(10_000) { container.registry.requests.count { it.pageToken == null } >= 2 }
-        val replay = container.registry.requests.filter { it.pageToken == null }
-        assertEquals(sourceTags, replay.associate { it.source to it.query.includeTags })
-        assertTrue(replay.all { it.query.sort == SortMode.TOP })
-        assertTrue(io { container.data.likesRepository.observeLikes("profile-main").first().isEmpty() })
-        compose.onNodeWithTag(searchCardTestTag(posts.getValue(SourceKey.PIXIV)[0].id)).assertIsDisplayed()
     }
 
     private fun cardOffsetInViewport(tag: String): Float {

@@ -7,7 +7,6 @@ import androidx.compose.ui.test.performTouchInput
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.library.LibrarySection
 import com.theoriacodex.app.search.searchCardTestTag
-import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
@@ -22,16 +21,14 @@ class LiftToCollectJourneyTest : AppJourneyFixture() {
         val first = posts.getValue(SourceKey.PIXIV).first()
         val collection = io {
             container.data.recentsRepository.recordSearch(
-                Query(QueryMode.Unified, listOf("pixiv_seed"), emptyList(), SortMode.NEWEST, null, null),
-                "for_you:lift", RecentSearchKind.FYP, listOf(SourceKey.PIXIV),
-                mapOf(SourceKey.PIXIV to listOf("pixiv_seed")),
+                Query(QueryMode.Source(SourceKey.PIXIV), listOf("pixiv_seed"), emptyList(), SortMode.NEWEST, null, null), "lift",
             )
             container.content.ensureCodex(profileScopedCodexId("profile-main", "lift"), "Lift target")
         }
         launch()
         library(LibrarySection.History)
         openRecentsSection("Searches")
-        compose.onNodeWithTag("Recent search:for_you:lift").performClick()
+        compose.onNodeWithTag("Recent search:lift").performClick()
         val cardTag = searchCardTestTag(first.id)
         compose.waitUntil(10_000) { compose.onAllNodesWithTag(cardTag).fetchSemanticsNodes().isNotEmpty() }
         val card = compose.onNodeWithTag(cardTag)

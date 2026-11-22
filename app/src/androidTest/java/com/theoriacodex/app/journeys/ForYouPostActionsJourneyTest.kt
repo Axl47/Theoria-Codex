@@ -1,6 +1,5 @@
 package com.theoriacodex.app.journeys
 
-import com.theoriacodex.app.library.LibrarySection
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
@@ -15,36 +14,26 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import com.theoriacodex.app.codex.likesCodexIdForProfile
 import com.theoriacodex.app.codex.profileScopedCodexId
+import com.theoriacodex.app.recommend.FOR_YOU_VIEW_TOGGLE_TAG
 import com.theoriacodex.app.search.searchCardTestTag
-import com.theoriacodex.data.repository.RecentSearchKind
-import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
-import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.first
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ForYouPostActionsJourneyTest : AppJourneyFixture() {
     @Test
-    fun replayLikeRelatedShelfSaveAndCreatorActionsUseTheRealOwners() {
+    fun gridLikeRelatedShelfSaveAndCreatorActionsUseTheRealOwners() {
         val first = posts.getValue(SourceKey.PIXIV).first()
-        val collection = io {
-            container.data.recentsRepository.recordSearch(
-                Query(QueryMode.Unified, listOf("pixiv_seed"), emptyList(), SortMode.NEWEST, null, null),
-                "for_you:actions", RecentSearchKind.FYP, listOf(SourceKey.PIXIV),
-                mapOf(SourceKey.PIXIV to listOf("pixiv_seed")),
-            )
-            container.content.ensureCodex(profileScopedCodexId("profile-main", "actions"), "FYP saved")
-        }
+        val collection = io { container.content.ensureCodex(profileScopedCodexId("profile-main", "actions"), "FYP saved") }
         launch()
-        library(LibrarySection.History)
-        openRecentsSection("Searches")
-        compose.onNodeWithTag("Recent search:for_you:actions").performClick()
+        tab("For You")
+        // The grid shows the Mix's posts; the first lane's first post is among its first cards.
+        activate(compose.onNodeWithTag(FOR_YOU_VIEW_TOGGLE_TAG))
         val card = searchCardTestTag(first.id)
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag(card).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(15_000) { compose.onAllNodesWithTag(card).fetchSemanticsNodes().isNotEmpty() }
         val rootsBeforeLike = container.registry.requests.count { it.pageToken == null }
-        val historyBeforeLike = io { container.data.recentsRepository.observeSearches().first() }
         compose.onNode(hasContentDescription("Like post") and hasAnyAncestor(hasTestTag(card)), useUnmergedTree = true)
             .performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("More like this").fetchSemanticsNodes().isNotEmpty() }
@@ -52,7 +41,8 @@ class ForYouPostActionsJourneyTest : AppJourneyFixture() {
         assertEquals(setOf(first.id), io { container.data.likesRepository.observeLikedPostIds("profile-main").first() })
         assertEquals(listOf(first.id), io { container.content.observeCodexItems(likesCodexIdForProfile("profile-main")).first().map { it.postId } })
         assertEquals(rootsBeforeLike, container.registry.requests.count { it.pageToken == null })
-        assertEquals(historyBeforeLike, io { container.data.recentsRepository.observeSearches().first() })
+        // For You leaves nothing in the search history.
+        assertTrue(io { container.data.recentsRepository.observeSearches().first() }.isEmpty())
         compose.onNodeWithText("Dismiss").performClick()
         longPress(compose.onNodeWithTag(card))
         activate(compose.onNodeWithText("Save to Codex"))
