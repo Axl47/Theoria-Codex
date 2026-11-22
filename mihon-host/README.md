@@ -2,7 +2,8 @@
 
 Runs [Mihon](https://github.com/mihonapp/mihon) manga extensions and presents their sources as `SeriesSource`s, which
 the Series tab browses and the Viewer reads chapter by chapter. It finds the extensions Mihon installed on the device,
-and runs one only after the user turns it on. Only debug builds include it; release builds contain none of this.
+and runs one only after the user turns it on. Every build includes it; the Series tab shows only while an extension
+is installed.
 
 It began as a spike asking how much of Mihon's run-time Theoria must provide before the extension ecosystem works
 here. That verdict and its measurements are kept below; the Series feature is built on top of it.
@@ -14,7 +15,7 @@ rest is Mihon's API trimmed to what extensions call. An unmodified MangaDex exte
 shows its pages in the real Viewer. Of 10 other extensions tried, 7 listed, opened and fetched a page unchanged.
 
 Three costs decided whether to build it. The spike solved none; settings and trust have since been built (see "How it
-works"), and release size is still open:
+works"), and the release size was measured again and accepted (see "Release builds"):
 
 - **Settings.** 30% of extensions have a settings screen built on `androidx.preference`, which Theoria does not
   ship. They cannot load until the host provides it, and some need their settings to work at all (a site address, a
@@ -71,15 +72,47 @@ file as `mihon_<name>`, so extension files cannot be mistaken for the app's own.
 | Piece | Where | What it does |
 | --- | --- | --- |
 | Host API | `src/main/kotlin/eu/kanade/tachiyomi`, `uy/kohesive/injekt` | The classes extensions link against, trimmed from Mihon (Apache 2.0, see `LICENSE-APACHE-2.0.txt`). Only the coroutine API; no RxJava. |
-| `ExtensionPackages` | `com.theoriacodex.mihonhost` | Lists the extensions on the device without running them: installed packages with the extension feature, and APK files in the debug app's `mihon-extensions` folder. |
+| `ExtensionPackages` | `com.theoriacodex.mihonhost` | Lists the extensions on the device without running them: installed packages with the extension feature and, in debug builds only, APK files in the app's `mihon-extensions` folder. `any()` answers whether there is one at all, which decides the Series tab. |
 | `ExtensionRegistry` | same | The rule for what runs: loads the extensions that are on, on first use, each with 15 s to finish, and offers the sources of the languages that are on; only those sources fetch images. One that hangs or fails is left out and says why on the Extensions page. Settings are read only for the extension whose page is open. |
 | `ExtensionLoader` | same | Loads an installed package's code from its own APK; a folder file is first copied to a private read-only file (Android refuses writable code) and the copy's signer checked again. |
 | `SourceSettings`, `androidx/preference` | same | Reads a source's settings out of the holder classes and stores a changed value where the source reads it. |
 | `MihonHost` | same | Gives extensions what they ask the service locator for: the application, a `Json`, and an HTTP client. |
 | `MihonSeriesSource` | same | Presents one extension source as the app's `SeriesSource` (`core-domain`): popular and text search list series, a series has details and chapters, and a chapter gives its pages when it is opened. |
 | `ExtensionImages` | same | Fetches covers and pages through the extension's own HTTP client. Each address handed to the app ends in `#mihon=<source id>`; an interceptor on the app's media client answers those. |
-| App seam | `app/.../di/ExtensionSources.kt`, `app/src/debug/.../MihonExtensionSourceHost.kt` | Debug builds find the host through `ServiceLoader`. Nothing loads at startup: the extensions that are on load once, off the main thread, the first time the Series tab asks for sources or an image address ending in `#mihon=` is requested. The debug manifest holds `QUERY_ALL_PACKAGES`, as Mihon does: extension packages share only a declared feature, which a `<queries>` element cannot match. |
+| App seam | `app/.../extensions/MihonExtensionSourceHost.kt`, `app/.../di/ExtensionSources.kt` | The application creates the host. Nothing loads at startup: the extensions that are on load once, off the main thread, the first time the Series tab asks for sources or an image address ending in `#mihon=` is requested. The manifest holds `QUERY_ALL_PACKAGES`, as Mihon does: extension packages share only a declared feature, which a `<queries>` element cannot match. The Series tab is shown while an extension is on the device, looked up at startup and each time the app returns to the foreground. |
 | Series | `feature-series`, `app/.../series/`, `core-data` `SeriesRepository` | The Series tab and series page, the Extensions page (also reached from Settings), the Viewer session over a series' chapters, and the `series` and `series_entries` tables that keep followed series, read state and progress. Pages are never stored. |
+
+## Release builds
+
+Release builds shrink and rename code with R8, which cannot see that an extension will call `okhttp3.OkHttpClient` or
+`kotlin.collections.CollectionsKt` by name. `consumer-rules.pro` therefore keeps the public members of every package
+the 300 sampled extensions referenced: this module's Mihon API, and the public packages of OkHttp, Okio, Jsoup,
+kotlinx.serialization, kotlinx.coroutines and the Kotlin standard library. Internal packages are left to R8 except two
+members one extension each used.
+
+Why whole packages. Three rule sets were built and measured on `:app:assembleRelease` (the APK the Release workflow
+ships, unsigned here), and each APK was checked symbol by symbol against the 300 extensions:
+
+| Rules | APK | Growth | Sampled extensions that link |
+| --- | --- | --- | --- |
+| None (before, at `f17caecf`) | 10,867,852 bytes | | |
+| Exactly the 1,508 sampled classes and members | 13,153,339 bytes | +2.29 MB (+21%) | 294 of 300 |
+| **The packages they are in (chosen)** | 15,170,425 bytes | +4.30 MB (+40%) | 294 of 300 |
+| Every class of those libraries | 17,204,943 bytes | +6.34 MB (+58%) | 294 of 300 |
+
+The six that do not link need what the host lacks in any build (protobuf, a JavaScript engine, an image decoder). The
+smallest set was not chosen because the sample is 300 of 1,711 extensions: rules made from 250 of them left out
+something that about 30% of the other 50 call, rules that keep each sampled class whole about 7%, and rules by
+package 0 to 8% (five random splits each). About 1.5 MB of the growth is the zstd decoder, a native library that every
+extension's HTTP client names; the app packages it for `arm64-v8a` and `x86_64` only.
+
+`extension-symbols.txt` lists what the sample referenced, in the form R8 reports what it kept. The release part of the
+checks (`scripts/check.sh --part release`) fails when a release build no longer keeps one of them. It lists host names
+only; the survey's scripts and the extension index are not in the repository.
+
+Proved on an emulator with the minified `releaseAcceptance` build: MangaDex and Omoi browse, MangaDex opens a series
+and a 28-page chapter and lists its settings, a Jsoup-only extension lists, and logcat shows no missing class or
+member other than the protobuf one extension needs.
 
 ## Try it
 
@@ -103,8 +136,8 @@ adb -s <emulator> shell am instrument -w -r -e extensionApk extension.apk \
 It lists popular series, opens one's first chapter, fetches a cover and a page, and prints counts, timings and request counts as
 `harness=` lines. It never prints or saves images.
 
-In the debug app, install the extension the way Mihon does, as a package (for tests, a file pushed to
-`/sdcard/Android/data/com.theoriacodex.debug/files/mihon-extensions/` is found too):
+In the app, install the extension the way Mihon does, as a package (for tests, a debug build also finds a file pushed
+to `/sdcard/Android/data/com.theoriacodex.debug/files/mihon-extensions/`):
 
 ```sh
 adb -s <emulator> install -r extension.apk
@@ -189,14 +222,13 @@ framework. The scripts are not in the repository: they depend on the index, whic
 
 What the feature still lacks.
 
-- **Updates in release builds.** The background check's service and its notification and boot permissions are
-  declared in the debug manifest only, beside the host.
 - **Backup.** Followed series and reading progress are not in profile backups.
 - **Search filters.** Each extension defines its own filters (genre, status, sort). Only popular, latest and free
   text are used. Posts carry no tags.
 - **Unloading.** Loaded code cannot be unloaded. Turning an extension off stops its sources and images at once; its
   code stays idle in memory until the app's process ends.
-- **Release builds.** The host, the `QUERY_ALL_PACKAGES` permission and the Series tab are debug-only.
+- **Extensions outside the sample.** The keep rules cover the packages 300 extensions used. One that calls a class in
+  another package of those libraries fails with a missing class or method in release builds only.
 - **Cloudflare.** `CloudflareInterceptor` is an empty stand-in. A site behind a browser challenge answers 403.
 - **A JavaScript engine, protobuf and extra image decoders**, used by about 2% of extensions.
 - **Installing and updating extensions.** There is no repository browser and no update check.
@@ -208,10 +240,11 @@ What the feature still lacks.
 
 ## Removing it
 
-Delete `mihon-host/`, `app/src/debug/java/com/theoriacodex/app/extensions/`, the `META-INF/services` file under
-`app/src/debug/resources/`, and `ExtensionSourceLiveTest`. Then remove the module's lines from
-`settings.gradle.kts`, `app/build.gradle.kts`, the root `build.gradle.kts`, `scripts/check.sh`,
+Delete `mihon-host/`, `app/src/main/java/com/theoriacodex/app/extensions/` and its use in `TheoriaApplication`, and
+`ExtensionSourceLiveTest`. Then remove the module's lines from
+`settings.gradle.kts`, `app/build.gradle.kts` (the `abiFilters` line too), the root `build.gradle.kts`, `scripts/check.sh`,
 `scripts/verify_device_apk.py`, `config/quality/hotspot-budgets.json` and its Detekt baseline, and the three library
-aliases in `gradle/libs.versions.toml`. The seam in `:app` and `:media-kit` (`ExtensionSourceHost`, `AppHttpClients`'
-`extensionMedia`) does nothing without a host, and without one the Series tab is not shown; `feature-series` and the
+aliases in `gradle/libs.versions.toml`, and the permissions, service and activity it added to the manifest. The seam
+in `:app` and `:media-kit` (`SeriesDependencies`, `AppHttpClients`' `extensionMedia`) does nothing without a host, and
+without one the Series tab is not shown; `feature-series` and the
 series tables depend only on `SeriesSource`, not on this module.
