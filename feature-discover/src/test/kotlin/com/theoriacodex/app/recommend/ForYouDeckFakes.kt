@@ -61,6 +61,9 @@ internal class FakeForYouEngine(var tags: List<String>, private val pages: Int =
     var failLanes = false
     private val held = mutableMapOf<String, CompletableDeferred<Unit>>()
 
+    /** While set, a lane plan waits for it. */
+    var planGate: CompletableDeferred<Unit>? = null
+
     /** Makes the pages of [tags]' lanes wait for [release]. */
     fun hold(vararg tags: String) = tags.forEach { held[it] = CompletableDeferred() }
 
@@ -76,6 +79,7 @@ internal class FakeForYouEngine(var tags: List<String>, private val pages: Int =
 
     override suspend fun lanes(request: ForYouFeedRequest): List<ForYouLane> {
         builds++
+        planGate?.await()
         check(!failLanes) { "down" }
         val hidden = request.settings.forYouBlacklistByProfile[request.settings.activeProfileId].orEmpty()
         return tags.filterNot { hidden.hidesSeed(DECK_SOURCE, listOf(it)) }.map { tag ->

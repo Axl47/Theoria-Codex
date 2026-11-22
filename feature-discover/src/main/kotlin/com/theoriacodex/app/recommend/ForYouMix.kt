@@ -151,12 +151,14 @@ internal class ForYouMix(lanes: List<ForYouLane>) {
     }
 
     /**
-     * Adds the lanes of [plan] this Mix does not have, at the end. A label another lane already uses gains its source.
-     * Returns whether any was added.
+     * Adds the lanes of [plan] this Mix does not have, at the end. One whose label another lane has, added with it or
+     * already here, gains its source. Returns whether any was added.
      */
     fun addLanes(plan: List<ForYouLane>): Boolean {
         val known = all.mapTo(mutableSetOf()) { it.lane.id }
-        val added = plan.filter { known.add(it.id) }.map { lane -> MixLane(lane, lane.labelAmong(all.map(MixLane::lane) + lane)) }
+        val fresh = plan.filter { known.add(it.id) }
+        val every = all.map(MixLane::lane) + fresh
+        val added = fresh.map { lane -> MixLane(lane, lane.labelAmong(every)) }
         all = all + added
         lanes = lanes + added
         return added.isNotEmpty()
@@ -185,7 +187,8 @@ internal class ForYouMix(lanes: List<ForYouLane>) {
         return TriageFeedSnapshot(
             posts = released,
             canLoadMore = buffered || running.any { it.cursor != null },
-            loadingMore = !ready || (wanted && loading),
+            // Before any lane has answered, the first requests are out; with no lane left to ask, nothing is loading.
+            loadingMore = if (ready) wanted && loading else running.any { !it.opened },
             // Lanes that still give cards keep the deck going; a failed one waits in the status row.
             pageFailed = ready && wanted && !loading && !buffered && running.any { it.failed },
         )

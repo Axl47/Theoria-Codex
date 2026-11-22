@@ -376,15 +376,17 @@ class ForYouDeckViewModel(
 
     /**
      * Plans the lanes again after the hides [removed] went, and adds the lanes they had kept out of this Mix; the
-     * levels stay. Without a Mix to add to, it starts a fresh one.
+     * levels stay. A hide that came back while the plan ran keeps its lanes out, and is planned again the next time
+     * it goes. Without a Mix to add to, it starts a fresh one.
      */
     private fun restoreLanes(removed: List<ForYouBlacklistEntry>) {
-        plannedUnder = plannedUnder - removed.toSet()
         val mix = mix ?: return rebuild()
         val request = request() ?: return
         workScope.launch {
             val plan = runCatchingPreservingCancellation { engine.lanes(request) }.getOrNull() ?: return@launch
-            if (mix.addLanes(plan.filter { removed.hidesSeed(it.source, it.tags) })) refill(mix)
+            val gone = removed.filterNot { it in hidden }
+            plannedUnder = plannedUnder - gone.toSet()
+            if (mix.addLanes(plan.filter { gone.hidesSeed(it.source, it.tags) && !hidden.hidesSeed(it.source, it.tags) })) refill(mix)
         }
     }
 

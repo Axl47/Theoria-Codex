@@ -251,6 +251,30 @@ class ForYouDeckViewModelTest {
         assertEquals(listOf("b", "b", "b", "b"), owner.posts.lanes())
     }
 
+    @Test fun `a tag hidden again while its lane is planned stays out until its hide goes`() {
+        val owner = owner(deckEnvironment(hiding("b")))
+        val gate = CompletableDeferred<Unit>().also { engine.planGate = it }
+        owner.synchronize(deckEnvironment())
+        owner.synchronize(deckEnvironment(hiding("b")))
+        engine.planGate = null
+        gate.complete(Unit)
+        assertEquals(listOf("a", "c"), owner.state.value.chips.map(ForYouChip::label))
+
+        owner.synchronize(deckEnvironment())
+        assertEquals(listOf("a", "c", "b"), owner.state.value.chips.map(ForYouChip::label))
+    }
+
+    @Test fun `hiding the last lane ends the grid instead of leaving it loading`() {
+        engine.tags = listOf("a")
+        val owner = owner(deckEnvironment(grid = true))
+        assertTrue(owner.posts.isNotEmpty())
+
+        owner.synchronize(deckEnvironment(hiding("a"), grid = true))
+        val feed = owner.top.feed.value
+        assertTrue(feed.posts.isEmpty())
+        assertFalse(feed.loadingMore || feed.canLoadMore)
+    }
+
     @Test fun `the first lane to answer deals, and lanes that answer later join the rotation`() {
         engine.hold("a", "b", "c")
         val owner = owner()
@@ -269,6 +293,16 @@ class ForYouDeckViewModelTest {
         val mix = ForYouMix(listOf(ForYouLane(DECK_SOURCE, listOf("fog"), cursor), ForYouLane(SourceKey.PIXIV, listOf("fog"), cursor), ForYouLane(SourceKey.PIXIV, listOf("sea"), cursor)))
         assertEquals(
             listOf("fog · ${DECK_SOURCE.displayName()}", "fog · ${SourceKey.PIXIV.displayName()}", "sea"),
+            mix.lanes.map { it.origin.label },
+        )
+    }
+
+    @Test fun `lanes added together with the same tag say which source each is`() {
+        val cursor = FeedCursor(Query.newest(DECK_SOURCE))
+        val mix = ForYouMix(listOf(ForYouLane(DECK_SOURCE, listOf("sea"), cursor)))
+        mix.addLanes(listOf(ForYouLane(DECK_SOURCE, listOf("fog"), cursor), ForYouLane(SourceKey.PIXIV, listOf("fog"), cursor)))
+        assertEquals(
+            listOf("sea", "fog · ${DECK_SOURCE.displayName()}", "fog · ${SourceKey.PIXIV.displayName()}"),
             mix.lanes.map { it.origin.label },
         )
     }
