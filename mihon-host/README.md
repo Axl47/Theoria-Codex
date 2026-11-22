@@ -104,9 +104,9 @@ source's client; so does this host.
 (details, chapter list, page list): 4 requests, about 1.5 s alone. In the app, opening a series right after a listing
 took 4 to 12 s: the covers go through the same rate-limited client, and the Viewer also resolves the next post.
 
-**Ten more extensions through the harness.** Seven listed, opened a series and fetched a page image. One more did
-after a host fix (its details page returns no title, which Mihon tolerates), though the site's own image link was
-dead. One sits behind a browser challenge, which needs the missing Cloudflare support. One gets HTTP 403 for page
+**Ten more extensions through the harness.** Seven listed, opened a series and fetched a page image. One more
+opened a series after a host fix (its details page returns no title, which Mihon tolerates) but could not fetch a
+page: the site's own image link was dead. One sits behind a browser challenge, which needs the missing Cloudflare support. One gets HTTP 403 for page
 images through its own client while a plain request succeeds; whether Mihon gets the same was not checked.
 
 **How the sample was measured.** The 300 were drawn at random from the index (seed 20261122). Each APK's references
@@ -131,6 +131,8 @@ Besides the three costs above, this is what a real feature would have to add.
   old page addresses; it would have to be resolved again.
 - **The source logo.** The picker's icon is the site's favicon, fetched by the app's own client; MangaDex bot-checks
   it, so the text logo shows instead.
+- **A limit on loading.** Debug startup waits for every extension to load. One whose code hangs while it is created
+  would hold the app on its startup screen.
 - **Cancellation.** An image fetch that the app cancels still runs to completion on the extension's client.
 - **Pages that share an address.** A source whose pages differ only in the request body would show one image for all.
 
