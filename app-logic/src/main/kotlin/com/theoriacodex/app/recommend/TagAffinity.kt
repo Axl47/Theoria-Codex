@@ -87,26 +87,33 @@ data class TagAffinityInputs(
 
 /**
  * What the picture tagger saw on the posts the profile kept, whatever their source: [keptByTag] sums each predicted tag's
- * score over the kept posts it was predicted on with [PredictedTagUse.EVIDENCE] confidence, out of [kept] analysed kept
- * posts, and [baseRates] holds each tag's share of Danbooru posts. Keys are Danbooru tags as [normalizeMatchToken]
- * spells them.
+ * score over the kept posts it was predicted on with [PredictedTagUse.EVIDENCE] confidence ([evidence]), [postsByTag]
+ * counts those posts, out of [kept] analysed kept posts, and [baseRates] holds each tag's share of Danbooru posts. Keys
+ * are Danbooru tags as [normalizeMatchToken] spells them.
  */
 data class PictureEvidence(
     val keptByTag: Map<String, Double> = emptyMap(),
+    val postsByTag: Map<String, Int> = emptyMap(),
     val kept: Int = 0,
     val baseRates: Map<String, Double> = emptyMap(),
 ) {
-    /** The predicted tags with enough score across kept posts (a sum of [MIN_KEPT_FOR_TAG]) to be proven by [pictureAffinity]. */
-    val candidates: Set<String> get() = keptByTag.filterValues { it >= MIN_KEPT_FOR_TAG }.keys
+    /** The predicted tags on enough kept posts ([MIN_KEPT_FOR_TAG]) to be proven by [pictureAffinity]. */
+    val candidates: Set<String> get() = postsByTag.filterValues { it >= MIN_KEPT_FOR_TAG }.keys
 
     companion object {
         /** [index]'s predictions on the posts in [kept]. */
         fun of(kept: Set<PostId>, index: PredictedTagIndex): PictureEvidence {
             val seen = kept.filter { index[it] != null }
             if (seen.isEmpty()) return PictureEvidence()
-            val byTag = HashMap<String, Double>()
-            for (id in seen) index.evidence(id).forEach { (token, score) -> byTag.merge(token, score, Double::plus) }
-            return PictureEvidence(byTag, seen.size, index.baseRates)
+            val scores = HashMap<String, Double>()
+            val posts = HashMap<String, Int>()
+            for (id in seen) {
+                index.evidence(id).forEach { (token, score) ->
+                    scores.merge(token, score, Double::plus)
+                    posts.merge(token, 1, Int::plus)
+                }
+            }
+            return PictureEvidence(scores, posts, seen.size, index.baseRates)
         }
     }
 }
@@ -320,18 +327,20 @@ fun TagAffinityInputs.affinity(source: SourceKey, tag: String, feedShare: Map<St
  * Danbooru's words, [sourceToken] in [source]'s. Its kept share (see [PictureEvidence]) is compared with its share of what
  * the profile watched on [source], never below its share of Danbooru posts, so a tag the source's providers rarely write
  * cannot look sought after. Before [source] has enough watched posts the Danbooru share stands alone and must be beaten
- * [COLD_PICTURE_LIFT] times. Proven like a provider tag: on [MIN_KEPT_FOR_TAG] kept posts' worth of score at the lift,
- * out of at least [MIN_KEPT_FOR_LIFT] analysed kept posts, never universal and never text on the image.
+ * [COLD_PICTURE_LIFT] times. Proven like a provider tag: on [MIN_KEPT_FOR_TAG] kept posts at the lift, out of at least
+ * [MIN_KEPT_FOR_LIFT] analysed kept posts, never universal (on more than [UNIVERSAL_LIKED_SHARE] of them, too) and never
+ * text on the image. The kept share weighs each post by its score.
  */
 fun TagAffinityInputs.pictureAffinity(source: SourceKey, booruToken: String, sourceToken: String): TagAffinity {
     val kept = pictures.keptByTag[booruToken] ?: 0.0
+    val posts = pictures.postsByTag[booruToken] ?: 0
     val watched = watchedShare(source, normalizeMatchToken(sourceToken))
     val baseRate = pictures.baseRates[booruToken] ?: 0.0
-    // Universal like a provider tag: common where the profile watches, or on nearly everything it kept.
-    val universal = maxOf(watched ?: 0.0, baseRate) >= UNIVERSAL_WATCHED_SHARE || kept / maxOf(pictures.kept, 1) > UNIVERSAL_LIKED_SHARE
+    // Universal like a provider tag: common where the profile watches, or on nearly every post it kept.
+    val universal = maxOf(watched ?: 0.0, baseRate) >= UNIVERSAL_WATCHED_SHARE || posts > UNIVERSAL_LIKED_SHARE * pictures.kept
     val floor = LIFT_PSEUDO_COUNT / maxOf(watchedBySource[source] ?: 0L, MIN_WATCHED_FOR_SHARE)
     val lift = (kept + LIFT_PSEUDO_COUNT) / (pictures.kept + 1.0) / maxOf(watched ?: 0.0, baseRate, floor)
-    val proven = !universal && !isImageTextTag(booruToken) && pictures.kept >= MIN_KEPT_FOR_LIFT && kept >= MIN_KEPT_FOR_TAG &&
+    val proven = !universal && !isImageTextTag(booruToken) && pictures.kept >= MIN_KEPT_FOR_LIFT && posts >= MIN_KEPT_FOR_TAG &&
         lift >= if (watched != null) MIN_INFORMATIVE_LIFT else COLD_PICTURE_LIFT
     return TagAffinity(sourceToken, interest = kept, score = ln(lift) * ln(1.0 + kept), universal, informative = proven, proven = proven)
 }

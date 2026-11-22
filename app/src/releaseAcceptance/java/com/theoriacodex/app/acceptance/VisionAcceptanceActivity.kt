@@ -98,9 +98,13 @@ private class VisionPhases(private val container: TheoriaAppContainer, private v
     private suspend fun check(): String {
         val progress = pictures.progress.first { it.analysed >= FIXTURES }
         val index = pictures.tagger.index.first { index -> library.all { index[it.id] != null } }
+        // The line drawings read as monochrome and greyscale; the colour pictures do not.
         val expected = listOf("monochrome", "greyscale").map(::normalizeMatchToken)
-        val tagged = library.count { post -> index[post.id].orEmpty().tokens(PredictedTagUse.EVIDENCE).keys.containsAll(expected) }
-        check(tagged == FIXTURES) { "evidence tags on $tagged of $FIXTURES" }
+        val (drawings, colour) = library.partition { post -> index[post.id].orEmpty().tokens(PredictedTagUse.EVIDENCE).keys.containsAll(expected) }
+        check(drawings.size == COLOUR_FROM && colour.all { it.id.sourcePostId.removePrefix("vision-").toInt() >= COLOUR_FROM }) {
+            "monochrome on ${drawings.size} of $FIXTURES"
+        }
+        val tagged = drawings.size
         return "analysed=${progress.analysed}/${progress.total} tagged=$tagged ${forYou()} ${hidden()}"
     }
 
@@ -160,8 +164,12 @@ private fun fixturePost(id: String, picture: Int): Post {
     )
 }
 
-/** Pictures 0 until [FIXTURES] fill the Library; one more is the untagged candidate. */
+/**
+ * Pictures 0 until [FIXTURES] fill the Library, [COLOUR_FROM] onwards in colour (scripts/vision_fixtures.py), so
+ * monochrome is on three quarters of it: common, not universal. One more line drawing is the untagged candidate.
+ */
 private const val FIXTURES = 24
+private const val COLOUR_FROM = 18
 private const val TAG = "TheoriaVision"
 private const val PHASE_TIMEOUT_MS = 300_000L
 private const val IDLE_WAIT_MS = 10_000L
