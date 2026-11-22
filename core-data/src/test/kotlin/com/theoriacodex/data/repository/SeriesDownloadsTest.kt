@@ -180,6 +180,18 @@ class SeriesDownloadsTest {
         assertEquals(mapOf("/c2" to ChapterDownload.OnDevice), harness.downloads.states(id).first())
     }
 
+    @Test fun `delete after reading removes read chapters except where the series was last opened, also at start`() = runTest {
+        // Chapters 1 and 2 are read, and the series was last opened at 2.
+        val entries = (3 downTo 1).mapIndexed { order, number -> chapter(number, order, read = number != 3) }
+        val stored = StoredSeries(Series(id, "Title"), lastOpenedEntry = "/c2")
+        listOf("/c1", "/c2", "/c3").forEach { address -> store().write(id, address) { listOf(page(it, 0)) } }
+
+        Harness(this, stored, entries).downloads.deleteRead()
+        assertEquals(setOf("/c1", "/c2", "/c3"), store().downloaded(id))
+        Harness(this, stored, entries, deleteAfterReading = true).downloads.resume()
+        assertEquals(setOf("/c2", "/c3"), store().downloaded(id))
+    }
+
     @Test fun `a queue left by a process that ended resumes and its leftovers go`() = runTest {
         Harness(this).downloads.download(id, listOf("/c1"))
         File(root(), "series/.partial-left").mkdirs()
@@ -251,6 +263,7 @@ class SeriesDownloadsTest {
         scope: TestScope,
         stored: StoredSeries = StoredSeries(Series(id, "Title")),
         entries: List<StoredSeriesEntry> = chapters,
+        deleteAfterReading: Boolean = false,
     ) {
         val scheduled = mutableListOf<String>()
         val fetched = mutableListOf<String>()
@@ -276,6 +289,7 @@ class SeriesDownloadsTest {
                     scheduled += "ensure ${if (automatic) "automatic" else "user"}"
                 }
             },
+            deleteAfterReading = { deleteAfterReading },
             files = AtomicJsonFileStore(StandardTestDispatcher(scope.testScheduler)),
         )
     }

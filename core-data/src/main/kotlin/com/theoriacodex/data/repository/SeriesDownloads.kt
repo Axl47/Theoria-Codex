@@ -100,6 +100,8 @@ class SeriesDownloads(
     /** Writes the image at an address into a file and returns its media type; throws unless a whole image arrived. */
     private val fetch: suspend (url: String, into: File) -> String?,
     private val scheduler: DownloadScheduler,
+    /** The Delete after reading setting, as it is now. */
+    private val deleteAfterReading: suspend () -> Boolean,
     private val files: AtomicJsonFileStore = AtomicJsonFileStore(),
     private val retryDelay: Duration = 2.seconds,
 ) {
@@ -135,14 +137,31 @@ class SeriesDownloads(
     /** The addresses of [id]'s chapters on the device. */
     suspend fun downloaded(id: SeriesId): Set<String> = store.downloaded(id)
 
-    /** Loads the saved queue, clears what stopped downloads left, and has the queue drained. Call once per process. */
+    /**
+     * Loads the saved queue, clears what stopped downloads left, deletes what [deleteRead] would, since the process may
+     * have ended with chapters read, and has the queue drained. Call once per process.
+     */
     suspend fun resume() {
         val queued = lock.withLock {
             load()
             if (draining.isEmpty()) store.removeUnfinished()
             queue.value
         }
+        deleteRead()
         queued.map { it.automatic }.distinct().forEach { scheduler.ensureScheduled(it) }
+    }
+
+    /**
+     * With Delete after reading on, deletes each downloaded chapter that is read, except the one its series was last
+     * opened at. Called once no reader is open, and at start.
+     */
+    suspend fun deleteRead() {
+        if (!deleteAfterReading()) return
+        store.downloaded().forEach { (id, chapters) ->
+            val series = repository.series(id) ?: return@forEach
+            val read = repository.entries(id).filter { it.read }.mapTo(HashSet()) { it.entry.address }
+            (chapters intersect read).minus(setOfNotNull(series.lastOpenedEntry)).forEach { delete(id, it) }
+        }
     }
 
     /**

@@ -3,7 +3,6 @@ package com.theoriacodex.app.series
 import com.theoriacodex.app.di.SeriesDependencies
 import com.theoriacodex.app.viewer.decodeViewerPostId
 import com.theoriacodex.app.viewer.encodeViewerPostId
-import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.data.repository.DownloadScheduler
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesDownloadStore
@@ -134,50 +133,37 @@ class SeriesReaderTest {
     }
 
     @Test
-    fun deleteAfterReadingDeletesTheReadChaptersShownOnceTheViewerCloses() = runTest {
+    fun deleteAfterReadingWaitsForTheLastReaderToClose() = runTest {
         val reader = readerOverDownloadedChapters(deleteAfterReading = true)
-        val session = checkNotNull(reader.session(id, "/c1"))
-        val other = checkNotNull(reader.session(id, "/c3"))
+        reader.opened()
+        reader.opened()
 
-        reader.show(other, "/c3")
-        listOf("/c1", "/c2", "/c3").forEach { reader.show(session, it) }
-        // Moving on deletes nothing.
+        reader.closed()
+        advanceUntilIdle()
         assertEquals(listOf("/c1", "/c2", "/c3"), onDevice())
-
-        reader.closed(session)
+        reader.closed()
         advanceUntilIdle()
-        // Chapter 2 is unread, and the other session still shows chapter 3.
+        // Chapter 2 is unread, and the series was last opened at chapter 3.
         assertEquals(listOf("/c2", "/c3"), onDevice())
-        reader.closed(other)
-        advanceUntilIdle()
-        assertEquals(listOf("/c2"), onDevice())
     }
 
     @Test
-    fun withDeleteAfterReadingOffLeavingAReadChapterKeepsIt() = runTest {
+    fun withDeleteAfterReadingOffClosingKeepsReadChapters() = runTest {
         val reader = readerOverDownloadedChapters(deleteAfterReading = false)
-        val session = checkNotNull(reader.session(id, "/c1"))
-
-        reader.show(session, "/c1")
-        reader.show(session, "/c2")
-        reader.closed(session)
+        reader.opened()
+        reader.closed()
         advanceUntilIdle()
         assertEquals(listOf("/c1", "/c2", "/c3"), onDevice())
     }
 
-    /** Chapters 1 to 3 on the device, of which 1 and 3 are read. */
+    /** Chapters 1 to 3 on the device, of which 1 and 3 are read, in a series last opened at 3. */
     private suspend fun TestScope.readerOverDownloadedChapters(deleteAfterReading: Boolean): SeriesReader {
         val entries = (3 downTo 1).mapIndexed { order, number ->
             StoredSeriesEntry(SeriesEntry("/c$number", "Ch. $number"), sourceOrder = order, firstSeenAtEpochMs = 0, read = number != 2)
         }
         listOf("/c1", "/c2", "/c3").forEach { download(it) }
-        return SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), entries), { error("unused") }, deleteAfterReading))
-    }
-
-    /** What the Viewer reports once the chapter at [address] shows its first page. */
-    private suspend fun SeriesReader.show(session: ViewerSession, address: String) {
-        val post = session.posts.single { it.id.sourcePostId == address }
-        recordProgress(session, post.copy(media = listOf(ImageRef(url = null, localPath = "/page", mime = null))), mediaNumber = 1)
+        val stored = StoredSeries(Series(id, "Title"), lastOpenedEntry = "/c3")
+        return SeriesReader(dependencies(StoredOnly(stored, entries), { error("unused") }, deleteAfterReading))
     }
 
     private suspend fun TestScope.onDevice() = store().downloaded(id).sorted()
@@ -206,9 +192,10 @@ class SeriesReaderTest {
 
                 override suspend fun ensureScheduled(automatic: Boolean) = Unit
             },
+            deleteAfterReading = { deleteAfterReading },
             files = AtomicJsonFileStore(StandardTestDispatcher(testScheduler)),
         )
-        return SeriesDependencies(repository, sources, NoExtensions, downloads, { deleteAfterReading }, scope = this)
+        return SeriesDependencies(repository, sources, NoExtensions, downloads, scope = this)
     }
 
     private val chapter = StoredSeriesEntry(SeriesEntry("/c1", "Ch. 1"), sourceOrder = 0, firstSeenAtEpochMs = 0)

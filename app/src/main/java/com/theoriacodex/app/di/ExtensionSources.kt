@@ -22,8 +22,6 @@ class SeriesDependencies(
     val sources: suspend () -> List<SeriesSource>,
     val extensions: SeriesExtensions,
     val downloads: SeriesDownloads,
-    /** The Delete after reading setting, as it is now. */
-    val deleteAfterReading: suspend () -> Boolean,
     /** Lives as long as the app, for work that must finish after the screen that started it closes. */
     val scope: CoroutineScope,
 ) {

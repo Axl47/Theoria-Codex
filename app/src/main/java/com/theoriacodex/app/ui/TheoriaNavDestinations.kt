@@ -370,15 +370,22 @@ private fun rememberSeriesViewerConfig(shell: TheoriaShell): (ViewerScreenConfig
     val session = owner.session.collectAsStateWithLifecycle().value
         ?.takeIf { it.context.streamSource == ViewerStreamSource.SERIES }
         ?: return { it }
-    // The Viewer's owner outlives configuration changes and is cleared when the Viewer closes, which leaves its chapter.
-    LaunchedEffect(owner, session.sessionId) {
-        owner.addCloseable { shell.seriesReader?.closed(session) }
+    // The Viewer's owner outlives configuration changes and is cleared when the Viewer closes. Keyed, so it counts as one
+    // open reader however often this composes.
+    LaunchedEffect(owner) {
+        val reader = shell.seriesReader ?: return@LaunchedEffect
+        if (owner.getCloseable<AutoCloseable>(SERIES_READER_KEY) == null) {
+            reader.opened()
+            owner.addCloseable(SERIES_READER_KEY, AutoCloseable(reader::closed))
+        }
     }
     val mode by remember(session.context.queryHash) { shell.seriesReader?.readingMode(session) ?: emptyFlow() }
         .collectAsStateWithLifecycle(initialValue = session.seriesReadingMode)
     val modes = mode?.let { chosen -> session.posts.associate { it.id to chosen } }.orEmpty()
     return { it.copy(seriesChapters = true, galleryReadingModes = modes) }
 }
+
+private const val SERIES_READER_KEY = "series-reader"
 
 /** Pending likes stay visible in a feed that hides liked posts until the like commits or fails. */
 private fun viewerLiveSourceState(

@@ -563,12 +563,9 @@ internal class DefaultTheoriaAppContainer(
             // The client that carries the extension interceptor, as the Viewer's image loader does.
             fetch = { url, file -> downloadChapterPage(url, file, httpClients.downloads) },
             scheduler = SeriesDownloadScheduler(appContext) { settingsRepository.observeSettings().first().cache },
-        )
-        SeriesDependencies(
-            repository, host::sources, host.extensions, downloads,
             deleteAfterReading = { settingsRepository.observeSettings().first().seriesDeleteAfterReading },
-            scope = durableStoreScope,
         )
+        SeriesDependencies(repository, host::sources, host.extensions, downloads, scope = durableStoreScope)
     }
 
     /** Keeps the new-chapter check scheduled; started by [awaitDurableStores], once. */
