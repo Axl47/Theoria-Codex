@@ -149,6 +149,10 @@ class SeriesDownloadJobService : JobService() {
         return params.stopReason != JobParameters.STOP_REASON_USER
     }
 
+    // Requests use the system's default network, not the job's, so a new network needs nothing here; the system's
+    // version only logs that it was not overridden.
+    override fun onNetworkChanged(params: JobParameters) = Unit
+
     override fun onDestroy() {
         scope.cancel()
         super.onDestroy()

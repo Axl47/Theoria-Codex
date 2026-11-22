@@ -640,6 +640,11 @@ internal class DefaultTheoriaAppContainer(
                         .onFailure { Diagnostics.report("series", "Chapter downloads could not resume", it) }
                 }
                 durableStoreScope.launch {
+                    val network = settingsRepository.observeSettings().map { it.cache.downloadsOverMetered to it.cache.downloadsOverRoaming }
+                    runCatchingPreservingCancellation { series.downloads.rescheduleOnChanges(series.extensions.revision, network) }
+                        .onFailure { Diagnostics.report("series", "Chapter downloads stopped following source and network changes", it) }
+                }
+                durableStoreScope.launch {
                     keepSeriesUpdatesScheduled(appContext, series.repository.observeFollowed(), settingsRepository.observeSettings())
                 }
             }

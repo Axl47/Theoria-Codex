@@ -17,11 +17,13 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -242,6 +244,40 @@ class SeriesDownloadsTest {
         assertEquals(DrainResult(downloaded = 1, failed = 0), user.await())
         assertEquals(mapOf("/c1" to ChapterDownload.OnDevice, "/c2" to ChapterDownload.Queued(null)), harness.downloads.states(id).first())
         assertEquals(DrainResult(downloaded = 1, failed = 0), harness.downloads.drain(automatic = true))
+    }
+
+    @Test fun `waiting lanes are scheduled again when the sources or the network settings change, draining ones are not`() = runTest {
+        val harness = Harness(this)
+        val sources = MutableStateFlow(1)
+        val network = MutableStateFlow(false)
+        // runCurrent, not advanceUntilIdle: the latter stops once only backgroundScope's work is left.
+        backgroundScope.launch { harness.downloads.rescheduleOnChanges(sources, network) }
+        harness.downloads.download(id, listOf("/c1"))
+        harness.downloads.download(id, listOf("/c2"), automatic = true)
+        runCurrent()
+        harness.scheduled.clear()
+
+        // Only the user's job follows the network settings.
+        network.value = true
+        runCurrent()
+        assertEquals(listOf("schedule user"), harness.scheduled)
+
+        harness.scheduled.clear()
+        sources.value = 2
+        runCurrent()
+        assertEquals(listOf("schedule user", "schedule automatic"), harness.scheduled)
+
+        // A draining lane keeps its running job.
+        val held = CompletableDeferred<Unit>()
+        harness.onFetch = { url -> if ("/c1/" in url) held.await() }
+        val user = async { harness.downloads.drain(automatic = false) }
+        runCurrent()
+        harness.scheduled.clear()
+        sources.value = 3
+        runCurrent()
+        assertEquals(listOf("schedule automatic"), harness.scheduled)
+        held.complete(Unit)
+        user.await()
     }
 
     @Test fun `new chapters download by themselves only for a followed series set to`() = runTest {

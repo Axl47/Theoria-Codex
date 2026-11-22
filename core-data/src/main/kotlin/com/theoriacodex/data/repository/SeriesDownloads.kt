@@ -20,6 +20,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
@@ -149,6 +151,26 @@ class SeriesDownloads(
         }
         deleteRead()
         queued.map { it.automatic }.distinct().forEach { scheduler.ensureScheduled(it) }
+    }
+
+    /**
+     * Schedules each waiting lane again whenever what it may have waited for changes: both lanes when [sources] (the
+     * sources that are on) change, and the user's lane when its [network] settings do, since only its job's network
+     * follows them. Scheduling again replaces the pending job with today's requirements and no failure backoff; a lane
+     * that is draining is left alone. Changes count from each flow's first value. Never returns.
+     */
+    suspend fun rescheduleOnChanges(sources: Flow<*>, network: Flow<*>): Unit = coroutineScope {
+        launch { sources.distinctUntilChanged().drop(1).collect { reschedule { true } } }
+        launch { network.distinctUntilChanged().drop(1).collect { reschedule { automatic -> !automatic } } }
+    }
+
+    /** Schedules each lane that [lanes] picks, has chapters queued and is not draining. */
+    private suspend fun reschedule(lanes: (automatic: Boolean) -> Boolean) {
+        val waiting = lock.withLock {
+            load()
+            queue.value.map { it.automatic }.distinct().filter { it !in draining && lanes(it) }
+        }
+        waiting.forEach { scheduler.schedule(it) }
     }
 
     /**
