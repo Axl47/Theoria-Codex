@@ -90,25 +90,27 @@ class ExtensionSourceLiveTest {
         val launch = requireNotNull(context.packageManager.getLaunchIntentForPackage(context.packageName))
         context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
         requireNotNull(device.wait(Until.findObject(By.desc(SEARCH_ONLY_CONTROL)), LAUNCH_TIMEOUT_MS)) { "Search did not open" }
-        assertTrue(
-            "Search does not name $label as its source; on screen: ${screenText()}",
-            device.wait(Until.hasObject(By.descContains(label)), UI_TIMEOUT_MS),
-        )
-        // A source lists nothing until a search is sent; one with no tags asks for its popular series.
-        requireNotNull(device.findObject(By.text(SEARCH_INPUT))) { "No search box; on screen: ${screenText()}" }.click()
-        device.pressEnter()
+        check(device.wait(Until.hasObject(By.descContains(label)), UI_TIMEOUT_MS)) {
+            "Search does not name $label as its source; on screen: ${screenText()}"
+        }
+        // A source lists nothing until a search is sent; one with no tags asks for its popular series. A feed kept
+        // from an earlier launch is already listed, and there a tap on the search box would open the tag editor.
+        if (device.wait(Until.findObject(CARD), RESTORED_FEED_WAIT_MS) == null) {
+            requireNotNull(device.findObject(By.text(SEARCH_INPUT))) { "No search box; on screen: ${screenText()}" }.click()
+            device.pressEnter()
+        }
 
         requireNotNull(device.wait(Until.findObject(CARD), RESULTS_TIMEOUT_MS)) {
             "The source listed no series; on screen: ${screenText()}"
         }
-        await("a cover image", images) { images.loaded() > 0 }
-        val covers = images.addresses()
+        await("a cover image", images) { images.fromExtension().isNotEmpty() }
+        val covers = images.fromExtension()
         report("search", "cards=${device.findObjects(CARD).size} covers=${covers.size} failed=${images.failed()}")
 
         device.findObject(CARD).click()
         val pageCount = firstPageLabel().removePrefix(FIRST_PAGE).toInt()
-        await("a page image", images) { (images.addresses() - covers).isNotEmpty() }
-        report("viewer", "pages=$pageCount pageImages=${(images.addresses() - covers).size} failures=${images.failures()}")
+        await("a page image", images) { (images.fromExtension() - covers).isNotEmpty() }
+        report("viewer", "pages=$pageCount pageImages=${(images.fromExtension() - covers).size} failures=${images.failures()}")
         assertTrue("A chapter has more than one page", pageCount > 1)
     }
 
@@ -137,7 +139,8 @@ class ExtensionSourceLiveTest {
 
     /** The labels on screen, for a failure message; text only, so no provider media leaves the device. */
     private fun screenText(): String = device.findObjects(By.pkg(context.packageName))
-        .flatMap { listOfNotNull(it.text, it.contentDescription) }
+        // The screen keeps changing while it is read; an element that has gone is skipped.
+        .flatMap { element -> runCatching { listOfNotNull(element.text, element.contentDescription) }.getOrDefault(emptyList()) }
         .filter(String::isNotBlank)
         .distinct()
         .joinToString(" | ")
@@ -147,18 +150,19 @@ class ExtensionSourceLiveTest {
         instrumentation.sendStatus(0, Bundle().apply { putString("extension", "$step: $text") })
     }
 
-    /** Which images the app finished loading, by address, so pages can be told from the covers loaded before them. */
+    /**
+     * Which images the app finished loading, by address, so pages can be told from the covers loaded before them.
+     * Only addresses the extension answered count: the app also loads images of its own, such as the source's logo.
+     */
     private class LoadedImages : EventListener {
         private val loaded = ConcurrentHashMap.newKeySet<String>()
         private val failures = ConcurrentHashMap<String, String>()
-
-        fun loaded(): Int = loaded.size
 
         fun failed(): Int = failures.size
 
         fun failures(): String = "${failures.size} ${failures.values.distinct().take(FAILURES_SHOWN)}"
 
-        fun addresses(): Set<String> = loaded.toSet()
+        fun fromExtension(): Set<String> = loaded.filterTo(HashSet()) { EXTENSION_TAG in it }
 
         override fun onSuccess(request: ImageRequest, result: SuccessResult) {
             loaded += request.data.toString()
@@ -175,6 +179,7 @@ class ExtensionSourceLiveTest {
     private companion object {
         const val OPT_IN = "extensionSourceLive"
         const val EXTENSION_PREFIX = "custom_mihon_"
+        const val EXTENSION_TAG = "#mihon="
         const val SEARCH_ONLY_CONTROL = "Filter and sort"
         const val SEARCH_INPUT = "Search tags"
         const val FIRST_PAGE = "Go to page 1 of "
@@ -182,6 +187,7 @@ class ExtensionSourceLiveTest {
 
         const val LOAD_TIMEOUT_MS = 30_000L
         const val LAUNCH_TIMEOUT_MS = 30_000L
+        const val RESTORED_FEED_WAIT_MS = 3_000L
         const val RESULTS_TIMEOUT_MS = 45_000L
         const val RESOLVE_TIMEOUT_MS = 45_000L
         const val UI_TIMEOUT_MS = 30_000L
