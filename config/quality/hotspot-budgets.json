@@ -18,7 +18,8 @@
     "feature-search",
     "feature-library",
     "feature-discover",
-    "feature-settings"
+    "feature-settings",
+    "vision-bench"
   ],
   "lineBudgets": {
     "production": 900,
