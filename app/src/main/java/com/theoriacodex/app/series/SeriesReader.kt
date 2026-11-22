@@ -2,6 +2,7 @@ package com.theoriacodex.app.series
 
 import com.theoriacodex.app.di.SeriesDependencies
 import com.theoriacodex.app.viewer.ViewerSession
+import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.repository.inReadingOrder
@@ -16,10 +17,8 @@ import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.seriesReadingMode
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
 
 /**
  * Reads a series in the Viewer. A session's posts are the series' entries in reading order, each a gallery whose pages
@@ -39,8 +38,8 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         val context = ViewerLaunchContext(seriesQueryHash(id), start, ViewerStreamSource.SERIES, scrollOffsetHint = 0)
         val resume = entries.associate { PostId(id.source, it.entry.address) to it.resumePageIndex() } +
             listOfNotNull(pageIndex?.let { posts[start].id to it })
-        return if (sessionId == null) ViewerSession(posts, context, initialMediaIndices = resume)
-        else ViewerSession(posts, context, sessionId = sessionId, initialMediaIndices = resume)
+        val session = ViewerSession(posts, context, initialMediaIndices = resume, seriesReadingMode = stored.readingModeOrGuess())
+        return if (sessionId == null) session else session.copy(sessionId = sessionId)
     }
 
     /** The chapter [postId] of the series [queryHash] names, with its pages; null when the source lists none for it. */
@@ -75,17 +74,10 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         seriesIdOf(session.context.queryHash)?.let { series.repository.setReadingMode(it, mode) }
     }
 
-    /** The mode [session]'s series is read in: the user's choice, else a guess from the series and its source. */
+    /** The mode [session]'s series is read in from now on; the session itself carries the mode it opens in. */
     fun readingMode(session: ViewerSession): Flow<GalleryReadingMode> {
         val id = seriesIdOf(session.context.queryHash) ?: return emptyFlow()
-        return flow {
-            val sourceName = series.sources().firstOrNull { it.key == id.source }?.name.orEmpty()
-            emitAll(
-                series.repository.observeSeries(id).map { stored ->
-                    seriesReadingMode(stored?.readingMode, stored?.series?.genres.orEmpty(), sourceName, stored?.series?.language.orEmpty())
-                },
-            )
-        }
+        return series.repository.observeSeries(id).mapNotNull { it?.readingModeOrGuess() }
     }
 
     private suspend fun source(key: SourceKey) =
@@ -119,5 +111,8 @@ internal fun chapterPost(series: Series, entry: SeriesEntry) = Post(
     title = "${series.title} · ${entry.name}",
     galleryLengthUnknown = true,
 )
+
+/** The user's choice for the series, else a guess from what is stored about it. */
+private fun StoredSeries.readingModeOrGuess() = seriesReadingMode(readingMode, series.genres, series.language)
 
 private const val SERIES_QUERY_PREFIX = "series:"

@@ -67,6 +67,19 @@ class SeriesReaderTest {
     }
 
     @Test
+    fun aSessionKnowsItsReadingModeWithoutLoadingAnExtension() = runTest {
+        val webtoon = StoredSeries(Series(id, "Title", genres = listOf("Long Strip")))
+        fun reader(stored: StoredSeries) =
+            SeriesReader(SeriesDependencies(StoredOnly(stored, listOf(chapter)), sources = { error("No extension may load") }, extensions = NoExtensions))
+
+        assertEquals(GalleryReadingMode.VERTICAL, reader(webtoon).session(id, "/c1")?.seriesReadingMode)
+        assertEquals(
+            GalleryReadingMode.LEFT_TO_RIGHT,
+            reader(webtoon.copy(readingMode = GalleryReadingMode.LEFT_TO_RIGHT)).session(id, "/c1")?.seriesReadingMode,
+        )
+    }
+
+    @Test
     fun aChapterIsRecordedOnlyOnceItsPagesShow() = runTest {
         val repository = StoredOnly(StoredSeries(Series(id, "Title")), listOf(chapter))
         val reader = SeriesReader(SeriesDependencies(repository, { listOf(OnePage(source)) }, NoExtensions))

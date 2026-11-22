@@ -75,7 +75,10 @@ internal fun ViewerPostPagerSurface(
                     reservedBottomPx = reservedBottom,
                     verticalScroll = verticalGallery?.scrollGesture,
                 ),
-                viewerGestureHandler(swipe, dismissDrag, screen, controls, haptics, flingVelocity, scope, frame.uiState.controls.slideshow),
+                viewerGestureHandler(
+                    swipe, dismissDrag, screen, controls, haptics, flingVelocity, scope, frame.uiState.controls.slideshow,
+                    openNextChapter = nextChapterOpener(frame, swipe).takeIf { vertical && config.seriesChapters },
+                ),
             )
             .graphicsLayer { translationX = swipe.edgeOffset },
     ) {
@@ -105,6 +108,8 @@ private fun viewerGestureHandler(
     flingVelocity: Float,
     scope: CoroutineScope,
     slideshowRunning: Boolean,
+    /** Set in a series chapter read vertically: a push up past its last page goes on reading instead of opening info. */
+    openNextChapter: (() -> Unit)?,
 ) = object : ViewerGestureHandler {
     // Any touch on the media stops a slideshow; a tap then shows the controls as usual.
     override fun onPress() {
@@ -121,7 +126,11 @@ private fun viewerGestureHandler(
     override fun onDismissRelease(velocityY: Float) {
         if (viewerDismissCommits(dismissDrag.progress, velocityY, flingVelocity)) controls.requestDismiss()
     }
-    override fun onInfoSwipe() { controls.setInfoSheetVisible(true); controls.markInteraction() }
+    override fun onInfoSwipe() {
+        if (openNextChapter != null) return openNextChapter()
+        controls.setInfoSheetVisible(true)
+        controls.markInteraction()
+    }
     override fun onGestureEnd() {
         swipe.cancel()
         if (dismissDrag.active && !screen.pendingDismiss) scope.launch { dismissDrag.recoil() }
@@ -129,6 +138,13 @@ private fun viewerGestureHandler(
     override fun onLevelLimit() = haptics.performHapticFeedback(TheoriaHaptics.Limit)
     override fun onScrubStart() = controls.beginScrub()
     override fun onScrubEnd() = controls.endScrub()
+}
+
+/** Opens the post after the current one where it was left; null on the last post. */
+private fun nextChapterOpener(frame: ViewerFrame, swipe: ViewerSwipeController): (() -> Unit)? {
+    val index = frame.navigation.currentIndex + 1
+    val next = frame.navigation.pages.getOrNull(index) ?: return null
+    return { swipe.navigateTo(ViewerHorizontalSwipeTarget(index, next.targetMediaIndex)) }
 }
 
 /** A gallery read as one vertical strip; its end card opens the next post. */

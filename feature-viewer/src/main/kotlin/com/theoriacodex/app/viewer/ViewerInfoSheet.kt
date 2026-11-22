@@ -149,6 +149,12 @@ internal fun ViewerInfoSheet(
     comments: ViewerComments,
 ) {
     val post = selection.post
+    if (config.seriesChapters) {
+        AdaptiveViewerInfo(onDismiss = { controls.setInfoSheetVisible(false) }) {
+            ViewerChapterActions(post) { controls.jumpToMedia(post.id, 0) }
+        }
+        return
+    }
     val onAction = host.onAction
     val searchActions = LocalPostTagSearchActions.current
     PreloadCodexSaveRelevance(post, saveToCodexQuery)
@@ -166,7 +172,7 @@ internal fun ViewerInfoSheet(
             header = {
                 ViewerInfoActions(
                     selection, post.id in config.likedPostIds, controls, config.creatorBrowsingSources, onAction, host.onGoToSearch,
-                    host.onOpenCreatorFallback, contextActions, collectable = !config.seriesChapters,
+                    host.onOpenCreatorFallback, contextActions,
                 )
             },
             post = post,
@@ -230,17 +236,8 @@ private fun ViewerInfoActions(
     onGoToSearch: () -> Unit,
     onOpenCreatorFallback: ((Post) -> Unit)?,
     contextActions: ViewerContextActions,
-    /**
-     * Whether the post is one to collect and share. A series' chapter is not: it has no link, tags or creator, its pages
-     * load only through its extension, and Search cannot reach its source, so it keeps only Start over.
-     */
-    collectable: Boolean,
 ) {
     val post = selection.post
-    if (!collectable) {
-        ViewerChapterActions(post) { controls.jumpToMedia(post.id, 0) }
-        return
-    }
     val creators = if (onOpenCreatorFallback != null) creatorProfileActions(post, creatorBrowsingSources) else emptyList()
     fun closeThen(action: () -> Unit) {
         action()
@@ -281,7 +278,11 @@ private fun ViewerInfoActions(
     }
 }
 
-/** A series chapter's actions: its title, without the address that stands in for a post id, and Start over. */
+/**
+ * All a series chapter's sheet holds: its title, without the address that stands in for a post id, and Start over. A
+ * chapter is not a post to collect, share or search from: it has no link, tags or creator, its pages load only through
+ * its extension, and Search cannot reach its source.
+ */
 @Composable
 private fun ViewerChapterActions(post: Post, onStartOver: () -> Unit) {
     Column {
@@ -289,7 +290,6 @@ private fun ViewerChapterActions(post: Post, onStartOver: () -> Unit) {
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), Arrangement.SpaceEvenly) {
             ViewerInfoAction(Icons.Default.Replay, "Start over", "Start over", onClick = onStartOver)
         }
-        HorizontalDivider()
     }
 }
 

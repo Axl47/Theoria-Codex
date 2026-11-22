@@ -11,11 +11,10 @@ class SeriesReadingModeTest {
     }
 
     @Test
-    fun `a long-strip genre or source name reads vertically`() {
+    fun `a long-strip genre reads vertically`() {
         for (genre in listOf("Long Strip", "Webtoons", "Manhwa", "manhua")) {
             assertEquals(genre, GalleryReadingMode.VERTICAL, mode(genres = listOf("Action", genre)))
         }
-        assertEquals(GalleryReadingMode.VERTICAL, mode(sourceName = "Some Webtoon Site"))
     }
 
     @Test
@@ -27,7 +26,7 @@ class SeriesReadingModeTest {
 
     @Test
     fun `anything else reads right to left`() {
-        assertEquals(GalleryReadingMode.RIGHT_TO_LEFT, mode(genres = listOf("Action", "Comedy"), sourceName = "MangaDex", language = "en"))
+        assertEquals(GalleryReadingMode.RIGHT_TO_LEFT, mode(genres = listOf("Action", "Comedy"), language = "en"))
         assertEquals(GalleryReadingMode.RIGHT_TO_LEFT, mode(language = "ja"))
         assertEquals(GalleryReadingMode.RIGHT_TO_LEFT, mode())
     }
@@ -35,7 +34,6 @@ class SeriesReadingModeTest {
     private fun mode(
         chosen: GalleryReadingMode? = null,
         genres: List<String> = emptyList(),
-        sourceName: String = "",
         language: String = "",
-    ) = seriesReadingMode(chosen, genres, sourceName, language)
+    ) = seriesReadingMode(chosen, genres, language)
 }
