@@ -1,55 +1,11 @@
 package com.theoriacodex.app.customsites
 
-import android.webkit.CookieManager
 import com.theoriacodex.domain.source.SiteAddress
+import com.theoriacodex.sources.http.BrowserCookieJar
+import com.theoriacodex.sources.http.BrowserCookieStore
 import com.theoriacodex.sources.http.HostOutageTracker
 import java.net.URI
-import okhttp3.Cookie
 import okhttp3.CookieJar
-import okhttp3.HttpUrl
-
-/**
- * The cookie store the in-app browser writes to, as the bridge needs it. A port so the bridge's rules
- * are tested without `android.webkit`; [AndroidBrowserCookieStore] is the real one.
- */
-interface BrowserCookieStore {
-    /** The `Cookie` header value for [url], or null when there are none. */
-    fun cookieHeader(url: String): String?
-
-    /** Stores one `Set-Cookie` value for [url]. */
-    fun setCookie(url: String, setCookie: String)
-
-    fun flush()
-
-    /** Expires every cookie [url] would send. */
-    fun expireAll(url: String)
-}
-
-/** The system WebView's [CookieManager]. It can throw when the WebView is missing or updating; [SiteCookieBridge] guards for that. */
-object AndroidBrowserCookieStore : BrowserCookieStore {
-    override fun cookieHeader(url: String): String? =
-        CookieManager.getInstance().getCookie(url)?.takeIf(String::isNotBlank)
-
-    override fun setCookie(url: String, setCookie: String) {
-        CookieManager.getInstance().setCookie(url, setCookie)
-    }
-
-    override fun flush() {
-        CookieManager.getInstance().flush()
-    }
-
-    override fun expireAll(url: String) {
-        val host = runCatching { URI(url).host }.getOrNull() ?: return
-        // A cookie set on the parent domain (a `www.` site's) only expires with the Domain it was created with.
-        val domains = setOf(host, HostOutageTracker.normalizeHost(host))
-        val names = cookieHeader(url)?.split(';')?.map { it.substringBefore('=').trim() }.orEmpty()
-        names.forEach { name ->
-            setCookie(url, "$name=; Max-Age=0; Path=/")
-            domains.forEach { setCookie(url, "$name=; Max-Age=0; Path=/; Domain=$it") }
-        }
-        flush()
-    }
-}
 
 /** One saved site's `Authorization` value. A plain class, so the value can't reach a log through `toString`. */
 class SiteMediaKey(val address: SiteAddress, val authorization: String)
@@ -131,15 +87,12 @@ class SiteCookieBridge(private val store: BrowserCookieStore) {
 
     /** Drops [host]'s cookies from the shared store, for a site that was removed. */
     fun forget(host: String) {
-        runCatching { store.expireAll("https://$host/") }
+        runCatching { store.expire("https://$host/") }
     }
 
     /** The cookies the in-app browser holds for [url], when its host is allowed. */
-    fun cookiesFor(url: String): String? = cookiesFor(url, runCatching { URI(url).host }.getOrNull())
-
-    /** [host] is the already-parsed host of [url]; callers on the request path never re-parse it. */
-    private fun cookiesFor(url: String, host: String?): String? =
-        if (isAllowed(host)) runCatching { store.cookieHeader(url) }.getOrNull() else null
+    fun cookiesFor(url: String): String? =
+        if (isAllowed(runCatching { URI(url).host }.getOrNull())) runCatching { store.cookieHeader(url) }.getOrNull() else null
 
     /** Whether [host] shares the browser's identity. On every image and API request: no allocation, and no parsing beyond the host's normalization. */
     fun isAllowed(host: String?): Boolean {
@@ -149,19 +102,7 @@ class SiteCookieBridge(private val store: BrowserCookieStore) {
             setupHost?.let { HostOutageTracker.hostBelongsToSite(host, it) } == true
     }
 
-    private fun storeCookie(url: String, host: String?, setCookie: String) {
-        if (isAllowed(host)) runCatching { store.setCookie(url, setCookie) }
-    }
-
-    val cookieJar: CookieJar = object : CookieJar {
-        override fun loadForRequest(url: HttpUrl): List<Cookie> =
-            cookiesFor(url.toString(), url.host)?.split(';')?.mapNotNull { Cookie.parse(url, it.trim()) }.orEmpty()
-
-        // Refreshed clearance cookies go back to the browser's store, so both stay in step.
-        override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-            cookies.forEach { storeCookie(url.toString(), url.host, it.toString()) }
-        }
-    }
+    val cookieJar: CookieJar = BrowserCookieJar(store, ::isAllowed)
 }
 
 /** Implemented by the application, which owns the one bridge every HTTP client carries. */
