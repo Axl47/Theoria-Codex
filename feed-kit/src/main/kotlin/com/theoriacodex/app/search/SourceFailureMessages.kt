@@ -1,6 +1,7 @@
 package com.theoriacodex.app.search
 
 import com.theoriacodex.app.source.displayName
+import com.theoriacodex.app.ui.sourceFailureDetail
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
@@ -48,18 +49,3 @@ fun buildSourceFailureMessage(statuses: List<SourceRunStatus>): String? {
 /** Why a request failed: the sources' errors, else the account sources need, else [fallback]. */
 fun sourceFailureMessage(statuses: List<SourceRunStatus>, fallback: String): String =
     buildSourceFailureMessage(statuses) ?: buildSourceAuthErrorMessage(statuses) ?: fallback
-
-private fun sourceFailureDetail(reason: SourceFailureReason?, rawMessage: String): String {
-    return when (reason) {
-        SourceFailureReason.RATE_LIMITED -> "Rate limited. Wait a bit, then retry."
-        SourceFailureReason.NETWORK -> rawMessage.takeIf(String::isNotBlank)
-            ?: "Provider unreachable or blocked right now."
-        SourceFailureReason.PARSE -> rawMessage.takeIf(String::isNotBlank)
-            ?: "Provider response changed; parsing needs an update."
-        SourceFailureReason.UNKNOWN, null -> rawMessage.takeIf(String::isNotBlank)
-            ?: "Request failed for an unknown reason."
-        SourceFailureReason.AUTH_REQUIRED,
-        SourceFailureReason.AUTH_EXPIRED -> rawMessage.takeIf(String::isNotBlank)
-            ?: "Account setup is required."
-    }
-}

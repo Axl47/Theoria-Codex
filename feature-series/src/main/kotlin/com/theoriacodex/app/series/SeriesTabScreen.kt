@@ -28,6 +28,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -86,7 +88,7 @@ fun SeriesTabScreen(viewModel: SeriesTabViewModel, onOpenSeries: (SeriesId) -> U
             ) {
                 val search = state.search
                 if (search != null && state.sources == null) fullWidth("search-waiting") { LoadingState() }
-                else if (search != null) searchResults(search, open, viewModel::retrySearch)
+                else if (search != null) searchResults(search, open, viewModel::retrySearch, viewModel::searchMore)
                 else {
                     followingShelf(followed, open)
                     browse(state, viewModel, open, onOpenExtensions)
@@ -171,7 +173,12 @@ private fun LazyGridScope.browseListing(browse: SeriesSourceListing, viewModel: 
     }
 }
 
-private fun LazyGridScope.searchResults(results: List<SeriesSourceListing>, open: (Series) -> Unit, retry: (SourceKey) -> Unit) {
+private fun LazyGridScope.searchResults(
+    results: List<SeriesSourceListing>,
+    open: (Series) -> Unit,
+    retry: (SourceKey) -> Unit,
+    more: (SourceKey) -> Unit,
+) {
     if (results.isEmpty()) fullWidth("search-no-sources") { EmptyState(NO_EXTENSIONS_ON) }
     results.forEach { result ->
         val listing = result.listing
@@ -181,20 +188,30 @@ private fun LazyGridScope.searchResults(results: List<SeriesSourceListing>, open
         fullWidth("search-${result.key.id}") {
             when (listing) {
                 SeriesListing.Loading -> LoadingState()
-                is SeriesListing.Failed -> FailureRow({ retry(result.key) })
+                is SeriesListing.Failed -> FailureRow({ retry(result.key) }, message = listing.message)
                 is SeriesListing.Loaded ->
                     if (listing.series.isEmpty()) Text("No results", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    else SeriesRow(listing.series, key = { it.id.toString() }) { series -> SeriesCard(series, { open(series) }, Modifier.width(CARD_WIDTH)) }
+                    else SeriesRow(listing.series, key = { it.id.toString() }, after = moreResults(listing) { more(result.key) }) { series ->
+                        SeriesCard(series, { open(series) }, Modifier.width(CARD_WIDTH))
+                    }
             }
         }
     }
 }
 
-/** A sideways row of cards, running to the screen's edges past the grid's padding. */
+/** What ends a source's row of results: its next page's button or progress; null once the source has no more. */
+private fun moreResults(listing: SeriesListing.Loaded, onMore: () -> Unit): (@Composable () -> Unit)? = when {
+    listing.loadingMore -> { { CircularProgressIndicator(Modifier.padding(horizontal = 16.dp).size(24.dp), strokeWidth = 2.dp) } }
+    listing.nextPage != null -> { { TextButton(onClick = onMore) { Text(if (listing.moreFailed) "Retry" else "More") } } }
+    else -> null
+}
+
+/** A sideways row of cards, running to the screen's edges past the grid's padding, with [after] at its end. */
 @Composable
-private fun <T> SeriesRow(items: List<T>, key: (T) -> Any, card: @Composable (T) -> Unit) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+private fun <T> SeriesRow(items: List<T>, key: (T) -> Any, after: (@Composable () -> Unit)? = null, card: @Composable (T) -> Unit) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         items(items, key = key) { item -> card(item) }
+        if (after != null) item(key = "after") { after() }
     }
 }
 
@@ -208,9 +225,9 @@ private fun SectionTitle(title: String, count: Int? = null) {
 
 /** One line for a source that failed, where a full-height failure would push the other sources away. */
 @Composable
-internal fun FailureRow(onRetry: () -> Unit, modifier: Modifier = Modifier) {
+internal fun FailureRow(onRetry: () -> Unit, modifier: Modifier = Modifier, message: String = LOAD_FAILED) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Text(LOAD_FAILED, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(message, Modifier.weight(1f, fill = false), color = MaterialTheme.colorScheme.onSurfaceVariant)
         TextButton(onClick = onRetry) { Text("Retry") }
     }
 }

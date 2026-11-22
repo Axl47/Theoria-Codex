@@ -7,6 +7,7 @@ import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.data.repository.continueEntry
 import com.theoriacodex.data.repository.refresh
+import com.theoriacodex.domain.series.InstalledExtension
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesSource
 import kotlinx.coroutines.CancellationException
@@ -14,14 +15,23 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+/** Why a stored series has no source to read it from. */
+enum class SeriesSourceMissing(val label: String) {
+    EXTENSION_OFF("Extension off"),
+    EXTENSION_NOT_INSTALLED("Extension not installed"),
+}
+
 /**
  * One series' page: what is stored of it, its entries in the source's order (newest first), and how the refresh from
- * its source is going. A failed refresh leaves the stored series and entries on screen.
+ * its source is going. A failed refresh leaves the stored series and entries on screen. So does a series whose source
+ * is [missing], but its chapters cannot be opened until the extension is back.
  */
 data class SeriesPageState(
     val stored: StoredSeries? = null,
@@ -29,6 +39,7 @@ data class SeriesPageState(
     val sourceName: String = "",
     val refreshing: Boolean = true,
     val failure: String? = null,
+    val missing: SeriesSourceMissing? = null,
 ) {
     /** The entry Continue opens. */
     val continueWith: StoredSeriesEntry? get() = stored?.let { continueEntry(it, entries) }
@@ -37,10 +48,13 @@ data class SeriesPageState(
     val started: Boolean get() = entries.any { it.read || it.lastPage > 0 }
 }
 
+/** [sourcesChanged] emits once at the start and again whenever [loadSources] may answer differently; each is a refresh. */
 class SeriesPageViewModel(
     private val id: SeriesId,
     private val repository: SeriesRepository,
     private val loadSources: suspend () -> List<SeriesSource>,
+    private val installedExtensions: suspend () -> List<InstalledExtension> = { emptyList() },
+    sourcesChanged: Flow<*> = flowOf(Unit),
 ) : ViewModel() {
     private val refresh = MutableStateFlow(SeriesPageState())
 
@@ -50,39 +64,47 @@ class SeriesPageViewModel(
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SeriesPageState())
 
     init {
-        refresh()
+        viewModelScope.launch { sourcesChanged.collectLatest { refreshNow() } }
     }
 
     /** Fetches the series' details and entries from its source and stores them. */
     fun refresh() {
-        refresh.update { it.copy(refreshing = true, failure = null) }
-        viewModelScope.launch {
-            val failure = try {
-                val source = loadSources().firstOrNull { it.key == id.source }
-                source?.let { refresh.update { state -> state.copy(sourceName = source.name) } }
-                val stored = repository.series(id)
-                if (source == null || stored == null) {
-                    "The extension for this series is not installed"
-                } else {
-                    repository.refresh(source, stored.series)
-                    null
-                }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                error.message?.takeIf(String::isNotBlank) ?: LOAD_FAILED
-            }
-            refresh.update { it.copy(refreshing = false, failure = failure) }
-        }
+        viewModelScope.launch { refreshNow() }
     }
 
-    /** Follows or unfollows the series; [onFirstFollowed] runs when it became the only followed series. */
-    fun toggleFollowed(onFirstFollowed: () -> Unit) {
+    private suspend fun refreshNow() {
+        refresh.update { it.copy(refreshing = true, failure = null) }
+        val source = loadSources().firstOrNull { it.key == id.source }
+        if (source == null) {
+            val missing = missingSource()
+            refresh.update { it.copy(refreshing = false, sourceName = "", missing = missing) }
+            return
+        }
+        refresh.update { it.copy(sourceName = source.name, missing = null) }
+        val failure = try {
+            repository.series(id)?.let { repository.refresh(source, it.series) }
+            null
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            failureLine(error)
+        }
+        refresh.update { it.copy(refreshing = false, failure = failure) }
+    }
+
+    /**
+     * A series does not record which extension it came from, and an extension that is off does not say which sources
+     * it has. So an extension that is off is taken to be the series' own; with every installed one on, it is gone.
+     */
+    private suspend fun missingSource(): SeriesSourceMissing =
+        if (installedExtensions().any { !it.on }) SeriesSourceMissing.EXTENSION_OFF else SeriesSourceMissing.EXTENSION_NOT_INSTALLED
+
+    /** Follows or unfollows the series; [onFollowed] runs once it is followed. */
+    fun toggleFollowed(onFollowed: () -> Unit) {
         val followed = state.value.stored?.followed ?: return
         viewModelScope.launch {
-            val first = !followed && repository.observeFollowed().first().isEmpty()
             repository.setFollowed(id, !followed)
-            if (first) onFirstFollowed()
+            if (!followed) onFollowed()
         }
     }
 }

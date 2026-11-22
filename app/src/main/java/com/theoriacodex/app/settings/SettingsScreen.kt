@@ -1,5 +1,11 @@
 package com.theoriacodex.app.settings
 
+import android.app.NotificationManager
+import android.content.Intent
+import android.provider.Settings
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.theoriacodex.data.repository.SeriesUpdateInterval
 import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -200,7 +206,11 @@ private fun SettingsHome(
             when (sheet) {
                 SettingsSheet.DOWNLOADS -> DownloadPreferencesSection(state, onAction)
                 SettingsSheet.CONTROLS -> PreferencesSection(state, onAction)
-                SettingsSheet.SERIES_UPDATES -> SeriesUpdatesSection(state, onAction)
+                // One choice is all this sheet holds, so choosing closes it.
+                SettingsSheet.SERIES_UPDATES -> SeriesUpdatesSection(state) { action ->
+                    onAction(action)
+                    onAction(SettingsAction.OpenPage(SettingsPage.HOME))
+                }
             }
         }
     }
@@ -231,12 +241,32 @@ private fun SettingsSourcesGroup(
         OpenLinksRow()
         if (seriesUpdates) {
             SettingsRowDivider()
-            SettingsRow(
-                SettingChoices.SeriesUpdates.title, seriesUpdateIntervalLabel(state.settings.seriesUpdateInterval), Icons.Default.Notifications,
-                onClick = { onSheet(SettingsSheet.SERIES_UPDATES) },
-            )
+            SeriesUpdatesRow(state.settings.seriesUpdateInterval) { onSheet(SettingsSheet.SERIES_UPDATES) }
         }
     }
+}
+
+/**
+ * How often followed series are checked. A check that cannot announce what it finds says so instead, and the row then
+ * opens the app's notification settings, since the system stops showing its permission prompt once it was refused.
+ */
+@Composable
+private fun SeriesUpdatesRow(interval: SeriesUpdateInterval, onChooseInterval: () -> Unit) {
+    val context = LocalContext.current
+    var notificationsOn by remember { mutableStateOf(true) }
+    LifecycleResumeEffect(Unit) {
+        notificationsOn = context.getSystemService(NotificationManager::class.java).areNotificationsEnabled()
+        onPauseOrDispose {}
+    }
+    val silenced = !notificationsOn && interval.hours != null
+    SettingsRow(
+        SettingChoices.SeriesUpdates.title, if (silenced) "Notifications off" else seriesUpdateIntervalLabel(interval), Icons.Default.Notifications,
+        onClick = {
+            if (silenced) {
+                context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+            } else onChooseInterval()
+        },
+    )
 }
 
 @Composable

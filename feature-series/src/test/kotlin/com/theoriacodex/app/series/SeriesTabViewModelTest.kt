@@ -23,6 +23,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import androidx.lifecycle.SavedStateHandle
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -65,15 +66,54 @@ class SeriesTabViewModelTest {
         val found = viewModel.state.value.search.orEmpty().map { (it.listing as SeriesListing.Loaded).series.single().id.source.id }
         assertEquals(listOf("custom_mihon_7", "custom_mihon_8"), found)
     }
+
+    @Test
+    fun theSearchAndBrowsedSourceShowAgainAfterProcessDeath() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val offered = listOf<SeriesSource>(Answering(), Answering("custom_mihon_8"))
+        val saved = SavedStateHandle()
+        val before = SeriesTabViewModel(NothingStored, { offered }, saved = saved) {}
+        advanceUntilIdle()
+        before.browse(offered[1].key)
+        before.search("one punch")
+        advanceUntilIdle()
+
+        // The system keeps only the handle's contents; the sources load again in the new process.
+        val after = SeriesTabViewModel(NothingStored, { offered }, saved = SavedStateHandle(saved.keys().associateWith { saved.get<String>(it) })) {}
+        assertEquals(emptyList<SeriesSourceListing>(), after.state.value.search)
+        advanceUntilIdle()
+
+        assertEquals(offered[1].key, after.state.value.browse?.key)
+        val found = after.state.value.search.orEmpty().map { (it.listing as SeriesListing.Loaded).series.single().title }
+        assertEquals(listOf("one punch", "one punch"), found)
+    }
+
+    @Test
+    fun moreAddsASourcesNextPageOfResults() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val source = Answering(pages = 2)
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) {}
+        advanceUntilIdle()
+        viewModel.search("one punch")
+        advanceUntilIdle()
+
+        viewModel.searchMore(source.key)
+        advanceUntilIdle()
+
+        val listing = viewModel.state.value.search?.single()?.listing as SeriesListing.Loaded
+        assertEquals(listOf("/found", "/found2"), listing.series.map { it.id.address })
+        assertEquals(null, listing.nextPage)
+    }
 }
 
-/** Answers a search with one series titled by the text searched for. */
-private class Answering(id: String = "custom_mihon_7") : SeriesSource {
+/** Answers a search with one series a page, titled by the text searched for, over [pages] pages. */
+private class Answering(id: String = "custom_mihon_7", private val pages: Int = 1) : SeriesSource {
     override val key = SourceKey.parseOrThrow(id)
     override val name = "Fake"
     override val language = "en"
     override suspend fun popular(page: Int) = SeriesPage(emptyList(), hasNextPage = false)
-    override suspend fun search(text: String, page: Int) = SeriesPage(listOf(Series(SeriesId(key, "/found"), text)), hasNextPage = false)
+    override suspend fun search(text: String, page: Int) =
+        SeriesPage(listOf(Series(SeriesId(key, if (page == 1) "/found" else "/found$page"), text)), hasNextPage = page < pages)
     override suspend fun details(series: Series) = series
     override suspend fun entries(series: Series) = emptyList<SeriesEntry>()
     override suspend fun pages(entry: SeriesEntry) = emptyList<ImageRef>()

@@ -1,6 +1,7 @@
 package com.theoriacodex.app.series
 
 import android.Manifest
+import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -18,10 +19,13 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -39,22 +43,37 @@ import java.util.Date
  * whether it was read and how far. [onOpenEntry] gets the address of the chapter to read.
  */
 @Composable
-fun SeriesPageScreen(viewModel: SeriesPageViewModel, onBack: () -> Unit, onOpenEntry: (String) -> Unit, modifier: Modifier = Modifier) {
+fun SeriesPageScreen(
+    viewModel: SeriesPageViewModel,
+    onBack: () -> Unit,
+    onOpenEntry: (String) -> Unit,
+    onOpenExtensions: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    // New chapters of followed series are announced, so the first follow is when the permission is asked for.
+    val context = LocalContext.current
+    // New chapters of followed series are announced, so each follow asks for the permission while it is missing.
     // Refusing changes nothing else: the series is followed and the shelf still counts its new chapters.
     val askToNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
-    val toggleFollowed = { viewModel.toggleFollowed { askToNotify.launch(Manifest.permission.POST_NOTIFICATIONS) } }
+    val toggleFollowed = {
+        viewModel.toggleFollowed {
+            val permission = Manifest.permission.POST_NOTIFICATIONS
+            if (context.checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) askToNotify.launch(permission)
+        }
+    }
+    val missing = state.missing
     Column(modifier.fillMaxSize()) {
-        SecondaryScreenAppBar(title = state.sourceName, onBack = onBack)
+        // Without its source the page has no source name to show.
+        SecondaryScreenAppBar(title = state.sourceName.ifEmpty { state.stored?.series?.title.orEmpty() }, onBack = onBack)
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
             state.stored?.let { stored ->
                 item("header") { SeriesHeader(stored, state, toggleFollowed, onOpenEntry) }
             }
             val failure = state.failure
             when {
+                missing != null -> item("missing") { MissingSourceRow(missing, onOpenExtensions) }
                 failure != null && state.entries.isEmpty() -> item("failure") { ErrorState(failure, onRetry = viewModel::refresh) }
-                failure != null -> item("failure") { FailureRow(viewModel::refresh, Modifier.padding(horizontal = 16.dp)) }
+                failure != null -> item("failure") { FailureRow(viewModel::refresh, Modifier.padding(horizontal = 16.dp), failure) }
                 state.refreshing && state.entries.isEmpty() -> item("loading") { LoadingState() }
                 state.entries.isEmpty() -> item("empty") { EmptyState("No chapters") }
             }
@@ -67,8 +86,19 @@ fun SeriesPageScreen(viewModel: SeriesPageViewModel, onBack: () -> Unit, onOpenE
                     )
                 }
             }
-            items(state.entries, key = { it.entry.address }) { entry -> EntryRow(entry) { onOpenEntry(entry.entry.address) } }
+            items(state.entries, key = { it.entry.address }) { entry ->
+                EntryRow(entry, enabled = missing == null) { onOpenEntry(entry.entry.address) }
+            }
         }
+    }
+}
+
+/** Says the series' extension is off or gone, which is why its chapters cannot be opened, and leads to where to fix it. */
+@Composable
+private fun MissingSourceRow(missing: SeriesSourceMissing, onOpenExtensions: () -> Unit) {
+    Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(missing.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        TextButton(onClick = onOpenExtensions) { Text(EXTENSIONS_TITLE) }
     }
 }
 
@@ -87,7 +117,7 @@ private fun SeriesHeader(stored: StoredSeries, state: SeriesPageState, onToggleF
                 label = { Text(if (stored.followed) "Following" else "Follow") },
             )
             state.continueWith?.let { entry ->
-                Button(onClick = { onOpenEntry(entry.entry.address) }) {
+                Button(onClick = { onOpenEntry(entry.entry.address) }, enabled = state.missing == null) {
                     Text(continueLabel(state.started, entry), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
@@ -97,11 +127,11 @@ private fun SeriesHeader(stored: StoredSeries, state: SeriesPageState, onToggleF
 
 /** A chapter: its name, then how far the user is in it or, untouched or finished, when it came out. Read ones fade. */
 @Composable
-private fun EntryRow(entry: StoredSeriesEntry, onClick: () -> Unit) {
+private fun EntryRow(entry: StoredSeriesEntry, enabled: Boolean, onClick: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .alpha(if (entry.read) READ_ALPHA else 1f)
             .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {

@@ -1,9 +1,12 @@
 package com.theoriacodex.app.series
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.theoriacodex.app.ui.sourceFailureDetail
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
+import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
@@ -50,22 +53,25 @@ data class SeriesTabState(
     val refreshing: Boolean = false,
 )
 
-/** [sourcesChanged] emits once at the start and again whenever [loadSources] may answer differently. */
+/**
+ * [sourcesChanged] emits once at the start and again whenever [loadSources] may answer differently. [saved] keeps the
+ * search on screen and the browsed source across process death; both show again once the sources have loaded.
+ */
 class SeriesTabViewModel(
     private val repository: SeriesRepository,
     private val loadSources: suspend () -> List<SeriesSource>,
     sourcesChanged: Flow<*> = flowOf(Unit),
+    private val saved: SavedStateHandle = SavedStateHandle(),
     /** Stores the followed series' new chapters, which changes the shelf's unread counts. */
     private val checkFollowed: suspend () -> Unit,
 ) : ViewModel() {
-    private val mutableState = MutableStateFlow(SeriesTabState())
+    /** The text of the search on screen; a result for any other text is dropped. */
+    private var searchText: String? = saved[SAVED_SEARCH]
+    private val mutableState = MutableStateFlow(SeriesTabState(search = searchText?.let { emptyList() }))
     val state: StateFlow<SeriesTabState> = mutableState
 
     val followed: StateFlow<List<FollowedSeries>> =
         repository.observeFollowed().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    /** The text of the search on screen; a result for any other text is dropped. */
-    private var searchText: String? = null
 
     init {
         viewModelScope.launch { sourcesChanged.collectLatest { showSources(loadSources()) } }
@@ -104,13 +110,17 @@ class SeriesTabViewModel(
                 },
             )
         }
-        if (state.value.browse == null) sources.firstOrNull()?.let { browse(it.key) }
+        if (state.value.browse == null) {
+            val browsed = saved.get<String>(SAVED_BROWSE)
+            (sources.firstOrNull { it.key.id == browsed } ?: sources.firstOrNull())?.let { browse(it.key) }
+        }
         if (query != null) fresh.forEach { searchIn(it, query) }
     }
 
     /** Shows [key]'s popular series from the first page. */
     fun browse(key: SourceKey) {
         val source = source(key) ?: return
+        saved[SAVED_BROWSE] = key.id
         mutableState.update { it.copy(browse = SeriesSourceListing(key, source.name, SeriesListing.Loading)) }
         viewModelScope.launch {
             val listing = firstPage { source.popular(1) }
@@ -126,16 +136,21 @@ class SeriesTabViewModel(
         val source = source(browse.key) ?: return
         updateBrowse(browse.key) { loaded.copy(loadingMore = true, moreFailed = false) }
         viewModelScope.launch {
-            val next = try {
-                source.popular(page).let { more ->
-                    loaded.copy(series = (loaded.series + more.series).distinctBy(Series::id), nextPage = (page + 1).takeIf { more.hasNextPage })
-                }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Exception) {
-                loaded.copy(moreFailed = true)
-            }
+            val next = loaded.withPage(page) { source.popular(it) }
             updateBrowse(browse.key) { next }
+        }
+    }
+
+    /** Loads [key]'s next page of search results, unless one is loading or none is left. */
+    fun searchMore(key: SourceKey) {
+        val query = searchText ?: return
+        val loaded = state.value.search?.firstOrNull { it.key == key }?.listing as? SeriesListing.Loaded ?: return
+        val page = loaded.nextPage?.takeUnless { loaded.loadingMore } ?: return
+        val source = source(key) ?: return
+        updateSearch(key, query, loaded.copy(loadingMore = true, moreFailed = false))
+        viewModelScope.launch {
+            val next = loaded.withPage(page) { source.search(query, it) }
+            if (source(key) === source) updateSearch(key, query, next)
         }
     }
 
@@ -144,6 +159,7 @@ class SeriesTabViewModel(
         val query = text.trim().ifEmpty { return clearSearch() }
         val sources = state.value.sources.orEmpty()
         searchText = query
+        saved[SAVED_SEARCH] = query
         mutableState.update { it.copy(search = sources.map { source -> SeriesSourceListing(source.key, source.name, SeriesListing.Loading) }) }
         sources.forEach { searchIn(it, query) }
     }
@@ -157,6 +173,7 @@ class SeriesTabViewModel(
 
     fun clearSearch() {
         searchText = null
+        saved.remove<String>(SAVED_SEARCH)
         mutableState.update { it.copy(search = null) }
     }
 
@@ -196,7 +213,23 @@ private suspend fun firstPage(load: suspend () -> SeriesPage): SeriesListing = t
 } catch (error: CancellationException) {
     throw error
 } catch (error: Exception) {
-    SeriesListing.Failed(error.message?.takeIf(String::isNotBlank) ?: LOAD_FAILED)
+    SeriesListing.Failed(failureLine(error))
 }
+
+/** [this] with page [page] from [load] added; a failure keeps what is loaded and holds that page back until Retry. */
+private suspend fun SeriesListing.Loaded.withPage(page: Int, load: suspend (Int) -> SeriesPage): SeriesListing.Loaded = try {
+    val more = load(page)
+    copy(series = (series + more.series).distinctBy(Series::id), nextPage = (page + 1).takeIf { more.hasNextPage }, loadingMore = false)
+} catch (error: CancellationException) {
+    throw error
+} catch (_: Exception) {
+    copy(loadingMore = false, moreFailed = true)
+}
+
+/** What the screen says about [error]: a line for its reason, never the exception's own text. */
+internal fun failureLine(error: Exception): String = sourceFailureDetail((error as? SourceAdapterException)?.reason)
+
+private const val SAVED_SEARCH = "search"
+private const val SAVED_BROWSE = "browse"
 
 internal const val LOAD_FAILED = "Couldn't load"

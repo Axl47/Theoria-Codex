@@ -1,6 +1,7 @@
 package com.theoriacodex.app.series
 
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavType
@@ -22,7 +23,9 @@ internal val seriesArguments = listOf(
 @Composable
 internal fun SeriesTabDestination(shell: TheoriaShell) {
     val series = shell.container.series ?: return
-    val viewModel = viewModel { SeriesTabViewModel(series.repository, series.sources, series.extensions.revision) { series.checkFollowed() } }
+    val viewModel = viewModel {
+        SeriesTabViewModel(series.repository, series.sources, series.extensions.revision, createSavedStateHandle()) { series.checkFollowed() }
+    }
     SeriesTabScreen(
         viewModel,
         onOpenSeries = { id -> shell.navController.navigate(AppRoute.series(id)) },
@@ -48,10 +51,13 @@ internal fun SeriesPageDestination(shell: TheoriaShell, entry: NavBackStackEntry
     val series = shell.container.series ?: return
     val source = entry.arguments?.getString("source")?.let(SourceKey::parse) ?: return
     val id = SeriesId(source, entry.arguments?.getString("address") ?: return)
-    val viewModel = viewModel { SeriesPageViewModel(id, series.repository, series.sources) }
+    val viewModel = viewModel {
+        SeriesPageViewModel(id, series.repository, series.sources, series.extensions::installed, series.extensions.revision)
+    }
     SeriesPageScreen(
         viewModel = viewModel,
         onBack = { shell.navController.popBackStack() },
+        onOpenExtensions = shell::openExtensions,
         onOpenEntry = { address ->
             shell.scope.launch {
                 shell.seriesReader?.session(id, address)?.let { session -> shell.launchViewer(session, saveContext = false, singleTop = true) }
