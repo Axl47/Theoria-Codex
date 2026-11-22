@@ -236,6 +236,9 @@ What the feature still lacks.
   code stays idle in memory until the app's process ends.
 - **Extensions outside the sample.** The keep rules cover the packages 300 extensions used. One that calls a class in
   another package of those libraries fails with a missing class or method in release builds only.
+- **Failures in native code.** A source that throws is left out and says why. One that fails inside a library's native
+  code (the zstd decoder is the app's only such library) ends the app's process instead, and the Series tab loads its
+  first source when it opens.
 - **A hand-modified backup.** A restored series', chapters' and cover's addresses go to their extension as stored, and an
   extension builds its requests from addresses as it likes and may talk to several hosts, so the app has no origin to
   check them against. A backup edited by hand can thus make an approved extension request another host; the boundary
