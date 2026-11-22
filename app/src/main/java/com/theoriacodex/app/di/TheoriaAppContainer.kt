@@ -295,7 +295,7 @@ internal class DefaultTheoriaAppContainer(
         ),
         scope = durableStoreScope,
         publishMediaKeys = cookieBridge::updateMediaKeys,
-        extensionSources = extensionSources(extensionHost, appContext as Application),
+        extensionSources = extensionSources(extensionHost, appContext),
     )
     /** Opened at the end of [awaitDurableStores]: restored downloads and offline jobs wait on it. */
     private val sourceReadiness = SourceReadiness(accountStore::refreshAvailability) { customSourceRuntime.awaitFirstBuild() }
@@ -586,11 +586,11 @@ private fun siteHosts(profiles: List<SiteProfile>): Set<String> = profiles.mapTo
 /** Matches the built-in client's read timeout; probes keep the custom client's 10 s default. */
 private const val CUSTOM_SITE_READ_TIMEOUT_MS = 20_000
 
-/** Stored sites are usable at once; extensions join when their code has loaded, off the main thread. */
-private fun extensionSources(host: ExtensionSourceHost?, application: Application): Flow<List<ExtensionSource>> {
+/**
+ * Extension code loads off the main thread. The first source snapshot waits for it, so a search or download restored
+ * at startup finds its extension source already registered.
+ */
+private fun extensionSources(host: ExtensionSourceHost?, appContext: Context): Flow<List<ExtensionSource>> {
     if (host == null) return flowOf(emptyList())
-    return flow {
-        emit(emptyList())
-        emit(host.load(application))
-    }.flowOn(Dispatchers.IO)
+    return flow { emit(host.load(appContext as Application)) }.flowOn(Dispatchers.IO)
 }
