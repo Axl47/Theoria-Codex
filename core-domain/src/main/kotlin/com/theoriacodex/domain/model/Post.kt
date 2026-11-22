@@ -153,13 +153,32 @@ fun Post.keepingListingDataOf(listed: Post): Post {
  * picture hosted by several of them appears once: by [Post.contentHash], or by a [Post.pictureHash] within
  * [SAME_PICTURE_MAX_DISTANCE] of one kept earlier. Posts with neither are only compared by ID.
  */
-fun Iterable<Post>.distinctByFile(): List<Post> {
-    val ids = HashSet<PostId>()
-    val files = HashSet<String>()
-    val pictures = PictureHashIndex<Unit>()
-    return filter { post ->
-        ids.add(post.id) && (post.contentHash == null || files.add(post.contentHash)) &&
-            (post.pictureHash == null || pictures.addUnlessMatched(Unit, post.pictureHash))
+fun Iterable<Post>.distinctByFile(): List<Post> = FileSieve().let { sieve -> filter(sieve::admit) }
+
+/**
+ * [this] as shown, even posts that are copies of one another, then each of [incoming] that [distinctByFile] would keep
+ * after all of them: not a shown post, nor a copy of any shown or earlier incoming one.
+ */
+fun List<Post>.plusDistinctFiles(incoming: Iterable<Post>): List<Post> {
+    val sieve = FileSieve()
+    forEach(sieve::remember)
+    return this + incoming.filter(sieve::admit)
+}
+
+/** The IDs, files and pictures seen so far, for [distinctByFile]. */
+private class FileSieve {
+    private val ids = HashSet<PostId>()
+    private val files = HashSet<String>()
+    private val pictures = PictureHashIndex<Unit>()
+
+    /** Whether [post] is new by ID, file and picture; what it brings is remembered either way, as far as it was read. */
+    fun admit(post: Post): Boolean = ids.add(post.id) && (post.contentHash == null || files.add(post.contentHash)) &&
+        (post.pictureHash == null || pictures.addUnlessMatched(Unit, post.pictureHash))
+
+    fun remember(post: Post) {
+        ids += post.id
+        post.contentHash?.let(files::add)
+        post.pictureHash?.let { pictures.add(Unit, it) }
     }
 }
 

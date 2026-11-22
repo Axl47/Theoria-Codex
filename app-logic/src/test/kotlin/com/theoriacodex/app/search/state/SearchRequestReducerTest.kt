@@ -287,6 +287,22 @@ class SearchRequestReducerTest {
     }
 
     @Test
+    fun `a page's copy of a shown card is dropped even when that card copies another shown one`() {
+        // Within 4 bits of its neighbour each, but 5 bits apart end to end.
+        val first = post("first").copy(pictureHash = PICTURE)
+        val second = post("second").copy(pictureHash = PICTURE xor 0b111)
+        val repost = post("repost").copy(pictureHash = PICTURE xor 0b11_0111)
+        val next = post("next")
+        val initial = showing(query("paged"), listOf(first, second))
+        val request = page(16L, initial)
+
+        val completed = initial.reduce(SearchStateChange.BeginRequest(request))
+            .reduce(SearchStateChange.PageResult(16L, nextPage(request, listOf(repost, next))))
+
+        assertEquals(listOf(first, second, next), completed.content.results)
+    }
+
+    @Test
     fun `paging appends unique posts and preserves ordered existing results`() {
         val first = post("first")
         val duplicate = post("duplicate")

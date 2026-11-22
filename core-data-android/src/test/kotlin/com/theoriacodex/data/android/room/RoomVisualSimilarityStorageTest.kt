@@ -36,7 +36,8 @@ class RoomVisualSimilarityStorageTest {
         verdicts.record(verdict("b", "1", ForYouVerdictKind.SKIPPED, at = 5))
 
         assertEquals(listOf("3" to ForYouVerdictKind.SAVED, "2" to ForYouVerdictKind.HID), verdicts.verdicts("a").map { it.postId.sourcePostId to it.kind })
-        verdicts.remove("a", id("3"))
+        verdicts.remove(verdict("a", "2", ForYouVerdictKind.SKIPPED, at = 1))
+        verdicts.remove(verdict("a", "3", ForYouVerdictKind.SAVED, at = 4))
         assertEquals(listOf("2"), verdicts.verdicts("a").map { it.postId.sourcePostId })
 
         guard.retire("a")

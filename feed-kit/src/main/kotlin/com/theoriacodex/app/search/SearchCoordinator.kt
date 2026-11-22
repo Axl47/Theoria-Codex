@@ -67,7 +67,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Application execution service for Search.
@@ -411,10 +410,7 @@ class SearchCoordinator(
     ): UnifiedSearchResult {
         val adapter = requireNotNull(registry.adapterFor(source)) { "No adapter for $source" }
         val token = continuation.cursor.pageTokens[source]
-        val fetch: suspend () -> Page<Post> = { registry.unifiedOrchestrator().searchSource(adapter, continuation.query, token) }
-        val page = if (timeoutMs == null) fetch() else {
-            withTimeoutOrNull(timeoutMs) { fetch() } ?: throw SourceAdapterException(SourceFailureReason.NETWORK, "Source timed out")
-        }
+        val page = registry.unifiedOrchestrator().searchSource(adapter, continuation.query, token, timeoutMs)
         currentCoroutineContext().ensureActive()
         listed(page.items)
         return UnifiedSearchResult(page.items, mapOf(source to page.nextPageToken), listOf(SourceRunStatus(source, SourceRunState.SUCCESS)))
