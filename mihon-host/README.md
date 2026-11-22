@@ -1,10 +1,13 @@
-# mihon-host (spike)
+# mihon-host
 
-A debug-only experiment: load a [Mihon](https://github.com/mihonapp/mihon) manga extension APK and browse it as a
-Theoria source. It exists to answer one question: how much of Mihon's run-time must Theoria provide before the
-extension ecosystem works here? The answer and the measurements are below. Release builds contain none of this.
+Loads [Mihon](https://github.com/mihonapp/mihon) manga extension APKs and presents each of their sources as a
+`SeriesSource`, which the Series tab browses and the Viewer reads chapter by chapter. Only debug builds include it;
+release builds contain none of this.
 
-## Verdict
+It began as a spike asking how much of Mihon's run-time Theoria must provide before the extension ecosystem works
+here. That verdict and its measurements are kept below; the Series feature is built on top of it.
+
+## Verdict (the spike)
 
 Hosting the ecosystem is feasible, and the host is small: about 1,000 lines, of which 450 are Theoria's own and the
 rest is Mihon's API trimmed to what extensions call. An unmodified MangaDex extension lists series, opens one and
@@ -24,7 +27,8 @@ Three costs decide whether to build it, and none of them is solved here:
 Running extensions in a separate companion app, reached over IPC, would answer trust and release size structurally
 and give settings screens a home. It was not built or costed here and is worth costing before building in-process.
 
-The product work is on top: a series is a single post here, with no chapter list, progress or library.
+The first slice of the product is built on top: the Series tab, a series page with its chapter list, reading with
+progress and resume in the Viewer, and a Following shelf. "What is missing" lists what is not.
 
 ## How it works
 
@@ -37,16 +41,15 @@ compiled against those names, so the host must provide classes with exactly thos
 | Host API | `src/main/kotlin/eu/kanade/tachiyomi`, `uy/kohesive/injekt` | The classes extensions link against, trimmed from Mihon (Apache 2.0, see `LICENSE-APACHE-2.0.txt`). Only the coroutine API; no RxJava. |
 | `ExtensionLoader` | `com.theoriacodex.mihonhost` | Checks the APK's manifest, copies it to a private read-only file (Android refuses writable code), loads it and creates its sources. |
 | `MihonHost` | same | Gives extensions what they ask the service locator for: the application, a `Json`, and an HTTP client. |
-| `MihonSourceAdapter` | same | Presents one extension source as a Theoria `SourceAdapter`. A series becomes one post; opening it shows the pages of the series' first chapter. |
+| `MihonSeriesSource` | same | Presents one extension source as the app's `SeriesSource` (`core-domain`): popular, latest and text search list series, a series has details and chapters, and a chapter gives its pages when it is opened. |
 | `ExtensionImages` | same | Fetches covers and pages through the extension's own HTTP client. Each address handed to the app ends in `#mihon=<source id>`; an interceptor on the app's media client answers those. |
-| App seam | `app/.../di/ExtensionSources.kt`, `app/src/debug/.../MihonExtensionSourceHost.kt` | Debug builds find the host through `ServiceLoader` and feed its sources into the same registry Custom Sites use. |
+| App seam | `app/.../di/ExtensionSources.kt`, `app/src/debug/.../MihonExtensionSourceHost.kt` | Debug builds find the host through `ServiceLoader`. Nothing loads at startup: the extensions in the app's `mihon-extensions` folder load once, off the main thread, the first time the Series tab asks for sources or an image address ending in `#mihon=` is requested. |
+| Series | `feature-series`, `app/.../series/`, `core-data` `SeriesRepository` | The Series tab and series page, the Viewer session over a series' chapters, and the `series` and `series_entries` tables that keep followed series, read state and progress. Pages are never stored. |
 
 ## Try it
 
 Use an emulator. The extension's code runs inside the app with the app's permissions, so load only extensions you
-trust, and follow `AGENTS.md` ("Personal-device Safety") before installing anything. Posts liked, saved or kept
-offline from an extension source stay in the app's data under the spike's ids (`custom_mihon_<id>`, image addresses
-ending in `#mihon=`), which a real feature would not keep; avoid that on an install whose data matters.
+trust, and follow `AGENTS.md` ("Personal-device Safety") before installing anything.
 
 Without the app, on any extension APK:
 
@@ -62,7 +65,7 @@ adb -s <emulator> shell am instrument -w -r -e extensionApk extension.apk \
   com.theoriacodex.mihonhost.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
-It lists popular series, opens one, fetches a cover and a page, and prints counts, timings and request counts as
+It lists popular series, opens one's first chapter, fetches a cover and a page, and prints counts, timings and request counts as
 `harness=` lines. It never prints or saves images.
 
 In the debug app:
@@ -72,10 +75,17 @@ adb -s <emulator> shell mkdir -p /sdcard/Android/data/com.theoriacodex.debug/fil
 adb -s <emulator> push extension.apk /sdcard/Android/data/com.theoriacodex.debug/files/mihon-extensions/
 ```
 
-Restart the app. The source appears in Search's source picker under Custom. Send a search with no tags for the
-source's popular series, or type words for a text search. `ExtensionSourceLiveTest` (in `app/src/androidTest`) does
-the same through the real UI: `-e extensionSourceLive true -e class com.theoriacodex.app.live.ExtensionSourceLiveTest`
-on `com.theoriacodex.debug.test`.
+Restart the app and open the Series tab: it browses the first source's popular series, searches every loaded source
+at once, and opens a series' page, from which a chapter opens in the Viewer. `ExtensionSourceLiveTest` (in
+`app/src/androidTest`) does this through the real UI on `com.theoriacodex.debug.test`, as two runs with
+`-e extensionSourceLive true`, because the second checks the Following shelf after the app's process restarts:
+
+```sh
+T=com.theoriacodex.app.live.ExtensionSourceLiveTest
+R=com.theoriacodex.debug.test/androidx.test.runner.AndroidJUnitRunner
+adb -s <emulator> shell am instrument -w -r -e extensionSourceLive true -e class $T#aSeriesIsBrowsedReadResumedAndFollowed $R
+adb -s <emulator> shell am instrument -w -r -e extensionSourceLive true -e class $T#aFollowedSeriesIsOnTheShelfAfterARestart $R
+```
 
 ## What was measured (November 2026)
 
@@ -122,8 +132,10 @@ framework. The scripts are not in the repository: they depend on the index, whic
 
 Besides the three costs above, this is what a real feature would have to add.
 
-- **A series model.** A series here is one post showing its first chapter. No chapter list, no reading progress, no
-  library, no updates.
+- **Updates.** Nothing checks followed series for new chapters; a series' chapters refresh when its page is opened.
+- **Choosing sources.** Every source of every loaded extension is used, so an extension with one source per language
+  fills the Series tab's source row and is searched once per language.
+- **Backup.** Followed series and reading progress are not in profile backups.
 - **Search filters.** Each extension defines its own filters (genre, status, sort). Only popular, latest and free
   text are used. Posts carry no tags.
 - **Extension settings.** The extensions that do load run on their defaults. MangaDex writes its settings into the
@@ -132,12 +144,8 @@ Besides the three costs above, this is what a real feature would have to add.
 - **A JavaScript engine, protobuf and extra image decoders**, used by about 2% of extensions.
 - **Installing and updating extensions.** There is no repository browser and no update check.
 - **Other extension API versions.** Only extension API 1.6 loads, which is all the index held.
-- **Saved posts.** A page address can expire within minutes (MangaDex). A post reopened later from history keeps its
-  old page addresses; it would have to be resolved again.
-- **The source logo.** The picker's icon is the site's favicon, fetched by the app's own client; MangaDex bot-checks
-  it, so the text logo shows instead.
-- **A limit on loading.** Debug startup waits for every extension to load. One whose code hangs while it is created
-  would hold the app on its startup screen.
+- **A limit on loading.** An extension whose code hangs while it is created holds the Series tab on its loading
+  state, and every image request that waits for the extensions, though no longer the app's startup.
 - **Cancellation.** An image fetch that the app cancels still runs to completion on the extension's client.
 - **Pages that share an address.** A source whose pages differ only in the request body would show one image for all.
 
@@ -147,5 +155,6 @@ Delete `mihon-host/`, `app/src/debug/java/com/theoriacodex/app/extensions/`, the
 `app/src/debug/resources/`, and `ExtensionSourceLiveTest`. Then remove the module's lines from
 `settings.gradle.kts`, `app/build.gradle.kts`, the root `build.gradle.kts`, `scripts/check.sh`,
 `scripts/verify_device_apk.py`, `config/quality/hotspot-budgets.json` and its Detekt baseline, and the three library
-aliases in `gradle/libs.versions.toml`. The seam in `:app` and `:media-kit` (`ExtensionSourceHost`, the extra flow in
-`CustomSourceRuntime`, `AppHttpClients`' `extensionMedia`) does nothing without a host and can stay or go.
+aliases in `gradle/libs.versions.toml`. The seam in `:app` and `:media-kit` (`ExtensionSourceHost`, `AppHttpClients`'
+`extensionMedia`) does nothing without a host, and without one the Series tab is not shown; `feature-series` and the
+series tables depend only on `SeriesSource`, not on this module.
