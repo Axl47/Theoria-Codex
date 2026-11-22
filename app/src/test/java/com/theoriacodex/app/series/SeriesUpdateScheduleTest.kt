@@ -1,5 +1,7 @@
 package com.theoriacodex.app.series
 
+import android.app.Notification
+import android.app.NotificationManager
 import android.app.job.JobInfo
 import android.app.job.JobScheduler
 import android.content.Context
@@ -7,6 +9,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesUpdateInterval
+import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
@@ -62,6 +65,19 @@ class SeriesUpdateScheduleTest {
     fun `a notification names the one new chapter or counts several`() {
         assertEquals("Chapter 5", newChaptersText(listOf(SeriesEntry("/c/5", "Chapter 5"))))
         assertEquals("2 new chapters", newChaptersText(listOf(SeriesEntry("/c/6", "Chapter 6"), SeriesEntry("/c/5", "Chapter 5"))))
+    }
+
+    @Test
+    fun `series announced by separate checks are grouped under one summary`() {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val other = Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_1"), "/series/b"), "Other")
+        fun summaries() = manager.activeNotifications.count { it.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0 }
+
+        notifySeriesUpdate(context, SeriesUpdate(one.single().series, listOf(SeriesEntry("/c/5", "Chapter 5"))))
+        assertEquals(0, summaries())
+        notifySeriesUpdate(context, SeriesUpdate(other, listOf(SeriesEntry("/c/2", "Chapter 2"))))
+        assertEquals(1, summaries())
+        assertEquals(3, manager.activeNotifications.size)
     }
 
     @Test

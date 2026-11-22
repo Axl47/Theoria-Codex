@@ -122,6 +122,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import com.theoriacodex.app.series.keepSeriesUpdatesScheduled
 import kotlinx.coroutines.withContext
@@ -522,13 +523,8 @@ internal class DefaultTheoriaAppContainer(
         SeriesDependencies(RoomSeriesRepository(contentDatabase)) { withContext(Dispatchers.IO) { host.sources() } }
     }
 
-    init {
-        series?.let { series ->
-            applicationScope.launch {
-                keepSeriesUpdatesScheduled(appContext, series.repository.observeFollowed(), settingsRepository.observeSettings())
-            }
-        }
-    }
+    /** Keeps the new-chapter check scheduled; started by [awaitDurableStores], once. */
+    private var seriesScheduling: Job? = null
 
     override val customSites: CustomSitesController = CustomSitesControllerImpl(
         profiles = siteProfiles,
@@ -585,6 +581,14 @@ internal class DefaultTheoriaAppContainer(
         // Registers the saved offline queue before any screen can add to it; its jobs wait on sourceReadiness.
         offlineMedia.recoverPendingJobs()
         sourceReadiness.open()
+        // Only now: watching followed series opens Room, which must first get the chance to fail into the startup screen.
+        if (seriesScheduling == null) {
+            seriesScheduling = series?.let { series ->
+                durableStoreScope.launch {
+                    keepSeriesUpdatesScheduled(appContext, series.repository.observeFollowed(), settingsRepository.observeSettings())
+                }
+            }
+        }
         // Off the startup path: searched-tag suggestions start from what Recents remembers.
         durableStoreScope.launch {
             runCatchingPreservingCancellation {

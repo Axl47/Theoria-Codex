@@ -31,7 +31,7 @@ import com.theoriacodex.app.appshell.AppShellAction
 import com.theoriacodex.app.appshell.AppShellEffect
 import com.theoriacodex.app.appshell.AppShellUiState
 import com.theoriacodex.app.appshell.IncomingUriKind
-import com.theoriacodex.app.series.seriesIdOfUri
+import com.theoriacodex.app.series.SeriesNotificationActivity
 import com.theoriacodex.app.codex.CodexCommandHost
 import com.theoriacodex.app.codex.transfer.CodexImportHost
 import com.theoriacodex.app.settings.SettingsAction
@@ -171,10 +171,16 @@ internal fun ShellIncomingUriEffects(
     LaunchedEffect(shell.navReady, pendingExternalContent) {
         if (!shell.navReady) return@LaunchedEffect
         val pending = pendingExternalContent ?: return@LaunchedEffect
-        val uri = pending.value.toUri()
-        // A new-chapters notification names its series; anything else is a link to a post or a site.
-        seriesIdOfUri(uri)?.let { shell.navController.navigate(AppRoute.series(it)) { launchSingleTop = true } } ?: shell.openExternalContent(uri)
+        shell.openExternalContent(pending.value.toUri())
         appShellOwner.onAction(AppShellAction.ConsumeIncomingUri(pending))
+    }
+    LaunchedEffect(shell.navReady) {
+        if (!shell.navReady) return@LaunchedEffect
+        // Always a new page: reusing the one on top would keep the series that page was opened for.
+        SeriesNotificationActivity.opened.filterNotNull().collect { id ->
+            SeriesNotificationActivity.opened.value = null
+            shell.navController.navigate(AppRoute.series(id))
+        }
     }
 }
 

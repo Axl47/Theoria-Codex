@@ -25,11 +25,19 @@ suspend fun SeriesRepository.refresh(source: SeriesSource, series: Series): List
  * Refreshes every followed series from its source in [sources] and returns the ones that gained entries. Sources are
  * checked side by side, but each source's series one at a time, because a source's requests share one rate limit. A
  * series whose source is missing or fails is skipped and the rest go on.
+ *
+ * [onUpdate] gets each series as soon as its new entries are stored, so a check stopped midway has already reported
+ * everything it stored. Sources report side by side.
  */
-suspend fun SeriesRepository.checkFollowed(sources: List<SeriesSource>): List<SeriesUpdate> = coroutineScope {
+suspend fun SeriesRepository.checkFollowed(
+    sources: List<SeriesSource>,
+    onUpdate: suspend (SeriesUpdate) -> Unit = {},
+): List<SeriesUpdate> = coroutineScope {
     val followedBySource = observeFollowed().first().map(FollowedSeries::series).groupBy { it.id.source }
     sources.mapNotNull { source ->
-        followedBySource[source.key]?.let { followed -> async { followed.mapNotNull { update(source, it) } } }
+        followedBySource[source.key]?.let { followed ->
+            async { followed.mapNotNull { series -> update(source, series)?.also { onUpdate(it) } } }
+        }
     }.awaitAll().flatten()
 }
 

@@ -12,6 +12,7 @@ import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -76,6 +77,21 @@ class SeriesUpdateCheckTest {
     }
 
     @Test
+    fun `a series is reported once it is stored, even when a later series stops the check`() = runTest {
+        val later = Series(SeriesId(source.key, "/series/b"), "Zeta")
+        listOf(series, later).forEach { follow(it) }
+        source.chapters[series.id] = listOf(first)
+        repository.checkFollowed(listOf(source))
+
+        source.chapters[series.id] = listOf(second, first)
+        source.stopsAt = later.id
+        val reported = mutableListOf<SeriesUpdate>()
+        runCatching { repository.checkFollowed(listOf(source)) { reported += it } }
+
+        assertEquals(listOf(SeriesUpdate(series, listOf(second))), reported)
+    }
+
+    @Test
     fun `unfollowed series are not checked`() = runTest {
         repository.store(series)
         source.chapters[series.id] = listOf(first)
@@ -88,14 +104,19 @@ class SeriesUpdateCheckTest {
 
 private class FakeSource(id: String, private val fails: Boolean = false) : SeriesSource {
     val chapters = mutableMapOf<SeriesId, List<SeriesEntry>>()
+
+    /** The series at which the check is cancelled, as the system stopping the job would. */
+    var stopsAt: SeriesId? = null
     override val key = SourceKey.parseOrThrow(id)
     override val name = id
     override val language = "en"
-    override val supportsLatest = false
     override suspend fun popular(page: Int) = SeriesPage(emptyList(), false)
-    override suspend fun latest(page: Int) = popular(page)
     override suspend fun search(text: String, page: Int) = popular(page)
-    override suspend fun details(series: Series) = if (fails) throw IllegalStateException("down") else series
+    override suspend fun details(series: Series) = when {
+        fails -> throw IllegalStateException("down")
+        series.id == stopsAt -> throw CancellationException("stopped")
+        else -> series
+    }
     override suspend fun entries(series: Series) = chapters[series.id].orEmpty()
     override suspend fun pages(entry: SeriesEntry) = emptyList<ImageRef>()
 }

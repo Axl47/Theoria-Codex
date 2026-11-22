@@ -16,11 +16,14 @@ import androidx.test.uiautomator.Until
 import com.theoriacodex.app.di.SeriesDependencies
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
 import com.theoriacodex.app.series.SERIES_UPDATE_JOB_ID
+import com.theoriacodex.app.series.notifySeriesUpdate
 import com.theoriacodex.app.ui.TopLevelDestination
+import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.data.repository.continueEntry
 import com.theoriacodex.data.repository.inReadingOrder
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesSource
 import java.util.regex.Pattern
 import kotlin.time.Duration.Companion.milliseconds
@@ -41,7 +44,7 @@ import org.junit.runner.RunWith
  * The tests are one story across app restarts, so run each as its own `am instrument` call, which starts the app's
  * process anew: [aSeriesIsBrowsedReadResumedAndFollowed], [aFollowedSeriesIsOnTheShelfAfterARestart], then the
  * new-chapter story: [followingASeriesAsksToNotifyAndSchedulesTheCheck], [aFollowedSeriesForgetsItsNewestChapter], the background check run by hand from a shell
- * (`cmd jobscheduler run`, see `mihon-host/README.md`), [aNewChapterNotificationOpensItsSeries] and
+ * (`cmd jobscheduler run`, see `mihon-host/README.md`), [aNewChapterNotificationOpensItsSeries], [aNotificationOpensItsSeriesOverAnotherSeriesPage] and
  * [unfollowingTheLastSeriesCancelsTheCheck].
  *
  * The report is counts and labels only, never images: provider media stays off screenshots and logs.
@@ -169,6 +172,26 @@ class ExtensionSourceLiveTest {
         waitFor("the series' page naming the series", By.text(followed.series.title))
         waitFor("the series' page showing it followed", By.text("Following"))
         report("opened", "the notification opened \"${followed.series.title}\"'s page")
+    }
+
+    /** A notification for one series, tapped while another series' page is open, opens its own series over it. */
+    @Test
+    fun aNotificationOpensItsSeriesOverAnotherSeriesPage() {
+        val (open, announced) = runBlocking { series.sources().first().popular(1) }.series
+        runBlocking { series.repository.store(announced) }
+        openSeriesTab()
+        tap("the first listed series", By.text(open.title), RESULTS_TIMEOUT_MS)
+        waitFor("the first series' chapter count", By.text(CHAPTER_COUNT), RESULTS_TIMEOUT_MS)
+        notifySeriesUpdate(context, SeriesUpdate(announced, listOf(SeriesEntry("/chapter/none", "Ch.1"))))
+        device.openNotification()
+        tap("the other series' notification", By.text(announced.title))
+        waitFor("the announced series' page", By.text(announced.title), RESULTS_TIMEOUT_MS)
+        waitFor("the announced series' chapters", By.text(CHAPTER_COUNT), RESULTS_TIMEOUT_MS)
+        assertNull("The page under it is covered", device.findObject(By.text(open.title)))
+        report("opened", "over \"${open.title}\"'s page, the notification opened \"${announced.title}\"")
+        device.pressBack()
+        waitFor("the first series' page under it", By.text(open.title))
+        report("back", "Back returned to \"${open.title}\"")
     }
 
     @Test

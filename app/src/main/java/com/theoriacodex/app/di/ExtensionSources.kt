@@ -39,8 +39,10 @@ class SeriesDependencies(
     private val checking = Mutex()
 
     /**
-     * Stores the followed series' new chapters and returns the series that gained some. The Series tab's refresh and
-     * the background job both call this; one check runs at a time, so neither repeats the other's requests midway.
+     * Stores the followed series' new chapters and returns the series that gained some, each also handed to [onUpdate]
+     * as soon as it is stored. The Series tab's refresh and the background job both call this; one check runs at a
+     * time, so neither repeats the other's requests midway.
      */
-    suspend fun checkFollowed(): List<SeriesUpdate> = checking.withLock { repository.checkFollowed(sources()) }
+    suspend fun checkFollowed(onUpdate: suspend (SeriesUpdate) -> Unit = {}): List<SeriesUpdate> =
+        checking.withLock { repository.checkFollowed(sources(), onUpdate) }
 }
