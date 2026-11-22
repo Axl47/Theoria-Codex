@@ -1,5 +1,7 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.series.SeriesId
 import android.net.Uri
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -29,6 +31,14 @@ internal object AppRoute {
     const val Viewer = "viewer"
     const val CodexDetail = "codex/detail/{codexId}"
     const val Settings = "settings-screen"
+
+    /** Every extension on the device: which are on, their languages and their settings. */
+    const val Extensions = "extensions"
+
+    /** One series' page, named by its [SeriesId]. */
+    const val Series = "series?source={source}&address={address}"
+
+    fun series(id: SeriesId): String = "series?source=${id.source.id}&address=${Uri.encode(id.address)}"
 
     /** The triage deck over one feed, named by a [TriageRequest]; [triageArguments] reads it back. */
     const val Triage = "triage/{source}?feedKey={feedKey}&removes={removes}&alsoIn={alsoIn}"
@@ -96,14 +106,16 @@ internal fun RecordCodexEntryEffect(entry: NavBackStackEntry, codexId: String, s
 
 /**
  * What time on a screen counts as. Library keeps the meaning of the tabs it replaced: History browses
- * like Recents did, Codices and Saved (once a Codex screen) count as Codex. Settings counts as nothing.
+ * like Recents did, Codices and Saved (once a Codex screen) count as Codex. Settings counts as nothing, and so does
+ * reading a series' chapter, which [viewerStream] (the stream of the Viewer's session) tells from watching a post.
  */
 internal fun statisticsUsageCategory(
     currentRoute: String?,
     homeTabRoute: String,
     librarySection: LibrarySection,
+    viewerStream: ViewerStreamSource? = null,
 ): StatisticsUsageCategory? = when (currentRoute) {
-    AppRoute.Viewer -> StatisticsUsageCategory.WATCHING
+    AppRoute.Viewer -> StatisticsUsageCategory.WATCHING.takeUnless { viewerStream == ViewerStreamSource.SERIES }
     AppRoute.CreatorProfile -> StatisticsUsageCategory.BROWSING
     AppRoute.CodexDetail -> StatisticsUsageCategory.CODEX
     AppRoute.Home -> when (homeTabRoute) {

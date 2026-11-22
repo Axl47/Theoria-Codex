@@ -36,6 +36,7 @@ dependencies {
     kover(project(":feature-search"))
     kover(project(":feature-library"))
     kover(project(":feature-discover"))
+    kover(project(":feature-series"))
     kover(project(":feature-settings"))
 }
 

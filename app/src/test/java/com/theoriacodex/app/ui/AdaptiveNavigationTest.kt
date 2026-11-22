@@ -41,6 +41,7 @@ class AdaptiveNavigationTest {
             MaterialTheme {
                 TheoriaAdaptiveScaffold(true, selected.value, 64.dp, 24.dp, WindowInsets(0),
                     remember { SnackbarHostState() },
+                    destinations = homeTabs(withSeries = false),
                     onDestinationSelected = { selected.value = TopLevelDestination.entries.indexOf(it) },
                     windowWidthDp = width.value,
                 ) { modifier ->

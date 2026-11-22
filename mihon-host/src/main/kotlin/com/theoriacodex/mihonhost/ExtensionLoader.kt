@@ -1,72 +1,57 @@
 package com.theoriacodex.mihonhost
 
 import android.content.Context
-import android.content.pm.PackageInfo
-import android.content.pm.PackageManager
 import dalvik.system.DelegateLastClassLoader
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceFactory
 import java.io.File
-import java.security.MessageDigest
-import java.util.HexFormat
 
-/** An extension whose code is loaded and whose sources are ready to call. */
-class LoadedExtension(
-    val packageName: String,
-    val name: String,
-    val versionName: String,
-    /** SHA-256 of the signing certificate, lowercase hex; who built the APK. */
-    val signatureSha256: String,
-    val sources: List<Source>,
-)
-
-/** Why an APK was not loaded; [message] is for logs. */
+/** Why an extension was not loaded; [message] is for logs and the Extensions page. */
 class ExtensionRejectedException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 /**
- * Loads a Mihon extension APK into this process. An extension is an ordinary APK that is never installed: its
- * manifest names the classes to create, and its code links against the host API in this module (`eu.kanade.tachiyomi`)
- * and against the libraries the app already ships.
+ * Loads a Mihon extension's code into this process. Its manifest names the classes to create, and its code links
+ * against the host API in this module (`eu.kanade.tachiyomi`, `androidx.preference`) and against the libraries the app
+ * already ships.
  *
- * Loaded code runs with the app's own permissions and can read the app's data, so only load APKs you trust.
- * [MihonHost.install] must have run first.
+ * Loaded code runs with the app's own permissions and can read the app's data, so the caller loads only extensions the
+ * user turned on (see [ExtensionRegistry]). [MihonHost.install] must have run first.
  */
-class ExtensionLoader(private val context: Context) {
-    /** @throws ExtensionRejectedException when [apk] is not a loadable extension for this host. */
-    fun load(apk: File): LoadedExtension {
-        val info = context.packageManager.getPackageArchiveInfo(apk.path, PackageManager.PackageInfoFlags.of(ARCHIVE_FLAGS))
-            ?: throw ExtensionRejectedException("${apk.name} is not a readable APK")
-        if (info.reqFeatures.orEmpty().none { it.name == EXTENSION_FEATURE }) {
-            throw ExtensionRejectedException("${info.packageName} does not declare the $EXTENSION_FEATURE feature")
+class ExtensionLoader(private val context: Context, private val packages: ExtensionPackages) {
+    /** Copies an earlier process left behind are removed once, before this process makes its first. */
+    private val copies by lazy {
+        File(context.codeCacheDir, "mihon-extensions").apply {
+            deleteRecursively()
+            mkdirs()
         }
-        val metaData = info.applicationInfo?.metaData ?: throw ExtensionRejectedException("${info.packageName} has no metadata")
-        val libVersion = metaData.getFloat(METADATA_LIB_VERSION)
-        if (libVersion != SUPPORTED_LIB_VERSION) {
-            throw ExtensionRejectedException("${info.packageName} targets extension-lib $libVersion; this host implements $SUPPORTED_LIB_VERSION")
-        }
-        val classNames = metaData.getString(METADATA_SOURCE_CLASS).orEmpty().split(';').map(String::trim).filter(String::isNotEmpty)
-            .map { name -> if (name.startsWith('.')) info.packageName + name else name }
-        if (classNames.isEmpty()) throw ExtensionRejectedException("${info.packageName} names no source class")
-
-        val classLoader = DelegateLastClassLoader(privateReadOnlyCopy(apk).path, context.classLoader)
-        val sources = classNames.flatMap { className -> createSources(classLoader, className, info.packageName) }
-        return LoadedExtension(
-            packageName = info.packageName,
-            name = metaData.getString(METADATA_NAME) ?: info.packageName,
-            versionName = info.versionName.orEmpty(),
-            signatureSha256 = signatureSha256(info),
-            sources = sources,
-        )
     }
 
-    /** Android refuses to load code from a file the app could still write, so the APK is copied and locked first. */
-    private fun privateReadOnlyCopy(apk: File): File {
-        val directory = File(context.codeCacheDir, "mihon-extensions").apply { mkdirs() }
-        // One copy per file: a second file of the same extension must not replace code that is already loaded.
-        val target = File(directory, apk.name)
-        target.delete()
-        apk.copyTo(target)
+    /** @throws ExtensionRejectedException when [extension] is not loadable by this host. */
+    fun load(extension: ExtensionPackage): List<Source> {
+        extension.unsupported?.let { throw ExtensionRejectedException("${extension.packageName}: $it") }
+        // An installed package's APK is Android's own read-only copy, so its code loads from where it is.
+        val code = if (extension.installed) extension.apk else privateReadOnlyCopy(extension)
+        val classLoader = DelegateLastClassLoader(code.path, context.classLoader)
+        return extension.sourceClasses.flatMap { className -> createSources(classLoader, className, extension.packageName) }
+    }
+
+    /**
+     * Android refuses to load code from a file the app could still write, so a file from the folder is copied and
+     * locked first. Every load gets a copy of its own, never written again, so code already loaded from an earlier
+     * copy is not changed under it. The copy is what runs, so it is the copy that must be what the user turned on:
+     * the same package, signer, version and length as the file that was listed.
+     */
+    private fun privateReadOnlyCopy(extension: ExtensionPackage): File {
+        val target = File.createTempFile(extension.apk.nameWithoutExtension, ".apk", copies)
+        extension.apk.copyTo(target, overwrite = true)
         check(target.setReadOnly()) { "Could not lock ${target.name}" }
+        val copy = packages.read(target)
+        val same = copy != null && copy.packageName == extension.packageName && copy.signer == extension.signer &&
+            copy.versionCode == extension.versionCode && copy.size == extension.size
+        if (extension.signer == null || !same) {
+            target.delete()
+            throw ExtensionRejectedException("${extension.apk.name} changed after it was listed")
+        }
         return target
     }
 
@@ -85,20 +70,5 @@ class ExtensionLoader(private val context: Context) {
         throw error
     } catch (error: Throwable) {
         throw ExtensionRejectedException("$className in $packageName could not be created: $error", error)
-    }
-
-    private fun signatureSha256(info: PackageInfo): String {
-        val signature = info.signingInfo?.apkContentsSigners?.firstOrNull() ?: return ""
-        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(signature.toByteArray()))
-    }
-
-    private companion object {
-        const val ARCHIVE_FLAGS =
-            (PackageManager.GET_CONFIGURATIONS or PackageManager.GET_META_DATA or PackageManager.GET_SIGNING_CERTIFICATES).toLong()
-        const val EXTENSION_FEATURE = "tachiyomi.extension"
-        const val METADATA_SOURCE_CLASS = "tachiyomi.extension.class"
-        const val METADATA_NAME = "tachiyomix.name"
-        const val METADATA_LIB_VERSION = "tachiyomix.extensionLib"
-        const val SUPPORTED_LIB_VERSION = 1.6f
     }
 }

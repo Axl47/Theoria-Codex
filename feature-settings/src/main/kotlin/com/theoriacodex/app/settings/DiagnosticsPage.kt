@@ -32,6 +32,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.diagnostics.DiagnosticSection
 import kotlinx.coroutines.launch
+import com.theoriacodex.app.ui.components.SettingsHeader
+import com.theoriacodex.app.ui.components.SettingsPageColumn
 
 private const val PREVIEW_CHARS = 8_000
 

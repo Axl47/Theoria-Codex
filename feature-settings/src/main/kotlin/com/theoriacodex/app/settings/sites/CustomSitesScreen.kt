@@ -29,14 +29,14 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.customsites.CustomSiteSummary
 import com.theoriacodex.app.settings.BuiltInAccounts
 import com.theoriacodex.app.settings.SETTINGS_PATH
-import com.theoriacodex.app.settings.SettingsGroup
-import com.theoriacodex.app.settings.SettingsHeader
-import com.theoriacodex.app.settings.SettingsPageColumn
-import com.theoriacodex.app.settings.SettingsRow
-import com.theoriacodex.app.settings.SettingsRowDivider
 import com.theoriacodex.app.ui.components.EmptyState
 import com.theoriacodex.app.ui.undo.DeferredRemovalRow
 import com.theoriacodex.app.ui.undo.SurfaceLeaveEffect
+import com.theoriacodex.app.ui.components.SettingsHeader
+import com.theoriacodex.app.ui.components.SettingsGroup
+import com.theoriacodex.app.ui.components.SettingsRowDivider
+import com.theoriacodex.app.ui.components.SettingsRow
+import com.theoriacodex.app.ui.components.SettingsPageColumn
 
 /** The pages above anything opened from the Sites list. */
 internal val SITES_PATH = SETTINGS_PATH + SettingDestinations.Sites.title

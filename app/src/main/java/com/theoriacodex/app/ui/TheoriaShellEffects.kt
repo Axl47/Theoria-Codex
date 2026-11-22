@@ -31,6 +31,7 @@ import com.theoriacodex.app.appshell.AppShellAction
 import com.theoriacodex.app.appshell.AppShellEffect
 import com.theoriacodex.app.appshell.AppShellUiState
 import com.theoriacodex.app.appshell.IncomingUriKind
+import com.theoriacodex.app.series.SeriesNotificationActivity
 import com.theoriacodex.app.codex.CodexCommandHost
 import com.theoriacodex.app.codex.transfer.CodexImportHost
 import com.theoriacodex.app.settings.SettingsAction
@@ -173,6 +174,14 @@ internal fun ShellIncomingUriEffects(
         shell.openExternalContent(pending.value.toUri())
         appShellOwner.onAction(AppShellAction.ConsumeIncomingUri(pending))
     }
+    LaunchedEffect(shell.navReady) {
+        if (!shell.navReady) return@LaunchedEffect
+        // Always a new page: reusing the one on top would keep the series that page was opened for.
+        SeriesNotificationActivity.opened.filterNotNull().collect { id ->
+            SeriesNotificationActivity.opened.value = null
+            shell.navController.navigate(AppRoute.series(id))
+        }
+    }
 }
 
 /** Reports the current destination to usage statistics. */
@@ -181,8 +190,9 @@ internal fun ShellUsageEffect(shell: TheoriaShell, currentRoute: String?, statis
     val appUsageTracker = shell.features.appUsageTracker
     val homeTabRoute = shell.navigation.homeTabRoute
     val librarySection by shell.data.librarySections.section.collectAsStateWithLifecycle()
-    LaunchedEffect(appUsageTracker, currentRoute, homeTabRoute, librarySection, statisticsCodexId) {
-        appUsageTracker.onCategoryChanged(statisticsUsageCategory(currentRoute, homeTabRoute, librarySection))
+    val viewerStream = shell.routes.viewer.current?.session?.collectAsStateWithLifecycle()?.value?.context?.streamSource
+    LaunchedEffect(appUsageTracker, currentRoute, homeTabRoute, librarySection, statisticsCodexId, viewerStream) {
+        appUsageTracker.onCategoryChanged(statisticsUsageCategory(currentRoute, homeTabRoute, librarySection, viewerStream))
         if (currentRoute != AppRoute.Viewer) {
             appUsageTracker.onCodexTargetChanged(
                 statisticsCodexId?.takeIf { currentRoute == AppRoute.CodexDetail }

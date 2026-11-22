@@ -22,7 +22,26 @@ import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.app.viewer.state.ViewerAction
+import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+
+/** What the top bar names: a series chapter by its title, any other post by its source. */
+private fun ViewerScreenConfig.topBarTitle(post: Post): String =
+    post.title?.takeIf { seriesChapters } ?: post.id.source.displayName()
+
+/** The dock's Save button; a series chapter is not a post to save, so its dock has none. */
+@Composable
+private fun ViewerDockSave(
+    config: ViewerScreenConfig,
+    post: Post,
+    saveContext: ViewerSaveContext,
+    screen: ViewerScreenState,
+    controls: ViewerControls,
+    host: ViewerScreenHost,
+) {
+    if (config.seriesChapters) return
+    ViewerSaveButton(post, saveContext, screen.saveFan, controls::markInteraction) { host.onAction(ViewerAction.Save) }
+}
 
 /** Everything drawn over the media: top bar and trail row, dock, post strip, rotate and slideshow buttons, related drawer and the save fan. */
 @Composable
@@ -58,13 +77,16 @@ internal fun BoxScope.ViewerChromeOverlays(
         ViewerBottomStack(frame, postPagerState, controls, pendingPostId, config, loadMoreFromStrip, fadesWhileScrubbing)
     }
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_TOP_BAR, Modifier.align(Alignment.BottomCenter).then(fadesWhileScrubbing)) {
-        val dock = viewerDockActions(frame, controls, activity, quality, qualityHeight, selection.post.id in config.likedPostIds, comments.countOf(selection.post), host.onAction)
-        ViewerDock(dock) { ViewerSaveButton(selection.post, saveContext, screen.saveFan, controls::markInteraction) { host.onAction(ViewerAction.Save) } }
+        val dock = viewerDockActions(
+            frame, controls, activity, quality, qualityHeight, selection.post.id in config.likedPostIds, comments.countOf(selection.post), host.onAction,
+            collectable = !config.seriesChapters,
+        )
+        ViewerDock(dock) { ViewerDockSave(config, selection.post, saveContext, screen, controls, host) }
     }
     ViewerFooterButtons(frame, screen, activity, host.onAction)
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_TOP_BAR, Modifier.align(Alignment.TopCenter).then(fadesWhileScrubbing)) {
         ViewerChrome(
-            source = selection.post.id.source.displayName(),
+            source = config.topBarTitle(selection.post),
             indexLabel = if (selection.mediaItems.size > 1) "${selection.mediaIndex + 1} / ${selection.mediaItems.size}" else null,
             onBack = { controls.requestDismiss() },
         ) { ViewerTrailRow(selection.post, frame.posts, trail, config.creatorBrowsingSources, screen.trailForks, controls::markInteraction) }
@@ -132,7 +154,7 @@ private fun ViewerBottomStack(
             onLoadMore = loadMoreFromStrip, onInteraction = { controls.markInteraction() },
             openPages = ViewerStripPages(selection.post.id, selection.overviewItems, selection.mediaIndex, mirrored) {
                 controls.jumpToMedia(selection.post.id, it)
-            })
+            }, chapters = config.seriesChapters)
     }
 }
 

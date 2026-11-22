@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.app.ui.components.SettingsGroup
 
 /** The account line for a built-in source's row in Sites; null for sources without accounts. */
 fun builtInAccountSummary(source: SourceKey, accounts: SettingsAccountUiState): String? = when (source) {

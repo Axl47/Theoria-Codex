@@ -16,14 +16,7 @@ import com.theoriacodex.app.customsites.SiteCookieBridge
 import com.theoriacodex.app.sourceauth.InMemorySiteCredentialsStore
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.InMemorySiteProfileRepository
-import com.theoriacodex.app.source.SourcePresentation
-import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.SourceAdapter
-import com.theoriacodex.domain.adapter.SourceCapabilities
-import com.theoriacodex.domain.adapter.TagSuggestion
-import com.theoriacodex.domain.model.Post
-import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
@@ -405,41 +398,6 @@ class CustomSitesControllerImplTest {
         assertSame(first, graph.registry.unifiedOrchestrator())
         graph.controller.update(SITE.id, CustomSiteEdit(label = "Renamed"))
         assertNotSame(first, graph.registry.unifiedOrchestrator())
-    }
-
-    @Test
-    fun `an extension source is published with its adapter and a presentation`() = runTest {
-        val key = SourceKey.parseOrThrow("custom_mihon_1")
-        val adapter = object : SourceAdapter {
-            override val sourceKey = key
-            override val capabilities = SourceCapabilities(
-                supportsSortNewest = false,
-                supportsSortPopular = true,
-                supportsSortTop = false,
-                supportsSortRandom = false,
-                supportsExcludeTagsServerSide = false,
-            )
-
-            override suspend fun search(query: Query, pageToken: String?): Page<Post> = error("Not used")
-
-            override suspend fun trendingTags(limit: Int): List<TagSuggestion> = error("Not used")
-
-            override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = error("Not used")
-
-            override suspend fun resolvePost(id: PostId): Post? = error("Not used")
-        }
-        val extensions = MutableStateFlow(emptyList<ExtensionSource>())
-        val presented = mutableListOf<SourcePresentation>()
-        val runtime = CustomSourceRuntime(
-            profiles, keys, families, NoNetwork, backgroundScope + UnconfinedTestDispatcher(testScheduler),
-            extensionSources = extensions,
-        ) { presented.clear(); presented += it }
-
-        extensions.value = listOf(ExtensionSource(key, label = "Fake Reader", homeUrl = "https://reader.example", adapter = adapter))
-
-        assertSame(adapter, runtime.snapshot.value.adapters[key])
-        assertEquals(listOf(key), presented.map(SourcePresentation::source))
-        assertEquals("Fake Reader", presented.single().label)
     }
 
     private fun draft(label: String = "Booru", include: Boolean = false) = CustomSiteDraft(

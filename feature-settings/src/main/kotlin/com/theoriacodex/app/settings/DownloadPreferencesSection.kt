@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.videoQualityLabel
@@ -15,6 +17,7 @@ import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.data.repository.SettingChoice
 import com.theoriacodex.data.repository.SettingChoices
 import com.theoriacodex.data.repository.SettingDestinations
+import com.theoriacodex.data.repository.SeriesUpdateInterval
 import com.theoriacodex.data.repository.SettingToggles
 import com.theoriacodex.domain.model.VideoQuality
 
@@ -41,3 +44,29 @@ private fun QualityChoices(choice: SettingChoice<VideoQuality>, selected: VideoQ
         }
     }
 }
+
+/**
+ * Settings' sheet for how often followed series are checked for new chapters. [onOpenNotificationSettings] is given
+ * while the app may not notify, which only the system's settings can change once its prompt was refused.
+ */
+@Composable
+fun SeriesUpdatesSection(state: SettingsUiState, onOpenNotificationSettings: (() -> Unit)?, onAction: (SettingsAction) -> Unit) {
+    val choice = SettingChoices.SeriesUpdates
+    Text(choice.title, style = MaterialTheme.typography.titleMedium)
+    Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth()) {
+        choice.options.forEach { interval ->
+            FilterChip(selected = choice.read(state.settings) == interval, onClick = { onAction(SettingsAction.SetChoice(choice, interval)) },
+                label = { Text(seriesUpdateIntervalLabel(interval)) })
+        }
+    }
+    if (onOpenNotificationSettings != null) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(NOTIFICATIONS_OFF, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TextButton(onClick = onOpenNotificationSettings) { Text("Notification settings") }
+        }
+    }
+}
+
+const val NOTIFICATIONS_OFF = "Notifications off"
+
+fun seriesUpdateIntervalLabel(interval: SeriesUpdateInterval): String = interval.hours?.let { "$it hours" } ?: "Off"

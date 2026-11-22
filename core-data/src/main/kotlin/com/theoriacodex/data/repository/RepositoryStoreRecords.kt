@@ -1,6 +1,7 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.ExtensionChoices
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -40,6 +41,8 @@ internal data class SettingsStoreRecord(
     @SerialName("invertMultiImageScrollDirection")
     val invertMultiImageScrollDirection: Boolean = false,
     @SerialName("oldSearchBar") val oldSearchBar: Boolean = false,
+    /** Absent while the setting is at its default, so files written before it existed stay byte-for-byte current. */
+    @SerialName("seriesUpdateInterval") val seriesUpdateInterval: String? = null,
     @SerialName("codexLibrarySort") val codexLibrarySort: String? = null,
     @SerialName("instantSeek") val instantSeek: Boolean = false,
     @SerialName("viewerAutoRotateVideos") val viewerAutoRotateVideos: Boolean? = null,
@@ -60,6 +63,8 @@ internal data class SettingsStoreRecord(
     val favoriteTagsByProfile: Map<String, List<FavoriteTagEntryRecord>>? = null,
     @SerialName("providerHealth")
     val providerHealth: List<ProviderHealthSnapshotRecord>? = null,
+    @SerialName("trustedExtensions") val trustedExtensions: Map<String, String>? = null,
+    @SerialName("extensionLanguages") val extensionLanguages: Map<String, List<String>>? = null,
 ) {
     fun toDomain(): AppSettings {
         val storedEnabledSources = enabledSources
@@ -86,6 +91,8 @@ internal data class SettingsStoreRecord(
         return RepositoryPolicies.normalizeSettings(
             AppSettings(
                 oldSearchBar = oldSearchBar,
+                seriesUpdateInterval = SeriesUpdateInterval.entries.firstOrNull { it.name == seriesUpdateInterval }
+                    ?: AppSettings().seriesUpdateInterval,
                 codexLibrarySort = CodexLibrarySort.entries.firstOrNull { it.name == codexLibrarySort }
                     ?: CodexLibrarySort.MANUAL,
                 followedCreators = followedCreators.orEmpty().mapNotNull { it.toDomain() }.distinctBy { it.creator.followKey() }.take(MAX_FOLLOWED_CREATORS),
@@ -111,6 +118,10 @@ internal data class SettingsStoreRecord(
                         record.toDomainOrNull()?.let { snapshot -> snapshot.source to snapshot }
                     }
                     .toMap(),
+                extensions = ExtensionChoices(
+                    trusted = trustedExtensions.orEmpty(),
+                    languages = extensionLanguages.orEmpty().mapValues { (_, languages) -> languages.toSet() },
+                ),
             )
         )
     }
@@ -155,6 +166,7 @@ internal data class SettingsStoreRecord(
                 followedCreators = settings.followedCreators.map(FollowedCreatorRecord::fromDomain),
                 sourceCatalogVersion = SHARED_SOURCE_CATALOG_VERSION,
                 oldSearchBar = settings.oldSearchBar,
+                seriesUpdateInterval = settings.seriesUpdateInterval.takeIf { it != AppSettings().seriesUpdateInterval }?.name,
                 codexLibrarySort = settings.codexLibrarySort.name,
                 enabledSources = settings.runtime.enabledSources.map { it.id },
                 sourceWeights = settings.runtime.sourceWeights.mapKeys { it.key.id },
@@ -188,6 +200,8 @@ internal data class SettingsStoreRecord(
                 providerHealth = settings.providerHealth.values
                     .sortedBy { snapshot -> snapshot.source.id }
                     .map(ProviderHealthSnapshotRecord::fromDomain),
+                trustedExtensions = settings.extensions.trusted.toSortedMap().takeIf { it.isNotEmpty() },
+                extensionLanguages = settings.extensions.languages.mapValues { (_, languages) -> languages.sorted() }.takeIf { it.isNotEmpty() },
             )
         }
     }

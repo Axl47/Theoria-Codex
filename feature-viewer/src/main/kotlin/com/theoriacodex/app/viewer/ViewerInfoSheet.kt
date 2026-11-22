@@ -149,6 +149,27 @@ internal fun ViewerInfoSheet(
     comments: ViewerComments,
 ) {
     val post = selection.post
+    if (config.seriesChapters) {
+        AdaptiveViewerInfo(onDismiss = { controls.setInfoSheetVisible(false) }) {
+            ViewerChapterActions(post) { controls.jumpToMedia(post.id, 0) }
+        }
+    } else {
+        PostInfoSheet(selection, controls, host, config, saveToCodexQuery, contextActions, comments)
+    }
+}
+
+/** A post's sheet: its actions, tags and comments. A series chapter has none of these, so it never gets this sheet. */
+@Composable
+private fun PostInfoSheet(
+    selection: ViewerSelection,
+    controls: ViewerControls,
+    host: ViewerScreenHost,
+    config: ViewerScreenConfig,
+    saveToCodexQuery: Query?,
+    contextActions: ViewerContextActions,
+    comments: ViewerComments,
+) {
+    val post = selection.post
     val onAction = host.onAction
     val searchActions = LocalPostTagSearchActions.current
     PreloadCodexSaveRelevance(post, saveToCodexQuery)
@@ -269,6 +290,21 @@ private fun ViewerInfoActions(
             ViewerInfoMoreActions(moreActions, contextActions.removeFromCodex?.let { remove -> { remove(post) } }, ::closeThen)
         }
         HorizontalDivider()
+    }
+}
+
+/**
+ * All a series chapter's sheet holds: its title, without the address that stands in for a post id, and Start over. A
+ * chapter is not a post to collect, share or search from: it has no link, tags or creator, its pages load only through
+ * its extension, and Search cannot reach its source.
+ */
+@Composable
+private fun ViewerChapterActions(post: Post, onStartOver: () -> Unit) {
+    Column {
+        PostActionHeader(post)
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), Arrangement.SpaceEvenly) {
+            ViewerInfoAction(Icons.Default.Replay, "Start over", "Start over", onClick = onStartOver)
+        }
     }
 }
 

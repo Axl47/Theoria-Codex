@@ -116,6 +116,8 @@ internal fun ViewerPostStrip(
     onLoadMore: () -> Unit = {},
     onInteraction: () -> Unit = {},
     openPages: ViewerStripPages? = null,
+    /** Whether the posts are a series' chapters, which are named by their titles: their ids are addresses. */
+    chapters: Boolean = false,
 ) {
     val list = rememberLazyListState(initialFirstVisibleItemIndex = selectedIndex)
     RequestMorePostsNearEnd(list, posts.lastIndex, onLoadMore)
@@ -143,7 +145,8 @@ internal fun ViewerPostStrip(
                         val pagesWidth = viewerStripUnfoldedWidth(pages.items.size, cell, gap, slots)
                         ViewerUnfoldedPages(post.id.source, pages, cell, onInteraction, Modifier.requiredWidth(pagesWidth).height(cell))
                     } else {
-                        ViewerPostThumbnail(post, index == selectedIndex, Modifier.size(cell), pageCount = postMediaCount(post)) { onSelect(index) }
+                        val label = post.title?.takeIf { chapters }?.let { "Open $it" } ?: viewerPostLabel(post)
+                        ViewerPostThumbnail(post, index == selectedIndex, Modifier.size(cell), postMediaCount(post), label) { onSelect(index) }
                     }
                 }
             }
@@ -298,15 +301,24 @@ private fun ViewerUnfoldedPages(source: SourceKey, pages: ViewerStripPages, cell
 
 /** [pageCount] above one stacks cards behind the thumbnail, so a multi-page post reads as one before it is opened. */
 @Composable
-internal fun ViewerPostThumbnail(post: Post, selected: Boolean, modifier: Modifier = Modifier, pageCount: Int = 1, onClick: () -> Unit) {
+internal fun ViewerPostThumbnail(
+    post: Post,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    pageCount: Int = 1,
+    label: String = viewerPostLabel(post),
+    onClick: () -> Unit,
+) {
     val context = LocalContext.current
     val location = post.preview.localPath ?: post.preview.url
     val request = remember(context, location, post.id.source) {
         location?.let { buildViewerImageRequest(context, it, post.id.source, staticAnimatedWebPFrame = true) }
     }
     val animated = remember(post) { isAnimatedPost(post) }
-    ViewerThumbnailTile(request, "Open post ${post.id.sourcePostId}", selected, animated, modifier, pageCount, onClick)
+    ViewerThumbnailTile(request, label, selected, animated, modifier, pageCount, onClick)
 }
+
+private fun viewerPostLabel(post: Post) = "Open post ${post.id.sourcePostId}"
 
 /** One tappable image in the Viewer's strips, whether it stands for a post or for one of a post's pages. */
 @Composable

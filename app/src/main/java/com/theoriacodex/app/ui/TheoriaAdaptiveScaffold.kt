@@ -39,6 +39,7 @@ internal fun TheoriaAdaptiveScaffold(
     bottomBarIconSize: Dp,
     bottomBarWindowInsets: WindowInsets,
     snackbarHostState: SnackbarHostState,
+    destinations: List<TopLevelDestination>,
     onDestinationSelected: (TopLevelDestination) -> Unit,
     marked: Set<TopLevelDestination> = emptySet(),
     containerColor: Color = MaterialTheme.colorScheme.background,
@@ -56,7 +57,7 @@ internal fun TheoriaAdaptiveScaffold(
         },
         bottomBar = {
             if (navigationVisible && !rail) TheoriaBottomNavigation(
-                selectedIndex, bottomBarHeight, bottomBarIconSize, bottomBarWindowInsets, onDestinationSelected, marked,
+                selectedIndex, bottomBarHeight, bottomBarIconSize, bottomBarWindowInsets, destinations, onDestinationSelected, marked,
             )
         },
     ) { padding ->
@@ -65,7 +66,7 @@ internal fun TheoriaAdaptiveScaffold(
                 modifier = Modifier.testTag("navigation-rail"),
             ) {
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                    TopLevelDestination.entries.forEachIndexed { index, destination ->
+                    destinations.forEachIndexed { index, destination ->
                         NavigationRailItem(
                             selected = selectedIndex == index,
                             onClick = { onDestinationSelected(destination) },

@@ -9,6 +9,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.ExtensionChoices
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -511,8 +512,17 @@ enum class CodexLibrarySort {
     MOST_OPENED,
 }
 
+/** How often followed series are checked for new chapters in the background; [hours] is null when they never are. */
+enum class SeriesUpdateInterval(val hours: Int?) {
+    OFF(null),
+    HOURS_6(6),
+    HOURS_12(12),
+    HOURS_24(24),
+}
+
 data class AppSettings(
     val oldSearchBar: Boolean = false,
+    val seriesUpdateInterval: SeriesUpdateInterval = SeriesUpdateInterval.HOURS_12,
     val codexLibrarySort: CodexLibrarySort = CodexLibrarySort.MANUAL,
     val followedCreators: List<FollowedCreator> = emptyList(),
     val runtime: SourceRuntimeSettings = SourceRuntimeSettings(),
@@ -525,6 +535,8 @@ data class AppSettings(
     val forYouBlacklistByProfile: Map<String, List<ForYouBlacklistEntry>> = emptyMap(),
     val favoriteTagsByProfile: Map<String, List<FavoriteTagEntry>> = emptyMap(),
     val providerHealth: Map<SourceKey, ProviderHealthSnapshot> = emptyMap(),
+    /** Which extensions the user turned on, and which of their languages. */
+    val extensions: ExtensionChoices = ExtensionChoices(),
 )
 
 enum class ScenarioPreset {
@@ -588,6 +600,12 @@ enum class ViewerStreamSource {
     RECENTS,
     /** A Trail: a Viewer level forked from a post by tag, creator or similarity. History stores it as [SEARCH]. */
     TRAIL,
+
+    /**
+     * One series' entries (chapters) in reading order. They are read, not collected: History, statistics, stored
+     * posts, Like and Save all leave this stream alone, and its progress and reading mode belong to the series.
+     */
+    SERIES,
 }
 
 data class ViewerLaunchContext(

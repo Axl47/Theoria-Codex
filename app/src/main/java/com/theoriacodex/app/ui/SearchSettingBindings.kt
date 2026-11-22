@@ -6,8 +6,10 @@ import com.theoriacodex.app.search.omnibox.OmniboxKind
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsPage
 import com.theoriacodex.app.settings.SettingsSheet
+import com.theoriacodex.app.settings.seriesUpdateIntervalLabel
 import com.theoriacodex.data.repository.ALL_SETTING_DEFINITIONS
 import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.data.repository.SeriesUpdateInterval
 import com.theoriacodex.data.repository.SettingChoice
 import com.theoriacodex.data.repository.SettingChoices
 import com.theoriacodex.data.repository.SettingDestinations
@@ -39,6 +41,7 @@ internal val SETTING_BINDINGS: Map<String, SettingBinding> = buildMap {
     SettingToggles.all.forEach { put(it.id, SettingBinding.Switch) }
     put(SettingChoices.DefaultVideoQuality.id, SettingBinding.InViewer)
     put(SettingChoices.DownloadQuality.id, SettingBinding.Settings(SettingsPage.HOME, SettingsSheet.DOWNLOADS))
+    put(SettingChoices.SeriesUpdates.id, SettingBinding.Settings(SettingsPage.HOME, SettingsSheet.SERIES_UPDATES))
     put(SettingDestinations.Home.id, SettingBinding.Settings(SettingsPage.HOME))
     put(SettingDestinations.Stats.id, SettingBinding.Settings(SettingsPage.STATS))
     put(SettingDestinations.ShareStats.id, SettingBinding.Settings(SettingsPage.STATS_SHARE))
@@ -57,7 +60,7 @@ internal val SETTING_BINDINGS: Map<String, SettingBinding> = buildMap {
 /**
  * The search box's entry for every setting definition as it stands in [settings]: toggles switch in place
  * through [dispatch], choices show their current value, and picking a choice or destination calls [open]
- * with its binding. [hidden] leaves out definitions this build cannot open (Diagnostics without a report).
+ * with its binding. [hidden] leaves out definitions this build cannot open (Diagnostics without a report, series checks without extensions).
  */
 internal fun searchSettingEntries(
     settings: AppSettings,
@@ -80,7 +83,11 @@ internal fun searchSettingEntries(
 }
 
 /** A choice's current value as the search box shows it; null for a value type it cannot label yet. */
-internal fun settingValueLabel(value: Any?): String? = (value as? VideoQuality)?.let(::videoQualityLabel)
+internal fun settingValueLabel(value: Any?): String? = when (value) {
+    is VideoQuality -> videoQualityLabel(value)
+    is SeriesUpdateInterval -> seriesUpdateIntervalLabel(value)
+    else -> null
+}
 
 /** Opens what [binding] names from the search box. */
 internal fun TheoriaShell.openSettingBinding(binding: SettingBinding, openHiddenTags: () -> Unit) = when (binding) {

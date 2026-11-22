@@ -46,15 +46,19 @@ internal fun viewerDockActions(
     commentCount: CommentCount?,
     onAction: (ViewerAction) -> Unit,
     moreExtras: List<ViewerMenuItem> = emptyList(),
+    /** Whether the post can be liked and saved; a series' chapter cannot. */
+    collectable: Boolean = true,
 ): ViewerDockActions {
     val selection = frame.selection
     val pictureInPicture = viewerPictureInPictureAction(activity, selection.post, selection.media, frame.uiState.mediaError != null)
     return ViewerDockActions(
         liked = liked,
-        onToggleLike = {
-            onAction(ViewerAction.ToggleLike)
-            controls.markInteraction()
-        },
+        onToggleLike = if (collectable) {
+            {
+                onAction(ViewerAction.ToggleLike)
+                controls.markInteraction()
+            }
+        } else null,
         commentCount = commentCount,
         onInfo = {
             controls.setInfoSheetVisible(true)
@@ -65,7 +69,7 @@ internal fun viewerDockActions(
             controls.setActionsMenuExpanded(expanded)
             if (expanded) controls.markInteraction()
         },
-        moreItems = viewerMoreItems(onChooseCodex = { onAction(ViewerAction.Save) }, pictureInPicture, moreExtras),
+        moreItems = viewerMoreItems(onChooseCodex = if (collectable) { { onAction(ViewerAction.Save) } } else null, pictureInPicture, moreExtras),
         overview = if (selection.overviewAvailable) {
             ViewerOverviewToggle(frame.mediaOverviewVisible) {
                 controls.setOverviewVisible(!frame.mediaOverviewVisible)

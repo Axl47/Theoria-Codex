@@ -5,6 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshotFlow
+import com.theoriacodex.app.series.openExtensions
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsPage
 import com.theoriacodex.app.settings.SettingsSheet
@@ -33,8 +34,10 @@ internal fun SettingsScreenDestination(shell: TheoriaShell) {
         },
         diagnostics = shell.diagnosticsEntry,
         storageTools = { LibraryTransferSettings(shell.transfers) },
+        seriesUpdates = shell.container.series != null,
         onClose = { shell.navController.popBackStack() },
         closesFrom = entryPage,
+        onOpenExtensions = shell.container.series?.let { shell::openExtensions },
     )
 }
 

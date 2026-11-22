@@ -75,7 +75,10 @@ internal fun ViewerPostPagerSurface(
                     reservedBottomPx = reservedBottom,
                     verticalScroll = verticalGallery?.scrollGesture,
                 ),
-                viewerGestureHandler(swipe, dismissDrag, screen, controls, haptics, flingVelocity, scope, frame.uiState.controls.slideshow),
+                viewerGestureHandler(
+                    swipe, dismissDrag, screen, controls, haptics, flingVelocity, scope, frame.uiState.controls.slideshow,
+                    openNextChapter = nextPostOpener(frame.navigation.currentIndex, frame, swipe, config).takeIf { vertical && config.seriesChapters },
+                ),
             )
             .graphicsLayer { translationX = swipe.edgeOffset },
     ) {
@@ -105,6 +108,8 @@ private fun viewerGestureHandler(
     flingVelocity: Float,
     scope: CoroutineScope,
     slideshowRunning: Boolean,
+    /** Set in a series chapter read vertically: a push up past its last page goes on reading instead of opening info. */
+    openNextChapter: (() -> Unit)?,
 ) = object : ViewerGestureHandler {
     // Any touch on the media stops a slideshow; a tap then shows the controls as usual.
     override fun onPress() {
@@ -121,7 +126,11 @@ private fun viewerGestureHandler(
     override fun onDismissRelease(velocityY: Float) {
         if (viewerDismissCommits(dismissDrag.progress, velocityY, flingVelocity)) controls.requestDismiss()
     }
-    override fun onInfoSwipe() { controls.setInfoSheetVisible(true); controls.markInteraction() }
+    override fun onInfoSwipe() {
+        if (openNextChapter != null) return openNextChapter()
+        controls.setInfoSheetVisible(true)
+        controls.markInteraction()
+    }
     override fun onGestureEnd() {
         swipe.cancel()
         if (dismissDrag.active && !screen.pendingDismiss) scope.launch { dismissDrag.recoil() }
@@ -129,6 +138,12 @@ private fun viewerGestureHandler(
     override fun onLevelLimit() = haptics.performHapticFeedback(TheoriaHaptics.Limit)
     override fun onScrubStart() = controls.beginScrub()
     override fun onScrubEnd() = controls.endScrub()
+}
+
+/** Opens the post after [index] at its [entryMediaIndex]; null on the last post. */
+private fun nextPostOpener(index: Int, frame: ViewerFrame, swipe: ViewerSwipeController, config: ViewerScreenConfig): (() -> Unit)? {
+    val next = frame.navigation.pages.getOrNull(index + 1) ?: return null
+    return { swipe.navigateTo(ViewerHorizontalSwipeTarget(index + 1, config.entryMediaIndex(next))) }
 }
 
 /** A gallery read as one vertical strip; its end card opens the next post. */
@@ -143,13 +158,13 @@ private fun ViewerVerticalPostPage(
     dismissDrag: ViewerDismissDrag,
     readReturnProgress: () -> Float,
     host: ViewerScreenHost,
+    config: ViewerScreenConfig,
 ) {
-    val next = frame.navigation.pages.getOrNull(postPage + 1)
     ViewerVerticalGallery(
         postPage, pageState, frame, screen, controls, host,
         dismissDrag = dismissDrag.takeIf { postPage == frame.navigation.currentIndex },
         readReturnProgress = readReturnProgress,
-        onOpenNext = next?.let { { swipe.navigateTo(ViewerHorizontalSwipeTarget(postPage + 1, it.targetMediaIndex)) } },
+        onOpenNext = nextPostOpener(postPage, frame, swipe, config),
     )
 }
 
@@ -175,7 +190,7 @@ private fun ViewerPostPage(
     val post = frame.posts[postPage]
     val pageState = frame.navigation.pages[postPage]
     if (config.readingModeOf(pageState) == GalleryReadingMode.VERTICAL) {
-        return ViewerVerticalPostPage(postPage, pageState, frame, screen, controls, swipe, dismissDrag, readReturnProgress, host)
+        return ViewerVerticalPostPage(postPage, pageState, frame, screen, controls, swipe, dismissDrag, readReturnProgress, host, config)
     }
     val postMedia = pageState.media
     val knownDurationMs by remember(post, host.durations) { host.durations.observe(post) }.collectAsStateWithLifecycle(null)
@@ -289,7 +304,8 @@ private fun ViewerPostPageEffects(
             screen.pendingMediaJumpByPost.remove(post.id)
         }
     }
-    LaunchedEffect(mediaPagerState.settledPage, currentPostIndex, pageState.pendingMediaIndex, swipe.dragging, swipe.settling) {
+    // [mediaCount] is a key so a post whose pages arrive while it shows is reported again, now with its pages.
+    LaunchedEffect(mediaPagerState.settledPage, currentPostIndex, pageState.pendingMediaIndex, swipe.dragging, swipe.settling, mediaCount) {
         if (swipeActive || pageState.pendingMediaIndex != null) return@LaunchedEffect
         reportSettledMedia(isCurrentPost, mediaPagerState.settledPage, selectedMediaIndex, post, onAction, onVisibleMediaChanged)
         if (postPage == postPagerState.currentPage) controls.markPassiveInteraction()

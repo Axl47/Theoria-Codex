@@ -1,6 +1,5 @@
 package com.theoriacodex.app.di
 
-import android.app.Application
 import com.theoriacodex.app.media.NetworkMonitor
 import com.theoriacodex.app.network.AppHttpClients
 import android.content.Context
@@ -93,6 +92,7 @@ import com.theoriacodex.app.media.LibraryPictureBackfill
 import com.theoriacodex.app.media.chargingState
 import com.theoriacodex.data.android.room.RoomMediaDurationRepository
 import com.theoriacodex.data.android.room.RoomRecentsRepository
+import com.theoriacodex.data.android.room.RoomSeriesRepository
 import com.theoriacodex.data.android.room.RoomProfileBackupStore
 import com.theoriacodex.data.android.room.openProfileLibrary
 import com.theoriacodex.data.android.room.TheoriaRoomDatabase
@@ -129,12 +129,12 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import com.theoriacodex.app.series.keepSeriesUpdatesScheduled
+import kotlinx.coroutines.withContext
 
 data class DataDependencies(
     val storageDirectory: File,
@@ -219,6 +219,9 @@ interface TheoriaAppContainer {
 
     /** Settings → Sites: user-added booru sites. */
     val customSites: CustomSitesController
+
+    /** The Series area; null in a build with no extension host, which then shows no Series tab. */
+    val series: SeriesDependencies? get() = null
 
     /** Lives as long as the process: work that must finish after the screen or Activity that started it. */
     val applicationScope: CoroutineScope
@@ -313,7 +316,6 @@ internal class DefaultTheoriaAppContainer(
         ),
         scope = durableStoreScope,
         publishMediaKeys = cookieBridge::updateMediaKeys,
-        extensionSources = extensionSources(extensionHost, appContext),
     )
     /** Opened at the end of [awaitDurableStores]: restored downloads and offline jobs wait on it. */
     private val sourceReadiness = SourceReadiness(accountStore::refreshAvailability) { customSourceRuntime.awaitFirstBuild() }
@@ -545,6 +547,14 @@ internal class DefaultTheoriaAppContainer(
         profileDeletion = profileDeletion,
     )
 
+    override val series: SeriesDependencies? = extensionHost?.let { host ->
+        host.bind(SettingsExtensionChoices(settingsRepository))
+        SeriesDependencies(RoomSeriesRepository(contentDatabase), host::sources, host.extensions)
+    }
+
+    /** Keeps the new-chapter check scheduled; started by [awaitDurableStores], once. */
+    private var seriesScheduling: Job? = null
+
     override val customSites: CustomSitesController = CustomSitesControllerImpl(
         profiles = siteProfiles,
         credentials = credentialStore,
@@ -599,9 +609,15 @@ internal class DefaultTheoriaAppContainer(
         offlineCatalogReady.await()
         // Registers the saved offline queue before any screen can add to it; its jobs wait on sourceReadiness.
         offlineMedia.recoverPendingJobs()
-        // Search restores its last source as soon as the app is ready, so extension sources must be registered by then.
-        if (extensionHost != null) customSourceRuntime.awaitFirstBuild()
         sourceReadiness.open()
+        // Only now: watching followed series opens Room, which must first get the chance to fail into the startup screen.
+        if (seriesScheduling == null) {
+            seriesScheduling = series?.let { series ->
+                durableStoreScope.launch {
+                    keepSeriesUpdatesScheduled(appContext, series.repository.observeFollowed(), settingsRepository.observeSettings())
+                }
+            }
+        }
         // Optional upkeep: if it fails (say the battery broadcast cannot be read), saves still store their hashes.
         durableStoreScope.launch {
             runCatchingPreservingCancellation {
@@ -621,12 +637,3 @@ private fun siteHosts(profiles: List<SiteProfile>): Set<String> = profiles.mapTo
 
 /** Matches the built-in client's read timeout; probes keep the custom client's 10 s default. */
 private const val CUSTOM_SITE_READ_TIMEOUT_MS = 20_000
-
-/**
- * Extension code loads off the main thread. The first source snapshot waits for it, so a search or download restored
- * at startup finds its extension source already registered.
- */
-private fun extensionSources(host: ExtensionSourceHost?, appContext: Context): Flow<List<ExtensionSource>> {
-    if (host == null) return flowOf(emptyList())
-    return flow { emit(host.load(appContext as Application)) }.flowOn(Dispatchers.IO)
-}

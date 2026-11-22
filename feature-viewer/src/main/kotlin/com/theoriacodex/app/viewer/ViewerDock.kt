@@ -83,7 +83,7 @@ internal fun ViewerDock(actions: ViewerDockActions, modifier: Modifier = Modifie
             ViewerInfoAction(actions.commentCount, actions.onInfo)
             actions.playbackSettings?.invoke()
             actions.overview?.let { ViewerOverviewAction(it) }
-            ViewerMoreMenu(actions.moreExpanded, actions.onMoreExpandedChange, actions.moreItems)
+            if (actions.moreItems.isNotEmpty()) ViewerMoreMenu(actions.moreExpanded, actions.onMoreExpandedChange, actions.moreItems)
             Spacer(Modifier.weight(1f))
             save()
         }
@@ -158,9 +158,9 @@ private fun ViewerMoreMenu(expanded: Boolean, onExpandedChange: (Boolean) -> Uni
     }
 }
 
-/** The More menu's entries: the full Save-to-Codex picker always, picture-in-picture when the media allows it. */
-internal fun viewerMoreItems(onChooseCodex: () -> Unit, onPictureInPicture: (() -> Unit)?, extra: List<ViewerMenuItem>): List<ViewerMenuItem> =
+/** The More menu's entries: the full Save-to-Codex picker for a post that can be saved, picture-in-picture when the media allows it. */
+internal fun viewerMoreItems(onChooseCodex: (() -> Unit)?, onPictureInPicture: (() -> Unit)?, extra: List<ViewerMenuItem>): List<ViewerMenuItem> =
     listOfNotNull(
-        ViewerMenuItem("Save to…", Icons.Outlined.BookmarkAdd, onChooseCodex),
+        onChooseCodex?.let { ViewerMenuItem("Save to…", Icons.Outlined.BookmarkAdd, it) },
         onPictureInPicture?.let { ViewerMenuItem("Picture-in-picture", Icons.Default.PictureInPictureAlt, it) },
     ) + extra

@@ -29,6 +29,8 @@ data class ViewerSession(
     val relatedBinding: ViewerRelatedBinding? = null,
     // A comment link's target on the first post; the Viewer opens its comments on it once, when the session launches.
     val focusComment: CommentTarget? = null,
+    // The mode a series session's chapters open in, known before the first one draws.
+    val seriesReadingMode: com.theoriacodex.domain.model.GalleryReadingMode? = null,
 )
 
 internal fun requiresViewerPostResolution(post: Post, streamSource: ViewerStreamSource): Boolean {

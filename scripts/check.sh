@@ -174,6 +174,7 @@ test_tasks=(
   :feature-search:testDebugUnitTest
   :feature-library:testDebugUnitTest
   :feature-discover:testDebugUnitTest
+  :feature-series:testDebugUnitTest
   :feature-settings:testDebugUnitTest
   :app:testDebugUnitTest
   :app:compileDebugAndroidTestKotlin
@@ -193,13 +194,14 @@ detekt_tasks=(
   :feature-search:detektDebug
   :feature-library:detektDebug
   :feature-discover:detektDebug
+  :feature-series:detektDebug
   :feature-settings:detektDebug
   :core-domain:detektMain
   :core-data:detektMain
   :core-sources:detektMain
   :core-stubs:detektMain
 )
-lint_tasks=(:app:lint :core-data-android:lintDebug :mihon-host:lintDebug :ui-kit:lintDebug :media-kit:lintDebug :feed-kit:lintDebug :feature-viewer:lintDebug :feature-search:lintDebug :feature-library:lintDebug :feature-discover:lintDebug :feature-settings:lintDebug)
+lint_tasks=(:app:lint :core-data-android:lintDebug :mihon-host:lintDebug :ui-kit:lintDebug :media-kit:lintDebug :feed-kit:lintDebug :feature-viewer:lintDebug :feature-search:lintDebug :feature-library:lintDebug :feature-discover:lintDebug :feature-series:lintDebug :feature-settings:lintDebug)
 # Everything lint shares with the tests and Detekt: all compilation and code generation. Once these
 # are built, a lint build and a tests-and-Detekt build have no task left in common, so the two can
 # run at the same time without writing the same output or reading sources mid-generation.
@@ -238,6 +240,9 @@ shared_tasks=(
   :feature-discover:compileDebugUnitTestKotlin
   :feature-discover:compileDebugUnitTestJavaWithJavac
   :feature-discover:bundleLibRuntimeToJarDebug
+  :feature-series:compileDebugUnitTestKotlin
+  :feature-series:compileDebugUnitTestJavaWithJavac
+  :feature-series:bundleLibRuntimeToJarDebug
   :feature-settings:compileDebugUnitTestKotlin
   :feature-settings:compileDebugUnitTestJavaWithJavac
   :feature-settings:bundleLibRuntimeToJarDebug
@@ -316,6 +321,7 @@ run_lint() {
     :feature-search:compileDebugKotlin \
     :feature-library:compileDebugKotlin \
     :feature-discover:compileDebugKotlin \
+    :feature-series:compileDebugKotlin \
     :feature-settings:compileDebugKotlin \
     --warning-mode=all \
     --console=plain

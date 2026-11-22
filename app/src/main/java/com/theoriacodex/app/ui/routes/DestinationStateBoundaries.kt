@@ -422,8 +422,10 @@ internal fun SettingsDestinationStateBoundary(
     statsActions: StatsActions = StatsActions(),
     diagnostics: SettingsDiagnosticsEntry? = null,
     storageTools: (@Composable () -> Unit)? = null,
+    seriesUpdates: Boolean = false,
     onClose: () -> Unit = {},
     closesFrom: SettingsPage = SettingsPage.HOME,
+    onOpenExtensions: (() -> Unit)? = null,
 ) {
     val state = owner.state.collectAsStateWithLifecycle()
     // Subscribing here keeps statistics collection scoped to a visible Settings destination.
@@ -432,7 +434,8 @@ internal fun SettingsDestinationStateBoundary(
         SettingsScreen(
             state = it, onAction = owner::onAction, statistics = statistics.value,
             storageSummary = storageSummary, sites = sites, backup = backup, statsActions = statsActions, diagnostics = diagnostics,
-            storageTools = storageTools, onClose = onClose, closesFrom = closesFrom,
+            storageTools = storageTools, seriesUpdates = seriesUpdates, onClose = onClose, closesFrom = closesFrom,
+            onOpenExtensions = onOpenExtensions,
         )
     }
 }

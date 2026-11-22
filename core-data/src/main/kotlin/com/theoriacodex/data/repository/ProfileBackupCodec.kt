@@ -5,6 +5,7 @@ import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.ExtensionChoices
 import com.theoriacodex.domain.source.SiteProfile
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -189,6 +190,8 @@ class ProfileBackupCodec {
     private fun portableSettings(settings: AppSettings): AppSettings = settings.copy(
         followedCreators = settings.followedCreators.map { it.copy(creator = portableBackupCreator(it.creator)) },
         providerHealth = emptyMap(),
+        // Trust is given on a device, for the extensions on it: a backup file must not be able to turn one on.
+        extensions = ExtensionChoices(),
         scenarioPreset = ScenarioPreset.NORMAL,
         viewer = settings.viewer.copy(automaticTextTranslationEnabled = false, enabledOcrLanguages = emptySet()),
     )

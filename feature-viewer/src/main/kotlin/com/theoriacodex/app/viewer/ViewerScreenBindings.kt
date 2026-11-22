@@ -26,6 +26,11 @@ data class ViewerScreenConfig(
     /** Galleries whose reading mode the user chose; the rest follow [invertMultiImageScrollDirection]. */
     val galleryReadingModes: Map<PostId, GalleryReadingMode> = emptyMap(),
     val playbackDiagnosticsEnabled: Boolean = false,
+    /**
+     * The posts are one series' chapters, which are read and never collected: the top bar names the series and
+     * chapter in place of the source, and Like and Save are hidden.
+     */
+    val seriesChapters: Boolean = false,
 )
 
 /** What the Viewer asks of the app: navigation, persistence and platform behavior. The app builds one per shell. */

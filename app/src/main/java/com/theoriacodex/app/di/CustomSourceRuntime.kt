@@ -17,13 +17,11 @@ import com.theoriacodex.sources.custom.SiteRequestContext
 import com.theoriacodex.sources.http.SourceHttpClient
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import okhttp3.Credentials
 
@@ -39,17 +37,10 @@ data class CustomSiteState(val profile: SiteProfile, val hasCredentials: Boolean
         }
 }
 
-/** An immutable view of every source added at run time; [revision] changes with each rebuild. */
-data class CustomSourceSnapshot(
-    val revision: Long,
-    /** User-added sites. */
-    val sites: List<CustomSiteState>,
-    /** Sources from loaded extension code; always usable, and not sites the user manages in Settings. */
-    val extensions: List<ExtensionSource> = emptyList(),
-) {
-    /** Usable sources only: a site needs a known family, and keys stored when it requires them. */
-    val adapters: Map<SourceKey, SourceAdapter> =
-        sites.mapNotNull { site -> site.adapter?.let { site.source to it } }.toMap() + extensions.associate { it.source to it.adapter }
+/** An immutable view of every user-added site; [revision] changes with each rebuild. */
+data class CustomSourceSnapshot(val revision: Long, val sites: List<CustomSiteState>) {
+    /** Usable sites only: a known family, and keys stored when the site requires them. */
+    val adapters: Map<SourceKey, SourceAdapter> = sites.mapNotNull { site -> site.adapter?.let { site.source to it } }.toMap()
 
     companion object {
         val EMPTY = CustomSourceSnapshot(revision = 0, sites = emptyList())
@@ -70,8 +61,6 @@ internal class CustomSourceRuntime(
     scope: CoroutineScope,
     /** Receives the saved sites whose API accepts their key in an `Authorization` header. */
     private val publishMediaKeys: (List<SiteMediaKey>) -> Unit = {},
-    /** Sources from loaded extension code; each emission replaces the last. */
-    extensionSources: Flow<List<ExtensionSource>> = flowOf(emptyList()),
     private val installPresentations: (List<SourcePresentation>) -> Unit = SourcePresentationCatalog::installCustom,
 ) {
     private val revisions = AtomicLong()
@@ -87,8 +76,8 @@ internal class CustomSourceRuntime(
 
     init {
         scope.launch {
-            combine(profiles.observeProfiles(), credentials.changes, extensionSources) { stored, _, extensions -> stored to extensions }
-                .collect { (stored, extensions) -> publish(build(stored, extensions)) }
+            combine(profiles.observeProfiles(), credentials.changes) { stored, _ -> stored }
+                .collect { stored -> publish(build(stored)) }
         }
     }
 
@@ -97,22 +86,14 @@ internal class CustomSourceRuntime(
      * (and so its adapters) is published, and removed entries are withdrawn only after.
      */
     private fun publish(next: CustomSourceSnapshot) {
-        val sites = next.sites.mapIndexed { index, site -> site.presentation(CUSTOM_PRESENTATION_ORDER_START + index) }
-        val presentations = sites + next.extensions.mapIndexed { index, extension ->
-            customSourcePresentation(
-                source = extension.source,
-                label = extension.label,
-                baseUrl = extension.homeUrl,
-                order = CUSTOM_PRESENTATION_ORDER_START + sites.size + index,
-            )
-        }
+        val presentations = next.sites.mapIndexed { index, site -> site.presentation(CUSTOM_PRESENTATION_ORDER_START + index) }
         installPresentations((presentations + installed).distinctBy(SourcePresentation::source))
         mutableSnapshot.value = next
         installPresentations(presentations)
         installed = presentations
     }
 
-    private suspend fun build(profiles: List<SiteProfile>, extensions: List<ExtensionSource>): CustomSourceSnapshot {
+    private suspend fun build(profiles: List<SiteProfile>): CustomSourceSnapshot {
         val mediaKeys = ArrayList<SiteMediaKey>()
         val sites = profiles.map { profile ->
             val keys = credentials.get(profile.sourceId)
@@ -129,7 +110,7 @@ internal class CustomSourceRuntime(
             CustomSiteState(profile, hasCredentials = keys != null, adapter = adapter)
         }
         publishMediaKeys(mediaKeys)
-        return CustomSourceSnapshot(revision = revisions.incrementAndGet(), sites = sites, extensions = extensions)
+        return CustomSourceSnapshot(revision = revisions.incrementAndGet(), sites = sites)
     }
 }
 

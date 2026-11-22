@@ -6,12 +6,24 @@ import com.theoriacodex.domain.model.GalleryReadingMode
 
 /**
  * How [page] lays out its pages: the mode chosen for its gallery, else the global direction. A single page always
- * runs left to right, and a saved Vertical gives way while the gallery holds pages that are not still images.
+ * runs left to right, except a series' one-page chapter, which keeps the series' mode so the gesture to the next
+ * chapter stays the one the reader has been making. A saved Vertical gives way while the gallery holds pages that are
+ * not still images.
  */
 internal fun ViewerScreenConfig.readingModeOf(page: ViewerPageState?): GalleryReadingMode {
-    if (page == null || page.swipeMediaCount() <= 1) return GalleryReadingMode.LEFT_TO_RIGHT
+    if (page == null || (page.swipeMediaCount() <= 1 && !seriesChapters)) return GalleryReadingMode.LEFT_TO_RIGHT
     val chosen = galleryReadingModes[page.post.id]?.takeIf { it != GalleryReadingMode.VERTICAL || page.verticalReadingAvailable() }
     return chosen ?: if (invertMultiImageScrollDirection) GalleryReadingMode.RIGHT_TO_LEFT else GalleryReadingMode.LEFT_TO_RIGHT
+}
+
+/**
+ * The page (from 0) [page] shows when the reader moves to its post: where it was left, except a series' chapter left
+ * on its last page. That chapter is finished, and a finished chapter starts over, unless the reader is going [back]
+ * to it from the chapter after: paging back continues from the end of the one before.
+ */
+internal fun ViewerScreenConfig.entryMediaIndex(page: ViewerPageState, back: Boolean = false): Int {
+    val finished = seriesChapters && page.pendingMediaIndex == null && page.selectedMediaIndex > 0 && page.selectedMediaIndex >= page.media.lastIndex
+    return if (finished && !back) 0 else page.targetMediaIndex
 }
 
 /** Vertical reading is for still-image galleries: video and animation need the pager's one active page to play. */

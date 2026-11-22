@@ -184,7 +184,8 @@ internal fun ViewerVerticalGallery(
             )
         }
         if (onOpenNext != null) {
-            item(key = "next") { VerticalGalleryNextCard(frame.posts.getOrNull(postPage + 1), onOpenNext) }
+            // Clear of the dock, which shows again as the list is scrolled back up.
+            item(key = "next") { VerticalGalleryNextCard(frame.posts.getOrNull(postPage + 1), Modifier.padding(bottom = viewerDockInset()), onOpenNext) }
         }
     }
 }
@@ -207,7 +208,7 @@ private fun VerticalGalleryEffects(
     // The list's position counts as the reader's choice only once it shows the selection; until then (a resume
     // still resolving, or a restored page not yet scrolled to) publishing it would overwrite the saved page.
     var aligned by remember(list) { mutableStateOf(false) }
-    LaunchedEffect(focusedPage, isCurrentPost, aligned) {
+    LaunchedEffect(focusedPage, isCurrentPost, aligned, pageCount) {
         if (!isCurrentPost || !aligned || pageCount == 0) return@LaunchedEffect
         if (focusedPage != selected) host.onAction(ViewerAction.SelectMedia(focusedPage))
         host.onVisibleMediaChanged?.invoke(post, focusedPage + 1)
@@ -321,13 +322,13 @@ private fun VerticalGalleryPage(
 }
 
 @Composable
-private fun VerticalGalleryNextCard(next: Post?, onOpen: () -> Unit) {
+private fun VerticalGalleryNextCard(next: Post?, modifier: Modifier, onOpen: () -> Unit) {
     next ?: return
     val context = LocalContext.current
     val location = next.preview.localPath ?: next.preview.url
     val request = remember(context, location, next.id.source) { location?.let { buildViewerImageRequest(context, it, next.id.source) } }
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 24.dp)
+        modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 24.dp)
             .clip(RoundedCornerShape(16.dp)).background(Color.White.copy(alpha = 0.08f))
             .clickable(onClick = onOpen).padding(12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),

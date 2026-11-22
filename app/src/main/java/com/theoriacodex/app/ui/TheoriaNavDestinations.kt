@@ -1,5 +1,9 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.app.series.ExtensionsDestination
+import com.theoriacodex.app.series.seriesArguments
+import com.theoriacodex.app.series.SeriesPageDestination
+import kotlinx.coroutines.flow.emptyFlow
 import com.theoriacodex.app.ui.components.feedDurations
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContentScope
@@ -115,6 +119,8 @@ internal fun NavGraphBuilder.theoriaDestinations(shell: TheoriaShell, sharedScop
         }
     }
     composable(AppRoute.Settings) { SettingsScreenDestination(shell) }
+    composable(AppRoute.Series, arguments = seriesArguments) { entry -> SeriesPageDestination(shell, entry) }
+    composable(AppRoute.Extensions) { ExtensionsDestination(shell) }
     composable(AppRoute.Triage, arguments = triageArguments) { entry -> TriageDestination(shell, entry.triageRequest()) }
 }
 
@@ -306,6 +312,7 @@ private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
         var published: ViewerViewModel? = null
         { owner -> if (owner != null) routes.viewer.publish(owner.also { published = it }) else published?.let(routes.viewer::withdraw) }
     }
+    val forSeries = rememberSeriesViewerConfig(shell)
     ViewerDestinationStateBoundary(
         data = shell.data,
         sources = shell.sources,
@@ -340,7 +347,7 @@ private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
                     galleryReadingModes = state.browsing.galleryReadingModes,
                     creatorBrowsingSources = state.browsing.creatorBrowsingSources,
                     playbackDiagnosticsEnabled = BuildConfig.BENCHMARK_FIXTURES_ENABLED,
-                ),
+                ).let(forSeries),
                 liveSourceState = viewerLiveSourceState(state, shell.pendingLikePostIds[state.browsing.activeProfile.profileId].orEmpty()),
                 effectCallbacks = effectCallbacks,
                 screenCallbacks = screenCallbacks,
@@ -349,6 +356,22 @@ private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
             )
         }
     }
+}
+
+/**
+ * What a series session changes in the Viewer's configuration: every chapter reads in the series' mode, and none of the
+ * collecting controls show. Any other session's configuration passes through unchanged.
+ */
+@Composable
+private fun rememberSeriesViewerConfig(shell: TheoriaShell): (ViewerScreenConfig) -> ViewerScreenConfig {
+    // The Viewer's owner holds the session; the retained one is claimed before this destination composes.
+    val session = shell.routes.viewer.current?.session?.collectAsStateWithLifecycle()?.value
+        ?.takeIf { it.context.streamSource == ViewerStreamSource.SERIES }
+        ?: return { it }
+    val mode by remember(session.context.queryHash) { shell.seriesReader?.readingMode(session) ?: emptyFlow() }
+        .collectAsStateWithLifecycle(initialValue = session.seriesReadingMode)
+    val modes = mode?.let { chosen -> session.posts.associate { it.id to chosen } }.orEmpty()
+    return { it.copy(seriesChapters = true, galleryReadingModes = modes) }
 }
 
 /** Pending likes stay visible in a feed that hides liked posts until the like commits or fails. */
@@ -376,6 +399,7 @@ private suspend fun TheoriaShell.viewerDownloadOrigin(): String {
         ViewerStreamSource.CREATOR_PROFILE -> "Creator profile"
         ViewerStreamSource.RECENTS -> "History"
         ViewerStreamSource.RELATED -> "Related posts"
+        ViewerStreamSource.SERIES -> "Series"
         null -> "Viewer"
     }
 }
@@ -419,7 +443,9 @@ private fun viewerEffectCallbacks(shell: TheoriaShell, tagActions: PostTagSearch
     onApplyTag = { post, term, excluded ->
         if (excluded) tagActions.addExclude(post, term.toSearchTerm()) else tagActions.addInclude(post, term.toSearchTerm())
     },
-    onRecoverMedia = shell.viewerRouteWorkflow::recoverMedia,
+    onRecoverMedia = { post, failedMedia, context, stillApplies ->
+        shell.viewerRouteWorkflow.recoverMedia(post, failedMedia, context.streamSource, context.queryHash, stillApplies)
+    },
     onLoadMore = shell.viewerRouteWorkflow::loadMore,
     onDismiss = {
         shell.features.search.setViewerLaunchContext(null)
@@ -440,7 +466,13 @@ private fun viewerScreenCallbacks(shell: TheoriaShell) = ViewerScreenCallbacks(
     onPlaybackModeSelected = { shell.owners.settings.onAction(SettingsAction.SetViewerPlaybackMode(it)) },
     onVideoQualitySelected = { shell.owners.settings.onAction(SettingsAction.SetChoice(SettingChoices.DefaultVideoQuality, it)) },
     onCommentOrderSelected = { shell.owners.settings.onAction(SettingsAction.SetCommentOrder(it)) },
-    onGalleryReadingModeSelected = { postId, mode -> shell.scope.launch { shell.data.galleryReadingModes.set(postId, mode) } },
+    onGalleryReadingModeSelected = { postId, mode ->
+        shell.scope.launch {
+            val session = shell.routes.viewer.current?.session?.value
+            if (session?.context?.streamSource == ViewerStreamSource.SERIES) shell.seriesReader?.setReadingMode(session, mode)
+            else shell.data.galleryReadingModes.set(postId, mode)
+        }
+    },
     onVisiblePostChanged = { post, viewedMediaNumber, session ->
         shell.data.markViewedNewPost(post, session)
         shell.viewerRouteWorkflow.recordVisiblePost(post, viewedMediaNumber, session)

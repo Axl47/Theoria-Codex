@@ -1,5 +1,11 @@
 package com.theoriacodex.app.settings
 
+import android.app.NotificationManager
+import android.content.Intent
+import android.provider.Settings
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.theoriacodex.data.repository.SeriesUpdateInterval
 import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -14,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Delete
@@ -21,6 +28,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.BugReport
@@ -55,11 +63,17 @@ import com.theoriacodex.app.ui.components.NameEntryDialog
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.app.ui.components.ActionMenuSheet
 import com.theoriacodex.data.repository.ScenarioPreset
+import com.theoriacodex.data.repository.SettingChoices
 import com.theoriacodex.data.repository.SettingDestinations
 import com.theoriacodex.data.repository.SettingToggles
 import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.data.storage.CorruptionRecovery
 import kotlinx.coroutines.launch
+import com.theoriacodex.app.ui.components.SettingsHeader
+import com.theoriacodex.app.ui.components.SettingsGroup
+import com.theoriacodex.app.ui.components.SettingsRowDivider
+import com.theoriacodex.app.ui.components.SettingsRow
+import com.theoriacodex.app.ui.components.SettingsPageColumn
 
 private val STORAGE_TOGGLES = listOf(SettingToggles.KeepMediaOffline, SettingToggles.FindAnimationDurations)
 
@@ -78,8 +92,12 @@ fun SettingsScreen(
     statsActions: StatsActions = StatsActions(),
     diagnostics: SettingsDiagnosticsEntry? = null,
     storageTools: (@Composable () -> Unit)? = null,
+    /** Whether this build has series to check, and so the setting for how often. */
+    seriesUpdates: Boolean = false,
     onClose: () -> Unit = {},
     closesFrom: SettingsPage = SettingsPage.HOME,
+    /** Opens the Extensions page, which lives outside Settings; null in a build without extensions. */
+    onOpenExtensions: (() -> Unit)? = null,
 ) {
     val openHome = { if (state.page == closesFrom) onClose() else onAction(SettingsAction.OpenPage(SettingsPage.HOME)) }
     val openPost = rememberPostOpener(statsActions.openPost)
@@ -93,7 +111,7 @@ fun SettingsScreen(
         label = "Settings page",
     ) { page ->
         when (page) {
-            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, storageSummary, sites, backup, diagnostics != null, onClose)
+            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, storageSummary, sites, backup, diagnostics != null, seriesUpdates, onClose, onOpenExtensions)
             SettingsPage.SITES -> sites?.page?.invoke(
                 openHome,
                 BuiltInAccounts(
@@ -133,7 +151,9 @@ private fun SettingsHome(
     sites: SettingsSitesEntry?,
     backup: SettingsBackupEntry?,
     showDiagnostics: Boolean,
+    seriesUpdates: Boolean,
     onClose: () -> Unit,
+    onOpenExtensions: (() -> Unit)?,
 ) {
     var profileMenu by rememberSaveable { mutableStateOf(false) }
     var showAddProfile by remember { mutableStateOf(false) }
@@ -155,7 +175,7 @@ private fun SettingsHome(
                 open(SettingsPage.STATS_COMPARE)
             })
         }
-        SettingsHomeGroups(state, onAction, storageSummary, sites, backup, showDiagnostics) { sheet -> onAction(SettingsAction.OpenPage(SettingsPage.HOME, sheet)) }
+        SettingsHomeGroups(state, onAction, storageSummary, sites, backup, showDiagnostics, seriesUpdates, onOpenExtensions) { sheet -> onAction(SettingsAction.OpenPage(SettingsPage.HOME, sheet)) }
         if (state.showDeveloperScenarios) DeveloperScenarios(state, onAction)
     }
     if (showAddProfile) {
@@ -186,9 +206,70 @@ private fun SettingsHome(
             when (sheet) {
                 SettingsSheet.DOWNLOADS -> DownloadPreferencesSection(state, onAction)
                 SettingsSheet.CONTROLS -> PreferencesSection(state, onAction)
+                // One choice is all this sheet holds, so choosing closes it.
+                SettingsSheet.SERIES_UPDATES -> SeriesUpdatesSection(state, notificationSettingsOpener()) { action ->
+                    onAction(action)
+                    onAction(SettingsAction.OpenPage(SettingsPage.HOME))
+                }
             }
         }
     }
+}
+
+/** Where content comes from: sites, extensions, links, and the check for new chapters of followed series. */
+@Composable
+private fun SettingsSourcesGroup(
+    state: SettingsUiState,
+    sites: SettingsSitesEntry?,
+    seriesUpdates: Boolean,
+    onOpenExtensions: (() -> Unit)?,
+    onOpenSites: () -> Unit,
+    onSheet: (SettingsSheet) -> Unit,
+) {
+    SettingsGroup("Sources") {
+        if (sites != null) {
+            SettingsRow(
+                SettingDestinations.Sites.title, "${sites.summary} · ${sourceAccountsSummary(state.accounts)}", Icons.Default.Public,
+                onClick = onOpenSites,
+            )
+            SettingsRowDivider()
+        }
+        if (onOpenExtensions != null) {
+            SettingsRow("Extensions", icon = Icons.Default.Extension, onClick = onOpenExtensions)
+            SettingsRowDivider()
+        }
+        OpenLinksRow()
+        if (seriesUpdates) {
+            SettingsRowDivider()
+            SeriesUpdatesRow(state.settings.seriesUpdateInterval) { onSheet(SettingsSheet.SERIES_UPDATES) }
+        }
+    }
+}
+
+/** How often followed series are checked. A check that cannot announce what it finds says so instead of its interval. */
+@Composable
+private fun SeriesUpdatesRow(interval: SeriesUpdateInterval, onChooseInterval: () -> Unit) {
+    val silenced = notificationSettingsOpener() != null && interval.hours != null
+    SettingsRow(
+        SettingChoices.SeriesUpdates.title, if (silenced) NOTIFICATIONS_OFF else seriesUpdateIntervalLabel(interval), Icons.Default.Notifications,
+        onClick = onChooseInterval,
+    )
+}
+
+/**
+ * Opens the app's notification settings, while the app may not notify; null while it may. The system stops showing
+ * its permission prompt once it was refused, so its settings are the only way back. Read again on every return.
+ */
+@Composable
+private fun notificationSettingsOpener(): (() -> Unit)? {
+    val context = LocalContext.current
+    var notificationsOn by remember { mutableStateOf(true) }
+    LifecycleResumeEffect(Unit) {
+        notificationsOn = context.getSystemService(NotificationManager::class.java).areNotificationsEnabled()
+        onPauseOrDispose {}
+    }
+    if (notificationsOn) return null
+    return { context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)) }
 }
 
 @Composable
@@ -199,19 +280,12 @@ private fun SettingsHomeGroups(
     sites: SettingsSitesEntry?,
     backup: SettingsBackupEntry?,
     showDiagnostics: Boolean,
+    seriesUpdates: Boolean,
+    onOpenExtensions: (() -> Unit)?,
     onSheet: (SettingsSheet) -> Unit,
 ) {
     val open = { page: SettingsPage -> onAction(SettingsAction.OpenPage(page)) }
-    SettingsGroup("Sources") {
-        if (sites != null) {
-            SettingsRow(
-                SettingDestinations.Sites.title, "${sites.summary} · ${sourceAccountsSummary(state.accounts)}", Icons.Default.Public,
-                onClick = { open(SettingsPage.SITES) },
-            )
-            SettingsRowDivider()
-        }
-        OpenLinksRow()
-    }
+    SettingsSourcesGroup(state, sites, seriesUpdates, onOpenExtensions, { open(SettingsPage.SITES) }, onSheet)
     SettingsGroup("Viewing") {
         SettingsRow(SettingDestinations.Controls.title, "Search bar, seeking, swipes, rotation", Icons.Default.TouchApp, onClick = {
             onSheet(SettingsSheet.CONTROLS)

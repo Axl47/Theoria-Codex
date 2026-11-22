@@ -1,5 +1,6 @@
 package com.theoriacodex.app.statistics
 
+import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.app.library.LibrarySection
 import com.theoriacodex.app.ui.statisticsUsageCategory
 import com.theoriacodex.data.repository.InMemoryStatisticsRepository
@@ -150,6 +151,8 @@ class AppUsageTrackerTest {
         assertEquals(StatisticsUsageCategory.CODEX, statisticsUsageCategory("home", "library", LibrarySection.Saved))
         assertNull(statisticsUsageCategory("settings-screen", "search", codices))
         assertEquals(StatisticsUsageCategory.WATCHING, statisticsUsageCategory("viewer", "search", codices))
+        assertEquals(StatisticsUsageCategory.WATCHING, statisticsUsageCategory("viewer", "search", codices, ViewerStreamSource.SEARCH))
+        assertNull(statisticsUsageCategory("viewer", "series", codices, ViewerStreamSource.SERIES))
         assertEquals(StatisticsUsageCategory.BROWSING, statisticsUsageCategory("creator-profile", "library", codices))
         assertEquals(StatisticsUsageCategory.CODEX, statisticsUsageCategory("codex/detail/{codexId}", "search", codices))
     }

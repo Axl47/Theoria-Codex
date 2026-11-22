@@ -1,70 +1,104 @@
 package com.theoriacodex.app.extensions
 
 import android.app.Application
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.util.Log
 import com.theoriacodex.app.BuildConfig
-import com.theoriacodex.app.di.ExtensionSource
 import com.theoriacodex.app.di.ExtensionSourceHost
-import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.mihonhost.ExtensionLoader
+import com.theoriacodex.domain.series.ExtensionChoiceStore
+import com.theoriacodex.domain.series.ExtensionChoices
+import com.theoriacodex.domain.series.SeriesExtensions
+import com.theoriacodex.domain.series.SeriesSource
 import com.theoriacodex.mihonhost.ExtensionImages
+import com.theoriacodex.mihonhost.ExtensionLoader
+import com.theoriacodex.mihonhost.ExtensionPackages
+import com.theoriacodex.mihonhost.ExtensionRegistry
 import com.theoriacodex.mihonhost.MihonHost
-import com.theoriacodex.mihonhost.MihonSourceAdapter
-import eu.kanade.tachiyomi.source.online.HttpSource
-import java.io.File
+import com.theoriacodex.mihonhost.SourceSettings
+import eu.kanade.tachiyomi.source.sourcePreferences
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 
 /**
- * Debug-only spike: turns Mihon extension APKs into sources. There is no install screen; push an APK with
- * `adb push <apk> /sdcard/Android/data/com.theoriacodex.debug/files/mihon-extensions/` and restart the app.
- * The APK's code then runs inside the app, so push only extensions you trust.
+ * Debug builds only: turns Mihon extensions into series sources. It finds the extensions Mihon installed as packages,
+ * and APK files pushed for tests with
+ * `adb push <apk> /sdcard/Android/data/com.theoriacodex.debug/files/mihon-extensions/`.
+ * None of them runs until the user turns it on in the Extensions page; [ExtensionRegistry] holds that rule.
  */
 internal class MihonExtensionSourceHost : ExtensionSourceHost {
-    private val images = ExtensionImages()
+    private lateinit var registry: ExtensionRegistry
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private lateinit var watching: Lazy<Unit>
+
+    /** The settings store, which opens after the HTTP clients that already hold [mediaInterceptor]. */
+    private val choices = CompletableDeferred<ExtensionChoiceStore>()
+
+    // Runs on an HTTP client's thread before each extension image: loads the extensions the first time, then only checks the stamp.
+    private val images = ExtensionImages { runBlocking { registry.sources() } }
 
     override val mediaInterceptor: Interceptor get() = images
+    override val extensions: SeriesExtensions get() = registry.also { watching.value }
 
-    /** Never throws: the app's own sources wait for this list, so an extension that fails is logged and left out. */
-    override fun load(application: Application): List<ExtensionSource> = try {
-        val apks = application.getExternalFilesDir(DIRECTORY)?.listFiles { file -> file.extension == "apk" }.orEmpty()
-        if (apks.isNotEmpty()) MihonHost.install(application, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
-        val loader = ExtensionLoader(application)
-        val loaded = HashSet<SourceKey>()
-        apks.sortedBy { it.name }.mapNotNull { apk -> source(loader, apk, loaded) }
-    } catch (@Suppress("TooGenericExceptionCaught") error: Exception) {
-        Log.w(TAG, "No extensions loaded", error)
-        emptyList()
-    } finally {
-        images.finishedLoading()
+    override fun attach(application: Application) {
+        val packages = ExtensionPackages(application) { application.getExternalFilesDir(DIRECTORY) }
+        val loader = ExtensionLoader(application, packages)
+        // What extensions ask their host for is set up when the first one loads, not at startup.
+        val hostInstalled = lazy { MihonHost.install(application, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE) }
+        registry = ExtensionRegistry(
+            packages = packages::list,
+            stamp = packages::stamp,
+            load = { extension ->
+                hostInstalled.value
+                loader.load(extension)
+            },
+            choices = object : ExtensionChoiceStore {
+                override suspend fun choices(): ExtensionChoices = choices.await().choices()
+
+                override suspend fun update(transform: (ExtensionChoices) -> ExtensionChoices) = choices.await().update(transform)
+            },
+            images = images,
+            settings = { source -> SourceSettings(application, source, source.sourcePreferences()) },
+            deviceLanguages = { application.resources.configuration.locales.toLanguageTags().split(',') },
+            log = { Log.i(TAG, it) },
+        )
+        watching = lazy { watchPackages(application) }
     }
 
     /**
-     * An extension can offer one source per language; one is enough here: English, else the first. Reading a source's
-     * name or address already runs its code, which can fail like any other call into it.
+     * An extension installed, updated or removed while the app runs is noticed at once, which moves the registry's
+     * revision and so reloads the Series tab. Started when the extensions are first asked about: [attach] runs before
+     * the application can register anything, and there is nothing to reload before then.
      */
-    private fun source(loader: ExtensionLoader, apk: File, loaded: MutableSet<SourceKey>): ExtensionSource? = try {
-        val extension = loader.load(apk)
-        Log.i(TAG, "Loaded ${extension.name} ${extension.versionName}: ${extension.sources.size} sources, signer ${extension.signatureSha256}")
-        val source = extension.sources.firstOrNull { it.lang == "en" } ?: extension.sources.first()
-        val key = MihonSourceAdapter.sourceKey(source)
-        val homeUrl = (source as HttpSource).baseUrl
-        if (loaded.add(key)) {
-            ExtensionSource(key, source.name, homeUrl, MihonSourceAdapter(key, source, images) { Log.i(TAG, it) })
-        } else {
-            // The same extension under a second file name. Only the first one's source may answer image requests.
-            Log.w(TAG, "Skipped ${apk.name}: ${source.name} is already loaded")
-            null
+    private fun watchPackages(application: Application) {
+        val changed = IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addDataScheme("package")
         }
-    } catch (@Suppress("TooGenericExceptionCaught") error: Exception) {
-        skipped(apk, error)
-    } catch (error: LinkageError) {
-        // The extension needs a part of Mihon's host API this module lacks.
-        skipped(apk, error)
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                scope.launch { registry.recheck() }
+            }
+        }
+        application.registerReceiver(receiver, changed, Context.RECEIVER_NOT_EXPORTED)
     }
 
-    private fun skipped(apk: File, error: Throwable): ExtensionSource? {
-        Log.w(TAG, "Skipped ${apk.name}: ${error.message}", error)
-        return null
+    override fun bind(choices: ExtensionChoiceStore) {
+        this.choices.complete(choices)
+    }
+
+    override suspend fun sources(): List<SeriesSource> {
+        watching.value
+        return registry.sources()
     }
 
     private companion object {
