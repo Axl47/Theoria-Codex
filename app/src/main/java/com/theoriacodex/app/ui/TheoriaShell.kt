@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -108,6 +109,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -168,10 +170,14 @@ internal class RouteOwners {
 internal class HomeNavigation(
     val navController: NavHostController,
     homeTabRoute: MutableState<String>,
+    seriesTab: State<Boolean>,
     val pagerState: PagerState,
     private val scope: CoroutineScope,
 ) {
     var homeTabRoute by homeTabRoute
+
+    /** The tabs showing now; Series only while an extension is on the device. */
+    val homeTabs: List<TopLevelDestination> by derivedStateOf { homeTabs(withSeries = seriesTab.value) }
 
     val currentRoute: String?
         get() = navController.currentBackStackEntry?.destination?.route
@@ -351,9 +357,6 @@ internal class TheoriaShell(
     private val fileCopies = FileCopyLookup(sources.registry)
     val savedSearchOpens = SavedSearchOpenMarks(data.uiRestoreRepository)
     val recentsClearWorkflow = RecentsClearWorkflow(data.recentsRepository)
-    /** The tabs this build shows; Series only with extensions. */
-    val homeTabs = homeTabs(container.series != null)
-
     /** Reads series chapters in the Viewer; null in a build without extensions. */
     val seriesReader = container.series?.let(::SeriesReader)
     val viewerRouteWorkflow = ViewerRouteWorkflow(
@@ -576,7 +579,8 @@ internal class TheoriaShell(
         val currentSettings = data.currentSettingsSnapshot()
         workflows.likesCodexSync.ensureProfileCodex(currentSettings.activeRecommendationProfile())
         owners.settings.onAction(SettingsAction.RefreshAccounts)
-        navigation.homeTabRoute = data.restoreHomeTabRoute()
+        container.series?.findExtensions()
+        navigation.homeTabRoute = data.restoreHomeTabRoute(homeTabs(withSeries = container.series?.hasExtensions?.value == true))
         appShellOwner.onAction(AppShellAction.MarkAppReady)
         navReady = true
     }
@@ -736,11 +740,12 @@ internal fun rememberTheoriaShell(
     val pendingLikePostIds = owners.postMutations.pendingLikePostIds.collectAsStateWithLifecycle()
     val homeTabRoute = rememberSaveable { mutableStateOf(TopLevelDestination.Search.route) }
     val pendingCreatorProfile = rememberSaveable(stateSaver = CreatorProfileStateSaver) { mutableStateOf<CreatorProfile?>(null) }
-    val pagerState = rememberPagerState(pageCount = { homeTabs(container.series != null).size })
+    val seriesTab = remember(container) { container.series?.hasExtensions ?: MutableStateFlow(false) }.collectAsStateWithLifecycle()
+    val pagerState = rememberPagerState(pageCount = { homeTabs(withSeries = seriesTab.value).size })
     val routes = remember { RouteOwners() }
     val pendingSave = remember { PendingCodexSave() }
     val overlays = remember { ShellOverlays() }
-    val navigation = remember(navController, pagerState) { HomeNavigation(navController, homeTabRoute, pagerState, scope) }
+    val navigation = remember(navController, pagerState) { HomeNavigation(navController, homeTabRoute, seriesTab, pagerState, scope) }
     return remember(container, viewerSessions, appShellOwner, appContext, scope, registry, transfers, owners, codexImportLauncher, navigation) {
         TheoriaShell(
             container, viewerSessions, appShellOwner, appContext, scope, snackbarHostState, registry, transfers, owners,

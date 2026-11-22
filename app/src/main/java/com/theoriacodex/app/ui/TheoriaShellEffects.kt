@@ -2,6 +2,7 @@ package com.theoriacodex.app.ui
 
 import com.theoriacodex.app.ui.routes.codexCollectionOwner
 import com.theoriacodex.app.library.LibrarySection
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.filterNotNull
 import com.theoriacodex.app.MainActivity
 import android.content.Intent
@@ -24,6 +25,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.BuildConfig
@@ -261,6 +263,16 @@ internal fun HomeTabEffects(shell: TheoriaShell, currentRoute: String?) {
     val onHome = shell.navReady && currentRoute == AppRoute.Home
     var homeTabRestoreComplete by remember { mutableStateOf(false) }
     var persistedHomeTabRoute by rememberSaveable { mutableStateOf<String?>(null) }
+    val series = shell.container.series
+    // Installing or removing an extension happens in another app, so the Series tab is decided again on each return.
+    LifecycleStartEffect(series, shell.navReady) {
+        if (shell.navReady) shell.scope.launch { series?.findExtensions() }
+        onStopOrDispose {}
+    }
+    // A tab that went away is not the selected one: the pager already rests on the last tab left.
+    LaunchedEffect(navigation.homeTabs) {
+        if (navigation.homeTabs.none { it.route == navigation.homeTabRoute }) navigation.homeTabRoute = navigation.homeTabs.last().route
+    }
     LaunchedEffect(shell.navReady, currentRoute) {
         if (!onHome) return@LaunchedEffect
         pagerState.scrollToRoute(navigation.homeTabRoute)

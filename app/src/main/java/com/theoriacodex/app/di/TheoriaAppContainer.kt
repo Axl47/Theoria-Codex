@@ -10,6 +10,7 @@ import com.theoriacodex.app.backup.SharedPreferencesAutoBackupStore
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
 import com.theoriacodex.app.customsites.CustomSitesController
+import com.theoriacodex.app.extensions.MihonExtensionSourceHost
 import com.theoriacodex.app.customsites.SharedPreferencesBuiltInAgentStore
 import com.theoriacodex.app.customsites.SiteCookieBridge
 import com.theoriacodex.app.media.BoundedMediaDurationProbe
@@ -205,7 +206,7 @@ interface TheoriaAppContainer {
     /** Settings → Sites: user-added booru sites. */
     val customSites: CustomSitesController
 
-    /** The Series area; null in a build with no extension host, which then shows no Series tab. */
+    /** The Series area; null in a container with no extension host, which then shows no Series tab. */
     val series: SeriesDependencies? get() = null
 
     /** Lives as long as the process: work that must finish after the screen or Activity that started it. */
@@ -226,7 +227,7 @@ internal class DefaultTheoriaAppContainer(
     context: Context,
     private val cookieBridge: SiteCookieBridge,
     private val httpClients: AppHttpClients,
-    private val extensionHost: ExtensionSourceHost? = null,
+    private val extensionHost: MihonExtensionSourceHost? = null,
 ) : TheoriaAppContainer {
     private val appContext = context.applicationContext
     private val storageDirectory = File(appContext.filesDir, "theoria_codex")
@@ -521,7 +522,7 @@ internal class DefaultTheoriaAppContainer(
 
     override val series: SeriesDependencies? = extensionHost?.let { host ->
         host.bind(SettingsExtensionChoices(settingsRepository))
-        SeriesDependencies(RoomSeriesRepository(contentDatabase), host::sources, host.extensions)
+        SeriesDependencies(RoomSeriesRepository(contentDatabase), host::sources, host.extensions, host::anyOnDevice)
     }
 
     /** Keeps the new-chapter check scheduled; started by [awaitDurableStores], once. */

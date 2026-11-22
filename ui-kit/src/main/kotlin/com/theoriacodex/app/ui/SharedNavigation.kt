@@ -20,7 +20,7 @@ import kotlinx.coroutines.flow.filter
 
 /**
  * The bottom bar's tabs, in pager order. [route] is what the last-tab preference stores. [Series] stays last because
- * only a build with extensions shows it ([homeTabs]), which keeps every other tab's page index the same either way.
+ * it shows only while an extension is on the device ([homeTabs]), which keeps every other tab's page index the same either way.
  */
 enum class TopLevelDestination(val route: String, val label: String) {
     Search("search", "Search"),
@@ -29,7 +29,7 @@ enum class TopLevelDestination(val route: String, val label: String) {
     Series("series", "Series"),
 }
 
-/** The tabs a build shows: all of them [withSeries], otherwise all but [TopLevelDestination.Series]. */
+/** The tabs showing: all of them [withSeries], otherwise all but [TopLevelDestination.Series]. */
 fun homeTabs(withSeries: Boolean): List<TopLevelDestination> =
     TopLevelDestination.entries.filter { withSeries || it != TopLevelDestination.Series }
 
