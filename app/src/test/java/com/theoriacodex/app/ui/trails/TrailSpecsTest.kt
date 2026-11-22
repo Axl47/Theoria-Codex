@@ -15,6 +15,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.query.SearchTermLimit
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -82,6 +83,16 @@ class TrailSpecsTest {
 
         // A post from another source searches its own source, where the level's exclusions may not mean the same.
         assertEquals(emptyList<String>(), trailTagQuery("fox", SourceKey.GELBOORU, level).excludeTags)
+    }
+
+    @Test
+    fun `a single-source tag trail drops exclusions its source has no room for`() {
+        // Danbooru's guest limit leaves one term under a ranked sort; the trail's own tag takes it.
+        val level = Query(QueryMode.Source(SourceKey.DANBOORU), emptyList(), listOf("comic"), SortMode.TOP, null, null)
+
+        val fork = trailTagQuery("dog", SourceKey.DANBOORU, level, termLimit = SearchTermLimit(maxTerms = 2, rankedSortUsesTerm = true))
+
+        assertEquals(listOf("dog") to emptyList<String>(), fork.includeTags to fork.excludeTags)
     }
 
     @Test

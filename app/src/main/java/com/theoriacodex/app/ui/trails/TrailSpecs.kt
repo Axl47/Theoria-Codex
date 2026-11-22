@@ -18,6 +18,8 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.query.SearchTermLimit
+import com.theoriacodex.domain.query.withinTermLimit
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -31,6 +33,9 @@ internal interface TrailSources {
     fun tag(query: Query): TrailPager
     fun creator(creator: CreatorProfile): TrailPager?
     fun similar(seed: Post): TrailPager?
+
+    /** [source]'s cap on terms per request, which a single-source tag trail must fit. */
+    fun termLimit(source: SourceKey): SearchTermLimit? = null
 }
 
 /** The trail [request] asks for from a level filtered by [parent], or null when its source cannot supply one. */
@@ -39,7 +44,9 @@ internal fun trailSpec(
     sources: TrailSources,
     parent: SearchVisibilityFilters = SearchVisibilityFilters(),
 ): TrailSpec? = when (request) {
-    is TrailRequest.Tag -> trailTagQuery(request.tag, request.source, request.context, parent.animatedOnly).let { query ->
+    is TrailRequest.Tag -> trailTagQuery(
+        request.tag, request.source, request.context, parent.animatedOnly, sources.termLimit(request.source),
+    ).let { query ->
         TrailSpec(request.tag.replace('_', ' '), query, sources.tag(query))
     }
     is TrailRequest.Creator -> sources.creator(request.creator)?.let { TrailSpec(request.creator.displayName, null, it) }
@@ -50,9 +57,15 @@ internal fun trailSpec(
  * One tag, searched where the level it came from searched (everywhere for a Unified level, else the post's own source)
  * and under that level's filters: its sort, dates and, where it searched the same place, its exclusions. It asks for
  * animated posts when the level's query did or the level shows only animated posts ([animatedOnly]); a Creator or
- * Similar level has no query to say so.
+ * Similar level has no query to say so. A single-source trail drops the exclusions that would overrun [termLimit].
  */
-internal fun trailTagQuery(tag: String, source: SourceKey, context: Query?, animatedOnly: Boolean = false): Query {
+internal fun trailTagQuery(
+    tag: String,
+    source: SourceKey,
+    context: Query?,
+    animatedOnly: Boolean = false,
+    termLimit: SearchTermLimit? = null,
+): Query {
     val mode = if (context?.mode == QueryMode.Unified) QueryMode.Unified else QueryMode.Source(source)
     // Another source's exclusions may name tags this one spells differently, so they stay with their level.
     val excluded = if (context != null && context.mode == mode) {
@@ -63,6 +76,7 @@ internal fun trailTagQuery(tag: String, source: SourceKey, context: Query?, anim
     val media = if (animatedOnly || context?.media == MediaFilter.ANIMATED) MediaFilter.ANIMATED else MediaFilter.ANY
     return Query(mode, listOf(tag), emptyList(), context?.sort ?: SortMode.NEWEST, context?.dateRange, null)
         .copy(excludeTerms = excluded, media = media)
+        .withinTermLimit(termLimit.takeIf { mode is QueryMode.Source })
 }
 
 /**

@@ -48,6 +48,18 @@ class TagAffinityTest {
     }
 
     @Test
+    fun `one search across several sources is not a repeated search`() {
+        val stats = LifetimeStatistics(
+            searchesByTag = mapOf(
+                SearchedTagKey(SourceKey.GELBOORU, SearchTerm("wolf")) to 1L,
+                SearchedTagKey(SourceKey.DANBOORU, SearchTerm("wolf")) to 1L,
+            ),
+        )
+
+        assertFalse("wolf" in tagAffinityInputs(emptyList(), emptyList(), emptyList(), emptyList(), stats).explicit)
+    }
+
+    @Test
     fun `Codex posts count as interest like Likes do`() {
         val inputs = tagAffinityInputs(emptyList(), listOf(post("moth"), post("moth", "lamp")), emptyList(), emptyList(), LifetimeStatistics())
 

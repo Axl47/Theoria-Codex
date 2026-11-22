@@ -67,9 +67,10 @@ fun tagAffinityInputs(
 ): TagAffinityInputs {
     val likedCounts = likes.map { it.tags }.tokenCounts()
     val codexCounts = codexPosts.map { it.canonicalTags.ifEmpty { it.rawTags } }.tokenCounts()
+    // One search counts once under every source it ran on, so a tag's busiest source is its search count.
     val searchedTwice = statistics.searchesByTag.entries
         .groupBy({ normalizeMatchToken(it.key.term.value) }, { it.value })
-        .filterValues { counts -> counts.sum() >= MIN_SEARCHES_FOR_INTEREST }.keys
+        .filterValues { counts -> counts.max() >= MIN_SEARCHES_FOR_INTEREST }.keys
     val explicit = (savedTags + savedSearches.flatMap { it.search.query.includeTags }).map(::normalizeMatchToken)
         .plus(searchedTwice).filterTo(mutableSetOf(), String::isNotBlank)
     val interest = (likedCounts.keys + codexCounts.keys + explicit).associateWith { token ->

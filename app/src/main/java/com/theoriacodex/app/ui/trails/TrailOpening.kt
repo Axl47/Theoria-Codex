@@ -26,6 +26,7 @@ import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.SourceKey
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
@@ -141,5 +142,6 @@ private suspend fun TheoriaShell.shellTrailSources(): TrailSources {
             ?.takeIf { creator.source in available }
             ?.let { adapter -> creatorTrailPager(adapter, creator, data.fileMirrors::learn) }
         override fun similar(seed: Post) = similarTrailPager(features.relatedPosts, seed)
+        override fun termLimit(source: SourceKey) = sources.registry.adapterFor(source)?.capabilities?.searchTermLimit
     }
 }
