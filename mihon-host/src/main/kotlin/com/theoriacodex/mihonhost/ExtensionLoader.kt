@@ -48,7 +48,7 @@ class ExtensionLoader(private val context: Context) {
             .map { name -> if (name.startsWith('.')) info.packageName + name else name }
         if (classNames.isEmpty()) throw ExtensionRejectedException("${info.packageName} names no source class")
 
-        val classLoader = DelegateLastClassLoader(privateReadOnlyCopy(apk, info.packageName).path, context.classLoader)
+        val classLoader = DelegateLastClassLoader(privateReadOnlyCopy(apk).path, context.classLoader)
         val sources = classNames.flatMap { className -> createSources(classLoader, className, info.packageName) }
         return LoadedExtension(
             packageName = info.packageName,
@@ -60,9 +60,10 @@ class ExtensionLoader(private val context: Context) {
     }
 
     /** Android refuses to load code from a file the app could still write, so the APK is copied and locked first. */
-    private fun privateReadOnlyCopy(apk: File, packageName: String): File {
+    private fun privateReadOnlyCopy(apk: File): File {
         val directory = File(context.codeCacheDir, "mihon-extensions").apply { mkdirs() }
-        val target = File(directory, "$packageName.apk")
+        // One copy per file: a second file of the same extension must not replace code that is already loaded.
+        val target = File(directory, apk.name)
         target.delete()
         apk.copyTo(target)
         check(target.setReadOnly()) { "Could not lock ${target.name}" }

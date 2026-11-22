@@ -2,10 +2,13 @@ package com.theoriacodex.mihonhost
 
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.online.HttpSource
+import java.io.IOException
+import java.util.concurrent.CompletableFuture
 import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 class ExtensionImagesTest {
@@ -48,11 +51,40 @@ class ExtensionImagesTest {
         assertEquals("app https://other.test/a.jpg", fetch("https://other.test/a.jpg"))
     }
 
-    private fun fetch(address: String): String =
-        appClient().newCall(Request.Builder().url(address).build()).execute().body.string()
+    @Test
+    fun `an extension failure that is not an IOException still reaches the caller as one`() {
+        val address = images.pageAddress(source, page)
+        val missingHostClass = NoClassDefFoundError("androidx/preference/PreferenceScreen")
+        source.failure = missingHostClass
+
+        val failure = assertFailsWith<IOException> { fetch(address) }
+
+        assertSame(missingHostClass, failure.cause)
+    }
+
+    @Test(timeout = TEST_TIMEOUT_MS)
+    fun `a loaded source answers while other extensions are still loading`() {
+        val loading = ExtensionImages(loadWaitMs = LONG_WAIT_MS).also { it.attach(source) }
+
+        assertEquals("source-token https://covers.test/1.jpg", fetch("https://covers.test/1.jpg#mihon=1", loading))
+    }
+
+    @Test(timeout = TEST_TIMEOUT_MS)
+    fun `a request for a source that has not loaded yet waits for it`() {
+        val loading = ExtensionImages(loadWaitMs = LONG_WAIT_MS)
+        val answer = CompletableFuture.supplyAsync { fetch("https://covers.test/1.jpg#mihon=1", loading) }
+
+        loading.attach(source)
+        loading.finishedLoading()
+
+        assertEquals("source-token https://covers.test/1.jpg", answer.get())
+    }
+
+    private fun fetch(address: String, images: ExtensionImages = this.images): String =
+        appClient(images).newCall(Request.Builder().url(address).build()).execute().body.string()
 
     /** The app's media client: the interceptor under test, then a network that echoes the address it was asked for. */
-    private fun appClient() = OkHttpClient.Builder()
+    private fun appClient(images: ExtensionImages) = OkHttpClient.Builder()
         .addInterceptor(images)
         .addInterceptor(answering { request -> cannedResponse(request, body = "app ${request.url}") })
         .build()
@@ -77,14 +109,22 @@ class ExtensionImagesTest {
         // The default asks the host for its browser agent string, which this test does not install.
         override fun headersBuilder() = Headers.Builder()
 
-        override fun imageRequest(page: Page): Request = Request.Builder()
-            .url("$baseUrl/data/${page.url}${page.imageUrl}")
-            .header(PAGE_HEADER, "page-request")
-            .build()
+        /** Thrown in place of the next page request. */
+        var failure: Throwable? = null
+
+        override fun imageRequest(page: Page): Request {
+            failure?.let { throw it }
+            return Request.Builder().url("$baseUrl/data/${page.url}${page.imageUrl}").header(PAGE_HEADER, "page-request").build()
+        }
 
         private companion object {
             const val TOKEN_HEADER = "X-Source-Token"
             const val PAGE_HEADER = "X-Page"
         }
+    }
+
+    private companion object {
+        const val LONG_WAIT_MS = 60_000L
+        const val TEST_TIMEOUT_MS = 10_000L
     }
 }

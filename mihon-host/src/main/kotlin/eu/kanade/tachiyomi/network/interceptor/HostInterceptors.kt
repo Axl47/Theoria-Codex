@@ -2,7 +2,7 @@
 // Trimmed to what extension binaries call. Package, class and member names are fixed by those binaries.
 package eu.kanade.tachiyomi.network.interceptor
 
-import java.io.IOException
+import com.theoriacodex.mihonhost.failingAsIo
 import okhttp3.Interceptor
 import okhttp3.Response
 
@@ -13,13 +13,7 @@ import okhttp3.Response
 
 /** Turns any failure later in the chain into an `IOException`, the only kind OkHttp hands back to a caller. */
 class UncaughtExceptionInterceptor : Interceptor {
-    override fun intercept(chain: Interceptor.Chain): Response = try {
-        chain.proceed(chain.request())
-    } catch (failure: IOException) {
-        throw failure
-    } catch (@Suppress("TooGenericExceptionCaught") failure: Exception) {
-        throw IOException(failure)
-    }
+    override fun intercept(chain: Interceptor.Chain): Response = failingAsIo { chain.proceed(chain.request()) }
 }
 
 /** Sends the host's browser agent string on requests that name none. */
