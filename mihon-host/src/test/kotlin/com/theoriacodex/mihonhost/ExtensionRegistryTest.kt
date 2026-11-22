@@ -126,6 +126,18 @@ class ExtensionRegistryTest {
     }
 
     @Test
+    fun `an extension that is off moves the revision when it is installed or removed, for the page that lists it`() = runBlocking {
+        registry.installed()
+        val listed = registry.revision.value
+
+        onDevice = emptyList()
+        registry.recheck()
+
+        assertEquals(listed + 1, registry.revision.value)
+        assertTrue(loads.isEmpty())
+    }
+
+    @Test
     fun `a lookup interrupted after a change on the device leaves the change for the next one`() = runBlocking {
         store.choices = ExtensionChoices(trusted = mapOf("a" to "key-1"))
         registry.sources()

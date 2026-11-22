@@ -38,7 +38,7 @@ never written to or read from a profile backup.
 **Changes on the device.** Every source lookup first compares a cheap stamp of the device's packages and the folder's
 files; an extension installed, updated or removed since then is listed again and only what changed is loaded. Every
 extension image request makes the same check, so a source removed or turned off stops fetching images. Debug
-builds also listen for package changes while the app runs, so the Series tab follows without a restart.
+builds also listen for package changes while the app runs, so the Series tab and the open Extensions page follow without a restart.
 
 **Pages.** A chapter's pages are handed out without further requests. Where a source names each image on a page of
 its own, the address handed out is that page's, marked `#mihon-page=` with the source, the page's place and its

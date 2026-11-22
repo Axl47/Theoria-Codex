@@ -95,7 +95,9 @@ class ExtensionImages(private val refresh: () -> Unit = {}) : Interceptor {
         return failingAsIo {
             if (unresolved) {
                 val page = unresolvedPage(source, url.toString(), tag)
-                fetched(source.imageCall(page.named(source))) { page.imageUrl = null }
+                val (call, named) = page.imageCall(source)
+                // Another request may have asked again since: only the address this fetch used is dropped.
+                fetched(call) { synchronized(page) { if (page.imageUrl == named) page.imageUrl = null } }
             } else {
                 val page = pages[url.toString()]
                 (if (page != null) source.imageCall(page) else source.imageCall(url.newBuilder().fragment(null).build().toString())).execute()
@@ -118,10 +120,14 @@ class ExtensionImages(private val refresh: () -> Unit = {}) : Interceptor {
         pages[address] ?: listed.firstOrNull { it.index == index } ?: throw IOException("The chapter no longer has this page")
     }
 
-    /** This page once the source has named its image, asking it the first time; a failure is this page's alone and is asked again next time. */
-    private fun Page.named(source: HttpSource): Page = synchronized(this) {
-        if (imageUrl == null) imageUrl = runBlocking { source.getImageUrl(this@named) }
-        this
+    /**
+     * The request for this page's image with the address it uses, asking the source to name the image when no address
+     * is held. Under one lock per page, so the request is never built while another drops the address; a failure
+     * to name it is this page's alone and is asked again next time.
+     */
+    private fun Page.imageCall(source: HttpSource): Pair<Call, String?> = synchronized(this) {
+        if (imageUrl == null) imageUrl = runBlocking { source.getImageUrl(this@imageCall) }
+        source.imageCall(this) to imageUrl
     }
 
     /** Runs [call]; when the image does not arrive, [forget] drops what led to it, so the next request starts over. */
