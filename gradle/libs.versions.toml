@@ -35,8 +35,16 @@ profileInstaller = "1.4.1"
 uiAutomator = "2.4.0"
 kover = "0.9.11"
 detekt = "2.0.0-alpha.6"
+# Phase 0 phone benchmark only (:vision-bench); not a product dependency.
+litert = "2.4.0"
+# QAIRT runtime libraries (libQnnHtp.so and DSP skels) that LiteRT's Qualcomm dispatch loads; 2.4.0 checks for 2.52.
+qnnRuntime = "2.52.0"
 
 [libraries]
+litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "litert" }
+litert-gpu = { group = "com.google.ai.edge.litert", name = "litert-gpu", version.ref = "litert" }
+qnn-runtime = { group = "com.qualcomm.qti", name = "qnn-runtime", version.ref = "qnnRuntime" }
+litert-npu-qualcomm = { group = "com.google.ai.edge.litert", name = "litert-npu-runtime-qualcomm", version.ref = "litert" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 okhttp-brotli = { group = "com.squareup.okhttp3", name = "okhttp-brotli", version.ref = "okhttp" }
 okhttp-zstd = { group = "com.squareup.okhttp3", name = "okhttp-zstd", version.ref = "okhttp" }

@@ -33,3 +33,5 @@ include(":feature-search")
 include(":feature-library")
 include(":feature-discover")
 include(":feature-settings")
+// Phase 0 visual-similarity phone benchmark; a standalone debug app, never part of a release.
+include(":vision-bench")

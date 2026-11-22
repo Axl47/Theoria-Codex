@@ -26,6 +26,8 @@ ISOLATED_LANES = {
     "com.theoriacodex.macrobenchmark": "true",
     "com.theoriacodex.baselineprofile": "false",
     "com.theoriacodex.baselineprofile.test": "true",
+    # Phase 0 visual-similarity phone benchmark (:vision-bench), a standalone app.
+    "com.theoriacodex.visionbench": "true",
 }
 INSTRUMENTATION_TARGETS = {
     "com.theoriacodex.debug.test": "com.theoriacodex.debug",
