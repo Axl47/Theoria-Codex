@@ -22,6 +22,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recommend.state.ForYouUiState
+import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.domain.model.SourceKey
@@ -72,6 +73,15 @@ class ForYouHomeScreenTest {
         compose.onNodeWithText("Dismiss").assertIsEnabled()
         compose.onNodeWithText("Remove from Saved").performClick()
         compose.runOnIdle { assertEquals(listOf(ForYouAction.PinSection(section.id)), actions) }
+    }
+
+    @Test fun `a shelf with posts offers Triage over that shelf`() {
+        val section = emptySection().let { it.copy(feed = it.feed.copy(page = UnifiedSearchResult(listOf(testPost()), emptyMap(), emptyList()))) }
+        val triaged = mutableListOf<String?>()
+        render(ForYouHomeState(visible = true, sections = listOf(section)), mutableListOf(), onTriageShelf = { triaged += it })
+        compose.onNodeWithContentDescription("Actions for forest").performClick()
+        compose.onNodeWithText("Triage").performClick()
+        compose.runOnIdle { assertEquals(listOf<String?>(section.id), triaged) }
     }
 
     @Test fun `reorder uses shared move actions and commits the selected row order`() {
@@ -148,13 +158,15 @@ class ForYouHomeScreenTest {
         base: ForYouUiState = ForYouUiState(),
         onOpenWhy: (ForYouWhyTarget) -> Unit = {},
         onSelectProfile: (String) -> Unit = {},
+        onTriageShelf: ((String?) -> Unit)? = null,
     ) {
         compose.setContent {
             MaterialTheme {
                 val cards = rememberFeedCardEnvironment(null, emptySet(), emptyMap(), FeedDurations.NONE, {})
                 ForYouHomeScreen(base.copy(home = home), cards, { it }, {},
                     onAction = { actions += it }, onShowFilters = {}, filterLabels = emptyList(), onClearFilters = { {} },
-                    onOpenPreview = { _, _, _ -> }, onOpenWhy = onOpenWhy, onSelectProfile = onSelectProfile)
+                    onOpenPreview = { _, _, _ -> }, onOpenWhy = onOpenWhy, onSelectProfile = onSelectProfile,
+                    onTriageShelf = onTriageShelf)
             }
         }
     }

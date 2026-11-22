@@ -2,6 +2,7 @@ package com.theoriacodex.app.recommend.state
 
 import com.theoriacodex.app.feed.FeedCursor
 import com.theoriacodex.app.recommend.ForYouFeedResult
+import com.theoriacodex.app.recommend.forYouQueryHash
 import com.theoriacodex.app.feed.mergeFeedPosts
 import com.theoriacodex.app.feed.mergeFeedStatuses
 import com.theoriacodex.app.recommend.ForYouUndoAnchor
@@ -89,7 +90,7 @@ data class ForYouUiState(
     val canLoadMore: Boolean get() = pageableSources.isNotEmpty()
 
     /** Names this feed for the Viewer and the triage deck, which find the feed again by it. */
-    val queryHash: String get() = "for_you:$seedId"
+    val queryHash: String get() = forYouQueryHash(seedId)
 
     val canRefresh: Boolean
         get() = (activeProfileLikesCount > 0 || seedSummaryBySource.isNotEmpty()) && !isRefreshing && !isPaging

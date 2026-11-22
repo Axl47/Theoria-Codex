@@ -45,6 +45,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
@@ -68,6 +69,9 @@ import com.theoriacodex.app.ui.components.FeedFailureTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
 import com.theoriacodex.app.triage.triageSeed
+import com.theoriacodex.app.ui.navigation.LocalTriageOpener
+import com.theoriacodex.app.ui.navigation.TriageOpener
+import com.theoriacodex.app.ui.navigation.TriageRequest
 import com.theoriacodex.app.ui.navigation.rememberTriageAction
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.app.ui.components.FeedPageDemandControl
@@ -127,6 +131,7 @@ fun ForYouScreen(
         clearForYouFilters(state.sortMode, fabRestoreState, onFabRestoreStateChange, onAction)
     }
     val pageDemand = rememberForYouPageDemand(state, feed, gridState, onAction)
+    val shelfTriage = rememberShelfTriage(state, feed, onAction)
     val cards = rememberFeedCardEnvironment(
         pixivUgoiraClient, likedPostIds, feed.durations.knownDurationMsByPostId, durations, onToggleLike, resolvePostById,
     )
@@ -142,7 +147,7 @@ fun ForYouScreen(
                     ForYouHomeScreen(state, cards, feed::filterHomePosts,
                         { selectedActionPost = it }, onAction, { showSortSheet = true }, filterLabels, clearFilters,
                         onOpenPreview = { id, posts, index -> onAction(ForYouAction.OpenSectionResult(id, index, posts, feed.filters)) },
-                        onOpenWhy = { why = it }, onSelectProfile = onSelectProfile)
+                        onOpenWhy = { why = it }, onSelectProfile = onSelectProfile, onTriageShelf = shelfTriage)
                 }
             } else {
                 ForYouResults(
@@ -168,7 +173,11 @@ fun ForYouScreen(
             state.sortMode, fabRestoreState, feed, onFabRestoreStateChange, onAction,
             // The sheet reset has no undo affordance, so the undo callback is intentionally discarded.
             onReset = @Suppress("IgnoredReturnValue") { clearFilters() },
-            onTriage = rememberTriageAction(ViewerStreamSource.FOR_YOU, state.queryHash, feed.triageSeed()),
+            // Home's own feed is Your mix; the grid's results there are whichever shelf was open last.
+            onTriage = rememberTriageAction(ViewerStreamSource.FOR_YOU, state.queryHash, feed.triageSeed())
+                .takeUnless { state.home.visible }
+                ?: shelfTriage?.takeIf { state.home.visible && state.home.mixedFeed?.page?.items.orEmpty().isNotEmpty() }
+                    ?.let { triage -> { triage(null) } },
             onDismiss = { showSortSheet = false },
         )
     }
@@ -260,6 +269,33 @@ private fun ForYouResults(
             )
             FeedContinueLoading(pageDemand)
             ForYouFeedBody(state, related, feed, cards, gridState, onAction, onLongPress)
+        }
+    }
+}
+
+/**
+ * Triage over a home shelf: section `id`, or Your mix for null. It opens the shelf as the grid's feed, which the deck
+ * pages through and returns to, then the deck, seeded with the shelf's posts the grid's filters keep. Null when
+ * nothing in the app provides a deck.
+ */
+@Composable
+private fun rememberShelfTriage(state: ForYouUiState, feed: FeedView, onAction: (ForYouAction) -> Unit): ((String?) -> Unit)? {
+    val opener = LocalTriageOpener.current
+    val latestState by rememberUpdatedState(state)
+    val latestFeed by rememberUpdatedState(feed)
+    return remember(opener, onAction) {
+        if (opener === TriageOpener.None) return@remember null
+        { id: String? ->
+            val home = latestState.home
+            val shelf = if (id == null) home.mixedFeed else home.sections.firstOrNull { it.id == id }?.feed
+            val posts = shelf?.let { latestFeed.filterHomePosts(it.page.items) }.orEmpty()
+            if (shelf != null && posts.isNotEmpty()) {
+                onAction(if (id == null) ForYouAction.OpenMixedFeed else ForYouAction.OpenSection(id))
+                opener.openTriage(
+                    TriageRequest(ViewerStreamSource.FOR_YOU, shelf.queryHash),
+                    latestFeed.triageSeed().copy(posts = posts),
+                )
+            }
         }
     }
 }
