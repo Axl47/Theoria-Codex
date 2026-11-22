@@ -77,8 +77,12 @@ waits up to 10 s for a new clearance cookie, stores it to disk, and sends the or
 cannot pass fails with `BrowserCheckException`, which the source reports as `BROWSER_CHECK` with the address and agent.
 The Series tab's listings (popular, latest and filtered) and search results, on their first or a later page, and the
 series page then offer Open check: a full-screen in-app browser with that agent, showing the host it is on, which
-closes itself and loads again once the site lets a page through. If the site let the browser through but still refuses the app, the failure shows as an ordinary one for
-five minutes, since a browser cannot help. A host whose check failed out of sight fails at once for five minutes, or
+closes itself and loads again once the site lets a page through or a new clearance cookie arrives (the address checked
+can be an endpoint that answers a browser with an error even after the check). If the site let the browser through but
+still refuses the app, the failure shows as an ordinary one for five minutes, since a browser cannot help. Cloudflare
+accepts a clearance only from the network address it was earned from, so the client connects over the address family
+the WebView uses (`BrowserAddressDns`): where IPv6 and IPv4 leave the device from different addresses, OkHttp's usual
+IPv6-first race would otherwise send the cookie from the other one and be refused. A host whose check failed out of sight fails at once for five minutes, or
 until it answers without a challenge, so a screen of covers or the background chapter check does not wait once per
 request. Every wait ends when the call is cancelled. A missing or updating WebView, or one whose renderer dies, counts
 as a failed check, never a crash.

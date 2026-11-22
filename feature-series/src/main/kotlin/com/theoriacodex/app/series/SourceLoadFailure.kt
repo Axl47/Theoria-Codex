@@ -34,7 +34,11 @@ import com.theoriacodex.app.ui.components.BrowserPage
 import com.theoriacodex.app.ui.components.ErrorState
 import com.theoriacodex.app.ui.components.rememberBrowserState
 import com.theoriacodex.domain.adapter.BrowserCheck
+import com.theoriacodex.sources.http.BrowserCookieStore
+import com.theoriacodex.sources.http.CLEARANCE_COOKIE
 import com.theoriacodex.sources.http.HostOutageTracker
+import com.theoriacodex.sources.http.cookie
+import com.theoriacodex.sources.http.hasNewClearance
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -75,45 +79,58 @@ internal fun BrowserCheckScope(content: @Composable () -> Unit) {
     val scope = rememberCoroutineScope()
     val checks = remember {
         // The WebView writes cookies to disk lazily; a clearance lost to the app being closed would mean another check.
-        BrowserChecks(flushCookies = { scope.launch(Dispatchers.IO) { runCatching { AndroidBrowserCookieStore.flush() } } })
+        BrowserChecks(AndroidBrowserCookieStore, flushCookies = { scope.launch(Dispatchers.IO) { runCatching { AndroidBrowserCookieStore.flush() } } })
     }
     CompositionLocalProvider(LocalBrowserChecks provides checks, content = content)
-    checks.opened?.let { opened -> BrowserCheckDialog(opened, onClose = checks::close, onThrough = { checks.through(opened) }) }
+    checks.opened?.let { opened ->
+        BrowserCheckDialog(opened, onClose = checks::close, onPageLoaded = { letThrough -> checks.pageLoaded(opened, letThrough) })
+    }
 }
 
-/** A check open on screen: whose it is, where, and the load to run again once the browser gets through. */
-internal class OpenedCheck(val sourceName: String, val check: BrowserCheck, val retry: () -> Unit)
+/**
+ * A check open on screen: whose it is, where, the load to run again once the browser gets through, and the clearance
+ * cookie the site held when it opened.
+ */
+internal class OpenedCheck(val sourceName: String, val check: BrowserCheck, val retry: () -> Unit, val clearance: String?)
 
 /**
- * The check open on a screen, and the sites whose page the browser showed without a challenge in the last
- * [CANNOT_HELP_MS]. A source still refused after that is refused for something a browser cannot fix, such as how the
+ * The check open on a screen, and the sites the browser got through to in the last [CANNOT_HELP_MS]. A source still refused after that is refused for something a browser cannot fix, such as how the
  * app's connection looks, so its failure is shown as an ordinary one rather than sending the user round again.
  */
 @Stable
-internal class BrowserChecks(private val flushCookies: () -> Unit = {}, private val now: () -> Long = System::currentTimeMillis) {
+internal class BrowserChecks(
+    private val cookies: BrowserCookieStore,
+    private val flushCookies: () -> Unit = {},
+    private val now: () -> Long = System::currentTimeMillis,
+) {
     var opened by mutableStateOf<OpenedCheck?>(null)
         private set
-    private val letThrough = mutableStateMapOf<String, Long>()
+    private val throughAt = mutableStateMapOf<String, Long>()
 
     fun open(sourceName: String, check: BrowserCheck, retry: () -> Unit) {
-        opened = OpenedCheck(sourceName, check, retry)
+        opened = OpenedCheck(sourceName, check, retry, cookies.cookie(check.url, CLEARANCE_COOKIE))
     }
 
     fun close() {
         opened = null
     }
 
-    /** The browser got through to [check]'s site: the page closes and the source loads again, once. */
-    fun through(check: OpenedCheck) {
-        if (opened !== check) return
-        HostOutageTracker.hostKey(check.check.url)?.let { letThrough[it] = now() }
+    /**
+     * A page of [check]'s finished loading. The browser got through when the site let that page through, or when a
+     * clearance cookie other than the one held at the start has arrived: the address checked can be one that answers a
+     * browser with an error even once the check is passed, such as an endpoint meant for the source's own requests.
+     * Then the page closes and the source loads again, once.
+     */
+    fun pageLoaded(check: OpenedCheck, letThrough: Boolean) {
+        if (opened !== check || !letThrough && !cookies.hasNewClearance(check.check.url, check.clearance)) return
+        HostOutageTracker.hostKey(check.check.url)?.let { throughAt[it] = now() }
         opened = null
         flushCookies()
         check.retry()
     }
 
     fun cannotHelp(check: BrowserCheck): Boolean {
-        val at = HostOutageTracker.hostKey(check.url)?.let(letThrough::get) ?: return false
+        val at = HostOutageTracker.hostKey(check.url)?.let(throughAt::get) ?: return false
         return now() - at < CANNOT_HELP_MS
     }
 
@@ -127,15 +144,14 @@ private val LocalBrowserChecks = staticCompositionLocalOf<BrowserChecks> { error
 /**
  * [opened]'s page in a full-screen in-app browser that sends the agent the source was refused with, since the
  * clearance cookie it earns is bound to that agent. The host on screen sits under the source's name, so the user
- * always sees where the page has gone. The first page the site lets through, with no HTTP error such as a challenge's
- * 403, closes it through [onThrough]: a check just passed reloads the page that way, and a site that never challenged
- * the browser shows itself that way. Closing it by hand ([onClose]) retries nothing.
+ * always sees where the page has gone. Each page that finishes loading goes to [onPageLoaded], with whether the site
+ * let it through (no HTTP error such as a challenge's 403). Closing it by hand ([onClose]) retries nothing.
  */
 @Composable
-private fun BrowserCheckDialog(opened: OpenedCheck, onClose: () -> Unit, onThrough: () -> Unit) {
+private fun BrowserCheckDialog(opened: OpenedCheck, onClose: () -> Unit, onPageLoaded: (letThrough: Boolean) -> Unit) {
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize()) {
-            val browser = rememberBrowserState(opened.check.url, opened.check.userAgent) { _, letThrough -> if (letThrough) onThrough() }
+            val browser = rememberBrowserState(opened.check.url, opened.check.userAgent) { _, letThrough -> onPageLoaded(letThrough) }
             BrowserPage(browser, onClose = onClose, header = {
                 Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = "Close") }

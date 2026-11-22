@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.interceptor.CloudflareInterceptor
 import eu.kanade.tachiyomi.network.interceptor.UncaughtExceptionInterceptor
 import eu.kanade.tachiyomi.network.interceptor.UserAgentInterceptor
+import com.theoriacodex.sources.http.BrowserAddressDns
 import com.theoriacodex.sources.http.BrowserCookieJar
 import com.theoriacodex.sources.http.BrowserCookieStore
 import java.io.File
@@ -48,8 +49,11 @@ object MihonHost {
      * every host's cookies, as Mihon's does: extensions are written against it, and many keep a session in cookies. It
      * is not limited to the hosts the app's own clients may send browser cookies to (`SiteCookieBridge`), because
      * extension code runs in the app's process and could read the store directly, so such a limit would be no barrier.
+     * It resolves hosts as the WebView would connect to them ([BrowserAddressDns]), since a clearance cookie a browser
+     * check earns is only accepted from the address it was earned from.
      */
     internal fun extensionClient(cookies: BrowserCookieStore, browser: ChallengeBrowser): OkHttpClient = OkHttpClient.Builder()
+        .dns(BrowserAddressDns())
         .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .callTimeout(CALL_TIMEOUT_MINUTES, TimeUnit.MINUTES)

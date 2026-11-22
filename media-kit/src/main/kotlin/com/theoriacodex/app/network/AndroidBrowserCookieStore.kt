@@ -21,14 +21,20 @@ object AndroidBrowserCookieStore : BrowserCookieStore {
         CookieManager.getInstance().flush()
     }
 
+    /**
+     * Overwrites each cookie with an expired one, in every form it can have been stored in: host-only or on the
+     * domain it was created with (a `www.` site's can sit on the parent), and, over HTTPS, `Secure` and partitioned.
+     * The WebView keeps a `Secure` cookie from being replaced by one without the flag, and a partitioned one (as
+     * Cloudflare's clearance is) is only replaced within its partition.
+     */
     override fun expire(url: String, name: String?) {
-        val host = runCatching { URI(url).host }.getOrNull() ?: return
-        // A cookie set on the parent domain (a `www.` site's) only expires with the Domain it was created with.
-        val domains = setOf(host, HostOutageTracker.normalizeHost(host))
+        val address = runCatching { URI(url) }.getOrNull() ?: return
+        val host = address.host ?: return
+        val domains = listOf("") + setOf(host, HostOutageTracker.normalizeHost(host)).map { "; Domain=$it" }
+        val forms = if (address.scheme == "https") listOf("; Secure", "; Secure; Partitioned") else listOf("")
         val names = name?.let(::listOf) ?: cookieHeader(url)?.split(';')?.map { it.substringBefore('=').trim() }.orEmpty()
         names.forEach { expired ->
-            setCookie(url, "$expired=; Max-Age=0; Path=/")
-            domains.forEach { setCookie(url, "$expired=; Max-Age=0; Path=/; Domain=$it") }
+            forms.forEach { form -> domains.forEach { domain -> setCookie(url, "$expired=; Max-Age=0; Path=/$domain$form") } }
         }
         flush()
     }
