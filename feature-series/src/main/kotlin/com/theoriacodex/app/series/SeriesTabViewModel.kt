@@ -9,15 +9,22 @@ import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
+import com.theoriacodex.domain.series.changedFrom
+import com.theoriacodex.domain.series.withChoices
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -40,22 +47,53 @@ sealed interface SeriesListing {
 
 data class SeriesSourceListing(val key: SourceKey, val name: String, val listing: SeriesListing)
 
+/** Which of its listings the browsed source shows. */
+sealed interface BrowseKind {
+    data object Popular : BrowseKind
+
+    data object Latest : BrowseKind
+
+    /** The source's own search for [text] with [filters], of which [changed] differ from the source's defaults. */
+    data class Filtered(val text: String, val filters: List<SeriesFilter>, val changed: Int) : BrowseKind {
+        /** What the Filter chip counts: the changed filters, and the text when there is one. */
+        val active: Int get() = changed + if (text.isEmpty()) 0 else 1
+    }
+}
+
+/**
+ * The open filter sheet, which holds its choices until Search. [defaults] are the browsed source's filters as it
+ * offers them, and [draft] those with the choices made; both are null while they load. [expanded] names the open
+ * groups by their place in the tree.
+ */
+data class FilterSheetState(
+    val text: String,
+    val defaults: List<SeriesFilter>? = null,
+    val draft: List<SeriesFilter>? = null,
+    val expanded: Set<String> = emptySet(),
+)
+
 /**
  * The Series tab. [sources] is null until the extensions that are on have loaded; [browse] is the chosen source's
- * popular series; [search] is one listing per source while a search shows, and null otherwise; a search sent before
- * the extensions have loaded is empty until they have, and then runs. [refreshing] is true while a refresh by hand
- * checks the followed series for new chapters.
+ * [browseKind] listing, and [browseRun] counts the listings browsed, so what belongs to an earlier one can tell;
+ * [filterSheet] is the filter sheet while it is open; [search] is one listing per source while a search shows, and
+ * null otherwise; a search sent before the extensions have loaded is empty until they have, and then runs.
+ * [refreshing] is true while a refresh by hand checks the followed series for new chapters.
  */
 data class SeriesTabState(
     val sources: List<SeriesSource>? = null,
     val browse: SeriesSourceListing? = null,
+    val browseKind: BrowseKind = BrowseKind.Popular,
+    val browseRun: Int = 0,
+    val filterSheet: FilterSheetState? = null,
     val search: List<SeriesSourceListing>? = null,
     val refreshing: Boolean = false,
 )
 
 /**
  * [sourcesChanged] emits once at the start and again whenever [loadSources] may answer differently. [saved] keeps the
- * search on screen and the browsed source across process death; both show again once the sources have loaded.
+ * search on screen and the browsed source across process death; both show again once the sources have loaded. The
+ * browsed listing, its filters and the filter sheet are kept only in memory: after process death they start again at
+ * the source's popular series.
  */
 class SeriesTabViewModel(
     private val repository: SeriesRepository,
@@ -69,6 +107,12 @@ class SeriesTabViewModel(
 
     /** Counts submitted searches; a result asked for under an earlier one is dropped, even when its text is the same. */
     private var searchRun = 0
+
+    /** The filter sheet's load of the source's filters; a sheet closed or opened again cancels it. */
+    private var filterLoad: Job? = null
+
+    /** Follows whether the tab shows; see [followShown]. */
+    private var shownWatch: Job? = null
     private val mutableState = MutableStateFlow(SeriesTabState(search = searchText?.let { emptyList() }))
     val state: StateFlow<SeriesTabState> = mutableState
 
@@ -94,7 +138,8 @@ class SeriesTabViewModel(
 
     /**
      * Keeps what is on screen for the sources still on offer, and browses the first when the browsed one is gone. A
-     * search on screen, or one sent while the extensions were loading, runs in every source that is new or replaced.
+     * browsed source that was replaced (its extension updated) is browsed afresh, as if chosen again. A search on
+     * screen, or one sent while the extensions were loading, runs in every source that is new or replaced.
      */
     private fun showSources(sources: List<SeriesSource>) {
         val keys = sources.mapTo(HashSet()) { it.key }
@@ -112,34 +157,114 @@ class SeriesTabViewModel(
                 },
             )
         }
-        if (state.value.browse == null) {
+        val browsedKey = state.value.browse?.key
+        if (browsedKey != null && fresh.any { it.key == browsedKey }) browse(browsedKey)
+        else if (browsedKey == null) {
             val browsed = saved.get<String>(SAVED_BROWSE)
             (sources.firstOrNull { it.key.id == browsed } ?: sources.firstOrNull())?.let { browse(it.key) }
         }
         if (query != null) fresh.forEach { searchIn(it, query) }
     }
 
-    /** Shows [key]'s popular series from the first page. */
+    /** Shows [key]'s popular series from the first page; the filters chosen before are dropped. */
     fun browse(key: SourceKey) {
         val source = source(key) ?: return
         saved[SAVED_BROWSE] = key.id
-        mutableState.update { it.copy(browse = SeriesSourceListing(key, source.name, SeriesListing.Loading)) }
-        viewModelScope.launch {
-            val listing = firstPage { source.popular(1) }
-            updateBrowse(key) { listing }
+        closeFilters()
+        show(source, BrowseKind.Popular)
+    }
+
+    /** Shows the browsed source's [kind] listing from the first page. */
+    fun choose(kind: BrowseKind) {
+        show(browsedSource() ?: return, kind)
+    }
+
+    fun retryBrowse() = choose(state.value.browseKind)
+
+    /**
+     * Closes the filter sheet and lists the browsed source's search for what it holds. Sent before the source's
+     * filters have loaded, it keeps the filters the listing on screen applied and changes only the text.
+     */
+    fun searchSource() {
+        val sheet = state.value.filterSheet ?: return
+        val applied = state.value.browseKind as? BrowseKind.Filtered
+        val query = sheet.text.trim()
+        closeFilters()
+        choose(
+            when {
+                sheet.draft != null -> BrowseKind.Filtered(query, sheet.draft, sheet.draft.changedFrom(sheet.defaults.orEmpty()))
+                else -> BrowseKind.Filtered(query, applied?.filters.orEmpty(), applied?.changed ?: 0)
+            },
+        )
+    }
+
+    /**
+     * Follows [shown], whether the tab shows, replacing what was followed before. Filter choices last only while the
+     * tab shows: once it is left, the sheet closes and a filtered browse returns to the popular series. It is followed
+     * here rather than in the tab's composition, which the pager drops before it reports another tab settled.
+     */
+    fun followShown(shown: Flow<Boolean>) {
+        shownWatch?.cancel()
+        shownWatch = viewModelScope.launch {
+            shown.distinctUntilChanged().drop(1).collect { if (!it) dropFilters() }
         }
     }
 
-    /** Loads the browsed source's next page, unless one is loading or none is left. */
+    private fun dropFilters() {
+        closeFilters()
+        if (state.value.browseKind is BrowseKind.Filtered) choose(BrowseKind.Popular)
+    }
+
+    /**
+     * Opens the filter sheet at what the filtered listing on screen chose. The source's filters load afresh each
+     * time, since some sources fill theirs in from what they fetched meanwhile; one whose filters fail to load offers
+     * none, so the sheet still searches it.
+     */
+    fun openFilters() {
+        val source = browsedSource() ?: return
+        val applied = state.value.browseKind as? BrowseKind.Filtered
+        filterLoad?.cancel()
+        mutableState.update { it.copy(filterSheet = FilterSheetState(text = applied?.text.orEmpty())) }
+        val load = viewModelScope.launch {
+            val defaults = try {
+                source.filters()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                emptyList()
+            }
+            ensureActive()
+            mutableState.update { state ->
+                state.copy(filterSheet = state.filterSheet?.copy(defaults = defaults, draft = defaults.withChoices(applied?.filters.orEmpty())))
+            }
+        }
+        filterLoad = load
+    }
+
+    /** Changes what the open filter sheet holds. */
+    fun editFilters(edit: (FilterSheetState) -> FilterSheetState) {
+        mutableState.update { it.copy(filterSheet = it.filterSheet?.let(edit)) }
+    }
+
+    /** Closes the filter sheet; its choices are dropped. */
+    fun closeFilters() {
+        filterLoad?.cancel()
+        filterLoad = null
+        mutableState.update { it.copy(filterSheet = null) }
+    }
+
+    /** Loads the browsed listing's next page, unless one is loading or none is left. */
     fun browseMore() {
         val browse = state.value.browse ?: return
         val loaded = browse.listing as? SeriesListing.Loaded ?: return
         val page = loaded.nextPage?.takeUnless { loaded.loadingMore } ?: return
         val source = source(browse.key) ?: return
-        updateBrowse(browse.key) { loaded.copy(loadingMore = true, moreFailed = false) }
+        val kind = state.value.browseKind
+        val run = state.value.browseRun
+        updateBrowse(run, loaded.copy(loadingMore = true, moreFailed = false))
         viewModelScope.launch {
-            val next = loaded.withPage(page) { source.popular(it) }
-            updateBrowse(browse.key) { next }
+            val next = loaded.withPage(page) { source.list(kind, it) }
+            updateBrowse(run, next)
         }
     }
 
@@ -206,11 +331,31 @@ class SeriesTabViewModel(
         }
     }
 
-    private fun updateBrowse(key: SourceKey, listing: () -> SeriesListing) {
-        mutableState.update { state -> if (state.browse?.key == key) state.copy(browse = state.browse.copy(listing = listing())) else state }
+    private fun show(source: SeriesSource, kind: BrowseKind) {
+        mutableState.update {
+            it.copy(browse = SeriesSourceListing(source.key, source.name, SeriesListing.Loading), browseKind = kind, browseRun = it.browseRun + 1)
+        }
+        val run = state.value.browseRun
+        viewModelScope.launch {
+            val listing = firstPage { source.list(kind, 1) }
+            updateBrowse(run, listing)
+        }
+    }
+
+    private fun updateBrowse(run: Int, listing: SeriesListing) {
+        if (state.value.browseRun != run) return
+        mutableState.update { state -> state.copy(browse = state.browse?.copy(listing = listing)) }
     }
 
     private fun source(key: SourceKey) = state.value.sources?.firstOrNull { it.key == key }
+
+    private fun browsedSource() = state.value.browse?.key?.let(::source)
+}
+
+private suspend fun SeriesSource.list(kind: BrowseKind, page: Int): SeriesPage = when (kind) {
+    BrowseKind.Popular -> popular(page)
+    BrowseKind.Latest -> latest(page)
+    is BrowseKind.Filtered -> search(kind.text, page, kind.filters)
 }
 
 /** A source's first page as a listing; any failure but cancellation becomes [SeriesListing.Failed]. Also the Switch source sheet's search. */

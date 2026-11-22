@@ -12,6 +12,7 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
+import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
@@ -136,7 +137,7 @@ private class Listing(id: String) : SeriesSource {
     override val name = id
     override val language = "en"
     override suspend fun popular(page: Int) = SeriesPage(emptyList(), false)
-    override suspend fun search(text: String, page: Int) = popular(page)
+    override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>) = popular(page)
     override suspend fun details(series: Series): Series = if (fails) throw IllegalStateException("down") else series
     override suspend fun entries(series: Series) = chapters
     override suspend fun pages(entry: SeriesEntry) = emptyList<ImageRef>()

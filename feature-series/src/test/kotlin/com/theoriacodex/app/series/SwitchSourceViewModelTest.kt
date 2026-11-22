@@ -5,6 +5,7 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
+import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
@@ -166,7 +167,7 @@ private class Finding(
     var cancelled = false
 
     override suspend fun popular(page: Int) = SeriesPage(emptyList(), hasNextPage = false)
-    override suspend fun search(text: String, page: Int): SeriesPage {
+    override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>): SeriesPage {
         try {
             wait?.await()
         } catch (error: CancellationException) {
