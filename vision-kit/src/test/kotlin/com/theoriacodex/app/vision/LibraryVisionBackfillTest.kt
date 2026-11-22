@@ -72,7 +72,7 @@ class LibraryVisionBackfillTest {
 
     @Test
     fun `previews that fail to load are skipped, so the older Library is still indexed`() = runBlocking {
-        val dead = List(12) { post("dead-$it") }
+        val dead = List(40) { post("dead-$it") }
         val older = List(3) { post("no-still-$it") }
         val library = Library(dead + older)
         val store = readyStore()

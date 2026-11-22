@@ -69,9 +69,17 @@ internal class MixLane(val lane: ForYouLane, label: String = lane.label) {
         buffer = buffer.drop(count)
     }
 
-    /** Returns [posts] to the front of the lane; they are vetted again first when [vetting]. */
+    /**
+     * Returns [posts] to the front of the lane. When [vetting] they are vetted again, and the buffer waits behind them so
+     * the deal keeps their order (its tags are remembered, so it passes again at once).
+     */
     fun putBack(posts: List<Post>, vetting: Boolean) {
-        if (vetting) unvetted = posts + unvetted else buffer = posts + buffer
+        if (!vetting) {
+            buffer = posts + buffer
+            return
+        }
+        unvetted = posts + buffer + unvetted
+        buffer = emptyList()
     }
 
     fun keep(shown: (Post) -> Boolean) {

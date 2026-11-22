@@ -174,13 +174,12 @@ class ForYouDeckViewModel(
             wiring.pictures.ready.collect { ready ->
                 val optedOut = wasReady && !ready
                 wasReady = ready
+                // Before the Mix check: a plan in flight may have read the tagger's evidence.
+                if (optedOut) return@collect rebuild()
                 val mix = mix ?: return@collect
-                when {
-                    optedOut -> rebuild()
-                    vetsPictures -> {
-                        mix.revet()
-                        vet(mix)
-                    }
+                if (vetsPictures) {
+                    mix.revet()
+                    vet(mix)
                 }
             }
         }
