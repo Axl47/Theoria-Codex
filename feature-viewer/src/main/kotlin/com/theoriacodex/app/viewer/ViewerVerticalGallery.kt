@@ -207,7 +207,7 @@ private fun VerticalGalleryEffects(
     // The list's position counts as the reader's choice only once it shows the selection; until then (a resume
     // still resolving, or a restored page not yet scrolled to) publishing it would overwrite the saved page.
     var aligned by remember(list) { mutableStateOf(false) }
-    LaunchedEffect(focusedPage, isCurrentPost, aligned) {
+    LaunchedEffect(focusedPage, isCurrentPost, aligned, pageCount) {
         if (!isCurrentPost || !aligned || pageCount == 0) return@LaunchedEffect
         if (focusedPage != selected) host.onAction(ViewerAction.SelectMedia(focusedPage))
         host.onVisibleMediaChanged?.invoke(post, focusedPage + 1)

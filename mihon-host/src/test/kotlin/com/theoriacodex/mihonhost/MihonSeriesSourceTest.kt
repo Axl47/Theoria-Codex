@@ -32,18 +32,16 @@ class MihonSeriesSourceTest {
         assertEquals("custom_mihon_7", series.key.id)
         assertEquals("Fake", series.name)
         assertEquals("en", series.language)
-        assertTrue(series.supportsLatest)
     }
 
     @Test
-    fun `popular, latest and search each ask the source for their page`() = runTest {
+    fun `popular and search each ask the source for their page`() = runTest {
         source.listing = MangasPage(emptyList(), hasNextPage = true)
 
         assertTrue(series.popular(1).hasNextPage)
-        series.latest(2)
         series.search("one punch", 3)
 
-        assertEquals(listOf("popular 1", "latest 2", "search 3 'one punch'"), source.calls)
+        assertEquals(listOf("popular 1", "search 3 'one punch'"), source.calls)
     }
 
     @Test

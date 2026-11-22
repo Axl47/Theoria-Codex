@@ -27,6 +27,14 @@ class ViewerReadingModeTest {
         assertEquals(GalleryReadingMode.LEFT_TO_RIGHT, config.readingModeOf(single))
     }
 
+    @Test fun `a series' one-page chapter keeps the series' mode`() {
+        val single = page(listOf(image))
+        for (mode in listOf(GalleryReadingMode.RIGHT_TO_LEFT, GalleryReadingMode.VERTICAL)) {
+            val config = ViewerScreenConfig(seriesChapters = true, galleryReadingModes = mapOf(single.post.id to mode))
+            assertEquals(mode, config.readingModeOf(single))
+        }
+    }
+
     @Test fun `vertical gives way while a gallery holds pages that are not still images`() {
         val mixed = page(listOf(image, video))
         val config = ViewerScreenConfig(galleryReadingModes = mapOf(mixed.post.id to GalleryReadingMode.VERTICAL))

@@ -33,7 +33,6 @@ class MihonSeriesSource(
     override val key: SourceKey = sourceKey(source)
     override val name: String get() = source.name
     override val language: String get() = source.lang
-    override val supportsLatest: Boolean get() = source.supportsLatest
 
     /**
      * Series and chapters as the source listed them. Sources may keep data on them between calls, so a later call
@@ -48,7 +47,6 @@ class MihonSeriesSource(
 
     override suspend fun popular(page: Int): SeriesPage = calling { source.getPopularManga(page).listed() }
 
-    override suspend fun latest(page: Int): SeriesPage = calling { source.getLatestUpdates(page).listed() }
 
     override suspend fun search(text: String, page: Int): SeriesPage =
         calling { source.getSearchManga(page, text, source.getFilterList()).listed() }

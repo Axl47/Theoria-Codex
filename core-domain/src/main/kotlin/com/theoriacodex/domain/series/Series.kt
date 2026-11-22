@@ -39,13 +39,9 @@ interface SeriesSource {
 
     /** The language code of everything this source lists; blank when it names none. */
     val language: String
-    val supportsLatest: Boolean
 
     /** Pages count from 1. */
     suspend fun popular(page: Int): SeriesPage
-
-    /** Only when [supportsLatest]. */
-    suspend fun latest(page: Int): SeriesPage
 
     suspend fun search(text: String, page: Int): SeriesPage
 

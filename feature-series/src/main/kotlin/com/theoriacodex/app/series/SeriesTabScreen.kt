@@ -79,7 +79,8 @@ fun SeriesTabScreen(viewModel: SeriesTabViewModel, onOpenSeries: (SeriesId) -> U
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             val search = state.search
-            if (search != null) searchResults(search, open, viewModel::retrySearch)
+            if (search != null && state.sources == null) fullWidth("search-waiting") { LoadingState() }
+            else if (search != null) searchResults(search, open, viewModel::retrySearch)
             else {
                 followingShelf(followed, open)
                 browse(state, viewModel, open)

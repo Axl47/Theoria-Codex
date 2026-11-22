@@ -230,10 +230,17 @@ private fun ViewerInfoActions(
     onGoToSearch: () -> Unit,
     onOpenCreatorFallback: ((Post) -> Unit)?,
     contextActions: ViewerContextActions,
-    /** Whether the post can be liked and saved; a series' chapter cannot. */
+    /**
+     * Whether the post is one to collect and share. A series' chapter is not: it has no link, tags or creator, its pages
+     * load only through its extension, and Search cannot reach its source, so it keeps only Start over.
+     */
     collectable: Boolean,
 ) {
     val post = selection.post
+    if (!collectable) {
+        ViewerChapterActions(post) { controls.jumpToMedia(post.id, 0) }
+        return
+    }
     val creators = if (onOpenCreatorFallback != null) creatorProfileActions(post, creatorBrowsingSources) else emptyList()
     fun closeThen(action: () -> Unit) {
         action()
@@ -262,15 +269,25 @@ private fun ViewerInfoActions(
             creator = creators.firstOrNull()?.let { creator -> HeaderLink(creator.label) { closeThen { openCreator(creator) } } },
         )
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), Arrangement.SpaceEvenly) {
-            if (collectable) {
-                ViewerLikeAction(liked) { onAction(ViewerAction.ToggleLike) }
-                ViewerCodexAction(post.id in LocalCodexPostIds.current.value) { closeThen { onAction(ViewerAction.Save) } }
-            }
+            ViewerLikeAction(liked) { onAction(ViewerAction.ToggleLike) }
+            ViewerCodexAction(post.id in LocalCodexPostIds.current.value) { closeThen { onAction(ViewerAction.Save) } }
             ViewerInfoAction(Icons.Default.Download, "Device", "Save to device", selection.canDownload) {
                 closeThen { onAction(ViewerAction.Download) }
             }
             ViewerInfoAction(Icons.Default.Share, "Share", "Share", enabled = share != null) { share?.let(::closeThen) }
             ViewerInfoMoreActions(moreActions, contextActions.removeFromCodex?.let { remove -> { remove(post) } }, ::closeThen)
+        }
+        HorizontalDivider()
+    }
+}
+
+/** A series chapter's actions: its title, without the address that stands in for a post id, and Start over. */
+@Composable
+private fun ViewerChapterActions(post: Post, onStartOver: () -> Unit) {
+    Column {
+        PostActionHeader(post)
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), Arrangement.SpaceEvenly) {
+            ViewerInfoAction(Icons.Default.Replay, "Start over", "Start over", onClick = onStartOver)
         }
         HorizontalDivider()
     }

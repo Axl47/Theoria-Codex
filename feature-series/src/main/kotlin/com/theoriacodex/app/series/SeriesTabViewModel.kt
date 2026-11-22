@@ -36,7 +36,8 @@ data class SeriesSourceListing(val key: SourceKey, val name: String, val listing
 
 /**
  * The Series tab. [sources] is null until the extensions have loaded; [browse] is the chosen source's popular series;
- * [search] is one listing per source while a search shows, and null otherwise.
+ * [search] is one listing per source while a search shows, and null otherwise; a search sent before the extensions
+ * have loaded is empty until they have, and then runs.
  */
 data class SeriesTabState(
     val sources: List<SeriesSource>? = null,
@@ -62,6 +63,8 @@ class SeriesTabViewModel(
             val sources = loadSources()
             mutableState.update { it.copy(sources = sources) }
             sources.firstOrNull()?.let { browse(it.key) }
+            // A search sent while the extensions were loading has waited for them.
+            searchText?.let(::search)
         }
     }
 

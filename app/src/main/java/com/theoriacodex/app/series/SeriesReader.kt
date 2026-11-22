@@ -27,10 +27,6 @@ import kotlinx.coroutines.flow.map
  * give resume, next chapter and modes. What the Viewer reports back goes to the series, never to History or a Codex.
  */
 internal class SeriesReader(private val series: SeriesDependencies) {
-    /** The entry on screen whose page count is not known yet, and the page it is on; recorded once its pages arrive. */
-    @Volatile
-    private var awaitingPages: Pair<PostId, Int>? = null
-
     /**
      * A session over [id]'s stored entries opening at [entryAddress], on [pageIndex] or, without one, where the user
      * left it. Null when the series or that entry is not stored.
@@ -56,10 +52,6 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         }
         val pages = source(id.source).pages(entry.entry)
         if (pages.isEmpty()) return null
-        awaitingPages?.takeIf { it.first == postId }?.let { (_, page) ->
-            awaitingPages = null
-            series.repository.recordProgress(id, entry.entry.address, page, pages.size)
-        }
         return chapterPost(stored.series, entry.entry).copy(
             full = pages.first(),
             media = pages,
@@ -68,12 +60,14 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         )
     }
 
-    /** The user is on page [mediaNumber] (from 1) of the chapter [post]. */
+    /**
+     * The user is on page [mediaNumber] (from 1) of the chapter [post]. A chapter whose pages have not arrived shows
+     * only its cover, which is not a page read; the Viewer reports the chapter again once they have.
+     */
     suspend fun recordProgress(session: ViewerSession, post: Post, mediaNumber: Int) {
         val id = seriesIdOf(session.context.queryHash) ?: return
-        val pageCount = post.media.size.takeIf { it > 0 }
-        awaitingPages = if (pageCount == null) post.id to mediaNumber else null
-        series.repository.recordProgress(id, post.id.sourcePostId, mediaNumber, pageCount)
+        if (post.media.isEmpty()) return
+        series.repository.recordProgress(id, post.id.sourcePostId, mediaNumber, post.media.size)
     }
 
     /** A mode chosen in any chapter is the series' mode. */

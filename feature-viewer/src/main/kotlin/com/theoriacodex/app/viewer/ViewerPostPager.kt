@@ -289,7 +289,8 @@ private fun ViewerPostPageEffects(
             screen.pendingMediaJumpByPost.remove(post.id)
         }
     }
-    LaunchedEffect(mediaPagerState.settledPage, currentPostIndex, pageState.pendingMediaIndex, swipe.dragging, swipe.settling) {
+    // [mediaCount] is a key so a post whose pages arrive while it shows is reported again, now with its pages.
+    LaunchedEffect(mediaPagerState.settledPage, currentPostIndex, pageState.pendingMediaIndex, swipe.dragging, swipe.settling, mediaCount) {
         if (swipeActive || pageState.pendingMediaIndex != null) return@LaunchedEffect
         reportSettledMedia(isCurrentPost, mediaPagerState.settledPage, selectedMediaIndex, post, onAction, onVisibleMediaChanged)
         if (postPage == postPagerState.currentPage) controls.markPassiveInteraction()

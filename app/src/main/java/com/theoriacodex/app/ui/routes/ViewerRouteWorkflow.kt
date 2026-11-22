@@ -92,15 +92,21 @@ internal class ViewerRouteWorkflow(
         return resolved
     }
 
-    /** Recovers working media for [post]; a result that no longer [stillApplies] is dropped before anything records it. */
+    /**
+     * Recovers working media for [post]; a result that no longer [stillApplies] is dropped before anything records it.
+     * A series chapter's page addresses expire within minutes, so its pages are asked for again from the series
+     * [queryHash] names.
+     */
     suspend fun recoverMedia(
         post: Post,
         failedMedia: ImageRef,
         streamSource: ViewerStreamSource,
+        queryHash: String? = null,
         stillApplies: () -> Boolean = { true },
     ): Post? {
-        // A chapter's pages come only from its extension, which has no second address to offer.
-        if (streamSource == ViewerStreamSource.SERIES) return null
+        if (streamSource == ViewerStreamSource.SERIES) {
+            return runCatchingPreservingCancellation { series?.resolve(queryHash, post.id) }.getOrNull()?.takeIf { stillApplies() }
+        }
         val recovered = try {
             withContext(providerDispatcher) { recoverRemoteMedia(sources.registry, post, failedMedia) }
         } catch (error: CancellationException) {

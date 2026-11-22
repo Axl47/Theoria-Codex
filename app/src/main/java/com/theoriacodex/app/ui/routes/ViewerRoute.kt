@@ -147,7 +147,8 @@ internal data class ViewerRouteEffectCallbacks(
     val onOpenCreatorProfile: suspend (CreatorProfile) -> Unit,
     val onApplyTag: (Post, PostTaxonomyTerm, Boolean) -> Unit,
     /** Recovers media for a post; the last argument says whether the result still applies before anything records it. */
-    val onRecoverMedia: suspend (Post, ImageRef, ViewerStreamSource, () -> Boolean) -> Post?,
+    /** Working media for a post whose media failed, asked for in the session's launch context; null when there is none. */
+    val onRecoverMedia: suspend (Post, ImageRef, ViewerLaunchContext, () -> Boolean) -> Post?,
     val onLoadMore: (ViewerStreamSource) -> Unit,
     val onDismiss: suspend () -> Unit,
     val onRestorationUnavailable: suspend () -> Unit,
@@ -502,7 +503,10 @@ private suspend fun handleViewerEffect(
         is ViewerEffect.SavePost -> post(effect.postId)?.let { selected ->
             viewerOwner.session.value?.context?.let { context -> callbacks.onSavePost(selected, context) }
         }
-        is ViewerEffect.DownloadMedia -> callbacks.onDownloadMedia(viewerDownloadRequest(effect, currentState))
+        // A chapter's pages load only through its extension's client, which the device download does not use.
+        is ViewerEffect.DownloadMedia -> if (viewerOwner.session.value?.context?.streamSource != ViewerStreamSource.SERIES) {
+            callbacks.onDownloadMedia(viewerDownloadRequest(effect, currentState))
+        }
         is ViewerEffect.SetLiked -> post(effect.postId)?.let { selected ->
             val launchAction = viewerOwner.session.value?.onToggleLike
             if (launchAction != null) launchAction(selected) else callbacks.onToggleLike(selected)
@@ -646,7 +650,7 @@ private suspend fun recoverAndApplyMedia(
     fun stillApplies() = viewerOwner.session.value?.sessionId == session.sessionId &&
         viewerOwner.state.value.pages.any { page -> page.post == post }
     val recovered = try {
-        callbacks.onRecoverMedia(post, failedMedia, session.context.streamSource, ::stillApplies)
+        callbacks.onRecoverMedia(post, failedMedia, session.context, ::stillApplies)
     } catch (error: CancellationException) {
         throw error
     } catch (_: Exception) {

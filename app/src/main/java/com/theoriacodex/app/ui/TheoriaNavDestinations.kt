@@ -441,7 +441,9 @@ private fun viewerEffectCallbacks(shell: TheoriaShell, tagActions: PostTagSearch
     onApplyTag = { post, term, excluded ->
         if (excluded) tagActions.addExclude(post, term.toSearchTerm()) else tagActions.addInclude(post, term.toSearchTerm())
     },
-    onRecoverMedia = shell.viewerRouteWorkflow::recoverMedia,
+    onRecoverMedia = { post, failedMedia, context, stillApplies ->
+        shell.viewerRouteWorkflow.recoverMedia(post, failedMedia, context.streamSource, context.queryHash, stillApplies)
+    },
     onLoadMore = shell.viewerRouteWorkflow::loadMore,
     onDismiss = {
         shell.features.search.setViewerLaunchContext(null)
