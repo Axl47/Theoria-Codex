@@ -56,6 +56,7 @@ class ViewerLevelGesturesTest {
     private var dismissDrags = 0
     private var infoSwipes = 0
     private var scrubStarts = 0
+    private var scrubEnds = 0
     private val holdScrub = ViewerHoldScrub()
 
     @Before fun setup() {
@@ -178,6 +179,7 @@ class ViewerLevelGesturesTest {
         }
         compose.runOnIdle {
             assertEquals(1, scrubStarts)
+            assertEquals(1, scrubEnds)
             assertTrue((holdScrub.phase as ViewerHoldScrubPhase.Ended).released)
             assertEquals(emptyList<ViewerHorizontalSwipeDirection>(), navigations)
         }
@@ -295,6 +297,7 @@ class ViewerLevelGesturesTest {
                         override fun onGestureEnd() = Unit
                         override fun onLevelLimit() = Unit
                         override fun onScrubStart() { scrubStarts++ }
+                        override fun onScrubEnd() { scrubEnds++ }
                     },
                 )) {
                     CompositionLocalProvider(LocalViewerHoldScrub provides holdScrub) {

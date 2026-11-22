@@ -127,7 +127,8 @@ private fun viewerGestureHandler(
         if (dismissDrag.active && !screen.pendingDismiss) scope.launch { dismissDrag.recoil() }
     }
     override fun onLevelLimit() = haptics.performHapticFeedback(TheoriaHaptics.Limit)
-    override fun onScrubStart() = controls.markInteraction()
+    override fun onScrubStart() = controls.beginScrub()
+    override fun onScrubEnd() = controls.endScrub()
 }
 
 /** A gallery read as one vertical strip; its end card opens the next post. */

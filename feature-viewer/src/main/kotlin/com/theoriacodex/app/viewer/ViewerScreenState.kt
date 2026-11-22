@@ -35,6 +35,8 @@ internal class ViewerScreenState {
     val pendingMediaJumpByPost = mutableStateMapOf<PostId, Int>()
     var interactionSerial by mutableIntStateOf(0)
     var timelineInteractionActive by mutableStateOf(false)
+    /** Set while a hold-scrub has shown chrome that was hidden, so the scrub's end can hide it again. */
+    var chromeShownForScrub = false
     var relatedStripExpanded by mutableStateOf(false)
     var pendingDismiss by mutableStateOf(false)
 
@@ -108,6 +110,17 @@ internal class ViewerControls(
     /** For seeking, zooming, and navigation: keeps open controls alive but never opens them; only a tap does. */
     fun markPassiveInteraction() {
         screen.interactionSerial += 1
+    }
+
+    /** A hold-scrub needs the timeline on screen; chrome it had to show is hidden again by [endScrub]. */
+    fun beginScrub() {
+        screen.chromeShownForScrub = !chromeVisible && !opening && !returning
+        markInteraction()
+    }
+
+    fun endScrub() {
+        if (screen.chromeShownForScrub && chromeVisible) onAction(ViewerAction.ToggleChrome)
+        screen.chromeShownForScrub = false
     }
 
     fun toggleChrome() {

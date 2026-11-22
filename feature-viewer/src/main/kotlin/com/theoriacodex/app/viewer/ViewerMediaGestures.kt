@@ -148,6 +148,8 @@ internal interface ViewerGestureHandler {
     fun onLevelLimit()
     /** A held press became a timeline scrub; the timeline has to be on screen to follow it. */
     fun onScrubStart()
+    /** The scrub ended, by a lift or a cancelled gesture. */
+    fun onScrubEnd()
 }
 
 /**
@@ -241,6 +243,7 @@ private suspend fun AwaitPointerEventScope.readViewerGesture(
     } finally {
         config.levels?.end()
         config.holdScrub?.end(released = false)
+        if (gesture.scrubbing) handler().onScrubEnd()
     }
 }
 
@@ -261,6 +264,7 @@ private class ViewerGestureTracker(
     private var x = 0f
     private var y = 0f
     private var atLimit = false
+    val scrubbing: Boolean get() = mode == ViewerGestureMode.Scrub
     /** How far the finger has moved since it landed. */
     val travel: Offset get() = Offset(x, y)
 

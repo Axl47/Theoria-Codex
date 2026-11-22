@@ -55,6 +55,22 @@ class ViewerControlsTest {
         assertEquals(5, screen.interactionSerial)
     }
 
+    @Test fun `a scrub hides again only the chrome it had to show`() {
+        val actions = mutableListOf<ViewerAction>()
+        val screen = ViewerScreenState()
+        fun controls(chromeVisible: Boolean) =
+            ViewerControls({ actions += it }, screen, overviewVisible = false, chromeVisible = chromeVisible, opening = false, returning = false)
+
+        controls(chromeVisible = false).beginScrub()
+        controls(chromeVisible = true).endScrub()
+        assertEquals(listOf<ViewerAction>(ViewerAction.ToggleChrome, ViewerAction.ToggleChrome), actions)
+
+        actions.clear()
+        controls(chromeVisible = true).beginScrub()
+        controls(chromeVisible = true).endScrub()
+        assertEquals(emptyList<ViewerAction>(), actions)
+    }
+
     @Test fun `dismissal closes every surface once`() {
         val actions = mutableListOf<ViewerAction>()
         val screen = ViewerScreenState()
