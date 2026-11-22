@@ -85,6 +85,12 @@ import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.android.room.RoomCodexLikesRepository
+import com.theoriacodex.data.android.room.RoomForYouVerdictRepository
+import com.theoriacodex.data.android.room.RoomVisualSignatureRepository
+import com.theoriacodex.data.repository.ForYouVerdictRepository
+import com.theoriacodex.data.repository.VisualSignatureRepository
+import com.theoriacodex.app.media.LibraryPictureBackfill
+import com.theoriacodex.app.media.chargingState
 import com.theoriacodex.data.android.room.RoomMediaDurationRepository
 import com.theoriacodex.data.android.room.RoomRecentsRepository
 import com.theoriacodex.data.android.room.RoomProfileBackupStore
@@ -93,6 +99,7 @@ import com.theoriacodex.data.android.room.TheoriaRoomDatabase
 import com.theoriacodex.app.post.FileMirrorIndex
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.PostId
@@ -147,6 +154,10 @@ data class DataDependencies(
     /** This session's copies of one file across sites; feeds teach it what they list. */
     val fileMirrors: FileMirrorIndex = FileMirrorIndex(),
     val librarySections: LibrarySectionStore = LibrarySectionStore(uiRestoreRepository),
+    /** Every For You swipe, kept for a later taste model; nothing reads it yet. */
+    val forYouVerdicts: ForYouVerdictRepository,
+    /** The Library's picture hashes, so a repost of a liked or saved post elsewhere counts as one. */
+    val visualSignatures: VisualSignatureRepository,
 )
 
 data class SourceDependencies(
@@ -306,10 +317,13 @@ internal class DefaultTheoriaAppContainer(
     )
     /** Opened at the end of [awaitDurableStores]: restored downloads and offline jobs wait on it. */
     private val sourceReadiness = SourceReadiness(accountStore::refreshAvailability) { customSourceRuntime.awaitFirstBuild() }
+    private val fileMirrors = FileMirrorIndex()
+    private val listingPictures = ListingPictures(appContext, durableStoreScope, fileMirrors)
     private val sourceRegistry = CompositeSourceAdapterRegistry(
         potentialBuiltIns = allPotentialSourceRegistry,
         availableBuiltIns = accountStore.availableSources,
         custom = customSourceRuntime.snapshot,
+        annotateListing = listingPictures::annotate,
     )
     /** Built-ins the account store allows plus usable custom sites; Settings intersects saves with it. */
     private val availableSources: StateFlow<Set<SourceKey>> =
@@ -330,6 +344,7 @@ internal class DefaultTheoriaAppContainer(
 
     private val profileWriteGuard = ProfileLibraryWriteGuard()
     private val contentRepository = RoomCodexLikesRepository(contentDatabase, writeGuard = profileWriteGuard)
+    private val visualSignatures = RoomVisualSignatureRepository(contentDatabase)
     private val codexRepository: CodexRepository = contentRepository
     private val likesRepository: LikesRepository = contentRepository
     private val codexLikesTransactions: CodexLikesTransactions = contentRepository
@@ -440,6 +455,9 @@ internal class DefaultTheoriaAppContainer(
         readingPositions = readingPositions,
         galleryReadingModes = FileBackedGalleryReadingModeRepository(storageDirectory),
         savedSearches = savedSearches,
+        fileMirrors = fileMirrors,
+        forYouVerdicts = RoomForYouVerdictRepository(contentDatabase, profileWriteGuard),
+        visualSignatures = visualSignatures,
     )
 
     private val postResolutions = PostResolutionFlights()
@@ -584,6 +602,12 @@ internal class DefaultTheoriaAppContainer(
         // Search restores its last source as soon as the app is ready, so extension sources must be registered by then.
         if (extensionHost != null) customSourceRuntime.awaitFirstBuild()
         sourceReadiness.open()
+        // Optional upkeep: if it fails (say the battery broadcast cannot be read), saves still store their hashes.
+        durableStoreScope.launch {
+            runCatchingPreservingCancellation {
+                LibraryPictureBackfill(visualSignatures, listingPictures.hasher::hash, appContext.chargingState()).run()
+            }.onFailure { Diagnostics.report("similarity", "The Library's pictures could not be hashed", it) }
+        }
         // Off the startup path: searched-tag suggestions start from what Recents remembers.
         durableStoreScope.launch {
             runCatchingPreservingCancellation {

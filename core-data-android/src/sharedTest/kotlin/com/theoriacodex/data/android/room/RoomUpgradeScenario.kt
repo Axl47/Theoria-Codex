@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.testing.MigrationTestHelper
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.theoriacodex.data.repository.CodexSortMode
+import com.theoriacodex.data.repository.ForYouVerdict
+import com.theoriacodex.data.repository.ForYouVerdictKind
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.StoredMediaDurationKey
@@ -29,6 +31,7 @@ import org.junit.Assert.assertTrue
 
 /** Same persisted upgrade journey runs on Robolectric and Android SQLite through the production factory. */
 object RoomUpgradeScenario {
+    private const val PICTURE_HASH = 0x5E5E_0000_FFFFL
     suspend fun verify(context: Context, helper: MigrationTestHelper, startingVersion: Int) = withContext<Unit>(Dispatchers.IO) {
         val name = "upgrade-journey-v$startingVersion.db"
         context.deleteDatabase(name)
@@ -66,7 +69,9 @@ object RoomUpgradeScenario {
                 recents.recordSearch(query(), "new-search", RecentSearchKind.SOURCE, listOf(SourceKey.PIXIV))
                 RoomMediaDurationRepository(database).put(durationKey, duration)
                 RoomViewerTranslationCacheRepository(database, clock = { 100L }).putAll(mapOf(translationKey to "Blue sky"))
-                assertEquals(12, database.openHelper.readableDatabase.version)
+                RoomForYouVerdictRepository(database).record(ForYouVerdict("a", shared.id, ForYouVerdictKind.SKIPPED, 100L, null))
+                RoomVisualSignatureRepository(database).put(shared.id, PICTURE_HASH)
+                assertEquals(13, database.openHelper.readableDatabase.version)
                 database.openHelper.readableDatabase.query(
                     "SELECT name FROM sqlite_master WHERE name IN ('migration_metadata','recents_migration_metadata')",
                 ).use { assertFalse(it.moveToFirst()) }
@@ -96,6 +101,8 @@ object RoomUpgradeScenario {
                 val translations = RoomViewerTranslationCacheRepository(database, clock = { 101L })
                 assertEquals(mapOf(translationKey to "Blue sky"), translations.getAll(setOf(translationKey)))
                 assertTrue(translations.getAll(setOf(translationKey.copy(backendVersion = "google-nmt-v2"))).isEmpty())
+                assertEquals(listOf(ForYouVerdictKind.SKIPPED), RoomForYouVerdictRepository(database).verdicts("a").map { it.kind })
+                assertEquals(mapOf(shared.id to PICTURE_HASH), RoomVisualSignatureRepository(database).observePictureHashes().first())
 
                 // Subsequent writes still honor membership isolation and actual foreign-key cascades.
                 assertFalse(collections.toggleLikeAndSyncSystemCodex("a", "likes-a", "Likes A", shared, emptyList()).nowLiked)

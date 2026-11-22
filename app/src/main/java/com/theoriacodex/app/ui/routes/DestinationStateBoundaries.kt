@@ -199,7 +199,7 @@ internal fun browsingMetadataOwner(data: DataDependencies): BrowsingMetadataView
     key = "browsing-metadata",
 ) {
     BrowsingMetadataViewModel(data.settingsRepository, data.likesRepository, data.codexRepository, data.recentsRepository, mirrors = data.fileMirrors,
-        galleryReadingModes = data.galleryReadingModes)
+        galleryReadingModes = data.galleryReadingModes, pictureHashes = data.visualSignatures.observePictureHashes())
 }
 
 /** The activity's store, for read models every destination shares; the nearest store outside an activity. */

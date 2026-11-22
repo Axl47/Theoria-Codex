@@ -55,13 +55,15 @@ class SearchFirstPageStoreTest {
     }
 
     @Test
-    fun `file hashes survive a restore`() = runTest {
+    fun `file and picture hashes survive a restore`() = runTest {
         val store = SearchFirstPageStore(file(), StandardTestDispatcher(testScheduler))
         val hashes = listOf("0123456789abcdef0123456789abcdef", null)
+        val pictures = listOf(null, -0x7FF0_0000_0000_0001L)
 
-        store.save("key", hashes.mapIndexed { index, hash -> post("$index").copy(contentHash = hash) })
+        store.save("key", hashes.indices.map { index -> post("$index").copy(contentHash = hashes[index], pictureHash = pictures[index]) })
 
         assertEquals(hashes, store.load("key").map { it.contentHash })
+        assertEquals(pictures, store.load("key").map { it.pictureHash })
     }
 
     @Test

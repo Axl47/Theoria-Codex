@@ -95,6 +95,7 @@ class RoomCodexLikesRepository(
             val affected = codices.flatMap { dao.itemsForCodex(it.codexId) }
                 .map { it.source to it.sourcePostId } + dao.likesForProfile(profileId).map { it.source to it.sourcePostId }
             dao.deleteLikes(profileId)
+            database.forYouVerdictDao().deleteProfile(profileId)
             codices.forEach { dao.deleteCodex(it.codexId) }
             normalizeCodexOrderInside()
             sharedPosts.releaseIfOrphaned(affected)
@@ -281,6 +282,7 @@ class RoomCodexLikesRepository(
         database.withTransaction {
             if (dao.post(post.id.source.id, post.id.sourcePostId) != null) {
                 sharedPosts.upsert(post)
+                rememberPicture(post)
             }
         }
     }
@@ -505,7 +507,14 @@ class RoomCodexLikesRepository(
     /** Stores [post]'s snapshot, then its membership in [codexId]; true when the membership is new. */
     private fun saveItem(codexId: String, post: Post, savedAtEpochMs: Long): Boolean {
         sharedPosts.upsert(post)
+        rememberPicture(post)
         return insertItem(codexId, post.id, savedAtEpochMs)
+    }
+
+    /** Keeps the picture hash a listed post arrived with, which the post's own payload does not store. */
+    private fun rememberPicture(post: Post) {
+        val hash = post.pictureHash ?: return
+        database.visualSignatureDao().put(post.id.source.id, post.id.sourcePostId, hash, clock())
     }
 
     private fun insertItem(codexId: String, postId: PostId, savedAtEpochMs: Long): Boolean =

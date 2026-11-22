@@ -28,6 +28,8 @@ import com.theoriacodex.app.recommend.FOR_YOU_ORIGIN_TAG
 import com.theoriacodex.app.recommend.FOR_YOU_SAVE_SEARCH_TAG
 import com.theoriacodex.app.recommend.FOR_YOU_UNDO_TAG
 import com.theoriacodex.app.recommend.FOR_YOU_VIEW_TOGGLE_TAG
+import com.theoriacodex.app.search.searchCardTestTag
+import com.theoriacodex.data.repository.ForYouVerdictKind
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
@@ -136,6 +138,26 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
     }
 
     @Test
+    fun everySwipeIsKeptAcrossARestartAndUndoForgetsIt() {
+        openDeck()
+        val liked = currentCard()
+        decide("Like")
+        val skipped = currentCard()
+        decide("Skip")
+        val undone = currentCard()
+        decide("Skip")
+        activate(compose.onNodeWithTag(FOR_YOU_UNDO_TAG))
+        compose.waitUntil(10_000) { currentCardOrNull() == undone }
+        compose.waitUntil(10_000) { verdicts().size == 2 }
+
+        coldGraphRelaunch()
+        assertEquals(
+            listOf(skipped to ForYouVerdictKind.SKIPPED, liked to ForYouVerdictKind.LIKED),
+            verdicts().map { searchCardTestTag(it.postId) to it.kind },
+        )
+    }
+
+    @Test
     fun aCardDragNeverChangesTab() {
         openDeck()
         val deck = compose.onNodeWithTag("triage-deck")
@@ -208,6 +230,8 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
         return compose.onAllNodes(card and hasAnyAncestor(hasTestTag("triage-deck"))).fetchSemanticsNodes()
             .singleOrNull()?.config?.get(SemanticsProperties.TestTag)
     }
+
+    private fun verdicts() = io { container.data.forYouVerdicts.verdicts("profile-main") }
 
     private fun savedSearches() = io { container.data.savedSearches.observeSavedSearches().first() }
 

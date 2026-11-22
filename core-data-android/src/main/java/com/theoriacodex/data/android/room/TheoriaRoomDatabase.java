@@ -18,9 +18,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
                 RecentWatchedEntity.class,
                 RecentSearchEntity.class,
                 MediaDurationEntity.class,
-                ViewerTranslationCacheEntity.class
+                ViewerTranslationCacheEntity.class,
+                ForYouVerdictEntity.class,
+                VisualSignatureEntity.class
         },
-        version = 12,
+        version = 13,
         exportSchema = true
 )
 public abstract class TheoriaRoomDatabase extends RoomDatabase {
@@ -102,6 +104,14 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             database.execSQL("DELETE FROM `recent_watched` WHERE `section` = 'FYP'");
         }
     };
+    // Logs For You swipes per profile and keeps each stored post's perceptual hash.
+    public static final Migration MIGRATION_12_13 = new Migration(12, 13) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("CREATE TABLE IF NOT EXISTS `for_you_verdicts` (`profile_id` TEXT NOT NULL, `source` TEXT NOT NULL, `source_post_id` TEXT NOT NULL, `decision` TEXT NOT NULL, `decided_at_epoch_ms` INTEGER NOT NULL, `preview_url` TEXT, PRIMARY KEY(`profile_id`, `source`, `source_post_id`))");
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_for_you_verdicts_profile_id_decided_at_epoch_ms` ON `for_you_verdicts` (`profile_id`, `decided_at_epoch_ms`)");
+            database.execSQL("CREATE TABLE IF NOT EXISTS `post_visual_signatures` (`source` TEXT NOT NULL, `source_post_id` TEXT NOT NULL, `phash` INTEGER, `indexed_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`source`, `source_post_id`), FOREIGN KEY(`source`, `source_post_id`) REFERENCES `posts`(`source`, `source_post_id`) ON UPDATE NO ACTION ON DELETE CASCADE )");
+        }
+    };
     public static final Migration[] MIGRATIONS = new Migration[] {
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -113,13 +123,16 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             MIGRATION_8_9,
             MIGRATION_9_10,
             MIGRATION_10_11,
-            MIGRATION_11_12
+            MIGRATION_11_12,
+            MIGRATION_12_13
     };
 
     public abstract CodexLikesDao codexLikesDao();
     public abstract RecentsDao recentsDao();
     public abstract MediaDurationDao mediaDurationDao();
     public abstract ViewerTranslationCacheDao viewerTranslationCacheDao();
+    public abstract ForYouVerdictDao forYouVerdictDao();
+    public abstract VisualSignatureDao visualSignatureDao();
 
     @NonNull
     public static TheoriaRoomDatabase create(@NonNull Context context) {

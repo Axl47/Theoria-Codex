@@ -224,19 +224,28 @@ class SearchRequestReducerTest {
     fun `a scrolled cached page keeps its posts in place when the fresh ones arrive`() {
         val request = root(8L, query("resumed"), SearchRequestKind.RETRY)
         val first = post("first")
-        val second = post("second")
+        val second = post("second").copy(pictureHash = PICTURE)
         val painted = SearchUiState().reduce(SearchStateChange.BeginRequest(request))
             .reduce(SearchStateChange.ShowCachedFirstPage(8L, listOf(first, second)))
         val newest = post("newest")
-        val fresh = success(request, listOf(newest, first.copy(title = "Updated")))
+        // The refresh finds the first post is a copy of the second, and brings another copy of it; the second's own hash
+        // came too late this time.
+        val updated = first.copy(title = "Updated", pictureHash = PICTURE xor 0b111)
+        val repost = post("repost").copy(pictureHash = PICTURE xor 0b1100_0000)
+        val fresh = success(request, listOf(newest, updated, second.copy(pictureHash = null), repost))
 
         val atTop = painted.reduce(SearchStateChange.RootResult(8L, fresh))
         val scrolled = painted.reduce(SearchStateChange.CachedFirstPageScrolled)
             .reduce(SearchStateChange.RootResult(8L, fresh))
 
         assertEquals(fresh.posts, atTop.content.results)
-        assertEquals(listOf(first.copy(title = "Updated"), second, newest), scrolled.content.results)
+        assertEquals(listOf(updated, second, newest), scrolled.content.results)
         assertSame(atTop, atTop.reduce(SearchStateChange.CachedFirstPageScrolled))
+        // The next page keeps them too.
+        val more = page(81L, scrolled)
+        val paged = scrolled.reduce(SearchStateChange.BeginRequest(more))
+            .reduce(SearchStateChange.PageResult(81L, nextPage(more, emptyList())))
+        assertEquals(listOf(updated, second, newest), paged.content.results)
     }
 
     @Test
@@ -278,6 +287,22 @@ class SearchRequestReducerTest {
         assertEquals("offline", failed.content.error?.message)
         assertFalse(failed.content.canLoadMore)
         assertNull(failed.execution.activeRequestId)
+    }
+
+    @Test
+    fun `a page's copy of a shown card is dropped even when that card copies another shown one`() {
+        // Within 4 bits of its neighbour each, but 5 bits apart end to end.
+        val first = post("first").copy(pictureHash = PICTURE)
+        val second = post("second").copy(pictureHash = PICTURE xor 0b111)
+        val repost = post("repost").copy(pictureHash = PICTURE xor 0b11_0111)
+        val next = post("next")
+        val initial = showing(query("paged"), listOf(first, second))
+        val request = page(16L, initial)
+
+        val completed = initial.reduce(SearchStateChange.BeginRequest(request))
+            .reduce(SearchStateChange.PageResult(16L, nextPage(request, listOf(repost, next))))
+
+        assertEquals(listOf(first, second, next), completed.content.results)
     }
 
     @Test
@@ -458,3 +483,5 @@ class SearchRequestReducerTest {
         createdAtEpochMs = null,
     )
 }
+
+private const val PICTURE = 0x0F0F_3C3C_5A5A_9669L

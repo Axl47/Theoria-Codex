@@ -11,6 +11,7 @@ import com.theoriacodex.app.triage.TriageFeed
 import com.theoriacodex.app.triage.TriageFeedSnapshot
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.data.repository.ForYouVerdictRepository
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -41,6 +42,11 @@ class ForYouDeckWiring(
     val reconnections: Flow<Unit> = emptyFlow(),
     /** Where the posts a like or save asks for are fetched, off the main thread. */
     val fetchContext: CoroutineContext = Dispatchers.Default,
+    /** The log every level's swipes are recorded in, per profile. */
+    val verdicts: ForYouVerdictRepository,
+    /** The posts known to hold the same file or picture as a post, itself included ([com.theoriacodex.app.post.FileMirrorIndex.copiesOf]). */
+    val copiesOf: (Post) -> Set<PostId> = { setOf(it.id) },
+    val clock: () -> Long = System::currentTimeMillis,
 )
 
 /** What the For You route knows that its deck is built from. The route calls the owner again whenever it changes. */
