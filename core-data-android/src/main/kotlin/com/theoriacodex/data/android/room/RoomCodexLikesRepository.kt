@@ -255,7 +255,7 @@ class RoomCodexLikesRepository(
         if (codexIds.isEmpty()) return flowOf(emptyList())
         val ids = codexIds.sorted()
         // Every viewed post writes `posts`, which would rerun this whole-library read, so only membership writes trigger
-        // it. Each one does, even one that ends where it began (a removal and its Undo), since the read can fall between.
+        // it: even ones that leave the same IDs (a removal and its Undo), since the read can fall between them.
         return dao.observeSavedPostIds(ids).flatMapLatest { dao.observeLibraryPosts(ids).take(1) }
             .decodePostSnapshots(retainedPayloads, "library:${ids.joinToString("\u0000")}")
     }
