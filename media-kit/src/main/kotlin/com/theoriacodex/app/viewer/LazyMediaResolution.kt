@@ -24,7 +24,7 @@ private val REFRESHABLE_REMOTE_MEDIA_SOURCES = setOf(
     SourceKey.RULE34GEN,
 )
 
-/** Custom sources are booru families (and, in debug builds, extension sources); their media links are refreshed like the built-in boorus'. */
+/** Custom sources are booru families (and extension sources); their media links are refreshed like the built-in boorus'. */
 fun SourceKey.hasRefreshableRemoteMedia(): Boolean = this in REFRESHABLE_REMOTE_MEDIA_SOURCES || isCustom
 
 fun requiresLazyMediaResolution(post: Post): Boolean {

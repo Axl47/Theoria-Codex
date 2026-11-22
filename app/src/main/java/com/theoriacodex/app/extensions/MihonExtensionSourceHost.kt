@@ -7,7 +7,6 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.util.Log
 import com.theoriacodex.app.BuildConfig
-import com.theoriacodex.app.di.ExtensionSourceHost
 import com.theoriacodex.domain.series.ExtensionChoiceStore
 import com.theoriacodex.domain.series.ExtensionChoices
 import com.theoriacodex.domain.series.SeriesExtensions
@@ -28,27 +27,37 @@ import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 
 /**
- * Debug builds only: turns Mihon extensions into series sources. It finds the extensions Mihon installed as packages,
- * and APK files pushed for tests with
+ * Turns Mihon extensions into series sources: third-party code, loaded into the app. It finds the extensions Mihon
+ * installed as packages and, in debug builds only, APK files pushed for tests with
  * `adb push <apk> /sdcard/Android/data/com.theoriacodex.debug/files/mihon-extensions/`.
- * None of them runs until the user turns it on in the Extensions page; [ExtensionRegistry] holds that rule.
+ *
+ * Nothing loads at startup, and nothing ever loads but the extensions the user turned on in the Extensions page;
+ * [ExtensionRegistry] holds that rule. Those load once, the first time [sources] is called or [mediaInterceptor] is
+ * asked for an image only an extension can fetch.
  */
-internal class MihonExtensionSourceHost : ExtensionSourceHost {
+internal class MihonExtensionSourceHost {
+    private lateinit var packages: ExtensionPackages
     private lateinit var registry: ExtensionRegistry
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var watching: Lazy<Unit>
 
-    /** The settings store, which opens after the HTTP clients that already hold [mediaInterceptor]. */
+    /** The user's choices, which open with the app's data, after the HTTP clients that already hold [mediaInterceptor]. */
     private val choices = CompletableDeferred<ExtensionChoiceStore>()
 
-    // Runs on an HTTP client's thread before each extension image: loads the extensions the first time, then only checks the stamp.
-    private val images = ExtensionImages { runBlocking { registry.sources() } }
+    // Its refresh runs on an HTTP client's thread before each extension image: loads the extensions the first time, then only checks the stamp.
+    private lateinit var images: ExtensionImages
 
-    override val mediaInterceptor: Interceptor get() = images
-    override val extensions: SeriesExtensions get() = registry.also { watching.value }
+    /** Goes on the app's media clients: answers requests only an extension can fetch and passes the rest on. */
+    val mediaInterceptor: Interceptor get() = images
 
-    override fun attach(application: Application) {
-        val packages = ExtensionPackages(application) { application.getExternalFilesDir(DIRECTORY) }
+    /** The extensions on the device and the user's choices about them, for the Extensions page. */
+    val extensions: SeriesExtensions get() = registry.also { watching.value }
+
+    /** Names the application extensions load into. Called once, before anything else; loads nothing. */
+    fun attach(application: Application) {
+        // Release builds run installed packages only; the folder is how tests hand a debug build an APK.
+        images = ExtensionImages(lazy { MihonHost.imageKey(application) }) { runBlocking { registry.sources() } }
+        packages = ExtensionPackages(application) { if (BuildConfig.DEBUG) application.getExternalFilesDir(DIRECTORY) else null }
         val loader = ExtensionLoader(application, packages)
         // What extensions ask their host for is set up when the first one loads, not at startup.
         val hostInstalled = lazy { MihonHost.install(application, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE) }
@@ -92,14 +101,22 @@ internal class MihonExtensionSourceHost : ExtensionSourceHost {
         application.registerReceiver(receiver, changed, Context.RECEIVER_NOT_EXPORTED)
     }
 
-    override fun bind(choices: ExtensionChoiceStore) {
+    /** Says where the user's choices are kept. Called once, when the app's data opens; everything else waits for it. */
+    fun bind(choices: ExtensionChoiceStore) {
         this.choices.complete(choices)
     }
 
-    override suspend fun sources(): List<SeriesSource> {
+    /**
+     * The sources of the extensions and languages that are on. The first call loads them, which can take seconds;
+     * later calls answer at once. Never throws: an extension that fails to load is left out.
+     */
+    suspend fun sources(): List<SeriesSource> {
         watching.value
         return registry.sources()
     }
+
+    /** Whether any extension is on the device, on or off. Asks the package manager; runs no extension code. */
+    fun anyOnDevice(): Boolean = packages.any()
 
     private companion object {
         const val TAG = "MihonHost"

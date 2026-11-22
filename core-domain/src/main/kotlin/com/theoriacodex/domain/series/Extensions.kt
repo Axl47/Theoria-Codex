@@ -2,7 +2,7 @@ package com.theoriacodex.domain.series
 
 import kotlinx.coroutines.flow.StateFlow
 
-/** What the user decided about extensions; kept in the app's settings store. */
+/** What the user decided about extensions on this device; kept where Android neither backs it up nor transfers it. */
 data class ExtensionChoices(
     /**
      * The extensions the user turned on: per extension (its package name, or for a file in the debug folder a name

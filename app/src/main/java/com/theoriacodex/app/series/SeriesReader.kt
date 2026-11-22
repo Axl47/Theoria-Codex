@@ -34,7 +34,8 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         val stored = series.repository.series(id) ?: return null
         val entries = series.repository.entries(id).inReadingOrder()
         val start = entries.indexOfFirst { it.entry.address == entryAddress }.takeIf { it >= 0 } ?: return null
-        val posts = entries.map { chapterPost(stored.series, it.entry) }
+        // No extension loads for a session, so the cover is the stored address until a chapter's pages are asked for.
+        val posts = entries.map { chapterPost(stored.series, it.entry, stored.series.coverUrl) }
         val context = ViewerLaunchContext(seriesQueryHash(id), start, ViewerStreamSource.SERIES, scrollOffsetHint = 0)
         val resume = entries.associate { PostId(id.source, it.entry.address) to it.resumePageIndex() } +
             listOfNotNull(pageIndex?.let { posts[start].id to it })
@@ -49,9 +50,10 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         val entry = checkNotNull(series.repository.entries(id).firstOrNull { it.entry.address == postId.sourcePostId }) {
             "The chapter is not stored"
         }
-        val pages = source(id.source).pages(entry.entry)
+        val source = source(id.source)
+        val pages = source.pages(entry.entry)
         if (pages.isEmpty()) return null
-        return chapterPost(stored.series, entry.entry).copy(
+        return chapterPost(stored.series, entry.entry, source.coverAddress(stored.series)).copy(
             full = pages.first(),
             media = pages,
             mediaCount = pages.size,
@@ -97,9 +99,9 @@ internal fun seriesIdOf(queryHash: String?): SeriesId? {
  * One chapter as the Viewer's post: its id is the chapter's address on the series' source, and it names no pages, so
  * the Viewer asks for them when it gets there. The title is what the Viewer's top bar shows.
  */
-internal fun chapterPost(series: Series, entry: SeriesEntry) = Post(
+internal fun chapterPost(series: Series, entry: SeriesEntry, cover: String?) = Post(
     id = PostId(series.id.source, entry.address),
-    preview = ImageRef(url = series.coverUrl, localPath = null, mime = null),
+    preview = ImageRef(url = cover, localPath = null, mime = null),
     full = null,
     pageUrl = null,
     width = null,

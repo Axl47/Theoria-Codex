@@ -37,6 +37,31 @@ public interface SeriesDao {
     @Query("SELECT * FROM series_entries WHERE source = :source AND series_address = :seriesAddress AND address = :address LIMIT 1")
     SeriesEntryEntity entry(String source, String seriesAddress, String address);
 
+    /** What a profile backup holds: the series the user follows, started reading, or chose a reading mode for. */
+    @Query("SELECT * FROM series WHERE followed = 1 OR reading_mode IS NOT NULL OR last_opened_entry IS NOT NULL "
+            + "ORDER BY source ASC, address ASC")
+    List<SeriesEntity> keptSeries();
+
+    /** Returns -1 when the series is already stored. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE) long insertSeries(SeriesEntity entity);
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE) void insertEntries(List<SeriesEntryEntity> entities);
+
+    /** A restore adds to a stored series without taking anything from it. */
+    @Query("UPDATE series SET followed = followed OR :followed, reading_mode = COALESCE(reading_mode, :readingMode), "
+            + "last_opened_entry = COALESCE(last_opened_entry, :lastOpenedEntry) WHERE source = :source AND address = :address")
+    void mergeRestoredSeries(String source, String address, boolean followed, String readingMode, String lastOpenedEntry);
+
+    /**
+     * A stored entry takes the further progress of the two: read on either side, and the later page together with the
+     * page count it was recorded against, so a page is never shown beyond its count.
+     */
+    @Query("UPDATE series_entries SET read = read OR :read, last_page = MAX(last_page, :lastPage), "
+            + "page_count = CASE WHEN :lastPage > last_page THEN COALESCE(:pageCount, page_count) "
+            + "ELSE COALESCE(page_count, :pageCount) END "
+            + "WHERE source = :source AND series_address = :seriesAddress AND address = :address")
+    void mergeRestoredEntry(String source, String seriesAddress, String address, boolean read, int lastPage, Integer pageCount);
+
     /** An update in place: replacing the row would cascade its entries away. */
     @Upsert void upsertSeries(SeriesEntity entity);
 

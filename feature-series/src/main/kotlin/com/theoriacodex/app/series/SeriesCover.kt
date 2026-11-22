@@ -14,6 +14,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,13 +27,21 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesSource
 
-/** A series' cover at book proportions; a plain tile while it loads or when the series has none. */
+/** The sources that are on, for the covers drawn below: each cover loads through its series' own source. */
+internal val LocalSeriesSources = staticCompositionLocalOf<List<SeriesSource>> { emptyList() }
+
+/**
+ * A series' cover at book proportions; a plain tile while it loads or when the series has none. A series whose source
+ * is not among [LocalSeriesSources] loads the stored address as it is.
+ */
 @Composable
 internal fun SeriesCover(series: Series, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val request = remember(context, series.id, series.coverUrl) {
-        series.coverUrl?.let { url ->
+    val source = LocalSeriesSources.current.firstOrNull { it.key == series.id.source }
+    val request = remember(context, series.id, series.coverUrl, source) {
+        (if (source != null) source.coverAddress(series) else series.coverUrl)?.let { url ->
             MediaRequestFactory.imageRequest(context, url, series.id.source, crossfade = true, targetWidthPx = COVER_WIDTH_PX)
         }
     }

@@ -46,7 +46,6 @@ class MihonSeriesSource(
 
     override suspend fun popular(page: Int): SeriesPage = calling { source.getPopularManga(page).listed() }
 
-
     override suspend fun search(text: String, page: Int): SeriesPage =
         calling { source.getSearchManga(page, text, source.getFilterList()).listed() }
 
@@ -78,6 +77,11 @@ class MihonSeriesSource(
             entry.uploadedAtEpochMs?.let { date_upload = it }
         }
         source.getPageList(chapter).mapNotNull { page -> pageImage(chapter, page) }
+    }
+
+    /** Covers stored by earlier builds carry a tag of their own, which is replaced. */
+    override fun coverAddress(series: Series): String? = series.coverUrl?.substringBefore(ExtensionImages.FRAGMENT)?.let { address ->
+        if (source is HttpSource) images.coverAddress(source, address) else address
     }
 
     private fun MangasPage.listed() = SeriesPage(
@@ -113,9 +117,7 @@ class MihonSeriesSource(
     private fun SManga.toSeries() = Series(
         id = SeriesId(key, url),
         title = title,
-        coverUrl = thumbnail_url?.takeIf(String::isNotBlank)?.let { address ->
-            if (source is HttpSource) images.coverAddress(source, address) else address
-        },
+        coverUrl = thumbnail_url?.takeIf(String::isNotBlank),
         author = author?.takeIf(String::isNotBlank),
         genres = genre.orEmpty().split(',').map(String::trim).filter(String::isNotEmpty),
         language = source.lang,

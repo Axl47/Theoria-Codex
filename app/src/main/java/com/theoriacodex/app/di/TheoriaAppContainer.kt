@@ -10,6 +10,7 @@ import com.theoriacodex.app.backup.SharedPreferencesAutoBackupStore
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
 import com.theoriacodex.app.customsites.CustomSitesController
+import com.theoriacodex.app.extensions.MihonExtensionSourceHost
 import com.theoriacodex.app.customsites.SharedPreferencesBuiltInAgentStore
 import com.theoriacodex.app.customsites.SiteCookieBridge
 import com.theoriacodex.app.media.BoundedMediaDurationProbe
@@ -220,7 +221,7 @@ interface TheoriaAppContainer {
     /** Settings → Sites: user-added booru sites. */
     val customSites: CustomSitesController
 
-    /** The Series area; null in a build with no extension host, which then shows no Series tab. */
+    /** The Series area; null in a container with no extension host, which then shows no Series tab. */
     val series: SeriesDependencies? get() = null
 
     /** Lives as long as the process: work that must finish after the screen or Activity that started it. */
@@ -241,7 +242,7 @@ internal class DefaultTheoriaAppContainer(
     context: Context,
     private val cookieBridge: SiteCookieBridge,
     private val httpClients: AppHttpClients,
-    private val extensionHost: ExtensionSourceHost? = null,
+    private val extensionHost: MihonExtensionSourceHost? = null,
 ) : TheoriaAppContainer {
     private val appContext = context.applicationContext
     private val storageDirectory = File(appContext.filesDir, "theoria_codex")
@@ -548,8 +549,13 @@ internal class DefaultTheoriaAppContainer(
     )
 
     override val series: SeriesDependencies? = extensionHost?.let { host ->
-        host.bind(SettingsExtensionChoices(settingsRepository))
-        SeriesDependencies(RoomSeriesRepository(contentDatabase), host::sources, host.extensions)
+        val choices = DeviceExtensionChoices.on(appContext)
+        host.bind(choices)
+        SeriesDependencies(
+            RoomSeriesRepository(contentDatabase), host::sources, host.extensions, host::anyOnDevice,
+            extensionSeen = choices.extensionSeen, rememberExtensionSeen = choices::rememberExtensionSeen,
+            reportFailure = { Diagnostics.report("extensions", "Could not look for extensions or remember the answer", it) },
+        )
     }
 
     /** Keeps the new-chapter check scheduled; started by [awaitDurableStores], once. */
@@ -610,6 +616,12 @@ internal class DefaultTheoriaAppContainer(
         // Registers the saved offline queue before any screen can add to it; its jobs wait on sourceReadiness.
         offlineMedia.recoverPendingJobs()
         sourceReadiness.open()
+        if (series != null) {
+            durableStoreScope.launch {
+                runCatchingPreservingCancellation { forgetLegacyExtensionData(appContext, settingsRepository) }
+                    .onFailure { Diagnostics.report("extensions", "Old extension data could not be removed", it) }
+            }
+        }
         // Only now: watching followed series opens Room, which must first get the chance to fail into the startup screen.
         if (seriesScheduling == null) {
             seriesScheduling = series?.let { series ->

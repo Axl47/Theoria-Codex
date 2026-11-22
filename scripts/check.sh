@@ -365,6 +365,23 @@ run_release() {
     echo 'Skipping benchmark builds: nothing they depend on changed since main.'
   fi
   phase 'Gradle: release builds' ./gradlew "${task_timings[@]}" "${tasks[@]}" --warning-mode=all --console=plain
+  phase 'Extension keep rules' extension_symbols_kept
+}
+
+# Extensions call the app's classes by name, which the shrinker cannot see. Every name a sample of them used
+# (mihon-host/extension-symbols.txt) must be one R8 reports it was told to keep. A list or report that is missing or
+# empty fails the check: neither can show that anything was kept.
+extension_symbols_kept() {
+  local symbols=mihon-host/extension-symbols.txt seeds=app/build/outputs/mapping/release/seeds.txt wanted missing status=0
+  [[ -s "$symbols" && -r "$symbols" ]] || { echo "$symbols is missing or empty." >&2; return 1; }
+  [[ -s "$seeds" && -r "$seeds" ]] || { echo "$seeds is missing or empty: the release build did not report what R8 kept." >&2; return 1; }
+  wanted="$(grep -v '^#' "$symbols")" || { echo "$symbols lists no symbols." >&2; return 1; }
+  # grep exits 1 when every symbol is in the report, and above 1 when it could not read it.
+  missing="$(grep -Fvxf "$seeds" <<<"$wanted")" || status=$?
+  ((status <= 1)) || { echo "Could not compare $symbols with $seeds." >&2; return 1; }
+  [[ -z "$missing" ]] && return
+  printf 'mihon-host/consumer-rules.pro no longer keeps what extensions call:\n%s\n' "$missing" >&2
+  return 1
 }
 
 # Reference images are inputs Gradle does not track, so the comparison always reruns.

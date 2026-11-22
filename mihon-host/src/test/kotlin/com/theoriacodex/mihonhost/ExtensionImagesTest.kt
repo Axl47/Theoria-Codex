@@ -1,6 +1,8 @@
 package com.theoriacodex.mihonhost
 
+import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
+import com.theoriacodex.domain.series.SeriesId
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.online.HttpSource
@@ -11,17 +13,20 @@ import kotlinx.coroutines.test.runTest
 import okhttp3.Request
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ExtensionImagesTest {
-    private val images = ExtensionImages()
+    // One install's key, as the host keeps it across restarts.
+    private val key = lazyOf(ByteArray(ExtensionImages.KEY_BYTES) { 7 })
+    private val images = ExtensionImages(key)
     private val source = ImageServerSource().also { images.publish(listOf(it)) }
     private val page = Page(0, url = "chapter-hash", imageUrl = "/data/1.jpg")
     private val chapter = SChapter.create().apply { url = "/c/1" }
 
     @Test
     fun `a page gets the address the source builds for it, tagged with the source`() {
-        assertEquals("https://cdn.test/data/chapter-hash/data/1.jpg#mihon=1", images.pageAddress(source, chapter, page))
+        assertTrue(Regex("https://cdn\\.test/data/chapter-hash/data/1\\.jpg#mihon=1\\.[0-9a-f]{32}").matches(images.pageAddress(source, chapter, page)!!))
     }
 
     @Test
@@ -35,18 +40,55 @@ class ExtensionImagesTest {
     fun `a cover is fetched by the source's client at its untagged address`() {
         val address = images.coverAddress(source, "https://covers.test/1.jpg")
 
-        assertEquals("https://covers.test/1.jpg#mihon=1", address)
+        assertTrue(address.startsWith("https://covers.test/1.jpg#mihon=1."))
         assertEquals("source-token https://covers.test/1.jpg", fetch(address))
     }
 
     @Test
+    fun `a stored cover is plain and is tagged for its own source each time it is loaded`() = runTest {
+        val series = MihonSeriesSource(source, images)
+        val stored = Series(SeriesId(series.key, "/s"), "Series", coverUrl = "https://covers.test/1.jpg")
+
+        assertEquals("source-token https://covers.test/1.jpg", fetch(checkNotNull(series.coverAddress(stored))))
+        // A cover that names another source, as an earlier build stored it or a backup could: its own source still fetches it.
+        val named = stored.copy(coverUrl = "https://covers.test/1.jpg#mihon=7.00000000000000000000000000000000")
+        assertEquals(series.coverAddress(stored), series.coverAddress(named))
+        assertEquals(null, series.coverAddress(stored.copy(coverUrl = null)))
+    }
+
+    @Test
     fun `a page saved in an earlier run is fetched by the source's client at its address`() {
-        assertEquals("source-token https://cdn.test/old/2.jpg", fetch("https://cdn.test/old/2.jpg#mihon=1"))
+        val saved = images.coverAddress(source, "https://cdn.test/old/2.jpg")
+
+        assertEquals("source-token https://cdn.test/old/2.jpg", fetch(saved, ExtensionImages(key).also { it.publish(listOf(source)) }))
+    }
+
+    @Test
+    fun `a tag this host did not issue is not sent through an extension and is taken off`() {
+        var loads = 0
+        val checking = ExtensionImages(key) { loads += 1 }.also { it.publish(listOf(source)) }
+        val issued = checking.coverAddress(source, "https://covers.test/1.jpg")
+        // What a Custom Site could put on a thumbnail: a bare tag, a made-up code, and a real code moved to its own host.
+        val forged = listOf(
+            "https://custom-site.test/thumb.jpg#mihon=1",
+            "https://custom-site.test/thumb.jpg#mihon=1.00000000000000000000000000000000",
+            "https://custom-site.test/thumb.jpg#" + issued.substringAfter('#'),
+            "https://custom-site.test/p/1#mihon-page=1/0//c/1",
+        )
+
+        forged.forEach { assertEquals("app " + it.substringBefore('#'), fetch(it, checking)) }
+        // Nor does a forged tag load the extensions.
+        assertEquals(0, loads)
+        assertEquals("source-token https://covers.test/1.jpg", fetch(issued, checking))
+        // Another install's key issues nothing this one honors.
+        assertEquals("app https://covers.test/1.jpg", fetch(ExtensionImages().coverAddress(source, "https://covers.test/1.jpg"), checking))
     }
 
     @Test
     fun `an address tagged with a source that is no longer loaded passes down the chain`() {
-        assertEquals("app https://cdn.test/old/2.jpg#mihon=7", fetch("https://cdn.test/old/2.jpg#mihon=7"))
+        val gone = ImageServerSource(id = 7)
+
+        assertEquals("app https://cdn.test/old/2.jpg", fetch(images.coverAddress(gone, "https://cdn.test/old/2.jpg")))
     }
 
     @Test
@@ -68,17 +110,17 @@ class ExtensionImagesTest {
     @Test
     fun `a source turned off or removed since the last lookup stops answering`() {
         lateinit var checking: ExtensionImages
-        checking = ExtensionImages { checking.publish(emptyList()) }.also { it.publish(listOf(source)) }
+        checking = ExtensionImages(key) { checking.publish(emptyList()) }.also { it.publish(listOf(source)) }
 
-        assertEquals("app https://covers.test/1.jpg#mihon=1", fetch("https://covers.test/1.jpg#mihon=1", checking))
+        assertEquals("app https://covers.test/1.jpg", fetch(images.coverAddress(source, "https://covers.test/1.jpg"), checking))
     }
 
     @Test
     fun `a request for a source that has not loaded yet loads the extensions first`() {
         lateinit var loading: ExtensionImages
-        loading = ExtensionImages { loading.publish(listOf(source)) }
+        loading = ExtensionImages(key) { loading.publish(listOf(source)) }
 
-        assertEquals("source-token https://covers.test/1.jpg", fetch("https://covers.test/1.jpg#mihon=1", loading))
+        assertEquals("source-token https://covers.test/1.jpg", fetch(images.coverAddress(source, "https://covers.test/1.jpg"), loading))
     }
 
     @Test
@@ -87,7 +129,8 @@ class ExtensionImagesTest {
 
         val pages = MihonSeriesSource(reader, images).pages(SeriesEntry("/c/1", "Chapter 1"))
 
-        assertEquals(listOf("1", "broken", "3").mapIndexed { index, page -> "https://reader.test/p/$page#mihon-page=2/$index//c/1" }, pages.map { it.url })
+        val tagged = listOf("1", "broken", "3").mapIndexed { index, page -> Regex("https://reader\\.test/p/$page#mihon-page=2\\.[0-9a-f]{32}/$index//c/1") }
+        assertTrue(tagged.zip(pages.map { it.url!! }).all { (expected, address) -> expected.matches(address) })
         assertEquals(emptyList<String>(), reader.asked)
     }
 
@@ -109,9 +152,9 @@ class ExtensionImagesTest {
     fun `pages that share an address are told apart, also once they are no longer held`() = runTest {
         val reader = PagePerImageSource(pages = listOf("viewer", "viewer")).also { images.publish(listOf(it)) }
         val (first, second) = MihonSeriesSource(reader, images).pages(SeriesEntry("/c/1", "Chapter 1")).map { it.url!! }
-        val restarted = ExtensionImages().also { it.publish(listOf(reader)) }
+        val restarted = ExtensionImages(key).also { it.publish(listOf(reader)) }
 
-        assertEquals("https://reader.test/p/viewer#mihon-page=2/1//c/1", second)
+        assertTrue(second.startsWith("https://reader.test/p/viewer#mihon-page=2.") && second.endsWith("/1//c/1") && first != second)
         assertEquals(listOf("image https://img.test/viewer-1.jpg", "image https://img.test/viewer-0.jpg"), listOf(fetch(second), fetch(first)))
         // Nothing holds the page after a restart: its chapter is listed again and the page at the same place taken.
         assertEquals("image https://img.test/viewer-1.jpg", fetch(second, restarted))
@@ -180,8 +223,7 @@ class ExtensionImagesTest {
     }
 
     /** Builds its image address from `page.url` and `page.imageUrl`, as MangaDex does, and holds a token only its client adds. */
-    private class ImageServerSource : HttpSource() {
-        override val id = 1L
+    private class ImageServerSource(override val id: Long = 1L) : HttpSource() {
         override val name = "Fake"
         override val lang = "en"
         override val baseUrl = "https://cdn.test"

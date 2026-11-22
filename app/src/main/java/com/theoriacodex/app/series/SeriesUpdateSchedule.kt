@@ -26,7 +26,7 @@ internal suspend fun keepSeriesUpdatesScheduled(context: Context, followed: Flow
 
 /**
  * Schedules [SeriesUpdateJobService] every [intervalHours] on any network, kept across reboots; null cancels it. The
- * build's manifest must declare the service and `RECEIVE_BOOT_COMPLETED`, which only builds with extensions do.
+ * manifest declares the service and `RECEIVE_BOOT_COMPLETED` for that.
  */
 internal fun scheduleSeriesUpdates(context: Context, intervalHours: Int?) {
     val scheduler = context.getSystemService(JobScheduler::class.java)

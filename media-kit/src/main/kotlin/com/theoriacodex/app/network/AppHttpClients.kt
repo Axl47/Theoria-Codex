@@ -30,7 +30,7 @@ class AppHttpClients(
     /** Hosts whose requests carry a browser identity, which a warm-up's fixed agent would misrepresent. */
     private val sharesBrowserIdentity: (host: String) -> Boolean = { false },
     private val siteAuthorization: (url: String) -> String? = { null },
-    /** Answers media requests only loaded extension code can fetch and passes the rest on; null outside debug builds. */
+    /** Answers media requests only loaded extension code can fetch and passes the rest on; null where no extension host exists. */
     private val extensionMedia: Interceptor? = null,
 ) {
     private val warmed = AtomicBoolean(false)

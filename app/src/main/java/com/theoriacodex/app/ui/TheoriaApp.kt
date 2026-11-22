@@ -270,7 +270,7 @@ private fun TheoriaNavigationSurface(shell: TheoriaShell, currentRoute: String?)
         bottomBarIconSize = bottomNavigationSizing.iconSizeDp.dp,
         bottomBarWindowInsets = bottomBarWindowInsets,
         snackbarHostState = shell.snackbarHostState,
-        destinations = shell.homeTabs,
+        destinations = navigation.homeTabs,
         marked = if (libraryHasNew) setOf(TopLevelDestination.Library) else emptySet(),
         // The status bar's inset shows this color, and the Viewer's letterboxing is black.
         containerColor = if (currentRoute == AppRoute.Viewer) Color.Black else MaterialTheme.colorScheme.background,

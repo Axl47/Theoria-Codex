@@ -1,5 +1,10 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.domain.model.GalleryReadingMode
+import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesEntry
+import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SeriesStatus
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
@@ -295,12 +300,74 @@ class ProfileBackupServiceTest {
         assertEquals(0, harness.store.merges)
     }
 
+    @Test fun `series round trip as version 3 and a backup without them is written and read as before`() {
+        val plain = backup()
+        val written = codec.encode(plain).toString(Charsets.UTF_8)
+        assertTrue(written.contains("\"version\":2") && !written.contains("\"series\""))
+        assertEquals(emptyList<BackupSeries>(), codec.decode(written.toByteArray()).library.series)
+
+        val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
+        val series = BackupSeries(
+            StoredSeries(
+                Series(id, "Title", "https://example.test/cover.jpg", "Author", listOf("Drama"), "en", "Synopsis", SeriesStatus.ONGOING),
+                followed = true, readingMode = GalleryReadingMode.VERTICAL, lastOpenedEntry = "/chapter/2", lastCheckedAtEpochMs = 9L,
+            ),
+            listOf(
+                StoredSeriesEntry(SeriesEntry("/chapter/2", "Ch.2", 2f, "Group", 5L), sourceOrder = 0, firstSeenAtEpochMs = 6L, lastPage = 3, pageCount = 20),
+                StoredSeriesEntry(SeriesEntry("/chapter/1", "Ch.1"), sourceOrder = 1, firstSeenAtEpochMs = 4L, read = true, lastPage = 18, pageCount = 18),
+                StoredSeriesEntry(SeriesEntry("/chapter/0", "Dropped"), sourceOrder = -1, firstSeenAtEpochMs = 4L),
+            ),
+        )
+        val withSeries = plain.copy(library = plain.library.copy(series = listOf(series)))
+        val encoded = codec.encode(withSeries)
+        assertTrue(encoded.toString(Charsets.UTF_8).contains("\"version\":3"))
+        // The cover travels as the plain address the source gave; a series without one is written without the field.
+        assertTrue(encoded.toString(Charsets.UTF_8).contains("\"coverUrl\":\"https://example.test/cover.jpg\""))
+        assertEquals(listOf(series), codec.decode(encoded).library.series)
+        // Trust is never in a backup, with or without series.
+        assertFalse(encoded.toString(Charsets.UTF_8).contains("trustedExtensions"))
+        val twice = withSeries.copy(library = withSeries.library.copy(series = listOf(series, series)))
+        assertTrue(runCatching { codec.encode(twice) }.isFailure)
+    }
+
+    @Test fun `a backup the app writes is one it restores even for a series over the chapter limit`() {
+        val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
+        fun entry(index: Int, order: Int, read: Boolean = false) =
+            StoredSeriesEntry(SeriesEntry("/chapter/$index", "Ch.$index"), sourceOrder = order, firstSeenAtEpochMs = 1L, read = read)
+        // Two over the limit: the dropped chapter without progress and the last listed chapter without progress are
+        // left out; the Continue target is kept although it is dropped and has no progress.
+        val entries = listOf(entry(-3, order = -1), entry(-2, order = -1), entry(-1, order = -1, read = true)) +
+            List(MAX_BACKUP_SERIES_ENTRIES - 1) { entry(it, order = it) }
+        val stored = StoredSeries(Series(id, "Title"), lastOpenedEntry = "/chapter/-3")
+        val huge = backup().let { it.copy(library = it.library.copy(series = listOf(BackupSeries(stored, entries)))) }
+        val restored = codec.decode(codec.encode(huge)).library.series.single().entries.map { it.entry.address }
+        assertEquals(MAX_BACKUP_SERIES_ENTRIES, restored.size)
+        assertEquals(listOf("/chapter/-3", "/chapter/-1", "/chapter/0"), restored.take(3))
+        assertTrue("/chapter/-2" !in restored && "/chapter/${MAX_BACKUP_SERIES_ENTRIES - 2}" !in restored)
+        // The same series in another order is cut the same way.
+        val shuffled = huge.copy(library = huge.library.copy(series = listOf(BackupSeries(stored, entries.reversed()))))
+        assertEquals(restored, codec.decode(codec.encode(shuffled)).library.series.single().entries.map { it.entry.address })
+
+        // What an extension can list must not stop the backup: a blank title is written as the address, and a chapter
+        // or a series without an address is left out. The same rows in a file are still refused on restore.
+        val odd = backup().let { plain ->
+            plain.copy(library = plain.library.copy(series = listOf(
+                BackupSeries(StoredSeries(Series(id, " ")), listOf(entry(1, 0), entry(2, 1).let { it.copy(entry = it.entry.copy(address = "")) })),
+                BackupSeries(StoredSeries(Series(SeriesId(id.source, ""), "No address")), emptyList()),
+            )))
+        }
+        val written = codec.decode(codec.encode(odd)).library.series.single()
+        assertEquals("/title/1" to listOf("/chapter/1"), written.series.series.title to written.entries.map { it.entry.address })
+        val blankTitle = codec.encode(odd).toString(Charsets.UTF_8).replace("\"title\":\"/title/1\"", "\"title\":\" \"")
+        assertTrue(blankTitle.contains("\"title\":\" \"") && runCatching { codec.decode(blankTitle.toByteArray()) }.isFailure)
+    }
+
     @Test fun `invalid versions malformed bytes unknown sources and deeply nested input are rejected`() {
         val invalid = listOf(
             byteArrayOf(0xc3.toByte(), 0x28),
             "{}".toByteArray(),
             "[".repeat(65).toByteArray(),
-            codec.encode(backup()).toString(Charsets.UTF_8).replace("\"version\":2", "\"version\":3").toByteArray(),
+            codec.encode(backup()).toString(Charsets.UTF_8).replace("\"version\":2", "\"version\":4").toByteArray(),
             codec.encode(backup()).toString(Charsets.UTF_8).replace("\"PIXIV\"", "\"UNKNOWN\"").toByteArray(),
         )
         invalid.forEach { assertTrue(runCatching { codec.decode(it) }.isFailure) }

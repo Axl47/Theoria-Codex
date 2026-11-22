@@ -38,7 +38,7 @@ class SeriesUpdateCheckTest {
     private var now = 100L
     private val repository = RoomSeriesRepository(database) { now }
     private val source = FakeSource("custom_mihon_1")
-    private val series = Series(SeriesId(source.key, "/series/a"), "Series")
+    private val series = Series(SeriesId(source.key, "/series/a"), "Series", coverUrl = "https://cdn.test/a.jpg")
     private val first = SeriesEntry("/c/1", "Chapter 1")
     private val second = SeriesEntry("/c/2", "Chapter 2")
 

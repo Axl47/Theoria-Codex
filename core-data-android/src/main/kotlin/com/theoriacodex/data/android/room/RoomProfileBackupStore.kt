@@ -2,6 +2,7 @@ package com.theoriacodex.data.android.room
 
 import androidx.room.withTransaction
 import com.theoriacodex.data.repository.BackupLibrary
+import com.theoriacodex.data.repository.BackupSeries
 import com.theoriacodex.data.repository.LikedPost
 import com.theoriacodex.data.repository.ProfileBackupStore
 import com.theoriacodex.data.repository.ProfileLibraryIds
@@ -25,6 +26,7 @@ class RoomProfileBackupStore(
     private val dao = database.codexLikesDao()
     private val recents = database.recentsDao()
     private val recentsWriter = RecentsWriter(recents, SharedPosts(dao))
+    private val series = database.seriesDao()
 
     override suspend fun snapshot(includeRecents: Boolean): BackupLibrary = database.withTransaction {
         val codices = dao.codices().map { row ->
@@ -58,6 +60,10 @@ class RoomProfileBackupStore(
                     RecentPostSection.valueOf(it.section), it.maxViewedMediaNumber)
             },
             if (includeRecents) recents.searches().map(RecentSearchEntity::toDomain) else emptyList(),
+            // Entries the source stopped listing are kept too: one that returns is then as the user left it.
+            series.keptSeries().map { row ->
+                BackupSeries(row.toStored(), series.allEntries(row.source, row.address).map(SeriesEntryEntity::toStored))
+            },
         )
     }
 
@@ -87,8 +93,28 @@ class RoomProfileBackupStore(
                 dao.insertLike(like.toEntity())
             }
             mergeRecents(library)
+            library.series.forEach(::mergeSeries)
             collectionsAdded
         }
+
+    /**
+     * Adds a backed-up series to what the device holds. An entry on both sides takes the further progress. When the
+     * device already has entries for the series, they are the source's current list, so an entry only the backup has
+     * arrives as one the source no longer lists: kept with its progress, but neither counted as unread nor announced
+     * as new, and listed again as it was if the source brings it back. When that entry is the Continue point, the
+     * series page offers the nearest listed chapter until its next refresh lists the entry again.
+     */
+    private fun mergeSeries(backup: BackupSeries) {
+        val stored = backup.series
+        val id = stored.series.id
+        if (series.insertSeries(stored.toEntity()) == -1L) {
+            series.mergeRestoredSeries(id.source.id, id.address, stored.followed, stored.readingMode?.name, stored.lastOpenedEntry)
+        }
+        val onDevice = series.allEntries(id.source.id, id.address).mapTo(HashSet()) { it.address }
+        val (known, missing) = backup.entries.partition { it.entry.address in onDevice }
+        known.forEach { series.mergeRestoredEntry(id.source.id, id.address, it.entry.address, it.read, it.lastPage, it.pageCount) }
+        series.insertEntries(missing.map { (if (onDevice.isEmpty()) it else it.copy(sourceOrder = NOT_LISTED)).toEntity(id) })
+    }
 
     private fun mergeRecents(library: BackupLibrary) {
         library.watched.asReversed().forEach { entry ->
