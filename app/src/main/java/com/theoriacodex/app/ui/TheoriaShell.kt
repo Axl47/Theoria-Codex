@@ -109,8 +109,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 /**
@@ -579,8 +579,7 @@ internal class TheoriaShell(
         val currentSettings = data.currentSettingsSnapshot()
         workflows.likesCodexSync.ensureProfileCodex(currentSettings.activeRecommendationProfile())
         owners.settings.onAction(SettingsAction.RefreshAccounts)
-        container.series?.findExtensions()
-        navigation.homeTabRoute = data.restoreHomeTabRoute(homeTabs(withSeries = container.series?.hasExtensions?.value == true))
+        navigation.homeTabRoute = data.restoreHomeTabRoute(homeTabs(withSeries = container.series?.tab?.first() == true))
         appShellOwner.onAction(AppShellAction.MarkAppReady)
         navReady = true
     }
@@ -740,7 +739,8 @@ internal fun rememberTheoriaShell(
     val pendingLikePostIds = owners.postMutations.pendingLikePostIds.collectAsStateWithLifecycle()
     val homeTabRoute = rememberSaveable { mutableStateOf(TopLevelDestination.Search.route) }
     val pendingCreatorProfile = rememberSaveable(stateSaver = CreatorProfileStateSaver) { mutableStateOf<CreatorProfile?>(null) }
-    val seriesTab = remember(container) { container.series?.hasExtensions ?: MutableStateFlow(false) }.collectAsStateWithLifecycle()
+    val seriesTab = remember(container) { container.series?.tab ?: flowOf(false) }
+        .collectAsStateWithLifecycle(initialValue = container.series?.hasExtensions?.value == true)
     val pagerState = rememberPagerState(pageCount = { homeTabs(withSeries = seriesTab.value).size })
     val routes = remember { RouteOwners() }
     val pendingSave = remember { PendingCodexSave() }

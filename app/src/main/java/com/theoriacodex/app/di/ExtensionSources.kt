@@ -6,9 +6,14 @@ import com.theoriacodex.data.repository.checkFollowed
 import com.theoriacodex.domain.series.SeriesExtensions
 import com.theoriacodex.domain.series.SeriesSource
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.getAndUpdate
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -21,16 +26,28 @@ class SeriesDependencies(
     val extensions: SeriesExtensions,
     /** Whether any extension is on the device, on or off; may block, and runs none of their code. */
     private val anyExtension: () -> Boolean = { true },
+    /** What [anyExtension] said when the app last ran, so that startup does not wait for it. */
+    extensionSeen: Boolean = false,
+    private val rememberExtensionSeen: suspend (Boolean) -> Unit = {},
 ) {
     private val checking = Mutex()
-    private val mutableHasExtensions = MutableStateFlow(false)
+    private val mutableHasExtensions = MutableStateFlow(extensionSeen)
 
-    /** Whether an extension was on the device at the last [findExtensions]. The Series tab shows only then. */
+    /** Whether an extension was on the device at the last [findExtensions], or before that when the app last ran. */
     val hasExtensions: StateFlow<Boolean> = mutableHasExtensions.asStateFlow()
 
-    /** Looks again for extensions on the device: at startup, and whenever the app returns to the foreground. */
+    /**
+     * Whether the Series tab shows: with an extension on the device, or with a followed series, which stays reachable
+     * when its extension is gone (its page then says so).
+     */
+    val tab: Flow<Boolean> = combine(hasExtensions, repository.observeFollowed().map { it.isNotEmpty() }) { extension, followed ->
+        extension || followed
+    }.distinctUntilChanged()
+
+    /** Looks again for extensions on the device, each time the app comes to the foreground; never on the way to the first screen. */
     suspend fun findExtensions() {
-        mutableHasExtensions.value = withContext(Dispatchers.IO) { anyExtension() }
+        val found = withContext(Dispatchers.IO) { anyExtension() }
+        if (mutableHasExtensions.getAndUpdate { found } != found) rememberExtensionSeen(found)
     }
 
     /**
