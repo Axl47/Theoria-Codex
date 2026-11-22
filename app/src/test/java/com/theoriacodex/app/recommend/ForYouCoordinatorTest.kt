@@ -92,6 +92,16 @@ class ForYouCoordinatorTest {
         assertEquals(0, warm.trendingRequests)
     }
 
+    @Test fun `a profile that only keeps Codex posts gets lanes from them, not trending`() = runTest {
+        val adapter = FakeAdapter(SourceKey.GELBOORU).apply { trendingCandidates = listOf(TagSuggestion("sky", "tag", null)) }
+        val codexOnly = TagAffinityInputs(interest = mapOf("cloud" to 3.0), keptByTag = mapOf(SourceKey.GELBOORU to mapOf("cloud" to 3)),
+            keptBySource = mapOf(SourceKey.GELBOORU to 3))
+        val service = testForYouCoordinator(registryOf(adapter), tagAffinity = codexOnly)
+
+        assertEquals(listOf(listOf("cloud")), service.lanes(request(service)).map { it.tags })
+        assertEquals(0, adapter.trendingRequests)
+    }
+
     @Test fun `hidden tags drop their lanes and the media filter reaches each lane's query`() = runTest {
         val service = testForYouCoordinator(registryOf(FakeAdapter(SourceKey.GELBOORU)), likesRepository = liked(SourceKey.GELBOORU, "cloud", "river"))
         val hidden = AppSettings().let { it.copy(forYouBlacklistByProfile = mapOf(it.activeProfileId to listOf(ForYouBlacklistEntry(SourceKey.GELBOORU, listOf("cloud"))))) }

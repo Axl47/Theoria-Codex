@@ -55,13 +55,15 @@ data class TagAffinityInputs(
      * before the source has enough of either to say.
      */
     fun lift(source: SourceKey, token: String): Double? {
-        val watched = watchedBySource[source] ?: 0L
-        val kept = keptBySource[source] ?: 0
-        if (watched < MIN_WATCHED_FOR_SHARE || kept < MIN_KEPT_FOR_LIFT) return null
-        val keptShare = ((keptByTag[source]?.get(token) ?: 0) + LIFT_PSEUDO_COUNT) / (kept + 1.0)
-        val watchedShare = maxOf((watchedByTag[source]?.get(token) ?: 0L).toDouble(), LIFT_PSEUDO_COUNT) / watched
+        if (!hasHistory(source)) return null
+        val keptShare = ((keptByTag[source]?.get(token) ?: 0) + LIFT_PSEUDO_COUNT) / ((keptBySource[source] ?: 0) + 1.0)
+        val watchedShare = maxOf((watchedByTag[source]?.get(token) ?: 0L).toDouble(), LIFT_PSEUDO_COUNT) / (watchedBySource[source] ?: 0L)
         return keptShare / watchedShare
     }
+
+    /** Whether [source] has watched and kept enough posts for [lift], and so for [TagAffinity.proven]. */
+    fun hasHistory(source: SourceKey): Boolean =
+        (watchedBySource[source] ?: 0L) >= MIN_WATCHED_FOR_SHARE && (keptBySource[source] ?: 0) >= MIN_KEPT_FOR_LIFT
 
     companion object {
         val Empty = TagAffinityInputs()
@@ -74,7 +76,8 @@ data class TagAffinityInputs(
  * the profile watches. A [universal] tag (on most watched posts of its source, or on nearly every post of the feed at
  * hand) narrows nothing and is offered neither to follow nor to hide. An [informative] tag is worth offering to follow:
  * one the profile chose, one clearly more common in what it kept than in what it watched, or one too rare in what it
- * watches to tell yet, but never one for text on the image ([isImageTextTag]) that the profile did not choose.
+ * watches to tell yet, but never one for text on the image ([isImageTextTag]) that the profile did not choose. A
+ * [proven] tag is informative for the first two reasons, not as a guess: For You seeds lanes only from proven tags.
  */
 data class TagAffinity(
     val tag: String,
@@ -82,6 +85,7 @@ data class TagAffinity(
     val score: Double,
     val universal: Boolean,
     val informative: Boolean = !universal,
+    val proven: Boolean = false,
 )
 
 /** Builds [TagAffinityInputs] from the profile's Likes, Codex posts, saved tags and searches, and its statistics. */
@@ -170,27 +174,30 @@ fun TagAffinityInputs.affinity(source: SourceKey, tag: String, feedShare: Map<St
     val offerable = !universal && (chosen || !isImageTextTag(token))
     val lift = lift(source, token) ?: return TagAffinity(
         tag, interest, (interest + UNKNOWN_TAG_INTEREST) * (1.0 - (watched ?: 0.0)), universal, informative = offerable,
+        proven = offerable && chosen,
     )
-    val (score, worthOffering) = historyScore(source, token, lift, chosen, watched ?: 0.0)
-    return TagAffinity(tag, interest, score, universal, informative = offerable && worthOffering)
+    val kept = keptByTag[source]?.get(token) ?: 0
+    val proven = chosen || (kept >= MIN_KEPT_FOR_TAG && lift >= MIN_INFORMATIVE_LIFT)
+    val (score, worthOffering) = historyScore(source, kept, lift, chosen, proven, watched ?: 0.0)
+    return TagAffinity(tag, interest, score, universal, informative = offerable && worthOffering, proven = offerable && proven)
 }
 
 /**
- * A tag's score and whether it is worth offering, on a source with the history for [lift]. It is when [chosen] or
- * clearly more common in what was kept, and also, after those, when too rare in what was watched ([watched], a share)
- * for its absence from what was kept to count against it.
+ * A tag's score and whether it is worth offering, on a source with the history for [lift]. It is when [proven], and
+ * also, after those, when too rare in what was watched ([watched], a share) for its absence from what was kept ([kept]
+ * posts) to count against it.
  */
 private fun TagAffinityInputs.historyScore(
     source: SourceKey,
-    token: String,
+    kept: Int,
     lift: Double,
     chosen: Boolean,
+    proven: Boolean,
     watched: Double,
 ): Pair<Double, Boolean> {
-    val kept = keptByTag[source]?.get(token) ?: 0
     // How much more common, times how many kept posts say so; a tag kept once is still a guess.
     val score = ln(lift) * ln(1.0 + kept) + if (chosen) EXPLICIT_BONUS else 0.0
-    if (chosen || (kept >= MIN_KEPT_FOR_TAG && lift >= MIN_INFORMATIVE_LIFT)) return score to true
+    if (proven) return score to true
     val tooRareToJudge = kept < MIN_KEPT_FOR_TAG && watched * (keptBySource[source] ?: 0) < MIN_KEPT_FOR_TAG
     // Rarest first, below every proven tag.
     return if (tooRareToJudge) -watched to true else score to false

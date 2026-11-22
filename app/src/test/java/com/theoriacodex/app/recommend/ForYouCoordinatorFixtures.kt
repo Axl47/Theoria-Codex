@@ -16,11 +16,12 @@ internal fun testForYouCoordinator(
     likesRepository: LikesRepository = InMemoryLikesRepository(),
     statisticsRepository: StatisticsRepository = InMemoryStatisticsRepository(),
     tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
+    tagAffinity: TagAffinityInputs = TagAffinityInputs.Empty,
 ): ForYouCoordinator = ForYouCoordinator(
     registry = registry,
     likesRepository = likesRepository,
     statisticsRepository = statisticsRepository,
-    tagAffinity = flowOf(TagAffinityInputs.Empty),
+    tagAffinity = flowOf(tagAffinity),
     tagSuggestionStore = tagSuggestionStore,
     computationDispatcher = Dispatchers.Unconfined,
     random = { null },

@@ -14,7 +14,7 @@ class ForYouInterestsTest {
         val generated = ForYouInterests.generate(SourceKey.GELBOORU, documents, TagAffinityInputs.Empty, random = random)
         assertEquals(documents.size, random.draws)
         assertEquals(generated, ForYouInterests.generate(SourceKey.GELBOORU, documents, TagAffinityInputs.Empty, random = CountingRandom()))
-        assertEquals(5, generated.size)
+        assertEquals(4, generated.size)
     }
 
     @Test fun `separate interests stay together rather than creating unrelated pairs`() {
@@ -24,29 +24,52 @@ class ForYouInterestsTest {
         assertEquals(listOf(listOf("night", "city"), listOf("forest", "watercolor")), interests.map { it.tags })
     }
 
-    @Test fun `lanes rank by lift and skip watched-everywhere, unlifted and image-text tags`() {
+    @Test fun `lanes rank by lift, skip watched-everywhere, unlifted and image-text tags, and explore a guess`() {
         val documents = List(15) { listOf("blush", "miku", "artist_name") } + List(3) { listOf("blush") } +
-            List(6) { listOf("tree") } + List(6) { listOf("missing") }
-        val affinity = TagAffinityInputs(
-            interest = mapOf("blush" to 18.0, "miku" to 15.0, "artist name" to 15.0, "tree" to 6.0, "missing" to 6.0),
-            watchedByTag = mapOf(SourceKey.GELBOORU to mapOf("blush" to 60L, "miku" to 5L, "artist name" to 2L, "tree" to 20L)),
-            watchedBySource = mapOf(SourceKey.GELBOORU to 100L),
-            keptByTag = mapOf(SourceKey.GELBOORU to mapOf("blush" to 18, "miku" to 15, "artist name" to 15, "tree" to 6, "missing" to 6)),
-            keptBySource = mapOf(SourceKey.GELBOORU to 30),
+            List(6) { listOf("tree") } + listOf(listOf("moth"))
+        val kept = mapOf("blush" to 18, "miku" to 15, "artist name" to 15, "tree" to 6, "moth" to 1)
+        val affinity = history(
+            SourceKey.GELBOORU, kept, watched = mapOf("blush" to 60L, "miku" to 5L, "artist name" to 2L, "tree" to 20L),
         )
-        val interests = ForYouInterests.generate(SourceKey.GELBOORU, documents, affinity, mapOf("missing" to 0))
-        assertEquals(listOf(listOf("miku")), interests.map { it.tags })
+        val interests = ForYouInterests.generate(SourceKey.GELBOORU, documents, affinity)
+        assertEquals(listOf(listOf("miku"), listOf("moth")), interests.map { it.tags })
     }
 
-    @Test fun `sections and adjacent exploration are bounded and use source normalization`() {
+    @Test fun `a tag proven on one booru leads a lane on another that has history of its own`() {
+        val affinity = history(SourceKey.GELBOORU, mapOf("cloud" to 3), watched = mapOf("cloud" to 3L))
+            .merge(history(SourceKey.DANBOORU, mapOf("hatsune miku" to 15), watched = mapOf("hatsune miku" to 5L)))
+        val translated = List(15) { listOf("hatsune_miku") }
+        val interests = ForYouInterests.generate(SourceKey.GELBOORU, translated, affinity)
+        assertEquals(listOf("hatsune_miku"), interests.first().tags)
+    }
+
+    @Test fun `a saved tag leads a lane without any Like carrying it`() {
+        val affinity = TagAffinityInputs(interest = mapOf("fox ears" to EXPLICIT_WEIGHT), explicit = setOf("fox ears"))
+        assertEquals(listOf(listOf("fox_ears")), ForYouInterests.generate(SourceKey.GELBOORU, emptyList(), affinity).map { it.tags })
+    }
+
+    @Test fun `interests are bounded and use source normalization`() {
         val interests = ForYouInterests.generate(SourceKey.GELBOORU,
             (1..12).map { listOf("Interest $it") }, TagAffinityInputs.Empty)
-        assertEquals(5, interests.size)
+        assertEquals(4, interests.size)
         assertTrue(interests.all { it.tags.single().startsWith("interest_") })
-        assertEquals(5, interests.flatMap { it.tags }.distinct().size)
+        assertEquals(4, interests.flatMap { it.tags }.distinct().size)
         assertEquals(emptyList<ForYouInterest>(), ForYouInterests.generate(SourceKey.PIXIV, listOf(listOf("1000users入り")), TagAffinityInputs.Empty))
     }
 }
+
+/** [source]'s history: 100 watched posts and 30 kept, carrying [kept] and [watched] of each tag. */
+private fun history(source: SourceKey, kept: Map<String, Int>, watched: Map<String, Long>) = TagAffinityInputs(
+    interest = kept.mapValues { it.value.toDouble() },
+    watchedByTag = mapOf(source to watched), watchedBySource = mapOf(source to 100L),
+    keptByTag = mapOf(source to kept), keptBySource = mapOf(source to 30),
+)
+
+private fun TagAffinityInputs.merge(other: TagAffinityInputs) = copy(
+    interest = interest + other.interest,
+    watchedByTag = watchedByTag + other.watchedByTag, watchedBySource = watchedBySource + other.watchedBySource,
+    keptByTag = keptByTag + other.keptByTag, keptBySource = keptBySource + other.keptBySource,
+)
 
 /** What a profile whose only history is these Likes would have. */
 private fun likedOnly(documents: List<List<String>>): TagAffinityInputs {
