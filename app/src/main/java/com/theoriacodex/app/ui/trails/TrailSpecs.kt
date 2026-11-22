@@ -5,6 +5,7 @@ import com.theoriacodex.app.codex.SavedSearchFeedLoader
 import com.theoriacodex.app.codex.SavedSearchQueryBranch
 import com.theoriacodex.app.related.RelatedPostsLoading
 import com.theoriacodex.app.media.AnimatedDurationRange
+import com.theoriacodex.app.post.PostTagSelection
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.ui.navigation.TrailRequest
@@ -76,13 +77,16 @@ internal fun trailTagQuery(
     val mode = if (context?.mode == QueryMode.Unified) QueryMode.Unified else QueryMode.Source(source)
     // Another source's terms may name tags this one spells differently, so they stay with their level.
     val level = context?.takeIf { it.mode == mode }
-    val excluded = level?.excludeTerms.orEmpty().filterNot { it.value.equals(tag, ignoreCase = true) }
-    val earlier = level?.includeTermGroups.orEmpty()
-        .filterNot { group -> group.terms.singleOrNull()?.value.equals(tag, ignoreCase = true) }
+    val tapped = SearchTerm(tag)
+    // Matched as the source matches terms, so a typed term such as artist:foo is not taken for a plain foo.
+    val selection = level?.let { PostTagSelection(source, it.includeTerms, it.excludeTerms) }
+    val excluded = level?.excludeTerms.orEmpty() - listOfNotNull(selection?.excluded(tapped)).toSet()
+    val alreadySearched = selection?.included(tapped)?.let(SearchTermGroup::single)
+    val earlier = level?.includeTermGroups.orEmpty().filterNot { it == alreadySearched }
     val media = if (animatedOnly || context?.media == MediaFilter.ANIMATED) MediaFilter.ANIMATED else MediaFilter.ANY
     return Query(mode, listOf(tag), emptyList(), context?.sort ?: SortMode.NEWEST, context?.dateRange, null)
         .copy(excludeTerms = excluded, media = media)
-        .withIncludeTermGroups(listOf(SearchTermGroup.single(SearchTerm(tag))) + earlier)
+        .withIncludeTermGroups(listOf(SearchTermGroup.single(tapped)) + earlier)
         .withinTermLimit(termLimit.takeIf { mode is QueryMode.Source })
 }
 

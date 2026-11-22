@@ -13,6 +13,9 @@ import com.theoriacodex.domain.model.MediaFilter
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchFacet
+import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.query.SearchTermLimit
@@ -116,6 +119,19 @@ class TrailSpecsTest {
         val first = trailTagQuery("blush", SourceKey.DANBOORU, level)
         assertEquals(listOf("blush", "cat", "dog"), first.includeTags)
         assertEquals(listOf("smile", "blush", "cat", "dog"), trailTagQuery("smile", SourceKey.DANBOORU, first).includeTags)
+    }
+
+    @Test
+    fun `a typed term of the same name is another constraint, so the trail keeps it`() {
+        val artist = SearchTerm("foo", SearchFacet.ARTIST)
+        val level = Query(QueryMode.Source(SourceKey.DANBOORU), listOf("foo"), emptyList(), SortMode.NEWEST, null, null)
+            .withIncludeTermGroups(listOf(SearchTermGroup.single(artist)))
+            .copy(excludeTerms = listOf(SearchTerm("foo", SearchFacet.CHARACTER)))
+
+        val fork = trailTagQuery("foo", SourceKey.DANBOORU, level)
+
+        assertEquals(listOf(SearchTermGroup.single(SearchTerm("foo")), SearchTermGroup.single(artist)), fork.includeTermGroups)
+        assertEquals(level.excludeTerms, fork.excludeTerms)
     }
 
     @Test
