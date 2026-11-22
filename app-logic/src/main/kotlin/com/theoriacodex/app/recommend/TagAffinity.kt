@@ -155,7 +155,8 @@ fun tagAffinities(post: Post, inputs: TagAffinityInputs, feedShare: Map<String, 
         .map { tag -> inputs.affinity(post.id.source, tag, feedShare) }
         .sortedByDescending(TagAffinity::score)
 
-private fun TagAffinityInputs.affinity(source: SourceKey, tag: String, feedShare: Map<String, Double>): TagAffinity {
+/** How characteristic [tag] is of the profile on [source]; [tagAffinities] ranks a post's tags by it, For You its lanes. */
+fun TagAffinityInputs.affinity(source: SourceKey, tag: String, feedShare: Map<String, Double> = emptyMap()): TagAffinity {
     val token = normalizeMatchToken(tag)
     val interest = interest[token] ?: 0.0
     val watched = watchedShare(source, token)

@@ -19,19 +19,22 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.recommendation.RecommendationTagNormalization
 import kotlin.random.Random
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Builds a Mix's lanes: the profile's interests on each source, taken in turn across sources so every source gets a
- * lane, or the sources' trending tags when its likes give none. Lanes the profile's hidden tags hide are left out.
+ * Builds a Mix's lanes: the profile's interests on each source, ranked by [tagAffinity] as Trails rank chips, taken in
+ * turn across sources so every source gets a lane, or the sources' trending tags when its likes give none. Lanes the
+ * profile's hidden tags hide are left out.
  * [random] varies which interests lead between Mixes; null keeps them in weight order.
  */
 internal class ForYouLanesLoader(
     private val registry: SourceAdapterRegistry,
     private val store: TagSuggestionStore,
     private val likes: LikesRepository,
+    private val tagAffinity: Flow<TagAffinityInputs>,
     private val computation: CoroutineDispatcher,
     private val random: () -> Random?,
 ) {
@@ -51,12 +54,13 @@ internal class ForYouLanesLoader(
     private suspend fun interestSeeds(sources: List<SourceKey>, liked: List<LikedPost>, blocked: List<ForYouBlacklistEntry>): List<LaneSeed> {
         if (liked.isEmpty()) return emptyList()
         val training = crossSourceTraining(liked, store)
+        val affinity = tagAffinity.first()
         return sources.mapConcurrent { source ->
             val documents = training.documentsFor(source)
             val tags = documents.flatMap { RecommendationTagNormalization.normalizeDistinct(source, it, 40) }
                 .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.take(48).map { it.key }
             val providerCounts = if (tags.isEmpty()) emptyMap() else counts.fetch(source, tags)
-            ForYouInterests.generate(source, documents, providerCounts, random()).map { LaneSeed(source, it.tags) }
+            ForYouInterests.generate(source, documents, affinity, providerCounts, random()).map { LaneSeed(source, it.tags) }
         }.flatten().filterNot { blocked.hidesSeed(it.source, it.tags) }
     }
 

@@ -8,6 +8,7 @@ import com.theoriacodex.data.repository.LikesRepository
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOf
 
 /** A coordinator that builds lanes inline and keeps interests in weight order. */
 internal fun testForYouCoordinator(
@@ -19,6 +20,7 @@ internal fun testForYouCoordinator(
     registry = registry,
     likesRepository = likesRepository,
     statisticsRepository = statisticsRepository,
+    tagAffinity = flowOf(TagAffinityInputs.Empty),
     tagSuggestionStore = tagSuggestionStore,
     computationDispatcher = Dispatchers.Unconfined,
     random = { null },

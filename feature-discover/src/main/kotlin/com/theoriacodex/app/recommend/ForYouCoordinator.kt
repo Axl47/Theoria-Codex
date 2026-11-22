@@ -19,6 +19,7 @@ import com.theoriacodex.domain.orchestration.UnifiedSearchResult
 import kotlin.random.Random
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 
 /**
  * The For You deck's engine: builds a Mix's lanes and loads their pages. Every page, whichever lane or source it is
@@ -28,6 +29,8 @@ class ForYouCoordinator(
     private val registry: SourceAdapterRegistry,
     likesRepository: LikesRepository,
     private val statisticsRepository: StatisticsRepository,
+    /** The active profile's tag affinity, which ranks each source's interests; see [observeTagAffinityInputs]. */
+    tagAffinity: Flow<TagAffinityInputs>,
     tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
     computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
     /** Shared with the Viewer, so a card and the Viewer asking for one post at once fetch it once. */
@@ -35,7 +38,7 @@ class ForYouCoordinator(
     private val fileMirrors: FileMirrorIndex = FileMirrorIndex(),
     random: () -> Random? = { Random.Default },
 ) : ForYouRouteEngine {
-    private val lanes = ForYouLanesLoader(registry, tagSuggestionStore, likesRepository, computationDispatcher, random)
+    private val lanes = ForYouLanesLoader(registry, tagSuggestionStore, likesRepository, tagAffinity, computationDispatcher, random)
 
     override fun availableSources(settings: AppSettings): List<SourceKey> =
         settings.runtime.enabledSources.intersect(registry.availableSources()).inPresentationOrder()
