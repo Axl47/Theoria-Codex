@@ -72,12 +72,14 @@ class ExtensionImagesTest {
     @Test(timeout = TEST_TIMEOUT_MS)
     fun `a request for a source that has not loaded yet waits for it`() {
         val loading = ExtensionImages(loadWaitMs = LONG_WAIT_MS)
-        val answer = CompletableFuture.supplyAsync { fetch("https://covers.test/1.jpg#mihon=1", loading) }
+        // The source arrives after the request below has started; without the wait the request would pass it by.
+        CompletableFuture.runAsync {
+            Thread.sleep(LOAD_DELAY_MS)
+            loading.attach(source)
+            loading.finishedLoading()
+        }
 
-        loading.attach(source)
-        loading.finishedLoading()
-
-        assertEquals("source-token https://covers.test/1.jpg", answer.get())
+        assertEquals("source-token https://covers.test/1.jpg", fetch("https://covers.test/1.jpg#mihon=1", loading))
     }
 
     private fun fetch(address: String, images: ExtensionImages = this.images): String =
@@ -125,6 +127,7 @@ class ExtensionImagesTest {
 
     private companion object {
         const val LONG_WAIT_MS = 60_000L
+        const val LOAD_DELAY_MS = 200L
         const val TEST_TIMEOUT_MS = 10_000L
     }
 }
