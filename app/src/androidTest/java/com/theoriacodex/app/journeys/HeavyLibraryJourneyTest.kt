@@ -17,6 +17,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToIndex
 import com.theoriacodex.app.codex.profileScopedCodexId
+import com.theoriacodex.app.fixtures.HeavyHistory
 import com.theoriacodex.app.library.LibrarySection
 import com.theoriacodex.app.recommend.FOR_YOU_CHIPS_TAG
 import com.theoriacodex.app.recommend.FOR_YOU_END_TAG

@@ -28,11 +28,14 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withContext
 
@@ -247,10 +250,14 @@ class RoomCodexLikesRepository(
         return rows.decodePostSnapshots(retainedPayloads, "codex:$codexId")
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeLibraryPosts(codexIds: Set<String>): Flow<List<Post>> {
         if (codexIds.isEmpty()) return flowOf(emptyList())
         val ids = codexIds.sorted()
-        return dao.observeLibraryPosts(ids).decodePostSnapshots(retainedPayloads, "library:${ids.joinToString("\u0000")}")
+        // Every viewed post writes `posts`, which would rerun this whole-library read, so only membership writes trigger
+        // it: even ones that leave the same IDs (a removal and its Undo), since the read can fall between them.
+        return dao.observeSavedPostIds(ids).flatMapLatest { dao.observeLibraryPosts(ids).take(1) }
+            .decodePostSnapshots(retainedPayloads, "library:${ids.joinToString("\u0000")}")
     }
 
     // Single-statement reads skip withTransaction: its one serialized executor and BEGIN IMMEDIATE

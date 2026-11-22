@@ -1,4 +1,4 @@
-package com.theoriacodex.app.journeys
+package com.theoriacodex.app.fixtures
 
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef

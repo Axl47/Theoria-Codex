@@ -12,8 +12,14 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -490,6 +496,27 @@ class RoomCodexLikesRepositoryTest {
         assertEquals(post.id, repository.observeCodexItems("system_likes_codex").first().single().postId)
     }
 
+    @Test
+    fun `the library rereads its posts when membership changes, not when a saved post's data does`() = runBlocking {
+        val repository = repository()
+        val codex = repository.createCodex("Kept")
+        repository.addItem(codex.codexId, post("one"))
+        val updates = Channel<List<Post>>(Channel.UNLIMITED)
+        val watching = launch(Dispatchers.IO) { repository.observeLibraryPosts(setOf(codex.codexId)).collect(updates::send) }
+        assertEquals(listOf("one"), withTimeout(UPDATE_TIMEOUT_MS) { updates.receive() }.map { it.id.sourcePostId })
+
+        // Viewing a saved post writes its row like this, on every view.
+        repository.updatePost(post("one").copy(title = "edited"))
+        delay(QUIET_MS)
+        assertTrue(updates.isEmpty)
+
+        repository.addItem(codex.codexId, post("two"))
+        val after = withTimeout(UPDATE_TIMEOUT_MS) { updates.receive() }
+        assertEquals(setOf("one", "two"), after.map { it.id.sourcePostId }.toSet())
+        assertEquals("edited", after.first { it.id.sourcePostId == "one" }.title)
+        watching.cancel()
+    }
+
     private fun repository(): RoomCodexLikesRepository {
         return RoomCodexLikesRepository(
             database = database,
@@ -525,3 +552,6 @@ private fun post(
         creatorProfile = creator,
     )
 }
+
+private const val UPDATE_TIMEOUT_MS = 5_000L
+private const val QUIET_MS = 500L
