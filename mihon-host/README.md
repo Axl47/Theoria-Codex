@@ -87,6 +87,21 @@ adb -s <emulator> shell am instrument -w -r -e extensionSourceLive true -e class
 adb -s <emulator> shell am instrument -w -r -e extensionSourceLive true -e class $T#aFollowedSeriesIsOnTheShelfAfterARestart $R
 ```
 
+Followed series are checked for new chapters by pulling down on the Series tab and by a periodic background job
+(`SeriesUpdateJobService`, every 12 hours unless Settings > Check for new chapters says otherwise), scheduled only
+while a series is followed. A chapter is new when its address was not stored before; each series that gained some
+gets one local notification that opens its page. The same test class proves it, with the job run by hand in between:
+
+```sh
+adb -s <emulator> shell am instrument -w -r -e extensionSourceLive true -e class $T#followingASeriesAsksToNotifyAndSchedulesTheCheck $R
+adb -s <emulator> shell am instrument -w -r -e extensionSourceLive true -e class $T#aFollowedSeriesForgetsItsNewestChapter $R
+adb -s <emulator> shell dumpsys jobscheduler com.theoriacodex.debug | grep SeriesUpdateJobService
+adb -s <emulator> shell cmd jobscheduler run -f com.theoriacodex.debug 3101
+adb -s <emulator> shell dumpsys notification --noredact | grep -E "android.(title|text)="
+adb -s <emulator> shell am instrument -w -r -e extensionSourceLive true -e class $T#aNewChapterNotificationOpensItsSeries $R
+adb -s <emulator> shell am instrument -w -r -e extensionSourceLive true -e class $T#unfollowingTheLastSeriesCancelsTheCheck $R
+```
+
 ## What was measured (November 2026)
 
 The extension index used listed 1,711 extensions (2,742 sources), every one built against extension API 1.6.
@@ -132,7 +147,8 @@ framework. The scripts are not in the repository: they depend on the index, whic
 
 Besides the three costs above, this is what a real feature would have to add.
 
-- **Updates.** Nothing checks followed series for new chapters; a series' chapters refresh when its page is opened.
+- **Updates in release builds.** The background check's service and its notification and boot permissions are
+  declared in the debug manifest only, beside the host.
 - **Choosing sources.** Every source of every loaded extension is used, so an extension with one source per language
   fills the Series tab's source row and is searched once per language.
 - **Backup.** Followed series and reading progress are not in profile backups.

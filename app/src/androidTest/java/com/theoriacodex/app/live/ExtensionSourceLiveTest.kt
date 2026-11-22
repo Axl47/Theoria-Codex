@@ -1,5 +1,7 @@
 package com.theoriacodex.app.live
 
+import android.app.job.JobInfo
+import android.app.job.JobScheduler
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -13,11 +15,13 @@ import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import com.theoriacodex.app.di.SeriesDependencies
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
+import com.theoriacodex.app.series.SERIES_UPDATE_JOB_ID
 import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.data.repository.continueEntry
 import com.theoriacodex.domain.series.Series
 import java.util.regex.Pattern
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertNull
@@ -32,8 +36,11 @@ import org.junit.runner.RunWith
  * runs only with `-e extensionSourceLive true`, after an extension file has been pushed to the app's
  * `mihon-extensions` folder (see `mihon-host/README.md`).
  *
- * The two tests are one story across an app restart, so run them as two `am instrument` calls, each of which starts
- * the app's process anew: first [aSeriesIsBrowsedReadResumedAndFollowed], then [aFollowedSeriesIsOnTheShelfAfterARestart].
+ * The tests are one story across app restarts, so run each as its own `am instrument` call, which starts the app's
+ * process anew: [aSeriesIsBrowsedReadResumedAndFollowed], [aFollowedSeriesIsOnTheShelfAfterARestart], then the
+ * new-chapter story: [followingASeriesAsksToNotifyAndSchedulesTheCheck], [aFollowedSeriesForgetsItsNewestChapter], the background check run by hand from a shell
+ * (`cmd jobscheduler run`, see `mihon-host/README.md`), [aNewChapterNotificationOpensItsSeries] and
+ * [unfollowingTheLastSeriesCancelsTheCheck].
  *
  * The report is counts and labels only, never images: provider media stays off screenshots and logs.
  */
@@ -87,9 +94,18 @@ class ExtensionSourceLiveTest {
         report("resume", "Continue reopened \"${chapter.entry.name}\" on page $target of $pages")
         device.pressBack()
 
-        if (device.wait(Until.hasObject(By.text("Following")), SHORT_WAIT_MS) != true) tap("Follow", By.text("Follow"))
-        waitFor("the series to read as followed", By.text("Following"))
-        report("follow", "\"${listed.title}\" is followed")
+        follow(listed)
+    }
+
+    /** The new-chapter story's start when the reading story above was not run: follows the first listed series. */
+    @Test
+    fun followingASeriesAsksToNotifyAndSchedulesTheCheck() {
+        val listed = runBlocking { series.sources().first().popular(1) }.series.first()
+        openSeriesTab()
+        tap("the listed series", By.text(listed.title), RESULTS_TIMEOUT_MS)
+        waitFor("the chapter count", By.text(CHAPTER_COUNT), RESULTS_TIMEOUT_MS)
+        follow(listed)
+        report("job", "following scheduled the check every ${awaitCheckJob(scheduled = true)?.intervalMillis?.milliseconds}")
     }
 
     @Test
@@ -102,6 +118,74 @@ class ExtensionSourceLiveTest {
         val shelved = followed.first()
         waitFor("the followed series on the shelf", By.text(shelved.series.title))
         report("shelf", "\"${shelved.series.title}\" is on the shelf, unread=${shelved.unreadCount}")
+    }
+
+    /**
+     * Makes the followed series' newest chapter one the app has not seen, so the next check finds it as new: stores
+     * the series' chapter list without it, as if the source had not listed it yet.
+     */
+    @Test
+    fun aFollowedSeriesForgetsItsNewestChapter() {
+        val followed = runBlocking { series.repository.observeFollowed().first() }.first().series
+        val entries = runBlocking { series.repository.entries(followed.id) }
+        runBlocking { series.repository.store(followed, entries.drop(1).map { it.entry }) }
+        val left = runBlocking { series.repository.entries(followed.id) }
+        assertTrue("The newest chapter is no longer stored", left.none { it.entry.address == entries.first().entry.address })
+        report("forgotten", "\"${followed.title}\" no longer stores \"${entries.first().entry.name}\"; chapters ${entries.size} -> ${left.size}")
+    }
+
+    /** Run after the background check posted a notification: tapping it opens that series' page. */
+    @Test
+    fun aNewChapterNotificationOpensItsSeries() {
+        val followed = runBlocking { series.repository.observeFollowed().first() }.first()
+        report("shelf", "\"${followed.series.title}\" unread=${followed.unreadCount}")
+        device.openNotification()
+        val notification = waitFor("the series' notification", By.text(followed.series.title))
+        report("notification", "\"${notification.text}\" is in the shade")
+        notification.click()
+        waitFor("the series' page", By.text(CHAPTER_COUNT), RESULTS_TIMEOUT_MS)
+        waitFor("the series' page naming the series", By.text(followed.series.title))
+        waitFor("the series' page showing it followed", By.text("Following"))
+        report("opened", "the notification opened \"${followed.series.title}\"'s page")
+    }
+
+    @Test
+    fun unfollowingTheLastSeriesCancelsTheCheck() {
+        val followed = runBlocking { series.repository.observeFollowed().first() }
+        assertTrue("Exactly one series is followed", followed.size == 1)
+        report("job", "before: scheduled every ${awaitCheckJob(scheduled = true)?.intervalMillis?.milliseconds}")
+        openSeriesTab()
+        tap("the followed series on the shelf", By.text(followed.single().series.title))
+        tap("Following, to unfollow", By.text("Following"))
+        waitFor("the series to read as not followed", By.text("Follow"))
+        awaitCheckJob(scheduled = false)
+        report("job", "after unfollowing the last series: cancelled")
+    }
+
+    /** Follows the series whose page is open, answering the notification question the first follow asks. */
+    private fun follow(listed: Series) {
+        if (device.wait(Until.hasObject(By.text("Following")), SHORT_WAIT_MS) != true) {
+            tap("Follow", By.text("Follow"))
+            // An install that already answered is not asked again.
+            device.wait(Until.findObject(By.res("com.android.permissioncontroller", "permission_allow_button")), SHORT_WAIT_MS)?.let { allow ->
+                report("permission", "the first follow asked to send notifications")
+                allow.click()
+            }
+        }
+        waitFor("the series to read as followed", By.text("Following"))
+        report("follow", "\"${listed.title}\" is followed")
+    }
+
+    /** Waits until the background check is [scheduled] or not, and returns it. */
+    private fun awaitCheckJob(scheduled: Boolean): JobInfo? {
+        val scheduler = context.getSystemService(JobScheduler::class.java)
+        val deadline = System.currentTimeMillis() + UI_TIMEOUT_MS
+        while (true) {
+            val job = scheduler.getPendingJob(SERIES_UPDATE_JOB_ID)
+            if ((job != null) == scheduled) return job
+            check(System.currentTimeMillis() < deadline) { "The check stayed ${if (scheduled) "unscheduled" else "scheduled"}" }
+            Thread.sleep(POLL_MS)
+        }
     }
 
     /** Launches the app afresh on the Series tab, which also proves the tab is in the bar. */
