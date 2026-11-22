@@ -92,15 +92,21 @@ fun StoredSeriesEntry.withProgress(page: Int, pageCount: Int): StoredSeriesEntry
 fun List<StoredSeriesEntry>.inReadingOrder(): List<StoredSeriesEntry> = sortedByDescending { it.sourceOrder }
 
 /**
- * Where Continue resumes: the entry opened last while it is unfinished; else the first unread entry in reading order;
- * else, with everything read, the entry opened last. Null when the series has no entries.
+ * Where Continue resumes, the first of these that exists: the entry opened last, while it is unfinished; the entry
+ * after it in reading order, while unread; the latest entry the user is partway through (past its first page); the
+ * first unread entry in reading order, which is the first entry while nothing is read; and, with everything read, the
+ * entry opened last. Null when the series has no entries.
  */
 fun continueEntry(series: StoredSeries, entries: List<StoredSeriesEntry>): StoredSeriesEntry? {
-    val lastOpened = entries.firstOrNull { it.entry.address == series.lastOpenedEntry }
+    val ordered = entries.inReadingOrder()
+    val opened = ordered.indexOfFirst { it.entry.address == series.lastOpenedEntry }
+    val lastOpened = ordered.getOrNull(opened)
     return lastOpened?.takeIf { !it.read }
-        ?: entries.inReadingOrder().firstOrNull { !it.read }
+        ?: lastOpened?.let { ordered.getOrNull(opened + 1) }?.takeIf { !it.read }
+        ?: ordered.lastOrNull { !it.read && it.lastPage > 1 }
+        ?: ordered.firstOrNull { !it.read }
         ?: lastOpened
-        ?: entries.inReadingOrder().lastOrNull()
+        ?: ordered.lastOrNull()
 }
 
 /** The page (from 0) an entry opens at: where the user left an unfinished entry, the start otherwise. */
