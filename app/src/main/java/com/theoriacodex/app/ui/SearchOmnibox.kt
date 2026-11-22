@@ -2,7 +2,10 @@ package com.theoriacodex.app.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import com.theoriacodex.app.codex.CodexCollectionPresentation
+import com.theoriacodex.app.codex.CodexCollectionSource
 import com.theoriacodex.app.codex.codexBelongsToProfile
+import com.theoriacodex.app.codex.codexPostCount
 import com.theoriacodex.app.codex.markSavedSearchesSeen
 import com.theoriacodex.app.recents.recentSearchPresentation
 import com.theoriacodex.app.search.omnibox.OmniboxEntry
@@ -16,6 +19,7 @@ import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.data.repository.SettingDestinations
+import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CreatorProfile
 import kotlinx.coroutines.launch
 
@@ -29,16 +33,26 @@ private const val RECENT_CREATOR_LIMIT = 20
  */
 @Composable
 internal fun rememberSearchOmniboxEntries(shell: TheoriaShell, state: BrowsingDestinationState): List<OmniboxEntry> {
-    val codices = rememberRetained("omnibox-codices") { shell.data.codexRepository.observeCodices() }.value.orEmpty()
+    val profileId = state.activeProfile.profileId
+    val allCodices = rememberRetained("omnibox-codices") { shell.data.codexRepository.observeCodices() }.value.orEmpty()
+    val codices = remember(allCodices, profileId) { allCodices.filter { codexBelongsToProfile(it.codexId, profileId) } }
+    val codexIds = remember(codices) { codices.mapTo(linkedSetOf(), Codex::codexId) }
+    val collection = rememberRetained("omnibox-codex-collection:$codexIds") {
+        with(shell.data) { CodexCollectionSource(codexRepository, storageDirectory, cacheRepository).observe(codexIds) }
+    }.value ?: CodexCollectionPresentation()
     val recents = rememberRetained("omnibox-recent-searches") { shell.data.recentsRepository.observeSearches() }.value.orEmpty()
     val watched = rememberRetained("omnibox-watched-posts") { shell.data.recentsRepository.observeWatchedPosts() }.value.orEmpty()
     val saved = shell.savedSearches
-    val profileId = state.activeProfile.profileId
     val hiddenTags = LocalHiddenTagsOpener.current
-    return remember(shell, codices, recents, watched, saved, state.settings, profileId, hiddenTags) {
+    return remember(shell, codices, collection, recents, watched, saved, state.settings, profileId, hiddenTags) {
         buildList {
-            codices.filter { codexBelongsToProfile(it.codexId, profileId) }.mapTo(this) { codex ->
-                OmniboxEntry.Action(OmniboxKind.CODEX, codex.name) { shell.navController.navigate(AppRoute.codexDetail(codex.codexId)) }
+            codices.mapTo(this) { codex ->
+                OmniboxEntry.Action(
+                    OmniboxKind.CODEX,
+                    codex.name,
+                    detail = collection.itemCounts[codex.codexId]?.let(::codexPostCount),
+                    cover = collection.coverCandidates[codex.codexId].orEmpty(),
+                ) { shell.navController.navigate(AppRoute.codexDetail(codex.codexId)) }
             }
             val followed = state.settings.followedCreators.map { it.creator }
             (followed + recentCreators(watched, followed)).mapTo(this) { creator ->

@@ -12,19 +12,6 @@ import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.theoriacodex.app.media.MediaRequestFactory
-import com.theoriacodex.domain.model.SourceKey
-import java.io.File
-
-/** One way to draw a Codex cover; a cover is tried candidate by candidate until one loads. */
-sealed interface CodexCoverCandidate {
-    data class LocalFile(val file: File, val cacheRevision: Long = 0L) : CodexCoverCandidate
-
-    data class RemoteImage(
-        val source: SourceKey,
-        val url: String,
-        val cacheRevision: Long = 0L,
-    ) : CodexCoverCandidate
-}
 
 /** Draws the first of [candidates] that loads, or [fallback] when none does. */
 @Composable
