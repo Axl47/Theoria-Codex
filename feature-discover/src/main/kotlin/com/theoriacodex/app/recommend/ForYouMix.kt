@@ -78,7 +78,7 @@ internal class MixLane(val lane: ForYouLane, label: String = lane.label) {
  * ([released], in the order the deck and the grid show them). [only] is the lane an interest chip picked. It runs no
  * requests and is not thread-safe: its owner loads the lanes and uses it on one thread.
  */
-internal class ForYouMix(lanes: List<ForYouLane>) {
+internal class ForYouMix(lanes: List<ForYouLane>, private val copiesOf: (Post) -> Set<PostId> = { setOf(it.id) }) {
     /** Every lane of the plan, in order, with the ones hidden tags hide; grows when a hide that kept lanes out goes. */
     private var all = lanes.map { lane -> MixLane(lane, lane.labelAmong(lanes)) }
 
@@ -107,13 +107,13 @@ internal class ForYouMix(lanes: List<ForYouLane>) {
 
     fun isDealt(id: PostId): Boolean = id in dealt
 
-    /** Deals up to [size] cards nobody has [seen], once a lane has opened. */
+    /** Deals up to [size] cards nobody has [seen], once a lane has opened; a copy of a seen or dealt post counts as seen. */
     fun deal(size: Int, seen: Set<PostId>) {
         if (!ready) {
             wanted = true
             return
         }
-        val batch = nextBatch(lanes.map { DeckLane(it.origin, it.buffer) }, steering, seen + dealt, size, only)
+        val batch = nextBatch(lanes.map { DeckLane(it.origin, it.buffer) }, steering, seen + dealt, size, only, copiesOf)
         steering = batch.steering
         lanes.forEach { lane -> batch.taken[lane.origin.laneId]?.let(lane::drop) }
         batch.cards.forEach { card ->

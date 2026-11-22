@@ -347,7 +347,7 @@ internal class TheoriaShell(
     var pendingCreatorProfile by pendingCreatorProfile
     var navReady by mutableStateOf(appShellOwner.state.value.appReady)
     val creatorOpening = CreatorOpeningWorkflow(sources.registry, sources.httpClient)
-    private val fileCopies = FileCopyLookup(sources.registry)
+    private val fileCopies = FileCopyLookup(sources.registry, data.fileMirrors::copiesOf)
     val savedSearchOpens = SavedSearchOpenMarks(data.uiRestoreRepository)
     val recentsClearWorkflow = RecentsClearWorkflow(data.recentsRepository)
     val viewerRouteWorkflow = ViewerRouteWorkflow(
@@ -598,7 +598,7 @@ internal class TheoriaShell(
         }
     }
 
-    /** "Find on other sites" for [post], or null when it has no file hash or no other site can look one up. */
+    /** "Find on other sites" for [post], or null when no copy is known and no other site can look its file up. */
     fun findOnOtherSites(post: Post): (() -> Unit)? = if (!fileCopies.canFind(post)) null else ({
         scope.launch {
             val copies = fileCopies.find(post) { toast("Searching other sites…") }

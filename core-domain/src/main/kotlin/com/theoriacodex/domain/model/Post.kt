@@ -86,6 +86,14 @@ data class Post(
      */
     val contentHash: String? = null,
     /**
+     * 64-bit perceptual hash of the post's still preview, which the app computes from the image when the post is
+     * listed; providers never supply it. Copies of one picture on different sites (resized, re-encoded) hash within
+     * [SAME_PICTURE_MAX_DISTANCE] bits, which [distinctByFile] also collapses. Live listing data only: null when the
+     * preview could not be hashed in time or is too flat to tell apart, and never persisted with the post (the Library's
+     * hashes live in their own table).
+     */
+    val pictureHash: Long? = null,
+    /**
      * The page a booru says the file came from, usually the artist's own post on Pixiv or a social site. Live
      * listing data only.
      */
@@ -128,24 +136,31 @@ private val MD5_IN_PATH = Regex("(?<![0-9a-fA-F])[0-9a-fA-F]{32}(?![0-9a-fA-F])"
 
 /**
  * A resolved or stored post replaces a listed one, keeping what only the listing said: detail responses seldom repeat
- * the comment hint, stored posts carry neither it nor the origin page, and older stored posts lack the file hash.
+ * the comment hint, stored posts carry neither it, the origin page nor the picture hash, and older stored posts lack
+ * the file hash.
  */
 fun Post.keepingListingDataOf(listed: Post): Post {
     val hint = commentHint ?: listed.commentHint
     val hash = contentHash ?: listed.contentHash
     val origin = originUrl ?: listed.originUrl
-    if (hint == commentHint && hash == contentHash && origin == originUrl) return this
-    return copy(commentHint = hint, contentHash = hash, originUrl = origin)
+    val picture = pictureHash ?: listed.pictureHash
+    if (hint == commentHint && hash == contentHash && origin == originUrl && picture == pictureHash) return this
+    return copy(commentHint = hint, contentHash = hash, originUrl = origin, pictureHash = picture)
 }
 
 /**
- * Keeps the first post for each ID and the first post for each file, in order. Feeds that mix sites use it so a file
- * hosted by several of them appears once; posts without a [Post.contentHash] are only compared by ID.
+ * Keeps the first post for each ID, each file and each picture, in order. Feeds that mix sites use it so a file or
+ * picture hosted by several of them appears once: by [Post.contentHash], or by a [Post.pictureHash] within
+ * [SAME_PICTURE_MAX_DISTANCE] of one kept earlier. Posts with neither are only compared by ID.
  */
 fun Iterable<Post>.distinctByFile(): List<Post> {
     val ids = HashSet<PostId>()
     val files = HashSet<String>()
-    return filter { post -> ids.add(post.id) && (post.contentHash == null || files.add(post.contentHash)) }
+    val pictures = PictureHashIndex<Unit>()
+    return filter { post ->
+        ids.add(post.id) && (post.contentHash == null || files.add(post.contentHash)) &&
+            (post.pictureHash == null || pictures.addUnlessMatched(Unit, post.pictureHash))
+    }
 }
 
 private const val MD5_HEX_LENGTH = 32

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theoriacodex.app.creator.creatorProfileActions
 import com.theoriacodex.app.media.isAnimatedPost
+import com.theoriacodex.app.media.postPreviewImageCandidate
 import com.theoriacodex.app.related.RelatedPostsRouteController
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.related.ViewerFeedOwner
@@ -21,6 +22,9 @@ import com.theoriacodex.app.triage.carriesAnyTag
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
+import com.theoriacodex.data.repository.ForYouVerdict
+import com.theoriacodex.data.repository.ForYouVerdictKind
+import com.theoriacodex.data.repository.ForYouVerdictRepository
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.diagnostics.Diagnostics
@@ -50,6 +54,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -58,9 +64,11 @@ import kotlinx.coroutines.withContext
  * the Viewer follows that level as stream [ViewerStreamSource.FOR_YOU].
  *
  * Swipes on the Mix steer what it deals next ([DeckSteering]): a run of skips lowers a lane, and a like or save asks
- * for two posts like it, which arrive a few cards later. Steering lives in memory, so a skip writes nothing and a
- * recreated owner starts from a fresh Mix. Trails do not steer, but a post decided on any level is never dealt again
- * this session. Everything here runs on the main thread, which is also where the decks report their decisions.
+ * for two posts like it, which arrive a few cards later. Steering lives in memory, so a recreated owner starts from a
+ * fresh Mix. Trails do not steer, but a post decided on any level, or a copy of it on another site, is never dealt
+ * again this session. Every level's like, save, skip and hide is also logged per profile ([ForYouDeckWiring.verdicts])
+ * as a label for a future taste model; Undo removes it. Everything here runs on the main thread, which is also where
+ * the decks report their decisions.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ForYouDeckViewModel(
@@ -110,6 +118,10 @@ class ForYouDeckViewModel(
 
     /** Posts decided on any level this session. */
     private val seen = mutableSetOf<PostId>()
+
+    /** The profile each logged verdict was recorded under, so Undo removes it there; writes run in order. */
+    private val loggedUnder = mutableMapOf<PostId, String>()
+    private val verdictWrites = Mutex()
 
     /** The Mix's latest decision and the steering before it, for Undo. */
     private var lastDecision: Pair<PostId, DeckSteering>? = null
@@ -207,7 +219,7 @@ class ForYouDeckViewModel(
                 return@launch settle(ForYouMixState.Failed, error.message)
             }
             if (lanes.isEmpty()) return@launch settle(ForYouMixState.NoLanes)
-            val built = ForYouMix(lanes)
+            val built = ForYouMix(lanes, wiring.copiesOf)
             mix = built
             // Every lane is asked before the first deal, so lanes that answer without waiting are dealt in turn; after
             // that the first lane to answer deals, and a slow source does not hold the first card back.
@@ -428,7 +440,7 @@ class ForYouDeckViewModel(
         val scope = levelScope()
         // Not read live: a card decided on this trail must stay in its deck for Undo.
         val known = seen + kept
-        val source = spec.pager.asTriageFeed(scope) { posts -> posts.filter { it.id !in known && shows(it) } }
+        val source = spec.pager.asTriageFeed(scope) { posts -> posts.filter { !it.copyOfAny(known) && shows(it) } }
         relatedPosts.clear("level opened")
         stack.update { it + level("for_you:$session:trail:${++trailCount}", spec.label, request, spec.query, source, scope = scope, onDecision = ::onTrailDecision) }
     }
@@ -477,11 +489,41 @@ class ForYouDeckViewModel(
         return CoroutineScope(context + SupervisorJob(context.job))
     }
 
-    /** A trail's decisions only mark their posts decided; a decision that no longer stands unmarks its post. */
+    /**
+     * A trail's decisions only mark their posts decided and log their verdicts; a decision that no longer stands
+     * unmarks its post and removes its verdict.
+     */
     private fun onTrailDecision(event: TriageDecisionEvent) {
-        val post = event.decision.post.id
-        if (event is TriageDecisionEvent.Decided) seen += post else seen -= post
+        val post = event.decision.post
+        when (event) {
+            is TriageDecisionEvent.Decided -> {
+                seen += post.id
+                val kind = event.decision.signal()?.verdictKind() ?: return
+                val profileId = inputs?.profileId ?: return
+                loggedUnder[post.id] = profileId
+                val verdict = ForYouVerdict(profileId, post.id, kind, wiring.clock(), postPreviewImageCandidate(post)?.url)
+                writeVerdict { record(verdict) }
+            }
+            is TriageDecisionEvent.Reverted -> {
+                seen -= post.id
+                val profileId = loggedUnder.remove(post.id) ?: return
+                writeVerdict { remove(profileId, post.id) }
+            }
+        }
     }
+
+    /** Runs [write] after the verdict writes asked for before it, so an Undo never lands ahead of its swipe. */
+    private fun writeVerdict(write: suspend ForYouVerdictRepository.() -> Unit) {
+        wiring.writeScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            verdictWrites.withLock {
+                runCatchingPreservingCancellation { wiring.verdicts.write() }
+                    .onFailure { Diagnostics.report("for-you", "A For You verdict could not be logged", it) }
+            }
+        }
+    }
+
+    /** Whether [this] post, or a copy of it on another site, is one of [ids]. */
+    private fun Post.copyOfAny(ids: Set<PostId>): Boolean = id in ids || wiring.copiesOf(this).any(ids::contains)
 
     /**
      * Steers the Mix by a decision of the Mix deck numbered [level]. A deck that was replaced since (its writes may
@@ -525,8 +567,7 @@ class ForYouDeckViewModel(
             val found = if (origin == null) emptyList() else page?.posts.orEmpty().map { DeckCard(it, origin) }
             asking.remove(post.id)
             val fresh = found.filter { card ->
-                val id = card.post.id
-                id != post.id && id !in seen && id !in kept && !mix.isDealt(id) && shows(card.post)
+                !card.post.copyOfAny(seen + kept + post.id) && !mix.isDealt(card.post.id) && shows(card.post)
             }.distinctBy { it.post.id }.take(INJECTED)
             if (fresh.isEmpty()) return@launch
             mix.steering = mix.steering.inject(fresh)
@@ -551,6 +592,13 @@ private fun TriageDecision.signal(): DeckSignal? = when (this) {
     is TriageDecision.Skipped -> DeckSignal.Skipped
     is TriageDecision.Hid -> DeckSignal.Hid
     is TriageDecision.Kept, is TriageDecision.Removed -> null
+}
+
+private fun DeckSignal.verdictKind(): ForYouVerdictKind = when (this) {
+    DeckSignal.Liked -> ForYouVerdictKind.LIKED
+    DeckSignal.Saved -> ForYouVerdictKind.SAVED
+    DeckSignal.Skipped -> ForYouVerdictKind.SKIPPED
+    DeckSignal.Hid -> ForYouVerdictKind.HID
 }
 
 private fun TrailRequest.name(): String = when (this) {
