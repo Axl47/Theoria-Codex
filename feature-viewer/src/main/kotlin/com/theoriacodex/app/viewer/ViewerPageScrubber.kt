@@ -51,8 +51,9 @@ import kotlinx.coroutines.delay
 
 /**
  * Seeks a multi-page post in whole-page steps, the way the video timeline seeks time. A drag floats the target
- * page and its neighbours and turns the page once, on release; with instant seek each step turns the page instead.
- * [mirrored] matches a right-to-left media pager, so dragging follows the direction pages swipe.
+ * page and its neighbours and turns the page once, on release; with instant seek each step turns the page instead,
+ * and only the page number floats. [mirrored] matches a right-to-left media pager, so dragging follows the direction
+ * pages swipe.
  */
 @Composable
 internal fun ViewerPageScrubber(
@@ -72,6 +73,7 @@ internal fun ViewerPageScrubber(
     val scrub = remember { PageScrubState(callbacks) }
     DisposableEffect(Unit) { onDispose(scrub::abandon) }
     val shownPage = scrub.target ?: pageIndex
+    val holdPx = with(LocalDensity.current) { PAGE_HOLD.toPx() }
 
     Box(
         modifier.fillMaxWidth().padding(horizontal = 16.dp).height(VIEWER_TIMELINE_TRACK_HEIGHT)
@@ -92,7 +94,7 @@ internal fun ViewerPageScrubber(
                     scrub.begin(latestPage)
                     scrub.moveTo(touched, instantSeek)
                 },
-                onMove = { x -> scrub.moveTo(viewerPageAt(x, scrub.widthPx, pageCount, mirrored), instantSeek) },
+                onMove = { x -> scrub.moveTo(viewerPageAt(x, scrub.widthPx, pageCount, mirrored, scrub.target, holdPx), instantSeek) },
                 onEnd = { released -> scrub.end(released, instantSeek) },
             ),
         contentAlignment = Alignment.Center,
@@ -102,12 +104,23 @@ internal fun ViewerPageScrubber(
             Modifier.fillMaxWidth().height(VIEWER_TIMELINE_TRACK_HEIGHT).graphicsLayer { if (mirrored) scaleX = -1f },
         )
         val target = scrub.target
-        if (target != null && !instantSeek) ViewerPagePreview(source, items, target, scrub.startPage, aspectRatio, mirrored)
+        if (target != null) {
+            if (instantSeek) ViewerPageReadout(target, scrub.startPage, pageCount, mirrored) else ViewerPagePreview(source, items, target, scrub.startPage, aspectRatio, mirrored)
+        }
     }
 }
 
-/** The page a touch at [x] on a track [widthPx] wide stands for: each page owns an equal share of the track. */
-internal fun viewerPageAt(x: Float, widthPx: Float, pageCount: Int, mirrored: Boolean): Int {
+/**
+ * The page a touch at [x] on a track [widthPx] wide stands for: each page owns an equal share of the track. A
+ * [held] page keeps the touch until it is [holdPx] past that page's share, so a finger resting on a boundary, or
+ * rolling as it lifts, does not flip between two pages. Long posts give each page a sliver, so this matters most there.
+ */
+internal fun viewerPageAt(x: Float, widthPx: Float, pageCount: Int, mirrored: Boolean, held: Int? = null, holdPx: Float = 0f): Int {
+    if (held != null) {
+        val slot = widthPx / pageCount
+        val start = (if (mirrored) pageCount - 1 - held else held) * slot
+        if (x >= start - holdPx && x < start + slot + holdPx) return held
+    }
     val page = ((x / widthPx).coerceIn(0f, 1f) * pageCount).toInt().coerceAtMost(pageCount - 1)
     return if (mirrored) pageCount - 1 - page else page
 }
@@ -169,6 +182,20 @@ private fun ViewerPageTrack(page: Int, pageCount: Int, emphasized: Boolean, modi
     }
 }
 
+/** Instant seek's float: the page already turns underneath, so only its number and the distance from the start show. */
+@Composable
+private fun ViewerPageReadout(target: Int, startPage: Int, pageCount: Int, mirrored: Boolean) {
+    val centre = (target + 0.5f) / pageCount
+    ViewerScrubPopup(viewerPageReadout(target, pageCount), viewerPageDelta(target, startPage), if (mirrored) 1f - centre else centre) {}
+}
+
+private fun viewerPageReadout(target: Int, pageCount: Int) = "${target + 1} / $pageCount"
+
+private fun viewerPageDelta(target: Int, startPage: Int): String {
+    val delta = target - startPage
+    return "${if (delta < 0) "-" else "+"}${abs(delta)}"
+}
+
 /** The floating target page between its neighbours. The readout follows the finger; images wait for it to rest, sparing providers a fast drag. */
 @Composable
 private fun ViewerPagePreview(
@@ -197,9 +224,8 @@ private fun ViewerPagePreview(
     val sideFrame = frame * SIDE_FRAME_SCALE
     val decodeEdgePx = with(LocalDensity.current) { maxOf(frame.width, frame.height).roundToPx() }
     val step = if (mirrored) -1 else 1
-    val delta = target - startPage
     val centre = (target + 0.5f) / items.size
-    ViewerScrubPopup("${target + 1} / ${items.size}", "${if (delta < 0) "-" else "+"}${abs(delta)}", if (mirrored) 1f - centre else centre) {
+    ViewerScrubPopup(viewerPageReadout(target, items.size), viewerPageDelta(target, startPage), if (mirrored) 1f - centre else centre) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(PREVIEW_FRAME_GAP)) {
             for (slot in -1..1) {
                 val item = items.getOrNull(settled + slot * step)
@@ -262,6 +288,8 @@ internal fun viewerPagePreviewFrame(aspectRatio: Float?, availableWidth: Dp): Dp
 }
 
 private const val MAX_PAGE_SEGMENTS = 24
+/** About a fingertip's roll as it lifts. */
+private val PAGE_HOLD = 6.dp
 private const val SIDE_FRAME_SCALE = 0.55f
 private const val SIDE_FRAME_ALPHA = 0.5f
 private val PREVIEW_FRAME_GAP = 6.dp
