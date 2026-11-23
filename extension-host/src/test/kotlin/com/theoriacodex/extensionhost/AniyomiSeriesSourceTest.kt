@@ -195,17 +195,28 @@ class AniyomiSeriesSourceTest {
     }
 
     @Test
-    fun `an anime whose details group it into seasons is refused unwrapped, asking for them first after a restart`() = runBlocking {
+    fun `an anime whose details group it into seasons is refused unwrapped, whatever its listing said`() = runBlocking {
+        // Listings leave every anime at episodes; only details say seasons.
         val source = ServerSource(listing = listOf(anime("/a/1", "Grouped")), details = { SAnime.create().apply { fetch_type = FetchType.Seasons } })
         val warm = AniyomiSeriesSource(source, HostServices(ExtensionImages()))
         val opened = warm.details(warm.popular(1).series.single())
         assertEquals("Seasons aren't supported yet", assertFailsWith<UnsupportedEntriesException> { warm.entries(opened) }.message)
         assertEquals(1, source.detailsAsked)
 
+        // Listed again after it was opened, as browsing does before the followed series are checked: no more requests.
+        warm.popular(1)
+        assertFailsWith<UnsupportedEntriesException> { warm.entries(opened) }
+        assertEquals(1, source.detailsAsked)
+
+        // Listed but never opened, as a search does before counting episodes.
+        val searched = AniyomiSeriesSource(source, HostServices(ExtensionImages()))
+        assertFailsWith<UnsupportedEntriesException> { searched.entries(searched.popular(1).series.single()) }
+        assertEquals(2, source.detailsAsked)
+
         // As the new-episode check asks after a restart: nothing listed, nothing opened.
         val cold = AniyomiSeriesSource(source, HostServices(ExtensionImages()))
         assertFailsWith<UnsupportedEntriesException> { cold.entries(Series(SeriesId(cold.key, "/a/1"), "Grouped")) }
-        assertEquals(2, source.detailsAsked)
+        assertEquals(3, source.detailsAsked)
     }
 
     @Test
