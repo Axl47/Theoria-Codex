@@ -62,6 +62,7 @@ private fun Player.tracksOf(type: Int): List<PlaybackTrack> = currentTracks.grou
 }
 
 private fun Player.overrideFor(type: Int, id: String): TrackSelectionOverride? {
+    if (TRACK_ID_SEPARATOR !in id) return null
     val groupId = id.substringBeforeLast(TRACK_ID_SEPARATOR)
     val track = id.substringAfterLast(TRACK_ID_SEPARATOR).toIntOrNull() ?: return null
     val group = currentTracks.groups.firstOrNull { it.type == type && it.mediaTrackGroup.id == groupId } ?: return null

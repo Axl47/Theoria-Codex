@@ -133,6 +133,15 @@ class VideoStreamPlaybackTest {
         pool.recycle(lease)
     }
 
+    @Test fun `an id without a track index chooses nothing, though it names a track group`() {
+        val lease = pool.acquire(VideoPlaybackRequest("${server.base}/main.wav", STREAM_FIXTURE_HEADERS, cache = false))
+        until { lease.player.playbackState == Player.STATE_READY }
+        lease.player.selectAudio("0")
+
+        assertTrue(lease.player.trackSelectionParameters.overrides.isEmpty())
+        pool.recycle(lease)
+    }
+
     @Test fun `subtitles stay off and unloaded until chosen, a stale id changes nothing, and null turns them off`() {
         val cues = mutableListOf<String>()
         val lease = pool.acquire(
