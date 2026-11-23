@@ -9,6 +9,7 @@ import coil.request.CachePolicy
 import coil.request.SuccessResult
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.SourceKey
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -105,7 +106,7 @@ class PreviewPictureHasher(
         private const val REMEMBERED = 8_192
 
         /** Long edge to decode at; the hash averages the picture down to 32×32, so a little more is plenty. */
-        private const val DECODE_PX = 96
+        internal const val DECODE_PX = 96
         private const val CONCURRENT_LOADS = 16
 
         private fun loadWithImageLoader(context: Context): suspend (PostMediaCandidate) -> PictureHashResult {
@@ -113,11 +114,8 @@ class PreviewPictureHasher(
             return { candidate ->
                 permits.withPermit {
                     val bitmap = loadPreviewStill(context, candidate, DECODE_PX)
-                    if (bitmap == null) PictureHashResult.Unavailable else withContext(Dispatchers.Default) {
-                        val pixels = IntArray(bitmap.width * bitmap.height)
-                        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-                        PerceptualHash.ofArgb(pixels, bitmap.width, bitmap.height)
-                            ?.let(PictureHashResult::Hashed) ?: PictureHashResult.Unhashable
+                    if (bitmap == null) PictureHashResult.Unavailable else {
+                        pictureHashOf(bitmap)?.let(PictureHashResult::Hashed) ?: PictureHashResult.Unhashable
                     }
                 }
             }
@@ -130,9 +128,25 @@ class PreviewPictureHasher(
  * goes through the app's image loader with the card's own address, so it reads and fills the disk cache cards use, and
  * keeps the bitmap out of the memory cache. Picture hashing and the picture tagger both read previews this way.
  */
-suspend fun loadPreviewStill(context: Context, candidate: PostMediaCandidate, sizePx: Int): Bitmap? {
+suspend fun loadPreviewStill(context: Context, candidate: PostMediaCandidate, sizePx: Int): Bitmap? =
+    loadStill(context, candidate.url, candidate.source, sizePx)
+
+/**
+ * The picture hash of the image at [url] (an address or a file) from [source], or null when it could not be loaded or
+ * is too flat to tell apart. Loads as [loadPreviewStill] does.
+ */
+suspend fun pictureHashAt(context: Context, url: String, source: SourceKey): Long? =
+    loadStill(context, url, source, PreviewPictureHasher.DECODE_PX)?.let { pictureHashOf(it) }
+
+private suspend fun pictureHashOf(bitmap: Bitmap): Long? = withContext(Dispatchers.Default) {
+    val pixels = IntArray(bitmap.width * bitmap.height)
+    bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+    PerceptualHash.ofArgb(pixels, bitmap.width, bitmap.height)
+}
+
+private suspend fun loadStill(context: Context, url: String, source: SourceKey, sizePx: Int): Bitmap? {
     val request = MediaRequestFactory.imageRequest(
-        context, candidate.url, candidate.source, crossfade = false, allowHardware = false,
+        context, url, source, crossfade = false, allowHardware = false,
         targetWidthPx = sizePx, targetHeightPx = sizePx,
     ).newBuilder()
         // A still first frame of any format, never an animation, and no bitmap in the memory cache.

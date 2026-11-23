@@ -37,7 +37,8 @@ data class ViewerScreenConfig(
 
 /**
  * How the strip shows one post: text drawn over its thumbnail ([badge], which TalkBack skips), the name TalkBack reads
- * for the tile, and an [image] to show in place of the post's preview. Each is optional.
+ * for the tile, and an [image], one of the post's pages, to show from its top in place of the post's preview. Each is
+ * optional.
  */
 data class ViewerStripMark(val badge: String? = null, val label: String? = null, val image: ImageRef? = null)
 

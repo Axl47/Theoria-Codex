@@ -52,6 +52,7 @@ import com.theoriacodex.app.creator.CreatorOpeningWorkflow
 import com.theoriacodex.app.source.FileCopyLookup
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.media.PostDownloadItem
+import com.theoriacodex.app.media.pictureHashAt
 import com.theoriacodex.app.post.PostMutationViewModel
 import com.theoriacodex.app.recents.RecentsClearWorkflow
 import com.theoriacodex.app.recents.SavedSearchViewModel
@@ -367,7 +368,7 @@ internal class TheoriaShell(
     val savedSearchOpens = SavedSearchOpenMarks(data.uiRestoreRepository)
     val recentsClearWorkflow = RecentsClearWorkflow(data.recentsRepository)
     /** Reads series chapters in the Viewer; null in a build without extensions. */
-    val seriesReader = container.series?.let(::SeriesReader)
+    val seriesReader = container.series?.let { series -> SeriesReader(series) { source, page -> (page.localPath ?: page.url)?.let { pictureHashAt(appContext, it, source) } } }
     val viewerRouteWorkflow = ViewerRouteWorkflow(
         data = data,
         cacheScope = scope,

@@ -217,6 +217,36 @@ class SeriesReaderTest {
     }
 
     @Test
+    fun chaptersThatOpenOnTheSamePageArePicturedByTheirSecond() = runTest {
+        val store = store()
+        download("/c1", store)
+        val twoPages = object : SeriesSource by OnePage(source) {
+            override suspend fun pages(entry: SeriesEntry) = pagesOf(entry.address)
+        }
+        val entries = listOf(chapter, StoredSeriesEntry(SeriesEntry("/c2", "Ch. 2"), sourceOrder = 1, firstSeenAtEpochMs = 0))
+        // Every chapter opens on the same credit page.
+        val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), entries), { listOf(twoPages) }, store = store)) { _, page ->
+            address(page).let { if (it.endsWith("/0")) 1L else it.hashCode().toLong() }
+        }
+        val session = checkNotNull(reader.session(id, "/c2"))
+        val seen = mutableListOf<Map<PostId, ViewerStripMark>>()
+        val collector = launch { reader.stripMarks(session).collect { seen += it } }
+        fun pictured() = seen.last().mapValues { (_, mark) -> mark.image?.let(::address) }
+        advanceUntilIdle()
+        // One chapter has nothing to match yet.
+        assertEquals(mapOf(PostId(source, "/c1") to pagesOf("/c1")[0].url), pictured())
+
+        reader.resolve(session.context.queryHash, PostId(source, "/c2"))
+        advanceUntilIdle()
+
+        assertEquals(mapOf(PostId(source, "/c1") to pagesOf("/c1")[1].url, PostId(source, "/c2") to pagesOf("/c2")[1].url), pictured())
+        collector.cancel()
+    }
+
+    /** A page's address, read from its file when it is downloaded. */
+    private fun address(page: ImageRef) = page.url ?: File(checkNotNull(page.localPath)).readText()
+
+    @Test
     fun deleteAfterReadingWaitsForTheLastReaderToClose() = runTest {
         val reader = readerOverDownloadedChapters(deleteAfterReading = true)
         reader.opened()
