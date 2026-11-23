@@ -3,6 +3,7 @@ package com.theoriacodex.app.ui.routes
 import android.app.Application
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -16,6 +17,7 @@ import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.fixtures.JourneyAppContainer
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.ui.TheoriaAppContent
+import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.CoroutineScope
@@ -38,7 +40,29 @@ class ForYouDealsWhenShownTest {
     @get:Rule val compose = createComposeRule()
     @get:Rule val temporary = TemporaryFolder()
 
-    @Test fun `a tab change that passes over For You asks the sources for nothing, and opening For You deals`() {
+    @Test fun `a tab change that passes over For You asks the sources for nothing, and opening For You deals`() = app { graph ->
+        compose.onNodeWithContentDescription("Library").performClick()
+        compose.waitForIdle()
+        assertTrue("For You dealt while passed over: ${graph.registry.requests}", graph.registry.requests.isEmpty())
+
+        compose.onNodeWithContentDescription("For You").performClick()
+        compose.waitForIdle()
+        compose.waitUntil(10_000) { graph.registry.requests.isNotEmpty() }
+    }
+
+    @Test fun `a tap on For You while the slide to Library is passing it goes to For You`() = app { graph ->
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithContentDescription("Library").performClick()
+        // Partway through the slide, where the pager's nearest page is already For You.
+        compose.mainClock.advanceTimeBy(TheoriaMotion.SCREEN_MS / 3L)
+        compose.onNodeWithContentDescription("For You").assertIsSelected().performClick()
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        compose.waitUntil(10_000) { graph.registry.requests.isNotEmpty() }
+    }
+
+    /** The app on its first tab, Search, over sources that record what they are asked. */
+    private fun app(test: (JourneyAppContainer) -> Unit) {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val show = mutableStateOf(true)
         var owners: ViewModelStoreOwner? = null
@@ -57,14 +81,9 @@ class ForYouDealsWhenShownTest {
                 if (show.value) TheoriaAppContent(graph, viewModel<ViewerSessionRetentionViewModel>(), viewModel<AppShellViewModel>())
             }
             compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Library").fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithContentDescription("Library").performClick()
-            compose.waitForIdle()
-            assertTrue("For You dealt while passed over: ${graph.registry.requests}", graph.registry.requests.isEmpty())
-
-            compose.onNodeWithContentDescription("For You").performClick()
-            compose.waitForIdle()
-            compose.waitUntil(10_000) { graph.registry.requests.isNotEmpty() }
+            test(graph)
         } finally {
+            compose.mainClock.autoAdvance = true
             compose.runOnIdle { show.value = false; owners?.viewModelStore?.clear() }
             runBlocking(Dispatchers.IO) { graph.shutdown() }
             scope.cancel()
