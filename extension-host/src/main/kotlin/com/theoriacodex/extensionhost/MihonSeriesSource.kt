@@ -60,14 +60,7 @@ class MihonSeriesSource(private val source: Source, host: HostServices) : Series
     override suspend fun entries(series: Series): List<SeriesEntry> = calls.calling {
         source.getMangaUpdate(manga(series), emptyList(), fetchDetails = false, fetchChapters = true).chapters.map { chapter ->
             listedChapters[chapter.url] = chapter
-            SeriesEntry(
-                address = chapter.url,
-                name = chapter.name,
-                // Most extensions leave the number at -1 for the app to read from the name, as Mihon does.
-                number = chapter.chapter_number.takeIf { it >= 0f } ?: ChapterRecognition.parseChapterNumber(series.title, chapter.name),
-                translatorGroup = chapter.scanlator?.takeIf(String::isNotBlank),
-                uploadedAtEpochMs = chapter.date_upload.takeIf { it > 0L },
-            )
+            extensionEntry(series.title, chapter.url, chapter.name, chapter.chapter_number, chapter.scanlator, chapter.date_upload)
         }
     }
 
@@ -119,16 +112,7 @@ class MihonSeriesSource(private val source: Source, host: HostServices) : Series
         if (details.status != SManga.UNKNOWN) series.status = details.status
     }
 
-    private fun SManga.toSeries() = Series(
-        id = SeriesId(key, url),
-        title = title,
-        coverUrl = thumbnail_url?.takeIf(String::isNotBlank),
-        author = author?.takeIf(String::isNotBlank),
-        genres = genre.orEmpty().split(',').map(String::trim).filter(String::isNotEmpty),
-        language = source.lang,
-        description = description?.trim()?.takeIf(String::isNotEmpty),
-        status = seriesStatus(status),
-    )
+    private fun SManga.toSeries() = extensionSeries(SeriesId(key, url), title, thumbnail_url, author, genre, source.lang, description, status)
 
     /**
      * Nothing is requested here. Some sources name each image only on a page of its own; [sourceImages] asks for that when
