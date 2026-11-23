@@ -22,6 +22,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -287,11 +288,13 @@ class ExtensionRegistry(
             on[listing.id] = code.sources.filter { it.language in chosen && taken.add(it.series.key) }
             listing.copy(problem = code.problem, languages = languages.map { ExtensionLanguage(it, it in chosen) })
         }
-        // Only a hint for the next start: failing to keep it leaves that start loading every extension for a lookup.
-        // Kept before anything is published, so a listing cancelled here publishes nothing and the next one counts.
+        // Only a hint for the next start: failing to keep it leaves that start loading every extension for a lookup. Not
+        // cancelled midway, so what loaded is always published with it.
         if (learned.isNotEmpty()) {
-            runCatchingPreservingCancellation { this.choices.update { it.copy(owners = it.owners + learned) } }
-                .onFailure { Diagnostics.report(LOG_AREA, "Which extension offers each source could not be kept", it) }
+            withContext(NonCancellable) {
+                runCatchingPreservingCancellation { this@ExtensionRegistry.choices.update { it.copy(owners = it.owners + learned) } }
+                    .onFailure { Diagnostics.report(LOG_AREA, "Which extension offers each source could not be kept", it) }
+            }
         }
         active = on
         val sources = on.values.flatten()

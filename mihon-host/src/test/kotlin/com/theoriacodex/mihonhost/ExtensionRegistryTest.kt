@@ -24,9 +24,13 @@ import okhttp3.Request
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -44,7 +48,11 @@ class ExtensionRegistryTest {
 
         override suspend fun choices() = interruption?.let { interruption = null; throw it } ?: choices
 
+        /** Runs before each [update] takes effect. */
+        var beforeUpdate: suspend () -> Unit = {}
+
         override suspend fun update(transform: (ExtensionChoices) -> ExtensionChoices) {
+            beforeUpdate()
             choices = transform(choices)
         }
     }
@@ -118,6 +126,24 @@ class ExtensionRegistryTest {
 
         assertNull(registry.source(MihonSeriesSource.sourceKey(2)))
         assertTrue(loads.isEmpty())
+    }
+
+    @Test
+    fun `a lookup cancelled while it keeps the owners still offers what it loaded`() = runBlocking {
+        twoExtensionsOn()
+        store.choices = store.choices.copy(owners = mapOf("custom_mihon_1" to "a", "custom_mihon_2" to "b"))
+        assertNotNull(registry.source(MihonSeriesSource.sourceKey(1)))
+        val updating = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        store.beforeUpdate = { updating.complete(Unit); release.await() }
+
+        val lookup = launch(Dispatchers.Default) { registry.source(MihonSeriesSource.sourceKey(2)) }
+        updating.await()
+        lookup.cancel()
+        release.complete(Unit)
+        lookup.join()
+
+        assertEquals("custom_mihon_2", registry.source(MihonSeriesSource.sourceKey(2))?.key?.id)
     }
 
     @Test
