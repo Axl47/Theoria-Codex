@@ -173,14 +173,37 @@ class AniyomiSeriesSourceTest {
     }
 
     @Test
-    fun `an anime grouped into seasons is refused in words the series page shows, unwrapped`() = runBlocking {
-        val source = ServerSource(listing = listOf(anime("/a/1", "Grouped").apply { fetch_type = FetchType.Seasons }))
+    fun `an anime whose details group it into seasons is refused unwrapped, asking for them first after a restart`() = runBlocking {
+        val source = ServerSource(listing = listOf(anime("/a/1", "Grouped")), details = { SAnime.create().apply { fetch_type = FetchType.Seasons } })
+        val warm = AniyomiSeriesSource(source, HostServices(ExtensionImages()))
+        val opened = warm.details(warm.popular(1).series.single())
+        assertEquals("Seasons aren't supported yet", assertFailsWith<UnsupportedEntriesException> { warm.entries(opened) }.message)
+        assertEquals(1, source.detailsAsked)
+
+        // As the new-episode check asks after a restart: nothing listed, nothing opened.
+        val cold = AniyomiSeriesSource(source, HostServices(ExtensionImages()))
+        assertFailsWith<UnsupportedEntriesException> { cold.entries(Series(SeriesId(cold.key, "/a/1"), "Grouped")) }
+        assertEquals(2, source.detailsAsked)
+    }
+
+    @Test
+    fun `episodes are listed with their numbers, read from the name where the source left none`() = runBlocking {
+        val source = ServerSource(
+            episodes = listOf(
+                SEpisode.create().apply { url = "/e/2"; name = "Episode 2"; episode_number = 2f; date_upload = 1_000L; scanlator = "Subs" },
+                SEpisode.create().apply { url = "/e/1"; name = "Show - Episode 1" },
+            ),
+        )
         val series = AniyomiSeriesSource(source, HostServices(ExtensionImages()))
+        val stored = Series(SeriesId(series.key, "/a/3"), "Show")
 
-        val listed = series.popular(1).series.single()
-        val refusal = assertFailsWith<UnsupportedEntriesException> { series.entries(listed) }
-
-        assertEquals("Seasons aren't supported yet", refusal.message)
+        assertEquals(
+            listOf(SeriesEntry("/e/2", "Episode 2", 2f, "Subs", 1_000L), SeriesEntry("/e/1", "Show - Episode 1", 1f)),
+            series.entries(stored),
+        )
+        // Listed once its details were asked for, so a second listing asks no more.
+        series.entries(stored)
+        assertEquals(1, source.detailsAsked)
     }
 
     @Test
@@ -225,8 +248,15 @@ class AniyomiSeriesSourceTest {
         private val videos: Map<String, suspend () -> List<Video>> = emptyMap(),
         private val listing: List<SAnime> = emptyList(),
         private val addressOf: suspend (Video) -> String = { it.url },
+        private val details: (SAnime) -> SAnime = { SAnime.create() },
+        private val episodes: List<SEpisode> = emptyList(),
     ) : FakeAnimeSource() {
         override val id = 7L
+        var detailsAsked = 0
+
+        override suspend fun getAnimeDetails(anime: SAnime): SAnime = details(anime).also { detailsAsked++ }
+
+        override suspend fun getEpisodeList(anime: SAnime): List<SEpisode> = episodes
 
         override suspend fun getPopularAnime(page: Int) = AnimesPage(listing, hasNextPage = false)
 

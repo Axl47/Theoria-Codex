@@ -60,14 +60,15 @@ class AniyomiSeriesSource internal constructor(
         source.getSearchAnime(page, text, searches.options(text, page, filters)).listed()
     }
 
-    override suspend fun details(series: Series): Series = calls.calling {
-        val anime = anime(series)
-        anime.withDetails(source.getAnimeDetails(anime)).also { listedAnime[it.url] = it }.toSeries()
-    }
+    override suspend fun details(series: Series): Series = calls.calling { opened(anime(series)).toSeries() }
 
-    /** An anime whose source groups its episodes into seasons is refused, in words the series page shows as they are. */
+    /**
+     * An anime whose source groups its episodes into seasons is refused, in words the series page shows as they are.
+     * Its details tell, so an anime not listed or opened in this process, as the background new-episode check asks
+     * about after a restart, has them asked for first: one more request, for such an anime only.
+     */
     override suspend fun entries(series: Series): List<SeriesEntry> {
-        val anime = anime(series)
+        val anime = listedAnime[series.id.address] ?: calls.calling { opened(anime(series)) }
         if (anime.fetch_type == FetchType.Seasons) throw UnsupportedEntriesException(SEASONS_UNSUPPORTED)
         return calls.calling {
             source.getEpisodeList(anime).map { episode ->
@@ -104,6 +105,9 @@ class AniyomiSeriesSource internal constructor(
         },
         hasNextPage = hasNextPage,
     )
+
+    /** [anime] with its details, kept as listed. */
+    private suspend fun opened(anime: SAnime): SAnime = anime.withDetails(source.getAnimeDetails(anime)).also { listedAnime[it.url] = it }
 
     private fun anime(series: Series): SAnime = listedAnime[series.id.address] ?: SAnime.create().apply {
         url = series.id.address
