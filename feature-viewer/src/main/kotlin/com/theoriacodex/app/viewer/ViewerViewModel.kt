@@ -25,7 +25,6 @@ import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
 import com.theoriacodex.app.viewer.state.ViewerResolutionStatus
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.ViewerUiState
-import com.theoriacodex.app.viewer.state.ViewerControlsState
 import com.theoriacodex.app.viewer.state.reduceViewerState
 import com.theoriacodex.data.repository.ANIME_FINISHED_PERCENT
 import com.theoriacodex.domain.model.Post
@@ -343,13 +342,20 @@ class ViewerViewModel(
             watchedThrough = null
             comments.reset()
             mutableSession.value = null
-            // The retained pages keep their episode choice: a stream label dropped here would rebind the closing player.
+            val current = mutableState.value
             mutableState.value = if (retainPresentation) ViewerUiState(
                 // The closing player still reports where the episode stopped, which needs the series' kind.
-                series = mutableState.value.series,
-                pages = mutableState.value.pages,
-                currentPageIndex = mutableState.value.currentPageIndex,
-                controls = ViewerControlsState(chromeVisible = false, episode = mutableState.value.controls.episode),
+                series = current.series,
+                pages = current.pages,
+                currentPageIndex = current.currentPageIndex,
+                // The closing player only pauses: its controls otherwise stay as they were, since it reads any change
+                // as a command (a stream label dropped rebinds it; a replay count reset seeks it to the start).
+                controls = current.controls.copy(
+                    chromeVisible = false,
+                    panel = null,
+                    slideshow = false,
+                    playback = current.controls.playback.copy(playing = false),
+                ),
             ) else ViewerUiState.Empty
             clearSavedState()
         }

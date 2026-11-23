@@ -173,6 +173,19 @@ class ViewerWatchingTest {
     }
 
     @Test
+    fun `closing after a replay only pauses the closing player`() = runTest {
+        val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this)
+        val episode = post("episode", media = listOf(ViewerOwnerTestData.video("episode.mp4")))
+        owner.replaceSession(session("watching", listOf(episode)).copy(series = ViewerSeries.Watching()))
+        owner.onAction(ViewerAction.RestartPlayback)
+        val playing = owner.state.value.controls.playback
+        owner.clearSession(retainPresentation = true)
+        assertEquals(1L, playing.restartRequest)
+        // A replay count back at 0 would read as another replay, seeking the closing player to the start it then saves.
+        assertEquals(playing.copy(playing = false), owner.state.value.controls.playback)
+    }
+
+    @Test
     fun `a watched session's seeds arrive with its first state, before anything can save`() = runTest {
         val seeds = ViewerSeries.Watching(mapOf(episodes[0].id to 90_000L))
         val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this)
