@@ -10,6 +10,7 @@ import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.Inclusion
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
@@ -441,6 +442,42 @@ class SeriesTabViewModelTest {
         changed.value = 1
         advanceUntilIdle()
         assertEquals(null, viewModel.state.value.dedicated)
+    }
+
+    @Test
+    fun openGenreSearchAppliesMatchingGenreFilterOrFallsBackToSourceTextSearch() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val source = Answering("custom_mihon_1").apply {
+            offered = {
+                listOf(
+                    SeriesFilter.Group(
+                        "Genres",
+                        listOf(
+                            SeriesFilter.TriState("Fantasy", Inclusion.IGNORE),
+                            SeriesFilter.Check("Action", checked = false),
+                        ),
+                    ),
+                )
+            }
+        }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) {}
+        advanceUntilIdle()
+
+        viewModel.openGenreSearch(source.key, "fantasy")
+        advanceUntilIdle()
+
+        val filtered = viewModel.state.value.dedicated?.kind as BrowseKind.Filtered
+        assertEquals("", filtered.text)
+        assertEquals(1, filtered.changed)
+        val group = filtered.filters.single() as SeriesFilter.Group
+        assertEquals(Inclusion.INCLUDE, (group.filters.first() as SeriesFilter.TriState).state)
+
+        // Unknown genre falls back to text search inside that source.
+        viewModel.openGenreSearch(source.key, "Mecha")
+        advanceUntilIdle()
+        val fallback = viewModel.state.value.dedicated?.kind as BrowseKind.Filtered
+        assertEquals("Mecha", fallback.text)
+        assertEquals(0, fallback.changed)
     }
 
     private fun TestScope.searchFor(viewModel: SeriesTabViewModel, text: String) {

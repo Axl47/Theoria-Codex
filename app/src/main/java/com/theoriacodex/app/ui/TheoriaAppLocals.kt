@@ -15,6 +15,8 @@ import com.theoriacodex.app.lift.LocalLiftUgoiraClient
 import com.theoriacodex.app.lift.rememberLiftSession
 import com.theoriacodex.app.recommend.LocalTagAffinityInputs
 import com.theoriacodex.app.related.LocalRelatedPostsSupport
+import com.theoriacodex.app.series.LocalSeriesGenreSearch
+import com.theoriacodex.app.series.SeriesGenreRequests
 import com.theoriacodex.app.search.LocalPostWatchPresentation
 import com.theoriacodex.app.search.rememberPostWatchPresentation
 import com.theoriacodex.app.source.LocalSourceHealth
@@ -56,6 +58,7 @@ internal fun ShellCompositionLocals(shell: TheoriaShell, content: @Composable ()
         LocalTriageOpener provides rememberTriageOpener(shell),
         LocalNewCodexOpener provides remember { NewCodexRequests() },
         LocalHiddenTagsOpener provides remember { HiddenTagsRequests() },
+        LocalSeriesGenreSearch provides remember { SeriesGenreRequests() },
     ) {
         content()
         SiteCheckOverlay(shell.owners.siteChecks)

@@ -196,13 +196,13 @@ class SeriesPageViewModelTest {
         val entries = listOf(StoredSeriesEntry(SeriesEntry("/c/1", "Chapter 1"), sourceOrder = 0, firstSeenAtEpochMs = 1L))
         val prefs = MemoryChapterPreferences()
 
-        val first = SeriesPageViewModel(id, Restored(stored, entries), loadSources = { emptyList() }, chapterPreferences = prefs)
+        val first = SeriesPageViewModel(id, Restored(stored, entries), loadSources = { emptyList() }, chapterPreferences = prefs, ioDispatcher = StandardTestDispatcher(testScheduler))
         first.setChapterSort(ChapterSort.CHAPTER_NUMBER)
         first.setChapterSort(ChapterSort.CHAPTER_NUMBER) // ascending
         first.setChapterFilter(ChapterFilter.UNREAD)
         first.setChapterQuery("boss")
 
-        val reopened = SeriesPageViewModel(id, Restored(stored, entries), loadSources = { emptyList() }, chapterPreferences = prefs)
+        val reopened = SeriesPageViewModel(id, Restored(stored, entries), loadSources = { emptyList() }, chapterPreferences = prefs, ioDispatcher = StandardTestDispatcher(testScheduler))
         val collecting = launch { reopened.state.collect {} }
         advanceUntilIdle()
 

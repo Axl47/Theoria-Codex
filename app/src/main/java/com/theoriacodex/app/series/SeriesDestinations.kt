@@ -5,6 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -18,6 +19,9 @@ import com.theoriacodex.app.ui.launchViewer
 import com.theoriacodex.app.ui.tabShown
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.SeriesId
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /** [AppRoute.Series]'s arguments. */
@@ -26,7 +30,21 @@ internal val seriesArguments = listOf(
     navArgument("address") { type = NavType.StringType },
 )
 
-private const val PENDING_SERIES_SEARCH = "pending_series_search"
+/** Carries a genre chip tap from a series page to the Series tab's source-filtered search. */
+internal class SeriesGenreRequests {
+    private val mutablePending = MutableStateFlow<Pair<SourceKey, String>?>(null)
+    val pending: StateFlow<Pair<SourceKey, String>?> = mutablePending.asStateFlow()
+
+    fun request(source: SourceKey, genre: String) {
+        mutablePending.value = source to genre
+    }
+
+    fun consume(request: Pair<SourceKey, String>) {
+        if (mutablePending.value == request) mutablePending.value = null
+    }
+}
+
+internal val LocalSeriesGenreSearch = staticCompositionLocalOf { SeriesGenreRequests() }
 
 /** The Series tab. */
 @Composable
@@ -39,14 +57,12 @@ internal fun SeriesTabDestination(shell: TheoriaShell) {
     LaunchedEffect(viewModel, pager) {
         viewModel.followShown(snapshotFlow { tabShown(TopLevelDestination.Series, pager.targetPage, pager.settledPage) })
     }
-    val homeHandle = remember(shell.navController) {
-        runCatching { shell.navController.getBackStackEntry(AppRoute.Home).savedStateHandle }.getOrNull()
-    }
-    val pendingSearch = homeHandle?.getStateFlow<String?>(PENDING_SERIES_SEARCH, null)?.collectAsStateWithLifecycle()?.value
-    LaunchedEffect(pendingSearch) {
-        if (!pendingSearch.isNullOrBlank()) {
-            homeHandle[PENDING_SERIES_SEARCH] = null
-            viewModel.search(pendingSearch)
+    val genreRequests = LocalSeriesGenreSearch.current
+    val pendingGenre by genreRequests.pending.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingGenre) {
+        pendingGenre?.let { request ->
+            genreRequests.consume(request)
+            viewModel.openGenreSearch(request.first, request.second)
         }
     }
     val settings by shell.data.settingsRepository.observeSettings().collectAsStateWithLifecycle(initialValue = null)
@@ -77,6 +93,7 @@ internal fun SeriesPageDestination(shell: TheoriaShell, entry: NavBackStackEntry
     val source = entry.arguments?.getString("source")?.let(SourceKey::parse) ?: return
     val id = SeriesId(source, entry.arguments?.getString("address") ?: return)
     val chapterPreferences = remember(shell.appContext) { SharedPreferencesSeriesChapterPreferences(shell.appContext) }
+    val genreRequests = LocalSeriesGenreSearch.current
     val viewModel = viewModel {
         SeriesPageViewModel(
             id = id,
@@ -110,8 +127,8 @@ internal fun SeriesPageDestination(shell: TheoriaShell, entry: NavBackStackEntry
             }
         },
         onSearchGenre = { genre ->
+            genreRequests.request(id.source, genre)
             shell.navigation.goToTab(TopLevelDestination.Series)
-            runCatching { shell.navController.getBackStackEntry(AppRoute.Home).savedStateHandle[PENDING_SERIES_SEARCH] = genre }
         },
     )
 }

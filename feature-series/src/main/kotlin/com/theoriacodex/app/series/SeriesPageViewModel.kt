@@ -19,8 +19,11 @@ import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesSource
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -115,17 +118,11 @@ class SeriesPageViewModel(
     private val downloads: SeriesDownloads? = null,
     downloadStates: Flow<Map<String, ChapterDownload>> = downloads?.states(id) ?: flowOf(emptyMap()),
     private val chapterPreferences: SeriesChapterPreferences = NoOpSeriesChapterPreferences,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
     private val refresh = MutableStateFlow(SeriesPageState())
-    private val chapterOptions = MutableStateFlow(
-        chapterPreferences.read(id).let { saved ->
-            ChapterViewOptions(
-                sort = saved.sort,
-                descending = saved.descending,
-                filter = if (downloads == null && saved.filter == ChapterFilter.DOWNLOADED) ChapterFilter.ALL else saved.filter,
-            )
-        },
-    )
+    private val chapterOptions = MutableStateFlow(ChapterViewOptions())
+    private var optionsTouched = false
 
     /** Whether this page offers downloads. */
     val canDownload: Boolean = downloads != null
@@ -164,6 +161,13 @@ class SeriesPageViewModel(
     private var moving = false
 
     init {
+        viewModelScope.launch {
+            val saved = withContext(ioDispatcher) { chapterPreferences.read(id) }
+            if (!optionsTouched && !saved.isDefault) {
+                val filter = if (downloads == null && saved.filter == ChapterFilter.DOWNLOADED) ChapterFilter.ALL else saved.filter
+                chapterOptions.update { it.copy(sort = saved.sort, descending = saved.descending, filter = filter) }
+            }
+        }
         viewModelScope.launch { sourcesChanged.collect { refresh() } }
     }
 
@@ -232,6 +236,7 @@ class SeriesPageViewModel(
     }
 
     private fun updateDisplayOptions(transform: (ChapterViewOptions) -> ChapterViewOptions) {
+        optionsTouched = true
         val next = chapterOptions.updateAndGet(transform)
         chapterPreferences.write(id, ChapterDisplayPreferences(next.sort, next.descending, next.filter))
     }
