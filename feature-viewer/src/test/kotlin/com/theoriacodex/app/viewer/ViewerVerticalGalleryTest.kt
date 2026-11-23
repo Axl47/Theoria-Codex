@@ -154,6 +154,29 @@ class ViewerVerticalGalleryTest {
         }
     }
 
+    @Test fun `a vertical gallery opened at its first page reports it again once its pages resolve`() {
+        val session = ViewerSessionIdentity("first")
+        val sparse = gallery.copy(media = listOf(page), mediaCount = gallery.media.size)
+        val reported = mutableListOf<Int>()
+        state.value = createViewerUiState(session, listOf(sparse, next), requiresResolution = { it.id == gallery.id })
+        compose.setContent {
+            MaterialTheme {
+                ViewerScreen(
+                    uiState = state.value,
+                    host = ViewerScreenHost(
+                        onAction = { state.value = reduceViewerState(state.value, it).state },
+                        onVisibleMediaChanged = { post, _ -> if (post.id == gallery.id) reported += post.media.size },
+                    ),
+                    config = ViewerScreenConfig(galleryReadingModes = mapOf(gallery.id to GalleryReadingMode.VERTICAL)),
+                )
+            }
+        }
+        compose.runOnIdle { state.value = reduceViewerState(state.value, ViewerAction.ResolutionCompleted(session, gallery)).state }
+        compose.waitForIdle()
+        // Series progress ignores a chapter without pages, so the resolved one has to be reported too.
+        compose.runOnIdle { assertEquals("reported page counts $reported", gallery.media.size, reported.lastOrNull()) }
+    }
+
     @Test fun `opening and closing the overview keeps a vertical gallery's scroll position`() {
         show()
         repeat(2) { compose.onRoot().performTouchInput { swipeUp(startY = centerY, endY = top) } }

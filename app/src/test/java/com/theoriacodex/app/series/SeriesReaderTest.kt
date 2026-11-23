@@ -2,6 +2,7 @@ package com.theoriacodex.app.series
 
 import com.theoriacodex.app.di.SeriesDependencies
 import com.theoriacodex.app.media.isLikelyImageLocation
+import com.theoriacodex.app.viewer.ViewerStripMark
 import com.theoriacodex.app.viewer.decodeViewerPostId
 import com.theoriacodex.app.viewer.encodeViewerPostId
 import com.theoriacodex.data.repository.DownloadScheduler
@@ -50,6 +51,15 @@ class SeriesReaderTest {
     private val source = SourceKey.parseOrThrow("custom_mihon_2499283573021220255")
     private val id = SeriesId(source, "/manga/a1b2:c3?lang=en")
 
+    @Test fun `a chapter's mark says its number once, from the chapter's own name`() {
+        assertEquals(ViewerStripMark("10", "S · Chapter 10"), seriesChapterMark("S", "Chapter 10", 10f))
+        assertEquals(ViewerStripMark("0", "S · Chapter 0, Prologue"), seriesChapterMark("S", "Prologue", 0f))
+        assertEquals(ViewerStripMark("1", "S · Chapter 1, Chapter 10"), seriesChapterMark("S", "Chapter 10", 1f))
+        assertEquals(ViewerStripMark("10.5", "S · Ch. 10.5"), seriesChapterMark("S", "Ch. 10.5", 10.5f))
+        // A number in the series' title does not count as the chapter saying its own.
+        assertEquals(ViewerStripMark("8", "Kaiju No. 8 · Chapter 8, The Test"), seriesChapterMark("Kaiju No. 8", "The Test", 8f))
+    }
+
     @Test
     fun chapterAndSeriesAddressesSurviveTheViewersSavedState() {
         val chapter = PostId(source, "/chapter/9f:8e/1?x=a:b")
@@ -71,7 +81,7 @@ class SeriesReaderTest {
 
         val session = checkNotNull(reader.session(id, "/c2"))
         // Only chapters with a number carry one, for the strip to show.
-        assertEquals(mapOf(PostId(source, "/c2") to 2f), session.seriesChapterNumbers)
+        assertEquals(mapOf(PostId(source, "/c2") to ViewerStripMark("2", "Title · Ch. 2")), session.stripMarks)
 
         assertEquals(listOf("/c1", "/c2", "/c3"), session.posts.map { it.id.sourcePostId })
         assertEquals(1, session.context.startIndex)
