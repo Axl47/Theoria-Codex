@@ -12,6 +12,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
@@ -58,15 +60,20 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.lerp
 import coil.compose.AsyncImage
 import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.search.postMediaCount
+import com.theoriacodex.app.ui.theme.TextOverMediaShadow
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -88,6 +95,10 @@ internal val VIEWER_POST_STRIP_HEIGHT = STRIP_TOP_PADDING + STRIP_MAX_CELL + STR
 /** Small enough that a grown thumbnail never overlaps its neighbours, in the strip or in the related shelf. */
 private const val SELECTED_THUMBNAIL_GROWTH = 0.13f
 private const val RESTING_THUMBNAIL_DIM = 0.28f
+
+/** A number over a thumbnail; the scrim keeps it legible on a bright cover. */
+private val BADGE_STYLE = TextStyle(color = Color.White, fontWeight = FontWeight.SemiBold, fontFeatureSettings = "tnum", shadow = TextOverMediaShadow)
+private const val BADGE_SCRIM = 0.3f
 
 private val UNFOLDED_PAGE_GAP = 4.dp
 private val UNFOLDED_PADDING = 4.dp
@@ -118,6 +129,8 @@ internal fun ViewerPostStrip(
     openPages: ViewerStripPages? = null,
     /** Whether the posts are a series' chapters, which are named by their titles: their ids are addresses. */
     chapters: Boolean = false,
+    /** Numbers drawn over chapters' thumbnails, which would otherwise all be the same cover. */
+    chapterNumbers: Map<PostId, Float> = emptyMap(),
 ) {
     val list = rememberLazyListState(initialFirstVisibleItemIndex = selectedIndex)
     RequestMorePostsNearEnd(list, posts.lastIndex, onLoadMore)
@@ -146,7 +159,10 @@ internal fun ViewerPostStrip(
                         ViewerUnfoldedPages(post.id.source, pages, cell, onInteraction, Modifier.requiredWidth(pagesWidth).height(cell))
                     } else {
                         val label = post.title?.takeIf { chapters }?.let { "Open $it" } ?: viewerPostLabel(post)
-                        ViewerPostThumbnail(post, index == selectedIndex, Modifier.size(cell), postMediaCount(post), label) { onSelect(index) }
+                        ViewerPostThumbnail(
+                            post, index == selectedIndex, Modifier.size(cell), postMediaCount(post), label,
+                            badge = chapterNumbers[post.id]?.let(::viewerChapterNumber),
+                        ) { onSelect(index) }
                     }
                 }
             }
@@ -307,6 +323,7 @@ internal fun ViewerPostThumbnail(
     modifier: Modifier = Modifier,
     pageCount: Int = 1,
     label: String = viewerPostLabel(post),
+    badge: String? = null,
     onClick: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -315,12 +332,15 @@ internal fun ViewerPostThumbnail(
         location?.let { buildViewerImageRequest(context, it, post.id.source, staticAnimatedWebPFrame = true) }
     }
     val animated = remember(post) { isAnimatedPost(post) }
-    ViewerThumbnailTile(request, label, selected, animated, modifier, pageCount, onClick)
+    ViewerThumbnailTile(request, label, selected, animated, modifier, pageCount, badge, onClick)
 }
 
 private fun viewerPostLabel(post: Post) = "Open post ${post.id.sourcePostId}"
 
-/** One tappable image in the Viewer's strips, whether it stands for a post or for one of a post's pages. */
+/** A chapter number as a reader writes it: 12, or 10.5 for a part-chapter. */
+internal fun viewerChapterNumber(number: Float): String = if (number % 1f == 0f) number.toLong().toString() else number.toString()
+
+/** One tappable image in the Viewer's strips, whether it stands for a post or for one of a post's pages. [badge] is drawn over the image. */
 @Composable
 private fun ViewerThumbnailTile(
     model: Any?,
@@ -329,6 +349,7 @@ private fun ViewerThumbnailTile(
     animated: Boolean,
     modifier: Modifier = Modifier,
     pageCount: Int = 1,
+    badge: String? = null,
     onClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(9.dp)
@@ -352,7 +373,20 @@ private fun ViewerThumbnailTile(
                     tint = Color.White,
                 )
             }
+            badge?.let { ThumbnailBadge(it) }
         }
+    }
+}
+
+/** A number over a whole thumbnail. The tile's label already names what it stands for, so the number is only drawn. */
+@Composable
+private fun ThumbnailBadge(text: String) {
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = BADGE_SCRIM)).semantics { hideFromAccessibility() }, contentAlignment = Alignment.Center) {
+        // Long part-chapter numbers ("105.5") shrink to fit the tile rather than clip.
+        BasicText(
+            text, Modifier.padding(horizontal = 3.dp), style = BADGE_STYLE, maxLines = 1, softWrap = false,
+            autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 15.sp),
+        )
     }
 }
 

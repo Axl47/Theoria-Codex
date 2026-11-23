@@ -360,8 +360,8 @@ private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
 }
 
 /**
- * What a series session changes in the Viewer's configuration: every chapter reads in the series' mode, and none of the
- * collecting controls show. Any other session's configuration passes through unchanged.
+ * What a series session changes in the Viewer's configuration: every chapter reads in the series' mode, the strip
+ * numbers its chapters, and none of the collecting controls show. Any other session's configuration passes through unchanged.
  */
 @Composable
 private fun rememberSeriesViewerConfig(shell: TheoriaShell): (ViewerScreenConfig) -> ViewerScreenConfig {
@@ -382,7 +382,7 @@ private fun rememberSeriesViewerConfig(shell: TheoriaShell): (ViewerScreenConfig
     val mode by remember(session.context.queryHash) { shell.seriesReader?.readingMode(session) ?: emptyFlow() }
         .collectAsStateWithLifecycle(initialValue = session.seriesReadingMode)
     val modes = mode?.let { chosen -> session.posts.associate { it.id to chosen } }.orEmpty()
-    return { it.copy(seriesChapters = true, galleryReadingModes = modes) }
+    return { it.copy(seriesChapters = true, galleryReadingModes = modes, chapterNumbers = session.seriesChapterNumbers) }
 }
 
 private const val SERIES_READER_KEY = "series-reader"

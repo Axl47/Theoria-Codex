@@ -45,7 +45,10 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         val context = ViewerLaunchContext(seriesQueryHash(id), start, ViewerStreamSource.SERIES, scrollOffsetHint = 0)
         val resume = entries.associate { PostId(id.source, it.entry.address) to it.resumePageIndex() } +
             listOfNotNull(pageIndex?.let { posts[start].id to it })
-        val session = ViewerSession(posts, context, initialMediaIndices = resume, seriesReadingMode = stored.readingModeOrGuess())
+        val numbers = entries.mapNotNull { stored -> stored.entry.number?.let { PostId(id.source, stored.entry.address) to it } }.toMap()
+        val session = ViewerSession(
+            posts, context, initialMediaIndices = resume, seriesReadingMode = stored.readingModeOrGuess(), seriesChapterNumbers = numbers,
+        )
         return if (sessionId == null) session else session.copy(sessionId = sessionId)
     }
 

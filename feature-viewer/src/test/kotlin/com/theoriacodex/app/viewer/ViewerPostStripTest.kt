@@ -22,6 +22,10 @@ import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.testing.testPost
@@ -119,6 +123,19 @@ class ViewerPostStripTest {
         }
         compose.onNodeWithContentDescription("Open post strip-3").assertIsDisplayed()
         compose.onNodeWithContentDescription("Go to page 1 of 4").assertDoesNotExist()
+    }
+
+    @Test fun `chapters show their numbers over the shared cover, and unnumbered ones show none`() {
+        val chapters = (1..3).map { testPost(sourcePostId = "/chapter/$it").copy(title = "Series · Chapter $it") }
+        val numbers = mapOf(chapters[0].id to 9f, chapters[1].id to 10.5f)
+        compose.setContent {
+            MaterialTheme { ViewerPostStrip(chapters, 0, {}, Modifier.width(360.dp), chapters = true, chapterNumbers = numbers) }
+        }
+        compose.onNodeWithText("9", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("10.5", useUnmergedTree = true).assertIsDisplayed()
+        compose.onAllNodesWithText("3", useUnmergedTree = true).assertCountEquals(0)
+        // The number is drawn only; the tile's label already names the chapter.
+        compose.onNodeWithText("9", useUnmergedTree = true).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility).or(hasAnyAncestor(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility))))
     }
 
     @Test fun `only multi-page posts announce their page count`() {
