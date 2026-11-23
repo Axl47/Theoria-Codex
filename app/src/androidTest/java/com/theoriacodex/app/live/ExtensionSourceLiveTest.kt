@@ -5,7 +5,6 @@ import android.app.job.JobScheduler
 import android.database.sqlite.SQLiteDatabase
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.UiObject2
@@ -337,19 +336,11 @@ class ExtensionSourceLiveTest {
         live.waitFor("the chapter's sheet after a tap", By.desc("Start over"))
         assertNull("A chapter's sheet has no tag search", device.findObject(By.text("Your search")))
         device.pressBack()
-        viewerControl("the dock's Info button", By.desc("Info"))
-        val node = checkNotNull(described(InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow, "Info")) { "No Info node" }
+        val node = viewerControl("the dock's Info button", By.desc("Info")).accessibilityNodeInfo
         assertTrue("Info takes an accessibility click", node.performAction(AccessibilityNodeInfo.ACTION_CLICK))
         live.waitFor("the chapter's sheet after an accessibility click", By.desc("Start over"))
         live.report("info", "a tap and an accessibility click on Info each opened the chapter's sheet, with no tag search")
         device.pressBack()
-    }
-
-    /** The node under [root] whose description is [description]. */
-    private fun described(root: AccessibilityNodeInfo?, description: String): AccessibilityNodeInfo? {
-        root ?: return null
-        if (root.contentDescription?.toString() == description) return root
-        return (0 until root.childCount).firstNotNullOfOrNull { described(root.getChild(it), description) }
     }
 
     /** Follows the series whose page is open, answering the notification question a follow asks while the permission is missing. */

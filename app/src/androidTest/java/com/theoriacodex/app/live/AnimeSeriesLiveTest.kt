@@ -2,10 +2,13 @@ package com.theoriacodex.app.live
 
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
+import android.os.SystemClock
+import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
+import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.Until
 import com.theoriacodex.data.android.room.TheoriaRoomDatabase
 import com.theoriacodex.data.repository.StoredSeriesEntry
@@ -65,16 +68,16 @@ class AnimeSeriesLiveTest {
         live.tap("the button that starts watching", By.text(Pattern.compile("Start|Continue · .*")))
         val episode = episodeOnScreen(title)
         val playing = awaitPosition("playback past ${PLAYED_MS / 1000} s") { it >= PLAYED_MS }
-        val later = awaitPosition("playback to keep advancing") { it > playing }
+        val later = awaitPosition("playback to keep advancing") { it >= playing + PLAYED_MS }
         live.report("play", "\"$episode\" plays: ${playing.seconds()} s, then ${later.seconds()} s")
         if (live.targetIsThisApp) recordsPlaybackEvery10Seconds(title, episode)
 
         val (from, to) = switchStream()
         val before = awaitPosition("the position before the switch") { true }
         live.tap("the stream \"$to\"", By.text(to))
-        live.viewerControl("the stream pill naming \"$to\"", By.desc(STREAM).hasDescendant(By.text(to)), PLAYBACK_TIMEOUT_MS)
-        val after = awaitPosition("playback on \"$to\" near ${before.seconds()} s") { abs(it - before) < NEAR_MS && it > PLAYED_MS }
-        val advancing = awaitPosition("playback on \"$to\" to advance") { it > after }
+        live.await("the stream pill to name \"$to\"", ::streamOnScreen) { it == to }
+        val after = awaitPlayback("playback on \"$to\" near ${before.seconds()} s") { it.state == "PLAYING" && abs(it.positionMs - before) < NEAR_MS }.positionMs
+        val advancing = awaitPosition("playback on \"$to\" to advance") { it >= after + PLAYED_MS }
         live.report("stream", "\"$from\" at ${before.seconds()} s became \"$to\" at ${after.seconds()} s, then ${advancing.seconds()} s")
 
         if (live.targetIsThisApp) recordsPlaybackOnPause(title, episode)
@@ -99,7 +102,7 @@ class AnimeSeriesLiveTest {
         live.report("resume", "\"$episode\" left at ${leftAt.seconds()} s resumed at ${resumed.seconds()} s after a restart")
         assertTrue("It resumes near where it was left", resumed >= leftAt - NEAR_MS)
 
-        live.viewerControl("Next episode", By.desc("Next episode")).click()
+        press("Next episode", By.desc("Next episode"))
         val next = live.await("the next episode's title", { episodeOnScreen(title) }) { it != episode }
         val start = awaitPosition("the next episode to play from its start") { it > 0 }
         live.report("next", "\"$next\" after \"$episode\", from ${start.seconds()} s")
@@ -164,19 +167,40 @@ class AnimeSeriesLiveTest {
         return title
     }
 
-    /** The episode the Viewer's title names, read as "series · episode". */
-    private fun episodeOnScreen(title: String): String =
+    /** The episode the Viewer's title names, read as "series · episode"; a title replaced as it is read is read again. */
+    private fun episodeOnScreen(title: String): String = try {
         live.viewerControl("the episode's name as the Viewer's title", By.textStartsWith("$title · "), PLAYBACK_TIMEOUT_MS).text.removePrefix("$title · ")
+    } catch (_: StaleObjectException) {
+        episodeOnScreen(title)
+    }
 
     /** Opens the stream list; returns the stream playing and another one to switch to. */
     private fun switchStream(): Pair<String, String> {
-        val pill = live.viewerControl("the stream pill", By.desc(STREAM))
-        val current = checkNotNull(pill.text ?: pill.findObject(By.textStartsWith(""))?.text) { "The stream pill names no stream" }
+        val current = streamOnScreen()
         val before = labels()
-        pill.click()
-        val listed = live.await("the stream list", { labels() - before }) { it.isNotEmpty() }
+        press("the stream pill", By.desc(STREAM))
+        val listed = live.await("the stream list", { labels() - before.toSet() - current }) { it.isNotEmpty() }
         live.report("streams", "playing \"$current\"; listed $listed")
         return current to (listed.firstOrNull { it != current } ?: error("The episode offers one stream: $listed"))
+    }
+
+    /**
+     * Presses one of the Viewer's controls by an accessibility click on the node that takes it, which the controls
+     * hiding a moment later cannot swallow as they can a tap.
+     */
+    private fun press(what: String, selector: BySelector) {
+        val node = live.viewerControl(what, selector).accessibilityNodeInfo
+        val target = checkNotNull(generateSequence(node) { it.parent }.firstOrNull { it.isClickable }) { "Nothing takes a press on $what" }
+        assertTrue("$what takes the press", target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+    }
+
+    /**
+     * The stream the Viewer's pill names, which it carries as its state. Compose puts the pill's description on a child
+     * of the node that takes the click and holds that state.
+     */
+    private fun streamOnScreen(): String {
+        val node = live.viewerControl("the stream pill", By.desc(STREAM)).accessibilityNodeInfo
+        return checkNotNull((node.stateDescription ?: node.parent?.stateDescription)?.toString()) { "The stream pill names no stream" }
     }
 
     /**
@@ -189,11 +213,16 @@ class AnimeSeriesLiveTest {
         device.drag(bounds.left + 4, bounds.centerY(), bounds.right - 2, bounds.centerY(), DRAG_STEPS)
         val nearEnd = awaitPosition("the playback near its end") { true }
         live.report("end", "dragged \"$episode\" to ${nearEnd.seconds()} s")
-        Thread.sleep(END_WAIT_MS)
+        // The end shows as the position going back (the next episode, or the same one again) or the player stopping.
+        var furthest = nearEnd
+        val ended = awaitPlayback("the episode to end") { playback ->
+            val wentBack = playback.positionMs < furthest - NEAR_MS
+            furthest = maxOf(furthest, playback.positionMs)
+            wentBack || playback.state !in setOf("PLAYING", "BUFFERING")
+        }
         val after = episodeOnScreen(title)
-        val position = awaitPosition("the position after the end") { true }
-        live.report("end", "after the end: \"$after\" at ${position.seconds()} s")
-        assertTrue("The episode did not start again", after != episode || position >= nearEnd)
+        live.report("end", "\"$episode\" reached ${furthest.seconds()} s; then \"$after\", $ended")
+        assertTrue("The episode did not start again", after != episode || ended.positionMs >= nearEnd)
     }
 
     /** Reads the stored progress for half a minute of playback and checks it is written about every ten seconds. */
@@ -207,19 +236,20 @@ class AnimeSeriesLiveTest {
             last = stored
             Thread.sleep(SeriesLiveDriver.POLL_MS)
         }
-        val gaps = changes.zipWithNext { a, b -> b.first - a.first }
+        // The first value was there before the watch began, so only the writes after it measure the gaps.
+        val gaps = changes.drop(1).zipWithNext { a, b -> b.first - a.first }
         live.report("cadence", "stored positions ${changes.map { (at, ms) -> "${ms.seconds()} s at +${at.seconds()} s" }}; gaps ${gaps.map { it.seconds() }} s")
-        assertTrue("Playback is recorded while it plays", changes.size >= 2)
+        assertTrue("Playback is recorded while it plays", gaps.size >= 2)
         assertTrue("About every ten seconds", gaps.all { it in REPORT_GAPS_MS })
     }
 
     /** Pauses playback and checks the position is stored at once, then plays on. */
     private fun recordsPlaybackOnPause(title: String, episode: String) {
-        live.viewerControl("Pause", By.desc("Pause")).click()
-        val paused = awaitPosition("the paused position") { true }
+        press("Pause", By.desc("Pause"))
+        val paused = awaitPlayback("the player to pause") { it.state == "PAUSED" }.positionMs
         val stored = live.await("the paused position to be stored", { storedEpisode(title, episode).position }) { abs(it - paused) < PAUSE_NEAR_MS }
         live.report("pause", "paused at ${paused.seconds()} s, stored ${stored.seconds()} s")
-        live.viewerControl("Play", By.desc("Play")).click()
+        press("Play", By.desc("Play"))
     }
 
     /** What the debug app stored for [episode] of the series titled [title]; read only. */
@@ -234,21 +264,32 @@ class AnimeSeriesLiveTest {
         return runBlocking { live.series.repository.entries(id) }.first { it.entry.name == episode }
     }
 
-    /**
-     * The playback position the Viewer's timeline shows, once it satisfies [done]. The timeline shows while the
-     * controls do, so each read brings them back.
-     */
-    private fun awaitPosition(what: String, done: (Long) -> Boolean): Long {
+    /** The playback position, from the target's media session, once it satisfies [done]. */
+    private fun awaitPosition(what: String, done: (Long) -> Boolean): Long = awaitPlayback(what) { done(it.positionMs) }.positionMs
+
+    private fun awaitPlayback(what: String, done: (Playback) -> Boolean): Playback {
         val deadline = System.currentTimeMillis() + PLAYBACK_TIMEOUT_MS
-        var last: Long? = null
+        var last: Playback? = null
         while (System.currentTimeMillis() < deadline) {
-            val text = runCatching { live.viewerControl("the playback time", TIME, CONTROLS_MS).text }.getOrNull()
-            last = text?.let(::positionMs) ?: last
+            last = playback() ?: last
             if (last != null && done(last)) return last
-            Thread.sleep(POSITION_POLL_MS)
+            Thread.sleep(SeriesLiveDriver.POLL_MS)
         }
-        error("Timed out waiting for $what; last position: ${last?.seconds()} s; on screen: ${live.screenText()}")
+        error("Timed out waiting for $what; last playback: $last; on screen: ${live.screenText()}")
     }
+
+    /**
+     * What the target's player is doing, as its media session last told the system: the position it reported, carried
+     * forward by the time since while it plays. Null before the Viewer opens a session.
+     */
+    private fun playback(): Playback? {
+        val sessions = device.executeShellCommand("dumpsys media_session").substringAfter("package=${live.targetPackage}\n", "")
+        val (state, position, speed, updated) = SESSION_STATE.find(sessions)?.destructured ?: return null
+        val moved = if (state == "PLAYING") (SystemClock.elapsedRealtime() - updated.toLong()) * speed.toFloat() else 0f
+        return Playback(state, position.toLong() + moved.toLong())
+    }
+
+    private data class Playback(val state: String, val positionMs: Long)
 
     /** Leaves the Viewer for the series page. */
     private fun leaveViewer() {
@@ -276,8 +317,8 @@ class AnimeSeriesLiveTest {
         const val ANIME = "Anime"
         const val EDIT_TEXT = "android.widget.EditText"
         val EPISODE_COUNT: Pattern = Pattern.compile("(.+ · )?\\d+ episodes?")
-        /** The timeline's time: "2:03 / 24:00" in portrait; in landscape the position and length stand apart, position first. */
-        val TIME: BySelector = By.text(Pattern.compile("(\\d+:)?\\d+:\\d\\d( / (\\d+:)?\\d+:\\d\\d)?"))
+        /** A session's line in `dumpsys media_session`: "state=PlaybackState {state=PLAYING(3), position=…, …, speed=1.0, updated=…". */
+        val SESSION_STATE = Regex("""state=PlaybackState \{state=(\w+)\(\d+\), position=(-?\d+), .*?speed=(-?[\d.]+), updated=(\d+)""")
         const val LISTED_AT_LEAST = 3
         const val PLAYED_MS = 5_000L
 
@@ -287,15 +328,8 @@ class AnimeSeriesLiveTest {
 
         /** An episode's lookup can take about 35 s for some extensions, and its stream must then buffer. */
         const val PLAYBACK_TIMEOUT_MS = 90_000L
-        const val CONTROLS_MS = 5_000L
-        const val POSITION_POLL_MS = 1_000L
         const val CADENCE_WATCH_MS = 32_000L
         val REPORT_GAPS_MS = 8_000L..13_000L
         const val DRAG_STEPS = 40
-        const val END_WAIT_MS = 15_000L
-
-        /** "1:02:03 / 1:20:00", "2:03 / 24:00" or "2:03": the position, before any slash. */
-        fun positionMs(time: String): Long =
-            time.substringBefore(" / ").split(':').fold(0L) { total, part -> total * 60 + part.trim().toLong() } * 1000
     }
 }
