@@ -209,4 +209,11 @@ internal class ViewerFrame(
 
     // Media pages drop the portrait top gap in landscape and in PiP, where it would frame the media in black bars.
     val mediaEdgeToEdge = isLandscape || inPictureInPicture
+
+    /**
+     * Whether the selected video may take the system's media controls and picture-in-picture: not while the Viewer
+     * opens (connecting them costs frames), nor once its session ended, while a closing Viewer's paused pages stay
+     * for the return transition (a system Play would start the closed Viewer's player).
+     */
+    val systemControlsReady = !opening && uiState.session != null
 }

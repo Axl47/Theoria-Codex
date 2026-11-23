@@ -184,6 +184,23 @@ class ViewerWatchingTest {
     }
 
     @Test
+    fun `a closing Viewer's paused player gives up the system's media controls`() = runTest {
+        val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this)
+        val episode = post("episode", media = listOf(ViewerOwnerTestData.video("episode.mp4")))
+        owner.replaceSession(session("watching", listOf(episode)).copy(series = ViewerSeries.Watching()))
+        fun frame() = owner.state.value.let { state ->
+            ViewerFrame(
+                state, viewerPostNavigation(state), listOf(episode), ViewerSelection(episode, episode.media, 0, false, emptyList()),
+                chromeVisible = false, chromeStage = 0, opening = false, returning = false, inPictureInPicture = false,
+                touchExplorationEnabled = false, isLandscape = false,
+            )
+        }
+        assertTrue(frame().systemControlsReady)
+        owner.clearSession(retainPresentation = true)
+        assertFalse(frame().systemControlsReady)
+    }
+
+    @Test
     fun `a watched session's seeds arrive with its first state, before anything can save`() = runTest {
         val seeds = ViewerSeries.Watching(mapOf(episodes[0].id to 90_000L))
         val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this)

@@ -293,7 +293,7 @@ private fun viewerRendererControls(
         playbackRate = closestViewerPlaybackRate(controls.playback.playbackRate).speed,
         restartRequest = controls.playback.restartRequest,
         loadGeneration = loadGeneration,
-        systemControlsReady = !frame.opening,
+        systemControlsReady = frame.systemControlsReady,
         expectedDurationMs = expectedDurationMs,
     )
 }
