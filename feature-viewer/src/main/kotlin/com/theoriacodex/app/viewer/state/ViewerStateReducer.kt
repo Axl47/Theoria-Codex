@@ -133,7 +133,7 @@ fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReducti
         is ViewerAction.SetPlaybackRate -> ViewerReduction(state.setPlaybackRate(action.rate))
         is ViewerAction.ChooseStream -> ViewerReduction(state.chooseStream(action.label))
         is ViewerAction.FallBackToStream -> ViewerReduction(state.copy(controls = state.controls.copy(
-            episode = state.controls.episode.copy(episodeStream = ViewerEpisodeStream(action.media, action.label, pickedByHand = false)),
+            episode = state.controls.episode.let { it.copy(episodeStreams = it.episodeStreams + (action.media to ViewerEpisodeStream(action.label, pickedByHand = false))) },
         )))
         is ViewerAction.ChooseSubtitle -> ViewerReduction(state.chooseEpisodeTracks { copy(subtitle = action.choice) })
         is ViewerAction.ChooseAudio -> ViewerReduction(state.chooseEpisodeTracks { copy(audioLabel = action.label) })
@@ -176,8 +176,9 @@ private fun ViewerUiState.chooseEpisodeTracks(change: ViewerEpisodeChoice.() -> 
 
 /** A new stream replaces the player, and with it any failure the last one showed. */
 private fun ViewerUiState.chooseStream(label: String): ViewerUiState {
-    val picked = currentMedia?.key?.let { ViewerEpisodeStream(it, label, pickedByHand = true) }
-    val chosen = chooseEpisodeTracks { copy(streamLabel = label, episodeStream = picked) }
+    // The session's new choice replaces every episode's own stream; the episode playing keeps it as picked by hand.
+    val picked = currentMedia?.key?.let { mapOf(it to ViewerEpisodeStream(label, pickedByHand = true)) }.orEmpty()
+    val chosen = chooseEpisodeTracks { copy(streamLabel = label, episodeStreams = picked) }
     val failedHere = mediaError != null && mediaError.mediaKey.let { it == null || it == currentMedia?.key }
     return chosen.copy(
         mediaError = mediaError.takeUnless { failedHere },

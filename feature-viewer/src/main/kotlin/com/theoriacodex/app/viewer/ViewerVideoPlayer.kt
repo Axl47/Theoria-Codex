@@ -90,13 +90,13 @@ internal fun ViewerVideoPlayer(
     // One showing of the page: the players it goes through share where it started (see ViewerVideoStart).
     val start = remember(mediaKey, positions) { ViewerVideoStart({ positions.position(mediaKey) }, positions::startsOver) }
     // A Retry's opening ask holds the player back: the address that failed is not replayed before fresh links come.
-    if (state.pending != ViewerRecoveryDecision.AskForFreshLinks || state.player != null) ViewerVideoBinding(state, playback, controls, events, recovery, start) { positionMs, durationMs, ended ->
+    if (state.pending != ViewerRecoveryDecision.AskForFreshLinks || state.player != null) ViewerVideoBinding(state, playback, controls, events, recovery, start) { progress ->
         // A finished video resumes from the start: seeking back to its end would finish it again and,
         // in Queue next mode, skip straight past it.
-        val resumeMs = if (ended) 0L else positionMs
+        val resumeMs = if (progress.positionMs >= progress.durationMs) 0L else progress.positionMs
         positions.save(mediaKey, resumeMs)
         context.videoPlaybackInfrastructure().feedPositionHandoff.publish(mediaKey, resumeMs)
-        events.onPlaybackProgress?.let { report -> viewerReleaseProgress(positionMs, durationMs, ended)?.let(report) }
+        events.onPlaybackProgress?.invoke(progress)
     }
     ViewerVideoStreamRecovery(state, recovery, episode, events)
     ReportViewerPlaybackProgress(state, events.onPlaybackProgress)
@@ -120,7 +120,7 @@ private class ViewerVideoState(pending: ViewerRecoveryDecision?) {
     /** Counts this state's players: a retry in place binds the next one. */
     var bindings by mutableIntStateOf(0)
     val failed get() = pending == ViewerRecoveryDecision.Fail
-    /** Where [player] started, and whether it got there. */
+    /** Where [player] started, and whether it got there; every report of its position goes through it. */
     var started: ViewerStartedPlayback? = null
     var duration by mutableLongStateOf(0L)
     var position by mutableLongStateOf(0L)
@@ -154,15 +154,8 @@ private class ViewerVideoState(pending: ViewerRecoveryDecision?) {
         runCatching { player?.seekTo(target) }
     }
 
-    /**
-     * Where playback is: read from the player, since a seek from the media session moves it before the poll that
-     * updates [position] runs; null while the duration is unknown, or before the player got to its start.
-     */
-    fun progress(): ViewerPlaybackProgress? {
-        val active = player ?: return viewerPlaybackProgress(position, duration)
-        if (started?.atPosition != true) return null
-        return viewerPlaybackProgress(active.currentPosition, active.duration)
-    }
+    /** Where the player is, to report; see [ViewerStartedPlayback.progress]. Null without a player. */
+    fun progress(): ViewerPlaybackProgress? = started?.progress()
 
     /** Takes [decision] on: shows the failure, which the route hears through [ViewerRendererEvents.onError], or recovers. */
     fun follow(decision: ViewerRecoveryDecision, message: String, events: () -> ViewerRendererEvents) {
@@ -214,11 +207,8 @@ private fun ViewerVideoBinding(
     events: ViewerRendererEvents,
     recovery: ViewerVideoRecovery,
     start: ViewerVideoStart,
-    /**
-     * Hears where the player stopped as it lets go, how long its video is (unset while unknown), and whether it ended;
-     * only from a player that got to a position ([ViewerStartedPlayback.atPosition]).
-     */
-    onRelease: (positionMs: Long, durationMs: Long, ended: Boolean) -> Unit,
+    /** Hears where the player stopped as it lets go ([ViewerStartedPlayback.releaseProgress]). */
+    onRelease: (ViewerPlaybackProgress) -> Unit,
 ) {
     val context = LocalContext.current
     val latestEvents by rememberUpdatedState(events)
@@ -235,22 +225,23 @@ private fun ViewerVideoBinding(
         val started = start.applyTo(player)
         player.playbackParameters = PlaybackParameters(controls.playbackRate)
         val listener = viewerVideoListener(player, state, recovery) { latestEvents }
-        val seeks = ViewerSeekReports({ state.scrubbing }, player::getDuration) { progress -> latestEvents.onPlaybackProgress?.invoke(progress) }
+        val seeks = ViewerSeekReports(started, { state.scrubbing }) { progress -> latestEvents.onPlaybackProgress?.invoke(progress) }
         player.addListener(listener)
         player.addListener(seeks)
         state.started = started
         state.player = player
         state.setPlaying(controls.isActive && controls.isPlaying)
         onDispose {
-            if (started.atPosition) {
-                latestOnRelease(player.currentPosition.coerceAtLeast(0L), player.duration, player.playbackState == Player.STATE_ENDED)
-            }
+            started.releaseProgress()?.let(latestOnRelease)
             player.removeListener(started)
             player.removeListener(seeks)
             player.removeListener(listener)
             state.actuallyPlaying = false
             state.setPlaying(false)
-            if (state.player === player) state.player = null
+            if (state.player === player) {
+                state.player = null
+                state.started = null
+            }
             runCatching { state.view?.player = null }
             pool.recycle(lease)
             state.view = null
@@ -389,9 +380,12 @@ internal class ViewerVideoStart(
 
 /**
  * Whether a player started at [resumeMs] has been [atPosition]: its start applied (a resume settled once the duration
- * was known), then a frame rendered there or playback ran (a stream may carry audio only). Only then does its release
- * report where it stopped: a player let go of before that, rebuilt or short-lived, still stands at its unplayed start
- * and would write it over the real position.
+ * was known, and any seek that took), then a frame rendered there or playback ran (a stream may carry audio only).
+ *
+ * Every report of the player's position goes through [progress]: its seeks ([ViewerSeekReports]), its pauses and
+ * periodic reports while it plays ([reportPlaybackProgress]), and its release ([releaseProgress]). Before it is at its
+ * position nothing is reported: a player rebuilt or short-lived still stands at its unplayed start and would write it
+ * over the real position, and the start's own seeks are not the user's.
  */
 internal class ViewerStartedPlayback(
     private val player: Player,
@@ -415,7 +409,11 @@ internal class ViewerStartedPlayback(
     // The duration is negative (unset) until the timeline is known.
     private fun settle() {
         val durationMs = player.duration.takeIf { it > 0L } ?: return
-        if (startsOver(resumeMs, durationMs)) player.seekTo(0L)
+        if (startsOver(resumeMs, durationMs)) {
+            player.seekTo(0L)
+            // What showed before stood at the resume position: only a frame or playback after this seek is the start.
+            shown = false
+        }
         settled = true
         arrive()
     }
@@ -440,27 +438,31 @@ internal class ViewerStartedPlayback(
         atPosition = true
         arrived()
     }
+
+    /** Where playback is, at [positionMs]; null before the player is [atPosition], or while the duration is unknown. */
+    fun progress(positionMs: Long = player.currentPosition): ViewerPlaybackProgress? =
+        if (atPosition) viewerPlaybackProgress(positionMs, player.duration) else null
+
+    /** Where the player stopped as it lets go: its end once it ended (a finished video resumes from the start). */
+    fun releaseProgress(): ViewerPlaybackProgress? =
+        progress(if (player.playbackState == Player.STATE_ENDED) player.duration else player.currentPosition)
 }
 
 /**
- * Reports where each of a player's seeks lands, from whichever controller made it (the timeline, a double-tap, the
- * media session), of the video's [durationMs]. A drag's instant seeks while [scrubbing] are one seek, reported when the
- * drag is released. Nothing is reported while the duration is unknown.
+ * Reports where each seek of a [started] player lands, from whichever controller made it (the timeline, a double-tap,
+ * the media session), as its [ViewerStartedPlayback.progress] allows. A drag's instant seeks while [scrubbing] are one
+ * seek, reported when the drag is released.
  */
 internal class ViewerSeekReports(
+    private val started: ViewerStartedPlayback,
     private val scrubbing: () -> Boolean,
-    private val durationMs: () -> Long,
     private val report: (ViewerPlaybackProgress) -> Unit,
 ) : Player.Listener {
     override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
         if (reason != Player.DISCONTINUITY_REASON_SEEK || scrubbing()) return
-        viewerPlaybackProgress(newPosition.positionMs, durationMs())?.let(report)
+        started.progress(newPosition.positionMs)?.let(report)
     }
 }
-
-/** What a player that lets go at [positionMs] reports: its end once it [ended]; nothing while [durationMs] is unknown. */
-internal fun viewerReleaseProgress(positionMs: Long, durationMs: Long, ended: Boolean): ViewerPlaybackProgress? =
-    viewerPlaybackProgress(if (ended) durationMs else positionMs, durationMs)
 
 /** Where playback is, at [positionMs] of [durationMs]; null while the duration is unknown (unset or not positive). */
 private fun viewerPlaybackProgress(positionMs: Long, durationMs: Long): ViewerPlaybackProgress? =
@@ -468,8 +470,8 @@ private fun viewerPlaybackProgress(positionMs: Long, durationMs: Long): ViewerPl
 
 /**
  * Reports an episode's playback to [report] while it plays and when it stops; each seek reports where it lands
- * ([ViewerSeekReports]), and the player's release once more ([ViewerVideoBinding]). Nothing is reported while the
- * duration is unknown.
+ * ([ViewerSeekReports]), and the player's release once more ([ViewerVideoBinding]). All of them as
+ * [ViewerStartedPlayback.progress] allows.
  */
 @Composable
 private fun ReportViewerPlaybackProgress(state: ViewerVideoState, report: ((ViewerPlaybackProgress) -> Unit)?) {

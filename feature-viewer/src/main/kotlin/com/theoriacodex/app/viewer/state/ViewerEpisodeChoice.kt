@@ -11,21 +11,24 @@ data class ViewerEpisodeChoice(
     val streamLabel: String? = null,
     val subtitle: ViewerSubtitleChoice? = null,
     val audioLabel: String? = null,
-    /** The stream one episode plays in place of [streamLabel]; see [streamLabelFor]. */
-    val episodeStream: ViewerEpisodeStream? = null,
+    /**
+     * The streams episodes play in place of [streamLabel]; see [streamLabelFor]. Each episode keeps its own, so an
+     * episode that fell back still plays its working stream after another episode fell back too.
+     */
+    val episodeStreams: Map<ViewerMediaKey, ViewerEpisodeStream> = emptyMap(),
 ) {
     /** The stream [media] plays: the one it fell back to or was picked by hand in, else the session's choice. */
-    fun streamLabelFor(media: ViewerMediaKey?): String? = episodeStream?.takeIf { it.media == media }?.label ?: streamLabel
+    fun streamLabelFor(media: ViewerMediaKey?): String? = episodeStreams[media]?.label ?: streamLabel
 
     /** The stream the user picked by hand in [media], if any: a stream they chose gets no automatic fallback. */
-    fun pickedStream(media: ViewerMediaKey?): String? = episodeStream?.takeIf { it.media == media && it.pickedByHand }?.label
+    fun pickedStream(media: ViewerMediaKey?): String? = episodeStreams[media]?.takeIf { it.pickedByHand }?.label
 }
 
 /**
- * The stream [label] that the episode [media] plays: picked by hand there ([pickedByHand]), or fallen back to after the
- * one before failed. A fallback holds for that episode only and leaves the session's choice for later episodes alone.
+ * The stream [label] that one episode plays: picked by hand there ([pickedByHand]), or fallen back to after the one
+ * before failed. A fallback holds for that episode only and leaves the session's choice for later episodes alone.
  */
-data class ViewerEpisodeStream(val media: ViewerMediaKey, val label: String, val pickedByHand: Boolean)
+data class ViewerEpisodeStream(val label: String, val pickedByHand: Boolean)
 
 /** Subtitles turned off, or the track labelled [Track.label] shown. */
 sealed interface ViewerSubtitleChoice {

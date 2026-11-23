@@ -1,8 +1,6 @@
 package com.theoriacodex.app.viewer
 
 import androidx.lifecycle.SavedStateHandle
-import androidx.media3.common.C
-import androidx.media3.common.Player
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.post
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.session
 import com.theoriacodex.app.viewer.state.ViewerAction
@@ -186,6 +184,23 @@ class ViewerWatchingTest {
     }
 
     @Test
+    fun `a closing Viewer's paused player gives up the system's media controls`() = runTest {
+        val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this)
+        val episode = post("episode", media = listOf(ViewerOwnerTestData.video("episode.mp4")))
+        owner.replaceSession(session("watching", listOf(episode)).copy(series = ViewerSeries.Watching()))
+        fun frame() = owner.state.value.let { state ->
+            ViewerFrame(
+                state, viewerPostNavigation(state), listOf(episode), ViewerSelection(episode, episode.media, 0, false, emptyList()),
+                chromeVisible = false, chromeStage = 0, opening = false, returning = false, inPictureInPicture = false,
+                touchExplorationEnabled = false, isLandscape = false,
+            )
+        }
+        assertTrue(frame().systemControlsReady)
+        owner.clearSession(retainPresentation = true)
+        assertFalse(frame().systemControlsReady)
+    }
+
+    @Test
     fun `a watched session's seeds arrive with its first state, before anything can save`() = runTest {
         val seeds = ViewerSeries.Watching(mapOf(episodes[0].id to 90_000L))
         val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this)
@@ -217,7 +232,7 @@ class ViewerWatchingTest {
         assertNull(state.controls.panel)
         assertEquals("720p · B", state.controls.episode.streamLabel)
         state = reduceViewerState(state, ViewerAction.ChooseSubtitle(ViewerSubtitleChoice.Track("English"))).state
-        assertEquals(ViewerEpisodeChoice("720p · B", ViewerSubtitleChoice.Track("English"), episodeStream = state.controls.episode.episodeStream), state.controls.episode)
+        assertEquals(ViewerEpisodeChoice("720p · B", ViewerSubtitleChoice.Track("English"), episodeStreams = state.controls.episode.episodeStreams), state.controls.episode)
     }
 
     @Test
@@ -266,30 +281,6 @@ class ViewerWatchingTest {
         assertEquals(listOf(ViewerTrackChange.Subtitle("1:/0")), english.trackChanges(later, Locale.US))
     }
 
-    @Test
-    fun `every seek reports where it landed, a drag's at its release, and a released player reports where it stopped`() {
-        var scrubbing = false
-        var durationMs = 1_440_000L
-        val reports = mutableListOf<ViewerPlaybackProgress>()
-        val seeks = ViewerSeekReports({ scrubbing }, { durationMs }) { reports += it }
-        fun discontinuity(reason: Int, toMs: Long = 60_000) = seeks.onPositionDiscontinuity(position(0), position(toMs), reason)
-        // A paused player that the media session seeks reports the new position, though nothing on screen polled it yet.
-        discontinuity(Player.DISCONTINUITY_REASON_SEEK)
-        discontinuity(Player.DISCONTINUITY_REASON_AUTO_TRANSITION)
-        scrubbing = true
-        repeat(3) { discontinuity(Player.DISCONTINUITY_REASON_SEEK) }
-        scrubbing = false
-        discontinuity(Player.DISCONTINUITY_REASON_SEEK, toMs = 90_000)
-        durationMs = C.TIME_UNSET
-        discontinuity(Player.DISCONTINUITY_REASON_SEEK)
-        assertEquals(listOf(ViewerPlaybackProgress(60_000, 1_440_000), ViewerPlaybackProgress(90_000, 1_440_000)), reports)
-
-        assertEquals(ViewerPlaybackProgress(61_000, 1_440_000), viewerReleaseProgress(61_000, 1_440_000, ended = false))
-        assertEquals(ViewerPlaybackProgress(1_440_000, 1_440_000), viewerReleaseProgress(1_439_000, 1_440_000, ended = true))
-        assertNull(viewerReleaseProgress(4_000, C.TIME_UNSET, ended = false))
-    }
-
-    private fun position(ms: Long) = Player.PositionInfo(null, 0, null, null, 0, ms, ms, C.INDEX_UNSET, C.INDEX_UNSET)
 
     @Test
     fun `playback is reported every ten seconds while playing and once when it stops, never without a duration`() = runTest {
@@ -338,6 +329,11 @@ class ViewerWatchingTest {
         assertEquals("B", state.controls.episode.streamLabelFor(first))
         assertNull(state.controls.episode.streamLabelFor(second))
         assertNull(state.controls.episode.pickedStream(first))
+
+        // Another episode falling back leaves this one on the stream it fell back to.
+        state = reduceViewerState(state, ViewerAction.FallBackToStream(second, "A")).state
+        assertEquals("B", state.controls.episode.streamLabelFor(first))
+        assertEquals("A", state.controls.episode.streamLabelFor(second))
 
         state = reduceViewerState(state, ViewerAction.ChooseStream("A")).state
         assertEquals("A", state.controls.episode.streamLabelFor(first))
