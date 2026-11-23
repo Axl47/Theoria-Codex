@@ -19,7 +19,10 @@ import kotlinx.coroutines.sync.withLock
  * chapters it compares.
  */
 class ChapterPictures(
-    /** A page's picture hash from its source, or null when it cannot be loaded or is too flat to tell apart. */
+    /**
+     * A page's picture hash from its source, or null when it cannot be loaded or is too flat to tell apart. The app's
+     * reads only files and the disk cache, so comparing never adds a request to the source.
+     */
     private val hashPage: suspend (source: SourceKey, page: ImageRef) -> Long? = { _, _ -> null },
 ) {
     private val skipping = MutableStateFlow(emptySet<SeriesId>())

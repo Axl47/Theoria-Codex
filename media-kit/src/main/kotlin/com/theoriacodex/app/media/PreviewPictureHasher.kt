@@ -133,10 +133,11 @@ suspend fun loadPreviewStill(context: Context, candidate: PostMediaCandidate, si
 
 /**
  * The picture hash of the image at [url] (an address or a file) from [source], or null when it could not be loaded or
- * is too flat to tell apart. Loads as [loadPreviewStill] does.
+ * is too flat to tell apart. Loads as [loadPreviewStill] does; when [cachedOnly], only from a file or the disk cache,
+ * never asking the network.
  */
-suspend fun pictureHashAt(context: Context, url: String, source: SourceKey): Long? =
-    loadStill(context, url, source, PreviewPictureHasher.DECODE_PX)?.let { pictureHashOf(it) }
+suspend fun pictureHashAt(context: Context, url: String, source: SourceKey, cachedOnly: Boolean = false): Long? =
+    loadStill(context, url, source, PreviewPictureHasher.DECODE_PX, cachedOnly)?.let { pictureHashOf(it) }
 
 private suspend fun pictureHashOf(bitmap: Bitmap): Long? = withContext(Dispatchers.Default) {
     val pixels = IntArray(bitmap.width * bitmap.height)
@@ -144,7 +145,7 @@ private suspend fun pictureHashOf(bitmap: Bitmap): Long? = withContext(Dispatche
     PerceptualHash.ofArgb(pixels, bitmap.width, bitmap.height)
 }
 
-private suspend fun loadStill(context: Context, url: String, source: SourceKey, sizePx: Int): Bitmap? {
+private suspend fun loadStill(context: Context, url: String, source: SourceKey, sizePx: Int, cachedOnly: Boolean = false): Bitmap? {
     val request = MediaRequestFactory.imageRequest(
         context, url, source, crossfade = false, allowHardware = false,
         targetWidthPx = sizePx, targetHeightPx = sizePx,
@@ -152,6 +153,7 @@ private suspend fun loadStill(context: Context, url: String, source: SourceKey, 
         // A still first frame of any format, never an animation, and no bitmap in the memory cache.
         .decoderFactory(BitmapFactoryDecoder.Factory())
         .memoryCachePolicy(CachePolicy.DISABLED)
+        .networkCachePolicy(if (cachedOnly) CachePolicy.DISABLED else CachePolicy.ENABLED)
         // Coil starts requests on the main thread by default; this one has no view, so it never waits for a busy frame.
         .interceptorDispatcher(Dispatchers.Default)
         .build()

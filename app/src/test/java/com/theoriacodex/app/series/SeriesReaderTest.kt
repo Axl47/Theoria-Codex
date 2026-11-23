@@ -235,7 +235,11 @@ class SeriesReaderTest {
         // One chapter has nothing to match yet.
         assertEquals(mapOf(PostId(source, "/c1") to (pagesOf("/c1")[0].url to 0)), pictured())
 
-        reader.resolve(session.context.queryHash, PostId(source, "/c2"))
+        // A loaded chapter is compared once it is being read, when the Viewer has fetched its first page, not as it loads.
+        val loaded = checkNotNull(reader.resolve(session.context.queryHash, PostId(source, "/c2")))
+        advanceUntilIdle()
+        assertEquals(mapOf(PostId(source, "/c1") to (pagesOf("/c1")[0].url to 0)), pictured())
+        reader.recordProgress(session, loaded, mediaNumber = 1)
         advanceUntilIdle()
 
         // The downloaded chapter's second page is its file; the loaded one's, its own pages, which the Viewer holds.

@@ -79,8 +79,6 @@ internal class SeriesReader(private val series: SeriesDependencies) {
             .onFailure { Diagnostics.report("series", "${id.source.id} chapter pages failed to load: ${failureKinds(it)}") }
             .getOrThrow()
         if (pages.isEmpty()) return null
-        // Any copy counts, even one another collection owns; only the hash is kept.
-        series.scope.launch { series.pictures.compare(id, mapOf(entry.entry.address to pages.first())) }
         return chapterPost(stored.series, entry.entry, series.covers.address(stored.series), pages)
     }
 
@@ -91,6 +89,9 @@ internal class SeriesReader(private val series: SeriesDependencies) {
     suspend fun recordProgress(session: ViewerSession, post: Post, mediaNumber: Int) {
         val id = seriesIdOf(session.context.queryHash) ?: return
         if (post.media.isEmpty()) return
+        // Once the chapter is being read its first page has been shown, so comparing it reads the copy the Viewer
+        // fetched rather than asking the source again. Any copy counts, even one another collection owns.
+        series.scope.launch { series.pictures.compare(id, mapOf(post.id.sourcePostId to post.media.first())) }
         series.repository.recordProgress(id, post.id.sourcePostId, mediaNumber, post.media.size)
     }
 
