@@ -276,7 +276,7 @@ private fun TheoriaNavigationSurface(shell: TheoriaShell, currentRoute: String?)
         containerColor = if (currentRoute == AppRoute.Viewer) Color.Black else MaterialTheme.colorScheme.background,
         onDestinationSelected = { destination ->
             val alreadyShowing = navigation.currentRoute == AppRoute.Home &&
-                TopLevelDestination.entries[pagerState.currentPage] == destination
+                tabTap(destination, pagerState.targetPage, pagerState.settledPage, pagerState.isScrollInProgress) == TabTap.Reselect
             navigation.homeTabRoute = destination.route
             // New posts wait in Saved, so a lit Library tab opens there; without the dot the remembered section stays.
             if (destination == TopLevelDestination.Library && !alreadyShowing && libraryHasNew) {

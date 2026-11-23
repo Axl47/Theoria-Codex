@@ -69,6 +69,20 @@ internal fun topLevelPagerFling(state: PagerState): TargetedFlingBehavior =
 internal fun tabShown(tab: TopLevelDestination, targetPage: Int, settledPage: Int): Boolean =
     tab.ordinal.let { it == targetPage || it == settledPage }
 
+/** What a bar tap on a tab does while Home is on top; [tabTap] decides. */
+internal enum class TabTap { Reselect, LetFinish, Move }
+
+/**
+ * A tap on the tab the pager rests on reselects it, a tap on the tab a scroll is already heading to lets that scroll
+ * finish, and any other tap moves there. Never decided from the nearest page: a scroll to another tab passes over the
+ * tabs between, and a tap on one of those is a tab change.
+ */
+internal fun tabTap(tab: TopLevelDestination, targetPage: Int, settledPage: Int, scrolling: Boolean): TabTap = when {
+    scrolling -> if (tab.ordinal == targetPage) TabTap.LetFinish else TabTap.Move
+    tab.ordinal == settledPage -> TabTap.Reselect
+    else -> TabTap.Move
+}
+
 /**
  * Whether a sideways swipe changes tab from the tab the pager has settled on. Not while For You shows its deck, where
  * a sideways drag decides a card; there the tabs change from the bottom bar only. For You's grid swipes like the other
