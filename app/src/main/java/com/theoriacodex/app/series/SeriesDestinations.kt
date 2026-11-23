@@ -45,7 +45,7 @@ internal fun SeriesTabDestination(shell: TheoriaShell) {
     val pendingSearch = homeHandle?.getStateFlow<String?>(PENDING_SERIES_SEARCH, null)?.collectAsStateWithLifecycle()?.value
     LaunchedEffect(pendingSearch) {
         if (!pendingSearch.isNullOrBlank()) {
-            homeHandle.remove<String>(PENDING_SERIES_SEARCH)
+            homeHandle[PENDING_SERIES_SEARCH] = null
             viewModel.search(pendingSearch)
         }
     }

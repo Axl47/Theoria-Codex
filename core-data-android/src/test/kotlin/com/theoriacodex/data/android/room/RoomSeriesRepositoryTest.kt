@@ -206,24 +206,28 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `setEntriesRead and restoreProgress update targeted chapters and undo cleanly`() = runTest {
+    fun `setEntriesRead and restoreProgress update targeted chapters and preserve unrelated edits on undo`() = runTest {
         repository.store(series, listOf(SeriesEntry("/c/3", "Chapter 3"), SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))
         repository.recordProgress(id, "/c/1", page = 4, pageCount = 10)
-        val beforeEntries = repository.entries(id)
-        val beforeLast = repository.series(id)!!.lastOpenedEntry
 
-        repository.setEntriesRead(id, listOf("/c/2", "/c/1"), read = true)
+        val restore = repository.setEntriesRead(id, listOf("/c/2", "/c/1"), read = true)
         assertEquals(listOf(false, true, true), repository.entries(id).map { it.read })
 
-        repository.restoreProgress(id, beforeEntries, beforeLast)
+        // Separate edit to an unrelated chapter after the bulk action.
+        repository.setEntriesRead(id, listOf("/c/3"), read = true)
+
+        repository.restoreProgress(id, restore)
         val restored = repository.entries(id)
-        assertEquals(listOf(false, false, false), restored.map { it.read })
+        assertEquals(listOf(true, false, false), restored.map { it.read })
         assertEquals(4, restored.last().lastPage)
         assertEquals("/c/1", repository.series(id)!!.lastOpenedEntry)
 
-        repository.setEntriesRead(id, listOf("/c/1"), read = false)
+        val unreadRestore = repository.setEntriesRead(id, listOf("/c/1"), read = false)
         assertEquals(0, repository.entries(id).last().lastPage)
         assertNull(repository.series(id)!!.lastOpenedEntry)
+        repository.restoreProgress(id, unreadRestore)
+        assertEquals(4, repository.entries(id).last().lastPage)
+        assertEquals("/c/1", repository.series(id)!!.lastOpenedEntry)
     }
 
     @Test

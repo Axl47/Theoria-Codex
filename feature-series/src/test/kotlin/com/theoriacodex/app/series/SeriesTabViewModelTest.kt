@@ -1,5 +1,6 @@
 package com.theoriacodex.app.series
 
+import com.theoriacodex.data.repository.EntryProgressRestore
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
@@ -500,9 +501,9 @@ private object NothingStored : SeriesRepository {
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit
-    override suspend fun setAllRead(id: SeriesId, read: Boolean) = Unit
-    override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean) = Unit
-    override suspend fun restoreProgress(id: SeriesId, entries: List<StoredSeriesEntry>, lastOpenedEntry: String?) = Unit
+    override suspend fun setAllRead(id: SeriesId, read: Boolean) = EntryProgressRestore()
+    override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean) = EntryProgressRestore()
+    override suspend fun restoreProgress(id: SeriesId, restore: EntryProgressRestore) = Unit
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) = Unit
     override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) = false
 }

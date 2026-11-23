@@ -1,6 +1,7 @@
 package com.theoriacodex.app.series
 
 import com.theoriacodex.data.repository.ChapterDownload
+import com.theoriacodex.data.repository.EntryProgressRestore
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
@@ -155,27 +156,35 @@ class SeriesPageViewModelTest {
         assertEquals(listOf(false, true, false), viewModel.state.value.entries.map { it.read })
 
         // Mark previous chapters from Chapter 3 marks only unread chapters earlier in reading order (/c/1).
-        val prevUndo = viewModel.markPreviousRead("/c/3")
+        var prevUndo: BulkReadUndo? = null
+        viewModel.markPreviousRead("/c/3") { prevUndo = it }
         advanceUntilIdle()
         assertNotNull(prevUndo)
         assertEquals(listOf(false, true, true), viewModel.state.value.entries.map { it.read })
 
-        // Undo restores exact prior progress.
+        // Separate edit to Chapter 3 must survive undoing the earlier Mark previous action.
+        viewModel.setEntryRead("/c/3", true)
+        advanceUntilIdle()
         viewModel.undoBulkRead(prevUndo!!)
         advanceUntilIdle()
-        assertEquals(listOf(false, true, false), viewModel.state.value.entries.map { it.read })
+        assertEquals(listOf(true, true, false), viewModel.state.value.entries.map { it.read })
         assertEquals(4, viewModel.state.value.entries.last().lastPage)
 
         // Mark all read + undo.
-        val allUndo = viewModel.markAllRead(true)
+        var allUndo: BulkReadUndo? = null
+        viewModel.markAllRead(true) { allUndo = it }
         advanceUntilIdle()
         assertNotNull(allUndo)
         assertTrue(viewModel.state.value.entries.all { it.read })
-        assertNull(viewModel.markAllRead(true))
+
+        var noopUndo: BulkReadUndo? = null
+        viewModel.markAllRead(true) { noopUndo = it }
+        advanceUntilIdle()
+        assertNull(noopUndo)
 
         viewModel.undoBulkRead(allUndo!!)
         advanceUntilIdle()
-        assertEquals(listOf(false, true, false), viewModel.state.value.entries.map { it.read })
+        assertEquals(listOf(true, true, false), viewModel.state.value.entries.map { it.read })
         collecting.cancel()
     }
 
@@ -244,29 +253,35 @@ private class Restored(stored: StoredSeries, entries: List<StoredSeriesEntry>) :
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit
-    override suspend fun setAllRead(id: SeriesId, read: Boolean) {
+    override suspend fun setAllRead(id: SeriesId, read: Boolean): EntryProgressRestore {
+        val changed = entryFlow.value.filter { if (read) !it.read else (it.read || it.lastPage > 0) }
+        val prevLast = storedFlow.value?.lastOpenedEntry
+        val clearLast = !read && prevLast != null
         entryFlow.value = entryFlow.value.map { it.copy(read = read, lastPage = if (read) it.lastPage else 0) }
-        if (!read) storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = null)
+        if (clearLast) storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = null)
+        return EntryProgressRestore(changed, restoreLastOpened = clearLast, lastOpenedEntry = prevLast)
     }
 
-    override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean) {
+    override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean): EntryProgressRestore {
         val targets = entryAddresses.toHashSet()
+        val changed = entryFlow.value.filter { it.entry.address in targets && (if (read) !it.read else (it.read || it.lastPage > 0)) }
+        val prevLast = storedFlow.value?.lastOpenedEntry
+        val clearLast = !read && prevLast in targets
         entryFlow.value = entryFlow.value.map { entry ->
             if (entry.entry.address !in targets) entry
             else entry.copy(read = read, lastPage = if (read) entry.lastPage else 0)
         }
-        if (!read && storedFlow.value?.lastOpenedEntry in targets) {
-            storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = null)
-        }
+        if (clearLast) storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = null)
+        return EntryProgressRestore(changed, restoreLastOpened = clearLast, lastOpenedEntry = prevLast)
     }
 
-    override suspend fun restoreProgress(id: SeriesId, entries: List<StoredSeriesEntry>, lastOpenedEntry: String?) {
-        val byAddress = entries.associateBy { it.entry.address }
+    override suspend fun restoreProgress(id: SeriesId, restore: EntryProgressRestore) {
+        val byAddress = restore.entries.associateBy { it.entry.address }
         entryFlow.value = entryFlow.value.map { current ->
             val target = byAddress[current.entry.address] ?: return@map current
             current.copy(read = target.read, lastPage = target.lastPage, pageCount = target.pageCount)
         }
-        storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = lastOpenedEntry)
+        if (restore.restoreLastOpened) storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = restore.lastOpenedEntry)
     }
 
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) = Unit

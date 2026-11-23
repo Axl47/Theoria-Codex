@@ -36,6 +36,18 @@ data class StoredSeriesEntry(
 data class FollowedSeries(val series: Series, val unreadCount: Int)
 
 /**
+ * Exact prior progress of the entries a bulk read/unread write changed, captured inside the write's transaction so
+ * Undo restores only what that operation touched.
+ */
+data class EntryProgressRestore(
+    val entries: List<StoredSeriesEntry> = emptyList(),
+    val restoreLastOpened: Boolean = false,
+    val lastOpenedEntry: String? = null,
+) {
+    val isEmpty: Boolean get() = entries.isEmpty() && !restoreLastOpened
+}
+
+/**
  * Stored series, their entries and reading progress. A series is stored when its page is opened; following only
  * flags it. Page addresses are never stored, since they expire; downloaded pages are [SeriesDownloads]' files.
  */
@@ -79,14 +91,20 @@ interface SeriesRepository {
 
     suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean)
 
-    /** Marks every listed entry of [id] as read or unread. Marking unread also resets partial page progress. */
-    suspend fun setAllRead(id: SeriesId, read: Boolean)
+    /**
+     * Marks every listed entry of [id] as read or unread and returns the prior state of only the entries changed.
+     * Marking unread also resets partial page progress and clears last-opened entry.
+     */
+    suspend fun setAllRead(id: SeriesId, read: Boolean): EntryProgressRestore
 
-    /** Marks the listed entries at [entryAddresses] as read or unread. Marking unread resets their partial page progress. */
-    suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean)
+    /**
+     * Marks the listed entries at [entryAddresses] as read or unread and returns the prior state of only the entries
+     * changed. Marking unread resets their partial page progress.
+     */
+    suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean): EntryProgressRestore
 
-    /** Restores snapshotted progress on listed entries and [lastOpenedEntry] (used to undo bulk read changes). */
-    suspend fun restoreProgress(id: SeriesId, entries: List<StoredSeriesEntry>, lastOpenedEntry: String?)
+    /** Restores only the snapshotted entries and (when requested) last-opened entry from [restore]. */
+    suspend fun restoreProgress(id: SeriesId, restore: EntryProgressRestore)
 
     /**
      * The user is on [page] (from 1) of the entry at [entryAddress]. [pageCount] is null while the entry's pages are

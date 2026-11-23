@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theoriacodex.data.repository.ChapterDownload
 import com.theoriacodex.data.repository.DownloadChoice
+import com.theoriacodex.data.repository.EntryProgressRestore
 import com.theoriacodex.data.repository.SeriesDownloads
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
@@ -40,11 +41,10 @@ private data class ChapterViewOptions(
     val query: String = "",
 )
 
-/** Snapshot taken before a bulk read/unread action so an Undo pill can restore exact prior progress. */
+/** Transaction-captured undo snapshot for a bulk read/unread action. */
 data class BulkReadUndo(
     val label: String,
-    val previousEntries: List<StoredSeriesEntry>,
-    val previousLastOpened: String?,
+    val restore: EntryProgressRestore,
 )
 
 /**
@@ -236,31 +236,32 @@ class SeriesPageViewModel(
         viewModelScope.launch { repository.setEntriesRead(id, listOf(entryAddress), read) }
     }
 
-    /** Marks all unread chapters earlier in reading order than [entryAddress] as read; returns an undo token. */
-    fun markPreviousRead(entryAddress: String): BulkReadUndo? {
+    /** Marks all unread chapters earlier in reading order than [entryAddress] as read and delivers an undo snapshot. */
+    fun markPreviousRead(entryAddress: String, onUndo: (BulkReadUndo) -> Unit) {
         val current = state.value
-        val target = current.entries.firstOrNull { it.entry.address == entryAddress } ?: return null
-        val previousUnread = current.entries.filter { it.sourceOrder > target.sourceOrder && !it.read }
-        if (previousUnread.isEmpty()) return null
-        val undo = BulkReadUndo("Marked ${chapterCount(previousUnread.size)} as read", current.entries, current.stored?.lastOpenedEntry)
-        viewModelScope.launch { repository.setEntriesRead(id, previousUnread.map { it.entry.address }, read = true) }
-        return undo
+        val target = current.entries.firstOrNull { it.entry.address == entryAddress } ?: return
+        val previousAddresses = current.entries.filter { it.sourceOrder > target.sourceOrder && !it.read }.map { it.entry.address }
+        if (previousAddresses.isEmpty()) return
+        viewModelScope.launch {
+            val restore = repository.setEntriesRead(id, previousAddresses, read = true)
+            if (!restore.isEmpty) onUndo(BulkReadUndo("Marked ${chapterCount(restore.entries.size)} as read", restore))
+        }
     }
 
-    /** Marks all chapters read or unread; returns an undo token when at least one chapter changes. */
-    fun markAllRead(read: Boolean): BulkReadUndo? {
-        val current = state.value
-        val hasChange = if (read) current.entries.any { !it.read } else current.entries.any { it.read || it.lastPage > 0 }
-        if (!hasChange) return null
-        val label = if (read) "Marked all as read" else "Marked all as unread"
-        val undo = BulkReadUndo(label, current.entries, current.stored?.lastOpenedEntry)
-        viewModelScope.launch { repository.setAllRead(id, read) }
-        return undo
+    /** Marks all chapters read or unread and delivers a transaction-scoped undo snapshot when anything changed. */
+    fun markAllRead(read: Boolean, onUndo: (BulkReadUndo) -> Unit) {
+        viewModelScope.launch {
+            val restore = repository.setAllRead(id, read)
+            if (!restore.isEmpty) {
+                val label = if (read) "Marked all as read" else "Marked all as unread"
+                onUndo(BulkReadUndo(label, restore))
+            }
+        }
     }
 
-    /** Reverses a [BulkReadUndo] snapshot, restoring exact prior chapter progress and last-opened entry. */
+    /** Reverses a [BulkReadUndo] snapshot, restoring only what that bulk operation modified. */
     fun undoBulkRead(undo: BulkReadUndo) {
-        viewModelScope.launch { repository.restoreProgress(id, undo.previousEntries, undo.previousLastOpened) }
+        viewModelScope.launch { repository.restoreProgress(id, undo.restore) }
     }
 
     /** The chapter row's download mark: downloads the chapter, or stops its download or deletes it from the device. */

@@ -1,6 +1,7 @@
 package com.theoriacodex.data.android.room
 
 import androidx.room.withTransaction
+import com.theoriacodex.data.repository.EntryProgressRestore
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.NoChaptersToMoveToException
 import com.theoriacodex.data.repository.SeriesRepository
@@ -104,33 +105,41 @@ class RoomSeriesRepository(
 
     override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = update(id) { it.copy(downloadNewChapters = on) }
 
-    override suspend fun setAllRead(id: SeriesId, read: Boolean) {
-        database.withTransaction {
-            if (read) {
-                dao.markAllRead(id.source.id, id.address)
-            } else {
-                dao.markAllUnread(id.source.id, id.address)
-                dao.clearLastOpenedEntry(id.source.id, id.address)
-            }
+    override suspend fun setAllRead(id: SeriesId, read: Boolean): EntryProgressRestore = database.withTransaction {
+        val current = dao.entries(id.source.id, id.address).map(SeriesEntryEntity::toStored)
+        val changedBefore = current.filter { it.withReadState(null, read) != null }
+        val seriesBefore = dao.series(id.source.id, id.address)?.toStored()
+        val clearLastOpened = !read && seriesBefore?.lastOpenedEntry != null
+        if (read) {
+            if (changedBefore.isNotEmpty()) dao.markAllRead(id.source.id, id.address)
+        } else {
+            if (changedBefore.isNotEmpty()) dao.markAllUnread(id.source.id, id.address)
+            if (clearLastOpened) dao.clearLastOpenedEntry(id.source.id, id.address)
         }
+        EntryProgressRestore(changedBefore, restoreLastOpened = clearLastOpened, lastOpenedEntry = seriesBefore?.lastOpenedEntry)
     }
 
-    override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean) {
-        if (entryAddresses.isEmpty()) return
+    override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean): EntryProgressRestore {
+        if (entryAddresses.isEmpty()) return EntryProgressRestore()
         val targets = entryAddresses.toHashSet()
-        database.withTransaction {
-            val updated = dao.entries(id.source.id, id.address)
-                .map(SeriesEntryEntity::toStored)
-                .mapNotNull { it.withReadState(targets, read)?.toEntity(id) }
-            if (updated.isNotEmpty()) dao.upsertEntries(updated)
-            if (!read && dao.series(id.source.id, id.address)?.toStored()?.lastOpenedEntry in targets) {
-                dao.clearLastOpenedEntry(id.source.id, id.address)
-            }
+        return database.withTransaction {
+            val current = dao.entries(id.source.id, id.address).map(SeriesEntryEntity::toStored)
+            val changedPairs = current.mapNotNull { before -> before.withReadState(targets, read)?.let { before to it } }
+            if (changedPairs.isNotEmpty()) dao.upsertEntries(changedPairs.map { (_, after) -> after.toEntity(id) })
+            val seriesBefore = dao.series(id.source.id, id.address)?.toStored()
+            val clearLastOpened = !read && seriesBefore?.lastOpenedEntry in targets
+            if (clearLastOpened) dao.clearLastOpenedEntry(id.source.id, id.address)
+            EntryProgressRestore(
+                entries = changedPairs.map { (before, _) -> before },
+                restoreLastOpened = clearLastOpened,
+                lastOpenedEntry = seriesBefore?.lastOpenedEntry,
+            )
         }
     }
 
-    override suspend fun restoreProgress(id: SeriesId, entries: List<StoredSeriesEntry>, lastOpenedEntry: String?) {
-        val byAddress = entries.associateBy { it.entry.address }
+    override suspend fun restoreProgress(id: SeriesId, restore: EntryProgressRestore) {
+        if (restore.isEmpty) return
+        val byAddress = restore.entries.associateBy { it.entry.address }
         database.withTransaction {
             val restored = dao.entries(id.source.id, id.address)
                 .map(SeriesEntryEntity::toStored)
@@ -140,9 +149,11 @@ class RoomSeriesRepository(
                     next.takeIf { it != current }?.toEntity(id)
                 }
             if (restored.isNotEmpty()) dao.upsertEntries(restored)
-            val series = dao.series(id.source.id, id.address)?.toStored()
-            if (series != null && series.lastOpenedEntry != lastOpenedEntry) {
-                dao.upsertSeries(series.copy(lastOpenedEntry = lastOpenedEntry).toEntity())
+            if (restore.restoreLastOpened) {
+                val series = dao.series(id.source.id, id.address)?.toStored()
+                if (series != null && series.lastOpenedEntry != restore.lastOpenedEntry) {
+                    dao.upsertSeries(series.copy(lastOpenedEntry = restore.lastOpenedEntry).toEntity())
+                }
             }
         }
     }
@@ -188,8 +199,8 @@ class RoomSeriesRepository(
 /** A chapter number and who released it: several groups release the same number, each a chapter of its own. */
 private val SeriesEntry.release: Pair<Float, String?>? get() = number?.let { it to translatorGroup }
 
-private fun StoredSeriesEntry.withReadState(targets: Set<String>, read: Boolean): StoredSeriesEntry? {
-    if (entry.address !in targets) return null
+private fun StoredSeriesEntry.withReadState(targets: Set<String>?, read: Boolean): StoredSeriesEntry? {
+    if (targets != null && entry.address !in targets) return null
     val next = if (read) copy(read = true) else copy(read = false, lastPage = 0)
     return next.takeIf { it != this }
 }

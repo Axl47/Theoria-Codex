@@ -5,6 +5,7 @@ import com.theoriacodex.app.media.isLikelyImageLocation
 import com.theoriacodex.app.viewer.decodeViewerPostId
 import com.theoriacodex.app.viewer.encodeViewerPostId
 import com.theoriacodex.data.repository.DownloadScheduler
+import com.theoriacodex.data.repository.EntryProgressRestore
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.OfflineMediaStore
 import com.theoriacodex.data.repository.SeriesDownloads
@@ -256,9 +257,9 @@ private class StoredOnly(private val stored: StoredSeries, private val entries: 
     override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) = false
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit
-    override suspend fun setAllRead(id: SeriesId, read: Boolean) = Unit
-    override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean) = Unit
-    override suspend fun restoreProgress(id: SeriesId, entries: List<StoredSeriesEntry>, lastOpenedEntry: String?) = Unit
+    override suspend fun setAllRead(id: SeriesId, read: Boolean) = EntryProgressRestore()
+    override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean) = EntryProgressRestore()
+    override suspend fun restoreProgress(id: SeriesId, restore: EntryProgressRestore) = Unit
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) {
         progress += "$entryAddress $page/$pageCount"
     }

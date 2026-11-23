@@ -38,12 +38,23 @@ internal val LocalSeriesSources = staticCompositionLocalOf<List<SeriesSource>> {
 
 /** Builds the Coil request for [series]' cover through its active source when available. */
 @Composable
-internal fun rememberSeriesCoverRequest(series: Series, targetWidthPx: Int = COVER_WIDTH_PX): ImageRequest? {
+internal fun rememberSeriesCoverRequest(
+    series: Series,
+    targetWidthPx: Int = COVER_WIDTH_PX,
+    targetHeightPx: Int = COVER_HEIGHT_PX,
+): ImageRequest? {
     val context = LocalContext.current
     val source = LocalSeriesSources.current.firstOrNull { it.key == series.id.source }
-    return remember(context, series.id, series.coverUrl, source, targetWidthPx) {
+    return remember(context, series.id, series.coverUrl, source, targetWidthPx, targetHeightPx) {
         (if (source != null) source.coverAddress(series) else series.coverUrl)?.let { url ->
-            MediaRequestFactory.imageRequest(context, url, series.id.source, crossfade = true, targetWidthPx = targetWidthPx)
+            MediaRequestFactory.imageRequest(
+                context,
+                url,
+                series.id.source,
+                crossfade = true,
+                targetWidthPx = targetWidthPx,
+                targetHeightPx = targetHeightPx,
+            )
         }
     }
 }
@@ -137,6 +148,8 @@ private val TITLE_SCRIM = Brush.verticalGradient(
 
 /** Wide enough for the series page's cover on a dense phone; grid tiles scale it down. */
 private const val COVER_WIDTH_PX = 480
+private const val COVER_HEIGHT_PX = 720
 
 /** High resolution target for the full-screen cover viewer. */
 internal const val FULL_COVER_WIDTH_PX = 1600
+internal const val FULL_COVER_HEIGHT_PX = 2400

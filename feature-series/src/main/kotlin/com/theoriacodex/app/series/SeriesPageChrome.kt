@@ -497,7 +497,7 @@ private fun ActiveOptionChip(label: String, clearDescription: String, onClear: (
 /** Full-screen pinch-to-zoom cover viewer opened by tapping a series' cover. */
 @Composable
 internal fun CoverLightboxDialog(series: Series, onDismiss: () -> Unit) {
-    val request = rememberSeriesCoverRequest(series, targetWidthPx = FULL_COVER_WIDTH_PX)
+    val request = rememberSeriesCoverRequest(series, targetWidthPx = FULL_COVER_WIDTH_PX, targetHeightPx = FULL_COVER_HEIGHT_PX)
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {

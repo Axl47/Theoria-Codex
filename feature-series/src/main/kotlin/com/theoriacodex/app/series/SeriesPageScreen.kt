@@ -66,6 +66,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.selected
@@ -117,8 +118,8 @@ fun SeriesPageScreen(
     val toggleFollowed = rememberFollowToggle(viewModel)
     val listState = rememberLazyListState()
     var topBarVisible by rememberSaveable { mutableStateOf(true) }
-    var searchOpen by rememberSaveable { mutableStateOf(false) }
-    var searchQuery by rememberSaveable { mutableStateOf(state.chapterQuery) }
+    var searchOpen by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf(state.chapterQuery) }
     var optionsSheetOpen by rememberSaveable { mutableStateOf(false) }
     var coverLightboxOpen by rememberSaveable { mutableStateOf(false) }
     val scrolled by remember(listState) { derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 48 } }
@@ -138,7 +139,7 @@ fun SeriesPageScreen(
             onCopyTitle = { copySeriesTitle(context, it) },
             onSearchGenre = onSearchGenre,
             onOpenEntry = onOpenEntry,
-            onMarkPreviousRead = { offerBulkUndo(viewModel.markPreviousRead(it)) },
+            onMarkPreviousRead = { viewModel.markPreviousRead(it, offerBulkUndo) },
             onOpenExtensions = onOpenExtensions,
             onOpenChapterOptions = { optionsSheetOpen = true },
             onClearQuery = clearQuery,
@@ -157,7 +158,7 @@ fun SeriesPageScreen(
             onCloseSearch = { searchOpen = false; clearQuery() },
             onQueryChange = { searchQuery = it; viewModel.setChapterQuery(it) },
             onRefresh = { viewModel.refresh() },
-            onMarkAllRead = { offerBulkUndo(viewModel.markAllRead(it)) },
+            onMarkAllRead = { viewModel.markAllRead(it, offerBulkUndo) },
             onDownload = viewModel::download,
             onDeleteDownloads = viewModel::deleteDownloads,
             onDownloadNewChapters = viewModel::setDownloadNewChapters,
@@ -169,13 +170,11 @@ fun SeriesPageScreen(
 }
 
 @Composable
-private fun rememberBulkReadUndo(anchor: UndoAnchor, viewModel: SeriesPageViewModel): (BulkReadUndo?) -> Unit {
+private fun rememberBulkReadUndo(anchor: UndoAnchor, viewModel: SeriesPageViewModel): (BulkReadUndo) -> Unit {
     val undoSlot = LocalUndoSlot.current
     UndoLeaveEffect(SERIES_UNDO_SCOPE)
-    return { undo ->
-        undo?.let { snapshot ->
-            undoSlot.offer(undoSlot.scope, UndoOffer(snapshot.label, anchor) { viewModel.undoBulkRead(snapshot) })
-        }
+    return { snapshot ->
+        undoSlot.offer(undoSlot.scope, UndoOffer(snapshot.label, anchor) { viewModel.undoBulkRead(snapshot) })
     }
 }
 
@@ -389,6 +388,7 @@ private fun SeriesHeroHeader(
                         stored.series,
                         Modifier
                             .width(HERO_COVER_WIDTH)
+                            .testTag(HERO_COVER_TAG)
                             .clickable(role = Role.Image, onClickLabel = "View cover", onClick = onOpenCover),
                     )
                     HeroMetadata(stored.series, state.sourceName, onCopyTitle, Modifier.weight(1f))
@@ -682,6 +682,7 @@ private val SeriesStatus.label: String?
     }
 
 private const val SERIES_UNDO_SCOPE = "series-page"
+internal const val HERO_COVER_TAG = "Series hero cover"
 private val HERO_COVER_WIDTH = 108.dp
 private val HERO_BLUR_RADIUS = 20.dp
 private val ACTION_BUTTON_HEIGHT = 44.dp

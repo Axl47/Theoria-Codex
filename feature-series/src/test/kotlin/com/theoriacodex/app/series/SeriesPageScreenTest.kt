@@ -18,6 +18,7 @@ import com.theoriacodex.app.ui.components.LocalPostMenuActions
 import com.theoriacodex.app.ui.components.PostMenuActions
 import com.theoriacodex.app.ui.undo.ProvideUndoSlot
 import com.theoriacodex.app.ui.undo.UndoSlot
+import com.theoriacodex.data.repository.EntryProgressRestore
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
@@ -86,8 +87,13 @@ class SeriesPageScreenTest {
         assertEquals(listOf("https://asura.example/series/1"), sharedUrls)
 
         // Tapping cover opens the full-screen lightbox and Close dismisses it.
-        compose.onNodeWithText("Suicidal Battle God").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Close cover").assertDoesNotExist()
+        compose.onNodeWithTag(COVER_LIGHTBOX_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(HERO_COVER_TAG).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag(COVER_LIGHTBOX_TAG).assertIsDisplayed()
+        compose.onNodeWithContentDescription("Close cover").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag(COVER_LIGHTBOX_TAG).assertDoesNotExist()
 
         // Genres reveal when expanding About, and tapping a genre invokes onSearchGenre.
         compose.onNodeWithText("Fantasy").assertDoesNotExist()
@@ -275,29 +281,35 @@ private class PageMemoryRepository(stored: StoredSeries, entries: List<StoredSer
 
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit
-    override suspend fun setAllRead(id: SeriesId, read: Boolean) {
+    override suspend fun setAllRead(id: SeriesId, read: Boolean): EntryProgressRestore {
+        val changed = entriesFlow.value.filter { if (read) !it.read else (it.read || it.lastPage > 0) }
+        val prevLast = storedFlow.value?.lastOpenedEntry
+        val clearLast = !read && prevLast != null
         entriesFlow.value = entriesFlow.value.map { it.copy(read = read, lastPage = if (read) it.lastPage else 0) }
-        if (!read) storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = null)
+        if (clearLast) storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = null)
+        return EntryProgressRestore(changed, restoreLastOpened = clearLast, lastOpenedEntry = prevLast)
     }
 
-    override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean) {
+    override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean): EntryProgressRestore {
         val targets = entryAddresses.toHashSet()
+        val changed = entriesFlow.value.filter { it.entry.address in targets && (if (read) !it.read else (it.read || it.lastPage > 0)) }
+        val prevLast = storedFlow.value?.lastOpenedEntry
+        val clearLast = !read && prevLast in targets
         entriesFlow.value = entriesFlow.value.map { entry ->
             if (entry.entry.address !in targets) entry
             else entry.copy(read = read, lastPage = if (read) entry.lastPage else 0)
         }
-        if (!read && storedFlow.value?.lastOpenedEntry in targets) {
-            storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = null)
-        }
+        if (clearLast) storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = null)
+        return EntryProgressRestore(changed, restoreLastOpened = clearLast, lastOpenedEntry = prevLast)
     }
 
-    override suspend fun restoreProgress(id: SeriesId, entries: List<StoredSeriesEntry>, lastOpenedEntry: String?) {
-        val byAddress = entries.associateBy { it.entry.address }
+    override suspend fun restoreProgress(id: SeriesId, restore: EntryProgressRestore) {
+        val byAddress = restore.entries.associateBy { it.entry.address }
         entriesFlow.value = entriesFlow.value.map { current ->
             val target = byAddress[current.entry.address] ?: return@map current
             current.copy(read = target.read, lastPage = target.lastPage, pageCount = target.pageCount)
         }
-        storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = lastOpenedEntry)
+        if (restore.restoreLastOpened) storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = restore.lastOpenedEntry)
     }
 
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) = Unit
