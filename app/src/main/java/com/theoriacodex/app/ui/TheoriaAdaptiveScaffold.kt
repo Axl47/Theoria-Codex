@@ -96,9 +96,10 @@ internal suspend fun navigateTopLevelDestination(
             restoreState = true
         }
         pager.scrollToPage(target)
-    } else if (if (pager.isScrollInProgress) pager.targetPage != target else pager.settledPage != target) {
-        // A scroll to another tab passes over this one, where currentPage already names it; one already heading
-        // here is left to finish.
-        pager.animateScrollToPage(target, animationSpec = tween(TheoriaMotion.SCREEN_MS))
+    } else if (tabTap(destination, pager.targetPage, pager.settledPage, pager.isScrollInProgress) == TabTap.Move) {
+        // A scroll passing exactly over the target makes animateScrollToPage return without stopping that scroll,
+        // which then carries on past it; scrollToPage stops it there.
+        if (pager.currentPage == target && pager.currentPageOffsetFraction == 0f) pager.scrollToPage(target)
+        else pager.animateScrollToPage(target, animationSpec = tween(TheoriaMotion.SCREEN_MS))
     }
 }

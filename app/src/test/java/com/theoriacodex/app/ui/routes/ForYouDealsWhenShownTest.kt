@@ -50,11 +50,18 @@ class ForYouDealsWhenShownTest {
         compose.waitUntil(10_000) { graph.registry.requests.isNotEmpty() }
     }
 
-    @Test fun `a tap on For You while the slide to Library is passing it goes to For You`() = app { graph ->
+    @Test fun `a tap on For You while the slide to Library is passing it goes to For You`() =
+        tapForYouDuringSlideToLibrary(afterMs = TheoriaMotion.SCREEN_MS * 2L / 5)
+
+    /** On the test clock's frames this lands exactly on For You, where a redirecting animateScrollToPage does nothing. */
+    @Test fun `a tap on For You just as the slide to Library is over it goes to For You`() =
+        tapForYouDuringSlideToLibrary(afterMs = TheoriaMotion.SCREEN_MS / 3L)
+
+    /** Taps Library, then For You [afterMs] into the slide, where the pager's nearest page is For You. */
+    private fun tapForYouDuringSlideToLibrary(afterMs: Long) = app { graph ->
         compose.mainClock.autoAdvance = false
         compose.onNodeWithContentDescription("Library").performClick()
-        // Partway through the slide, where the pager's nearest page is already For You.
-        compose.mainClock.advanceTimeBy(TheoriaMotion.SCREEN_MS / 3L)
+        compose.mainClock.advanceTimeBy(afterMs)
         compose.onNodeWithContentDescription("For You").assertIsSelected().performClick()
         compose.mainClock.autoAdvance = true
         compose.waitForIdle()

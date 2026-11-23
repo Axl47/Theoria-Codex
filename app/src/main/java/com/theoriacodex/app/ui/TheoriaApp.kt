@@ -275,10 +275,8 @@ private fun TheoriaNavigationSurface(shell: TheoriaShell, currentRoute: String?)
         // The status bar's inset shows this color, and the Viewer's letterboxing is black.
         containerColor = if (currentRoute == AppRoute.Viewer) Color.Black else MaterialTheme.colorScheme.background,
         onDestinationSelected = { destination ->
-            // Settled, not merely nearest: a scroll to another tab passes over the ones between, and a tap on one of
-            // those is a tab change, not a reselect.
-            val alreadyShowing = navigation.currentRoute == AppRoute.Home && !pagerState.isScrollInProgress &&
-                TopLevelDestination.entries[pagerState.settledPage] == destination
+            val alreadyShowing = navigation.currentRoute == AppRoute.Home &&
+                tabTap(destination, pagerState.targetPage, pagerState.settledPage, pagerState.isScrollInProgress) == TabTap.Reselect
             navigation.homeTabRoute = destination.route
             // New posts wait in Saved, so a lit Library tab opens there; without the dot the remembered section stays.
             if (destination == TopLevelDestination.Library && !alreadyShowing && libraryHasNew) {
