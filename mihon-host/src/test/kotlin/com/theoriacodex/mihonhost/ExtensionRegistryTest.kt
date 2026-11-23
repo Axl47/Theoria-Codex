@@ -112,6 +112,15 @@ class ExtensionRegistryTest {
     }
 
     @Test
+    fun `a source whose recorded extension is off is not found, and the others do not load for it`() = runBlocking {
+        twoExtensionsOn()
+        store.choices = store.choices.copy(trusted = mapOf("a" to "key-1"), owners = mapOf("custom_mihon_2" to "b"))
+
+        assertNull(registry.source(MihonSeriesSource.sourceKey(2)))
+        assertTrue(loads.isEmpty())
+    }
+
+    @Test
     fun `an extension that is off is listed without running its code`() = runBlocking {
         val listed = registry.installed().single()
 
