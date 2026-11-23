@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 
-/** The background check for new chapters, as `JobScheduler` knows it. */
+/** The background check for new chapters and episodes, as `JobScheduler` knows it. */
 internal const val SERIES_UPDATE_JOB_ID = 3101
 
 /**

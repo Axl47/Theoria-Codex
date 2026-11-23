@@ -189,8 +189,8 @@ android {
         buildConfigField("String", "VISION_MODEL_BASE_URL", "\"$visionModelBaseUrl\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        // Native libraries: the zstd decoder Mihon extensions expect of their host and LiteRT's runtime for the
-        // picture tagger. Every device in the support window and the test emulators are 64-bit, so the 32-bit copies
+        // Native libraries: the zstd decoder and the QuickJS engine extensions expect of their host, and LiteRT's
+        // runtime for the picture tagger. Every device in the support window and the test emulators are 64-bit, so the 32-bit copies
         // are left out. x86_64 is for emulators; the shipped builds drop it (see `androidComponents`).
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
