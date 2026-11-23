@@ -46,8 +46,7 @@ class ForYouDealsWhenShownTest {
         assertTrue("For You dealt while passed over: ${graph.registry.requests}", graph.registry.requests.isEmpty())
 
         compose.onNodeWithContentDescription("For You").performClick()
-        compose.waitForIdle()
-        compose.waitUntil(10_000) { graph.registry.requests.isNotEmpty() }
+        awaitDeal(graph)
     }
 
     @Test fun `a tap on For You while the slide to Library is passing it goes to For You`() =
@@ -64,8 +63,17 @@ class ForYouDealsWhenShownTest {
         compose.mainClock.advanceTimeBy(afterMs)
         compose.onNodeWithContentDescription("For You").assertIsSelected().performClick()
         compose.mainClock.autoAdvance = true
+        awaitDeal(graph)
+    }
+
+    /**
+     * Waits for For You to ask the sources. It plans its lanes off the main thread and hands the result back to it,
+     * and waitUntil alone does not run work handed to the main thread once the screen is idle: a result that arrives
+     * after that would sit there until the wait timed out.
+     */
+    private fun awaitDeal(graph: JourneyAppContainer) = compose.waitUntil(10_000) {
         compose.waitForIdle()
-        compose.waitUntil(10_000) { graph.registry.requests.isNotEmpty() }
+        graph.registry.requests.isNotEmpty()
     }
 
     /** The app on its first tab, Search, over sources that record what they are asked. */
