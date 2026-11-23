@@ -8,6 +8,7 @@ import androidx.media3.common.SimpleBasePlayer
 import androidx.media3.common.util.Util
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -24,6 +25,21 @@ class ViewerVideoStartTest {
         // An audio-only stream plays without a frame.
         started.onIsPlayingChanged(true)
         assertTrue(started.atPosition)
+    }
+
+    @Test fun `a player replacing one under way resumes near the end, where only the first starts over`() {
+        var stored = 1_438_000L
+        val start = ViewerVideoStart({ stored }) { positionMs, durationMs -> positionMs >= durationMs - 5_000L }
+        val opening = EpisodePlayer()
+        // Opened two seconds from the end, the episode was watched to its end: it begins again.
+        start.applyTo(opening).onIsPlayingChanged(true)
+        assertEquals(0L, opening.currentPosition)
+
+        // It then plays through the episode, and its stream fails five seconds from the end.
+        stored = 1_437_000L
+        val replacement = EpisodePlayer()
+        start.applyTo(replacement)
+        assertEquals(1_437_000L, replacement.currentPosition)
     }
 
     /** A player of one episode [durationMs] long that only seeks. */

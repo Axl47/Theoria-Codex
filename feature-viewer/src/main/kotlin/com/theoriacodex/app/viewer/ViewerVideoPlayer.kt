@@ -89,7 +89,8 @@ internal fun ViewerVideoPlayer(
     val key = ViewerVideoKey.of(ViewerMediaLoad(mediaKey, controls.loadGeneration), media, streamLabel, playback)
     val recovery = remember(key) { ViewerVideoRecovery(key.load, episode, key.label) }
     val state = remember(key) { ViewerVideoState(recovery.opening(positions.position(mediaKey))) }
-    val start = ViewerVideoStart({ positions.position(mediaKey) }, positions::startsOver)
+    // One showing of the page: the players it goes through share where it started (see ViewerVideoStart).
+    val start = remember(mediaKey, positions) { ViewerVideoStart({ positions.position(mediaKey) }, positions::startsOver) }
     // A Retry's opening ask holds the player back: the address that failed is not replayed before fresh links come.
     if (state.pending != ViewerRecoveryDecision.AskForFreshLinks || state.player != null) ViewerVideoBinding(state, playback, controls, events, recovery, start) { positionMs, durationMs, ended ->
         // A finished video resumes from the start: seeking back to its end would finish it again and,
@@ -362,16 +363,22 @@ private fun ViewerVideoStreamRecovery(state: ViewerVideoState, recovery: ViewerV
 }
 
 /**
- * Where a page's player starts: the [resume] position, unless, once the duration is known, [startsOver] judges it too
- * close to the end; then it starts from the beginning instead of ending the moment it starts.
+ * Where the players of one showing of a page start: the [resume] position. Until one of them has been there
+ * ([ViewerStartedPlayback.atPosition]), [startsOver] may judge it too close to the end once the duration is known; then
+ * the video starts from the beginning instead of ending the moment it starts. After that the video is under way, and a
+ * player replacing the last (another stream, fresh links, a Retry) resumes where it stopped, however near the end.
  */
 internal class ViewerVideoStart(
     private val resume: () -> Long,
     private val startsOver: (positionMs: Long, durationMs: Long) -> Boolean,
 ) {
+    private var underWay = false
+
     /** Seeks [player]; the listener it returns, to remove on release, follows whether the player got there. */
-    fun applyTo(player: Player): ViewerStartedPlayback =
-        ViewerStartedPlayback(player, resume().coerceAtLeast(0L), startsOver).also(player::addListener)
+    fun applyTo(player: Player): ViewerStartedPlayback {
+        val startsOver = startsOver.takeUnless { underWay } ?: { _, _ -> false }
+        return ViewerStartedPlayback(player, resume().coerceAtLeast(0L), startsOver) { underWay = true }.also(player::addListener)
+    }
 }
 
 /**
@@ -384,10 +391,13 @@ internal class ViewerStartedPlayback(
     private val player: Player,
     private val resumeMs: Long,
     private val startsOver: (positionMs: Long, durationMs: Long) -> Boolean,
+    /** Hears when the player first is [atPosition]. */
+    private val arrived: () -> Unit = {},
 ) : Player.Listener {
     private var settled = resumeMs == 0L
     private var shown = false
-    val atPosition get() = settled && shown
+    var atPosition = false
+        private set
 
     init {
         if (!settled) {
@@ -401,6 +411,7 @@ internal class ViewerStartedPlayback(
         val durationMs = player.duration.takeIf { it > 0L } ?: return
         if (startsOver(resumeMs, durationMs)) player.seekTo(0L)
         settled = true
+        arrive()
     }
 
     override fun onTimelineChanged(timeline: Timeline, reason: Int) {
@@ -409,10 +420,19 @@ internal class ViewerStartedPlayback(
 
     override fun onRenderedFirstFrame() {
         shown = true
+        arrive()
     }
 
     override fun onIsPlayingChanged(isPlaying: Boolean) {
-        if (isPlaying) shown = true
+        if (!isPlaying) return
+        shown = true
+        arrive()
+    }
+
+    private fun arrive() {
+        if (atPosition || !settled || !shown) return
+        atPosition = true
+        arrived()
     }
 }
 
