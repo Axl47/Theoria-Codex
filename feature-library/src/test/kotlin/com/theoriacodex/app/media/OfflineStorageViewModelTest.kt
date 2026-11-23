@@ -89,7 +89,7 @@ class OfflineStorageViewModelTest {
             coordinator.store.save(chapter, chapter.media, seriesOfflineOwner(series)) { _, file -> file.writeText("media"); null }
             val repository = seriesRepository(StoredSeries(Series(series, "Title")))
             val downloads = SeriesDownloads(
-                coordinator.store, temporary.root.resolve("queue.json"), repository, sources = { emptyList() }, covers = SeriesCovers.Stored,
+                coordinator.store, temporary.root.resolve("queue.json"), repository, source = { null }, covers = SeriesCovers.Stored,
                 fetch = { _, _ -> error("unused") }, scheduler = NoScheduler, deleteAfterReading = { false },
             )
             downloads.download(series, listOf("/queued"))

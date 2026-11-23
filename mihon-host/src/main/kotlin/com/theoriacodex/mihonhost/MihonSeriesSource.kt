@@ -2,6 +2,7 @@ package com.theoriacodex.mihonhost
 
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EXTENSION_SOURCE_ID_PREFIX
@@ -37,7 +38,6 @@ import kotlinx.coroutines.withContext
 class MihonSeriesSource(
     private val source: Source,
     private val images: ExtensionImages,
-    private val log: (String) -> Unit = {},
     private val onChallenged: (host: String) -> Unit = {},
 ) : SeriesSource {
     override val key: SourceKey = sourceKey(source)
@@ -178,7 +178,7 @@ class MihonSeriesSource(
         throw failure(error)
     } catch (error: LinkageError) {
         // The extension called a part of Mihon's host API this module does not provide.
-        log("${source.name} needs host API this module lacks: $error")
+        Diagnostics.report("extensions", "${source.name} needs host API this module lacks", error)
         throw SourceAdapterException(SourceFailureReason.UNKNOWN, error.message, error)
     }
 
@@ -198,7 +198,10 @@ class MihonSeriesSource(
 
     companion object {
         /** The app-wide identity of an extension source; the `mihon` label can never be a real site's host. */
-        fun sourceKey(source: Source): SourceKey = SourceKey.parseOrThrow("$EXTENSION_SOURCE_ID_PREFIX${source.id}")
+        fun sourceKey(source: Source): SourceKey = sourceKey(source.id)
+
+        /** The app-wide identity of the extension source whose Mihon id is [sourceId]. */
+        fun sourceKey(sourceId: Long): SourceKey = SourceKey.parseOrThrow("$EXTENSION_SOURCE_ID_PREFIX$sourceId")
 
         /** The extension source id [key] names, read back from [sourceKey]; null for a source that is no extension's. */
         fun sourceId(key: SourceKey): Long? = key.id.takeIf { it.startsWith(EXTENSION_SOURCE_ID_PREFIX) }?.removePrefix(EXTENSION_SOURCE_ID_PREFIX)?.toLongOrNull()

@@ -55,9 +55,11 @@
 
 ### Changed
 
+- Downloading chapters, checking followed series for new chapters, a series' images and a chapter reopened from where you left off start only the extension that series comes from, not every extension that is on, so they no longer wait for the others to load.
 - In the reader's chapter strip, downloaded chapters and chapters the reader has loaded show their first page instead of the series cover, so chapters are easier to tell apart.
 - When a series chapter's pages fail to load, the Diagnostics failure log records why, including whether the site refused the request outright.
 - The Diagnostics failure log names the extension source behind a failed image, and records when an extension image was sent without its source's own connection.
+- The Diagnostics failure log records why an extension failed to load, and when one needed something Theoria doesn't provide.
 - A tag trail now narrows the search you were in, adding the tag to it, instead of searching that tag alone.
 - In the Viewer's information sheet, tags the current search already covers show as included or excluded.
 - Animated only now asks each site for animated posts instead of filtering a mixed page on the phone, so animated results fill the feed from the first page, on Pixiv especially. Turning it on or off re-runs the search like changing the sort, and saved and recent searches remember it. If you had it on, tap it once more after updating.

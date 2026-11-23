@@ -60,18 +60,21 @@ internal inline fun <T> failingAsIo(block: () -> T): T = try {
  *
  * Only the sources last handed to [publish] answer: the ones whose extension loaded completely and whose extension
  * and language are on. Whoever publishes keeps that table current as extensions change ([ExtensionRegistry.recheck]);
- * a request only reads it, with no system call or lock. Until the first [publish], a tagged request calls [load],
- * which loads the extensions and publishes their sources, and returns once that is done. A load that fails counts as
- * publishing nothing, so later images do not retry it; the next publish replaces that.
+ * a request only reads it, with no system call or lock. A tagged request for a source not in the table calls [load]
+ * with its id, which loads that source's extension when it is on and publishes, and returns once that is done. A
+ * source that load did not publish, because it is not on or the load failed, is not asked for again until the next
+ * publish: its images then only read the table.
  */
 class ExtensionImages(
     /** Kept for the install, where Android does not back it up; read on first use, best warmed off the main thread. */
     private val key: Lazy<ByteArray> = lazy { ByteArray(KEY_BYTES).also(SecureRandom()::nextBytes) },
-    private val load: () -> Unit = {},
+    private val load: (sourceId: Long) -> Unit = {},
 ) : Interceptor, SeriesCovers {
-    /** Null until the first [publish]. */
     @Volatile
-    private var sources: Map<Long, HttpSource>? = null
+    private var sources: Map<Long, HttpSource> = emptyMap()
+
+    /** Sources [load] was asked for and did not publish, until the next [publish]. */
+    private val unanswered = ConcurrentHashMap.newKeySet<Long>()
 
     private val reported = ConcurrentHashMap.newKeySet<String>()
 
@@ -86,19 +89,20 @@ class ExtensionImages(
     @Synchronized
     internal fun publish(active: List<Source>) {
         sources = active.filterIsInstance<HttpSource>().associateBy { it.id }
+        unanswered.clear()
     }
 
-    /** The published sources, loading the extensions first when nothing was published yet. */
+    /** The published source [sourceId] names, loading its extension first when it is not published. */
     @Suppress("TooGenericExceptionCaught")
-    private fun published(): Map<Long, HttpSource> = sources ?: run {
+    private fun published(sourceId: Long): HttpSource? = sources[sourceId] ?: run {
+        if (sourceId in unanswered) return null
+        // Marked only once load returns: a chapter's pages that ask together all wait for the load under way.
         try {
-            load()
+            load(sourceId)
         } catch (failure: Exception) {
             reportOnce("extensions failed to load for an image: ${failure.javaClass.simpleName}")
-            // Unless a publish landed meanwhile, nothing is on until the next one.
-            synchronized(this) { if (sources == null) sources = emptyMap() }
         }
-        sources.orEmpty()
+        sources[sourceId] ?: null.also { unanswered += sourceId }
     }
 
     /**
@@ -163,7 +167,7 @@ class ExtensionImages(
             reportOnce("${url.host} image sent without its source: tag not issued here")
             return null
         }
-        val source = published()[sourceId]
+        val source = published(sourceId)
         if (source == null) reportOnce("${url.host} image of source $sourceId sent without its source: source not on")
         return source
     }

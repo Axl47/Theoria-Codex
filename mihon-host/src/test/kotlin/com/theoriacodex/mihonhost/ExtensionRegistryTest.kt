@@ -24,9 +24,13 @@ import okhttp3.Request
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -44,7 +48,11 @@ class ExtensionRegistryTest {
 
         override suspend fun choices() = interruption?.let { interruption = null; throw it } ?: choices
 
+        /** Runs before each [update] takes effect. */
+        var beforeUpdate: suspend () -> Unit = {}
+
         override suspend fun update(transform: (ExtensionChoices) -> ExtensionChoices) {
+            beforeUpdate()
             choices = transform(choices)
         }
     }
@@ -69,6 +77,83 @@ class ExtensionRegistryTest {
         val client = OkHttpClient.Builder().addInterceptor(images).addInterceptor(answering { cannedResponse(it, body = "app") }).build()
         val series = Series(SeriesId(MihonSeriesSource.sourceKey(source), "/s"), "Series", coverUrl = "https://covers.test/1.jpg")
         return client.newCall(Request.Builder().url(checkNotNull(images.address(series))).build()).execute().body.string() == "source"
+    }
+
+    /** Extensions a and b, both on, offering sources 1 and 2. */
+    private fun twoExtensionsOn() {
+        onDevice = listOf(extension("a", signer = "key-1"), extension("b", signer = "key-1"))
+        store.choices = store.choices.copy(trusted = mapOf("a" to "key-1", "b" to "key-1"))
+        sourcesOf = { listOf(StubSource(if (it.packageName == "a") 1 else 2, "en")) }
+    }
+
+    @Test
+    fun `a lookup loads only the extension that last offered its source`() = runBlocking {
+        twoExtensionsOn()
+        // A first start knows no owners, so the lookup loads every extension that is on and keeps who offers what.
+        assertEquals("custom_mihon_2", registry.source(MihonSeriesSource.sourceKey(2))?.key?.id)
+        assertEquals(listOf("/a.apk", "/b.apk"), loads)
+        assertEquals(mapOf("custom_mihon_1" to "a", "custom_mihon_2" to "b"), store.choices.owners)
+
+        loads.clear()
+        val restarted = registry { error("No source here has settings") }
+        assertEquals("custom_mihon_2", restarted.source(MihonSeriesSource.sourceKey(2))?.key?.id)
+        assertEquals(listOf("/b.apk"), loads)
+        // Loading the rest for the whole list changes nothing anyone was handed, so the revision stays.
+        val revision = restarted.revision.value
+        assertEquals(listOf("custom_mihon_1", "custom_mihon_2"), restarted.sources().map { it.key.id })
+        assertEquals(revision, restarted.revision.value)
+        assertEquals(listOf("/b.apk", "/a.apk"), loads)
+    }
+
+    @Test
+    fun `a source its recorded extension no longer offers is found by loading every extension, once`() = runBlocking {
+        twoExtensionsOn()
+        store.choices = store.choices.copy(owners = mapOf("custom_mihon_2" to "a"))
+
+        assertEquals("custom_mihon_2", registry.source(MihonSeriesSource.sourceKey(2))?.key?.id)
+        assertEquals(listOf("/a.apk", "/b.apk"), loads)
+        assertEquals("b", store.choices.owners["custom_mihon_2"])
+        // Everything that is on has loaded: a source none offers is answered without listing the device again.
+        val before = listings
+        assertNull(registry.source(MihonSeriesSource.sourceKey(9)))
+        assertEquals(before, listings)
+    }
+
+    @Test
+    fun `a source whose recorded extension is off is not found, and the others do not load for it`() = runBlocking {
+        twoExtensionsOn()
+        store.choices = store.choices.copy(trusted = mapOf("a" to "key-1"), owners = mapOf("custom_mihon_2" to "b"))
+
+        assertNull(registry.source(MihonSeriesSource.sourceKey(2)))
+        assertTrue(loads.isEmpty())
+    }
+
+    @Test
+    fun `a source whose recorded extension left the device is found under the one that offers it now`() = runBlocking {
+        twoExtensionsOn()
+        // Renamed extensions keep their source ids.
+        store.choices = store.choices.copy(owners = mapOf("custom_mihon_2" to "renamed-away"))
+
+        assertEquals("custom_mihon_2", registry.source(MihonSeriesSource.sourceKey(2))?.key?.id)
+        assertEquals("b", store.choices.owners["custom_mihon_2"])
+    }
+
+    @Test
+    fun `a lookup cancelled while it keeps the owners still offers what it loaded`() = runBlocking {
+        twoExtensionsOn()
+        store.choices = store.choices.copy(owners = mapOf("custom_mihon_1" to "a", "custom_mihon_2" to "b"))
+        assertNotNull(registry.source(MihonSeriesSource.sourceKey(1)))
+        val updating = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        store.beforeUpdate = { updating.complete(Unit); release.await() }
+
+        val lookup = launch(Dispatchers.Default) { registry.source(MihonSeriesSource.sourceKey(2)) }
+        updating.await()
+        lookup.cancel()
+        release.complete(Unit)
+        lookup.join()
+
+        assertEquals("custom_mihon_2", registry.source(MihonSeriesSource.sourceKey(2))?.key?.id)
     }
 
     @Test

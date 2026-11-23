@@ -140,21 +140,30 @@ class ExtensionImagesTest {
     }
 
     @Test
-    fun `only requests before the first publish load the extensions`() {
-        var loads = 0
+    fun `a request loads only its own source's extension, and only while that source is not published`() {
+        val asked = mutableListOf<Long>()
         lateinit var loading: ExtensionImages
-        loading = ExtensionImages(key) {
-            loads += 1
+        loading = ExtensionImages(key) { sourceId ->
+            asked += sourceId
             loading.publish(listOf(source))
         }
         val address = images.cover(source, "https://covers.test/1.jpg")
 
         repeat(3) { assertEquals("source-token https://covers.test/1.jpg", fetch(address, loading)) }
+        assertEquals(listOf(source.id), asked)
+    }
+
+    @Test
+    fun `a source its load does not publish is asked for once per publish`() {
+        var loads = 0
+        val off = ExtensionImages(key) { loads += 1 }
+        val address = images.cover(source, "https://covers.test/1.jpg")
+
+        repeat(3) { assertEquals("app https://covers.test/1.jpg", fetch(address, off)) }
         assertEquals(1, loads)
-        // A publish with nothing on still counts: the table is read, not loaded again.
-        loading.publish(emptyList())
-        assertEquals("app https://covers.test/1.jpg", fetch(address, loading))
-        assertEquals(1, loads)
+        off.publish(emptyList())
+        assertEquals("app https://covers.test/1.jpg", fetch(address, off))
+        assertEquals(2, loads)
     }
 
     @Test

@@ -27,13 +27,11 @@ internal class DeviceExtensionChoices(private val file: File) : ExtensionChoiceS
 
     @Volatile private var stored: Record? = runCatching { json.decodeFromString(Record.serializer(), file.readText()) }.getOrNull()
 
-    override suspend fun choices(): ExtensionChoices = lock.withLock { load() }.let { record ->
-        ExtensionChoices(record.trusted, record.languages.mapValues { (_, languages) -> languages.toSet() })
-    }
+    override suspend fun choices(): ExtensionChoices = lock.withLock { load() }.choices()
 
     override suspend fun update(transform: (ExtensionChoices) -> ExtensionChoices) = change { record ->
-        val changed = transform(ExtensionChoices(record.trusted, record.languages.mapValues { (_, languages) -> languages.toSet() }))
-        record.copy(trusted = changed.trusted, languages = changed.languages.mapValues { (_, languages) -> languages.sorted() })
+        val changed = transform(record.choices())
+        Record(changed.trusted, changed.languages.mapValues { (_, languages) -> languages.sorted() }, changed.owners)
     }
 
     private suspend fun change(transform: (Record) -> Record) = lock.withLock {
@@ -55,7 +53,10 @@ internal class DeviceExtensionChoices(private val file: File) : ExtensionChoiceS
     private data class Record(
         val trusted: Map<String, String> = emptyMap(),
         val languages: Map<String, List<String>> = emptyMap(),
-    )
+        val owners: Map<String, String> = emptyMap(),
+    ) {
+        fun choices() = ExtensionChoices(trusted, languages.mapValues { (_, languages) -> languages.toSet() }, owners)
+    }
 
     companion object {
         private val json = Json { ignoreUnknownKeys = true }

@@ -287,11 +287,12 @@ class SeriesReaderTest {
         store: OfflineMediaStore = store(),
     ): SeriesDependencies {
         val covers = SeriesCovers { series -> series.coverUrl?.let { "$it#loadable" } }
+        val source: suspend (SourceKey) -> SeriesSource? = { key -> sources().firstOrNull { it.key == key } }
         val downloads = SeriesDownloads(
             store = store,
             queueFile = folder.root.resolve("queue.json"),
             repository = repository,
-            sources = sources,
+            source = source,
             covers = covers,
             fetch = { _, _ -> error("Nothing downloads here") },
             scheduler = object : DownloadScheduler {
@@ -302,7 +303,7 @@ class SeriesReaderTest {
             deleteAfterReading = { deleteAfterReading },
             files = AtomicJsonFileStore(StandardTestDispatcher(testScheduler)),
         )
-        return SeriesDependencies(repository, sources, NoExtensions, downloads, scope = this, covers = covers)
+        return SeriesDependencies(repository, sources, source, NoExtensions, downloads, scope = this, covers = covers)
     }
 
     private val chapter = StoredSeriesEntry(SeriesEntry("/c1", "Ch. 1"), sourceOrder = 0, firstSeenAtEpochMs = 0)

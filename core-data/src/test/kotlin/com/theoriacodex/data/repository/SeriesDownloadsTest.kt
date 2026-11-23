@@ -343,7 +343,7 @@ class SeriesDownloadsTest {
             store = store,
             queueFile = folder.root.resolve("queue.json"),
             repository = Stored(stored, entries),
-            sources = { listOf(FakeSource(source) { pagesOf(it) }) },
+            source = { key -> FakeSource(source) { pagesOf(it) }.takeIf { it.key == key } },
             covers = { series -> series.coverUrl?.let { "$it#loadable" } },
             fetch = { url, file ->
                 onFetch(url)

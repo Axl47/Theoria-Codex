@@ -80,10 +80,10 @@ class SeriesMoveTest {
         source.chapters = listOf(SeriesEntry("/n2", "Ch. 2", 2f), SeriesEntry("/n1", "Ch. 1", 1f))
         repository.switchSource(old.id, source, new)
 
-        assertEquals(emptyList<SeriesUpdate>(), repository.checkFollowed({ listOf(source) }))
+        assertEquals(emptyList<SeriesUpdate>(), repository.checkFollowed(sourcesOn(source)))
         val later = SeriesEntry("/n3", "Ch. 3", 3f)
         source.chapters = listOf(later) + source.chapters
-        assertEquals(listOf(later), repository.checkFollowed({ listOf(source) }).single().newEntries)
+        assertEquals(listOf(later), repository.checkFollowed(sourcesOn(source)).single().newEntries)
     }
 
     @Test
