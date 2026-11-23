@@ -38,9 +38,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
@@ -270,14 +273,19 @@ private fun ViewerEpisodeMenu(
     }
 }
 
-/** The pill naming the stream playing; the whole 48 dp row height is its touch target. */
+/**
+ * The pill naming the stream playing; the whole 48 dp row height is its touch target. It is one accessibility node, a
+ * button described `Stream` whose text is [label]; the label is its state too, which TalkBack reads after the
+ * description where it skips the text.
+ */
 @Composable
 private fun ViewerStreamPill(label: String, open: () -> Unit) {
     Box(
+        // The tag comes first: clearing semantics drops every semantics modifier after it, the tag included.
         Modifier.heightIn(min = 48.dp)
+            .testTag(VIEWER_EPISODE_STREAM_TAG)
             .clickable(role = Role.Button, onClickLabel = "Choose stream", onClick = open)
-            .semantics(mergeDescendants = true) { contentDescription = "Stream"; stateDescription = label }
-            .testTag(VIEWER_EPISODE_STREAM_TAG),
+            .clearAndSetSemantics { contentDescription = "Stream"; text = AnnotatedString(label); stateDescription = label },
         contentAlignment = Alignment.Center,
     ) {
         Row(

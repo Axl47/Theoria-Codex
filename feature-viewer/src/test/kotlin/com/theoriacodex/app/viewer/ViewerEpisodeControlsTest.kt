@@ -3,6 +3,7 @@ package com.theoriacodex.app.viewer
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -46,6 +47,7 @@ class ViewerEpisodeControlsTest {
         setControls(state)
         // A remembered label the episode no longer offers falls back to its source's first stream.
         compose.onNodeWithTag(VIEWER_EPISODE_STREAM_TAG).assert(hasText("1080p · A")).assert(hasContentDescription("Stream"))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
         compose.onNodeWithTag(VIEWER_EPISODE_STREAM_TAG).performClick()
         waitUntil { state.value.controls.panel == ViewerPanel.EPISODE_STREAM }
         compose.onNodeWithTag("$VIEWER_EPISODE_STREAM_TAG:720p · B").performClick()
