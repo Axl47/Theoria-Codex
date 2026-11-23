@@ -9,7 +9,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Badge
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -18,6 +22,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
@@ -27,7 +32,9 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.SeriesSource
+import com.theoriacodex.domain.series.seriesKind
 
 /** The sources that are on, for the covers drawn below: each cover loads through its series' own source. */
 internal val LocalSeriesSources = staticCompositionLocalOf<List<SeriesSource>> { emptyList() }
@@ -55,16 +62,32 @@ internal fun SeriesCover(series: Series, modifier: Modifier = Modifier) {
     }
 }
 
-/** A cover with the title under it; [unread] above zero shows as a badge on the cover. */
+/**
+ * A cover with the title under it; [unread] above zero shows as a badge on the cover. [marked] puts a play glyph on an
+ * anime's cover, where manga and anime show together.
+ */
 @Composable
-internal fun SeriesCard(series: Series, onClick: () -> Unit, modifier: Modifier = Modifier, unread: Int = 0) {
+internal fun SeriesCard(series: Series, onClick: () -> Unit, modifier: Modifier = Modifier, unread: Int = 0, marked: Boolean = false) {
+    val kind = series.id.source.seriesKind
     Column(modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick)) {
         Box {
             SeriesCover(series, Modifier.fillMaxWidth())
             if (unread > 0) {
-                Badge(Modifier.align(Alignment.TopEnd).padding(4.dp).semantics { contentDescription = "$unread unread" }) {
+                Badge(Modifier.align(Alignment.TopEnd).padding(4.dp).semantics { contentDescription = kind.words.unfinished(unread) }) {
                     Text("$unread")
                 }
+            }
+            if (marked && kind == SeriesKind.ANIME) {
+                Icon(
+                    Icons.Default.PlayArrow,
+                    contentDescription = kind.label,
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(4.dp)
+                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = MARK_SCRIM_ALPHA), RoundedCornerShape(4.dp))
+                        .size(MARK_SIZE),
+                    tint = Color.White,
+                )
             }
         }
         Text(
@@ -78,6 +101,8 @@ internal fun SeriesCard(series: Series, onClick: () -> Unit, modifier: Modifier 
 }
 
 private const val COVER_ASPECT = 2f / 3f
+private const val MARK_SCRIM_ALPHA = 0.6f
+private val MARK_SIZE = 18.dp
 
 /** Wide enough for the series page's cover on a dense phone; grid tiles scale it down. */
 private const val COVER_WIDTH_PX = 480

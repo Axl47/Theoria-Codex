@@ -11,9 +11,12 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
+import com.theoriacodex.domain.series.UnsupportedEntriesException
 import com.theoriacodex.domain.series.changedFrom
+import com.theoriacodex.domain.series.seriesKind
 import com.theoriacodex.domain.series.withChoices
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -23,9 +26,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -77,7 +82,8 @@ data class FilterSheetState(
  * [browseKind] listing, and [browseRun] counts the listings browsed, so what belongs to an earlier one can tell;
  * [filterSheet] is the filter sheet while it is open; [search] is one listing per source while a search shows, and
  * null otherwise; a search sent before the extensions have loaded is empty until they have, and then runs.
- * [refreshing] is true while a refresh by hand checks the followed series for new chapters.
+ * [refreshing] is true while a refresh by hand checks the followed series for new entries. [kind] is the kind filter's
+ * choice, null for both; [SeriesTabContent] says when it applies.
  */
 data class SeriesTabState(
     val sources: List<SeriesSource>? = null,
@@ -87,20 +93,52 @@ data class SeriesTabState(
     val filterSheet: FilterSheetState? = null,
     val search: List<SeriesSourceListing>? = null,
     val refreshing: Boolean = false,
+    val kind: SeriesKind? = null,
 )
+
+/**
+ * What the tab shows of its state and the followed series. [kinds] are the kinds of series the user has, among the
+ * sources that are on and the followed series. The kind filter is offered only while there are both, and only then
+ * narrows the shelf, the sources to browse, the browsed listing and the search results to its [filter]. In the mixed
+ * list anime are [marked] apart from manga; under one kind the marks would say nothing.
+ */
+data class SeriesTabContent(
+    val kinds: Set<SeriesKind>,
+    val filter: SeriesKind?,
+    val followed: List<FollowedSeries>,
+    val sources: List<SeriesSource>?,
+    val browse: SeriesSourceListing?,
+    val search: List<SeriesSourceListing>?,
+) {
+    val offersFilter: Boolean get() = kinds.size > 1
+    val marked: Boolean get() = offersFilter && filter == null
+}
+
+internal fun SeriesTabState.content(followed: List<FollowedSeries>): SeriesTabContent {
+    val kinds = (sources.orEmpty().map { it.key.seriesKind } + followed.map { it.series.id.source.seriesKind }).toSet()
+    val filter = kind.takeIf { kinds.size > 1 }
+    return SeriesTabContent(
+        kinds = kinds,
+        filter = filter,
+        followed = followed.filter { filter.admits(it.series.id.source) },
+        sources = sources?.filter { filter.admits(it.key) },
+        browse = browse?.takeIf { filter.admits(it.key) },
+        search = search?.filter { filter.admits(it.key) },
+    )
+}
 
 /**
  * [sourcesChanged] emits once at the start and again whenever [loadSources] may answer differently. [saved] keeps the
  * search on screen and the browsed source across process death; both show again once the sources have loaded. The
- * browsed listing, its filters and the filter sheet are kept only in memory: after process death they start again at
- * the source's popular series.
+ * browsed listing, its filters, the filter sheet and the kind filter are kept only in memory: after process death they
+ * start again at the source's popular series of both kinds.
  */
 class SeriesTabViewModel(
     private val repository: SeriesRepository,
     private val loadSources: suspend () -> List<SeriesSource>,
     sourcesChanged: Flow<*> = flowOf(Unit),
     private val saved: SavedStateHandle = SavedStateHandle(),
-    /** Stores the followed series' new chapters, which changes the shelf's unread counts. */
+    /** Stores the followed series' new entries, which changes the shelf's unread counts. */
     private val checkFollowed: suspend () -> Unit,
 ) : ViewModel() {
     private var searchText: String? = saved[SAVED_SEARCH]
@@ -116,14 +154,19 @@ class SeriesTabViewModel(
     private val mutableState = MutableStateFlow(SeriesTabState(search = searchText?.let { emptyList() }))
     val state: StateFlow<SeriesTabState> = mutableState
 
-    val followed: StateFlow<List<FollowedSeries>> =
-        repository.observeFollowed().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /**
+     * What the screen shows: [state] with the followed series, under the kind filter while it applies. The rest shows
+     * before the followed series have been read.
+     */
+    val content: StateFlow<SeriesTabContent> = combine(mutableState, repository.observeFollowed().onStart { emit(emptyList()) }) { state, followed ->
+        state.content(followed)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), mutableState.value.content(emptyList()))
 
     init {
         viewModelScope.launch { sourcesChanged.collectLatest { showSources(loadSources()) } }
     }
 
-    /** Checks the followed series for new chapters, unless a check is already running. */
+    /** Checks the followed series for new entries, unless a check is already running. */
     fun refresh() {
         if (state.value.refreshing) return
         mutableState.update { it.copy(refreshing = true) }
@@ -137,9 +180,10 @@ class SeriesTabViewModel(
     }
 
     /**
-     * Keeps what is on screen for the sources still on offer, and browses the first when the browsed one is gone. A
-     * browsed source that was replaced (its extension updated) is browsed afresh, as if chosen again. A search on
-     * screen, or one sent while the extensions were loading, runs in every source that is new or replaced.
+     * Keeps what is on screen for the sources still on offer, and browses the first (of the kind the tab is narrowed
+     * to, when it is) when the browsed one is gone. A browsed source that was replaced (its extension updated) is
+     * browsed afresh, as if chosen again. A search on screen, or one sent while the extensions were loading, runs in
+     * every source that is new or replaced.
      */
     private fun showSources(sources: List<SeriesSource>) {
         val before = state.value.sources.orEmpty()
@@ -162,7 +206,8 @@ class SeriesTabViewModel(
         if (browsedKey != null && fresh.any { it.key == browsedKey }) browse(browsedKey)
         else if (browsedKey == null) {
             val browsed = saved.get<String>(SAVED_BROWSE)
-            (sources.firstOrNull { it.key.id == browsed } ?: sources.firstOrNull())?.let { browse(it.key) }
+            val kind = state.value.kind
+            (sources.firstOrNull { it.key.id == browsed } ?: sources.firstOrNull { kind.admits(it.key) } ?: sources.firstOrNull())?.let { browse(it.key) }
         }
         if (query != null) fresh.forEach { searchIn(it, query) }
     }
@@ -173,6 +218,16 @@ class SeriesTabViewModel(
         saved[SAVED_BROWSE] = key.id
         closeFilters()
         show(source, BrowseKind.Popular)
+    }
+
+    /**
+     * Narrows the tab to [kind], or shows both with null. A browsed source of the other kind gives way to the first of
+     * [kind]; with none of [kind] on, it stays browsed for when both show again.
+     */
+    fun chooseKind(kind: SeriesKind?) {
+        mutableState.update { it.copy(kind = kind) }
+        val browsed = state.value.browse?.key ?: return
+        if (!kind.admits(browsed)) state.value.sources.orEmpty().firstOrNull { kind.admits(it.key) }?.let { browse(it.key) }
     }
 
     /** Shows the browsed source's [kind] listing from the first page. */
@@ -384,8 +439,14 @@ private suspend fun SeriesListing.Loaded.withPage(page: Int, load: suspend (Int)
     copy(loadingMore = false, moreFailed = true)
 }
 
-/** What the screen says about [error]: a line for its reason, never the exception's own text. */
-internal fun failureLine(error: Exception): String = sourceFailureDetail((error as? SourceAdapterException)?.reason)
+/**
+ * What the screen says about [error]: a line for its reason, never the exception's own text, except for an
+ * [UnsupportedEntriesException], whose text is written for the user.
+ */
+internal fun failureLine(error: Exception): String = when (error) {
+    is UnsupportedEntriesException -> error.message
+    else -> sourceFailureDetail((error as? SourceAdapterException)?.reason)
+}
 
 private const val SAVED_SEARCH = "search"
 private const val SAVED_BROWSE = "browse"

@@ -53,6 +53,7 @@ import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.ui.components.EmptyState
+import com.theoriacodex.app.ui.formatTimelineTime
 import com.theoriacodex.app.ui.components.LoadingState
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.data.repository.ChapterDownload
@@ -62,13 +63,15 @@ import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.SeriesStatus
 import java.text.DateFormat
 import java.util.Date
 
 /**
- * One series: its cover and names, Follow, a button that continues where the user left off, and every chapter with
- * whether it was read and how far, and whether it is downloaded. [onOpenEntry] gets the address of the chapter to read.
+ * One series: its cover and names, Follow, a button that continues where the user left off, and every entry (chapter or
+ * episode, by the series' kind) with whether it was finished and how far, and whether it is downloaded. [onOpenEntry]
+ * gets the address of the entry to open.
  * The overflow menu moves the series to another source through [switchSource]: [onOpenSeries] shows another series'
  * page, and [onSwitched] shows the series once moved, in place of this page.
  */
@@ -85,8 +88,8 @@ fun SeriesPageScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    // New chapters of followed series are announced, so each follow asks for the permission while it is missing.
-    // Refusing changes nothing else: the series is followed and the shelf still counts its new chapters.
+    // New entries of followed series are announced, so each follow asks for the permission while it is missing.
+    // Refusing changes nothing else: the series is followed and the shelf still counts its new entries.
     val askToNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     val toggleFollowed = {
         viewModel.toggleFollowed {
@@ -113,19 +116,19 @@ fun SeriesPageScreen(
                     SourceLoadFailure(failure, state.source?.key, state.sourceName, viewModel::refresh, Modifier.padding(horizontal = 16.dp), compact = state.entries.isNotEmpty())
                 }
                 state.refreshing && state.entries.isEmpty() -> item("loading") { LoadingState() }
-                state.entries.isEmpty() -> item("empty") { EmptyState("No chapters") }
+                state.entries.isEmpty() -> item("empty") { EmptyState(state.kind.words.none) }
             }
-            chapterList(state, viewModel, onOpenEntry)
+            entryList(state, viewModel, onOpenEntry)
         }
     }
 }
 
-/** The chapter count with the Download menu, then every chapter, each with its download mark where downloads exist. */
-private fun LazyListScope.chapterList(state: SeriesPageState, viewModel: SeriesPageViewModel, onOpenEntry: (String) -> Unit) {
+/** The entry count with the Download menu, then every entry, each with its download mark where the page offers downloads. */
+private fun LazyListScope.entryList(state: SeriesPageState, viewModel: SeriesPageViewModel, onOpenEntry: (String) -> Unit) {
     val downloads = viewModel.canDownload
     if (state.entries.isNotEmpty()) {
-        item("chapters") {
-            ChapterListHeader(state, downloads, viewModel::download, viewModel::deleteDownloads, viewModel::setDownloadNewChapters)
+        item("entries") {
+            EntryListHeader(state, downloads, viewModel::download, viewModel::deleteDownloads, viewModel::setDownloadNewChapters)
         }
     }
     items(state.entries, key = { it.entry.address }) { entry ->
@@ -133,6 +136,7 @@ private fun LazyListScope.chapterList(state: SeriesPageState, viewModel: SeriesP
         val download = state.downloads[address]
         EntryRow(
             entry,
+            state.kind,
             enabled = state.canOpen(address),
             onClick = { onOpenEntry(address) },
             // Without its source a chapter cannot download; one queued or on the device can still be cancelled or deleted.
@@ -160,7 +164,7 @@ private fun SeriesPageMenu(switchSource: SwitchSourceViewModel, onSwitchSource: 
     }
 }
 
-/** Says the series' extension cannot be used, which is why its chapters cannot be opened, and leads to where to fix it. */
+/** Says the series' extension cannot be used, which is why its entries cannot be opened, and leads to where to fix it. */
 @Composable
 private fun MissingSourceRow(onOpenExtensions: () -> Unit) {
     Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -178,7 +182,7 @@ private fun SeriesHeader(stored: StoredSeries, state: SeriesPageState, onToggleF
             stored.series.author?.let { author ->
                 Text(author, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            // The chapter count heads the chapter list.
+            // The entry count heads the entry list.
             stored.series.status.label?.let { line ->
                 Text(line, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -231,12 +235,9 @@ private fun SeriesAbout(series: Series) {
 
 private const val DESCRIPTION_LINES = 4
 
-/**
- * A chapter: its name, then how far the user is in it or, untouched or finished, when it came out, and [trailing] at
- * the end. Read ones fade.
- */
+/** An entry: its name, then [entryDetail], and [trailing] at the end. Finished ones fade. */
 @Composable
-private fun EntryRow(entry: StoredSeriesEntry, enabled: Boolean, onClick: () -> Unit, trailing: (@Composable () -> Unit)?) {
+private fun EntryRow(entry: StoredSeriesEntry, kind: SeriesKind, enabled: Boolean, onClick: () -> Unit, trailing: (@Composable () -> Unit)?) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -247,7 +248,7 @@ private fun EntryRow(entry: StoredSeriesEntry, enabled: Boolean, onClick: () -> 
     ) {
         Column(Modifier.weight(1f).padding(vertical = 10.dp)) {
             Text(entry.entry.name, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            entryDetail(entry)?.let { detail ->
+            entryDetail(entry, kind)?.let { detail ->
                 Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -256,11 +257,11 @@ private fun EntryRow(entry: StoredSeriesEntry, enabled: Boolean, onClick: () -> 
 }
 
 /**
- * The chapter count, and the Download menu where the build can download: chapters to queue, deleting the series'
+ * The entry count, and the Download menu where the page offers downloads: chapters to queue, deleting the series'
  * downloads, and for a followed series whether new chapters download by themselves.
  */
 @Composable
-private fun ChapterListHeader(
+private fun EntryListHeader(
     state: SeriesPageState,
     downloads: Boolean,
     onDownload: (DownloadChoice) -> Unit,
@@ -269,7 +270,7 @@ private fun ChapterListHeader(
 ) {
     Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
-            chapterCount(state.entries.size),
+            state.kind.words.count(state.entries.size),
             Modifier.weight(1f).padding(vertical = 12.dp),
             style = MaterialTheme.typography.titleSmall,
         )
@@ -338,8 +339,6 @@ private val DOWNLOAD_STOP = 12.dp
 internal fun continueLabel(started: Boolean, entry: StoredSeriesEntry): String =
     if (started) "Continue · ${entry.entry.name}" else "Start"
 
-internal fun chapterCount(count: Int): String = if (count == 1) "1 chapter" else "$count chapters"
-
 private val SeriesStatus.label: String?
     get() = when (this) {
         SeriesStatus.UNKNOWN -> null
@@ -352,10 +351,16 @@ private val SeriesStatus.label: String?
         SeriesStatus.UPCOMING -> "Upcoming"
     }
 
-/** "Page 7 of 18" for a chapter left unfinished, "Read" for a finished one, else its date when the source gives one. */
-internal fun entryDetail(entry: StoredSeriesEntry): String? = when {
-    entry.read -> "Read"
-    entry.position > 0 -> entry.length?.let { "Page ${entry.position} of $it" } ?: "Page ${entry.position}"
+/**
+ * How far the user is in an entry left unfinished ("Page 7 of 18", or "8:12 / 23:40" as the Viewer's timeline writes
+ * it), what a finished one is ("Read", "Watched"), else when it came out, when the source says.
+ */
+internal fun entryDetail(entry: StoredSeriesEntry, kind: SeriesKind): String? = when {
+    entry.read -> kind.words.finished
+    entry.position > 0 -> when (kind) {
+        SeriesKind.MANGA -> entry.length?.let { "Page ${entry.position} of $it" } ?: "Page ${entry.position}"
+        SeriesKind.ANIME -> listOfNotNull(entry.position, entry.length).joinToString(" / ", transform = ::formatTimelineTime)
+    }
     else -> entry.entry.uploadedAtEpochMs?.let { DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it)) }
 }
 
