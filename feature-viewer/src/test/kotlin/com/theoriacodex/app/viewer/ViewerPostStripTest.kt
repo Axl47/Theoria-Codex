@@ -140,20 +140,25 @@ class ViewerPostStripTest {
         compose.onNodeWithText("9", useUnmergedTree = true).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility).or(hasAnyAncestor(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility))))
     }
 
-    @Test fun `a chapter with a marked page shows it from its top, the rest the shared cover`() {
+    @Test fun `chapters show their marked page or image from its top, the rest the shared cover`() {
         val log = installHangingLoader()
         try {
             val cover = ImageRef(null, "/missing/cover.jpg", "image/jpeg")
-            // The strip pictures chapters only by their marks, even one whose pages the Viewer has.
-            val read = testPost(sourcePostId = "/chapter/1").copy(preview = cover, media = listOf(ImageRef(null, "/missing/chapter-1/page-1.jpg", "image/jpeg")))
-            val marked = testPost(sourcePostId = "/chapter/2").copy(preview = cover)
-            val marks = mapOf(marked.id to ViewerStripMark(image = ImageRef(null, "/missing/chapter-2/0.jpg", "image/jpeg")))
+            fun pages(chapter: Int) = List(2) { ImageRef(null, "/missing/c$chapter-page-${it + 1}.jpg", "image/jpeg") }
+            val read = testPost(sourcePostId = "/chapter/1").copy(preview = cover, media = pages(1))
+            val skipped = testPost(sourcePostId = "/chapter/2").copy(preview = cover, media = pages(2))
+            val downloaded = testPost(sourcePostId = "/chapter/3").copy(preview = cover)
+            val unread = testPost(sourcePostId = "/chapter/4").copy(preview = cover)
+            val marks = mapOf(
+                skipped.id to ViewerStripMark(page = 1),
+                downloaded.id to ViewerStripMark(image = ImageRef(null, "/missing/c3-file.jpg", "image/jpeg"), page = 1),
+            )
             compose.setContent {
-                MaterialTheme { ViewerPostStrip(listOf(read, marked), 0, {}, Modifier.width(360.dp), chapters = true, stripMarks = marks) }
+                MaterialTheme { ViewerPostStrip(listOf(read, skipped, downloaded, unread), 0, {}, Modifier.width(360.dp), chapters = true, stripMarks = marks) }
             }
             compose.waitForIdle()
             val cropped = log.requests.associate { it.data.toString().substringAfterLast('/') to (PageTopCrop in it.transformations) }
-            assertEquals(mapOf("cover.jpg" to false, "0.jpg" to true), cropped)
+            assertEquals(mapOf("c1-page-1.jpg" to true, "c2-page-2.jpg" to true, "c3-file.jpg" to true, "cover.jpg" to false), cropped)
         } finally {
             coil.Coil.reset()
         }

@@ -26,6 +26,7 @@ class ViewerPageTopTest {
 
     @Test fun `a speck or faint noise in the margin is not content`() {
         val pixels = page(64, 2000, contentFrom = 400)
+        pixels[0] = ink
         pixels[100 * 64 + 10] = ink
         pixels[200 * 64 + 5] = 0xFFF0F0F0.toInt()
         pixels[200 * 64 + 6] = 0xFFE8E8E8.toInt()

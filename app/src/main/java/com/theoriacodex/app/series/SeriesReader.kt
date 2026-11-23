@@ -19,21 +19,15 @@ import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.seriesReadingMode
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.diagnostics.Diagnostics
-import com.theoriacodex.domain.model.isSamePicture
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.mapNotNull
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 /**
  * Reads a series in the Viewer. A session's posts are the series' entries in reading order, each a gallery whose pages
@@ -41,14 +35,9 @@ import kotlinx.coroutines.sync.withLock
  * give resume, next chapter and modes. What the Viewer reports back goes to the series, never to History or a Codex.
  * A downloaded chapter's pages are its files, so it reads with no connection and without its extension.
  */
-internal class SeriesReader(
-    private val series: SeriesDependencies,
-    /** A page's picture hash from [source], or null when it cannot be loaded or is too flat; see [SeriesPictures]. */
-    private val hashPage: suspend (source: SourceKey, page: ImageRef) -> Long? = { _, _ -> null },
-) {
+internal class SeriesReader(private val series: SeriesDependencies) {
     /** How many Viewers are reading a series now. */
     private val open = AtomicInteger()
-    private val pictures = ConcurrentHashMap<SeriesId, SeriesPictures>()
 
     /**
      * A session over [id]'s stored entries opening at [entryAddress], on [pageIndex] or, without one, where the user
@@ -68,8 +57,7 @@ internal class SeriesReader(
         val numbered = entries.mapNotNull { entry ->
             entry.entry.number?.takeIf { it >= 0f && it.isFinite() }?.let { PostId(id.source, entry.entry.address) to seriesChapterMark(stored.series.title, entry.entry.name, it) }
         }.toMap()
-        val pictures = pictures(id).apply { resolved.value = emptyMap() }
-        val marks = withPictures(numbered, posts, series.downloads.leadPages(id).first(), pictures.skipsLead.value)
+        val marks = withPictures(numbered, posts, series.downloads.leadPages(id).first(), series.pictures.leadPage(id).first())
         val session = ViewerSession(
             posts, context, initialMediaIndices = resume, seriesReadingMode = stored.readingModeOrGuess(), stripMarks = marks,
         )
@@ -91,8 +79,8 @@ internal class SeriesReader(
             .onFailure { Diagnostics.report("series", "${id.source.id} chapter pages failed to load: ${failureKinds(it)}") }
             .getOrThrow()
         if (pages.isEmpty()) return null
-        // A downloaded chapter's pictures come from the downloads, and its pages must not outlive the reader's copy.
-        if (downloaded == null) pictures(id).resolved.update { it + (entry.entry.address to pages.take(LEAD_PAGES)) }
+        // A downloaded chapter's first page is compared from the downloads.
+        if (downloaded == null) series.scope.launch { series.pictures.compare(id, mapOf(entry.entry.address to pages.first())) }
         return chapterPost(stored.series, entry.entry, series.covers.address(stored.series), pages)
     }
 
@@ -129,16 +117,15 @@ internal class SeriesReader(
     }
 
     /**
-     * [session]'s strip marks from now on: each downloaded or loaded chapter pictured by a page of its own, following
-     * its chapters as they are downloaded, deleted or loaded.
+     * [session]'s strip marks from now on, following its chapters as they are downloaded or deleted and the page that
+     * pictures them ([ChapterPictures]).
      */
     fun stripMarks(session: ViewerSession): Flow<Map<PostId, ViewerStripMark>> {
         val id = seriesIdOf(session.context.queryHash) ?: return emptyFlow()
-        val pictures = pictures(id)
-        val leads = combine(series.downloads.leadPages(id), pictures.resolved) { downloaded, resolved -> resolved + downloaded }
+        val leads = series.downloads.leadPages(id)
         return channelFlow {
-            launch { leads.collectLatest { pictures.findSharedLead(it) { page -> hashPage(id.source, page) } } }
-            combine(leads, pictures.skipsLead) { pages, skip -> withPictures(session.stripMarks, session.posts, pages, skip) }.collect { send(it) }
+            launch { leads.collectLatest { downloaded -> series.pictures.compare(id, downloaded.mapValues { it.value.first() }) } }
+            combine(leads, series.pictures.leadPage(id)) { pages, lead -> withPictures(session.stripMarks, session.posts, pages, lead) }.collect { send(it) }
         }
     }
 
@@ -156,41 +143,18 @@ internal class SeriesReader(
         cause.javaClass.simpleName + ((cause as? SourceAdapterException)?.let { "(${it.reason})" } ?: "")
     }
 
-    private fun pictures(id: SeriesId) = pictures.getOrPut(id, ::SeriesPictures)
-
     private suspend fun source(key: SourceKey) =
         checkNotNull(series.source(key)) { "The extension for this series is not installed" }
 }
 
 /**
- * What the reader learns about one series' chapter pictures. Two chapters that open on the same page, as a group's
- * credit page does, would look alike, so once any two do, every chapter is pictured by its second page instead. That
- * holds while the app runs; each new process finds it again from the first two chapters it compares.
+ * [marks] with each chapter pictured by its page at [lead]: downloaded ones by that file from [downloads] (their first
+ * pages, by address), the rest by that page once the Viewer has their pages.
  */
-private class SeriesPictures {
-    /** The first pages of chapters loaded from their source in the current session, by address. */
-    val resolved = MutableStateFlow<Map<String, List<ImageRef>>>(emptyMap())
-    val skipsLead = MutableStateFlow(false)
-    private val hashes = mutableMapOf<String, Long?>()
-    private val hashing = Mutex()
-
-    /** Hashes the first page of each chapter in [leads] not hashed yet, until two match. */
-    suspend fun findSharedLead(leads: Map<String, List<ImageRef>>, hash: suspend (ImageRef) -> Long?) = hashing.withLock {
-        for ((address, pages) in leads) {
-            if (skipsLead.value) return@withLock
-            if (address in hashes) continue
-            val found = pages.firstOrNull()?.let { hash(it) }
-            hashes[address] = found
-            if (found != null && hashes.any { (other, known) -> other != address && known != null && isSamePicture(known, found) }) skipsLead.value = true
-        }
-    }
-}
-
-/** [marks] with each chapter in [leads] (its first pages, by address) pictured by its first page, or its second when [skipLead]. */
-private fun withPictures(marks: Map<PostId, ViewerStripMark>, posts: List<Post>, leads: Map<String, List<ImageRef>>, skipLead: Boolean) =
+private fun withPictures(marks: Map<PostId, ViewerStripMark>, posts: List<Post>, downloads: Map<String, List<ImageRef>>, lead: Int) =
     posts.associate { post ->
-        val pages = leads[post.id.sourcePostId].orEmpty()
-        post.id to (marks[post.id] ?: ViewerStripMark()).copy(image = pages.getOrNull(if (skipLead) 1 else 0) ?: pages.firstOrNull())
+        val pages = downloads[post.id.sourcePostId].orEmpty()
+        post.id to (marks[post.id] ?: ViewerStripMark()).copy(image = pages.getOrNull(lead) ?: pages.firstOrNull(), page = lead)
     }.filterValues { it != ViewerStripMark() }
 
 /** The session key of a series' Viewer stream; [seriesIdOf] reads it back. A source id never contains `:`. */
@@ -219,6 +183,3 @@ internal fun seriesChapterMark(seriesTitle: String, name: String, number: Float)
 
 /** Enough of a failure's causes to tell a refusal from a parse error, without a runaway chain. */
 private const val MAX_CAUSES = 4
-
-/** A chapter's first pages the reader keeps to picture it: its first, and its second for when the first is shared. */
-private const val LEAD_PAGES = 2

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.di
 
+import com.theoriacodex.app.series.ChapterPictures
 import com.theoriacodex.data.repository.SeriesDownloads
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.SeriesUpdate
@@ -29,6 +30,8 @@ class SeriesDependencies(
     /** Lives as long as the app, for work that must finish after the screen that started it closes. */
     val scope: CoroutineScope,
     val covers: SeriesCovers,
+    /** Which page pictures each series' chapters on the Viewer's strip; lives as long as the app. */
+    val pictures: ChapterPictures = ChapterPictures(),
 ) {
     private val checking = Mutex()
 

@@ -225,21 +225,21 @@ class SeriesReaderTest {
         }
         val entries = listOf(chapter, StoredSeriesEntry(SeriesEntry("/c2", "Ch. 2"), sourceOrder = 1, firstSeenAtEpochMs = 0))
         // Every chapter opens on the same credit page.
-        val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), entries), { listOf(twoPages) }, store = store)) { _, page ->
-            address(page).let { if (it.endsWith("/0")) 1L else it.hashCode().toLong() }
-        }
+        val credits = ChapterPictures { _, page -> address(page).let { if (it.endsWith("/0")) 1L else it.hashCode().toLong() } }
+        val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), entries), { listOf(twoPages) }, store = store, pictures = credits))
         val session = checkNotNull(reader.session(id, "/c2"))
         val seen = mutableListOf<Map<PostId, ViewerStripMark>>()
         val collector = launch { reader.stripMarks(session).collect { seen += it } }
-        fun pictured() = seen.last().mapValues { (_, mark) -> mark.image?.let(::address) }
+        fun pictured() = seen.last().mapValues { (_, mark) -> mark.image?.let(::address) to mark.page }
         advanceUntilIdle()
         // One chapter has nothing to match yet.
-        assertEquals(mapOf(PostId(source, "/c1") to pagesOf("/c1")[0].url), pictured())
+        assertEquals(mapOf(PostId(source, "/c1") to (pagesOf("/c1")[0].url to 0)), pictured())
 
         reader.resolve(session.context.queryHash, PostId(source, "/c2"))
         advanceUntilIdle()
 
-        assertEquals(mapOf(PostId(source, "/c1") to pagesOf("/c1")[1].url, PostId(source, "/c2") to pagesOf("/c2")[1].url), pictured())
+        // The downloaded chapter's second page is its file; the loaded one's, its own pages, which the Viewer holds.
+        assertEquals(mapOf(PostId(source, "/c1") to (pagesOf("/c1")[1].url to 1), PostId(source, "/c2") to (null to 1)), pictured())
         collector.cancel()
     }
 
@@ -315,6 +315,7 @@ class SeriesReaderTest {
         sources: suspend () -> List<SeriesSource>,
         deleteAfterReading: Boolean = false,
         store: OfflineMediaStore = store(),
+        pictures: ChapterPictures = ChapterPictures(),
     ): SeriesDependencies {
         val covers = SeriesCovers { series -> series.coverUrl?.let { "$it#loadable" } }
         val source: suspend (SourceKey) -> SeriesSource? = { key -> sources().firstOrNull { it.key == key } }
@@ -333,7 +334,7 @@ class SeriesReaderTest {
             deleteAfterReading = { deleteAfterReading },
             files = AtomicJsonFileStore(StandardTestDispatcher(testScheduler)),
         )
-        return SeriesDependencies(repository, sources, source, NoExtensions, downloads, scope = this, covers = covers)
+        return SeriesDependencies(repository, sources, source, NoExtensions, downloads, scope = this, covers = covers, pictures = pictures)
     }
 
     private val chapter = StoredSeriesEntry(SeriesEntry("/c1", "Ch. 1"), sourceOrder = 0, firstSeenAtEpochMs = 0)

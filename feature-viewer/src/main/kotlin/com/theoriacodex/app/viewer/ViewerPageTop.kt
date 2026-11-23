@@ -29,13 +29,15 @@ internal object PageTopCrop : Transformation {
 
 /**
  * The first row of a [window]-row crop of a [width]×[height] page (ARGB pixels, row by row) that starts a little above
- * its first row of content: the first that differs from the top-left pixel's colour across enough of its width. A page
- * with no content keeps its top; content starting lower than the last full window keeps that window.
+ * its first row of content: the first that differs from the margin's colour across enough of its width. The margin's
+ * colour is the one most of the top row shares, so a speck in a corner does not stand for it. A page with no content
+ * keeps its top; content starting lower than the last full window keeps that window.
  */
 internal fun pageTopStart(pixels: IntArray, width: Int, height: Int, window: Int): Int {
-    val background = pixels[0]
     val step = max(1, width / ROW_SAMPLES)
     val samples = (width + step - 1) / step
+    val top = (0 until width step step).map { pixels[it] }
+    val background = top.maxBy { colour -> top.count { !differs(it, colour) } }
     val needed = max(1, samples / CONTENT_SHARE)
     val content = (0 until height).firstOrNull { y ->
         (0 until width step step).count { x -> differs(pixels[y * width + x], background) } >= needed
