@@ -60,6 +60,7 @@ internal class MihonExtensionSourceHost : ExtensionSites {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var watching: Lazy<Unit>
     private lateinit var packages: ExtensionPackages
+    private lateinit var imageKey: Lazy<ByteArray>
 
     /** Held so the debug folder stays watched; see [watchPackages]. */
     @Volatile
@@ -86,10 +87,8 @@ internal class MihonExtensionSourceHost : ExtensionSites {
      */
     fun attach(application: Application, browsers: ChallengeBrowsers, outages: () -> HostOutageTracker) {
         // Release builds run installed packages only; the folder is how tests hand a debug build an APK.
-        val key = lazy { MihonHost.imageKey(application) }
-        images = ExtensionImages(key) { runBlocking { sources() } }
-        // Screens tag covers as they draw, so the key file is read here rather than on the main thread.
-        scope.launch(Dispatchers.IO) { key.value }
+        imageKey = lazy { MihonHost.imageKey(application) }
+        images = ExtensionImages(imageKey) { runBlocking { sources() } }
         packages = ExtensionPackages(application) { if (BuildConfig.DEBUG) application.getExternalFilesDir(DIRECTORY) else null }
         val loader = ExtensionLoader(application, packages)
         // What extensions ask their host for is set up when the first one loads, not at startup.
@@ -142,6 +141,9 @@ internal class MihonExtensionSourceHost : ExtensionSites {
     /** Says where the user's choices are kept. Called once, when the app's data opens; everything else waits for it. */
     fun bind(choices: ExtensionChoiceStore) {
         this.choices.complete(choices)
+        // Screens tag covers as they draw, so the key file is read now, off the main thread. Not at [attach], which
+        // runs before the application has a context to find the file with.
+        scope.launch(Dispatchers.IO) { imageKey.value }
     }
 
     override fun sites(): Map<SourceKey, ExtensionSite> = registry.sites()
