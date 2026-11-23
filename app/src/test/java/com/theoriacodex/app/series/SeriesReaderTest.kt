@@ -22,6 +22,9 @@ import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.PostId
@@ -107,6 +110,22 @@ class SeriesReaderTest {
 
         assertEquals("https://cover.test#tagged", cover(listOf(tagging)))
         assertNull(cover(emptyList()))
+    }
+
+    @Test
+    fun aChapterThatFailsIsLoggedByKindWithoutTheExtensionsMessages() = runTest {
+        val logged = mutableListOf<String>()
+        Diagnostics.install { _, message, error -> logged += message + error?.message.orEmpty() }
+        val failing = object : SeriesSource by OnePage(source) {
+            override suspend fun pages(entry: SeriesEntry): List<ImageRef> = throw SourceAdapterException(
+                SourceFailureReason.NETWORK, "Invalid page /chapter/private-title?sig=x", IllegalStateException("private-title"),
+            )
+        }
+        val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), listOf(chapter)), { listOf(failing) }))
+
+        runCatching { reader.resolve(seriesQueryHash(id), PostId(source, "/c1")) }
+
+        assertEquals(listOf("${source.id} chapter pages failed to load: SourceAdapterException(NETWORK) < IllegalStateException"), logged)
     }
 
     @Test

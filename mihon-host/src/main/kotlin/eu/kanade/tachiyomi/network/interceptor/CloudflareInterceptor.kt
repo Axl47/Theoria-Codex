@@ -12,6 +12,7 @@ import com.theoriacodex.sources.http.RefusedRequest
 import com.theoriacodex.sources.http.challengedRequest
 import com.theoriacodex.sources.http.cookieValue
 import com.theoriacodex.sources.http.isCloudflareChallenge
+import java.util.concurrent.ConcurrentHashMap
 import okhttp3.Interceptor
 import okhttp3.Response
 
@@ -28,6 +29,9 @@ class CloudflareInterceptor internal constructor(
     private val pass: ChallengePass,
     private val outages: HostOutageTracker,
 ) : Interceptor {
+    /** The hosts and statuses [reportRefusal] has logged: a site refusing every image would otherwise fill the log. */
+    private val refusals = ConcurrentHashMap.newKeySet<String>()
+
     override fun intercept(chain: Interceptor.Chain): Response {
         val response = pass.intercept(chain)
         if (!response.isCloudflareChallenge()) return response.also(::clearRecovered).also(::reportRefusal)
@@ -40,16 +44,16 @@ class CloudflareInterceptor internal constructor(
 
     /**
      * Records a refusal that is not a challenge, which reaches the extension as a plain HTTP error: whether it carried a
-     * clearance tells a rejected clearance (such as one from a hidden pass) from a site that refuses outright.
+     * clearance tells a rejected clearance (such as one from a hidden pass) from a site that refuses outright. Once
+     * per host and status; the server is named only as Cloudflare or not, since the header is the site's free text.
      */
     private fun reportRefusal(response: Response) {
         if (response.code != HTTP_FORBIDDEN && response.code != HTTP_UNAVAILABLE) return
         val sent = response.challengedRequest
+        if (!refusals.add("${sent.url.host} ${response.code}")) return
         val clearance = if (cookieValue(sent.header("Cookie"), CLEARANCE_COOKIE) != null) "with" else "without"
-        Diagnostics.report(
-            "extension-network",
-            "${sent.url.host} refused ${response.code} $clearance a clearance, no challenge (server ${response.header("Server") ?: "unknown"})",
-        )
+        val server = if (response.header("Server").equals("cloudflare", ignoreCase = true)) "Cloudflare" else "another server"
+        Diagnostics.report("extension-network", "${sent.url.host} refused ${response.code} $clearance a clearance, no challenge, from $server")
     }
 
     /** Ends the challenge record of a host that answered [response] successfully; looks only while records exist. */

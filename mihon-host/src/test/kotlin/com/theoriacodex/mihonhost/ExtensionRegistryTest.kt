@@ -160,6 +160,19 @@ class ExtensionRegistryTest {
     }
 
     @Test
+    fun `a package broadcast lists the device again even when the package changes number did not move`() = runBlocking {
+        // Hiding a package changes the listing and sends a broadcast, but numbers no change.
+        val registry = ExtensionRegistry({ onDevice }, { 0 }, { sourcesOf(it) }, store, images, { error("no settings") }, { deviceLanguages }, 500)
+        registry.installed()
+        val listed = registry.revision.value
+
+        onDevice = emptyList()
+        registry.recheck()
+
+        assertEquals(listed + 1, registry.revision.value)
+    }
+
+    @Test
     fun `another app updating leaves the revision where it was`() = runBlocking {
         var stamp = 0
         val registry = ExtensionRegistry({ onDevice }, { stamp }, { sourcesOf(it) }, store, images, { error("no settings") }, { deviceLanguages }, 500)
