@@ -365,7 +365,7 @@ private fun ViewerVideoStreamRecovery(state: ViewerVideoState, recovery: ViewerV
  * Where a page's player starts: the [resume] position, unless, once the duration is known, [startsOver] judges it too
  * close to the end; then it starts from the beginning instead of ending the moment it starts.
  */
-private class ViewerVideoStart(
+internal class ViewerVideoStart(
     private val resume: () -> Long,
     private val startsOver: (positionMs: Long, durationMs: Long) -> Boolean,
 ) {
@@ -376,17 +376,18 @@ private class ViewerVideoStart(
 
 /**
  * Whether a player started at [resumeMs] has been [atPosition]: its start applied (a resume settled once the duration
- * was known) and a frame rendered. Only then does its release report where it stopped: a player let go of before
- * that, rebuilt or short-lived, still stands at its unplayed start and would write it over the real position.
+ * was known), then a frame rendered there or playback ran (a stream may carry audio only). Only then does its release
+ * report where it stopped: a player let go of before that, rebuilt or short-lived, still stands at its unplayed start
+ * and would write it over the real position.
  */
-private class ViewerStartedPlayback(
+internal class ViewerStartedPlayback(
     private val player: Player,
     private val resumeMs: Long,
     private val startsOver: (positionMs: Long, durationMs: Long) -> Boolean,
 ) : Player.Listener {
     private var settled = resumeMs == 0L
-    private var rendered = false
-    val atPosition get() = settled && rendered
+    private var shown = false
+    val atPosition get() = settled && shown
 
     init {
         if (!settled) {
@@ -407,7 +408,11 @@ private class ViewerStartedPlayback(
     }
 
     override fun onRenderedFirstFrame() {
-        rendered = true
+        shown = true
+    }
+
+    override fun onIsPlayingChanged(isPlaying: Boolean) {
+        if (isPlaying) shown = true
     }
 }
 
