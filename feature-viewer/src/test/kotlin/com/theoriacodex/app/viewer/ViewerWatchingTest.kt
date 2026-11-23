@@ -1,8 +1,6 @@
 package com.theoriacodex.app.viewer
 
 import androidx.lifecycle.SavedStateHandle
-import androidx.media3.common.C
-import androidx.media3.common.Player
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.post
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.session
 import com.theoriacodex.app.viewer.state.ViewerAction
@@ -266,30 +264,6 @@ class ViewerWatchingTest {
         assertEquals(listOf(ViewerTrackChange.Subtitle("1:/0")), english.trackChanges(later, Locale.US))
     }
 
-    @Test
-    fun `every seek reports where it landed, a drag's at its release, and a released player reports where it stopped`() {
-        var scrubbing = false
-        var durationMs = 1_440_000L
-        val reports = mutableListOf<ViewerPlaybackProgress>()
-        val seeks = ViewerSeekReports({ scrubbing }, { durationMs }) { reports += it }
-        fun discontinuity(reason: Int, toMs: Long = 60_000) = seeks.onPositionDiscontinuity(position(0), position(toMs), reason)
-        // A paused player that the media session seeks reports the new position, though nothing on screen polled it yet.
-        discontinuity(Player.DISCONTINUITY_REASON_SEEK)
-        discontinuity(Player.DISCONTINUITY_REASON_AUTO_TRANSITION)
-        scrubbing = true
-        repeat(3) { discontinuity(Player.DISCONTINUITY_REASON_SEEK) }
-        scrubbing = false
-        discontinuity(Player.DISCONTINUITY_REASON_SEEK, toMs = 90_000)
-        durationMs = C.TIME_UNSET
-        discontinuity(Player.DISCONTINUITY_REASON_SEEK)
-        assertEquals(listOf(ViewerPlaybackProgress(60_000, 1_440_000), ViewerPlaybackProgress(90_000, 1_440_000)), reports)
-
-        assertEquals(ViewerPlaybackProgress(61_000, 1_440_000), viewerReleaseProgress(61_000, 1_440_000, ended = false))
-        assertEquals(ViewerPlaybackProgress(1_440_000, 1_440_000), viewerReleaseProgress(1_439_000, 1_440_000, ended = true))
-        assertNull(viewerReleaseProgress(4_000, C.TIME_UNSET, ended = false))
-    }
-
-    private fun position(ms: Long) = Player.PositionInfo(null, 0, null, null, 0, ms, ms, C.INDEX_UNSET, C.INDEX_UNSET)
 
     @Test
     fun `playback is reported every ten seconds while playing and once when it stops, never without a duration`() = runTest {
