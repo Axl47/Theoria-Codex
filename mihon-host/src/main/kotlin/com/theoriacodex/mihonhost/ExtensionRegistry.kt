@@ -1,5 +1,6 @@
 package com.theoriacodex.mihonhost
 
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.ExtensionChoiceStore
 import com.theoriacodex.domain.series.ExtensionLanguage
@@ -230,7 +231,7 @@ class ExtensionRegistry(
     /** [source] as a series source, whose challenged hosts join its [sites] entry. */
     private fun series(source: Source): MihonSeriesSource {
         val key = MihonSeriesSource.sourceKey(source)
-        return MihonSeriesSource(source, images, log) { host ->
+        return MihonSeriesSource(source, images) { host ->
             challengedHosts.update { hosts -> hosts + (key to hosts[key].orEmpty() + host) }
         }
     }
@@ -267,7 +268,8 @@ class ExtensionRegistry(
             task.cancel(true)
             TimeoutException("Took longer than ${limitMs / MILLIS_PER_SECOND} s")
         }
-        log("Skipped $what: $failure")
+        // The failure's message is the extension's and can hold an address or a title, which only the redacted log may keep.
+        Diagnostics.report(LOG_AREA, "Skipped $what", failure)
         return Result.failure(failure)
     }
 
@@ -276,5 +278,6 @@ class ExtensionRegistry(
         const val MILLIS_PER_SECOND = 1_000L
         const val NOT_SIGNED = "Not signed"
         const val NO_SOURCES = "No sources"
+        const val LOG_AREA = "extensions"
     }
 }
