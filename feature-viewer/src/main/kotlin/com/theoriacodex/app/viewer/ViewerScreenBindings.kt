@@ -31,6 +31,8 @@ data class ViewerScreenConfig(
      * chapter in place of the source, and Like and Save are hidden.
      */
     val seriesChapters: Boolean = false,
+    /** Series chapters' numbers, drawn over their strip thumbnails, which all show the series cover. */
+    val chapterNumbers: Map<PostId, Float> = emptyMap(),
 )
 
 /** What the Viewer asks of the app: navigation, persistence and platform behavior. The app builds one per shell. */

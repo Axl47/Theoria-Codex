@@ -31,6 +31,8 @@ data class ViewerSession(
     val focusComment: CommentTarget? = null,
     // The mode a series session's chapters open in, known before the first one draws.
     val seriesReadingMode: com.theoriacodex.domain.model.GalleryReadingMode? = null,
+    // Each series chapter's number, for chapters that have one.
+    val seriesChapterNumbers: Map<com.theoriacodex.domain.model.PostId, Float> = emptyMap(),
 )
 
 internal fun requiresViewerPostResolution(post: Post, streamSource: ViewerStreamSource): Boolean {

@@ -64,12 +64,14 @@ class SeriesReaderTest {
         // The source lists the newest first, so order 0 is chapter 3.
         val entries = listOf(
             StoredSeriesEntry(SeriesEntry("/c3", "Ch. 3"), sourceOrder = 0, firstSeenAtEpochMs = 0),
-            StoredSeriesEntry(SeriesEntry("/c2", "Ch. 2"), sourceOrder = 1, firstSeenAtEpochMs = 0, lastPage = 7, pageCount = 18),
+            StoredSeriesEntry(SeriesEntry("/c2", "Ch. 2", number = 2f), sourceOrder = 1, firstSeenAtEpochMs = 0, lastPage = 7, pageCount = 18),
             StoredSeriesEntry(SeriesEntry("/c1", "Ch. 1"), sourceOrder = 2, firstSeenAtEpochMs = 0, read = true, lastPage = 20, pageCount = 20),
         )
         val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), entries), sources = { emptyList() }))
 
         val session = checkNotNull(reader.session(id, "/c2"))
+        // Only chapters with a number carry one, for the strip to show.
+        assertEquals(mapOf(PostId(source, "/c2") to 2f), session.seriesChapterNumbers)
 
         assertEquals(listOf("/c1", "/c2", "/c3"), session.posts.map { it.id.sourcePostId })
         assertEquals(1, session.context.startIndex)
