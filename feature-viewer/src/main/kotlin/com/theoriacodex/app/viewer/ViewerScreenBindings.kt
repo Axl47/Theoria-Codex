@@ -35,8 +35,11 @@ data class ViewerScreenConfig(
     val stripMarks: Map<PostId, ViewerStripMark> = emptyMap(),
 )
 
-/** Text drawn over a post's strip thumbnail ([badge], which TalkBack skips) and the name TalkBack reads for the tile. */
-data class ViewerStripMark(val badge: String, val label: String)
+/**
+ * How the strip shows one post: text drawn over its thumbnail ([badge], which TalkBack skips), the name TalkBack reads
+ * for the tile, and an [image] to show in place of the post's preview. Each is optional.
+ */
+data class ViewerStripMark(val badge: String? = null, val label: String? = null, val image: ImageRef? = null)
 
 /** What the Viewer asks of the app: navigation, persistence and platform behavior. The app builds one per shell. */
 data class ViewerScreenCallbacks(

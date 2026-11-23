@@ -179,6 +179,13 @@ class SeriesDownloads(
     /** The chapter at [entry] with its pages as files, in reading order; null when it is not on the device. */
     suspend fun chapter(id: SeriesId, entry: String): Post? = store.find(PostId(id.source, entry))
 
+    /** The first page, as a file, of each of [id]'s chapters on the device, by address; read from memory. */
+    suspend fun firstPages(id: SeriesId): Map<String, ImageRef> {
+        store.load()
+        val snapshot = store.snapshot.value
+        return snapshot.postsByOwner[seriesOfflineOwner(id)].orEmpty().mapNotNull { post -> snapshot.firstPages[post]?.let { post.sourcePostId to it } }.toMap()
+    }
+
     /** The addresses of [id]'s chapters on the device. */
     suspend fun downloaded(id: SeriesId): Set<String> {
         store.load()

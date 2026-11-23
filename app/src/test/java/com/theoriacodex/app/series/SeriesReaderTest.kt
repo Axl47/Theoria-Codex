@@ -187,15 +187,18 @@ class SeriesReaderTest {
     }
 
     @Test
-    fun aSessionHandsDownloadedChaptersTheirPagesWithoutAnExtension() = runTest {
-        val entries = listOf(chapter, StoredSeriesEntry(SeriesEntry("/c2", "Ch. 2"), sourceOrder = 1, firstSeenAtEpochMs = 0))
+    fun aSessionPicturesDownloadedChaptersByTheirFirstPageWithoutAnExtension() = runTest {
+        val entries = listOf(chapter, StoredSeriesEntry(SeriesEntry("/c2", "Ch. 2", number = 2f), sourceOrder = 1, firstSeenAtEpochMs = 0))
         download("/c1")
         val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), entries), { error("No extension may load") }))
 
         val session = checkNotNull(reader.session(id, "/c2"))
 
-        val pages = session.posts.associate { it.id.sourcePostId to it.media.map { page -> page.localPath?.let(::File)?.readText() } }
-        assertEquals(mapOf("/c1" to pagesOf("/c1").map { it.url }, "/c2" to emptyList()), pages)
+        val firstPage = checkNotNull(session.stripMarks[PostId(source, "/c1")]?.image?.localPath)
+        assertEquals(pagesOf("/c1").first().url, File(firstPage).readText())
+        // The undownloaded chapter keeps only its number; neither chapter's pages are read until the Viewer asks.
+        assertEquals(ViewerStripMark("2", "Title · Ch. 2"), session.stripMarks[PostId(source, "/c2")])
+        assertTrue(session.posts.all { it.media.isEmpty() })
     }
 
     @Test

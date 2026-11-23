@@ -130,10 +130,10 @@ internal fun ViewerPostStrip(
     openPages: ViewerStripPages? = null,
     /**
      * Whether the posts are a series' chapters, which are named by their titles (their ids are addresses) and, once
-     * their pages are known, pictured by their first page rather than the cover they all share.
+     * the Viewer has their pages, pictured by their first page rather than the cover they all share.
      */
     chapters: Boolean = false,
-    /** Marks over thumbnails, such as chapters' numbers on what would otherwise all be the same cover. */
+    /** How particular posts are shown, such as chapters' numbers and downloaded first pages in place of a shared cover. */
     stripMarks: Map<PostId, ViewerStripMark> = emptyMap(),
 ) {
     val list = rememberLazyListState(initialFirstVisibleItemIndex = selectedIndex)
@@ -164,7 +164,7 @@ internal fun ViewerPostStrip(
                     } else {
                         val mark = stripMarks[post.id]
                         val label = (mark?.label ?: post.title?.takeIf { chapters })?.let { "Open $it" } ?: viewerPostLabel(post)
-                        val image = post.media.firstOrNull()?.takeIf { chapters && (it.localPath ?: it.url) != null } ?: post.preview
+                        val image = mark?.image ?: post.media.firstOrNull()?.takeIf { chapters && (it.localPath ?: it.url) != null } ?: post.preview
                         ViewerPostThumbnail(post, index == selectedIndex, Modifier.size(cell), postMediaCount(post), label, mark?.badge, image) { onSelect(index) }
                     }
                 }

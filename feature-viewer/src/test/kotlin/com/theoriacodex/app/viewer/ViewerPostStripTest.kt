@@ -140,16 +140,20 @@ class ViewerPostStripTest {
         compose.onNodeWithText("9", useUnmergedTree = true).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility).or(hasAnyAncestor(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility))))
     }
 
-    @Test fun `chapters with pages show their first page, the rest the shared cover`() {
+    @Test fun `chapters with pages or a marked image show it, the rest the shared cover`() {
         val log = installHangingLoader()
         try {
             val cover = ImageRef(null, "/missing/cover.jpg", "image/jpeg")
             val firstPage = ImageRef(null, "/missing/chapter-1/page-1.jpg", "image/jpeg")
             val read = testPost(sourcePostId = "/chapter/1").copy(preview = cover, media = listOf(firstPage, ImageRef(null, "/missing/chapter-1/page-2.jpg", "image/jpeg")))
-            val unread = testPost(sourcePostId = "/chapter/2").copy(preview = cover)
-            compose.setContent { MaterialTheme { ViewerPostStrip(listOf(read, unread), 0, {}, Modifier.width(360.dp), chapters = true) } }
+            val downloaded = testPost(sourcePostId = "/chapter/2").copy(preview = cover)
+            val unread = testPost(sourcePostId = "/chapter/3").copy(preview = cover)
+            val marks = mapOf(downloaded.id to ViewerStripMark(image = ImageRef(null, "/missing/chapter-2/0.jpg", "image/jpeg")))
+            compose.setContent {
+                MaterialTheme { ViewerPostStrip(listOf(read, downloaded, unread), 0, {}, Modifier.width(360.dp), chapters = true, stripMarks = marks) }
+            }
             compose.waitForIdle()
-            assertEquals(setOf("page-1.jpg", "cover.jpg"), log.started.map { it.substringAfterLast('/') }.toSet())
+            assertEquals(setOf("page-1.jpg", "0.jpg", "cover.jpg"), log.started.map { it.substringAfterLast('/') }.toSet())
         } finally {
             coil.Coil.reset()
         }
