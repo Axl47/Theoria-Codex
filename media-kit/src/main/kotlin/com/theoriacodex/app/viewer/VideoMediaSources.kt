@@ -55,6 +55,13 @@ fun VideoPlaybackRequest.usesSharedCache(): Boolean =
     cache && isHttpVideoLocation(location) && streamType(videoLocationToUri(location), streamMimeType(mime)) == StreamType.PROGRESSIVE
 
 /**
+ * Whether this video may be read before it shows (preloaded, prefetched, or scrubbed through a second player) without
+ * fetching anything twice: a file on the device, or a web file the shared cache keeps ([usesSharedCache]). Any other
+ * web stream (an episode, an HLS or DASH rendition) is read only by the player showing it.
+ */
+fun VideoPlaybackRequest.readsAheadFreely(): Boolean = usesSharedCache() || !isHttpVideoLocation(location)
+
+/**
  * The [StreamType] of separate audio at [uri] beside a [main] stream: the one its address shows, or the main stream's
  * when its path has no extension at all, as an extension's HLS episode often names its audio playlist.
  */

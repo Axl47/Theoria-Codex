@@ -62,8 +62,8 @@ internal fun ViewerVideoPlayer(
     mediaKey: ViewerMediaKey,
     positions: ViewerVideoPositions,
     loadingPreview: (@Composable () -> Unit)? = null,
-    /** Fetches expired stream links again, for media with streams; null for other videos. */
-    freshLinks: ViewerFreshLinks? = null,
+    /** How an episode's failed stream recovers; null for media without streams. */
+    episode: ViewerEpisodeStreams? = null,
 ) {
     val context = LocalContext.current
     // The metered check is a system call, so it runs when the page picks its stream, not on every recomposition.
@@ -86,11 +86,11 @@ internal fun ViewerVideoPlayer(
         return
     }
     // New stream links are a new player even when the chosen stream's request reads the same: a REPLACED ask waits on it.
-    val recovery = remember(mediaKey, playback, media.streams, controls.loadGeneration, freshLinks?.budget) {
-        ViewerVideoRecovery(ViewerMediaLoad(mediaKey, controls.loadGeneration), freshLinks?.budget)
+    val recovery = remember(mediaKey, playback, media.streams, controls.loadGeneration, episode?.attempts) {
+        ViewerVideoRecovery(ViewerMediaLoad(mediaKey, controls.loadGeneration), episode, episode?.let { media.viewerStream(streamLabel)?.label })
     }
     var recoveryGeneration by remember(recovery) { mutableIntStateOf(0) }
-    val state = remember(recovery, recoveryGeneration) { ViewerVideoState() }
+    val state = remember(recovery, recoveryGeneration) { ViewerVideoState().apply { recoveringStream = recovery.opensWithAsk() } }
     LaunchedEffect(state, state.retryPending) {
         if (state.retryPending) {
             delay(250L)
@@ -98,7 +98,8 @@ internal fun ViewerVideoPlayer(
         }
     }
     val start = ViewerVideoStart({ positions.position(mediaKey) }, positions::startsOver)
-    ViewerVideoBinding(state, playback, controls, events, recovery, start) { positionMs, durationMs, ended ->
+    // A Retry's opening ask holds the player back: the address that failed is not replayed before fresh links come.
+    if (!state.recoveringStream || state.player != null) ViewerVideoBinding(state, playback, controls, events, recovery, start) { positionMs, durationMs, ended ->
         // A finished video resumes from the start: seeking back to its end would finish it again and,
         // in Queue next mode, skip straight past it.
         val resumeMs = if (ended) 0L else positionMs
@@ -106,7 +107,7 @@ internal fun ViewerVideoPlayer(
         context.videoPlaybackInfrastructure().feedPositionHandoff.publish(mediaKey, resumeMs)
         events.onPlaybackProgress?.let { report -> viewerReleaseProgress(positionMs, durationMs, ended)?.let(report) }
     }
-    ViewerVideoFreshLinks(state, recovery, freshLinks, events)
+    ViewerVideoStreamRecovery(state, recovery, episode, events)
     ReportViewerPlaybackProgress(state, events.onPlaybackProgress)
     FollowViewerActiveTracks(state.player, controls.isActive)
     ViewerVideoSystemBindings(state, controls.isActive && controls.systemControlsReady, events)
@@ -124,8 +125,10 @@ private class ViewerVideoState {
     var hasRenderedFirstFrame by mutableStateOf(false)
     var failed by mutableStateOf(false)
     var retryPending by mutableStateOf(false)
-    /** Waiting for an expired stream's links to be fetched again; see [ViewerRecoveryDecision.ASK_FOR_FRESH_LINKS]. */
+    /** Waiting for an expired stream's links to be fetched again; see [ViewerRecoveryDecision.AskForFreshLinks]. */
     var recoveringStream by mutableStateOf(false)
+    /** Moving to another of the episode's streams; see [ViewerRecoveryDecision.FallBack]. */
+    var fallingBackTo by mutableStateOf<String?>(null)
     /** Counts the player's seeks, from any controller, so an episode's progress is reported after each. */
     var seeks by mutableIntStateOf(0)
     var duration by mutableLongStateOf(0L)
@@ -326,37 +329,53 @@ private fun ViewerVideoState.handlePlayingChanged(isPlaying: Boolean, events: ()
 
 /** Acts on [recovery]'s decision for [error]; the terminal state holds until a new player replaces this one. */
 private fun ViewerVideoState.handleError(error: PlaybackException, recovery: ViewerVideoRecovery, events: () -> ViewerRendererEvents) {
-    if (retryPending || failed || recoveringStream) return
-    when (recovery.decide(error.errorCode)) {
-        ViewerRecoveryDecision.RETRY_IN_PLACE -> {
+    if (retryPending || failed || recoveringStream || fallingBackTo != null) return
+    follow(recovery.decide(ViewerRecoveryEvent.PlayerError(error.errorCode)), error.message ?: VIEWER_VIDEO_FAILED, events)
+}
+
+private fun ViewerVideoState.follow(decision: ViewerRecoveryDecision, message: String, events: () -> ViewerRendererEvents) {
+    when (decision) {
+        ViewerRecoveryDecision.RetryInPlace -> {
             loading = true
             retryPending = true
         }
-        ViewerRecoveryDecision.ASK_FOR_FRESH_LINKS -> {
+        ViewerRecoveryDecision.AskForFreshLinks -> {
             loading = true
             recoveringStream = true
         }
-        ViewerRecoveryDecision.FAIL -> fail(error.message ?: "Could not play video", events)
+        is ViewerRecoveryDecision.FallBack -> {
+            loading = true
+            fallingBackTo = decision.label
+        }
+        ViewerRecoveryDecision.Fail -> fail(message, events)
     }
 }
 
 /**
- * Asks for fresh links when [recovery] decided so, through the latest [freshLinks] (its post may have been replaced
- * since this player started), and gives the ask back once the media plays. Recovered media replaces this player, along
- * with this state and this ask. Nothing new (no links in the route's time, a failure, the same links) fails the stream
- * at once, so another can be picked. Leaving the page cancels the ask.
+ * Carries out [recovery]'s decisions that reach past this player, through the latest [episode] (its post may have
+ * been replaced since this player started). An ask for fresh links returns once the route's lookup ends: recovered
+ * media replaces this player, along with this state and this ask; nothing new goes back to [recovery]. A fallback
+ * stream replaces this player too. A rendered frame tells [recovery] the load played. Leaving the page cancels the ask.
  */
 @Composable
-private fun ViewerVideoFreshLinks(state: ViewerVideoState, recovery: ViewerVideoRecovery, freshLinks: ViewerFreshLinks?, events: ViewerRendererEvents) {
+private fun ViewerVideoStreamRecovery(state: ViewerVideoState, recovery: ViewerVideoRecovery, episode: ViewerEpisodeStreams?, events: ViewerRendererEvents) {
     LaunchedEffect(state.hasRenderedFirstFrame) { if (state.hasRenderedFirstFrame) recovery.onPlayed() }
-    val latestFreshLinks by rememberUpdatedState(freshLinks)
+    val latestEpisode by rememberUpdatedState(episode)
     val latestEvents by rememberUpdatedState(events)
     LaunchedEffect(state, state.recoveringStream) {
         if (!state.recoveringStream) return@LaunchedEffect
-        val outcome = latestFreshLinks?.ask?.invoke() ?: ViewerMediaRecovery.NOTHING_NEW
-        if (outcome == ViewerMediaRecovery.NOTHING_NEW) state.fail("Could not play video") { latestEvents }
+        val outcome = latestEpisode?.ask?.invoke() ?: ViewerMediaRecovery.NOTHING_NEW
+        if (outcome == ViewerMediaRecovery.NOTHING_NEW) {
+            state.recoveringStream = false
+            state.follow(recovery.decide(ViewerRecoveryEvent.NothingNew), VIEWER_VIDEO_FAILED) { latestEvents }
+        }
+    }
+    LaunchedEffect(state, state.fallingBackTo) {
+        state.fallingBackTo?.let { label -> latestEpisode?.fallBack?.invoke(label) }
     }
 }
+
+private const val VIEWER_VIDEO_FAILED = "Could not play video"
 
 /**
  * Where a page's player starts: the [resume] position, unless, once the duration is known, [startsOver] judges it too
@@ -402,13 +421,6 @@ internal fun viewerReleaseProgress(positionMs: Long, durationMs: Long, ended: Bo
 /** Where playback is, at [positionMs] of [durationMs]; null while the duration is unknown (unset or not positive). */
 private fun viewerPlaybackProgress(positionMs: Long, durationMs: Long): ViewerPlaybackProgress? =
     durationMs.takeIf { it > 0L }?.let { ViewerPlaybackProgress(positionMs.coerceIn(0L, it), it) }
-
-/**
- * Whether this video may be read ahead of being shown, preloaded or scrubbed through a second player, without
- * fetching anything twice: a file on the device, or a web file the shared cache keeps for playback.
- */
-private fun VideoPlaybackRequest.readsAheadFreely(): Boolean =
-    usesSharedCache() || !(location.startsWith("http://", ignoreCase = true) || location.startsWith("https://", ignoreCase = true))
 
 /**
  * Reports an episode's playback to [report] while it plays, when it stops, and after each seek; the player's release

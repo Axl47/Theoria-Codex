@@ -13,7 +13,6 @@ import com.theoriacodex.app.codex.SAVED_CODEX_ID
 import com.theoriacodex.app.codex.isVirtualCodex
 import com.theoriacodex.app.series.SeriesReader
 import com.theoriacodex.app.series.seriesIdOf
-import com.theoriacodex.app.viewer.ViewerSeries
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.ViewerPlaybackProgress
 import com.theoriacodex.app.viewer.ViewerPostResolver
@@ -303,17 +302,19 @@ internal class ViewerRouteWorkflow(
     }
 
     /**
-     * A visible page of a series entry, which goes to its series only while chapters are read: an episode's one media
-     * item showing is not progress, which arrives as [recordPlaybackProgress]. True for any series session, so neither
-     * kind of entry reaches History or statistics.
+     * A visible page of a series entry, which goes to its series only ([SeriesReader.recordPageProgress]). True for any
+     * series session, so neither kind of entry reaches History or statistics.
      */
-    private suspend fun recordSeriesPage(post: Post, page: Int, session: ViewerSession?): Boolean =
-        recordSeriesProgress(session) { if (it.series is ViewerSeries.Reading) recordPageProgress(it, post, page) }
+    private fun recordSeriesPage(post: Post, page: Int, session: ViewerSession?): Boolean =
+        recordSeriesProgress(session) { recordPageProgress(it, post, page) }
 
-    /** Records progress through a series entry on its series and reports true, so History and statistics never see it. */
-    private suspend fun recordSeriesProgress(session: ViewerSession?, record: suspend SeriesReader.(ViewerSession) -> Unit): Boolean {
-        if (session?.context?.streamSource != ViewerStreamSource.SERIES) return false
-        runCatchingPreservingCancellation { series?.record(session) }
+    /**
+     * Records progress through a series entry on its series and reports true, so History and statistics never see it.
+     * The series writes in the app's scope, so the closing Viewer's last report outlives it.
+     */
+    private fun recordSeriesProgress(session: ViewerSession?, record: SeriesReader.(ViewerSession) -> Unit): Boolean {
+        if (session?.series == null) return false
+        series?.record(session)
         return true
     }
 

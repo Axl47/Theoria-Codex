@@ -48,8 +48,12 @@ internal fun ViewerMediaContent(
             controls = controls, events = events,
             mediaKey = key, positions = videoPositions,
             loadingPreview = { ViewerLoadingPreview(post, media, modifier) },
-            freshLinks = videoOptions.freshLinks?.takeIf { media.streams.isNotEmpty() && onRequestMediaRecovery != null }?.let { budget ->
-                ViewerFreshLinks(budget) { onRequestMediaRecovery?.invoke(post, media) ?: ViewerMediaRecovery.NOTHING_NEW }
+            episode = videoOptions.episode?.takeIf { media.streams.isNotEmpty() }?.let { options ->
+                ViewerEpisodeStreams(
+                    options.attempts, media.streams.map { it.label }, options.pickedByHand, options.linksResolvedAtMs,
+                    ask = { onRequestMediaRecovery?.recoverStreams(post, media) ?: ViewerMediaRecovery.NOTHING_NEW },
+                    fallBack = options.fallBack,
+                )
             },
         )
         ViewerMediaKind.GIF -> {

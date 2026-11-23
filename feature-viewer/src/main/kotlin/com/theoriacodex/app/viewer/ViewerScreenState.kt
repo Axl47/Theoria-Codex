@@ -29,7 +29,7 @@ internal class ViewerScreenState {
     val imageSession = ViewerImageSession()
     /** The selected video's tracks, for the episode controls. */
     val activeTracks = ViewerActiveTracks()
-    val freshLinks = ViewerFreshLinksBudget()
+    val streamAttempts = ViewerStreamAttempts()
     val mediaPagers = mutableMapOf<PostId, PagerState>()
     /** Galleries shown as one vertical column, by post; observed, so the screen's gestures follow a new one at once. */
     val verticalGalleries = mutableStateMapOf<PostId, ViewerVerticalGalleryState>()

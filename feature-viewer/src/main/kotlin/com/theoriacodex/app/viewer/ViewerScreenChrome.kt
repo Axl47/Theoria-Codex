@@ -26,20 +26,20 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
 /** What the top bar names: a series entry by its title, any other post by its source. */
-private fun ViewerScreenConfig.topBarTitle(post: Post): String =
-    post.title?.takeIf { series != null } ?: post.id.source.displayName()
+private fun ViewerSeries?.topBarTitle(post: Post): String =
+    post.title?.takeIf { this != null } ?: post.id.source.displayName()
 
 /** The dock's Save button; a series entry is not a post to save, so its dock has none. */
 @Composable
 private fun ViewerDockSave(
-    config: ViewerScreenConfig,
+    series: ViewerSeries?,
     post: Post,
     saveContext: ViewerSaveContext,
     screen: ViewerScreenState,
     controls: ViewerControls,
     host: ViewerScreenHost,
 ) {
-    if (config.series != null) return
+    if (series != null) return
     ViewerSaveButton(post, saveContext, screen.saveFan, controls::markInteraction) { host.onAction(ViewerAction.Save) }
 }
 
@@ -81,14 +81,14 @@ internal fun BoxScope.ViewerChromeOverlays(
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_TOP_BAR, Modifier.align(Alignment.BottomCenter).then(fadesWhileScrubbing)) {
         val dock = viewerDockActions(
             frame, controls, activity, quality, qualityHeight, selection.post.id in config.likedPostIds, comments.countOf(selection.post), host.onAction,
-            series = config.series,
+            series = frame.uiState.series,
         )
-        ViewerDock(dock) { ViewerDockSave(config, selection.post, saveContext, screen, controls, host) }
+        ViewerDock(dock) { ViewerDockSave(frame.uiState.series, selection.post, saveContext, screen, controls, host) }
     }
     ViewerFooterButtons(frame, screen, activity, config, host.onAction)
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_TOP_BAR, Modifier.align(Alignment.TopCenter).then(fadesWhileScrubbing)) {
         ViewerChrome(
-            source = config.topBarTitle(selection.post),
+            source = frame.uiState.series.topBarTitle(selection.post),
             indexLabel = if (selection.mediaItems.size > 1) "${selection.mediaIndex + 1} / ${selection.mediaItems.size}" else null,
             onBack = { controls.requestDismiss() },
         ) { ViewerTrailRow(selection.post, frame.posts, trail, config.creatorBrowsingSources, screen.trailForks, controls::markInteraction) }
@@ -130,7 +130,7 @@ private fun ViewerBottomStack(
 ) {
     val selection = frame.selection
     val navigation = frame.navigation
-    val mirrored = config.readingModeOf(navigation.pages.getOrNull(navigation.currentIndex)).reversed
+    val mirrored = config.readingModeOf(navigation.pages.getOrNull(navigation.currentIndex), frame.uiState.series).reversed
     val stripIndex = navigation.originalPosts.indexOfFirst { it.id == frame.posts.getOrNull(postPagerState.currentPage)?.id }
         .takeIf { it >= 0 } ?: navigation.stripAnchorIndex
     ViewerBottomChrome(
@@ -154,7 +154,7 @@ private fun ViewerBottomStack(
             }
         },
     ) {
-        if (config.series is ViewerSeries.Watching) {
+        if (frame.uiState.series is ViewerSeries.Watching) {
             episodeControls()
         } else {
             ViewerPostStrip(navigation.originalPosts, stripIndex, { index ->
@@ -163,7 +163,7 @@ private fun ViewerBottomStack(
                 onLoadMore = loadMoreFromStrip, onInteraction = { controls.markInteraction() },
                 openPages = ViewerStripPages(selection.post.id, selection.overviewItems, selection.mediaIndex, mirrored) {
                     controls.jumpToMedia(selection.post.id, it)
-                }, chapters = config.series is ViewerSeries.Reading)
+                }, chapters = frame.uiState.series is ViewerSeries.Reading)
         }
     }
 }
@@ -177,7 +177,7 @@ private fun BoxScope.ViewerFooterButtons(
     frame: ViewerFrame, screen: ViewerScreenState, activity: ViewerHostActivity?, config: ViewerScreenConfig, onAction: (ViewerAction) -> Unit,
 ) {
     val bottomOwned = frame.mediaOverviewVisible || screen.timelineInteractionActive
-    val watching = config.series is ViewerSeries.Watching
+    val watching = frame.uiState.series is ViewerSeries.Watching
     // A running slideshow keeps the image clear, including of the rotate hint.
     val rotationSuppressed = bottomOwned || frame.uiState.controls.slideshow
     val bottomRow = if (watching) VIEWER_EPISODE_CONTROLS_HEIGHT else VIEWER_POST_STRIP_HEIGHT

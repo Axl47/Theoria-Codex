@@ -76,7 +76,7 @@ fun ViewerScreen(
         viewerPostNavigation(uiState, pendingPostId.value)
     }
     val posts = remember(navigation.pages) { navigation.pages.map { it.post } }
-    val videoPositions = rememberViewerVideoPositions(uiState.session, config.series)
+    val videoPositions = rememberViewerVideoPositions(uiState.session, uiState.series)
     if (posts.isEmpty()) {
         ViewerNoPosts()
         return
@@ -158,7 +158,7 @@ private fun ViewerLoadedScreen(
         LocalViewerAccent provides viewerAccent,
         LocalViewerHoldScrub provides holdScrub,
         // Only episodes offer their tracks; no other video's player is followed for them.
-        LocalViewerActiveTracks provides screen.activeTracks.takeIf { config.series is ViewerSeries.Watching },
+        LocalViewerActiveTracks provides screen.activeTracks.takeIf { uiState.series is ViewerSeries.Watching },
     ) {
         ViewerBackdrop(returnProgress, dismissDrag) {
             if (frame.mediaOverviewVisible && selection.overviewAvailable) {
@@ -176,7 +176,7 @@ private fun ViewerLoadedScreen(
         }
     }
     if (uiState.controls.panel == ViewerPanel.INFO && !inPictureInPicture) {
-        ViewerInfoSheet(selection, controls, host, config, saveContext.query, contextActions, comments)
+        ViewerInfoSheet(selection, controls, host, config, uiState.series, saveContext.query, contextActions, comments)
     }
 }
 
@@ -236,7 +236,7 @@ private fun ViewerOverview(
     val selection = frame.selection
     val page = frame.navigation.pages[frame.navigation.currentIndex]
     val readingModes = ViewerReadingModeChoice(
-        selected = config.readingModeOf(page),
+        selected = config.readingModeOf(page, frame.uiState.series),
         available = GalleryReadingMode.entries.filter { it != GalleryReadingMode.VERTICAL || page.verticalReadingAvailable() },
         onSelect = { mode ->
             host.onGalleryReadingModeSelected(selection.post.id, mode)

@@ -32,6 +32,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Locale
 
 /** The rules a series being watched follows: one episode at a time, played through, its progress reported. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -117,6 +118,30 @@ class ViewerWatchingTest {
     }
 
     @Test
+    fun `the next episode is looked up once the current one passes its watched point`() = runTest {
+        val started = mutableListOf<PostId>()
+        val owner = testViewerOwner(SavedStateHandle(), postResolver = ViewerPostResolver { _, id ->
+            started += id
+            null
+        }, scopeOverride = this)
+        owner.replaceSession(session("watching", episodes).copy(series = ViewerSeries.Watching()))
+        advanceUntilIdle()
+        val report: suspend (Post, ViewerPlaybackProgress, ViewerSession) -> Unit = { _, _, _ -> }
+        owner.recordPlaybackProgress(episodes[0], ViewerPlaybackProgress(1_200_000, 1_440_000), report)
+        advanceUntilIdle()
+        assertEquals("Before 85% only the episode on screen resolves", listOf(episodes[0].id), started)
+
+        owner.recordPlaybackProgress(episodes[0], ViewerPlaybackProgress(1_224_000, 1_440_000), report)
+        advanceUntilIdle()
+        assertEquals(listOf(episodes[0].id, episodes[1].id), started)
+        // The one after it stays refused, even as a drag's target.
+        owner.onAction(ViewerAction.RequestPageResolution(episodes[2].id))
+        advanceUntilIdle()
+        assertEquals(listOf(episodes[0].id, episodes[1].id), started)
+        owner.clearSession()
+    }
+
+    @Test
     fun `a chapter's lookup keeps a post's limit`() = runTest {
         val owner = testViewerOwner(SavedStateHandle(), postResolver = ViewerPostResolver { _, id ->
             delay(35_000)
@@ -136,13 +161,31 @@ class ViewerWatchingTest {
             recorded += session.sessionId to progress.positionMs
         }
         val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this)
+        // The screen's host, wired as the route wires it; each page's player reports through episodeProgress.
+        val host = ViewerScreenHost(onAction = owner::onAction, onPlaybackProgress = { post, progress -> owner.recordPlaybackProgress(post, progress, record) })
         owner.replaceSession(session("watching", listOf(episode)).copy(series = ViewerSeries.Watching()))
-        owner.recordPlaybackProgress(episode, ViewerPlaybackProgress(4_000, 1_440_000), record)
-        // Closing retains the paused pages; their players report as they pause and let go.
+        requireNotNull(host.episodeProgress(owner.state.value.series, episode))(ViewerPlaybackProgress(4_000, 1_440_000))
+        // Closing retains the paused pages, and the series with them; their players report as they pause and let go.
         owner.clearSession(retainPresentation = true)
-        owner.recordPlaybackProgress(episode, ViewerPlaybackProgress(6_000, 1_440_000), record)
+        requireNotNull(host.episodeProgress(owner.state.value.series, episode))(ViewerPlaybackProgress(6_000, 1_440_000))
         advanceUntilIdle()
         assertEquals(listOf("watching" to 4_000L, "watching" to 6_000L), recorded)
+    }
+
+    @Test
+    fun `a watched session's seeds arrive with its first state, before anything can save`() = runTest {
+        val seeds = ViewerSeries.Watching(mapOf(episodes[0].id to 90_000L))
+        val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this)
+        val states = mutableListOf<com.theoriacodex.app.viewer.state.ViewerUiState>()
+        val collecting = launch(kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)) { owner.state.collect { states += it } }
+        owner.replaceSession(session("watching", episodes).copy(series = seeds))
+        collecting.cancel()
+        assertTrue(states.filter { it.session != null }.all { it.series == seeds })
+        // So the screen's positions, made for the session's first state, start from its seeds.
+        val positions = ViewerVideoPositionStore().forSession(states.last().session, states.last().series as? ViewerSeries.Watching)
+        positions.retainAround(episodes.map(Post::id), 0)
+        assertEquals(90_000L, positions.position(com.theoriacodex.app.viewer.state.ViewerMediaKey(episodes[0].id, 0)))
+        owner.clearSession()
     }
 
     @Test
@@ -161,7 +204,7 @@ class ViewerWatchingTest {
         assertNull(state.controls.panel)
         assertEquals("720p · B", state.controls.episode.streamLabel)
         state = reduceViewerState(state, ViewerAction.ChooseSubtitle(ViewerSubtitleChoice.Track("English"))).state
-        assertEquals(ViewerEpisodeChoice("720p · B", ViewerSubtitleChoice.Track("English")), state.controls.episode)
+        assertEquals(ViewerEpisodeChoice("720p · B", ViewerSubtitleChoice.Track("English"), episodeStream = state.controls.episode.episodeStream), state.controls.episode)
     }
 
     @Test
@@ -183,6 +226,22 @@ class ViewerWatchingTest {
         // Off turns off a track Media3 picked by itself.
         val defaulted = next.copy(subtitles = next.subtitles.map { it.copy(selected = it.label == "Español") })
         assertEquals(listOf(ViewerTrackChange.Subtitle(null)), ViewerEpisodeChoice(subtitle = ViewerSubtitleChoice.Off).trackChanges(defaulted))
+    }
+
+    @Test
+    fun `with no choice, a side-loaded subtitle in the device's language shows, else the first, unless the stream shows one`() {
+        fun subtitles(vararg labels: String) = PlaybackTracks(subtitles = labels.mapIndexed { index, label -> PlaybackTrack("$index:/0", label, selected = false, sideLoaded = true) })
+        val none = ViewerEpisodeChoice()
+        assertEquals(listOf(ViewerTrackChange.Subtitle("1:/0")), none.trackChanges(subtitles("Signs", "English [CC]"), Locale.US))
+        assertEquals(listOf(ViewerTrackChange.Subtitle("2:/0")), none.trackChanges(subtitles("English", "Signs", "ESPAÑOL"), Locale.forLanguageTag("es-PR")))
+        assertEquals(listOf(ViewerTrackChange.Subtitle("1:/0")), none.trackChanges(subtitles("Signs", "pt-BR", "Portugal"), Locale.forLanguageTag("pt")))
+        // A word that only contains the name is not it.
+        assertEquals(listOf(ViewerTrackChange.Subtitle("0:/0")), none.trackChanges(subtitles("Signs", "Englishman"), Locale.US))
+        // The stream's own subtitle, shown by Media3, stays; only Off turns a side-loaded one off.
+        val embedded = PlaybackTrack("0:subtitle:0/0", "English", selected = true)
+        val withEmbedded = subtitles("English").let { it.copy(subtitles = listOf(embedded) + it.subtitles) }
+        assertEquals(emptyList<ViewerTrackChange>(), none.trackChanges(withEmbedded, Locale.US))
+        assertEquals(emptyList<ViewerTrackChange>(), ViewerEpisodeChoice(subtitle = ViewerSubtitleChoice.Off).trackChanges(subtitles("English"), Locale.US))
     }
 
     @Test
@@ -238,5 +297,30 @@ class ViewerWatchingTest {
         advanceTimeBy(60_000)
         assertEquals(listOf(10_000L, 20_000L, 25_000L), reports)
         job.cancel()
+    }
+
+    @Test
+    fun `a fallback stream plays for its episode only, a hand-picked one is remembered, and Retry leaves the episode's ask to its player`() {
+        val identity = ViewerSessionIdentity("watching")
+        val streams = listOf("A", "B").map { com.theoriacodex.domain.model.MediaStream("https://video.test/$it.m3u8", it) }
+        val episodes = (1..2).map { post("episode-$it", media = listOf(com.theoriacodex.domain.model.ImageRef(null, null, "video/mp4", streams = streams))) }
+        var state = createViewerUiState(identity, episodes, series = ViewerSeries.Watching())
+        val first = requireNotNull(state.currentMedia).key
+        val second = com.theoriacodex.app.viewer.state.ViewerMediaKey(episodes[1].id, 0)
+
+        state = reduceViewerState(state, ViewerAction.FallBackToStream(first, "B")).state
+        assertEquals("B", state.controls.episode.streamLabelFor(first))
+        assertNull(state.controls.episode.streamLabelFor(second))
+        assertFalse(state.controls.episode.pickedByHand(first))
+
+        state = reduceViewerState(state, ViewerAction.ChooseStream("A")).state
+        assertEquals("A", state.controls.episode.streamLabelFor(first))
+        assertTrue(state.controls.episode.pickedByHand(first))
+        assertEquals("A", state.controls.episode.streamLabelFor(second))
+
+        state = reduceViewerState(state, ViewerAction.MediaFailed(identity, ViewerMediaError.Recoverable(first, "Could not play video"))).state
+        val retried = reduceViewerState(state, ViewerAction.RetryMedia)
+        assertEquals(1L, retried.state.currentMedia?.loadGeneration)
+        assertEquals(emptyList<Any>(), retried.effects)
     }
 }

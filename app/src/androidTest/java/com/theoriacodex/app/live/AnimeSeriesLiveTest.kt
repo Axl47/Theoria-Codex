@@ -198,13 +198,10 @@ class AnimeSeriesLiveTest {
         error("$what refused $PRESS_TRIES presses")
     }
 
-    /**
-     * The stream the Viewer's pill names, which it carries as its state. Compose puts the pill's description on a child
-     * of the node that takes the click and holds that state.
-     */
+    /** The stream the Viewer's pill names: the text of its one node, described [STREAM]. */
     private fun streamOnScreen(): String {
         val node = live.viewerControl("the stream pill", By.desc(STREAM)).accessibilityNodeInfo
-        return checkNotNull((node.stateDescription ?: node.parent?.stateDescription)?.toString()) { "The stream pill names no stream" }
+        return checkNotNull(node.text?.toString()) { "The stream pill names no stream" }
     }
 
     /**

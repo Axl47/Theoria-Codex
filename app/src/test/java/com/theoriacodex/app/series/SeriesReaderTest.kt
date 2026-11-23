@@ -182,9 +182,11 @@ class SeriesReaderTest {
         val opened = checkNotNull(reader.resolve(session.context.queryHash, session.posts.single().id))
         suspend fun startsAt() = (reader.session(anime, "/e1")?.series as ViewerSeries.Watching).startPositionsMs.values.single()
 
-        // Its one media item showing is not page 1 of 1, which would mark it watched the moment it opens.
+        // Its one media item showing is not page 1 of 1, which would mark it watched the moment it opens: it makes the
+        // episode the one Continue opens, with no length, so it keeps where it was left.
         reader.recordPageProgress(session, opened, 1)
-        assertEquals(emptyList<String>(), repository.progress)
+        assertEquals(listOf("/e1 0/null"), repository.progress)
+        assertFalse(repository.entries(anime).single().read)
 
         reader.recordPlaybackProgress(session, opened, ViewerPlaybackProgress(positionMs = 61_000, durationMs = 1_440_000))
         assertEquals(61_000L, startsAt())

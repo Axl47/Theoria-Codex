@@ -144,16 +144,17 @@ internal fun ViewerInfoSheet(
     controls: ViewerControls,
     host: ViewerScreenHost,
     config: ViewerScreenConfig,
+    series: ViewerSeries?,
     saveToCodexQuery: Query?,
     contextActions: ViewerContextActions,
     comments: ViewerComments,
 ) {
     val post = selection.post
-    if (config.series != null) {
+    if (series != null) {
         AdaptiveViewerInfo(onDismiss = { controls.setInfoSheetVisible(false) }) {
             ViewerChapterActions(post) {
                 controls.jumpToMedia(post.id, 0)
-                if (config.series is ViewerSeries.Watching) {
+                if (series is ViewerSeries.Watching) {
                     // An episode is one video: starting over plays it from its start, which the sheet would hide.
                     host.onAction(ViewerAction.RestartPlayback)
                     controls.setInfoSheetVisible(false)

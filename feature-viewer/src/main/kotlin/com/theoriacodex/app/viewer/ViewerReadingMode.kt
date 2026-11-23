@@ -10,7 +10,7 @@ import com.theoriacodex.domain.model.GalleryReadingMode
  * chapter stays the one the reader has been making. A saved Vertical gives way while the gallery holds pages that are
  * not still images.
  */
-internal fun ViewerScreenConfig.readingModeOf(page: ViewerPageState?): GalleryReadingMode {
+internal fun ViewerScreenConfig.readingModeOf(page: ViewerPageState?, series: ViewerSeries?): GalleryReadingMode {
     if (page == null || (page.swipeMediaCount() <= 1 && series !is ViewerSeries.Reading)) return GalleryReadingMode.LEFT_TO_RIGHT
     val chosen = galleryReadingModes[page.post.id]?.takeIf { it != GalleryReadingMode.VERTICAL || page.verticalReadingAvailable() }
     return chosen ?: if (invertMultiImageScrollDirection) GalleryReadingMode.RIGHT_TO_LEFT else GalleryReadingMode.LEFT_TO_RIGHT
@@ -21,7 +21,7 @@ internal fun ViewerScreenConfig.readingModeOf(page: ViewerPageState?): GalleryRe
  * on its last page. That chapter is finished, and a finished chapter starts over, unless the reader is going [back]
  * to it from the chapter after: paging back continues from the end of the one before.
  */
-internal fun ViewerScreenConfig.entryMediaIndex(page: ViewerPageState, back: Boolean = false): Int {
+internal fun ViewerScreenConfig.entryMediaIndex(page: ViewerPageState, series: ViewerSeries?, back: Boolean = false): Int {
     val finished = series is ViewerSeries.Reading && page.pendingMediaIndex == null && page.selectedMediaIndex > 0 && page.selectedMediaIndex >= page.media.lastIndex
     return if (finished && !back) 0 else page.targetMediaIndex
 }

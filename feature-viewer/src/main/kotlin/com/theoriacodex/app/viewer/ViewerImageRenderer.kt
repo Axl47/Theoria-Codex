@@ -14,8 +14,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -81,9 +79,7 @@ internal fun ViewerImageRenderer(
     }
     ViewerImageUpgrade(candidates, state, post.id.source, imageSession)
     val onReady = { state.ready(location, imageSession, events) }
-    // The ask belongs to this image: leaving the page cancels it. A recovered post replaces the image, so its answer is unused.
-    val scope = rememberCoroutineScope()
-    val onRecovery = onRequestMediaRecovery?.let { recover -> { failedPost: Post, failed: ImageRef -> scope.launch { recover(failedPost, failed) }; Unit } }
+    val onRecovery = onRequestMediaRecovery?.let { recovery -> recovery::ask }
     val onError = { error: Throwable -> state.failed(error, post, key, candidate, candidates.size, imageSession, onRecovery, events) }
     Box(modifier, contentAlignment = Alignment.Center) {
         if (!state.visible) ViewerLoadingPreview(post, media, mediaModifier)

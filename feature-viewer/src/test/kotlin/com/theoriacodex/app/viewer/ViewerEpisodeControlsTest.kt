@@ -3,6 +3,7 @@ package com.theoriacodex.app.viewer
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -46,6 +47,7 @@ class ViewerEpisodeControlsTest {
         setControls(state)
         // A remembered label the episode no longer offers falls back to its source's first stream.
         compose.onNodeWithTag(VIEWER_EPISODE_STREAM_TAG).assert(hasText("1080p · A")).assert(hasContentDescription("Stream"))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
         compose.onNodeWithTag(VIEWER_EPISODE_STREAM_TAG).performClick()
         waitUntil { state.value.controls.panel == ViewerPanel.EPISODE_STREAM }
         compose.onNodeWithTag("$VIEWER_EPISODE_STREAM_TAG:720p · B").performClick()
@@ -56,16 +58,15 @@ class ViewerEpisodeControlsTest {
 
     @Test fun `subtitles turn off and on, by the label shown`() {
         val state = episodeState()
-        val tracks = PlaybackTracks(subtitles = listOf(PlaybackTrack("0:1/0", "English", selected = true), PlaybackTrack("0:2/0", "", selected = false)))
+        val tracks = PlaybackTracks(subtitles = listOf(PlaybackTrack("0:1/0", "English", selected = true), PlaybackTrack("0:2/0", "Signs", selected = false)))
         setControls(state, tracks)
         compose.onNodeWithTag(VIEWER_EPISODE_SUBTITLES_TAG).assert(stateDescription("English"))
         compose.onNodeWithContentDescription("Subtitles").performClick()
         compose.onNodeWithTag("$VIEWER_EPISODE_SUBTITLES_TAG:Off").performClick()
         waitUntil { state.value.controls.episode.subtitle == ViewerSubtitleChoice.Off }
         compose.onNodeWithContentDescription("Subtitles").performClick()
-        // A track named by neither label nor language is offered by its place.
-        compose.onNodeWithTag("$VIEWER_EPISODE_SUBTITLES_TAG:Track 2").performClick()
-        waitUntil { state.value.controls.episode.subtitle == ViewerSubtitleChoice.Track("Track 2") }
+        compose.onNodeWithTag("$VIEWER_EPISODE_SUBTITLES_TAG:Signs").performClick()
+        waitUntil { state.value.controls.episode.subtitle == ViewerSubtitleChoice.Track("Signs") }
     }
 
     @Test fun `audio is offered only with more than one track`() {
@@ -142,13 +143,12 @@ class ViewerEpisodeControlsTest {
     /** Two unresolved episodes of a watched series, on the full screen. */
     private fun watchingScreen(): androidx.compose.runtime.MutableState<ViewerUiState> {
         val episodes = (1..2).map { post("episode-$it", SourceKey.HITOMI, emptyList(), title = "Episode $it") }
-        val state = mutableStateOf(createViewerUiState(identity, episodes, requiresResolution = { true }))
+        val state = mutableStateOf(createViewerUiState(identity, episodes, requiresResolution = { true }, series = ViewerSeries.Watching()))
         compose.setContent {
             MaterialTheme {
                 ViewerScreen(
                     uiState = state.value,
                     host = ViewerScreenHost(onAction = { state.value = reduceViewerState(state.value, it).state }),
-                    config = ViewerScreenConfig(series = ViewerSeries.Watching()),
                 )
             }
         }

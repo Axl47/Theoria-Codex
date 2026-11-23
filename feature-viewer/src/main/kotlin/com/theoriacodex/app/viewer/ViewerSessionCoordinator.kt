@@ -69,6 +69,7 @@ internal fun requiresPrelaunchViewerPostResolution(post: Post): Boolean {
     return !hasUsableViewerMedia(post)
 }
 
+/** Whether [post] has media the Viewer can try to show: a file, an address, or an episode's streams (which have no address). */
 internal fun hasUsableViewerMedia(post: Post): Boolean {
     return sequence {
         yieldAll(post.media)
@@ -78,7 +79,8 @@ internal fun hasUsableViewerMedia(post: Post): Boolean {
         !media.localPath.isNullOrBlank() ||
             !media.url.isNullOrBlank() ||
             media.progressiveUrls.any { location -> location.isNotBlank() } ||
-            media.fallbackUrls.any { location -> location.isNotBlank() }
+            media.fallbackUrls.any { location -> location.isNotBlank() } ||
+            media.streams.any { stream -> stream.url.isNotBlank() }
     }
 }
 

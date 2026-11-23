@@ -1,6 +1,5 @@
 package com.theoriacodex.app.ui
 
-import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.series.SeriesId
 import android.net.Uri
 import androidx.compose.animation.EnterTransition
@@ -123,8 +122,7 @@ internal fun RecordCodexEntryEffect(entry: NavBackStackEntry, codexId: String, s
 /**
  * What time on a screen counts as. Library keeps the meaning of the tabs it replaced: History browses
  * like Recents did, Codices and Saved (once a Codex screen) count as Codex. Settings counts as nothing. In the Viewer,
- * [viewerSession] tells reading a series' chapters or watching its episodes from watching posts; a series session
- * without a kind counts as nothing rather than as watching posts.
+ * [viewerSession]'s series tells reading a series' chapters or watching its episodes from watching posts.
  */
 internal fun statisticsUsageCategory(
     currentRoute: String?,
@@ -136,7 +134,6 @@ internal fun statisticsUsageCategory(
         is ViewerSeries.Reading -> StatisticsUsageCategory.READING
         is ViewerSeries.Watching -> StatisticsUsageCategory.ANIME
         null -> StatisticsUsageCategory.WATCHING
-            .takeUnless { viewerSession?.context?.streamSource == ViewerStreamSource.SERIES }
     }
     AppRoute.CreatorProfile -> StatisticsUsageCategory.BROWSING
     AppRoute.CodexDetail -> StatisticsUsageCategory.CODEX
