@@ -22,6 +22,8 @@ data class ExtensionPackage(
     /** Its code: the installed package's own APK, or a file in the app's extensions folder. */
     val apk: File,
     val installed: Boolean,
+    /** The interface it is built against, which decides how its code is loaded and presented. */
+    val kind: ExtensionKind,
     val sourceClasses: List<String>,
     /**
      * What the user's choice to turn it on is kept under: the package name, so an update is the same extension and
@@ -42,11 +44,11 @@ data class ExtensionPackage(
 )
 
 /**
- * Finds the extensions on the device: packages Mihon installed, which declare the `tachiyomi.extension` feature, and
- * APK files in [folder]. Seeing other apps' packages needs the `QUERY_ALL_PACKAGES` permission; without it only the
- * folder is found.
+ * Finds the extensions on the device: installed packages and APK files in [folder] that declare the feature of one of
+ * [kinds]; any other package is no extension. Seeing other apps' packages needs the `QUERY_ALL_PACKAGES` permission;
+ * without it only the folder is found.
  */
-class ExtensionPackages(private val context: Context, private val folder: () -> File? = { null }) {
+class ExtensionPackages(private val context: Context, private val kinds: List<ExtensionKind>, private val folder: () -> File? = { null }) {
     /** Installed packages first, then the folder's files by name. */
     fun list(): List<ExtensionPackage> {
         val installed = context.packageManager.getInstalledPackages(PackageManager.PackageInfoFlags.of(FLAGS)).mapNotNull { info ->
@@ -79,29 +81,27 @@ class ExtensionPackages(private val context: Context, private val folder: () -> 
     }
 
     private fun extension(info: PackageInfo, apk: File, installed: Boolean): ExtensionPackage? {
-        if (!isExtension(info)) return null
-        val metaData = info.applicationInfo?.metaData
-        val libVersion = metaData?.getFloat(METADATA_LIB_VERSION)
-        val classes = metaData?.getString(METADATA_SOURCE_CLASS).orEmpty().split(';').map(String::trim).filter(String::isNotEmpty)
+        val kind = kindOf(info) ?: return null
+        val classes = info.applicationInfo?.metaData?.getString(kind.sourceClassesKey).orEmpty().split(';').map(String::trim).filter(String::isNotEmpty)
             .map { name -> if (name.startsWith('.')) info.packageName + name else name }
         return ExtensionPackage(
             packageName = info.packageName,
-            name = info.applicationInfo?.loadLabel(context.packageManager)?.toString()?.removePrefix(LABEL_PREFIX)?.ifBlank { null } ?: info.packageName,
+            name = info.applicationInfo?.loadLabel(context.packageManager)?.toString()?.removePrefix(kind.labelPrefix)?.ifBlank { null } ?: info.packageName,
             versionName = info.versionName.orEmpty(),
             versionCode = info.longVersionCode,
             signer = signer(info),
             apk = apk,
             installed = installed,
+            kind = kind,
             sourceClasses = classes,
-            unsupported = when {
-                libVersion != SUPPORTED_LIB_VERSION -> "Needs extension API $libVersion"
-                classes.isEmpty() -> "Names no source"
-                else -> null
-            },
+            unsupported = kind.unsupported(info) ?: "Names no source".takeIf { classes.isEmpty() },
         )
     }
 
-    private fun isExtension(info: PackageInfo): Boolean = info.reqFeatures.orEmpty().any { it.name == EXTENSION_FEATURE }
+    private fun kindOf(info: PackageInfo): ExtensionKind? {
+        val features = info.reqFeatures.orEmpty().mapTo(HashSet()) { it.name }
+        return kinds.firstOrNull { it.feature in features }
+    }
 
     /** Several signers at once would need every one of them trusted; no extension is built that way, so it is refused. */
     private fun signer(info: PackageInfo): String? {
@@ -112,12 +112,5 @@ class ExtensionPackages(private val context: Context, private val folder: () -> 
 
     private companion object {
         const val FLAGS = (PackageManager.GET_CONFIGURATIONS or PackageManager.GET_META_DATA or PackageManager.GET_SIGNING_CERTIFICATES).toLong()
-        const val EXTENSION_FEATURE = "tachiyomi.extension"
-        const val METADATA_SOURCE_CLASS = "tachiyomi.extension.class"
-        const val METADATA_LIB_VERSION = "tachiyomix.extensionLib"
-        const val SUPPORTED_LIB_VERSION = 1.6f
-
-        /** Extensions label themselves "Tachiyomi: <name>". */
-        const val LABEL_PREFIX = "Tachiyomi: "
     }
 }

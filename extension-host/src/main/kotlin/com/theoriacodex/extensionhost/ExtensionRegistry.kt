@@ -11,9 +11,6 @@ import com.theoriacodex.domain.series.SeriesSource
 import com.theoriacodex.domain.series.defaultLanguages
 import com.theoriacodex.domain.series.trusts
 import com.theoriacodex.sources.http.HostOutageTracker
-import eu.kanade.tachiyomi.source.ConfigurableSource
-import eu.kanade.tachiyomi.source.Source
-import eu.kanade.tachiyomi.source.online.HttpSource
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -41,25 +38,23 @@ data class ExtensionSite(val name: String, val hosts: Set<String>)
  *
  * @param packages the extensions on the device, read without running them
  * @param stamp a cheap value that differs whenever [packages] would answer differently
- * @param load creates an extension's sources, running its code
- * @param settings the settings of a source that has some
+ * @param load creates an extension's sources, running its code, and gives each of them what the host provides
+ * @param settings reads and changes a source's settings, running its code
  * @param deviceLanguages the user's languages as language tags, most preferred first
  */
 class ExtensionRegistry(
     private val packages: () -> List<ExtensionPackage>,
     private val stamp: () -> Any = packages,
-    private val load: (ExtensionPackage) -> List<Source>,
+    private val load: (ExtensionPackage, HostServices) -> List<HostedSource>,
     private val choices: ExtensionChoiceStore,
     private val images: ExtensionImages,
-    private val settings: (ConfigurableSource) -> SourceSettings,
+    private val settings: (SettingsHook) -> SourceSettings,
     private val deviceLanguages: () -> List<String>,
     private val limitMs: Long = LIMIT_MS,
     private val log: (String) -> Unit = {},
 ) : SeriesExtensions {
-    private class LoadedSource(val source: Source, val series: MihonSeriesSource, val name: String, val language: String)
-
     /** What loading one extension gave: its sources, or why there are none. */
-    private class Loaded(val sources: List<LoadedSource>, val problem: String? = null)
+    private class Loaded(val sources: List<HostedSource>, val problem: String? = null)
 
     private val mutex = Mutex()
 
@@ -75,25 +70,30 @@ class ExtensionRegistry(
 
     /** Per extension id, its sources that are on, as of the last listing. Written under [mutex]; [sites] reads it without. */
     @Volatile
-    private var active: Map<String, List<LoadedSource>> = emptyMap()
+    private var active: Map<String, List<HostedSource>> = emptyMap()
 
     private val challengedHosts = MutableStateFlow<Map<SourceKey, Set<String>>>(emptyMap())
+
+    /** What every source is given: a host whose challenge stopped one of its calls joins its [sites] entry. */
+    private val services = HostServices(images, log) { source, host ->
+        challengedHosts.update { hosts -> hosts + (source to hosts[source].orEmpty() + host) }
+    }
 
     /** Changes when a source is found to call another host, which [sites] then includes; held for this process. */
     val siteChanges: StateFlow<*> = challengedHosts
 
     /**
-     * The sources that are on, with their names and the hosts they call (an HTTP source's base address, and any host
+     * The sources that are on, with their names and the hosts they call (each one's site, and any host
      * whose challenge stopped one of its calls), so a challenged host can be traced to the sources it stops. Loads
      * nothing: a source that never loaded made no request.
      */
     fun sites(): Map<SourceKey, ExtensionSite> {
         val challenged = challengedHosts.value
-        return active.values.flatten().mapNotNull { loaded ->
+        return active.values.flatten().mapNotNull { source ->
             // An extension's address can depend on its settings, and its code can fail.
-            val base = (loaded.source as? HttpSource)?.let { runCatching { it.baseUrl }.getOrNull() }?.let(HostOutageTracker::hostKey)
-            val hosts = setOfNotNull(base) + challenged[loaded.series.key].orEmpty()
-            if (hosts.isEmpty()) null else loaded.series.key to ExtensionSite(loaded.name, hosts)
+            val site = runCatching { source.siteAddress() }.getOrNull()?.let(HostOutageTracker::hostKey)
+            val hosts = setOfNotNull(site) + challenged[source.key].orEmpty()
+            if (hosts.isEmpty()) null else source.key to ExtensionSite(source.name, hosts)
         }.toMap()
     }
 
@@ -164,9 +164,9 @@ class ExtensionRegistry(
     override suspend fun change(id: String, sourceId: String, setting: ExtensionSetting): List<ExtensionSourceSettings> = locked {
         // Looked up among the sources that are on now: an edit queued before its extension was turned off does nothing.
         val sources = active[id].orEmpty()
-        val source = sources.firstOrNull { it.series.key.id == sourceId }
-        val configurable = source?.source as? ConfigurableSource
-        if (configurable != null) limited("${source.name} settings") { settings(configurable).change(setting) }
+        val source = sources.firstOrNull { it.key.id == sourceId }
+        val hook = source?.settings
+        if (hook != null) limited("${source.name} settings") { settings(hook).change(setting) }
         sources.mapNotNull(::settingsOf)
     }
 
@@ -195,7 +195,7 @@ class ExtensionRegistry(
         val choices = choices.choices()
         val device = deviceLanguages()
         val taken = HashSet<SourceKey>()
-        val on = LinkedHashMap<String, List<LoadedSource>>()
+        val on = LinkedHashMap<String, List<HostedSource>>()
         // What is no longer on the device as it was loaded is never offered again.
         loaded.keys.retainAll(onDevice.toSet())
         val listed = onDevice.map { extension ->
@@ -214,31 +214,20 @@ class ExtensionRegistry(
             val languages = code.sources.map { it.language }.distinct()
             val chosen = choices.languages[extension.packageName] ?: defaultLanguages(languages, device)
             // The same extension can be on the device twice, installed and as a file; its sources are offered once.
-            on[listing.id] = code.sources.filter { it.language in chosen && taken.add(it.series.key) }
+            on[listing.id] = code.sources.filter { it.language in chosen && taken.add(it.key) }
             listing.copy(problem = code.problem, languages = languages.map { ExtensionLanguage(it, it in chosen) })
         }
         active = on
         val sources = on.values.flatten()
         // One complete table: only sources of an extension that finished loading, in a language that is on, fetch images.
-        images.publish(sources.map { it.source })
+        images.publish(sources)
         val series = sources.map { it.series }
         // The same list object while nothing changed, so a reader can tell.
         offer = Offer(offer?.sources?.takeIf { it == series } ?: series, found.stamp, onDevice)
         return listed
     }
 
-    /** [source] as a series source, whose challenged hosts join its [sites] entry. */
-    private fun series(source: Source): MihonSeriesSource {
-        val key = MihonSeriesSource.sourceKey(source)
-        return MihonSeriesSource(source, images, log) { host ->
-            challengedHosts.update { hosts -> hosts + (key to hosts[key].orEmpty() + host) }
-        }
-    }
-
-    private fun load(extension: ExtensionPackage): Loaded = limited(extension.name) {
-        // A source's name, language and id are its code too, so they are read here, within the limit.
-        load.invoke(extension).map { source -> LoadedSource(source, series(source), source.name, source.lang) }
-    }.fold(
+    private fun load(extension: ExtensionPackage): Loaded = limited(extension.name) { load.invoke(extension, services) }.fold(
         onSuccess = { sources ->
             log("Loaded ${extension.name} ${extension.versionName}: ${sources.size} sources, signer ${extension.signer}")
             Loaded(sources, NO_SOURCES.takeIf { sources.isEmpty() })
@@ -247,10 +236,10 @@ class ExtensionRegistry(
     )
 
     /** Builds the source's settings screen, which runs its code, within the limit. */
-    private fun settingsOf(source: LoadedSource): ExtensionSourceSettings? {
-        val configurable = source.source as? ConfigurableSource ?: return null
-        val list = limited("${source.name} settings") { settings(configurable).list() }.getOrNull().orEmpty()
-        return list.takeIf { it.isNotEmpty() }?.let { ExtensionSourceSettings(source.series.key.id, source.name, source.language, it) }
+    private fun settingsOf(source: HostedSource): ExtensionSourceSettings? {
+        val hook = source.settings ?: return null
+        val list = limited("${source.name} settings") { settings(hook).list() }.getOrNull().orEmpty()
+        return list.takeIf { it.isNotEmpty() }?.let { ExtensionSourceSettings(source.key.id, source.name, source.language, it) }
     }
 
     /**

@@ -49,9 +49,9 @@ class ExtensionRegistryTest {
     private val images = ExtensionImages()
     private val registry = registry { error("No source here has settings") }
 
-    private fun registry(settings: (ConfigurableSource) -> SourceSettings) = ExtensionRegistry(
+    private fun registry(settings: (SettingsHook) -> SourceSettings) = ExtensionRegistry(
         packages = { onDevice },
-        load = { loads += it.apk.path; sourcesOf(it) },
+        load = { extension, host -> loads += extension.apk.path; hosted(extension, host) },
         choices = store,
         images = images,
         settings = settings,
@@ -62,7 +62,7 @@ class ExtensionRegistryTest {
     /** Whether an image address tagged with [source] is answered by that source instead of passing down the chain. */
     private fun fetchesImages(source: StubHttpSource): Boolean {
         val client = OkHttpClient.Builder().addInterceptor(images).addInterceptor(answering { cannedResponse(it, body = "app") }).build()
-        return client.newCall(Request.Builder().url(images.coverAddress(source, "https://covers.test/1.jpg")).build()).execute().body.string() == "source"
+        return client.newCall(Request.Builder().url(images.tag(MihonSeriesSource.sourceKey(source), "https://covers.test/1.jpg")).build()).execute().body.string() == "source"
     }
 
     @Test
@@ -162,7 +162,7 @@ class ExtensionRegistryTest {
     @Test
     fun `another app updating leaves the revision where it was`() = runBlocking {
         var stamp = 0
-        val registry = ExtensionRegistry({ onDevice }, { stamp }, { sourcesOf(it) }, store, images, { error("no settings") }, { deviceLanguages }, 500)
+        val registry = ExtensionRegistry({ onDevice }, { stamp }, ::hosted, store, images, { error("no settings") }, { deviceLanguages }, 500)
         registry.installed()
         val listed = registry.revision.value
 
@@ -254,24 +254,24 @@ class ExtensionRegistryTest {
 
     @Test
     fun `settings are built only for the extension asked about and an edit for one turned off does nothing`() = runBlocking {
-        val built = mutableListOf<String>()
+        var built = 0
         val configurable = ConfigurableStub {}
         sourcesOf = { listOf(configurable) }
-        val registry = registry { source ->
-            built += source.name
+        val registry = registry {
+            built++
             error("Stops at the build")
         }
 
         registry.setOn("/a.apk", "key-1", true)
         registry.sources()
-        assertTrue(built.isEmpty())
+        assertEquals(0, built)
 
         registry.settings("/a.apk")
-        assertEquals(1, built.size)
+        assertEquals(1, built)
 
         registry.setOn("/a.apk", "key-1", false)
         registry.change("/a.apk", "custom_mihon_7", ExtensionSetting.Toggle("k", "", null, enabled = true, on = true))
-        assertEquals(1, built.size)
+        assertEquals(1, built)
     }
 
     @Test
@@ -285,6 +285,18 @@ class ExtensionRegistryTest {
 
         assertFalse(listed.on)
         assertEquals("Not signed", listed.problem)
+        assertTrue(loads.isEmpty())
+    }
+
+    @Test
+    fun `an extension its kind refuses says why and never loads, even when turned on`() = runBlocking {
+        onDevice = listOf(extension("a", signer = "key-1").copy(unsupported = "Streams by torrent"))
+
+        registry.setOn("/a.apk", "key-1", true)
+        val listed = registry.installed().single()
+
+        assertEquals(listOf(true, "Streams by torrent"), listOf(listed.on, listed.problem))
+        assertTrue(registry.sources().isEmpty())
         assertTrue(loads.isEmpty())
     }
 
@@ -336,8 +348,13 @@ class ExtensionRegistryTest {
         assertNull(registry.installed().last().problem)
     }
 
-    private fun extension(name: String, signer: String?, apk: String = "/$name.apk", installed: Boolean = true) =
-        ExtensionPackage(packageName = name, name = name, versionName = "1.0", versionCode = 1, signer = signer, apk = File(apk), installed = installed, sourceClasses = listOf(".Source"))
+    /** What the loader makes of [extension]: [sourcesOf] its Mihon sources, each adapted as [MihonKind] adapts them. */
+    private fun hosted(extension: ExtensionPackage, host: HostServices): List<HostedSource> = sourcesOf(extension).map { MihonKind.hosted(it, host) }
+
+    private fun extension(name: String, signer: String?, apk: String = "/$name.apk", installed: Boolean = true) = ExtensionPackage(
+        packageName = name, name = name, versionName = "1.0", versionCode = 1, signer = signer, apk = File(apk), installed = installed,
+        kind = MihonKind, sourceClasses = listOf(".Source"),
+    )
 }
 
 /** A source that is only ever named, never asked for anything. */

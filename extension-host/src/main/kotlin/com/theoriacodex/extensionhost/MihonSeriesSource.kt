@@ -36,11 +36,14 @@ import kotlinx.coroutines.withContext
  */
 class MihonSeriesSource(
     private val source: Source,
-    private val images: ExtensionImages,
+    images: ExtensionImages,
     private val log: (String) -> Unit = {},
     private val onChallenged: (host: String) -> Unit = {},
 ) : SeriesSource {
     override val key: SourceKey = sourceKey(source)
+
+    /** Fetches its covers and pages through its own client; only an HTTP source has one. */
+    internal val sourceImages: MihonImages? = (source as? HttpSource)?.let { MihonImages(it, key, images) }
     override val name: String get() = source.name
     override val language: String get() = source.lang
 
@@ -109,7 +112,7 @@ class MihonSeriesSource(
 
     /** Covers stored by earlier builds carry a tag of their own, which is replaced. */
     override fun coverAddress(series: Series): String? = series.coverUrl?.substringBefore(ExtensionImages.FRAGMENT)?.let { address ->
-        if (source is HttpSource) images.coverAddress(source, address) else address
+        sourceImages?.coverAddress(address) ?: address
     }
 
     private fun MangasPage.listed() = SeriesPage(
@@ -154,11 +157,11 @@ class MihonSeriesSource(
     )
 
     /**
-     * Nothing is requested here. Some sources name each image only on a page of its own; [images] asks for that when
+     * Nothing is requested here. Some sources name each image only on a page of its own; [sourceImages] asks for that when
      * the image itself is requested, so a chapter shows at once and a page that fails is the only one that does.
      */
     private fun pageImage(chapter: SChapter, page: Page): ImageRef? {
-        val address = if (source is HttpSource) images.pageAddress(source, chapter, page) else page.imageUrl
+        val address = if (sourceImages != null) sourceImages.pageAddress(chapter, page) else page.imageUrl
         return address?.let { ImageRef(url = it, localPath = null, mime = null) }
     }
 

@@ -10,17 +10,27 @@ import androidx.preference.PreferenceScreen
 import androidx.preference.TwoStatePreference
 import com.theoriacodex.domain.series.ExtensionSetting
 import com.theoriacodex.domain.series.ExtensionSettingOption
-import eu.kanade.tachiyomi.source.ConfigurableSource
+
+/**
+ * A source's settings, whichever interface it implements: the preferences file it reads them from ([preferences]),
+ * and its code that describes them by filling a [PreferenceScreen] of holder objects ([setup]). Both run its code.
+ *
+ * The file is the one the source asks the host for by name, `source_<id>` for every kind there is, so a manga and an
+ * anime source that compute the same id share one file; the host cannot tell which asked, so the name cannot be scoped.
+ */
+class SettingsHook(val preferences: () -> SharedPreferences, val setup: (PreferenceScreen) -> Unit)
 
 /**
  * One source's settings. The source's own code describes them by filling a [PreferenceScreen] of holder objects; this
- * reads the holders, and each setting's current value from [store], the preferences file the source itself reads.
+ * reads the holders, and each setting's current value from the preferences file the source itself reads.
  *
  * The screen is built anew for every call, as Mihon builds it each time its settings page opens, so a summary the
- * source computes from a stored value is current. Both calls run the source's code: call them off the main thread and
- * expect them to throw whatever that code throws.
+ * source computes from a stored value is current. Making one and both calls run the source's code: do it off the main
+ * thread and expect it to throw whatever that code throws.
  */
-class SourceSettings(private val context: Context, private val source: ConfigurableSource, private val store: SharedPreferences) {
+class SourceSettings(private val context: Context, private val hook: SettingsHook) {
+    private val store: SharedPreferences = hook.preferences()
+
     /** The settings the source shows that have a key to be stored under. */
     fun list(): List<ExtensionSetting> = screen().mapNotNull { it.toSetting() }
 
@@ -46,7 +56,7 @@ class SourceSettings(private val context: Context, private val source: Configura
     /** Each preference reads [store] from the moment the source adds it, and stores its default there when nothing is. */
     private fun screen(): List<Preference> {
         val screen = PreferenceScreen(context, store)
-        source.setupPreferenceScreen(screen)
+        hook.setup(screen)
         return screen.preferences.filter { it.isVisible && !it.key.isNullOrEmpty() }
     }
 

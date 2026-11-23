@@ -165,5 +165,5 @@ class SourceSettingsTest {
         assertNull(store.all["a"])
     }
 
-    private fun settings(setup: (PreferenceScreen) -> Unit) = SourceSettings(context, ConfigurableStub(setup), store)
+    private fun settings(setup: (PreferenceScreen) -> Unit) = SourceSettings(context, SettingsHook({ store }, setup))
 }

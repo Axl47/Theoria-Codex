@@ -19,10 +19,10 @@ import com.theoriacodex.extensionhost.ExtensionPackages
 import com.theoriacodex.extensionhost.ExtensionRegistry
 import com.theoriacodex.extensionhost.ExtensionSite
 import com.theoriacodex.extensionhost.ExtensionHost
+import com.theoriacodex.extensionhost.MihonKind
 import com.theoriacodex.extensionhost.SourceSettings
 import com.theoriacodex.sources.http.ChallengeBrowsers
 import com.theoriacodex.sources.http.HostOutageTracker
-import eu.kanade.tachiyomi.source.sourcePreferences
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -77,7 +77,7 @@ internal class ExtensionSourceHost : ExtensionSites {
     fun attach(application: Application, browsers: ChallengeBrowsers, outages: () -> HostOutageTracker) {
         // Release builds run installed packages only; the folder is how tests hand a debug build an APK.
         images = ExtensionImages(lazy { ExtensionHost.imageKey(application) }) { runBlocking { registry.sources() } }
-        val packages = ExtensionPackages(application) { if (BuildConfig.DEBUG) application.getExternalFilesDir(DIRECTORY) else null }
+        val packages = ExtensionPackages(application, listOf(MihonKind)) { if (BuildConfig.DEBUG) application.getExternalFilesDir(DIRECTORY) else null }
         val loader = ExtensionLoader(application, packages)
         // What extensions ask their host for is set up when the first one loads, not at startup.
         val hostInstalled = lazy {
@@ -86,9 +86,9 @@ internal class ExtensionSourceHost : ExtensionSites {
         registry = ExtensionRegistry(
             packages = packages::list,
             stamp = packages::stamp,
-            load = { extension ->
+            load = { extension, services ->
                 hostInstalled.value
-                loader.load(extension)
+                loader.load(extension, services)
             },
             choices = object : ExtensionChoiceStore {
                 override suspend fun choices(): ExtensionChoices = choices.await().choices()
@@ -96,7 +96,7 @@ internal class ExtensionSourceHost : ExtensionSites {
                 override suspend fun update(transform: (ExtensionChoices) -> ExtensionChoices) = choices.await().update(transform)
             },
             images = images,
-            settings = { source -> SourceSettings(application, source, source.sourcePreferences()) },
+            settings = { hook -> SourceSettings(application, hook) },
             deviceLanguages = { application.resources.configuration.locales.toLanguageTags().split(',') },
             log = { Log.i(TAG, it) },
         )

@@ -7,6 +7,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesSource
 import com.theoriacodex.sources.http.BrowserCookieStore
 import com.theoriacodex.sources.http.ChallengeBrowser
 import com.theoriacodex.sources.http.ChallengeBrowsers
@@ -44,15 +45,17 @@ class ExtensionHarnessTest {
         val context = instrumentation.targetContext
         ExtensionHost.install(context.applicationContext as Application, versionName = "harness", versionCode = 1, cookies = NoCookies, browsers = ChallengeBrowsers(NoCookies, NoBrowser), outages = HostOutageTracker())
 
-        val packages = ExtensionPackages(context)
+        val packages = ExtensionPackages(context, listOf(MihonKind))
         val extension = checkNotNull(packages.read(File(context.getExternalFilesDir(null), apkName!!))) { "$apkName is not an extension" }
-        val sources = timed("load") { ExtensionLoader(context, packages).load(extension) }
-        val source = sources.firstOrNull { it.lang == "en" } ?: sources.first()
+        val images = ExtensionImages()
+        val services = HostServices(images) { _, host -> report("source", host) }
+        val sources = timed("load") { ExtensionLoader(context, packages).load(extension, services) }
+        val source = sources.firstOrNull { it.language == "en" } ?: sources.first()
+        images.publish(listOf(source))
+        val series = source.series
         report("extension", "${extension.name} ${extension.versionName}, ${sources.size} sources, signer ${extension.signer}")
-        report("source", "${source.name} lang=${source.lang} supportsLatest=${source.supportsLatest}")
+        report("source", "${source.name} lang=${source.language} supportsLatest=${series.supportsLatest}")
 
-        val images = ExtensionImages().also { it.publish(listOf(source)) }
-        val series = MihonSeriesSource(source, images) { report("source", it) }
         val listing = timed("popular") { series.popular(1) }
         report("popular", "${listing.series.size} series, covers=${listing.series.count { it.coverUrl != null }}, more=${listing.hasNextPage}")
         assertTrue("The popular listing is empty", listing.series.isNotEmpty())
@@ -87,7 +90,7 @@ class ExtensionHarnessTest {
      * The pages of the first chapter of the first listed series that has one. Some series list no chapter in the
      * source's language, so listed series are opened until one does.
      */
-    private suspend fun firstReadable(source: MihonSeriesSource, listed: List<Series>): List<ImageRef> =
+    private suspend fun firstReadable(source: SeriesSource, listed: List<Series>): List<ImageRef> =
         listed.take(MAX_SERIES_TRIED).firstNotNullOfOrNull { series ->
             val first = source.entries(source.details(series)).lastOrNull()
             first?.let { source.pages(it) }?.takeIf { it.isNotEmpty() }
