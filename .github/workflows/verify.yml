@@ -115,7 +115,9 @@ jobs:
             17
             21
 
-      # Only the run for a push to main saves caches; everything else restores them.
+      # Only the run for a push to main saves caches; everything else restores them. Each part spends
+      # ~25s configuring on PRs: setup-gradle restores the configuration cache only on an exact Gradle
+      # Home cache match, which a PR never gets.
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6.4.0
         with:

@@ -142,7 +142,8 @@ subprojects {
         if (plugins.hasPlugin("com.android.application") || plugins.hasPlugin("com.android.library")) {
             // Each module's Robolectric suite runs in one JVM, Gradle's default. The check already runs every
             // module's suite side by side; a second JVM per suite only repeated Robolectric's startup and made
-            // the check slower.
+            // the check slower. That holds for the longest suite alone too: a second JVM for :feature-viewer
+            // made the tests lane ~8s slower on 4 cores, since its time is mostly Robolectric's sandbox boot.
             // Robolectric's Android 16+ runtime accesses JDK internals on Java 21.
             jvmArgs(
                 "--add-opens=java.base/java.lang=ALL-UNNAMED",

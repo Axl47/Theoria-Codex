@@ -157,6 +157,15 @@ configuration_cache_check() {
   fi
 }
 
+# On GitHub's 4-vCPU runners a full rebuild of these tasks is CPU-bound: Robolectric suites slow each
+# other down. Measured in Nov 2026 on full rebuilds (build cache off, 3+ runs each); PRs whose tasks
+# mostly come from the build cache gain nothing from either change:
+# - Requesting :app's tasks first ran slower (median 561s vs 451s): :app's suite took ~190s beside the
+#   others instead of ~55s alone at the end.
+# - Splitting these tasks across two runners saved ~75s (median 376s for the slower half); after a
+#   Kover merge job and with lint (~5 min) as the next floor, not worth a second coverage path.
+# Revisit if the runners' core count changes, or the tests part (ci-timings) runs more than ~2 minutes
+# longer than lint.
 test_tasks=(
   :core-domain:test
   :core-data:test
