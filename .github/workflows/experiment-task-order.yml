@@ -1,0 +1,44 @@
+name: Experiment task order
+# Throwaway A/B: does requesting :app's tasks first shorten the tests part? Never merged.
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  measure:
+    name: order ${{ matrix.order }} rep ${{ matrix.rep }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        order: [current, app-first]
+        rep: [1, 2, 3]
+    env:
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB_INSTANCE: tests
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-java@v6.1.0
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+      - uses: gradle/actions/setup-gradle@v6.4.0
+        with:
+          cache-read-only: true
+      - name: Tests and coverage, build cache off so every task executes
+        env:
+          ORDER: ${{ matrix.order }}
+        run: |
+          if [[ "$ORDER" == current ]]; then tasks=":core-domain:test :core-data:test :core-sources:test :core-stubs:test :app-logic:test :core-data-android:testDebugUnitTest :core-data-android:compileDebugAndroidTestKotlin :mihon-host:testDebugUnitTest :mihon-host:compileDebugAndroidTestKotlin :ui-kit:testDebugUnitTest :media-kit:testDebugUnitTest :vision-kit:testDebugUnitTest :feed-kit:testDebugUnitTest :feature-viewer:testDebugUnitTest :feature-search:testDebugUnitTest :feature-library:testDebugUnitTest :feature-discover:testDebugUnitTest :feature-series:testDebugUnitTest :feature-settings:testDebugUnitTest :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:assembleDebug :koverXmlReportQuality :koverVerifyQuality "; else tasks=":app:testDebugUnitTest :app:assembleDebug :app:compileDebugAndroidTestKotlin :core-domain:test :core-data:test :core-sources:test :core-stubs:test :app-logic:test :core-data-android:testDebugUnitTest :core-data-android:compileDebugAndroidTestKotlin :mihon-host:testDebugUnitTest :mihon-host:compileDebugAndroidTestKotlin :ui-kit:testDebugUnitTest :media-kit:testDebugUnitTest :vision-kit:testDebugUnitTest :feed-kit:testDebugUnitTest :feature-viewer:testDebugUnitTest :feature-search:testDebugUnitTest :feature-library:testDebugUnitTest :feature-discover:testDebugUnitTest :feature-series:testDebugUnitTest :feature-settings:testDebugUnitTest :koverXmlReportQuality :koverVerifyQuality "; fi
+          start=$(date +%s)
+          ./gradlew $tasks --no-build-cache --init-script gradle/task-timings.init.gradle.kts --console=plain
+          echo "### $ORDER: $(( $(date +%s) - start ))s" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: tasks-${{ matrix.order }}-${{ matrix.rep }}
+          path: build/reports/timings/gradle-tasks.jsonl
+          retention-days: 3
