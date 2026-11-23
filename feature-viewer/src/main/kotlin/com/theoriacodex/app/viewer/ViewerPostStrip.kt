@@ -74,6 +74,7 @@ import coil.compose.AsyncImage
 import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.search.postMediaCount
 import com.theoriacodex.app.ui.theme.TextOverMediaShadow
+import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -127,7 +128,10 @@ internal fun ViewerPostStrip(
     onLoadMore: () -> Unit = {},
     onInteraction: () -> Unit = {},
     openPages: ViewerStripPages? = null,
-    /** Whether the posts are a series' chapters, which are named by their titles: their ids are addresses. */
+    /**
+     * Whether the posts are a series' chapters, which are named by their titles (their ids are addresses) and, once
+     * their pages are known, pictured by their first page rather than the cover they all share.
+     */
     chapters: Boolean = false,
     /** Marks over thumbnails, such as chapters' numbers on what would otherwise all be the same cover. */
     stripMarks: Map<PostId, ViewerStripMark> = emptyMap(),
@@ -160,7 +164,8 @@ internal fun ViewerPostStrip(
                     } else {
                         val mark = stripMarks[post.id]
                         val label = (mark?.label ?: post.title?.takeIf { chapters })?.let { "Open $it" } ?: viewerPostLabel(post)
-                        ViewerPostThumbnail(post, index == selectedIndex, Modifier.size(cell), postMediaCount(post), label, badge = mark?.badge) { onSelect(index) }
+                        val image = post.media.firstOrNull()?.takeIf { chapters && (it.localPath ?: it.url) != null } ?: post.preview
+                        ViewerPostThumbnail(post, index == selectedIndex, Modifier.size(cell), postMediaCount(post), label, mark?.badge, image) { onSelect(index) }
                     }
                 }
             }
@@ -313,7 +318,11 @@ private fun ViewerUnfoldedPages(source: SourceKey, pages: ViewerStripPages, cell
     }
 }
 
-/** [pageCount] above one stacks cards behind the thumbnail, so a multi-page post reads as one before it is opened. */
+/**
+ * [pageCount] above one stacks cards behind the thumbnail, so a multi-page post reads as one before it is opened.
+ * [image] is the post's own preview unless the caller pictures it by something else, such as a chapter's first page;
+ * if that fails to load (a chapter's page addresses expire), the preview stands in.
+ */
 @Composable
 internal fun ViewerPostThumbnail(
     post: Post,
@@ -322,15 +331,18 @@ internal fun ViewerPostThumbnail(
     pageCount: Int = 1,
     label: String = viewerPostLabel(post),
     badge: String? = null,
+    image: ImageRef = post.preview,
     onClick: () -> Unit,
 ) {
     val context = LocalContext.current
-    val location = post.preview.localPath ?: post.preview.url
+    var failed by remember(image) { mutableStateOf(false) }
+    val shown = if (failed) post.preview else image
+    val location = shown.localPath ?: shown.url
     val request = remember(context, location, post.id.source) {
         location?.let { buildViewerImageRequest(context, it, post.id.source, staticAnimatedWebPFrame = true) }
     }
     val animated = remember(post) { isAnimatedPost(post) }
-    ViewerThumbnailTile(request, label, selected, animated, modifier, pageCount, badge, onClick)
+    ViewerThumbnailTile(request, label, selected, animated, modifier, pageCount, badge, onError = { failed = true }, onClick = onClick)
 }
 
 private fun viewerPostLabel(post: Post) = "Open post ${post.id.sourcePostId}"
@@ -345,6 +357,7 @@ private fun ViewerThumbnailTile(
     modifier: Modifier = Modifier,
     pageCount: Int = 1,
     badge: String? = null,
+    onError: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(9.dp)
@@ -359,7 +372,7 @@ private fun ViewerThumbnailTile(
         Box(
             Modifier.fillMaxSize().thumbnailSurface(emphasis, pageCount, shape).then(if (selected) Modifier.border(2.dp, accent, shape).padding(3.dp) else Modifier),
         ) {
-            AsyncImage(model, description, Modifier.fillMaxSize().clip(RoundedCornerShape(if (selected) 6.dp else 9.dp)), contentScale = ContentScale.Crop)
+            AsyncImage(model, description, Modifier.fillMaxSize().clip(RoundedCornerShape(if (selected) 6.dp else 9.dp)), contentScale = ContentScale.Crop, onError = onError?.let { { _ -> it() } })
             if (animated) {
                 Icon(
                     Icons.Default.PlayArrow,

@@ -45,8 +45,13 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         val start = entries.indexOfFirst { it.entry.address == entryAddress }.takeIf { it >= 0 } ?: return null
         // No extension loads for a session. The cover shows while a chapter's pages load, and only a loaded source can
         // give its address: its images can need the source's own client, and the stored address alone is refused.
+        // A downloaded chapter's pages are its files, so it comes with them, and the strip can picture it at once.
         val cover = loadedCover(stored.series)
-        val posts = entries.map { chapterPost(stored.series, it.entry, cover) }
+        val downloaded = series.downloads.downloaded(id)
+        val posts = entries.map { entry ->
+            val pages = entry.entry.address.takeIf { it in downloaded }?.let { series.downloads.chapter(id, it)?.media }
+            chapterPost(stored.series, entry.entry, cover, pages.orEmpty())
+        }
         val context = ViewerLaunchContext(seriesQueryHash(id), start, ViewerStreamSource.SERIES, scrollOffsetHint = 0)
         val resume = entries.associate { PostId(id.source, it.entry.address) to it.resumePageIndex() } +
             listOfNotNull(pageIndex?.let { posts[start].id to it })

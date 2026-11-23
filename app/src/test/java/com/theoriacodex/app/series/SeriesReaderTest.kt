@@ -187,6 +187,18 @@ class SeriesReaderTest {
     }
 
     @Test
+    fun aSessionHandsDownloadedChaptersTheirPagesWithoutAnExtension() = runTest {
+        val entries = listOf(chapter, StoredSeriesEntry(SeriesEntry("/c2", "Ch. 2"), sourceOrder = 1, firstSeenAtEpochMs = 0))
+        download("/c1")
+        val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), entries), { error("No extension may load") }))
+
+        val session = checkNotNull(reader.session(id, "/c2"))
+
+        val pages = session.posts.associate { it.id.sourcePostId to it.media.map { page -> page.localPath?.let(::File)?.readText() } }
+        assertEquals(mapOf("/c1" to pagesOf("/c1").map { it.url }, "/c2" to emptyList()), pages)
+    }
+
+    @Test
     fun deleteAfterReadingWaitsForTheLastReaderToClose() = runTest {
         val reader = readerOverDownloadedChapters(deleteAfterReading = true)
         reader.opened()
