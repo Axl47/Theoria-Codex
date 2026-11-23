@@ -38,7 +38,7 @@ import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -207,12 +207,18 @@ class SeriesReaderTest {
         val store = store()
         val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), listOf(chapter)), { error("unused") }, store = store))
         val session = checkNotNull(reader.session(id, "/c1"))
-        assertEquals(emptyMap<PostId, ViewerStripMark>(), session.stripMarks)
+        val seen = mutableListOf<Map<PostId, ViewerStripMark>>()
+        // Not backgroundScope: advanceUntilIdle stops once only background work remains.
+        val collector = launch { reader.stripMarks(session).collect { seen += it } }
+        advanceUntilIdle()
+        assertEquals(listOf(emptyMap<PostId, ViewerStripMark>()), seen)
 
         download("/c1", store)
+        advanceUntilIdle()
 
-        val firstPage = checkNotNull(reader.stripMarks(session).first()[PostId(source, "/c1")]?.image?.localPath)
+        val firstPage = checkNotNull(seen.last()[PostId(source, "/c1")]?.image?.localPath)
         assertEquals(pagesOf("/c1").first().url, File(firstPage).readText())
+        collector.cancel()
     }
 
     @Test
