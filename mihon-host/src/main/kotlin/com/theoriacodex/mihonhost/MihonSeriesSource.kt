@@ -4,7 +4,8 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.domain.series.EXTENSION_SOURCE_ID_PREFIX
+import com.theoriacodex.domain.series.EntryMedia
+import com.theoriacodex.domain.series.MIHON_SOURCE_ID_PREFIX
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
@@ -96,7 +97,10 @@ class MihonSeriesSource(
         }
     }
 
-    override suspend fun pages(entry: SeriesEntry): List<ImageRef> = calling {
+    override suspend fun media(entry: SeriesEntry): EntryMedia = EntryMedia.Pages(pages(entry))
+
+    /** [entry]'s pages, which are all a manga extension serves. */
+    suspend fun pages(entry: SeriesEntry): List<ImageRef> = calling {
         val chapter = listedChapters[entry.address] ?: SChapter.create().apply {
             url = entry.address
             name = entry.name
@@ -196,7 +200,7 @@ class MihonSeriesSource(
 
     companion object {
         /** The app-wide identity of an extension source; the `mihon` label can never be a real site's host. */
-        fun sourceKey(source: Source): SourceKey = SourceKey.parseOrThrow("$EXTENSION_SOURCE_ID_PREFIX${source.id}")
+        fun sourceKey(source: Source): SourceKey = SourceKey.parseOrThrow("$MIHON_SOURCE_ID_PREFIX${source.id}")
 
         private const val MAX_LISTED = 2_048
         private const val HTTP_TOO_MANY_REQUESTS = 429

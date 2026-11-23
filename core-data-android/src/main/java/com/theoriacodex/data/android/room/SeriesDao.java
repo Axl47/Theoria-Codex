@@ -61,7 +61,7 @@ public interface SeriesDao {
             + "page_count = CASE WHEN :lastPage > last_page THEN COALESCE(:pageCount, page_count) "
             + "ELSE COALESCE(page_count, :pageCount) END "
             + "WHERE source = :source AND series_address = :seriesAddress AND address = :address")
-    void mergeRestoredEntry(String source, String seriesAddress, String address, boolean read, int lastPage, Integer pageCount);
+    void mergeRestoredEntry(String source, String seriesAddress, String address, boolean read, long lastPage, Long pageCount);
 
     /** Its entries go with it, by the foreign key's cascade. */
     @Query("DELETE FROM series WHERE source = :source AND address = :address")

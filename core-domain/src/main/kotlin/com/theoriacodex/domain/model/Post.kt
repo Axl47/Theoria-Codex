@@ -21,6 +21,28 @@ data class VideoVariant(val url: String, val height: Int? = null, val original: 
 
 enum class VideoQuality { AUTO, DATA_SAVER, BEST }
 
+/**
+ * One way to play a series episode, as its source resolved it. Unlike a [VideoVariant] it is chosen by [label], not
+ * height, and is never stored: its address can expire within minutes, so streams are asked for each time the episode
+ * opens.
+ */
+data class MediaStream(
+    val url: String,
+    /** The source's name for it, such as `1080p · Server A`; the Viewer remembers a choice by it, since URLs change. */
+    val label: String,
+    /** The container or manifest type when the source names one (HLS, DASH); null leaves it to the player. */
+    val mime: String? = null,
+    /** Request headers its host requires; when empty, the source's own are sent. */
+    val headers: Map<String, String> = emptyMap(),
+    /** External subtitle files, rendered by the player. */
+    val subtitles: List<MediaTrack> = emptyList(),
+    /** Audio served apart from the video, merged by the player. */
+    val audioTracks: List<MediaTrack> = emptyList(),
+)
+
+/** A subtitle or audio file served beside a [MediaStream]; [label] is what a picker shows, such as a language. */
+data class MediaTrack(val url: String, val label: String)
+
 data class ImageRef(
     val url: String?,
     val localPath: String?,
@@ -33,6 +55,11 @@ data class ImageRef(
     val thumbnailUrl: String? = null,
     /** Equivalent copies of [url] (mirrors, other formats, other shards); tried only when it fails, never shown as a lighter step. */
     val fallbackUrls: List<String> = emptyList(),
+    /**
+     * A series episode's streams, in its source's preferred order; empty for every other media. Live data only: no
+     * storage, backup, share or offline record carries them, so a stored post has none.
+     */
+    val streams: List<MediaStream> = emptyList(),
 )
 
 data class PostTaxonomyTerm(

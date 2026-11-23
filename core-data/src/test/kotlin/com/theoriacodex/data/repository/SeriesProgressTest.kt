@@ -4,6 +4,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SeriesKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -12,29 +13,54 @@ import org.junit.Test
 
 class SeriesProgressTest {
     @Test
-    fun `an entry is read once its last page was reached, and stays read`() {
-        val midway = entry("c1", order = 0).withProgress(page = 3, pageCount = 5)
+    fun `a chapter is read once its last page was reached, and stays read`() {
+        val midway = entry("c1", order = 0).withProgress(position = 3, length = 5, SeriesKind.MANGA)
         assertFalse(midway.read)
-        assertEquals(3, midway.lastPage)
+        assertEquals(3L, midway.position)
         assertEquals(2, midway.resumePageIndex())
 
-        val finished = midway.withProgress(page = 5, pageCount = 5)
+        val finished = midway.withProgress(position = 5, length = 5, SeriesKind.MANGA)
         assertTrue(finished.read)
 
-        val reread = finished.withProgress(page = 2, pageCount = 5)
+        val reread = finished.withProgress(position = 2, length = 5, SeriesKind.MANGA)
         assertTrue(reread.read)
-        assertEquals(2, reread.lastPage)
+        assertEquals(2L, reread.position)
         assertEquals("A finished entry opens at its start", 0, reread.resumePageIndex())
     }
 
     @Test
     fun `a page past the end counts as the last page`() {
-        assertEquals(4, entry("c1", order = 0).withProgress(page = 9, pageCount = 4).lastPage)
+        assertEquals(4L, entry("c1", order = 0).withProgress(position = 9, length = 4, SeriesKind.MANGA).position)
+    }
+
+    @Test
+    fun `an episode is watched from 85 percent of its length, stays watched, and resumes where it was left until then`() {
+        val length = 1_200_000L
+        val midway = entry("e1", order = 0).withProgress(position = 1_019_999, length = length, SeriesKind.ANIME)
+        assertFalse("Short of 85%", midway.read)
+        assertEquals(1_019_999L, midway.resumePositionMs())
+
+        val finished = midway.withProgress(position = 1_020_000, length = length, SeriesKind.ANIME)
+        assertTrue(finished.read)
+        assertEquals("A finished episode starts over", 0L, finished.resumePositionMs())
+
+        val rewatched = finished.withProgress(position = 60_000, length = length, SeriesKind.ANIME)
+        assertTrue(rewatched.read)
+        assertEquals(60_000L, rewatched.position)
+    }
+
+    @Test
+    fun `an episode left at its first moment is not read, and a position past its end counts as its end`() {
+        val opened = entry("e1", order = 0).withProgress(position = 0, length = 1_000, SeriesKind.ANIME)
+        assertFalse(opened.read)
+        assertEquals(0L, opened.position)
+
+        assertEquals(1_000L, entry("e1", order = 0).withProgress(position = 5_000, length = 1_000, SeriesKind.ANIME).position)
     }
 
     @Test
     fun `continue resumes the entry opened last while it is unfinished`() {
-        val entries = listOf(entry("c3", order = 0), entry("c2", order = 1, lastPage = 4), entry("c1", order = 2))
+        val entries = listOf(entry("c3", order = 0), entry("c2", order = 1, position = 4), entry("c1", order = 2))
 
         assertEquals("c2", continueEntry(series(lastOpened = "c2"), entries)?.entry?.address)
     }
@@ -50,15 +76,15 @@ class SeriesProgressTest {
     @Test
     fun `after a finished entry, continue takes the next while unread, else one partway through, else the first unread`() {
         // The newest chapter was just finished and nothing follows it: the chapter left at page 5 comes before chapter 1.
-        val newestFinished = listOf(entry("c4", order = 0, read = true), entry("c3", order = 1, lastPage = 5), entry("c2", order = 2, lastPage = 1), entry("c1", order = 3))
+        val newestFinished = listOf(entry("c4", order = 0, read = true), entry("c3", order = 1, position = 5), entry("c2", order = 2, position = 1), entry("c1", order = 3))
         assertEquals("c3", continueEntry(series(lastOpened = "c4"), newestFinished)?.entry?.address)
 
         // The chapter after the finished one is read too; of two partway through, the later one is taken.
-        val nextRead = listOf(entry("c5", order = 0, lastPage = 2), entry("c4", order = 1, lastPage = 9), entry("c3", order = 2, read = true), entry("c2", order = 3, read = true), entry("c1", order = 4))
+        val nextRead = listOf(entry("c5", order = 0, position = 2), entry("c4", order = 1, position = 9), entry("c3", order = 2, read = true), entry("c2", order = 3, read = true), entry("c1", order = 4))
         assertEquals("c5", continueEntry(series(lastOpened = "c2"), nextRead)?.entry?.address)
 
         // An unread chapter after the finished one wins over a chapter partway through elsewhere.
-        val nextUnread = listOf(entry("c3", order = 0, lastPage = 7), entry("c2", order = 1), entry("c1", order = 2, read = true))
+        val nextUnread = listOf(entry("c3", order = 0, position = 7), entry("c2", order = 1), entry("c1", order = 2, read = true))
         assertEquals("c2", continueEntry(series(lastOpened = "c1"), nextUnread)?.entry?.address)
 
         // Nothing partway through: the first unread chapter in reading order.
@@ -77,6 +103,6 @@ class SeriesProgressTest {
     private fun series(lastOpened: String?) =
         StoredSeries(Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_1"), "/s"), "Series"), lastOpenedEntry = lastOpened)
 
-    private fun entry(address: String, order: Int, read: Boolean = false, lastPage: Int = 0) =
-        StoredSeriesEntry(SeriesEntry(address, address), sourceOrder = order, firstSeenAtEpochMs = 1L, read = read, lastPage = lastPage)
+    private fun entry(address: String, order: Int, read: Boolean = false, position: Long = 0) =
+        StoredSeriesEntry(SeriesEntry(address, address), sourceOrder = order, firstSeenAtEpochMs = 1L, read = read, position = position)
 }

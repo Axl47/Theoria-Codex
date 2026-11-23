@@ -51,17 +51,29 @@ class RoomSeriesRepositoryTest {
     fun `progress marks the entry opened last, and an entry read at its last page`() = runTest {
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))
 
-        repository.recordProgress(id, "/c/1", page = 1, pageCount = null)
+        repository.recordProgress(id, "/c/1", position = 1, length = null)
         assertEquals("/c/1", repository.series(id)!!.lastOpenedEntry)
-        assertEquals(0, repository.entries(id).last().lastPage)
+        assertEquals(0, repository.entries(id).last().position)
 
-        repository.recordProgress(id, "/c/1", page = 3, pageCount = 4)
-        assertEquals(3, repository.entries(id).last().lastPage)
+        repository.recordProgress(id, "/c/1", position = 3, length = 4)
+        assertEquals(3, repository.entries(id).last().position)
         assertFalse(repository.entries(id).last().read)
 
-        repository.recordProgress(id, "/c/1", page = 4, pageCount = 4)
+        repository.recordProgress(id, "/c/1", position = 4, length = 4)
         assertTrue(repository.entries(id).last().read)
         assertFalse(repository.entries(id).first().read)
+    }
+
+    @Test
+    fun `an anime series' episode is watched from 85 percent of its duration, its source telling the kind`() = runTest {
+        val anime = Series(SeriesId(SourceKey.parseOrThrow("custom_aniyomi_1"), "/anime/a"), "Anime")
+        repository.store(anime, listOf(SeriesEntry("/e/1", "Episode 1")))
+
+        repository.recordProgress(anime.id, "/e/1", position = 1_000_000, length = 1_440_000)
+        assertEquals(1_000_000L to false, repository.entries(anime.id).single().let { it.position to it.read })
+
+        repository.recordProgress(anime.id, "/e/1", position = 1_224_000, length = 1_440_000)
+        assertTrue(repository.entries(anime.id).single().read)
     }
 
     @Test
@@ -69,7 +81,7 @@ class RoomSeriesRepositoryTest {
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))
         repository.setFollowed(id, true)
         repository.setReadingMode(id, GalleryReadingMode.VERTICAL)
-        repository.recordProgress(id, "/c/2", page = 2, pageCount = 2)
+        repository.recordProgress(id, "/c/2", position = 2, length = 2)
         assertEquals(1, repository.observeFollowed().first().single().unreadCount)
 
         now = 200L
@@ -106,7 +118,7 @@ class RoomSeriesRepositoryTest {
     fun `a dropped chapter that returns is neither new nor unread`() = runTest {
         val first = SeriesEntry("/c/1", "Chapter 1")
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), first))
-        repository.recordProgress(id, "/c/2", page = 2, pageCount = 2)
+        repository.recordProgress(id, "/c/2", position = 2, length = 2)
 
         assertEquals(emptyList<SeriesEntry>(), repository.store(series, listOf(first)))
         assertEquals(listOf("/c/1"), repository.entries(id).map { it.entry.address })
@@ -119,29 +131,29 @@ class RoomSeriesRepositoryTest {
     fun `a chapter that returns at a new address takes over its number's progress and is not new`() = runTest {
         val first = SeriesEntry("/c/1", "Chapter 1", number = 1f)
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2", number = 2f), first))
-        repository.recordProgress(id, "/c/2", page = 3, pageCount = 5)
+        repository.recordProgress(id, "/c/2", position = 3, length = 5)
 
         val reuploaded = SeriesEntry("/c/2-v2", "Chapter 2", number = 2f)
         val third = SeriesEntry("/c/3", "Chapter 3", number = 3f)
         assertEquals(listOf(third), repository.store(series, listOf(third, reuploaded, first)))
 
         val moved = repository.entries(id).single { it.entry.address == "/c/2-v2" }
-        assertEquals(3, moved.lastPage)
-        assertEquals(5, moved.pageCount)
+        assertEquals(3, moved.position)
+        assertEquals(5L, moved.length)
         assertEquals("/c/2-v2", repository.series(id)!!.lastOpenedEntry)
 
         // The old address is remembered: listed again beside its replacement, it is neither new nor unread.
-        repository.recordProgress(id, "/c/2-v2", page = 5, pageCount = 5)
+        repository.recordProgress(id, "/c/2-v2", position = 5, length = 5)
         val both = listOf(third, reuploaded, SeriesEntry("/c/2", "Chapter 2", number = 2f), first)
         assertEquals(emptyList<SeriesEntry>(), repository.store(series, both))
-        assertEquals(listOf(3, 5), listOf("/c/2", "/c/2-v2").map { address -> repository.entries(id).single { it.entry.address == address }.lastPage })
+        assertEquals(listOf(3L, 5L), listOf("/c/2", "/c/2-v2").map { address -> repository.entries(id).single { it.entry.address == address }.position })
     }
 
     @Test
     fun `another group's release of a number, or one of several, is a new unread chapter`() = runTest {
         val read = SeriesEntry("/c/1-a", "Chapter 1", number = 1f, translatorGroup = "A")
         repository.store(series, listOf(read, SeriesEntry("/c/0", "Prologue")))
-        repository.recordProgress(id, "/c/1-a", page = 4, pageCount = 4)
+        repository.recordProgress(id, "/c/1-a", position = 4, length = 4)
 
         // Group A's release goes; group B's and two of a group that never released it arrive, and an unnumbered one.
         val arrived = listOf(
@@ -158,7 +170,7 @@ class RoomSeriesRepositoryTest {
     @Test
     fun `a kept address renumbered to a dropped chapter's number keeps that chapter's progress from a new address`() = runTest {
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2", number = 2f), SeriesEntry("/c/1", "Chapter 1", number = 1f)))
-        repository.recordProgress(id, "/c/1", page = 3, pageCount = 3)
+        repository.recordProgress(id, "/c/1", position = 3, length = 3)
 
         // Chapter 1's address goes; the kept address now says it is chapter 1, and a new address says so too.
         val added = SeriesEntry("/c/1-v2", "Chapter 1", number = 1f)

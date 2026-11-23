@@ -349,12 +349,13 @@ private val SeriesStatus.label: String?
         SeriesStatus.PUBLISHING_FINISHED -> "Finished"
         SeriesStatus.CANCELLED -> "Cancelled"
         SeriesStatus.ON_HIATUS -> "Hiatus"
+        SeriesStatus.UPCOMING -> "Upcoming"
     }
 
 /** "Page 7 of 18" for a chapter left unfinished, "Read" for a finished one, else its date when the source gives one. */
 internal fun entryDetail(entry: StoredSeriesEntry): String? = when {
     entry.read -> "Read"
-    entry.lastPage > 0 -> entry.pageCount?.let { "Page ${entry.lastPage} of $it" } ?: "Page ${entry.lastPage}"
+    entry.position > 0 -> entry.length?.let { "Page ${entry.position} of $it" } ?: "Page ${entry.position}"
     else -> entry.entry.uploadedAtEpochMs?.let { DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it)) }
 }
 

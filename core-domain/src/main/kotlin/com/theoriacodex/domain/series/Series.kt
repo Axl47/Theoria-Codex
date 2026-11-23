@@ -1,6 +1,7 @@
 package com.theoriacodex.domain.series
 
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.MediaStream
 import com.theoriacodex.domain.model.SourceKey
 
 /** A series is one address on one source; the same work on another source is another series. */
@@ -19,9 +20,12 @@ enum class SeriesStatus {
     PUBLISHING_FINISHED,
     CANCELLED,
     ON_HIATUS,
+
+    /** Announced, with nothing released yet. */
+    UPCOMING,
 }
 
-/** A work read or watched in order over time, such as a manga, as its source describes it. */
+/** A work read or watched in order over time, such as a manga or an anime, as its source describes it. */
 data class Series(
     val id: SeriesId,
     val title: String,
@@ -36,7 +40,7 @@ data class Series(
     val status: SeriesStatus = SeriesStatus.UNKNOWN,
 )
 
-/** One instalment of a [Series]: a chapter today. [address] identifies it within its series. */
+/** One instalment of a [Series]: a chapter or an episode. [address] identifies it within its series. */
 data class SeriesEntry(
     val address: String,
     val name: String,
@@ -48,6 +52,15 @@ data class SeriesEntry(
 
 data class SeriesPage(val series: List<Series>, val hasNextPage: Boolean)
 
+/** What an entry opens as. [SeriesSource.media] returns the kind its source's [SeriesSource.kind] serves. */
+sealed interface EntryMedia {
+    /** A chapter's pages, in reading order. */
+    data class Pages(val pages: List<ImageRef>) : EntryMedia
+
+    /** An episode's ways to play, in the source's preferred order: the first is the default. */
+    data class Streams(val streams: List<MediaStream>) : EntryMedia
+}
+
 /**
  * A provider of series. Every call can fail with a
  * [com.theoriacodex.domain.adapter.SourceAdapterException], as the post sources' calls do.
@@ -55,6 +68,9 @@ data class SeriesPage(val series: List<Series>, val hasNextPage: Boolean)
 interface SeriesSource {
     val key: SourceKey
     val name: String
+
+    /** Decided by [key] alone, so it is known with no extension loaded and after the extension is gone. */
+    val kind: SeriesKind get() = key.seriesKind
 
     /** The language code of everything this source lists; blank when it names none. */
     val language: String
@@ -80,8 +96,12 @@ interface SeriesSource {
     /** In the source's order, which lists the newest first. */
     suspend fun entries(series: Series): List<SeriesEntry>
 
-    /** Addresses that can expire within minutes, so they are asked for each time an entry opens and never stored. */
-    suspend fun pages(entry: SeriesEntry): List<ImageRef>
+    /**
+     * [entry]'s pages, or its streams for an anime source. Addresses can expire within minutes, so they are asked for
+     * each time an entry opens and never stored. A caller that can use only one kind fails on the other rather than
+     * reading it as empty.
+     */
+    suspend fun media(entry: SeriesEntry): EntryMedia
 
     /**
      * The address to load [series]' cover from. A source whose images only its own client can fetch marks the address
@@ -89,6 +109,3 @@ interface SeriesSource {
      */
     fun coverAddress(series: Series): String? = series.coverUrl
 }
-
-/** The id prefix of sources that run loaded extension code. It follows the custom-site id grammar, so stored ids parse. */
-const val EXTENSION_SOURCE_ID_PREFIX = "custom_mihon_"

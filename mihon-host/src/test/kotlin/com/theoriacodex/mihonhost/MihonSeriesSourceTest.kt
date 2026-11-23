@@ -2,9 +2,11 @@ package com.theoriacodex.mihonhost
 
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
+import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.SeriesStatus
 import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.source.CatalogueSource
@@ -133,12 +135,14 @@ class MihonSeriesSourceTest {
     }
 
     @Test
-    fun `pages are the chapter's images, for a listed entry and for one stored in an earlier run`() = runTest {
+    fun `media is the chapter's pages, for a listed entry and for one stored in an earlier run`() = runTest {
         source.chapters = listOf(chapter("Chapter 1", "/c/1"))
         source.pages = listOf(Page(0, imageUrl = "https://cdn.test/1.jpg"), Page(1, imageUrl = "https://cdn.test/2.jpg"))
         val listed = series.entries(Series(SeriesId(series.key, "/s"), "Series")).single()
 
-        assertEquals(listOf("https://cdn.test/1.jpg", "https://cdn.test/2.jpg"), series.pages(listed).map { it.url })
+        assertEquals(SeriesKind.MANGA, series.kind)
+        val media = series.media(listed)
+        assertEquals(listOf("https://cdn.test/1.jpg", "https://cdn.test/2.jpg"), (media as EntryMedia.Pages).pages.map { it.url })
         assertSame(source.chapters.single(), source.pageListRequests.last())
 
         series.pages(SeriesEntry("/c/9", "Chapter 9", number = 9f))

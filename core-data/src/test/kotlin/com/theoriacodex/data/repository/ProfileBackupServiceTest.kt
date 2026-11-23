@@ -313,8 +313,8 @@ class ProfileBackupServiceTest {
                 followed = true, readingMode = GalleryReadingMode.VERTICAL, lastOpenedEntry = "/chapter/2", lastCheckedAtEpochMs = 9L,
             ),
             listOf(
-                StoredSeriesEntry(SeriesEntry("/chapter/2", "Ch.2", 2f, "Group", 5L), sourceOrder = 0, firstSeenAtEpochMs = 6L, lastPage = 3, pageCount = 20),
-                StoredSeriesEntry(SeriesEntry("/chapter/1", "Ch.1"), sourceOrder = 1, firstSeenAtEpochMs = 4L, read = true, lastPage = 18, pageCount = 18),
+                StoredSeriesEntry(SeriesEntry("/chapter/2", "Ch.2", 2f, "Group", 5L), sourceOrder = 0, firstSeenAtEpochMs = 6L, position = 3, length = 20),
+                StoredSeriesEntry(SeriesEntry("/chapter/1", "Ch.1"), sourceOrder = 1, firstSeenAtEpochMs = 4L, read = true, position = 18, length = 18),
                 StoredSeriesEntry(SeriesEntry("/chapter/0", "Dropped"), sourceOrder = -1, firstSeenAtEpochMs = 4L),
             ),
         )

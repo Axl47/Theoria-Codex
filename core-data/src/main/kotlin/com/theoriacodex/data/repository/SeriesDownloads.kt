@@ -2,9 +2,11 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.MediaStream
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
@@ -103,10 +105,26 @@ private const val SERIES_OWNER_PREFIX = "series:"
  * download is kept under offline. Without [pages] the Viewer asks for them when it gets there. The title is what the
  * Viewer's top bar shows.
  */
-fun chapterPost(series: Series, entry: SeriesEntry, cover: String?, pages: List<ImageRef> = emptyList()) = Post(
+fun chapterPost(series: Series, entry: SeriesEntry, cover: String?, pages: List<ImageRef> = emptyList()) =
+    entryPost(series, entry, cover, pages, mediaCount = pages.size.takeIf { it > 0 })
+
+/**
+ * One episode as the Viewer's post, identified as [chapterPost] identifies a chapter. With [streams] its one media item
+ * is a video carrying them; the item's address is the default stream's, for code that only asks whether media has
+ * one, while what plays is chosen from [ImageRef.streams]. Without them it is its cover, which the Viewer resolves as
+ * it does a chapter without pages, but counted as exactly one media item, so it is never paged as a gallery. Like a
+ * chapter's, the post is never stored: a series session's posts stay out of History and every Codex.
+ */
+fun episodePost(series: Series, entry: SeriesEntry, cover: String?, streams: List<MediaStream> = emptyList()): Post {
+    val video = streams.firstOrNull()?.let { ImageRef(url = it.url, localPath = null, mime = null, streams = streams) }
+    return entryPost(series, entry, cover, listOfNotNull(video), mediaCount = 1)
+}
+
+/** What a chapter's and an episode's post share; empty [media] arrives with the Viewer's lookup. */
+private fun entryPost(series: Series, entry: SeriesEntry, cover: String?, media: List<ImageRef>, mediaCount: Int?) = Post(
     id = PostId(series.id.source, entry.address),
     preview = ImageRef(url = cover, localPath = null, mime = null),
-    full = pages.firstOrNull(),
+    full = media.firstOrNull(),
     pageUrl = null,
     width = null,
     height = null,
@@ -115,9 +133,9 @@ fun chapterPost(series: Series, entry: SeriesEntry, cover: String?, pages: List<
     authorName = null,
     createdAtEpochMs = entry.uploadedAtEpochMs,
     title = "${series.title} · ${entry.name}",
-    media = pages,
-    mediaCount = pages.size.takeIf { it > 0 },
-    galleryLengthUnknown = pages.isEmpty(),
+    media = media,
+    mediaCount = mediaCount,
+    galleryLengthUnknown = media.isEmpty(),
 )
 
 /**
@@ -386,7 +404,11 @@ class SeriesDownloads(
         // A copy already on the device, such as one saved to a Codex, needs only the series as another owner.
         if (store.retain(PostId(chapter.series.source, entry.address), owner) != null) return
         val source = sources().firstOrNull { it.key == chapter.series.source } ?: throw IOException("The series' source is not on")
-        val pages = attempts { source.pages(entry) }.ifEmpty { throw ChapterUnavailable("The chapter has no pages") }
+        // An episode's streams are played, never downloaded; the series page offers no download for them.
+        val pages = when (val media = attempts { source.media(entry) }) {
+            is EntryMedia.Pages -> media.pages
+            is EntryMedia.Streams -> throw ChapterUnavailable("An episode cannot be downloaded")
+        }.ifEmpty { throw ChapterUnavailable("The chapter has no pages") }
         if (pages.any { it.url == null }) throw ChapterUnavailable("A page has no address")
         fetching.value = chapter to 0f
         onPage(0, pages.size)

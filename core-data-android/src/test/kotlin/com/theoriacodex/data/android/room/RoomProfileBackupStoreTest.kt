@@ -81,8 +81,8 @@ class RoomProfileBackupStoreTest {
         series.store(Series(id, "Title", coverUrl = "https://cdn.test/c.jpg", language = "en"), listOf(SeriesEntry("/chapter/2", "Ch.2"), SeriesEntry("/chapter/1", "Ch.1")))
         series.setFollowed(id, true)
         series.setReadingMode(id, GalleryReadingMode.VERTICAL)
-        series.recordProgress(id, "/chapter/1", page = 18, pageCount = 18)
-        series.recordProgress(id, "/chapter/2", page = 3, pageCount = 20)
+        series.recordProgress(id, "/chapter/1", position = 18, length = 18)
+        series.recordProgress(id, "/chapter/2", position = 3, length = 20)
         // Only opened, never read or followed: not the user's, so not in a backup.
         series.store(Series(SeriesId(id.source, "/title/2"), "Glanced at"))
         val snapshot = backups.snapshot(includeRecents = false)
@@ -99,7 +99,7 @@ class RoomProfileBackupStoreTest {
         // On a device that already has the series, unfollowed and further along, the restore only adds.
         restored.setFollowed(id, false)
         restored.setReadingMode(id, GalleryReadingMode.RIGHT_TO_LEFT)
-        restored.recordProgress(id, "/chapter/2", page = 20, pageCount = 20)
+        restored.recordProgress(id, "/chapter/2", position = 20, length = 20)
         RoomProfileBackupStore(restoredDatabase).merge(snapshot)
         val kept = restored.series(id)!!
         assertTrue(kept.followed)
@@ -114,9 +114,9 @@ class RoomProfileBackupStoreTest {
         val title = Series(id, "Title", language = "en")
         series.store(title, listOf(SeriesEntry("/chapter/2", "Ch.2"), SeriesEntry("/chapter/1", "Ch.1"), SeriesEntry("/chapter/0", "Ch.0")))
         series.setFollowed(id, true)
-        series.recordProgress(id, "/chapter/0", page = 9, pageCount = 9)
-        series.recordProgress(id, "/chapter/1", page = 18, pageCount = 18)
-        series.recordProgress(id, "/chapter/2", page = 3, pageCount = 20)
+        series.recordProgress(id, "/chapter/0", position = 9, length = 9)
+        series.recordProgress(id, "/chapter/1", position = 18, length = 18)
+        series.recordProgress(id, "/chapter/2", position = 3, length = 20)
         val snapshot = backups.snapshot(includeRecents = false)
 
         // A new device where the series was opened before the restore: the source's list today, nothing read.
@@ -130,28 +130,28 @@ class RoomProfileBackupStoreTest {
         val merged = device.entries(id).associateBy { it.entry.address }
         assertEquals(setOf("/chapter/3", "/chapter/2", "/chapter/1"), merged.keys)
         assertTrue(merged.getValue("/chapter/1").read)
-        assertEquals(3 to 20, merged.getValue("/chapter/2").let { it.lastPage to it.pageCount })
+        assertEquals(3L to 20L, merged.getValue("/chapter/2").let { it.position to it.length })
         // Chapter 0 keeps its progress but is not listed, so the unread count is the device's list: chapters 2 and 3.
         val dropped = deviceDatabase.seriesDao().allEntries(id.source.id, id.address).single { it.address == "/chapter/0" }
         assertTrue(dropped.read && dropped.sourceOrder == NOT_LISTED)
         assertEquals(listOf(2), device.observeFollowed().first().map { it.unreadCount })
 
         // Further along on the device than in the backup: a second restore takes nothing back.
-        device.recordProgress(id, "/chapter/2", page = 7, pageCount = 20)
-        device.recordProgress(id, "/chapter/3", page = 2, pageCount = 9)
+        device.recordProgress(id, "/chapter/2", position = 7, length = 20)
+        device.recordProgress(id, "/chapter/3", position = 2, length = 9)
         RoomProfileBackupStore(deviceDatabase).merge(snapshot)
         assertEquals("/chapter/3", device.series(id)!!.lastOpenedEntry)
-        assertEquals(7, device.entries(id).single { it.entry.address == "/chapter/2" }.lastPage)
+        assertEquals(7, device.entries(id).single { it.entry.address == "/chapter/2" }.position)
 
         // The page count goes with the position that wins: page 8 of 10 here and page 3 of 20 in the backup stay 8 of 10,
         // and page 2 of 10 here becomes the backup's 3 of 20, never "3 of 10".
-        suspend fun progress() = device.entries(id).single { it.entry.address == "/chapter/2" }.let { it.lastPage to it.pageCount }
-        deviceDatabase.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 8, 10)
+        suspend fun progress() = device.entries(id).single { it.entry.address == "/chapter/2" }.let { it.position to it.length }
+        deviceDatabase.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 8L, 10L)
         RoomProfileBackupStore(deviceDatabase).merge(snapshot)
-        assertEquals(8 to 10, progress())
+        assertEquals(8L to 10L, progress())
         deviceDatabase.openHelper.writableDatabase.execSQL("UPDATE series_entries SET last_page = 2, page_count = 10 WHERE address = '/chapter/2'")
         RoomProfileBackupStore(deviceDatabase).merge(snapshot)
-        assertEquals(3 to 20, progress())
+        assertEquals(3L to 20L, progress())
         deviceDatabase.close()
     }
 

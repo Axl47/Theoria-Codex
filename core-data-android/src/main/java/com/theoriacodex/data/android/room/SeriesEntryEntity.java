@@ -6,7 +6,7 @@ import androidx.room.ColumnInfo;
 import androidx.room.Entity;
 import androidx.room.ForeignKey;
 
-/** One entry (a chapter) of a stored series, with the user's progress. Its pages are never stored. */
+/** One entry (a chapter or an episode) of a stored series, with the user's progress. Its media is never stored. */
 @Entity(
         tableName = "series_entries",
         primaryKeys = {"source", "series_address", "address"},
@@ -29,9 +29,13 @@ public final class SeriesEntryEntity {
     @ColumnInfo(name = "source_order") private final int sourceOrder;
     @ColumnInfo(name = "first_seen_at_epoch_ms") private final long firstSeenAtEpochMs;
     @ColumnInfo(name = "read") private final boolean read;
-    /** The page the user left at, from 1; 0 before the entry was opened. */
-    @ColumnInfo(name = "last_page") private final int lastPage;
-    @Nullable @ColumnInfo(name = "page_count") private final Integer pageCount;
+    /**
+     * Where the user left, 0 before the entry was opened: a page from 1, or milliseconds for an episode. The columns are
+     * named for pages, which came first; renaming them would need a schema upgrade for nothing.
+     */
+    @ColumnInfo(name = "last_page") private final long lastPage;
+    /** The page count or duration that the position counts within. */
+    @Nullable @ColumnInfo(name = "page_count") private final Long pageCount;
 
     public SeriesEntryEntity(
             @NonNull String source,
@@ -44,8 +48,8 @@ public final class SeriesEntryEntity {
             int sourceOrder,
             long firstSeenAtEpochMs,
             boolean read,
-            int lastPage,
-            @Nullable Integer pageCount
+            long lastPage,
+            @Nullable Long pageCount
     ) {
         this.source = source;
         this.seriesAddress = seriesAddress;
@@ -71,6 +75,6 @@ public final class SeriesEntryEntity {
     public int getSourceOrder() { return sourceOrder; }
     public long getFirstSeenAtEpochMs() { return firstSeenAtEpochMs; }
     public boolean getRead() { return read; }
-    public int getLastPage() { return lastPage; }
-    @Nullable public Integer getPageCount() { return pageCount; }
+    public long getLastPage() { return lastPage; }
+    @Nullable public Long getPageCount() { return pageCount; }
 }

@@ -95,16 +95,17 @@ internal data class BackupSeriesEntryRecord(
     @SerialName("sourceOrder") val sourceOrder: Int,
     @SerialName("firstSeenAt") val firstSeenAt: Long,
     @SerialName("read") val read: Boolean = false,
-    @SerialName("lastPage") val lastPage: Int = 0,
-    @SerialName("pageCount") val pageCount: Int? = null,
+    // The keys predate anime; they hold [StoredSeriesEntry.position] and [StoredSeriesEntry.length] for both kinds.
+    @SerialName("lastPage") val position: Long = 0,
+    @SerialName("pageCount") val length: Long? = null,
 ) {
-    fun toDomain() = StoredSeriesEntry(SeriesEntry(address, name, number, translatorGroup, uploadedAt), sourceOrder, firstSeenAt, read, lastPage, pageCount)
+    fun toDomain() = StoredSeriesEntry(SeriesEntry(address, name, number, translatorGroup, uploadedAt), sourceOrder, firstSeenAt, read, position, length)
 
     companion object {
         fun fromDomain(stored: StoredSeriesEntry): BackupSeriesEntryRecord = with(stored) {
             BackupSeriesEntryRecord(
                 entry.address, entry.name, entry.number, entry.translatorGroup, entry.uploadedAtEpochMs,
-                sourceOrder, firstSeenAtEpochMs, read, lastPage, pageCount,
+                sourceOrder, firstSeenAtEpochMs, read, position, length,
             )
         }
     }
@@ -119,7 +120,7 @@ internal fun validateBackupSeries(all: List<BackupSeries>) {
             "Backup contains an invalid series"
         }
         require(backup.entries.distinctBy { it.entry.address }.size == backup.entries.size) { "Backup contains duplicate chapters" }
-        require(backup.entries.all { it.entry.address.isNotBlank() && it.firstSeenAtEpochMs >= 0 && it.lastPage >= 0 && (it.pageCount ?: 1) > 0 }) {
+        require(backup.entries.all { it.entry.address.isNotBlank() && it.firstSeenAtEpochMs >= 0 && it.position >= 0 && (it.length ?: 1) > 0 }) {
             "Backup contains an invalid chapter"
         }
     }
@@ -149,7 +150,7 @@ internal fun BackupSeries.withinEntryLimit(): BackupSeries {
     if (entries.size <= MAX_BACKUP_SERIES_ENTRIES) return this
     fun tier(entry: StoredSeriesEntry) = when {
         entry.entry.address == series.lastOpenedEntry -> 0
-        entry.read || entry.lastPage > 0 -> 1
+        entry.read || entry.position > 0 -> 1
         entry.sourceOrder >= 0 -> 2
         else -> 3
     }

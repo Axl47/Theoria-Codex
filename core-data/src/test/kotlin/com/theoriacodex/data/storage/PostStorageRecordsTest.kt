@@ -1,13 +1,20 @@
 package com.theoriacodex.data.storage
 
+import com.theoriacodex.data.repository.encodeBackupPost
+import com.theoriacodex.data.repository.episodePost
 import com.theoriacodex.data.repository.mergeSparsePost
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.MediaStream
+import com.theoriacodex.domain.model.MediaTrack
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesEntry
+import com.theoriacodex.domain.series.SeriesId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -24,6 +31,25 @@ class PostStorageRecordsTest {
         assertTrue(json.contains("\"schemaVersion\":1"))
         assertEquals(CURRENT_POST_STORAGE_SCHEMA_VERSION, record.schemaVersion)
         assertEquals(post, PostStorageCodec.decode(reconstructedRecord))
+    }
+
+    @Test
+    fun `an episode's streams reach no stored or backed-up record`() {
+        val stream = MediaStream(
+            "https://video.test/master.m3u8", "1080p · Server A", "application/x-mpegURL",
+            headers = mapOf("Referer" to "https://host.test/"), subtitles = listOf(MediaTrack("https://subs.test/en.vtt", "English")),
+        )
+        val series = Series(SeriesId(SourceKey.parseOrThrow("custom_aniyomi_1"), "/anime/1"), "Anime")
+        val episode = episodePost(series, SeriesEntry("/e/1", "Episode 1"), "https://covers.test/1.jpg", listOf(stream))
+
+        val written = listOf(
+            DurableJson.encodeToString(PostStorageCodec.encode(episode)),
+            encodeBackupPost(episode).toString(),
+        )
+        // The media item's own address is the default stream's, as for any video; nothing only a stream has is written.
+        written.forEach { json -> listOf("Server A", "mpegURL", "host.test", "subs.test").forEach { assertTrue(json, it !in json) } }
+        val stored = PostStorageCodec.decode(DurableJson.decodeFromString<PostStorageRecord>(written.first()))
+        assertTrue(checkNotNull(stored).media.all { it.streams.isEmpty() })
     }
 
     @Test

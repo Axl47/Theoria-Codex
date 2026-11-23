@@ -8,8 +8,8 @@ import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.data.repository.checkFollowed
 import com.theoriacodex.data.repository.switchSource
 import com.theoriacodex.domain.model.GalleryReadingMode
-import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
@@ -69,7 +69,7 @@ class SeriesMoveTest {
         assertEquals("/n3", moved.lastOpenedEntry)
         val entries = repository.entries(new.id).associateBy { it.entry.address }
         assertEquals(listOf("/n1", "/n2"), entries.values.filter { it.read }.map { it.entry.address }.sorted())
-        assertEquals(4, entries.getValue("/n3").lastPage)
+        assertEquals(4, entries.getValue("/n3").position)
         assertEquals(emptyList<Any>(), repository.entries(old.id))
         assertEquals(listOf(new.id), repository.observeFollowed().first().map { it.series.id })
     }
@@ -100,7 +100,7 @@ class SeriesMoveTest {
         assertEquals("Its own further progress stays", "/n4", moved.lastOpenedEntry)
         val entries = repository.entries(new.id).associateBy { it.entry.address }
         assertTrue(entries.getValue("/n1").read)
-        assertEquals(8, entries.getValue("/n3").lastPage)
+        assertEquals(8, entries.getValue("/n3").position)
         assertNull(repository.series(old.id))
     }
 
@@ -151,5 +151,5 @@ private class Listing(id: String) : SeriesSource {
     override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>) = popular(page)
     override suspend fun details(series: Series): Series = if (fails) throw IllegalStateException("down") else series
     override suspend fun entries(series: Series) = chapters
-    override suspend fun pages(entry: SeriesEntry) = emptyList<ImageRef>()
+    override suspend fun media(entry: SeriesEntry) = EntryMedia.Pages(emptyList())
 }
