@@ -78,7 +78,7 @@ internal fun ViewerPostPagerSurface(
                 ),
                 viewerGestureHandler(
                     swipe, dismissDrag, screen, controls, haptics, flingVelocity, scope, frame.uiState.controls.slideshow,
-                    openNextChapter = nextPostOpener(frame.navigation.currentIndex, frame, swipe, config).takeIf { vertical && config.seriesChapters },
+                    openNextChapter = nextPostOpener(frame.navigation.currentIndex, frame, swipe, config).takeIf { vertical && config.series is ViewerSeries.Reading },
                 ),
             )
             .graphicsLayer { translationX = swipe.edgeOffset },
@@ -142,7 +142,7 @@ private fun viewerGestureHandler(
 }
 
 /** Opens the post after [index] at its [entryMediaIndex]; null on the last post. */
-private fun nextPostOpener(index: Int, frame: ViewerFrame, swipe: ViewerSwipeController, config: ViewerScreenConfig): (() -> Unit)? {
+internal fun nextPostOpener(index: Int, frame: ViewerFrame, swipe: ViewerSwipeController, config: ViewerScreenConfig): (() -> Unit)? {
     val next = frame.navigation.pages.getOrNull(index + 1) ?: return null
     return { swipe.navigateTo(ViewerHorizontalSwipeTarget(index + 1, config.entryMediaIndex(next))) }
 }
@@ -234,7 +234,7 @@ private fun ViewerPostPage(
             transform = viewerTransform,
             onTransformChanged = { viewerTransform.value = it },
             layout = ViewerMediaLayout(frame.isLandscape, frame.inPictureInPicture, frame.touchExplorationEnabled),
-            videoOptions = ViewerVideoOptions(quality, qualityHeight, streamLabel, pageState.terminalResolutionMessage(), config.playbackDiagnosticsEnabled),
+            videoOptions = ViewerVideoOptions(quality, qualityHeight, streamLabel, pageState.terminalResolutionMessage(), config.playbackDiagnosticsEnabled, host.episodeProgress(frame, post)),
             videoPositions = videoPositions,
             levelControls = levelControls,
             mediaError = frame.uiState.mediaError.takeIf { active }?.takeIf { it.mediaKey == key },
@@ -248,6 +248,10 @@ private fun ViewerPostPage(
         )
     }
 }
+
+/** Where [post]'s playback goes while a series is watched: its series records it. Null for every other video. */
+private fun ViewerScreenHost.episodeProgress(frame: ViewerFrame, post: Post): ((ViewerPlaybackProgress) -> Unit)? =
+    onPlaybackProgress?.takeIf { frame.watching }?.let { report -> { progress -> report(post, progress) } }
 
 private fun ViewerPageState.terminalResolutionMessage(): String? = resolution
     .takeIf { it.status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.FAILED && !it.recoverable }

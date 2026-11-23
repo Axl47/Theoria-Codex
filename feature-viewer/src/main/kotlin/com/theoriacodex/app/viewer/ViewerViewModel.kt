@@ -129,7 +129,7 @@ class ViewerViewModel(
             var result = reduceViewerState(mutableState.value, action)
             if (action is ViewerAction.ReplaceSession &&
                 (action.session != mutableState.value.session || mutableState.value.pages.isEmpty())) {
-                result = reduceViewerState(result.state, ViewerAction.SetPlaybackMode(playbackModeProvider()))
+                result = reduceViewerState(result.state, ViewerAction.SetPlaybackMode(startingPlaybackMode()))
             }
             result.also {
                 mutableState.value = result.state
@@ -146,6 +146,10 @@ class ViewerViewModel(
             showComments()
         }
     }
+
+    /** The app's playback setting, except while a series is watched: an episode goes on to the next one, never loops. */
+    private fun startingPlaybackMode(): ViewerPlaybackMode =
+        if (mutableSession.value?.series is ViewerSeries.Watching) ViewerPlaybackMode.NEXT else playbackModeProvider()
 
     /** The current post's first comment page, then its neighbours', so a swipe lands on a known count. */
     private fun showComments() {
@@ -277,8 +281,8 @@ class ViewerViewModel(
      */
     fun recordPlaybackProgress(
         post: Post,
-        progress: ViewerSeriesProgress.Playback,
-        record: suspend (Post, ViewerSeriesProgress.Playback, ViewerSession) -> Unit,
+        progress: ViewerPlaybackProgress,
+        record: suspend (Post, ViewerPlaybackProgress, ViewerSession) -> Unit,
     ) {
         val current = mutableSession.value ?: return
         if (state.value.pages.none { it.post.id == post.id }) return
@@ -313,11 +317,16 @@ class ViewerViewModel(
         }
     }
 
-    /** Current-page work wins; only the immediately adjacent posts (next first, then previous) resolve speculatively. */
+    /**
+     * Current-page work wins; only the immediately adjacent posts (next first, then previous) resolve speculatively,
+     * except while a series is watched: an episode's lookup scrapes third-party sites for links that soon expire, so
+     * only the episode on screen resolves.
+     */
     private fun reconcileResolutionLookahead() {
         val current = state.value
         val session = current.session ?: return
-        val neighbours = viewerPostNavigation(current).neighbours
+        val watching = mutableSession.value?.series is ViewerSeries.Watching
+        val neighbours = if (watching) emptyList() else viewerPostNavigation(current).neighbours
         val desired = setOfNotNull(current.currentPage?.post?.id) + neighbours.map { it.post.id }
         val obsolete = sessionJobs.keys.filterIsInstance<ViewerWorkKey.Resolution>().filter { it.postId !in desired }
         obsolete.forEach { key ->
@@ -349,7 +358,7 @@ class ViewerViewModel(
         launchSessionJob(ViewerWorkKey.Resolution(effect.postId)) {
             onAction(ViewerAction.ResolutionStarted(effect.session, effect.postId))
             try {
-                val outcome = withTimeoutOrNull(15_000L) { Result.success(postResolver.resolve(effect.session, effect.postId)) }
+                val outcome = withTimeoutOrNull(viewerResolutionTimeoutMs(mutableSession.value?.series)) { Result.success(postResolver.resolve(effect.session, effect.postId)) }
                     ?: throw java.io.IOException("Post resolution timed out")
                 val resolved = outcome.getOrThrow()
                 coroutineContext.ensureActive()
@@ -584,6 +593,15 @@ private class ViewerPrefetchLedger {
     }
 }
 
+/**
+ * How long a post lookup may take, the first one or one asked again to recover expired media. A series entry is
+ * looked up by its extension, which can take half a minute to find an episode's streams.
+ */
+internal fun viewerResolutionTimeoutMs(series: ViewerSeries?): Long =
+    if (series == null) VIEWER_RESOLUTION_TIMEOUT_MS else VIEWER_SERIES_RESOLUTION_TIMEOUT_MS
+
+internal const val VIEWER_RESOLUTION_TIMEOUT_MS = 15_000L
+internal const val VIEWER_SERIES_RESOLUTION_TIMEOUT_MS = 60_000L
 internal const val VIEWER_PREFETCH_MAX_CONCURRENCY = 2
 internal const val VIEWER_PREFETCH_READY_WAIT_MS = 1_500L
 

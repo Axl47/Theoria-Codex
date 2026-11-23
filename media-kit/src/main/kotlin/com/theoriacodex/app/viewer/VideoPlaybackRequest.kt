@@ -3,6 +3,7 @@ package com.theoriacodex.app.viewer
 import com.theoriacodex.app.media.withVideoQuality
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.MediaStream
 import com.theoriacodex.domain.model.MediaTrack
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.VideoQuality
@@ -45,9 +46,8 @@ fun ImageRef.viewerPlayback(
     height: Int? = null,
     streamLabel: String? = null,
 ): VideoPlaybackRequest? {
-    val playable = streams.filter { it.url.isNotBlank() }
-    if (localPath.isNullOrBlank() && playable.isNotEmpty()) {
-        val stream = playable.firstOrNull { it.label == streamLabel } ?: playable.first()
+    val stream = viewerStream(streamLabel)
+    if (localPath.isNullOrBlank() && stream != null) {
         return VideoPlaybackRequest(
             location = stream.url,
             headers = stream.headers.ifEmpty { source.requestHeaders() },
@@ -60,4 +60,14 @@ fun ImageRef.viewerPlayback(
     val selected = withVideoQuality(quality, metered, height)
     val location = selected.localPath?.takeIf(String::isNotBlank) ?: selected.url?.takeIf(String::isNotBlank) ?: return null
     return VideoPlaybackRequest(location, source.requestHeaders())
+}
+
+/**
+ * The stream [viewerPlayback] plays for media with [ImageRef.streams]: the playable one labelled [streamLabel], else
+ * the first playable one; null when there is none. A label that no longer exists after its links were fetched again
+ * falls back to the first.
+ */
+fun ImageRef.viewerStream(streamLabel: String?): MediaStream? {
+    val playable = streams.filter { it.url.isNotBlank() }
+    return playable.firstOrNull { it.label == streamLabel } ?: playable.firstOrNull()
 }

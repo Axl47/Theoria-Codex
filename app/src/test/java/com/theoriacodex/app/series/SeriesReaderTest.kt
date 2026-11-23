@@ -3,7 +3,7 @@ package com.theoriacodex.app.series
 import com.theoriacodex.app.di.SeriesDependencies
 import com.theoriacodex.app.media.isLikelyImageLocation
 import com.theoriacodex.app.viewer.ViewerSeries
-import com.theoriacodex.app.viewer.ViewerSeriesProgress
+import com.theoriacodex.app.viewer.ViewerPlaybackProgress
 import com.theoriacodex.app.viewer.decodeViewerPostId
 import com.theoriacodex.app.viewer.encodeViewerPostId
 import com.theoriacodex.data.repository.DownloadScheduler
@@ -106,11 +106,11 @@ class SeriesReaderTest {
         val session = checkNotNull(reader.session(id, "/c1"))
 
         // The Viewer first reports the chapter while only its cover shows; resolving it reads nothing either.
-        reader.recordProgress(session, session.posts.single(), ViewerSeriesProgress.Page(1))
+        reader.recordPageProgress(session, session.posts.single(), 1)
         val resolved = checkNotNull(reader.resolve(session.context.queryHash, session.posts.single().id))
         assertEquals(emptyList<String>(), repository.progress)
 
-        reader.recordProgress(session, resolved, ViewerSeriesProgress.Page(1))
+        reader.recordPageProgress(session, resolved, 1)
         assertEquals(listOf("/c1 1/1"), repository.progress)
     }
 
@@ -126,8 +126,8 @@ class SeriesReaderTest {
         assertEquals(listOf(stream), episode.media.single().streams)
 
         // A duration not known yet records only the entry opened last, as a chapter's pages still loading do.
-        reader.recordProgress(session, episode, ViewerSeriesProgress.Playback(positionMs = 0, durationMs = 0))
-        reader.recordProgress(session, episode, ViewerSeriesProgress.Playback(positionMs = 61_000, durationMs = 1_440_000))
+        reader.recordPlaybackProgress(session, episode, ViewerPlaybackProgress(positionMs = 0, durationMs = 0))
+        reader.recordPlaybackProgress(session, episode, ViewerPlaybackProgress(positionMs = 61_000, durationMs = 1_440_000))
         assertEquals(listOf("/c1 0/null", "/c1 61000/1440000"), repository.progress)
     }
 

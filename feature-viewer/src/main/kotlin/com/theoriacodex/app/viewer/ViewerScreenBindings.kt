@@ -27,10 +27,12 @@ data class ViewerScreenConfig(
     val galleryReadingModes: Map<PostId, GalleryReadingMode> = emptyMap(),
     val playbackDiagnosticsEnabled: Boolean = false,
     /**
-     * The posts are one series' chapters, which are read and never collected: the top bar names the series and
-     * chapter in place of the source, and Like and Save are hidden.
+     * The session's [ViewerSession.series], null for any session that is not a series'. A series' entries are never
+     * collected: the top bar names the series and entry in place of the source, Like and Save are hidden, and the info
+     * sheet holds only Start over. [ViewerSeries.Reading] adds the chapter rules (the series' reading mode, the
+     * chapter strip, reading on into the next chapter); [ViewerSeries.Watching] the episode rules.
      */
-    val seriesChapters: Boolean = false,
+    val series: ViewerSeries? = null,
 )
 
 /** What the Viewer asks of the app: navigation, persistence and platform behavior. The app builds one per shell. */
@@ -43,7 +45,7 @@ data class ViewerScreenCallbacks(
     val onVisiblePostChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
     val onVisibleMediaChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
     /** An episode's playback position in a [ViewerSeries.Watching] session, for its series' progress. */
-    val onPlaybackProgress: suspend (Post, ViewerSeriesProgress.Playback, ViewerSession) -> Unit = { _, _, _ -> },
+    val onPlaybackProgress: suspend (Post, ViewerPlaybackProgress, ViewerSession) -> Unit = { _, _, _ -> },
     val onOpenUrl: (String) -> Unit = {},
     val onGoToSearch: () -> Unit,
     val onDismissRelatedPosts: (ViewerStreamSource) -> Unit = {},
@@ -71,7 +73,7 @@ class ViewerScreenHost(
      * often enough that a killed process resumes close to where it stopped, and once more when it lets the episode go.
      * Other sessions never report.
      */
-    val onPlaybackProgress: ((Post, ViewerSeriesProgress.Playback) -> Unit)? = null,
+    val onPlaybackProgress: ((Post, ViewerPlaybackProgress) -> Unit)? = null,
     val onVideoQualitySelected: (VideoQuality) -> Unit = {},
     val durations: ViewerPostDurations = ViewerPostDurations.None,
 )

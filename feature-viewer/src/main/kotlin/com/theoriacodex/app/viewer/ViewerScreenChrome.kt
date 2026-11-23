@@ -25,11 +25,11 @@ import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
-/** What the top bar names: a series chapter by its title, any other post by its source. */
+/** What the top bar names: a series entry by its title, any other post by its source. */
 private fun ViewerScreenConfig.topBarTitle(post: Post): String =
-    post.title?.takeIf { seriesChapters } ?: post.id.source.displayName()
+    post.title?.takeIf { series != null } ?: post.id.source.displayName()
 
-/** The dock's Save button; a series chapter is not a post to save, so its dock has none. */
+/** The dock's Save button; a series entry is not a post to save, so its dock has none. */
 @Composable
 private fun ViewerDockSave(
     config: ViewerScreenConfig,
@@ -39,7 +39,7 @@ private fun ViewerDockSave(
     controls: ViewerControls,
     host: ViewerScreenHost,
 ) {
-    if (config.seriesChapters) return
+    if (config.series != null) return
     ViewerSaveButton(post, saveContext, screen.saveFan, controls::markInteraction) { host.onAction(ViewerAction.Save) }
 }
 
@@ -54,6 +54,7 @@ internal fun BoxScope.ViewerChromeOverlays(
     activity: ViewerHostActivity?,
     quality: MutableState<com.theoriacodex.domain.model.VideoQuality>,
     qualityHeight: MutableState<Int?>,
+    streamLabel: MutableState<String?>,
     pendingPostId: MutableState<PostId?>,
     host: ViewerScreenHost,
     config: ViewerScreenConfig,
@@ -74,12 +75,15 @@ internal fun BoxScope.ViewerChromeOverlays(
     val scrubFade by animateFloatAsState(if (screen.timelineInteractionActive) 0f else 1f, tween(TheoriaMotion.SHORT_MS), label = "Viewer scrub fade")
     val fadesWhileScrubbing = Modifier.graphicsLayer { alpha = scrubFade }
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_STRIPS && !frame.mediaOverviewVisible, Modifier.align(Alignment.BottomCenter)) {
-        ViewerBottomStack(frame, postPagerState, controls, pendingPostId, config, loadMoreFromStrip, fadesWhileScrubbing)
+        ViewerBottomStack(frame, postPagerState, controls, pendingPostId, config, loadMoreFromStrip, fadesWhileScrubbing) {
+            val onNext = nextPostOpener(navigation.currentIndex, frame, swipe, config)
+            ViewerEpisodeBar(frame, screen.activeTracks, streamLabel, onNext, controls::markInteraction)
+        }
     }
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_TOP_BAR, Modifier.align(Alignment.BottomCenter).then(fadesWhileScrubbing)) {
         val dock = viewerDockActions(
             frame, controls, activity, quality, qualityHeight, selection.post.id in config.likedPostIds, comments.countOf(selection.post), host.onAction,
-            collectable = !config.seriesChapters,
+            collectable = config.series == null,
         )
         ViewerDock(dock) { ViewerDockSave(config, selection.post, saveContext, screen, controls, host) }
     }
@@ -111,7 +115,10 @@ internal fun BoxScope.ViewerChromeOverlays(
     ViewerSaveFanOverlay(screen.saveFan)
 }
 
-/** The post strip and, on multi-page posts, the page scrubber below it, lifted above the dock and any timeline. */
+/**
+ * The post strip and, on multi-page posts, the page scrubber below it, lifted above the dock and any timeline. While a
+ * series is watched, [episodeControls] take the strip's place: every episode shows the same cover.
+ */
 @Composable
 private fun ViewerBottomStack(
     frame: ViewerFrame,
@@ -121,6 +128,7 @@ private fun ViewerBottomStack(
     config: ViewerScreenConfig,
     loadMoreFromStrip: () -> Unit,
     fadesWhileScrubbing: Modifier,
+    episodeControls: @Composable () -> Unit,
 ) {
     val selection = frame.selection
     val navigation = frame.navigation
@@ -148,13 +156,17 @@ private fun ViewerBottomStack(
             }
         },
     ) {
-        ViewerPostStrip(navigation.originalPosts, stripIndex, { index ->
-            pendingPostId.value = navigation.originalPosts[index].id
-        }, Modifier.testTag("viewer-post-navigation-strip"),
-            onLoadMore = loadMoreFromStrip, onInteraction = { controls.markInteraction() },
-            openPages = ViewerStripPages(selection.post.id, selection.overviewItems, selection.mediaIndex, mirrored) {
-                controls.jumpToMedia(selection.post.id, it)
-            }, chapters = config.seriesChapters)
+        if (frame.watching) {
+            episodeControls()
+        } else {
+            ViewerPostStrip(navigation.originalPosts, stripIndex, { index ->
+                pendingPostId.value = navigation.originalPosts[index].id
+            }, Modifier.testTag("viewer-post-navigation-strip"),
+                onLoadMore = loadMoreFromStrip, onInteraction = { controls.markInteraction() },
+                openPages = ViewerStripPages(selection.post.id, selection.overviewItems, selection.mediaIndex, mirrored) {
+                    controls.jumpToMedia(selection.post.id, it)
+                }, chapters = config.series != null)
+        }
     }
 }
 

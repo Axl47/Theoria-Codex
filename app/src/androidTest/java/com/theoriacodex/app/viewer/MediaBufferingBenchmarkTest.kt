@@ -200,7 +200,7 @@ class MediaBufferingBenchmarkTest {
         val frameSize = viewerScrubFrameSize(16f / 9f)
         val previews = onMain {
             ViewerScrubPreviews(
-                context, probe.player, SourceKey.GELBOORU.requestHeaders(),
+                context, probe.player, VideoPlaybackRequest(video, headers),
                 (frameSize.width.value * density).roundToInt() and 1.inv(),
                 (frameSize.height.value * density).roundToInt() and 1.inv(),
             )

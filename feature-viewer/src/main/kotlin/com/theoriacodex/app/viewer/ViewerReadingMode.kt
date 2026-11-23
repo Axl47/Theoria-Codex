@@ -11,7 +11,7 @@ import com.theoriacodex.domain.model.GalleryReadingMode
  * not still images.
  */
 internal fun ViewerScreenConfig.readingModeOf(page: ViewerPageState?): GalleryReadingMode {
-    if (page == null || (page.swipeMediaCount() <= 1 && !seriesChapters)) return GalleryReadingMode.LEFT_TO_RIGHT
+    if (page == null || (page.swipeMediaCount() <= 1 && series !is ViewerSeries.Reading)) return GalleryReadingMode.LEFT_TO_RIGHT
     val chosen = galleryReadingModes[page.post.id]?.takeIf { it != GalleryReadingMode.VERTICAL || page.verticalReadingAvailable() }
     return chosen ?: if (invertMultiImageScrollDirection) GalleryReadingMode.RIGHT_TO_LEFT else GalleryReadingMode.LEFT_TO_RIGHT
 }
@@ -22,7 +22,7 @@ internal fun ViewerScreenConfig.readingModeOf(page: ViewerPageState?): GalleryRe
  * to it from the chapter after: paging back continues from the end of the one before.
  */
 internal fun ViewerScreenConfig.entryMediaIndex(page: ViewerPageState, back: Boolean = false): Int {
-    val finished = seriesChapters && page.pendingMediaIndex == null && page.selectedMediaIndex > 0 && page.selectedMediaIndex >= page.media.lastIndex
+    val finished = series is ViewerSeries.Reading && page.pendingMediaIndex == null && page.selectedMediaIndex > 0 && page.selectedMediaIndex >= page.media.lastIndex
     return if (finished && !back) 0 else page.targetMediaIndex
 }
 
