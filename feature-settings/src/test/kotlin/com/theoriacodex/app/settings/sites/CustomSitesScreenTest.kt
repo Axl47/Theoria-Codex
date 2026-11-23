@@ -111,7 +111,7 @@ class CustomSitesScreenTest {
     }
 
     @Test
-    fun `a site proven to work shows the check mark on its row and Browser check row`() {
+    fun `a site proven to work shows the check mark on its row and offers no browser check`() {
         val controller = FakeCustomSitesController(listOf(site()))
         controller.workingSourceIds.value = setOf("custom_safebooru_org")
         show(controller)
@@ -120,7 +120,19 @@ class CustomSitesScreenTest {
 
         compose.onNodeWithText("Safebooru").performClick()
 
-        compose.onNodeWithContentDescription("Working").assertExists()
+        compose.onNodeWithText("Browser check").assertDoesNotExist()
+        compose.onNodeWithText("Verify in browser").assertDoesNotExist()
+    }
+
+    @Test
+    fun `a working built-in source's page offers no browser check`() {
+        val iwara = BuiltInSiteSummary(SourceKey.IWARA, "Iwara", "www.iwara.tv", working = true, needsVerification = false)
+        show(FakeCustomSitesController().apply { builtInSites.value = listOf(iwara) })
+
+        compose.onNodeWithText("Iwara").performClick()
+
+        compose.onNodeWithText("Settings / Sites / Iwara").assertExists()
+        compose.onNodeWithText("Verify in browser").assertDoesNotExist()
     }
 
     @Test
