@@ -6,6 +6,7 @@ import com.theoriacodex.domain.model.MediaStream
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.playable
 import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
@@ -111,12 +112,13 @@ fun chapterPost(series: Series, entry: SeriesEntry, cover: String?, pages: List<
 /**
  * One episode as the Viewer's post, identified as [chapterPost] identifies a chapter. With [streams] its one media item
  * is a video carrying them; the item's address is the default stream's, for code that only asks whether media has
- * one, while what plays is chosen from [ImageRef.streams]. Without them it is its cover, which the Viewer resolves as
+ * one, while what plays is chosen from [ImageRef.streams], here the [playable] ones. Without them it is its cover, which the Viewer resolves as
  * it does a chapter without pages, but counted as exactly one media item, so it is never paged as a gallery. Like a
  * chapter's, the post is never stored: a series session's posts stay out of History and every Codex.
  */
 fun episodePost(series: Series, entry: SeriesEntry, cover: String?, streams: List<MediaStream> = emptyList()): Post {
-    val video = streams.firstOrNull()?.let { ImageRef(url = it.url, localPath = null, mime = null, streams = streams) }
+    val playable = streams.playable()
+    val video = playable.firstOrNull()?.let { ImageRef(url = it.url, localPath = null, mime = null, streams = playable) }
     return entryPost(series, entry, cover, listOfNotNull(video), mediaCount = 1)
 }
 

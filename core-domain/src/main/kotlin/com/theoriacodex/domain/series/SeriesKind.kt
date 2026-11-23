@@ -13,7 +13,9 @@ enum class SeriesKind {
 
 /**
  * The id prefix of sources that run a loaded Mihon (manga) extension. Like [ANIYOMI_SOURCE_ID_PREFIX] it follows the
- * custom-site id grammar, so stored ids parse, and its label can never be a real site's host.
+ * custom-site id grammar, so stored ids parse. A Custom Site can share the prefix (`mihon.example.org` is
+ * `custom_mihon_example_org`), so an extension's id is the prefix followed by its number and nothing else, which no
+ * site's host can be.
  */
 const val MIHON_SOURCE_ID_PREFIX = "custom_mihon_"
 
@@ -28,7 +30,10 @@ const val ANIYOMI_SOURCE_ID_PREFIX = "custom_aniyomi_"
  * series source; any source but an Aniyomi extension's reads as [SeriesKind.MANGA].
  */
 val SourceKey.seriesKind: SeriesKind
-    get() = if (id.startsWith(ANIYOMI_SOURCE_ID_PREFIX)) SeriesKind.ANIME else SeriesKind.MANGA
+    get() = if (isNumbered(ANIYOMI_SOURCE_ID_PREFIX)) SeriesKind.ANIME else SeriesKind.MANGA
 
 /** Whether this source runs loaded extension code, of either kind. */
-fun SourceKey.isExtensionSource(): Boolean = id.startsWith(MIHON_SOURCE_ID_PREFIX) || id.startsWith(ANIYOMI_SOURCE_ID_PREFIX)
+fun SourceKey.isExtensionSource(): Boolean = isNumbered(MIHON_SOURCE_ID_PREFIX) || isNumbered(ANIYOMI_SOURCE_ID_PREFIX)
+
+private fun SourceKey.isNumbered(prefix: String): Boolean =
+    id.length > prefix.length && id.startsWith(prefix) && id.drop(prefix.length).all { it in '0'..'9' }

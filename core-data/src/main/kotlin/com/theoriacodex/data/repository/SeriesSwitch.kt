@@ -4,6 +4,7 @@ import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesSource
+import com.theoriacodex.domain.series.seriesKind
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -66,6 +67,8 @@ fun StoredSeries.withSettingsOf(from: StoredSeries): StoredSeries = copy(
  *
  * [to]'s own progress stays: read entries stay read, pages never go back, and an entry opened last that is as far or
  * further in reading order is kept.
+ *
+ * Both are the same kind of series: a page number means nothing as a playback position, so anything else is refused.
  */
 fun carryProgress(
     from: StoredSeries,
@@ -73,6 +76,7 @@ fun carryProgress(
     to: StoredSeries,
     toEntries: List<StoredSeriesEntry>,
 ): Pair<StoredSeries, List<StoredSeriesEntry>> {
+    require(from.series.id.source.seriesKind == to.series.id.source.seriesKind) { "Progress moves only between series of one kind" }
     val olds = fromEntries.map(StoredSeriesEntry::entry)
     val oldRead = fromEntries.filter { it.read }.mapTo(HashSet()) { it.entry.address }
     val readNumbers = fromEntries.filter { it.read }.mapNotNullTo(HashSet()) { it.entry.number }

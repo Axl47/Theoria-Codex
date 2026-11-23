@@ -7,11 +7,19 @@ import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class SeriesSwitchTest {
     private val from = StoredSeries(Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_1"), "/a"), "Series"))
     private val to = StoredSeries(Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_2"), "/b"), "Series"))
+
+    @Test
+    fun `progress does not move between a manga and an anime`() {
+        val anime = StoredSeries(Series(SeriesId(SourceKey.parseOrThrow("custom_aniyomi_2"), "/b"), "Series"))
+
+        assertThrows(IllegalArgumentException::class.java) { carryProgress(from, emptyList(), anime, emptyList()) }
+    }
 
     @Test
     fun `a number matches the same translator group, else the first in reading order`() {

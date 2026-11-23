@@ -20,7 +20,9 @@ class SeriesKindTest {
 
     @Test
     fun `sources that run no extension are not extension sources`() {
-        listOf(SourceKey.PIXIV, SourceKey.parseOrThrow("custom_safebooru_org"), SourceKey.parseOrThrow("custom_aniyomi-fan_org")).forEach {
+        // A Custom Site at aniyomi.example.org or mihon.example.org shares an extension prefix, but not its number.
+        val sites = listOf("custom_safebooru_org", "custom_aniyomi-fan_org", "custom_aniyomi_example_org", "custom_mihon_example_org")
+        (sites.map(SourceKey::parseOrThrow) + SourceKey.PIXIV).forEach {
             assertFalse(it.id, it.isExtensionSource())
             assertEquals(SeriesKind.MANGA, it.seriesKind)
         }

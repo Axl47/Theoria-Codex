@@ -418,7 +418,7 @@ dependencies {
     implementation(project(":feature-series"))
     implementation(project(":feature-settings"))
     implementation(project(":vision-kit"))
-    // Runs Mihon extensions as series sources; see extension-host/README.md for what it costs release builds.
+    // Runs Mihon and Aniyomi extensions as series sources; see extension-host/README.md for what it costs release builds.
     implementation(project(":extension-host"))
 
     implementation(libs.androidx.core.ktx)

@@ -59,6 +59,13 @@ class SeriesProgressTest {
     }
 
     @Test
+    fun `an episode of unknown length records nothing`() {
+        val episode = entry("/1", order = 0)
+
+        assertEquals(episode, episode.withProgress(position = 0, length = 0, kind = SeriesKind.ANIME))
+    }
+
+    @Test
     fun `continue resumes the entry opened last while it is unfinished`() {
         val entries = listOf(entry("c3", order = 0), entry("c2", order = 1, position = 4), entry("c1", order = 2))
 

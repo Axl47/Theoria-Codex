@@ -28,7 +28,10 @@ enum class VideoQuality { AUTO, DATA_SAVER, BEST }
  */
 data class MediaStream(
     val url: String,
-    /** The source's name for it, such as `1080p · Server A`; the Viewer remembers a choice by it, since URLs change. */
+    /**
+     * The source's name for it, such as `1080p · Server A`; the Viewer remembers a choice by it, since URLs change.
+     * Within one episode labels are unique and not blank, which [playable] sees to.
+     */
     val label: String,
     /** The container or manifest type when the source names one (HLS, DASH); null leaves it to the player. */
     val mime: String? = null,
@@ -61,6 +64,19 @@ data class ImageRef(
      */
     val streams: List<MediaStream> = emptyList(),
 )
+
+/**
+ * The streams of one episode that can play, as the Viewer lists them: those with an address, each under a label of
+ * its own. A stream the source left unnamed is `Stream 2` by its place; a repeated label gains its count, `1080p (2)`.
+ */
+fun List<MediaStream>.playable(): List<MediaStream> {
+    val seen = HashMap<String, Int>()
+    return filter { it.url.isNotBlank() }.mapIndexed { index, stream ->
+        val label = stream.label.trim().ifEmpty { "Stream ${index + 1}" }
+        val count = seen.merge(label, 1, Int::plus) ?: 1
+        stream.copy(label = if (count == 1) label else "$label ($count)")
+    }
+}
 
 data class PostTaxonomyTerm(
     val value: String,

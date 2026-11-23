@@ -5,6 +5,7 @@ import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
+import com.theoriacodex.domain.series.seriesKind
 import kotlinx.coroutines.flow.Flow
 
 /** A series as stored: what its source said, and what the user did with it. */
@@ -104,15 +105,16 @@ interface SeriesRepository {
 
 /**
  * [this] after the user reached [position] of [length] in a series of [kind]. A chapter is read once its last page was
- * reached; an episode once [ANIME_FINISHED_PERCENT] of it was watched, as Aniyomi counts it. Either stays read.
+ * reached; an episode once [ANIME_FINISHED_PERCENT] of it was watched, as Aniyomi counts it. Either stays read. An
+ * episode whose [length] is not known yet (zero) records nothing, so it is never finished by opening it.
  */
 fun StoredSeriesEntry.withProgress(position: Long, length: Long, kind: SeriesKind): StoredSeriesEntry = when (kind) {
     SeriesKind.MANGA -> {
         val reached = position.coerceIn(1, length.coerceAtLeast(1))
         copy(position = reached, length = length, read = read || reached >= length)
     }
-    SeriesKind.ANIME -> {
-        val reached = position.coerceIn(0, length.coerceAtLeast(0))
+    SeriesKind.ANIME -> if (length <= 0) this else {
+        val reached = position.coerceIn(0, length)
         copy(position = reached, length = length, read = read || reached * 100 >= length * ANIME_FINISHED_PERCENT)
     }
 }
@@ -132,11 +134,13 @@ fun List<StoredSeriesEntry>.inReadingOrder(): List<StoredSeriesEntry> = sortedBy
  */
 fun continueEntry(series: StoredSeries, entries: List<StoredSeriesEntry>): StoredSeriesEntry? {
     val ordered = entries.inReadingOrder()
+    // Where an untouched entry stands: page 1 of a chapter, the start of an episode.
+    val started = if (series.series.id.source.seriesKind == SeriesKind.ANIME) 0L else 1L
     val opened = ordered.indexOfFirst { it.entry.address == series.lastOpenedEntry }
     val lastOpened = ordered.getOrNull(opened)
     return lastOpened?.takeIf { !it.read }
         ?: lastOpened?.let { ordered.getOrNull(opened + 1) }?.takeIf { !it.read }
-        ?: ordered.lastOrNull { !it.read && it.position > 1 }
+        ?: ordered.lastOrNull { !it.read && it.position > started }
         ?: ordered.firstOrNull { !it.read }
         ?: lastOpened
         ?: ordered.lastOrNull()
