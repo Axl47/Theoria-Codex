@@ -215,7 +215,7 @@ class ViewerWatchingTest {
         assertNull(state.controls.panel)
         assertEquals("720p · B", state.controls.episode.streamLabel)
         state = reduceViewerState(state, ViewerAction.ChooseSubtitle(ViewerSubtitleChoice.Track("English"))).state
-        assertEquals(ViewerEpisodeChoice("720p · B", ViewerSubtitleChoice.Track("English"), episodeStream = state.controls.episode.episodeStream), state.controls.episode)
+        assertEquals(ViewerEpisodeChoice("720p · B", ViewerSubtitleChoice.Track("English"), episodeStreams = state.controls.episode.episodeStreams), state.controls.episode)
     }
 
     @Test
@@ -312,6 +312,11 @@ class ViewerWatchingTest {
         assertEquals("B", state.controls.episode.streamLabelFor(first))
         assertNull(state.controls.episode.streamLabelFor(second))
         assertNull(state.controls.episode.pickedStream(first))
+
+        // Another episode falling back leaves this one on the stream it fell back to.
+        state = reduceViewerState(state, ViewerAction.FallBackToStream(second, "A")).state
+        assertEquals("B", state.controls.episode.streamLabelFor(first))
+        assertEquals("A", state.controls.episode.streamLabelFor(second))
 
         state = reduceViewerState(state, ViewerAction.ChooseStream("A")).state
         assertEquals("A", state.controls.episode.streamLabelFor(first))
