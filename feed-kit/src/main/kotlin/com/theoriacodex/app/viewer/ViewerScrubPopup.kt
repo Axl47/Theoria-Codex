@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import com.theoriacodex.app.ui.formatTimelineTime
 import kotlin.math.roundToInt
 
 /** The current media's width over height, so scrub previews can take its real shape. */
