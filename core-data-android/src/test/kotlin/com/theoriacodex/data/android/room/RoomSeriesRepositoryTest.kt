@@ -187,4 +187,65 @@ class RoomSeriesRepositoryTest {
         assertEquals(1, repository.entries(id).size)
         assertEquals("Other", repository.series(id)!!.series.author)
     }
+
+    @Test
+    fun `marking all chapters read or unread updates listed chapters and resets progress when unread`() = runTest {
+        repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))
+        repository.setFollowed(id, true)
+        repository.recordProgress(id, "/c/1", page = 5, pageCount = 10)
+
+        repository.setAllRead(id, read = true)
+        assertTrue(repository.entries(id).all { it.read })
+        assertEquals(0, repository.observeFollowed().first().single().unreadCount)
+
+        repository.setAllRead(id, read = false)
+        assertTrue(repository.entries(id).none { it.read })
+        assertTrue(repository.entries(id).all { it.lastPage == 0 })
+        assertNull(repository.series(id)!!.lastOpenedEntry)
+        assertEquals(2, repository.observeFollowed().first().single().unreadCount)
+    }
+
+    @Test
+    fun `setEntriesRead and restoreProgress update targeted chapters and preserve unrelated edits on undo`() = runTest {
+        repository.store(series, listOf(SeriesEntry("/c/3", "Chapter 3"), SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))
+        repository.recordProgress(id, "/c/1", page = 4, pageCount = 10)
+
+        val restore = repository.setEntriesRead(id, listOf("/c/2", "/c/1"), read = true)
+        assertEquals(listOf(false, true, true), repository.entries(id).map { it.read })
+
+        // Separate edit to an unrelated chapter after the bulk action.
+        repository.setEntriesRead(id, listOf("/c/3"), read = true)
+
+        repository.restoreProgress(id, restore)
+        val restored = repository.entries(id)
+        assertEquals(listOf(true, false, false), restored.map { it.read })
+        assertEquals(4, restored.last().lastPage)
+        assertEquals("/c/1", repository.series(id)!!.lastOpenedEntry)
+
+        val unreadRestore = repository.setEntriesRead(id, listOf("/c/1"), read = false)
+        assertEquals(0, repository.entries(id).last().lastPage)
+        assertNull(repository.series(id)!!.lastOpenedEntry)
+        repository.restoreProgress(id, unreadRestore)
+        assertEquals(4, repository.entries(id).last().lastPage)
+        assertEquals("/c/1", repository.series(id)!!.lastOpenedEntry)
+
+        // If another chapter was opened after Mark all unread, Undo keeps that newer Continue destination.
+        val allUnreadRestore = repository.setAllRead(id, read = false)
+        repository.recordProgress(id, "/c/3", page = 2, pageCount = 8)
+        repository.restoreProgress(id, allUnreadRestore)
+        assertEquals("/c/3", repository.series(id)!!.lastOpenedEntry)
+    }
+
+    @Test
+    fun `observeFollowed puts series with unread chapters before caught-up ones`() = runTest {
+        val caughtUpId = SeriesId(id.source, "/series/alpha")
+        val unreadId = SeriesId(id.source, "/series/zeta")
+        repository.store(series.copy(id = caughtUpId, title = "Alpha"), listOf(SeriesEntry("/a/1", "Ch 1")))
+        repository.store(series.copy(id = unreadId, title = "Zeta"), listOf(SeriesEntry("/z/2", "Ch 2"), SeriesEntry("/z/1", "Ch 1")))
+        repository.setFollowed(caughtUpId, true)
+        repository.setFollowed(unreadId, true)
+        repository.setAllRead(caughtUpId, read = true)
+
+        assertEquals(listOf("Zeta", "Alpha"), repository.observeFollowed().first().map { it.series.title })
+    }
 }

@@ -13,7 +13,9 @@ public interface SeriesDao {
     @Query("SELECT series.*, (SELECT COUNT(*) FROM series_entries WHERE series_entries.source = series.source "
             + "AND series_entries.series_address = series.address AND series_entries.read = 0 "
             + "AND series_entries.source_order >= 0) AS unread_count "
-            + "FROM series WHERE followed = 1 ORDER BY title COLLATE NOCASE ASC, source ASC, address ASC")
+            + "FROM series WHERE followed = 1 "
+            + "ORDER BY CASE WHEN unread_count > 0 THEN 0 ELSE 1 END ASC, unread_count DESC, "
+            + "title COLLATE NOCASE ASC, source ASC, address ASC")
     Flow<List<FollowedSeriesRow>> observeFollowed();
 
     @Query("SELECT * FROM series WHERE source = :source AND address = :address LIMIT 1")
@@ -66,6 +68,15 @@ public interface SeriesDao {
     /** Its entries go with it, by the foreign key's cascade. */
     @Query("DELETE FROM series WHERE source = :source AND address = :address")
     void deleteSeries(String source, String address);
+
+    @Query("UPDATE series_entries SET read = 1 WHERE source = :source AND series_address = :seriesAddress AND source_order >= 0")
+    void markAllRead(String source, String seriesAddress);
+
+    @Query("UPDATE series_entries SET read = 0, last_page = 0 WHERE source = :source AND series_address = :seriesAddress AND source_order >= 0")
+    void markAllUnread(String source, String seriesAddress);
+
+    @Query("UPDATE series SET last_opened_entry = NULL WHERE source = :source AND address = :address")
+    void clearLastOpenedEntry(String source, String address);
 
     /** An update in place: replacing the row would cascade its entries away. */
     @Upsert void upsertSeries(SeriesEntity entity);

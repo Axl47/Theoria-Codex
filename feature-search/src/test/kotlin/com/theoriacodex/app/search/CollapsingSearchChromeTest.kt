@@ -19,6 +19,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import com.theoriacodex.app.ui.components.CollapsingSearchChrome
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -37,7 +38,7 @@ class CollapsingSearchChromeTest {
         compose.setContent {
             MaterialTheme {
                 CollapsingSearchChrome(expanded.value, false, { expanded.value = true },
-                    sourcePicker = { Text("Source") }, inputField = { Text("Search input") },
+                    trailingControl = { Text("Source") }, inputField = { Text("Search input") },
                     modifier = Modifier.fillMaxSize().testTag("chrome"), horizontalPadding = 16.dp) {
                     Box(Modifier.weight(1f).testTag("grid"))
                 }
@@ -65,7 +66,7 @@ class CollapsingSearchChromeTest {
             val holder = rememberSaveableStateHolder()
             MaterialTheme {
                 if (shown.value) holder.SaveableStateProvider("search") {
-                    CollapsingSearchChrome(true, false, {}, sourcePicker = {},
+                    CollapsingSearchChrome(true, false, {}, trailingControl = {},
                         inputField = { Box(Modifier.fillMaxWidth().height(56.dp)) }, modifier = Modifier.fillMaxSize()) {
                         remember { compositions++ }
                         Box(Modifier.weight(1f).testTag("grid"))
@@ -93,7 +94,7 @@ class CollapsingSearchChromeTest {
     @Test fun `legacy mode keeps the full input above the grid`() {
         compose.setContent {
             MaterialTheme {
-                CollapsingSearchChrome(false, true, {}, sourcePicker = {}, inputField = { Text("Search input") }, modifier = Modifier.fillMaxSize()) {
+                CollapsingSearchChrome(false, true, {}, trailingControl = {}, inputField = { Text("Search input") }, modifier = Modifier.fillMaxSize()) {
                     Box(Modifier.weight(1f).testTag("grid"))
                 }
             }

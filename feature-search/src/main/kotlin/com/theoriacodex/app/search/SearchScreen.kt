@@ -37,6 +37,7 @@ import com.theoriacodex.app.search.state.SearchQueryUiState
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.PostTagActionSection
+import com.theoriacodex.app.ui.components.CollapsingSearchChrome
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
@@ -239,7 +240,7 @@ private fun SearchChromeLayout(
         expanded = !chrome.searchBarDismissedByScroll,
         legacy = oldSearchBar,
         onExpand = { chrome.composerOpen = true },
-        sourcePicker = sourcePicker,
+        trailingControl = sourcePicker,
         horizontalPadding = 16.dp,
         modifier = Modifier.fillMaxSize().padding(padding)
             .padding(top = if (oldSearchBar) 6.dp else 0.dp, bottom = 8.dp),

@@ -88,6 +88,10 @@ interface SeriesSource {
      * here, each time it is loaded, so the stored cover stays what the source gave. Makes no request.
      */
     fun coverAddress(series: Series): String? = series.coverUrl
+
+    /** The series' page on its site, for Open in browser and Share; null when the source has none. Makes no request. */
+    fun webUrl(series: Series): String? =
+        series.id.address.takeIf { it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true) }
 }
 
 /** The id prefix of sources that run loaded extension code. It follows the custom-site id grammar, so stored ids parse. */
