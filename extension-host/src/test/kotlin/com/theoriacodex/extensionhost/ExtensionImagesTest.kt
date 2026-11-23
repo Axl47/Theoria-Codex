@@ -1,5 +1,7 @@
 package com.theoriacodex.extensionhost
 
+import com.theoriacodex.domain.series.EntryMedia
+import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
@@ -149,7 +151,7 @@ class ExtensionImagesTest {
     fun `a chapter's pages are handed out without asking where each image is`() = runTest {
         val reader = PagePerImageSource()
 
-        val pages = mihon(reader).also { images.publish(listOf(it)) }.series.pages(SeriesEntry("/c/1", "Chapter 1"))
+        val pages = mihon(reader).also { images.publish(listOf(it)) }.series.entryPages(SeriesEntry("/c/1", "Chapter 1"))
 
         val tagged = listOf("1", "broken", "3").mapIndexed { index, page -> Regex("https://reader\\.test/p/$page#mihon=custom_mihon_2\\.[0-9a-f]{32}/$index//c/1") }
         assertTrue(tagged.zip(pages.map { it.url!! }).all { (expected, address) -> expected.matches(address) })
@@ -159,7 +161,7 @@ class ExtensionImagesTest {
     @Test
     fun `an image's address is asked for when the image is, and one page failing leaves the others`() = runTest {
         val reader = PagePerImageSource()
-        val (first, broken, third) = mihon(reader).also { images.publish(listOf(it)) }.series.pages(SeriesEntry("/c/1", "Chapter 1")).map { it.url!! }
+        val (first, broken, third) = mihon(reader).also { images.publish(listOf(it)) }.series.entryPages(SeriesEntry("/c/1", "Chapter 1")).map { it.url!! }
 
         assertEquals("image https://img.test/3-2.jpg", fetch(third))
         assertFailsWith<IOException> { fetch(broken) }
@@ -173,7 +175,7 @@ class ExtensionImagesTest {
     @Test
     fun `pages that share an address are told apart, also once they are no longer held`() = runTest {
         val reader = PagePerImageSource(pages = listOf("viewer", "viewer"))
-        val (first, second) = mihon(reader).also { images.publish(listOf(it)) }.series.pages(SeriesEntry("/c/1", "Chapter 1")).map { it.url!! }
+        val (first, second) = mihon(reader).also { images.publish(listOf(it)) }.series.entryPages(SeriesEntry("/c/1", "Chapter 1")).map { it.url!! }
         val restarted = ExtensionImages(key).also { it.publish(listOf(mihon(reader, it))) }
 
         assertTrue(second.startsWith("https://reader.test/p/viewer#mihon=custom_mihon_2.") && second.endsWith("/1//c/1") && first != second)
@@ -186,7 +188,7 @@ class ExtensionImagesTest {
     @Test
     fun `an image address that did not give the image is asked for again`() = runTest {
         val reader = PagePerImageSource()
-        val first = mihon(reader).also { images.publish(listOf(it)) }.series.pages(SeriesEntry("/c/1", "Chapter 1")).first().url!!
+        val first = mihon(reader).also { images.publish(listOf(it)) }.series.entryPages(SeriesEntry("/c/1", "Chapter 1")).first().url!!
 
         reader.expired = true
         assertEquals("expired", fetch(first))
@@ -281,3 +283,6 @@ class ExtensionImagesTest {
         }
     }
 }
+
+/** The pages a manga source hands out for [entry]; a source that answers with streams fails the test. */
+private suspend fun SeriesSource.entryPages(entry: SeriesEntry): List<ImageRef> = (media(entry) as EntryMedia.Pages).pages
