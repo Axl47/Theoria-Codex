@@ -8,8 +8,10 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.OfflineMediaSnapshot
+import com.theoriacodex.data.repository.SeriesDownloads
+import com.theoriacodex.data.repository.SeriesRepository
+import com.theoriacodex.data.repository.seriesIdOfOfflineOwner
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
-import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.app.ui.undo.DeferredRemovals
 import com.theoriacodex.app.ui.undo.PendingRemoval
@@ -36,7 +38,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** One offline owner's row: a Codex kept offline, saved posts, or a removed Codex. */
+/** One offline owner's row: a Codex kept offline, saved posts, a series' downloaded chapters, or a removed Codex. */
 data class OfflineStorageOwner(
     val id: String,
     val name: String,
@@ -80,6 +82,8 @@ const val OFFLINE_ALL_REMOVAL = "*"
 /**
  * Activity-owned presentation and collection preparation; the coordinator owns acquisition and bytes. Removals
  * commit in [removalScope], which must be application-lived: clearing this owner commits what is still pending.
+ * In a build with extensions, [seriesRepository] names the series whose chapters are offline and [seriesDownloads]
+ * removes them, together with their queued chapters.
  */
 class OfflineStorageViewModel(
     private val codices: CodexRepository,
@@ -87,6 +91,8 @@ class OfflineStorageViewModel(
     private val readDisposableUsage: suspend () -> DisposableMediaCacheSnapshot,
     private val clearDisposable: suspend () -> Boolean,
     removalScope: CoroutineScope,
+    private val seriesRepository: SeriesRepository? = null,
+    private val seriesDownloads: SeriesDownloads? = null,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
     scopeOverride: CoroutineScope? = null,
 ) : ViewModel() {
@@ -97,10 +103,23 @@ class OfflineStorageViewModel(
 
     /** Why "Make available offline" could not start, once per attempt; the app shows it when the sheet is closed. */
     val preparationFailures: Flow<String> = failures.receiveAsFlow()
-    private val names = codices.observeCodices().flowOn(dispatcher).catch {
-        controls.update { it.copy(message = "Codex names could not be loaded.") }
-        emit(emptyList())
-    }
+    private val codexNames = codices.observeCodices().map { list -> list.associate { codexOfflineOwner(it.codexId) to it.name } }
+        .flowOn(dispatcher).catch {
+            controls.update { it.copy(message = "Codex names could not be loaded.") }
+            emit(emptyMap())
+        }
+    /** The title of each series with chapters offline, by owner. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val seriesNames = offline.store.snapshot.map { snapshot ->
+        snapshot.postsByOwner.keys.mapNotNull { owner -> seriesIdOfOfflineOwner(owner)?.let { owner to it } }
+    }.distinctUntilChanged().flatMapLatest { owners ->
+        val repository = seriesRepository
+        if (owners.isEmpty() || repository == null) return@flatMapLatest flowOf(emptyMap())
+        combine(owners.map { (owner, id) -> repository.observeSeries(id).map { owner to it?.series?.title } }) { titles ->
+            titles.mapNotNull { (owner, title) -> title?.let { owner to it } }.toMap()
+        }
+    }.flowOn(dispatcher).catch { emit(emptyMap()) }
+    private val names = combine(codexNames, seriesNames) { codex, series -> codex + series }
     /** The current posts of every Codex kept offline, by Codex id, for the ring's share of settled posts. */
     @OptIn(ExperimentalCoroutinesApi::class)
     private val members = combine(offline.store.snapshot, offline.jobs) { snapshot, jobs ->
@@ -114,8 +133,8 @@ class OfflineStorageViewModel(
     private val presented = combine(controls, removals.pending) { ui, pending ->
         ui.copy(pendingRemovals = pending, hiddenOwners = pending.keys)
     }
-    val state = combine(presented, offline.store.snapshot, offline.jobs, names, members) { ui, snapshot, jobs, collections, posts ->
-        val owners = offlineStorageOwners(snapshot, jobs, collections, ui)
+    val state = combine(presented, offline.store.snapshot, offline.jobs, names, members) { ui, snapshot, jobs, ownerNames, posts ->
+        val owners = offlineStorageOwners(snapshot, jobs, ownerNames, ui)
         ui.copy(offline = snapshot, owners = owners, codexStates = codexOfflineStates(owners, posts, snapshot.availablePostIds))
     }.stateIn(scope, SharingStarted.Eagerly, OfflineStorageUiState())
 
@@ -213,7 +232,16 @@ class OfflineStorageViewModel(
         controls.update { it.copy(working = true) }
         try {
             return runCatchingPreservingCancellation {
-                if (key == OFFLINE_ALL_REMOVAL) offline.clear() else offline.remove(key)
+                val series = seriesIdOfOfflineOwner(key)
+                when {
+                    key == OFFLINE_ALL_REMOVAL -> {
+                        // Queued chapters go too, or the next drain would download them again.
+                        seriesDownloads?.cancelAll()
+                        offline.clear()
+                    }
+                    series != null && seriesDownloads != null -> seriesDownloads.deleteSeries(series)
+                    else -> offline.remove(key)
+                }
             }.isSuccess
         } finally {
             controls.update { it.copy(working = false) }
@@ -248,24 +276,30 @@ class OfflineStorageViewModel(
             offline: OfflineMediaCoordinator,
             cache: MediaCacheMaintenance,
             removalScope: CoroutineScope,
-        ): ViewModelProvider.Factory =
-            viewModelFactory { initializer { OfflineStorageViewModel(codices, offline, cache::snapshot, cache::clear, removalScope) } }
+            seriesRepository: SeriesRepository?,
+            seriesDownloads: SeriesDownloads?,
+        ): ViewModelProvider.Factory = viewModelFactory {
+            initializer {
+                OfflineStorageViewModel(codices, offline, cache::snapshot, cache::clear, removalScope, seriesRepository, seriesDownloads)
+            }
+        }
     }
 }
 
+/** The rows of every owner; [names] are the Codex and series names by owner. */
 private fun offlineStorageOwners(
     snapshot: OfflineMediaSnapshot,
     jobs: Map<String, OfflineMediaJob>,
-    codices: List<Codex>,
+    names: Map<String, String>,
     ui: OfflineStorageUiState,
 ): List<OfflineStorageOwner> {
-    val names = codices.associate { codexOfflineOwner(it.codexId) to it.name }
     if (OFFLINE_ALL_REMOVAL in ui.hiddenOwners) return emptyList()
     return (snapshot.postsByOwner.keys + jobs.keys + ui.preparingOwners - ui.hiddenOwners).map { owner ->
+        val removed = if (seriesIdOfOfflineOwner(owner) != null) "Removed series" else "Removed Codex"
         OfflineStorageOwner(
             id = owner,
-            name = if (owner == AUTOMATIC_OFFLINE_OWNER) "Saved posts" else names[owner] ?: "Removed Codex",
-            availablePosts = snapshot.postsByOwner[owner] ?: 0,
+            name = if (owner == AUTOMATIC_OFFLINE_OWNER) "Saved posts" else names[owner] ?: removed,
+            availablePosts = snapshot.postsByOwner[owner]?.size ?: 0,
             job = jobs[owner],
             preparing = owner in ui.preparingOwners,
         )

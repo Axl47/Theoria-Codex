@@ -6,6 +6,7 @@ import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.VideoVariant
 import java.io.File
 import java.io.IOException
@@ -51,13 +52,14 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
             val store = OfflineMediaStore(directory, Dispatchers.IO, manifests)
             val posts = (1..size).map { samplePost(it.toString(), null) }
             for (post in posts) {
-                store.save(post, listOf(requireNotNull(post.full)), "all") { _, file -> file.writeText("media") }
+                store.save(post, listOf(requireNotNull(post.full)), "all") { _, file -> file.writeText("media"); null }
                 store.retain(post.id, "shared")
             }
             assertEquals(1, scans.get())
             assertEquals(size, reads.get())
             assertEquals(size, store.snapshot.value.postCount)
-            assertEquals(mapOf("all" to size, "shared" to size), store.snapshot.value.postsByOwner)
+            val ids = posts.mapTo(HashSet(), Post::id)
+            assertEquals(mapOf("all" to ids, "shared" to ids), store.snapshot.value.postsByOwner)
             store.load()
             assertEquals(1, scans.get())
             val beforeRefresh = store.snapshot.value
@@ -65,7 +67,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
             assertEquals(beforeRefresh, store.snapshot.value)
             assertEquals(size * 2, reads.get())
             store.removeOwner("shared")
-            assertEquals(mapOf("all" to size), store.snapshot.value.postsByOwner)
+            assertEquals(mapOf("all" to ids), store.snapshot.value.postsByOwner)
         }
     }
 
@@ -74,7 +76,8 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         val directory = tempDir("offline")
         val post = gallery()
         val store = OfflineMediaStore(directory)
-        val completed = store.save(post, post.media, "codex:a") { ref, file -> file.writeText(ref.url!!) }
+        val completed = store.save(post, post.media, "codex:a") { ref, file -> file.writeText(ref.url!!); null }
+        assertEquals(directory.walkTopDown().filter(File::isFile).sumOf(File::length), store.snapshot.value.bytes)
         assertEquals(2, completed.media.size)
         assertEquals(completed.media.first(), completed.full)
         assertTrue(completed.media.all { File(it.localPath!!).readText() == it.url })
@@ -83,7 +86,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         val restored = OfflineMediaStore(directory)
         restored.refresh()
         assertEquals(completed, restored.find(post.id))
-        assertEquals(mapOf("codex:a" to 1, "codex:b" to 1), restored.snapshot.value.postsByOwner)
+        assertEquals(mapOf("codex:a" to setOf(post.id), "codex:b" to setOf(post.id)), restored.snapshot.value.postsByOwner)
         assertEquals(2, restored.snapshot.value.mediaCount)
         assertEquals(directory.walkTopDown().filter(File::isFile).sumOf(File::length), restored.snapshot.value.bytes)
 
@@ -95,11 +98,81 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     }
 
     @Test
+    fun `removing one post from an owner keeps its other posts, another owner's copy and its admitted work`() = runTest {
+        val store = OfflineMediaStore(tempDir("one-post"))
+        val (a, b, c) = listOf("a", "b", "c").map { samplePost(it, null) }
+        val admission = store.admit("series")
+        for (post in listOf(a, b)) store.save(post, listOf(requireNotNull(post.full)), "series", admission) { _, file -> file.writeText("media"); null }
+        store.retain(a.id, "codex:x")
+
+        store.removeOwner("series", a.id)
+        store.removeOwner("series", b.id)
+        assertEquals(mapOf("codex:x" to setOf(a.id)), store.snapshot.value.postsByOwner)
+        assertNotNull(store.find(a.id))
+        assertNull(store.find(b.id))
+        store.save(c, listOf(requireNotNull(c.full)), "series", admission) { _, file -> file.writeText("media"); null }
+        assertEquals(setOf(c.id), store.snapshot.value.postsByOwner["series"])
+    }
+
+    @Test
+    fun `a save acquires up to its parallel media at once and keeps gallery order`() = runTest {
+        val store = OfflineMediaStore(tempDir("parallel"))
+        val post = gallery()
+        val secondStarted = CompletableDeferred<Unit>()
+        // The first page finishes only once the second has started, so acquiring one at a time never completes.
+        val saved = store.save(post, post.media, "series", parallel = 2) { ref, file ->
+            if (ref == post.media.first()) secondStarted.await() else secondStarted.complete(Unit)
+            file.writeText(ref.url!!)
+            null
+        }
+        assertEquals(post.media.map { it.url }, saved.media.map { File(it.localPath!!).readText() })
+    }
+
+    @Test
+    fun `a delete stopped partway leaves no copy that opens after a restart`() = runTest {
+        val directory = tempDir("stopped-delete")
+        val post = gallery()
+        OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes"); null }
+        val folder = directory.listFiles().orEmpty().single()
+        val generation = folder.listFiles().orEmpty().single(File::isDirectory)
+        // Its pages cannot be deleted, so the delete stops after the manifest.
+        generation.setWritable(false)
+        try {
+            OfflineMediaStore(directory).apply { load() }.removeOwner("codex:a")
+            assertTrue(generation.listFiles().orEmpty().isNotEmpty())
+            assertNull(OfflineMediaStore(directory).find(post.id))
+        } finally {
+            generation.setWritable(true)
+        }
+        val reopened = OfflineMediaStore(directory).apply { load() }
+        assertFalse(folder.exists())
+        assertEquals(0L, reopened.snapshot.value.bytes)
+    }
+
+    @Test
+    fun `a folder without a manifest is removed on load, and one with an unreadable manifest is kept`() = runTest {
+        val directory = tempDir("no-manifest")
+        val (kept, stopped) = listOf("kept", "stopped").map { samplePost(it, null) }
+        for (post in listOf(kept, stopped)) {
+            OfflineMediaStore(directory).save(post, listOf(requireNotNull(post.full)), "codex:a") { _, file -> file.writeText("bytes"); null }
+        }
+        val folders = directory.listFiles().orEmpty().toList()
+        val (unreadable, manifestless) = folders.partition { "kept" in it.resolve("manifest.json").readText() }
+        unreadable.single().resolve("manifest.json").writeText("{not json")
+        manifestless.single().resolve("manifest.json").delete()
+
+        val store = OfflineMediaStore(directory).apply { load() }
+        assertFalse(manifestless.single().exists())
+        assertTrue(unreadable.single().exists())
+        assertEquals(unreadable.single().walkTopDown().filter(File::isFile).sumOf(File::length), store.snapshot.value.bytes)
+    }
+
+    @Test
     fun `failed replacement and cancelled gallery leave completed bytes intact`() = runTest {
         val directory = tempDir("failed")
         val post = gallery()
         val store = OfflineMediaStore(directory)
-        val completed = store.save(post, post.media, "saved-posts") { _, file -> file.writeText("original") }
+        val completed = store.save(post, post.media, "saved-posts") { _, file -> file.writeText("original"); null }
         var failed = false
         try {
             store.save(post, post.media, "codex:b") { _, file ->
@@ -136,6 +209,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
                         started.complete(Unit)
                         finish.await()
                         file.writeText("complete")
+                        null
                     }
                 }
             }
@@ -154,10 +228,10 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         val post = gallery()
         assertNull(store.retain(post.id, "missing"))
         try {
-            store.save(post, post.media.take(1), "codex:a") { _, file -> file.writeText("bytes") }
+            store.save(post, post.media.take(1), "codex:a") { _, file -> file.writeText("bytes"); null }
             error("Incomplete gallery was accepted")
         } catch (_: IllegalArgumentException) { }
-        val saved = store.save(post, post.media, "codex:a") { _, file -> file.writeText("complete") }
+        val saved = store.save(post, post.media, "codex:a") { _, file -> file.writeText("complete"); null }
         File(saved.media.last().localPath!!).writeText("short")
         assertNull(store.find(post.id))
         store.refresh()
@@ -172,10 +246,10 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         val directory = tempDir("replace")
         val store = OfflineMediaStore(directory)
         val post = gallery()
-        val first = store.save(post, post.media, "codex:a") { _, file -> file.writeText("first") }
-        store.save(post, post.media, "codex:b") { _, file -> file.writeText("second") }
+        val first = store.save(post, post.media, "codex:a") { _, file -> file.writeText("first"); null }
+        store.save(post, post.media, "codex:b") { _, file -> file.writeText("second"); null }
         assertTrue(first.media.all { File(it.localPath!!).readText() == "first" })
-        assertEquals(mapOf("codex:a" to 1, "codex:b" to 1), store.snapshot.value.postsByOwner)
+        assertEquals(mapOf("codex:a" to setOf(post.id), "codex:b" to setOf(post.id)), store.snapshot.value.postsByOwner)
         assertEquals(1, directory.listFiles().orEmpty().single().listFiles().orEmpty().count(File::isDirectory))
     }
 
@@ -184,7 +258,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         val directory = tempDir("strip")
         val store = OfflineMediaStore(directory)
         val post = gallery()
-        val saved = store.save(post, post.media, "codex:a") { _, file -> file.writeText("bytes") }
+        val saved = store.save(post, post.media, "codex:a") { _, file -> file.writeText("bytes"); null }
         store.clear()
         val unrelated = post.media.last().copy(localPath = File(directory.parentFile, "fixture.png").absolutePath)
         val overlaid = saved.copy(media = saved.media + unrelated)
@@ -207,7 +281,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         val source = samplePost("video", null).copy(full = original, media = emptyList(), mediaCount = null)
         val selected = original.copy(url = original.videoVariants.single().url, mime = "video/webm")
         val firstStore = OfflineMediaStore(directory)
-        val first = firstStore.save(source, listOf(selected), "codex:a") { _, file -> file.writeText("webm bytes") }
+        val first = firstStore.save(source, listOf(selected), "codex:a") { _, file -> file.writeText("webm bytes"); null }
         assertEquals(selected.url, first.full?.url)
         assertEquals("video/webm", first.full?.mime)
         assertTrue(File(requireNotNull(first.full?.localPath)).isFile)
@@ -235,7 +309,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         val source = gallery().copy(mediaCount = 2)
         val selected = source.media.map { it.copy(url = it.url + "?rendition=small", mime = "image/webp") }
         val store = OfflineMediaStore(directory)
-        val offline = store.save(source, selected, "codex:a") { _, file -> file.writeText("selected") }
+        val offline = store.save(source, selected, "codex:a") { _, file -> file.writeText("selected"); null }
         val secondRead = requireNotNull(store.find(source.id))
         store.clear()
         assertEquals(source, store.withoutOfflineLocations(offline))
@@ -253,7 +327,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         val directory = tempDir("legacy-manifest")
         val store = OfflineMediaStore(directory)
         val source = gallery()
-        val offline = store.save(source, source.media, "codex:a") { _, file -> file.writeText("bytes") }
+        val offline = store.save(source, source.media, "codex:a") { _, file -> file.writeText("bytes"); null }
         editManifest(directory) { root ->
             root["version"] = JsonPrimitive(1)
             root.remove("sourcePost")
@@ -274,7 +348,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
             taxonomy = listOf(PostTaxonomyTerm("cat", SearchFacet.TAG, "ns", 3, translation = "neko")),
             creatorProfiles = listOf(CreatorProfile(SourceKey.PIXIV, "artist", "1", "https://example.test/u/1", "user:1")),
         )
-        val saved = OfflineMediaStore(directory).save(source, source.media, "codex:a") { _, file -> file.writeText("bytes") }
+        val saved = OfflineMediaStore(directory).save(source, source.media, "codex:a") { _, file -> file.writeText("bytes"); null }
         val manifest = manifestOf(directory)
         assertEquals(3, manifest.getValue("version").jsonPrimitive.int)
         val wire = manifest.getValue("post").jsonObject
@@ -293,7 +367,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     fun `a version 2 manifest is not a usable copy and a later save keeps its owners`() = runTest {
         val directory = tempDir("v2")
         val post = gallery()
-        OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes") }
+        OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes"); null }
         val folder = directory.listFiles().orEmpty().single()
         val oldGeneration = folder.listFiles().orEmpty().single(File::isDirectory)
         // Only the version changes, so the version check alone must reject an otherwise readable copy.
@@ -305,7 +379,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         val store = OfflineMediaStore(directory)
         assertNull(store.find(post.id))
         assertEquals(0, store.snapshot.value.postCount)
-        store.save(post, post.media, "codex:b") { _, media -> media.writeText("again") }
+        store.save(post, post.media, "codex:b") { _, media -> media.writeText("again"); null }
         val manifest = manifestOf(directory)
         assertEquals(3, manifest.getValue("version").jsonPrimitive.int)
         assertEquals(listOf("codex:a", "codex:b", "codex:z"), ownersOf(manifest))
@@ -317,7 +391,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     fun `a version 3 manifest whose post cannot be decoded keeps its valid owners`() = runTest {
         val directory = tempDir("v3-undecodable")
         val post = gallery()
-        OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes") }
+        OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes"); null }
         editManifest(directory) { root ->
             root["post"] = JsonPrimitive("not a post")
             root["owners"] = JsonArray(listOf(JsonPrimitive("codex:a"), JsonObject(emptyMap()), JsonPrimitive("codex:z")))
@@ -325,7 +399,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
 
         val store = OfflineMediaStore(directory)
         assertNull(store.find(post.id))
-        store.save(post, post.media, "codex:b") { _, media -> media.writeText("again") }
+        store.save(post, post.media, "codex:b") { _, media -> media.writeText("again"); null }
         assertEquals(listOf("codex:a", "codex:b", "codex:z"), ownersOf(manifestOf(directory)))
     }
 
@@ -333,13 +407,13 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     fun `a manifest without readable owners is replaced without crashing`() = runTest {
         val directory = tempDir("no-owners")
         val post = gallery()
-        OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes") }
+        OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes"); null }
         editManifest(directory) { root ->
             root["version"] = JsonPrimitive(2)
             root["owners"] = JsonPrimitive("codex:a")
         }
 
-        OfflineMediaStore(directory).save(post, post.media, "codex:b") { _, media -> media.writeText("again") }
+        OfflineMediaStore(directory).save(post, post.media, "codex:b") { _, media -> media.writeText("again"); null }
         assertEquals(listOf("codex:b"), ownersOf(manifestOf(directory)))
     }
 
@@ -347,7 +421,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     fun `removing the last owner of an undecodable copy deletes it, even after a restart`() = runTest {
         val directory = tempDir("undecodable-removal")
         val post = gallery()
-        OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes") }
+        OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes"); null }
         val folder = directory.listFiles().orEmpty().single()
         editManifest(directory) { root ->
             root["version"] = JsonPrimitive(2)
@@ -355,7 +429,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         }
 
         val store = OfflineMediaStore(directory).apply { load() }
-        assertEquals(mapOf("codex:a" to 0, "codex:z" to 0), store.snapshot.value.postsByOwner)
+        assertEquals(mapOf("codex:a" to emptySet<PostId>(), "codex:z" to emptySet()), store.snapshot.value.postsByOwner)
         store.removeOwner("codex:a")
         assertEquals(listOf("codex:z"), ownersOf(manifestOf(directory)))
         assertEquals(2, manifestOf(directory).getValue("version").jsonPrimitive.int)
@@ -368,7 +442,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     fun `a copy with no recoverable owner stays when collections are removed`() = runTest {
         val directory = tempDir("ownerless")
         val post = gallery()
-        OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes") }
+        OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes"); null }
         val folder = directory.listFiles().orEmpty().single()
         val indexed = OfflineMediaStore(directory).apply { load() }
         manifestFile(directory).writeText("{not json")
@@ -383,7 +457,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     fun `a manifest whose id does not hash to its folder is rejected`() = runTest {
         val directory = tempDir("misplaced")
         val post = gallery()
-        OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes") }
+        OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes"); null }
         editManifest(directory) { root ->
             for (name in listOf("post", "sourcePost")) {
                 root[name] = JsonObject(root.getValue(name).jsonObject + ("sourcePostId" to JsonPrimitive("other")))
@@ -392,6 +466,32 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         val store = OfflineMediaStore(directory)
         store.refresh()
         assertEquals(0, store.snapshot.value.postCount)
+    }
+
+    @Test
+    fun `a page outside its copy's folder is not a usable copy`() = runTest {
+        val outside = tempDir("outside").resolve("page.png").apply { writeText("bytes") }
+        for ((name, escape) in listOf<Pair<String, (File) -> String>>(
+            // The page's generation folder, then the copy's folder, then the store's: lands beside the store.
+            "dot-dot" to { page -> "${page.parent}/../../../escaped.png" },
+            "absolute" to { _ -> outside.absolutePath },
+        )) {
+            val directory = tempDir(name)
+            val post = gallery()
+            val saved = OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes"); null }
+            val page = File(saved.media.first().localPath!!)
+            val target = escape(page)
+            File(target).writeText("bytes")
+            editManifest(directory) { root ->
+                val media = root.getValue("post").jsonObject.getValue("media").jsonArray
+                val moved = JsonObject(media.first().jsonObject + ("localPath" to JsonPrimitive(target)))
+                root["post"] = JsonObject(root.getValue("post").jsonObject + ("media" to JsonArray(listOf(moved) + media.drop(1))))
+            }
+
+            val store = OfflineMediaStore(directory).apply { load() }
+            assertNull(name, store.find(post.id))
+            assertEquals(name, 0, store.snapshot.value.postCount)
+        }
     }
 
     private fun manifestFile(directory: File) = directory.listFiles().orEmpty().single().resolve("manifest.json")

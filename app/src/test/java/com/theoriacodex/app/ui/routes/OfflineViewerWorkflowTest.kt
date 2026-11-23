@@ -55,6 +55,7 @@ class OfflineViewerWorkflowTest {
                 // These bytes exercise metadata boundaries only; this test makes no decoder/playback claim.
                 offline.store.save(source, listOf(selected), "rendition-metadata") { _, output ->
                     output.writeText("controlled offline rendition metadata fixture")
+                    null
                 }
             }
             graph.content.ensureCodex("saved-rendition", "Saved rendition")
