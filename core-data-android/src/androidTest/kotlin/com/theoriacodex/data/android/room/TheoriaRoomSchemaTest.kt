@@ -257,6 +257,34 @@ class TheoriaRoomSchemaTest {
         database.close()
     }
 
+    @Test
+    fun migrationSixteenToSeventeenMarksEveryAnalysisAsAwaitingFrames() {
+        migrationHelper.createDatabase(TEST_DATABASE_NAME, 16).apply {
+            execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('PIXIV','1','{}')")
+            execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('PIXIV','2','{}')")
+            execSQL(
+                "INSERT INTO post_visual_signatures(source,source_post_id,phash,phash_checked,indexed_at_epoch_ms,model_id,predicted_tags) " +
+                    "VALUES('PIXIV','1',94,1,1,'m1','')",
+            )
+            execSQL("INSERT INTO post_visual_signatures(source,source_post_id,phash,indexed_at_epoch_ms) VALUES('PIXIV','2',95,1)")
+            close()
+        }
+
+        val database = migrationHelper.runMigrationsAndValidate(
+            TEST_DATABASE_NAME,
+            17,
+            true,
+            TheoriaRoomDatabase.MIGRATION_16_17,
+        )
+        database.query("SELECT source_post_id, frame_state, frame_attempts FROM post_visual_signatures ORDER BY source_post_id").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(listOf("1", "1", "0"), listOf(cursor.getString(0), cursor.getString(1), cursor.getString(2)))
+            assertTrue(cursor.moveToNext())
+            assertEquals(listOf("2", "0", "0"), listOf(cursor.getString(0), cursor.getString(1), cursor.getString(2)))
+        }
+        database.close()
+    }
+
     companion object {
         private const val TEST_DATABASE_NAME = "theoria-room-schema-test"
     }

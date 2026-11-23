@@ -46,6 +46,16 @@ class PixivUgoiraFramesTest {
     }
 
     @Test
+    fun `a frame held longer is sampled once per stretch of time it fills`() {
+        val held = listOf(UgoiraFrameSpec("0.png", 3_000)) + List(3) { UgoiraFrameSpec("${it + 1}.png", 1_000) }
+        assertEquals(listOf(0, 0, 0, 1, 2, 3), ugoiraSampleIndices(held, count = 6))
+
+        // One frame on screen for a minute among quick transitions is all six samples, not none of them.
+        val pause = listOf(UgoiraFrameSpec("0.png", 60_000)) + List(11) { UgoiraFrameSpec("${it + 1}.png", 16) }
+        assertEquals(List(6) { 0 }, ugoiraSampleIndices(pause, count = 6))
+    }
+
+    @Test
     fun `decoder publishes the first frame immediately and reuses it for complete playback`() = runTest {
         val archive = temporaryFolder.newFile("frames.zip")
         val bitmap = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888)

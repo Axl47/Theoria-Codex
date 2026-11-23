@@ -103,28 +103,23 @@ class PixivUgoiraClient constructor(
         runCatchingPreservingCancellation { archiveFor(postId) }.isSuccess
 
     /**
-     * Up to [count] frames spread evenly through [postId]'s animation, each at least [sizePx] on its long edge, for the
-     * picture tagger ([sampleUgoiraFrames]). Reads an archive already held (offline or in the playback store) without
-     * marking it used; otherwise downloads one to a temporary file it deletes afterwards, so sampling a Library never
-     * evicts the archives the user watched. Pixiv refusing the post is [FrameSample.Refused]; an invalid or oversized
-     * archive, or frames that will not decode, [FrameSample.Unreadable]; any other failure may pass, so it is
-     * [FrameSample.Unreachable].
+     * [count] frames spread through [postId]'s animation, each at least [sizePx] on its long edge, for the picture tagger
+     * ([sampleUgoiraFrames]). Reads an archive already held (offline or in the playback store) without marking it used;
+     * otherwise downloads Pixiv's smallest archive (600 px) to a temporary file it deletes afterwards, so sampling a
+     * Library never evicts the archives the user watched. An archive past [budget] is not downloaded further and leaves
+     * the post [FrameSample.Unreadable]; other failures are classed by [frameSample].
      */
-    suspend fun sampleFrames(postId: String, count: Int, sizePx: Int): FrameSample = withContext(Dispatchers.IO) {
-        try {
-            val held = synchronized(cacheLock) { memoryArchive(postId) } ?: heldArchive(postId, markUsed = false)
-            val frames = held?.let { heldFrames(postId, it, count, sizePx) } ?: downloadedFrames(postId, count, sizePx)
-            if (frames.isEmpty()) FrameSample.Unreadable else FrameSample.Frames(frames)
-        } catch (_: UgoiraRefused) {
-            FrameSample.Refused
-        } catch (_: InvalidUgoiraArchive) {
-            FrameSample.Unreadable
-        } catch (_: UgoiraArchiveTooLarge) {
-            FrameSample.Unreadable
-        } catch (_: IOException) {
-            FrameSample.Unreachable
+    suspend fun sampleFrames(postId: String, count: Int, sizePx: Int, budget: NetworkBudget): FrameSample =
+        withContext(Dispatchers.IO) {
+            try {
+                val held = synchronized(cacheLock) { memoryArchive(postId) } ?: heldArchive(postId, markUsed = false)
+                val frames = held?.let { heldFrames(postId, it, count, sizePx) }
+                    ?: downloadedFrames(postId, count, sizePx, budget.maxBytes)
+                frameSample(frames, failure = null)
+            } catch (error: IOException) {
+                frameSample(emptyList(), error)
+            }
         }
-    }
 
     /**
      * [sampleFrames] from a held archive. One that fails to read (damaged data passes the structural check) is
@@ -138,12 +133,13 @@ class PixivUgoiraClient constructor(
     }
 
     /** [sampleFrames] from a freshly downloaded archive, deleted afterwards. */
-    private suspend fun downloadedFrames(postId: String, count: Int, sizePx: Int): List<Bitmap> {
+    private suspend fun downloadedFrames(postId: String, count: Int, sizePx: Int, maxBytes: Long): List<Bitmap> {
         val (metadata, tokens) = fetchMetadataWithRetry(postId, tokenCoordinator.activeTokens())
         val temporary = File.createTempFile("ugoira-sample", ".zip")
         try {
-            withTimeoutOrNull(operationTimeoutMs) { downloadZipWithRetry(metadata.zipUrl, tokens, temporary) }
+            withTimeoutOrNull(operationTimeoutMs) { downloadZipWithRetry(metadata.zipUrl, tokens, temporary, maxBytes) }
                 ?: throw IOException("Pixiv animation download timed out")
+            if (temporary.length() > maxBytes) throw UgoiraArchiveTooLarge()
             if (!isValidArchive(temporary, metadata.frames)) throw InvalidUgoiraArchive()
             return try {
                 sampleUgoiraFrames(temporary, metadata.frames, count, sizePx)
@@ -399,11 +395,12 @@ class PixivUgoiraClient constructor(
         url: String,
         initialTokens: PixivAuthTokens,
         destination: File,
+        maxBytes: Long = UGOIRA_MAX_COMPRESSED_BYTES,
     ) {
         withUgoiraAuthRetry("zip", initialTokens, BinaryResponse::statusCode) { accessToken ->
             zipDownloader?.let { download ->
                 runInterruptible(Dispatchers.IO) { download(url, accessToken, destination) }
-            } ?: transport.downloadZip(url, accessToken, destination)
+            } ?: transport.downloadZip(url, accessToken, destination, maxBytes)
         }
     }
 
@@ -424,7 +421,7 @@ class PixivUgoiraClient constructor(
         repeat(UGOIRA_NETWORK_MAX_ATTEMPTS) { attempt ->
             val response = try {
                 request(tokens.accessToken)
-            } catch (error: UgoiraArchiveTooLarge) {
+            } catch (error: UnreadableMedia) {
                 throw error
             } catch (error: IOException) {
                 if (attempt >= UGOIRA_NETWORK_MAX_ATTEMPTS - 1) throw error
@@ -446,7 +443,7 @@ class PixivUgoiraClient constructor(
                     delay(ugoiraRetryDelayMs(attempt))
                 }
 
-                isUgoiraRefusal(status) -> throw UgoiraRefused("Pixiv ugoira $label request failed ($status)")
+                refusesMedia(status) -> throw MediaRefused("Pixiv ugoira $label request failed ($status)")
 
                 else -> throw IOException("Pixiv ugoira $label request failed ($status)")
             }
@@ -512,10 +509,6 @@ class PixivUgoiraClient constructor(
     private fun isRetryableUgoiraStatus(statusCode: Int): Boolean {
         return statusCode == 429 || statusCode in 500..599
     }
-
-    /** A 4xx that another try will not change; 408 and 429 ask for a later one. */
-    private fun isUgoiraRefusal(statusCode: Int): Boolean =
-        statusCode in 400..499 && statusCode != 408 && !isRetryableUgoiraStatus(statusCode)
 
     private fun ugoiraRetryDelayMs(attempt: Int): Long {
         val cappedAttempt = attempt.coerceAtLeast(0).coerceAtMost(6)
@@ -628,8 +621,5 @@ internal const val UGOIRA_DECODED_CACHE_MAX_BYTES = 96L * 1024L * 1024L
 internal const val UGOIRA_ARCHIVE_CACHE_MAX_BYTES = 512L * 1024L * 1024L
 private const val UGOIRA_ARCHIVE_MEMORY_ENTRY_LIMIT = 32
 
-/** Pixiv answered a request with a refusal that another try will not change (a 4xx other than 401/403 or "try later"). */
-private class UgoiraRefused(message: String) : IOException(message)
-
-/** A downloaded archive that does not hold the frames its metadata lists. */
-private class InvalidUgoiraArchive : IOException("Pixiv ugoira archive is invalid")
+/** A downloaded archive that does not hold the frames its metadata lists, or whose frames will not read. */
+private class InvalidUgoiraArchive : UnreadableMedia("Pixiv ugoira archive is invalid")

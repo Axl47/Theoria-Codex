@@ -36,6 +36,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Installed only in the acceptance APK: drives the picture tagger through the app's own container, one phase per
@@ -81,7 +82,7 @@ private class VisionPhases(
         "download" -> download()
         "seed" -> seed()
         "idle" -> idle()
-        "deferred" -> deferred()
+        "stills" -> stills()
         "check" -> check()
         "sample" -> sample()
         "delete" -> delete()
@@ -115,21 +116,25 @@ private class VisionPhases(
         return "analysed=${progress.analysed} total=${progress.total}"
     }
 
-    /** Charging with the app on screen: the stills are indexed, and the videos wait for the app to leave the screen. */
-    private suspend fun deferred(): String {
-        val progress = pictures.progress.first { it.analysed >= FIXTURES }
-        delay(IDLE_WAIT_MS)
-        val index = pictures.tagger.library.value
-        check(videos.none { index[it.id] != null } && pictures.progress.first().analysed == FIXTURES) {
-            "videos indexed on screen: ${videos.count { index[it.id] != null }}"
-        }
-        return "analysed=${progress.analysed}/${progress.total} videosWaiting=${videos.size}"
+    /**
+     * Charging with the app on screen: every post is indexed from its still, the videos from their colour posters, so no
+     * video carries the monochrome that only its frames show.
+     */
+    private suspend fun stills(): String {
+        val progress = pictures.progress.first { it.analysed >= FIXTURES + videos.size }
+        val index = pictures.tagger.library.first { index -> videos.all { index[it.id] != null } }
+        val monochrome = normalizeMatchToken("monochrome")
+        check(videos.none { monochrome in index[it.id].orEmpty().tokens(PredictedTagUse.EVIDENCE) }) { "a video was read from frames" }
+        return "analysed=${progress.analysed}/${progress.total} videosFromStills=${videos.size}"
     }
 
     private suspend fun check(): String {
         val progress = pictures.progress.first { it.analysed >= FIXTURES + videos.size }
-        val stored = pictures.tagger.library.first { index -> videos.all { index[it.id] != null } }
         val monochrome = normalizeMatchToken("monochrome")
+        // The idle job replaced each video's still analysis with one that read its line-drawing frames.
+        val stored = withTimeoutOrNull(IDLE_WAIT_MS) {
+            pictures.tagger.library.first { index -> videos.all { monochrome in index[it.id].orEmpty().tokens(PredictedTagUse.EVIDENCE) } }
+        } ?: pictures.tagger.library.value
         val framed = videos.count { monochrome in stored[it.id].orEmpty().tokens(PredictedTagUse.EVIDENCE) }
         check(framed == videos.size) { "monochrome on $framed of ${videos.size} videos" }
         val index = pictures.tagger.library.first { index -> library.all { index[it.id] != null } }
@@ -197,7 +202,8 @@ private class VisionPhases(
         pictures.model.delete()
         check(pictures.model.states.value == ModelState.Absent)
         check(!pictures.model.modelFile.exists() && !pictures.model.vocabularyFile.exists())
-        check(pictures.tagger.library.first() == PredictedTagIndex.Empty)
+        // The index empties as the tagger sees the model go, a moment after the delete returns.
+        checkNotNull(withTimeoutOrNull(IDLE_WAIT_MS) { pictures.tagger.library.first { it == PredictedTagIndex.Empty } }) { "index kept" }
         val progress = pictures.progress.first()
         check(progress.analysed == 0) { "after delete: $progress" }
         checkNotNull(container.data.codexRepository.deleteCodexForUndo(codexId()))

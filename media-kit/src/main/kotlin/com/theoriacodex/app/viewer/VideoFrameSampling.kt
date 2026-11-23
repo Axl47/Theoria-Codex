@@ -40,7 +40,7 @@ sealed interface FrameSample {
  * error bodies and skipped prefixes included) and shared by every request for that post, a refreshed address's too.
  * Past [maxBytes], reads fail with [NetworkBudgetSpent].
  */
-class NetworkBudget(private val maxBytes: Long) {
+class NetworkBudget(val maxBytes: Long) {
     private val spent = AtomicLong()
 
     /** An OkHttp network interceptor that counts each response body against this budget. */
@@ -91,20 +91,32 @@ internal fun sampleVideoFrames(source: DataSource, uri: Uri, key: String?, count
 }
 
 /**
- * What [frames] read before [failure] (null when every read succeeded) amount to. A network failure, or an answer to
- * try later, means a later run may read more, so even frames already read wait for it; a spent budget keeps what it
- * bought.
+ * What [frames] read before [failure] (null when every read succeeded) amount to, for videos and animations alike: the
+ * one place that decides whether a failed read is worth trying again.
+ * - A spent budget, or media whose bytes give no frames ([UnreadableMedia]), keeps what was read: another try repeats it.
+ * - A refusal ([MediaRefused], or a 4xx other than "try later") asks for a fresh address.
+ * - Anything else (the network, a "try later", a sign-in or browser check a source wants) may pass on a later run, so
+ *   even frames already read wait for it.
  */
-internal fun frameSample(frames: List<Bitmap>, failure: IOException?): FrameSample {
-    val causes = generateSequence<Throwable>(failure, Throwable::cause)
+fun frameSample(frames: List<Bitmap>, failure: Throwable?): FrameSample {
+    val causes = generateSequence(failure, Throwable::cause)
     val status = causes.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode
     return when {
-        failure == null || causes.any { it is NetworkBudgetSpent } ->
+        failure == null || causes.any { it is NetworkBudgetSpent || it is UnreadableMedia } ->
             if (frames.isEmpty()) FrameSample.Unreadable else FrameSample.Frames(frames)
-        status != null && status in CLIENT_ERRORS && status !in TRY_LATER -> FrameSample.Refused
+        causes.any { it is MediaRefused } || status != null && refusesMedia(status) -> FrameSample.Refused
         else -> FrameSample.Unreachable
     }
 }
+
+/** Whether an HTTP [status] refuses the media at this address for good: a 4xx other than "try later". */
+internal fun refusesMedia(status: Int): Boolean = status in CLIENT_ERRORS && status !in TRY_LATER
+
+/** Media whose bytes give no frames (a damaged or oversized archive, say): downloading it again gives the same answer. */
+internal open class UnreadableMedia(message: String) : IOException(message)
+
+/** A server refused the media at this address ([refusesMedia]); a fresh address may work. */
+internal class MediaRefused(message: String) : IOException(message)
 
 /** [count] points evenly from 5% to 95% of [durationMs], in microseconds; only the first frame when the length is unknown. */
 internal fun samplePointsUs(durationMs: Long?, count: Int): List<Long> {

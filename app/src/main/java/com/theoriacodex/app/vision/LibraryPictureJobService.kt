@@ -15,59 +15,97 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
-/** The Library's picture indexing, as `JobScheduler` knows it. */
-internal const val LIBRARY_PICTURES_JOB_ID = 3102
+/**
+ * The Library's background picture work, as `JobScheduler` knows it. Both jobs run while the device charges on an
+ * unmetered network with its battery not low, since a run may fetch previews the cache lost or video frames, and both
+ * survive a reboot.
+ */
+internal enum class LibraryJob(val id: Int) {
+    /** Hashes and tags the Library's pictures from their stills ([LibraryPictureJobService]). */
+    PICTURES(3102),
+
+    /**
+     * Upgrades playing posts' still analyses with their frames ([LibraryFrameJobService]), only while the device is idle:
+     * nobody is using it, so no card plays and no Like tap waits on the decoders.
+     */
+    FRAMES(3103),
+    ;
+
+    /** Whether a run is under way in this process, and whether work arrived during it. */
+    val running = AtomicBoolean(false)
+    val requested = AtomicBoolean(false)
+
+    /**
+     * Asks for this job to run on its terms. A job already waiting is left alone and a running one is asked to run
+     * again, so calling this whenever the Library or the model changes costs nothing.
+     */
+    fun schedule(context: Context) {
+        requested.set(true)
+        if (running.get()) return
+        val scheduler = context.getSystemService(JobScheduler::class.java)
+        if (scheduler.getPendingJob(id) != null) return
+        val service = when (this) {
+            PICTURES -> LibraryPictureJobService::class.java
+            FRAMES -> LibraryFrameJobService::class.java
+        }
+        scheduler.schedule(
+            JobInfo.Builder(id, ComponentName(context, service))
+                .setRequiresCharging(true)
+                .setRequiresBatteryNotLow(true)
+                .setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED)
+                .setRequiresDeviceIdle(this == FRAMES)
+                .setPersisted(true)
+                .build(),
+        )
+    }
+}
 
 /**
- * Hashes and tags the Library's pictures while the device charges ([AppPictures.indexLibrary]), on
- * [scheduleLibraryPictures]' terms. When tagging has more left (the device ran warm, say) it asks to run again; the
- * system stops it when the device is unplugged and runs it again on the next charge.
+ * Runs one [LibraryJob]'s [work] in the app's container. When the work asks to run again (the device ran warm, say), or
+ * work arrived during the run, it asks the system for another run; the system stops it when its conditions end
+ * (unplugged, or the device left idle) and runs it again when they return.
  */
-class LibraryPictureJobService : JobService() {
+abstract class LibraryJobService internal constructor(private val job: LibraryJob) : JobService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var run: Job? = null
 
+    /** This job's work; returns whether it should run again soon. */
+    protected abstract suspend fun work(pictures: AppPictures): Boolean
+
+    /** What [Diagnostics] reports when [work] fails. */
+    protected abstract val failure: String
+
     override fun onStartJob(params: JobParameters): Boolean {
-        synchronized(runLock) {
-            running.set(true)
-            restartWanted = false
-        }
-        requested.set(false)
+        job.running.set(true)
+        job.requested.set(false)
         run = scope.launch {
             val more = try {
-                (application as TheoriaAppContainerOwner).awaitAppContainer().pictures?.indexLibrary() ?: false
+                (application as TheoriaAppContainerOwner).awaitAppContainer().pictures?.let { work(it) } ?: false
             } catch (error: CancellationException) {
                 // onStopJob ended this run; the job is not reported finished a second time.
                 throw error
             } catch (error: Exception) {
-                Diagnostics.report("similarity", "The Library's pictures could not be indexed", error)
+                Diagnostics.report("similarity", failure, error)
                 false
             }
-            if (endRun()) {
-                jobFinished(params, false)
-                restartLibraryPictures(this@LibraryPictureJobService)
-            } else {
-                // Work that arrived during the run (a post saved while charging) gets a run of its own.
-                jobFinished(params, more || requested.getAndSet(false))
-            }
+            // Work that arrived during the run (a post saved while charging) gets a run of its own.
+            job.running.set(false)
+            jobFinished(params, more || job.requested.getAndSet(false))
         }
         return true
     }
 
-    /** Unplugged, or the battery ran low: the next charge picks up where this run stopped. */
+    /** The conditions ended: the next time they hold picks up where this run stopped. */
     override fun onStopJob(params: JobParameters): Boolean {
-        val restart = endRun()
+        job.running.set(false)
         run?.cancel()
-        // A restart held for this run replaces the system's retry, so it waits out no back-off.
-        if (restart) restartLibraryPictures(this)
-        return !restart
+        return true
     }
 
     override fun onDestroy() {
@@ -76,66 +114,27 @@ class LibraryPictureJobService : JobService() {
     }
 }
 
-/** Whether a run is under way in this process, and whether work arrived during it. */
-private val running = AtomicBoolean(false)
-private val requested = AtomicBoolean(false)
+/** Hashes and tags the Library's pictures from their stills ([AppPictures.indexLibrary]), then asks for their frames. */
+class LibraryPictureJobService : LibraryJobService(LibraryJob.PICTURES) {
+    override val failure = "The Library's pictures could not be indexed"
 
-/** Whether a restart was asked for during the current run; [runLock] guards it and a run's start and end. */
-private val runLock = Any()
-private var restartWanted = false
+    override suspend fun work(pictures: AppPictures): Boolean =
+        pictures.indexLibrary().also { LibraryJob.FRAMES.schedule(this) }
+}
 
-/** Ends the current run in this process; returns whether a restart was asked for during it. */
-private fun endRun(): Boolean = synchronized(runLock) {
-    running.set(false)
-    restartWanted.also { restartWanted = false }
+/** Upgrades playing posts' still analyses with their frames ([AppPictures.readFrames]) while the device is idle. */
+class LibraryFrameJobService : LibraryJobService(LibraryJob.FRAMES) {
+    override val failure = "The Library's video frames could not be read"
+
+    override suspend fun work(pictures: AppPictures): Boolean = pictures.readFrames()
 }
 
 /**
- * Asks for [LibraryPictureJobService] to run while the device charges on an unmetered network and its battery is not
- * low, since a run may fetch previews the cache lost and video frames. The job survives a reboot. A job already waiting
- * is left alone and a running one is asked to run again, so calling this whenever the Library or the model changes
- * costs nothing.
+ * Keeps both [LibraryJob]s scheduled for [pictures]: at every start, whenever the model comes or goes, and whenever the
+ * Library gains or loses a post. Runs until cancelled.
  */
-internal fun scheduleLibraryPictures(context: Context) {
-    requested.set(true)
-    if (running.get()) return
-    val scheduler = context.getSystemService(JobScheduler::class.java)
-    if (scheduler.getPendingJob(LIBRARY_PICTURES_JOB_ID) != null) return
-    scheduler.schedule(libraryPicturesJob(context))
-}
-
-/**
- * Replaces any waiting or finishing [LibraryPictureJobService] run with a fresh one, free of a retry's back-off, for
- * video frames a finished run left until the app left the screen. Unlike [scheduleLibraryPictures], a run that is
- * ending (and so still listed) cannot swallow the request. A run under way is never replaced, since that would drop
- * its unstored batch: the restart waits for it to end.
- */
-private fun restartLibraryPictures(context: Context) {
-    synchronized(runLock) {
-        if (running.get()) {
-            restartWanted = true
-            return
-        }
-    }
-    context.getSystemService(JobScheduler::class.java).schedule(libraryPicturesJob(context))
-}
-
-private fun libraryPicturesJob(context: Context): JobInfo =
-    JobInfo.Builder(LIBRARY_PICTURES_JOB_ID, ComponentName(context, LibraryPictureJobService::class.java))
-        .setRequiresCharging(true)
-        .setRequiresBatteryNotLow(true)
-        .setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED)
-        .setPersisted(true)
-        .build()
-
-/**
- * Keeps [LibraryPictureJobService] scheduled for [pictures]: at every start, whenever the model comes or goes, whenever
- * the Library gains or loses a post, and whenever the app leaves the screen while video frames wait for that. Runs
- * until cancelled.
- */
-internal suspend fun keepLibraryPicturesScheduled(context: Context, pictures: AppPictures): Unit = coroutineScope {
-    launch { pictures.tags.whenAway { restartLibraryPictures(context) } }
+internal suspend fun keepLibraryPicturesScheduled(context: Context, pictures: AppPictures) {
     val model = pictures.model.states.filter { it == ModelState.Absent || it == ModelState.Ready }.distinctUntilChanged()
     combine(model, pictures.progress.map { it.total }.distinctUntilChanged()) { _, _ -> }
-        .collect { scheduleLibraryPictures(context) }
+        .collect { LibraryJob.entries.forEach { it.schedule(context) } }
 }

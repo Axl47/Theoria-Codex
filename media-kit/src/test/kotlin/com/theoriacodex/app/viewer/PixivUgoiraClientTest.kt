@@ -204,13 +204,14 @@ class PixivUgoiraClientTest {
 
     @Test
     fun `sampling frames leaves the playback store alone, a refused post samples nothing, and a refused sign-in waits`() = runTest {
+        val budget = NetworkBudget(maxBytes = 1L shl 20)
         val client = fixtureClient()
 
-        assertTrue(client.sampleFrames("sampled", count = 6, sizePx = 2) is FrameSample.Frames)
+        assertTrue(client.sampleFrames("sampled", count = 6, sizePx = 2, budget) is FrameSample.Frames)
         assertEquals(0L, client.disposableCacheBytes())
 
         val refused = fixtureClient(download = { _, _, _ -> BinaryResponse(404) })
-        assertEquals(FrameSample.Refused, refused.sampleFrames("gone", count = 6, sizePx = 2))
+        assertEquals(FrameSample.Refused, refused.sampleFrames("gone", count = 6, sizePx = 2, budget))
 
         // Still refused after a token refresh: signed out or rate limited, which a later run may get past.
         val forbidden = fixtureClient(
@@ -218,7 +219,10 @@ class PixivUgoiraClientTest {
             httpClient = RefreshingHttpClient,
             download = { _, _, _ -> BinaryResponse(403) },
         )
-        assertEquals(FrameSample.Unreachable, forbidden.sampleFrames("locked", count = 6, sizePx = 2))
+        assertEquals(FrameSample.Unreachable, forbidden.sampleFrames("locked", count = 6, sizePx = 2, budget))
+
+        // An archive past the post's budget is left alone: its still stands.
+        assertEquals(FrameSample.Unreadable, fixtureClient().sampleFrames("large", count = 6, sizePx = 2, NetworkBudget(maxBytes = 16)))
     }
 
     @Test

@@ -9,6 +9,8 @@ import androidx.media3.datasource.ByteArrayDataSource
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.HttpDataSource
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import java.io.IOException
 import kotlinx.coroutines.Job
 import okhttp3.OkHttpClient
@@ -53,7 +55,7 @@ class VideoFrameSamplingTest {
     }
 
     @Test
-    fun `frames wait for a later try after a network failure, and a refusal asks for a fresh address`() {
+    fun `frames wait for a later try after a network failure or a sign-in, and a refusal asks for a fresh address`() {
         val frames = listOf(Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888))
         val spent = HttpDataSource.HttpDataSourceException(NetworkBudgetSpent(), DataSpec(uri), 0, HttpDataSource.HttpDataSourceException.TYPE_READ)
 
@@ -66,6 +68,11 @@ class VideoFrameSamplingTest {
         assertEquals(FrameSample.Unreachable, frameSample(emptyList(), status(429)))
         assertEquals(FrameSample.Unreachable, frameSample(emptyList(), status(503)))
         assertEquals(FrameSample.Unreachable, frameSample(frames, IOException("connection reset")))
+        // Ugoira and sources speak through the same classes.
+        assertEquals(FrameSample.Refused, frameSample(emptyList(), MediaRefused("gone")))
+        assertEquals(FrameSample.Unreadable, frameSample(emptyList(), UnreadableMedia("damaged")))
+        val signedOut = SourceAdapterException(SourceFailureReason.AUTH_REQUIRED, "Pixiv credentials not configured")
+        assertEquals(FrameSample.Unreachable, frameSample(emptyList(), signedOut))
     }
 
     @Test

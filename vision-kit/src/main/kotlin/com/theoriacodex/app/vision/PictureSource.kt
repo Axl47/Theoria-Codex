@@ -14,7 +14,7 @@ interface PictureSource {
     /** [post]'s still preview decoded for the model, or null when it failed to load. */
     suspend fun still(post: Post): Bitmap?
 
-    /** Whether [post] plays (a video or an animation), so its Library analysis reads [frames] beside its still. */
+    /** Whether [post] plays (a video or an animation), so its Library analysis is later upgraded with [frames]. */
     fun plays(post: Post): Boolean
 
     /** Frames from across [post]'s video or animation; asked only of posts that [plays]. */

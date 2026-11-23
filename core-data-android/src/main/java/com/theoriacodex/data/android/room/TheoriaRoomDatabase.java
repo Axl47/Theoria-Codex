@@ -31,7 +31,7 @@ import org.json.JSONObject;
                 SeriesEntity.class,
                 SeriesEntryEntity.class
         },
-        version = 16,
+        version = 17,
         exportSchema = true
 )
 public abstract class TheoriaRoomDatabase extends RoomDatabase {
@@ -188,6 +188,16 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             database.execSQL("ALTER TABLE `post_visual_signatures` ADD COLUMN `predicted_tags` TEXT");
         }
     };
+    // Analyses can be upgraded with a playing post's frames. Every existing analysis read only a still; each is marked as
+    // awaiting frames, and the frame job sets aside those whose post turns out not to play.
+    public static final Migration MIGRATION_16_17 = new Migration(16, 17) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("ALTER TABLE `post_visual_signatures` ADD COLUMN `frame_state` INTEGER NOT NULL DEFAULT 0");
+            database.execSQL("ALTER TABLE `post_visual_signatures` ADD COLUMN `frame_attempts` INTEGER NOT NULL DEFAULT 0");
+            database.execSQL("UPDATE `post_visual_signatures` SET `frame_state` = 1 WHERE `model_id` IS NOT NULL");
+        }
+    };
+
     public static final Migration[] MIGRATIONS = new Migration[] {
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -203,7 +213,8 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             MIGRATION_12_13,
             MIGRATION_13_14,
             MIGRATION_14_15,
-            MIGRATION_15_16
+            MIGRATION_15_16,
+            MIGRATION_16_17
     };
 
     public abstract CodexLikesDao codexLikesDao();

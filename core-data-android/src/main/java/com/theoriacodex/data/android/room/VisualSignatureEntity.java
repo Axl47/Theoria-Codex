@@ -14,6 +14,10 @@ import androidx.room.ForeignKey;
  * [modelId] names the tagger model that analysed the picture: with a null [embedding] and null [predictedTags] it
  * looked and could not analyse it. [embedding] is opaque bytes; [predictedTags] is the text
  * {@code PredictedTagCodec} writes.
+ * <p>
+ * [frameState] says whether that analysis read only the still (0), only the still of a post that plays, whose frames
+ * are still to be read (1), or the still and frames from across the post (2). [frameAttempts] counts failed frame reads;
+ * at the cap the still analysis stands for good.
  */
 @Entity(
         tableName = "post_visual_signatures",
@@ -34,6 +38,8 @@ public final class VisualSignatureEntity {
     @Nullable @ColumnInfo(name = "model_id") private final String modelId;
     @Nullable private final byte[] embedding;
     @Nullable @ColumnInfo(name = "predicted_tags") private final String predictedTags;
+    @ColumnInfo(name = "frame_state", defaultValue = "0") private final int frameState;
+    @ColumnInfo(name = "frame_attempts", defaultValue = "0") private final int frameAttempts;
 
     public VisualSignatureEntity(
             @NonNull String source,
@@ -43,7 +49,9 @@ public final class VisualSignatureEntity {
             long indexedAtEpochMs,
             @Nullable String modelId,
             @Nullable byte[] embedding,
-            @Nullable String predictedTags
+            @Nullable String predictedTags,
+            int frameState,
+            int frameAttempts
     ) {
         this.source = source;
         this.sourcePostId = sourcePostId;
@@ -53,6 +61,8 @@ public final class VisualSignatureEntity {
         this.modelId = modelId;
         this.embedding = embedding;
         this.predictedTags = predictedTags;
+        this.frameState = frameState;
+        this.frameAttempts = frameAttempts;
     }
 
     @NonNull public String getSource() { return source; }
@@ -63,4 +73,6 @@ public final class VisualSignatureEntity {
     @Nullable public String getModelId() { return modelId; }
     @Nullable public byte[] getEmbedding() { return embedding; }
     @Nullable public String getPredictedTags() { return predictedTags; }
+    public int getFrameState() { return frameState; }
+    public int getFrameAttempts() { return frameAttempts; }
 }

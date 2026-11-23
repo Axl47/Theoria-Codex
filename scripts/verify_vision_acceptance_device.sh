@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Picture tagger acceptance on an emulator, through the minified acceptance APK's own container:
-# download and verify the model, index the Library in the charging-only job (and not on battery), video frames read
-# only once the app leaves the screen, a predicted tag reaching For You, a hidden tag catching an untagged post, and
-# delete. See VisionAcceptanceActivity. Fixture videos are made from the fixture drawings with ffmpeg (libx264 and
+# download and verify the model, index the Library from stills in the charging-only job (and not on battery), video
+# frames read only by the idle-only job (refused while the device is in use), a predicted tag reaching For You, a hidden
+# tag catching an untagged post, and delete. See VisionAcceptanceActivity. Fixture videos are made from the fixture drawings with ffmpeg (libx264 and
 # libvpx-vp9) and served with byte ranges; the bytes each sampled video cost are printed.
 #
 # Usage: scripts/verify_vision_acceptance_device.sh <model-dir> [apk]
@@ -16,6 +16,7 @@ readonly apk_path="${2:-app/build/outputs/apk/releaseAcceptance/app-releaseAccep
 readonly package_name="com.theoriacodex.acceptance"
 readonly activity="com.theoriacodex.app.acceptance.VisionAcceptanceActivity"
 readonly job_id=3102
+readonly frames_job_id=3103
 readonly port=8765
 readonly script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -75,7 +76,18 @@ phase() {
   return 1
 }
 
-job_state() { adb_run shell dumpsys jobscheduler "$package_name" | grep -m1 -A3 "#u0a[0-9]*/$job_id" | tr -s ' ' | tr '\n' ' '; }
+job_state() { adb_run shell dumpsys jobscheduler "$package_name" | grep -m1 -A3 "#u0a[0-9]*/${1:-$job_id}" | tr -s ' ' | tr '\n' ' '; }
+# Waits until a job is no longer running or due; a finished run that left nothing to do drops the job, which
+# get-job-state reports as an error.
+wait_job() {
+  local state attempt
+  for attempt in $(seq 1 300); do
+    state="$(adb_run shell cmd jobscheduler get-job-state "$package_name" "$1" 2>&1 | tr -d '\r' || true)"
+    [[ "$state" == *active* || "$state" == *ready* || "$state" == *pending* ]] || break
+    sleep 1
+  done
+  printf '%s' "$state"
+}
 
 phase download
 phase seed
@@ -88,29 +100,32 @@ on_battery="$(adb_run shell cmd jobscheduler run -s "$package_name" "$job_id" 2>
 printf 'Run on battery: %s\n' "$on_battery"
 [[ "$on_battery" == *"functional constraints"* ]] || { echo "The indexing job ran on battery." >&2; exit 1; }
 phase idle same
-# Charging with the app on screen: the job indexes the stills and leaves the videos for a later run.
+# Charging with the app on screen: the job indexes every post from its still, videos from their posters.
 adb_run shell dumpsys battery set ac 1
 adb_run shell dumpsys battery set status 2
 adb_run shell cmd jobscheduler run -s "$package_name" "$job_id" >/dev/null
-phase deferred same
-# Off screen, the next run reads the videos' frames: leaving the screen schedules it, so it may start at once.
+phase stills same
+printf 'Pictures job after its run: %s\n' "$(wait_job "$job_id")"
+# The frames job waits for the device to be idle: asked to run while the app is on screen, it must be refused.
+in_use="$(adb_run shell cmd jobscheduler run -s "$package_name" "$frames_job_id" 2>&1 | tr -d '\r' || true)"
+printf 'Frames job while in use: %s | %s\n' "$in_use" "$(job_state "$frames_job_id")"
+[[ "$in_use" == *"functional constraints"* ]] || { echo "The frames job ran while the device was in use." >&2; exit 1; }
+# Screen off and idle maintenance make the device idle for jobs; when the emulator will not, the run is forced.
 : >"$served"
 adb_run logcat -c
-adb_run shell input keyevent KEYCODE_HOME
+adb_run shell input keyevent KEYCODE_SLEEP
 sleep 2
-# The deferring run asked to run again, so the job first waits out its backoff (about 30 s).
-for attempt in $(seq 1 30); do
-  started="$(adb_run shell cmd jobscheduler run -s "$package_name" "$job_id" 2>&1 | tr -d '\r' || true)"
-  [[ "$started" == *constraints* ]] || break
+adb_run shell cmd activity idle-maintenance >/dev/null 2>&1 || true
+idle_run="forced"
+for attempt in $(seq 1 12); do
+  started="$(adb_run shell cmd jobscheduler run -s "$package_name" "$frames_job_id" 2>&1 | tr -d '\r' || true)"
+  if [[ "$started" != *constraints* ]]; then idle_run="idle"; break; fi
   sleep 5
 done
-for attempt in $(seq 1 300); do
-  # A finished run that left nothing to do drops the job, which get-job-state reports as an error.
-  state="$(adb_run shell cmd jobscheduler get-job-state "$package_name" "$job_id" 2>&1 | tr -d '\r' || true)"
-  [[ "$state" == *active* || "$state" == *ready* || "$state" == *pending* ]] || break
-  sleep 1
-done
-printf 'Job after the off-screen run: %s\n' "$state"
+[[ "$idle_run" == idle ]] || adb_run shell cmd jobscheduler run -f "$package_name" "$frames_job_id" >/dev/null
+printf 'Frames job ran as: %s, then: %s\n' "$idle_run" "$(wait_job "$frames_job_id")"
+adb_run shell input keyevent KEYCODE_WAKEUP
+adb_run shell wm dismiss-keyguard >/dev/null 2>&1 || true
 printf 'Decoders: %s\n' "$(adb_run logcat -d | grep -Eo 'c2\.[a-z0-9]+\.[a-z0-9]+\.decoder' | sort | uniq -c | tr -s ' ' | tr '\n' ';')"
 video_bytes() { awk '/video/ { bytes[$1] += $3; requests[$1]++ } END { for (path in bytes) printf "%s=%d/%dreq\n", path, bytes[path], requests[path] }' "$served" | sort | tr '\n' ' '; }
 first_bytes="$(video_bytes)"

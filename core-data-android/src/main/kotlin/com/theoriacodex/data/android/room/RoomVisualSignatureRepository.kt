@@ -3,6 +3,7 @@ package com.theoriacodex.data.android.room
 import androidx.room.withTransaction
 import com.theoriacodex.data.repository.PictureVision
 import com.theoriacodex.data.repository.PredictedTagCodec
+import com.theoriacodex.data.repository.MAX_FRAME_ATTEMPTS
 import com.theoriacodex.data.repository.VisionProgress
 import com.theoriacodex.data.repository.VisualSignatureRepository
 import com.theoriacodex.domain.model.Post
@@ -45,15 +46,24 @@ class RoomVisualSignatureRepository(
                 for (entry in entries) {
                     dao.putVision(
                         entry.postId.source.id, entry.postId.sourcePostId, now, entry.modelId, entry.embedding,
-                        entry.tags?.let(PredictedTagCodec::encode),
+                        entry.tags?.let(PredictedTagCodec::encode), entry.frames.ordinal,
                     )
                 }
             }
         }
     }
 
-    override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int, offset: Int): List<Post> =
-        withContext(Dispatchers.IO) { dao.libraryPostsWithoutVision(modelId, limit, offset).decoded() }
+    override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post> =
+        withContext(Dispatchers.IO) { dao.libraryPostsWithoutVision(modelId, limit).decoded() }
+
+    override suspend fun libraryPostsAwaitingFrames(modelId: String, limit: Int): List<Post> =
+        withContext(Dispatchers.IO) { dao.libraryPostsAwaitingFrames(modelId, MAX_FRAME_ATTEMPTS, limit).decoded() }
+
+    override suspend fun failFrames(postId: PostId, modelId: String, permanently: Boolean) {
+        withContext(Dispatchers.IO) {
+            dao.addFrameAttempts(postId.source.id, postId.sourcePostId, modelId, if (permanently) MAX_FRAME_ATTEMPTS else 1)
+        }
+    }
 
     override fun observePredictedTags(modelId: String): Flow<Map<PostId, List<PredictedTag>>> =
         dao.observePredictedTags(modelId).map { rows ->
