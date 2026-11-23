@@ -2,7 +2,9 @@ package com.theoriacodex.app.series
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
@@ -34,10 +36,12 @@ internal fun SeriesTabDestination(shell: TheoriaShell) {
     LaunchedEffect(viewModel, pager) {
         viewModel.followShown(snapshotFlow { tabShown(TopLevelDestination.Series, pager.targetPage, pager.settledPage) })
     }
+    val settings by shell.data.settingsRepository.observeSettings().collectAsStateWithLifecycle(initialValue = null)
     SeriesTabScreen(
         viewModel,
         onOpenSeries = { id -> shell.navController.navigate(AppRoute.series(id)) },
         onOpenExtensions = shell::openExtensions,
+        oldSearchBar = settings?.oldSearchBar == true,
     )
 }
 

@@ -350,6 +350,98 @@ class SeriesTabViewModelTest {
         assertEquals(emptyList<SeriesFilter>(), viewModel.state.value.filterSheet?.draft)
     }
 
+    @Test
+    fun openingDedicatedSearchFromGlobalSearchReusesLoadedResultsAndPreservesGlobalSearch() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val first = Answering("custom_mihon_7", pages = 2, language = "en")
+        val second = Answering("custom_mihon_8", pages = 1, language = "es-419")
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(first, second) }) {}
+        advanceUntilIdle()
+
+        viewModel.search("reincarnation")
+        advanceUntilIdle()
+        assertEquals(1, first.searchedWith.size)
+
+        viewModel.openDedicatedSearch(first.key)
+        advanceUntilIdle()
+
+        val dedicated = viewModel.state.value.dedicated!!
+        assertEquals(first.key, dedicated.source.key)
+        assertEquals("Fake", dedicated.source.sourceName)
+        assertEquals("en", dedicated.source.language)
+        assertEquals(BrowseKind.Filtered("reincarnation", emptyList(), changed = 0), dedicated.kind)
+        // Reused page 1 from global search without issuing a duplicate search call.
+        assertEquals(1, first.searchedWith.size)
+        assertEquals(listOf("/found"), (dedicated.source.listing as SeriesListing.Loaded).series.map { it.id.address })
+
+        viewModel.dedicatedMore()
+        advanceUntilIdle()
+        val paged = viewModel.state.value.dedicated!!.source.listing as SeriesListing.Loaded
+        assertEquals(listOf("/found", "/found2"), paged.series.map { it.id.address })
+
+        viewModel.closeDedicatedSearch()
+        assertEquals(null, viewModel.state.value.dedicated)
+        assertEquals(2, viewModel.state.value.search?.size)
+    }
+
+    @Test
+    fun dedicatedSearchSupportsQueryEditingSwitchingKindsAndFiltersWithoutAlteringBrowse() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val defaults = listOf(SeriesFilter.Check("Completed", false))
+        val chosen = listOf(SeriesFilter.Check("Completed", true))
+        val source = Answering().apply { offered = { defaults } }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) {}
+        advanceUntilIdle()
+        viewModel.search("reincarnation")
+        advanceUntilIdle()
+
+        viewModel.openDedicatedSearch(source.key)
+        advanceUntilIdle()
+
+        viewModel.openFilters()
+        advanceUntilIdle()
+        viewModel.editFilters { it.copy(text = "solo", draft = chosen) }
+        viewModel.searchSource()
+        advanceUntilIdle()
+
+        assertEquals(BrowseKind.Filtered("solo", chosen, changed = 1), viewModel.state.value.dedicated?.kind)
+        assertEquals(BrowseKind.Popular, viewModel.state.value.browseKind)
+
+        // Updating text in dedicated search preserves the active source filters.
+        viewModel.searchDedicated("tower")
+        advanceUntilIdle()
+        assertEquals(BrowseKind.Filtered("tower", chosen, changed = 1), viewModel.state.value.dedicated?.kind)
+
+        viewModel.chooseDedicated(BrowseKind.Latest)
+        advanceUntilIdle()
+        assertEquals(BrowseKind.Latest, viewModel.state.value.dedicated?.kind)
+        assertEquals(listOf("latest"), (viewModel.state.value.dedicated?.source?.listing as SeriesListing.Loaded).series.map { it.title })
+
+        // Clearing text with no filters active returns to Popular.
+        viewModel.searchDedicated("")
+        advanceUntilIdle()
+        assertEquals(BrowseKind.Popular, viewModel.state.value.dedicated?.kind)
+    }
+
+    @Test
+    fun dedicatedSearchClosesWhenItsSourceIsTurnedOff() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        var offered = listOf(Answering("custom_mihon_7"), Answering("custom_mihon_8"))
+        val changed = MutableStateFlow(0)
+        val viewModel = SeriesTabViewModel(NothingStored, { offered }, changed) {}
+        advanceUntilIdle()
+        viewModel.search("reincarnation")
+        advanceUntilIdle()
+        viewModel.openDedicatedSearch(offered[1].key)
+        advanceUntilIdle()
+        assertEquals(offered[1].key, viewModel.state.value.dedicated?.source?.key)
+
+        offered = listOf(offered[0])
+        changed.value = 1
+        advanceUntilIdle()
+        assertEquals(null, viewModel.state.value.dedicated)
+    }
+
     private fun TestScope.searchFor(viewModel: SeriesTabViewModel, text: String) {
         viewModel.openFilters()
         advanceUntilIdle()

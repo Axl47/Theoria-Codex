@@ -1,4 +1,4 @@
-package com.theoriacodex.app.viewer
+package com.theoriacodex.app.ui.components
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -18,7 +18,7 @@ import kotlin.math.sign
  * pulling past either end changes nothing.
  */
 @Composable
-internal fun rememberQuickReturn(onReveal: (Boolean) -> Unit): NestedScrollConnection {
+fun rememberQuickReturn(onReveal: (Boolean) -> Unit): NestedScrollConnection {
     val currentOnReveal by rememberUpdatedState(onReveal)
     val threshold = with(LocalDensity.current) { QUICK_RETURN_DISTANCE.toPx() }
     return remember(threshold) {
