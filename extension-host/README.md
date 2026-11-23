@@ -127,7 +127,7 @@ different sources everywhere the app keeps an id.
 
 **Streams.** An episode's media is a list of `MediaStream`s. The host asks for the episode's servers, then for each
 server's videos at once, giving each server about 6 s; an extension that has only the older single call is asked that
-instead, with about 35 s. Both are abandoned in the host's scope when their time runs out or the caller stops waiting,
+instead, with about 50 s. Both are abandoned in the host's scope when their time runs out or the caller stops waiting,
 never joined, since extension code often ignores cancellation: a server that hangs costs the episode nothing, and a
 Viewer that closes stops waiting at once. Streams keep the order the source's own settings sort them in. Each is
 labelled with the quality and server names the extension gives, typed as HLS or DASH when its address or name says so,

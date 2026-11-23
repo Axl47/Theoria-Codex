@@ -46,8 +46,8 @@ interface ExtensionSites {
 }
 
 /**
- * Turns Mihon extensions into series sources: third-party code, loaded into the app. It finds the extensions Mihon
- * installed as packages and, in debug builds only, APK files pushed for tests with
+ * Turns Mihon (manga) and Aniyomi (anime) extensions into series sources: third-party code, loaded into the app. It
+ * finds the extensions those apps installed as packages and, in debug builds only, APK files pushed for tests with
  * `adb push <apk> /sdcard/Android/data/com.theoriacodex.debug/files/mihon-extensions/`.
  *
  * Nothing loads at startup, and nothing ever loads but the extensions the user turned on in the Extensions page;

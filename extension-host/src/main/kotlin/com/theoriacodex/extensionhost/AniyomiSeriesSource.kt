@@ -265,8 +265,11 @@ class AniyomiSeriesSource(
         /** Every server that answered in a measured sample did so within 6.2 s. */
         const val SERVER_LIMIT_MS = 6_000L
 
-        /** A server list that resolves every server itself took up to 31 s in the same sample. */
-        const val LIST_LIMIT_MS = 35_000L
+        /**
+         * A server list that resolves every server itself took up to 31 s on a phone-speed network and longer on an
+         * emulator. With one server's limit on top, this stays inside the 60 s the Viewer waits for an episode.
+         */
+        const val LIST_LIMIT_MS = 50_000L
         const val SEASONS_UNSUPPORTED = "Seasons aren't supported yet"
         private const val HLS_MIME = "application/x-mpegURL"
         private const val DASH_MIME = "application/dash+xml"
