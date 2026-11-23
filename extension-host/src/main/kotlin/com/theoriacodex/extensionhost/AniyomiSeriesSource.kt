@@ -109,7 +109,7 @@ class AniyomiSeriesSource internal constructor(
     private fun anime(series: Series): SAnime = listedAnime[series.id.address] ?: SAnime.create().apply {
         url = series.id.address
         title = series.title
-        thumbnail_url = series.coverUrl
+        thumbnail_url = series.coverUrl?.substringBefore(ExtensionImages.FRAGMENT)
         author = series.author
         genre = series.genres.joinToString().takeIf(String::isNotBlank)
     }

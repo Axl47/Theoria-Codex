@@ -34,6 +34,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -43,6 +44,10 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 class SeriesReaderTest {
+    /** A test that listens to diagnostics leaves no listener behind for the tests after it. */
+    @After
+    fun stopListeningToDiagnostics() = Diagnostics.install { _, _, _ -> }
+
     @get:Rule val folder = TemporaryFolder()
 
     private val source = SourceKey.parseOrThrow("custom_mihon_2499283573021220255")
