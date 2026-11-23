@@ -107,11 +107,6 @@ class MihonSeriesSource(
         source.getPageList(chapter).mapNotNull { page -> pageImage(chapter, page) }
     }
 
-    /** Covers stored by earlier builds carry a tag of their own, which is replaced. */
-    override fun coverAddress(series: Series): String? = series.coverUrl?.substringBefore(ExtensionImages.FRAGMENT)?.let { address ->
-        if (source is HttpSource) images.coverAddress(source, address) else address
-    }
-
     override fun webUrl(series: Series): String? {
         val http = source as? HttpSource ?: return super.webUrl(series)
         return runCatching { http.getMangaUrl(manga(series)) }.getOrNull()?.takeIf(String::isNotBlank)
@@ -204,6 +199,9 @@ class MihonSeriesSource(
     companion object {
         /** The app-wide identity of an extension source; the `mihon` label can never be a real site's host. */
         fun sourceKey(source: Source): SourceKey = SourceKey.parseOrThrow("$EXTENSION_SOURCE_ID_PREFIX${source.id}")
+
+        /** The extension source id [key] names, read back from [sourceKey]; null for a source that is no extension's. */
+        fun sourceId(key: SourceKey): Long? = key.id.takeIf { it.startsWith(EXTENSION_SOURCE_ID_PREFIX) }?.removePrefix(EXTENSION_SOURCE_ID_PREFIX)?.toLongOrNull()
 
         private const val MAX_LISTED = 2_048
         private const val HTTP_TOO_MANY_REQUESTS = 429

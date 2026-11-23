@@ -1,5 +1,6 @@
 package com.theoriacodex.mihonhost
 
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
@@ -38,27 +39,44 @@ class ExtensionImagesTest {
 
     @Test
     fun `a cover is fetched by the source's client at its untagged address`() {
-        val address = images.coverAddress(source, "https://covers.test/1.jpg")
+        val address = images.cover(source, "https://covers.test/1.jpg")
 
         assertTrue(address.startsWith("https://covers.test/1.jpg#mihon=1."))
         assertEquals("source-token https://covers.test/1.jpg", fetch(address))
     }
 
     @Test
-    fun `a stored cover is plain and is tagged for its own source each time it is loaded`() = runTest {
-        val series = MihonSeriesSource(source, images)
-        val stored = Series(SeriesId(series.key, "/s"), "Series", coverUrl = "https://covers.test/1.jpg")
+    fun `a stored cover is tagged from its series' source key without loading the extension`() {
+        var loads = 0
+        lateinit var cold: ExtensionImages
+        cold = ExtensionImages(key) {
+            loads += 1
+            cold.publish(listOf(source))
+        }
+        val stored = Series(SeriesId(MihonSeriesSource.sourceKey(source), "/s"), "Series", coverUrl = "https://covers.test/1.jpg")
 
-        assertEquals("source-token https://covers.test/1.jpg", fetch(checkNotNull(series.coverAddress(stored))))
+        val address = checkNotNull(cold.address(stored))
+        assertEquals(0, loads)
+        // The same address a loaded host gives, and the first request for it loads the extensions.
+        assertEquals(images.address(stored), address)
+        assertEquals("source-token https://covers.test/1.jpg", fetch(address, cold))
+        assertEquals(1, loads)
         // A cover that names another source, as an earlier build stored it or a backup could: its own source still fetches it.
         val named = stored.copy(coverUrl = "https://covers.test/1.jpg#mihon=7.00000000000000000000000000000000")
-        assertEquals(series.coverAddress(stored), series.coverAddress(named))
-        assertEquals(null, series.coverAddress(stored.copy(coverUrl = null)))
+        assertEquals(address, cold.address(named))
+        assertEquals(null, cold.address(stored.copy(coverUrl = null)))
+    }
+
+    @Test
+    fun `a cover of a source that is no extension's is handed over as stored`() {
+        val custom = Series(SeriesId(SourceKey.parseOrThrow("custom_safebooru_org"), "/s"), "Series", coverUrl = "https://site.test/c.jpg#mihon=1")
+
+        assertEquals("https://site.test/c.jpg#mihon=1", images.address(custom))
     }
 
     @Test
     fun `a page saved in an earlier run is fetched by the source's client at its address`() {
-        val saved = images.coverAddress(source, "https://cdn.test/old/2.jpg")
+        val saved = images.cover(source, "https://cdn.test/old/2.jpg")
 
         assertEquals("source-token https://cdn.test/old/2.jpg", fetch(saved, ExtensionImages(key).also { it.publish(listOf(source)) }))
     }
@@ -66,8 +84,12 @@ class ExtensionImagesTest {
     @Test
     fun `a tag this host did not issue is not sent through an extension and is taken off`() {
         var loads = 0
-        val checking = ExtensionImages(key) { loads += 1 }.also { it.publish(listOf(source)) }
-        val issued = checking.coverAddress(source, "https://covers.test/1.jpg")
+        lateinit var checking: ExtensionImages
+        checking = ExtensionImages(key) {
+            loads += 1
+            checking.publish(listOf(source))
+        }
+        val issued = checking.cover(source, "https://covers.test/1.jpg")
         // What a Custom Site could put on a thumbnail: a bare tag, a made-up code, and a real code moved to its own host.
         val forged = listOf(
             "https://custom-site.test/thumb.jpg#mihon=1",
@@ -81,14 +103,14 @@ class ExtensionImagesTest {
         assertEquals(0, loads)
         assertEquals("source-token https://covers.test/1.jpg", fetch(issued, checking))
         // Another install's key issues nothing this one honors.
-        assertEquals("app https://covers.test/1.jpg", fetch(ExtensionImages().coverAddress(source, "https://covers.test/1.jpg"), checking))
+        assertEquals("app https://covers.test/1.jpg", fetch(ExtensionImages().cover(source, "https://covers.test/1.jpg"), checking))
     }
 
     @Test
     fun `an address tagged with a source that is no longer loaded passes down the chain`() {
         val gone = ImageServerSource(id = 7)
 
-        assertEquals("app https://cdn.test/old/2.jpg", fetch(images.coverAddress(gone, "https://cdn.test/old/2.jpg")))
+        assertEquals("app https://cdn.test/old/2.jpg", fetch(images.cover(gone, "https://cdn.test/old/2.jpg")))
     }
 
     @Test
@@ -108,19 +130,47 @@ class ExtensionImagesTest {
     }
 
     @Test
-    fun `a source turned off or removed since the last lookup stops answering`() {
-        lateinit var checking: ExtensionImages
-        checking = ExtensionImages(key) { checking.publish(emptyList()) }.also { it.publish(listOf(source)) }
+    fun `a source turned off or removed stops answering once the sources are published again`() {
+        val address = images.cover(source, "https://covers.test/1.jpg")
+        assertEquals("source-token https://covers.test/1.jpg", fetch(address))
 
-        assertEquals("app https://covers.test/1.jpg", fetch(images.coverAddress(source, "https://covers.test/1.jpg"), checking))
+        images.publish(emptyList())
+
+        assertEquals("app https://covers.test/1.jpg", fetch(address))
     }
 
     @Test
-    fun `a request for a source that has not loaded yet loads the extensions first`() {
+    fun `only requests before the first publish load the extensions`() {
+        var loads = 0
         lateinit var loading: ExtensionImages
-        loading = ExtensionImages(key) { loading.publish(listOf(source)) }
+        loading = ExtensionImages(key) {
+            loads += 1
+            loading.publish(listOf(source))
+        }
+        val address = images.cover(source, "https://covers.test/1.jpg")
 
-        assertEquals("source-token https://covers.test/1.jpg", fetch(images.coverAddress(source, "https://covers.test/1.jpg"), loading))
+        repeat(3) { assertEquals("source-token https://covers.test/1.jpg", fetch(address, loading)) }
+        assertEquals(1, loads)
+        // A publish with nothing on still counts: the table is read, not loaded again.
+        loading.publish(emptyList())
+        assertEquals("app https://covers.test/1.jpg", fetch(address, loading))
+        assertEquals(1, loads)
+    }
+
+    @Test
+    fun `a load that fails is not retried per image and the request goes out as an ordinary one`() {
+        var loads = 0
+        val failing = ExtensionImages(key) {
+            loads += 1
+            error("The device could not be listed")
+        }
+        val address = images.cover(source, "https://covers.test/1.jpg")
+
+        repeat(2) { assertEquals("app https://covers.test/1.jpg", fetch(address, failing)) }
+        assertEquals(1, loads)
+        // The next listing that succeeds publishes as usual.
+        failing.publish(listOf(source))
+        assertEquals("source-token https://covers.test/1.jpg", fetch(address, failing))
     }
 
     @Test
@@ -174,6 +224,10 @@ class ExtensionImagesTest {
 
         assertEquals(listOf("/p/1", "/p/1"), reader.asked)
     }
+
+    /** The address this host hands out for a series of [source] whose stored cover is [url]. */
+    private fun ExtensionImages.cover(source: HttpSource, url: String): String =
+        checkNotNull(address(Series(SeriesId(MihonSeriesSource.sourceKey(source), "/s"), "Series", coverUrl = url)))
 
     private fun fetch(address: String, images: ExtensionImages = this.images): String =
         appClient(images).newCall(Request.Builder().url(address).build()).execute().body.string()

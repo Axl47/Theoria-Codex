@@ -6,6 +6,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesCovers
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesSource
@@ -101,7 +102,7 @@ private const val SERIES_OWNER_PREFIX = "series:"
 /**
  * One chapter as the Viewer's post: its id is the chapter's address on the series' source, which is also the id its
  * download is kept under offline. Without [pages] the Viewer asks for them when it gets there. The title is what the
- * Viewer's top bar shows.
+ * Viewer's top bar shows. [cover] is what [SeriesCovers.address] gives for [series].
  */
 fun chapterPost(series: Series, entry: SeriesEntry, cover: String?, pages: List<ImageRef> = emptyList()) = Post(
     id = PostId(series.id.source, entry.address),
@@ -140,6 +141,7 @@ class SeriesDownloads(
     private val queueFile: File,
     private val repository: SeriesRepository,
     private val sources: suspend () -> List<SeriesSource>,
+    private val covers: SeriesCovers,
     /** Writes the image at an address into a file and returns its media type; throws unless a whole image arrived. */
     private val fetch: suspend (url: String, into: File) -> String,
     private val scheduler: DownloadScheduler,
@@ -400,7 +402,7 @@ class SeriesDownloads(
         fetching.value = chapter to 0f
         onPage(0, pages.size)
         val done = AtomicInteger()
-        val post = chapterPost(series, entry, series.coverUrl, pages)
+        val post = chapterPost(series, entry, covers.address(series), pages)
         // Extension pages name no type, and their addresses often no extension, so the type fetched is the page's.
         store.save(post, pages, owner, parallel = PARALLEL_PAGES) { page, file ->
             val type = attempts { fetch(checkNotNull(page.url), file) }

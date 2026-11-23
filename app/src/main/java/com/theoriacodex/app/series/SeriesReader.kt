@@ -15,7 +15,6 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.seriesReadingMode
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -46,9 +45,9 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         val stored = series.repository.series(id) ?: return null
         val entries = series.repository.entries(id).inReadingOrder()
         val start = entries.indexOfFirst { it.entry.address == entryAddress }.takeIf { it >= 0 } ?: return null
-        // No extension loads for a session. The cover shows while a chapter's pages load, and only a loaded source can
-        // give its address: its images can need the source's own client, and the stored address alone is refused.
-        val cover = loadedCover(stored.series)
+        // No extension loads for a session. The cover shows while a chapter's pages load; one only an extension's own
+        // client can fetch is tagged for it, and that extension loads when the cover is requested.
+        val cover = series.covers.address(stored.series)
         val posts = entries.map { chapterPost(stored.series, it.entry, cover) }
         val context = ViewerLaunchContext(seriesQueryHash(id), start, ViewerStreamSource.SERIES, scrollOffsetHint = 0)
         val resume = entries.associate { PostId(id.source, it.entry.address) to it.resumePageIndex() } +
@@ -70,14 +69,15 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         val entry = checkNotNull(series.repository.entries(id).firstOrNull { it.entry.address == postId.sourcePostId }) {
             "The chapter is not stored"
         }
-        // Nothing is asked of the source for a downloaded chapter; its cover is as in a session.
+        // A downloaded chapter's pages are its files. Its cover is tagged as in a session, so only the Viewer's
+        // request for that cover can load the extension; offline, the cover fails and the pages still read.
         val downloaded = series.downloads.chapter(id, entry.entry.address)?.media
         val source = if (downloaded == null) source(id.source) else null
         val pages = downloaded ?: runCatchingPreservingCancellation { checkNotNull(source).pages(entry.entry) }
             .onFailure { Diagnostics.report("series", "${id.source.id} chapter pages failed to load: ${failureKinds(it)}") }
             .getOrThrow()
         if (pages.isEmpty()) return null
-        return chapterPost(stored.series, entry.entry, source?.coverAddress(stored.series) ?: loadedCover(stored.series), pages)
+        return chapterPost(stored.series, entry.entry, series.covers.address(stored.series), pages)
     }
 
     /**
@@ -131,9 +131,6 @@ internal class SeriesReader(private val series: SeriesDependencies) {
     private fun failureKinds(error: Throwable): String = generateSequence(error) { it.cause }.take(MAX_CAUSES).joinToString(" < ") { cause ->
         cause.javaClass.simpleName + ((cause as? SourceAdapterException)?.let { "(${it.reason})" } ?: "")
     }
-
-    /** [series]' cover as its source gives it, if that source has loaded already; null otherwise. */
-    private fun loadedCover(series: Series): String? = this.series.loadedSources().firstOrNull { it.key == series.id.source }?.coverAddress(series)
 
     private suspend fun source(key: SourceKey) =
         checkNotNull(series.sources().firstOrNull { it.key == key }) { "The extension for this series is not installed" }

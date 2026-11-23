@@ -47,7 +47,6 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -228,9 +227,7 @@ private fun SeriesPageOverlays(
     }
     if (coverLightboxOpen) {
         state.stored?.series?.let { series ->
-            CompositionLocalProvider(LocalSeriesSources provides listOfNotNull(state.source)) {
-                CoverLightboxDialog(series, onDismiss = onDismissCover)
-            }
+            CoverLightboxDialog(series, onDismiss = onDismissCover)
         }
     }
     SwitchSourceSheet(switchSource, onOpenSeries, onSwitched)
@@ -379,33 +376,31 @@ private fun SeriesHeroHeader(
     onOpenCover: () -> Unit,
     onCopyTitle: (String) -> Unit,
 ) {
-    CompositionLocalProvider(LocalSeriesSources provides listOfNotNull(state.source)) {
-        Box(Modifier.fillMaxWidth()) {
-            HeroBackdrop(stored.series, Modifier.matchParentSize())
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = SERIES_TOP_BAR_HEIGHT + 8.dp, start = 16.dp, end = 16.dp, bottom = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    SeriesCover(
-                        stored.series,
-                        Modifier
-                            .width(HERO_COVER_WIDTH)
-                            .testTag(HERO_COVER_TAG)
-                            .clickable(role = Role.Image, onClickLabel = "View cover", onClick = onOpenCover),
-                    )
-                    HeroMetadata(stored.series, state.sourceName, onCopyTitle, Modifier.weight(1f))
-                }
-                HeroActionRow(
-                    followed = stored.followed,
-                    hasWebUrl = state.webUrl != null,
-                    onToggleFollowed = onToggleFollowed,
-                    onOpenInBrowser = onOpenInBrowser,
-                    onShare = onShare,
+    Box(Modifier.fillMaxWidth()) {
+        HeroBackdrop(stored.series, Modifier.matchParentSize())
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = SERIES_TOP_BAR_HEIGHT + 8.dp, start = 16.dp, end = 16.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                SeriesCover(
+                    stored.series,
+                    Modifier
+                        .width(HERO_COVER_WIDTH)
+                        .testTag(HERO_COVER_TAG)
+                        .clickable(role = Role.Image, onClickLabel = "View cover", onClick = onOpenCover),
                 )
+                HeroMetadata(stored.series, state.sourceName, onCopyTitle, Modifier.weight(1f))
             }
+            HeroActionRow(
+                followed = stored.followed,
+                hasWebUrl = state.webUrl != null,
+                onToggleFollowed = onToggleFollowed,
+                onOpenInBrowser = onOpenInBrowser,
+                onShare = onShare,
+            )
         }
     }
 }

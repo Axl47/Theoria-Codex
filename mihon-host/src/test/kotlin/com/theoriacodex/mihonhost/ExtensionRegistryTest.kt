@@ -5,6 +5,8 @@ import com.theoriacodex.domain.series.ExtensionChoiceStore
 import com.theoriacodex.domain.series.ExtensionChoices
 import com.theoriacodex.domain.series.ExtensionLanguage
 import com.theoriacodex.domain.series.ExtensionSetting
+import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.HostUnavailableException
 import eu.kanade.tachiyomi.source.ConfigurableSource
@@ -49,8 +51,11 @@ class ExtensionRegistryTest {
     private val images = ExtensionImages()
     private val registry = registry { error("No source here has settings") }
 
+    /** How many times the registry listed the device. */
+    private var listings = 0
+
     private fun registry(settings: (ConfigurableSource) -> SourceSettings) = ExtensionRegistry(
-        packages = { onDevice },
+        packages = { listings += 1; onDevice },
         load = { loads += it.apk.path; sourcesOf(it) },
         choices = store,
         images = images,
@@ -62,7 +67,8 @@ class ExtensionRegistryTest {
     /** Whether an image address tagged with [source] is answered by that source instead of passing down the chain. */
     private fun fetchesImages(source: StubHttpSource): Boolean {
         val client = OkHttpClient.Builder().addInterceptor(images).addInterceptor(answering { cannedResponse(it, body = "app") }).build()
-        return client.newCall(Request.Builder().url(images.coverAddress(source, "https://covers.test/1.jpg")).build()).execute().body.string() == "source"
+        val series = Series(SeriesId(MihonSeriesSource.sourceKey(source), "/s"), "Series", coverUrl = "https://covers.test/1.jpg")
+        return client.newCall(Request.Builder().url(checkNotNull(images.address(series))).build()).execute().body.string() == "source"
     }
 
     @Test
@@ -126,21 +132,24 @@ class ExtensionRegistryTest {
     }
 
     @Test
-    fun `an extension removed, replaced or installed later is picked up by the next lookup`() = runBlocking {
+    fun `an extension removed, replaced or installed later is picked up by the next recheck`() = runBlocking {
         store.choices = ExtensionChoices(trusted = mapOf("a" to "key-1", "b" to "key-1"))
         val first = registry.sources().single()
         assertTrue(registry.sources().single() === first)
         assertEquals(1, registry.revision.value)
 
         onDevice = emptyList()
+        registry.recheck()
         assertTrue(registry.sources().isEmpty())
         assertEquals(2, registry.revision.value)
 
         onDevice = listOf(extension("a", signer = "key-1").copy(modified = 2))
+        registry.recheck()
         assertTrue(registry.sources().single() !== first)
 
         sourcesOf = { listOf(StubSource(if (it.name == "a") 1 else 2, "en")) }
         onDevice = onDevice + extension("b", signer = "key-1")
+        registry.recheck()
         assertEquals(listOf("custom_mihon_1", "custom_mihon_2"), registry.sources().map { it.key.id })
         // Only what changed was loaded each time.
         assertEquals(listOf("/a.apk", "/a.apk", "/b.apk"), loads)
@@ -160,40 +169,52 @@ class ExtensionRegistryTest {
     }
 
     @Test
-    fun `a package broadcast lists the device again even when the package changes number did not move`() = runBlocking {
-        // Hiding a package changes the listing and sends a broadcast, but numbers no change.
-        val registry = ExtensionRegistry({ onDevice }, { 0 }, { sourcesOf(it) }, store, images, { error("no settings") }, { deviceLanguages }, 500)
-        registry.installed()
-        val listed = registry.revision.value
+    fun `once loaded, lookups ask nothing of the device, and a recheck before the first load lists nothing`() = runBlocking {
+        store.choices = ExtensionChoices(trusted = mapOf("a" to "key-1"))
+        registry.recheck()
+        assertEquals(0, listings)
 
+        registry.sources()
         onDevice = emptyList()
+        repeat(3) { assertEquals(1, registry.sources().size) }
+
+        assertEquals(1, listings)
+    }
+
+    @Test
+    fun `a recheck tries again a first load that failed`() = runBlocking {
+        store.choices = ExtensionChoices(trusted = mapOf("a" to "key-1"))
+        store.interruption = IllegalStateException("the choices could not be read")
+        assertFailsWith<IllegalStateException> { registry.sources() }
+
         registry.recheck()
 
-        assertEquals(listed + 1, registry.revision.value)
+        assertEquals(2, listings)
+        assertEquals(1, registry.sources().size)
+        assertEquals(2, listings)
     }
 
     @Test
     fun `another app updating leaves the revision where it was`() = runBlocking {
-        var stamp = 0
-        val registry = ExtensionRegistry({ onDevice }, { stamp }, { sourcesOf(it) }, store, images, { error("no settings") }, { deviceLanguages }, 500)
         registry.installed()
         val listed = registry.revision.value
 
-        stamp++
         registry.recheck()
 
         assertEquals(listed, registry.revision.value)
     }
 
     @Test
-    fun `a lookup interrupted after a change on the device leaves the change for the next one`() = runBlocking {
+    fun `a recheck interrupted after a change on the device leaves the change for the next one`() = runBlocking {
         store.choices = ExtensionChoices(trusted = mapOf("a" to "key-1"))
         registry.sources()
 
         onDevice = emptyList()
         store.interruption = CancellationException("the caller left")
-        assertFailsWith<CancellationException> { registry.sources() }
+        assertFailsWith<CancellationException> { registry.recheck() }
+        assertEquals(1, registry.sources().size)
 
+        registry.recheck()
         assertTrue(registry.sources().isEmpty())
     }
 

@@ -5,12 +5,15 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.FileObserver
 import android.util.Log
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.network.AndroidBrowserCookieStore
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.ExtensionChoiceStore
 import com.theoriacodex.domain.series.ExtensionChoices
+import com.theoriacodex.domain.series.SeriesCovers
 import com.theoriacodex.domain.series.SeriesExtensions
 import com.theoriacodex.domain.series.SeriesSource
 import com.theoriacodex.mihonhost.ExtensionImages
@@ -28,6 +31,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
@@ -51,21 +55,30 @@ interface ExtensionSites {
  *
  * Nothing loads at startup, and nothing ever loads but the extensions the user turned on in the Extensions page;
  * [ExtensionRegistry] holds that rule. Those load once, the first time [sources] is called or [mediaInterceptor] is
- * asked for an image only an extension can fetch.
+ * asked for an image only an extension can fetch. [covers] tags a stored cover without loading anything.
  */
 internal class MihonExtensionSourceHost : ExtensionSites {
     private lateinit var registry: ExtensionRegistry
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var watching: Lazy<Unit>
+    private lateinit var packages: ExtensionPackages
+    private lateinit var imageKey: Lazy<ByteArray>
+
+    /** Held so the debug folder stays watched; see [watchPackages]. */
+    @Volatile
+    private var folderWatch: FileObserver? = null
 
     /** The user's choices, which open with the app's data, after the HTTP clients that already hold [mediaInterceptor]. */
     private val choices = CompletableDeferred<ExtensionChoiceStore>()
 
-    // Its refresh runs on an HTTP client's thread before each extension image: loads the extensions the first time, then only checks the stamp.
+    // Loads the extensions on an HTTP client's thread for the first extension image; after that, images only read its table.
     private lateinit var images: ExtensionImages
 
     /** Goes on the app's media clients: answers requests only an extension can fetch and passes the rest on. */
     val mediaInterceptor: Interceptor get() = images
+
+    /** Turns any stored series cover into the address to load, an extension's tagged for it; loads nothing. */
+    val covers: SeriesCovers get() = images
 
     /** The extensions on the device and the user's choices about them, for the Extensions page. */
     val extensions: SeriesExtensions get() = registry.also { watching.value }
@@ -76,8 +89,9 @@ internal class MihonExtensionSourceHost : ExtensionSites {
      */
     fun attach(application: Application, browsers: ChallengeBrowsers, outages: () -> HostOutageTracker) {
         // Release builds run installed packages only; the folder is how tests hand a debug build an APK.
-        images = ExtensionImages(lazy { MihonHost.imageKey(application) }) { runBlocking { registry.sources() } }
-        val packages = ExtensionPackages(application) { if (BuildConfig.DEBUG) application.getExternalFilesDir(DIRECTORY) else null }
+        imageKey = lazy { MihonHost.imageKey(application) }
+        images = ExtensionImages(imageKey) { runBlocking { sources() } }
+        packages = ExtensionPackages(application) { if (BuildConfig.DEBUG) application.getExternalFilesDir(DIRECTORY) else null }
         val loader = ExtensionLoader(application, packages)
         // What extensions ask their host for is set up when the first one loads, not at startup.
         val hostInstalled = lazy {
@@ -85,7 +99,6 @@ internal class MihonExtensionSourceHost : ExtensionSites {
         }
         registry = ExtensionRegistry(
             packages = packages::list,
-            stamp = packages::stamp,
             load = { extension ->
                 hostInstalled.value
                 loader.load(extension)
@@ -104,9 +117,11 @@ internal class MihonExtensionSourceHost : ExtensionSites {
     }
 
     /**
-     * An extension installed, updated or removed while the app runs is noticed at once, which moves the registry's
-     * revision and so reloads the Series tab. Started when the extensions are first asked about: [attach] runs before
-     * the application can register anything, and there is nothing to reload before then.
+     * An extension installed, updated, removed, hidden or unhidden while the app runs is noticed at once: the registry
+     * lists the device again, which updates the sources that fetch images and, when the extensions changed, moves its
+     * revision and so reloads the Series tab. This is the only way the registry learns of changes, so it starts before
+     * the extensions first load. Not at [attach], which runs before the application can register anything.
+     * Debug builds also watch the folder of pushed APK files, which sends no broadcast.
      */
     private fun watchPackages(application: Application) {
         val changed = IntentFilter().apply {
@@ -115,17 +130,32 @@ internal class MihonExtensionSourceHost : ExtensionSites {
             addAction(Intent.ACTION_PACKAGE_REPLACED)
             addDataScheme("package")
         }
+        // A burst of changes, such as a wave of app updates, lists the device once more after the listing under way.
+        val rechecks = Channel<Unit>(Channel.CONFLATED)
+        scope.launch {
+            for (change in rechecks) {
+                // One failed listing, such as a binder error, must not stop later changes being noticed.
+                runCatchingPreservingCancellation { registry.recheck() }.onFailure { Log.w(TAG, "Recheck failed: ${it.javaClass.simpleName}") }
+            }
+        }
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                scope.launch { registry.recheck() }
+                // An update also sends REMOVED and ADDED marked as replacing; its REPLACED is enough.
+                if (intent.action != Intent.ACTION_PACKAGE_REPLACED && intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) return
+                rechecks.trySend(Unit)
             }
         }
         application.registerReceiver(receiver, changed, Context.RECEIVER_NOT_EXPORTED)
+        // Finding the folder can create it, which is kept off the main thread.
+        scope.launch(Dispatchers.IO) { folderWatch = packages.watchFolder { rechecks.trySend(Unit) } }
     }
 
     /** Says where the user's choices are kept. Called once, when the app's data opens; everything else waits for it. */
     fun bind(choices: ExtensionChoiceStore) {
         this.choices.complete(choices)
+        // Screens tag covers as they draw, so the key file is read now, off the main thread. Not at [attach], which
+        // runs before the application has a context to find the file with.
+        scope.launch(Dispatchers.IO) { imageKey.value }
     }
 
     override fun sites(): Map<SourceKey, ExtensionSite> = registry.sites()
@@ -142,9 +172,6 @@ internal class MihonExtensionSourceHost : ExtensionSites {
         watching.value
         return registry.sources()
     }
-
-    /** The sources already loaded, without loading any; empty until [sources] first runs. */
-    fun loadedSources(): List<SeriesSource> = registry.loadedSources()
 
     private companion object {
         const val TAG = "MihonHost"

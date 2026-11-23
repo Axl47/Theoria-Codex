@@ -39,15 +39,17 @@ data class ExtensionSite(val name: String, val hosts: Set<String>)
  * and says why in the list. Loaded code cannot be unloaded, so turning an extension off stops its sources being
  * offered and its images being fetched, and its code stays idle in memory until the process ends.
  *
+ * Once loaded, the sources on offer change only when the device is listed again: on a choice made here, when the
+ * Extensions page asks, and on [recheck], which the host calls whenever the extensions on the device may have changed.
+ * Nothing is asked of the device per source lookup or image.
+ *
  * @param packages the extensions on the device, read without running them
- * @param stamp a cheap value that differs whenever [packages] would answer differently
  * @param load creates an extension's sources, running its code
  * @param settings the settings of a source that has some
  * @param deviceLanguages the user's languages as language tags, most preferred first
  */
 class ExtensionRegistry(
     private val packages: () -> List<ExtensionPackage>,
-    private val stamp: () -> Any = packages,
     private val load: (ExtensionPackage) -> List<Source>,
     private val choices: ExtensionChoiceStore,
     private val images: ExtensionImages,
@@ -97,52 +99,40 @@ class ExtensionRegistry(
         }.toMap()
     }
 
-    /** The sources on offer, with the [packages] they were listed from and [stamp] as it was read before that listing. */
-    private class Offer(val sources: List<SeriesSource>, val stamp: Any, val packages: List<ExtensionPackage>)
+    /** The sources on offer, with the [packages] they were listed from. */
+    private class Offer(val sources: List<SeriesSource>, val packages: List<ExtensionPackage>)
 
-    /** What a listing found on the device, with [stamp] read first, so a change during the listing is seen by the next check. */
-    private class OnDevice(val stamp: Any, val packages: List<ExtensionPackage>)
-
-    /**
-     * Null until first asked for. Sources and stamp are replaced together, once a listing has finished: a reader never
-     * pairs a new stamp with the sources of the listing before it, and a listing that was cancelled leaves both as they were.
-     */
+    /** Null until first asked for. Replaced once a listing has finished: a listing that was cancelled leaves it as it was. */
     @Volatile
     private var offer: Offer? = null
 
     private val mutableRevision = MutableStateFlow(0)
     override val revision: StateFlow<Int> = mutableRevision
 
-    /**
-     * The sources of the extensions and languages that are on. The first call loads them. Every later call checks
-     * [stamp], so an extension installed, updated or removed since is picked up without a restart: while nothing
-     * changed that check is all a call costs, and when something did only the extensions that changed load.
-     */
-    suspend fun sources(): List<SeriesSource> = withContext(Dispatchers.IO) {
-        current() ?: locked {
-            // A chapter's pages all ask at once after a change: only the first to get here lists the device again.
-            current() ?: refresh().let { offer?.sources.orEmpty() }
-        }
+    /** The sources of the extensions and languages that are on. The first call loads them; later calls read what is on offer. */
+    suspend fun sources(): List<SeriesSource> = offer?.sources ?: locked {
+        // A chapter's pages all ask at once on a cold start: only the first to get here lists the device.
+        if (offer == null) refresh()
+        offer?.sources.orEmpty()
     }
 
-    private fun current(): List<SeriesSource>? = offer?.takeIf { stamp() == it.stamp }?.sources
-
-    /** The sources [sources] last offered, without loading or checking anything; empty before the first load. */
-    fun loadedSources(): List<SeriesSource> = offer?.sources.orEmpty()
+    /** Whether a listing was ever started, even one that failed. Written under [mutex]. */
+    private var listed = false
 
     /**
-     * Lists the device again once the extensions have loaded, moving [revision] when something changed; before that,
-     * does nothing. For a package broadcast: hiding or unhiding a package changes the listing without moving [stamp].
+     * Lists the device again once a listing has been tried, so an extension installed, updated, removed, hidden or
+     * unhidden since is picked up, and a first load that failed is tried again; only the extensions that changed load.
+     * Moves [revision] when something changed. Before any listing, does nothing: nothing loads until first asked for.
      */
     suspend fun recheck() {
-        if (offer != null) locked { refresh() }
+        locked { if (listed) refresh() }
     }
 
     override suspend fun installed(): List<InstalledExtension> = locked { refresh() }
 
     override suspend fun setOn(id: String, signer: String, on: Boolean): List<InstalledExtension> = locked {
-        val onDevice = onDevice()
-        val extension = onDevice.packages.firstOrNull { it.id == id }
+        val onDevice = packages()
+        val extension = onDevice.firstOrNull { it.id == id }
         when {
             extension == null -> Unit
             !on -> choices.update { it.copy(trusted = it.trusted - extension.identity) }
@@ -157,8 +147,8 @@ class ExtensionRegistry(
     }
 
     override suspend fun setLanguage(id: String, language: String, on: Boolean): List<InstalledExtension> = locked {
-        val onDevice = onDevice()
-        val extension = onDevice.packages.firstOrNull { it.id == id }
+        val onDevice = packages()
+        val extension = onDevice.firstOrNull { it.id == id }
         val languages = extension?.let { loaded[it] }?.sources?.map { it.language }
         if (extension != null && languages != null) {
             val current = choices.choices().languages[extension.packageName] ?: defaultLanguages(languages.distinct(), deviceLanguages())
@@ -184,8 +174,8 @@ class ExtensionRegistry(
     /**
      * Runs [block] alone and off the caller's thread. The revision moves when the sources on offer did or the
      * extensions on the device did, whatever the cause: a choice made here, or a package installed or removed since
-     * the last listing, also one that is off, which the Extensions page lists. It stays put when [stamp] moved for
-     * a package that is no extension, such as any other app updating.
+     * the last listing, also one that is off, which the Extensions page lists. It stays put when a listing finds the
+     * same extensions, as after any other app updates.
      */
     private suspend fun <T> locked(block: suspend () -> T): T = withContext(Dispatchers.IO) {
         mutex.withLock {
@@ -194,15 +184,14 @@ class ExtensionRegistry(
         }
     }
 
-    private fun onDevice() = OnDevice(stamp(), packages())
-
     /**
      * Lists every extension, loading those that are on and not loaded yet, and replaces what is on offer. No settings
      * are read here: this runs for the first source lookup and image request, which must not wait on every source's
      * settings screen.
      */
-    private suspend fun refresh(found: OnDevice = onDevice()): List<InstalledExtension> {
-        val onDevice = found.packages
+    private suspend fun refresh(found: List<ExtensionPackage>? = null): List<InstalledExtension> {
+        listed = true
+        val onDevice = found ?: packages()
         val choices = choices.choices()
         val device = deviceLanguages()
         val taken = HashSet<SourceKey>()
@@ -234,7 +223,7 @@ class ExtensionRegistry(
         images.publish(sources.map { it.source })
         val series = sources.map { it.series }
         // The same list object while nothing changed, so a reader can tell.
-        offer = Offer(offer?.sources?.takeIf { it == series } ?: series, found.stamp, onDevice)
+        offer = Offer(offer?.sources?.takeIf { it == series } ?: series, onDevice)
         return listed
     }
 
