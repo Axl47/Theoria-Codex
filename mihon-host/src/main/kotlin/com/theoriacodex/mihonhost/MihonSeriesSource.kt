@@ -198,7 +198,10 @@ class MihonSeriesSource(
 
     companion object {
         /** The app-wide identity of an extension source; the `mihon` label can never be a real site's host. */
-        fun sourceKey(source: Source): SourceKey = SourceKey.parseOrThrow("$EXTENSION_SOURCE_ID_PREFIX${source.id}")
+        fun sourceKey(source: Source): SourceKey = sourceKey(source.id)
+
+        /** The app-wide identity of the extension source whose Mihon id is [sourceId]. */
+        fun sourceKey(sourceId: Long): SourceKey = SourceKey.parseOrThrow("$EXTENSION_SOURCE_ID_PREFIX$sourceId")
 
         /** The extension source id [key] names, read back from [sourceKey]; null for a source that is no extension's. */
         fun sourceId(key: SourceKey): Long? = key.id.takeIf { it.startsWith(EXTENSION_SOURCE_ID_PREFIX) }?.removePrefix(EXTENSION_SOURCE_ID_PREFIX)?.toLongOrNull()

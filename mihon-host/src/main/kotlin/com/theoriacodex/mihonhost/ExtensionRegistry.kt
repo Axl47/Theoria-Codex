@@ -1,8 +1,10 @@
 package com.theoriacodex.mihonhost
 
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.ExtensionChoiceStore
+import com.theoriacodex.domain.series.ExtensionChoices
 import com.theoriacodex.domain.series.ExtensionLanguage
 import com.theoriacodex.domain.series.ExtensionSetting
 import com.theoriacodex.domain.series.ExtensionSourceSettings
@@ -35,9 +37,11 @@ data class ExtensionSite(val name: String, val hosts: Set<String>)
  *
  * An extension's code is loaded only once the user has turned that extension on ([ExtensionChoiceStore]), and only
  * while it still has the signing certificate it had then; until then it is listed from what the package manager says
- * about it. Loading happens on first use, never at startup,
- * one extension at a time, each on a thread of its own with [limitMs] to finish: one that hangs or fails is left out
- * and says why in the list. Loaded code cannot be unloaded, so turning an extension off stops its sources being
+ * about it. Loading happens on first use, never at startup, and loads only what that use needs: a lookup of one
+ * source ([source]) loads the extension this device last saw offer it ([ExtensionChoices.owners]), and only a source it
+ * never saw, or no longer finds there, loads every extension that is on, as the whole list ([sources]) and the
+ * Extensions page do. Extensions load one at a time, each on a thread of its own with [limitMs] to finish: one that
+ * hangs or fails is left out and says why in the list. Loaded code cannot be unloaded, so turning an extension off stops its sources being
  * offered and its images being fetched, and its code stays idle in memory until the process ends.
  *
  * Once loaded, the sources on offer change only when the device is listed again: on a choice made here, when the
@@ -100,8 +104,13 @@ class ExtensionRegistry(
         }.toMap()
     }
 
-    /** The sources on offer, with the [packages] they were listed from. */
-    private class Offer(val sources: List<SeriesSource>, val packages: List<ExtensionPackage>)
+    /**
+     * The sources on offer, with the [packages] they were listed from; [complete] when every extension that is on was
+     * loaded for them, rather than only the ones lookups needed.
+     */
+    private class Offer(val sources: List<SeriesSource>, val packages: List<ExtensionPackage>, val complete: Boolean) {
+        fun find(key: SourceKey): SeriesSource? = sources.firstOrNull { it.key == key }
+    }
 
     /** Null until first asked for. Replaced once a listing has finished: a listing that was cancelled leaves it as it was. */
     @Volatile
@@ -110,15 +119,40 @@ class ExtensionRegistry(
     private val mutableRevision = MutableStateFlow(0)
     override val revision: StateFlow<Int> = mutableRevision
 
-    /** The sources of the extensions and languages that are on. The first call loads them; later calls read what is on offer. */
-    suspend fun sources(): List<SeriesSource> = offer?.sources ?: locked {
-        // A chapter's pages all ask at once on a cold start: only the first to get here lists the device.
-        if (offer == null) refresh()
+    /** The sources of the extensions and languages that are on. The first call loads them all; later calls read what is on offer. */
+    suspend fun sources(): List<SeriesSource> = offer?.takeIf { it.complete }?.sources ?: locked(growing = true) {
+        loadEverything()
         offer?.sources.orEmpty()
+    }
+
+    /**
+     * The source [key] names, when its extension and language are on; null otherwise. Loads the extension this device
+     * last saw offer it, or every extension that is on when it saw none or that one no longer offers it.
+     */
+    suspend fun source(key: SourceKey): SeriesSource? {
+        offer?.let { current ->
+            current.find(key)?.let { return it }
+            // Every extension that is on already loaded: the source is not on.
+            if (current.complete) return null
+        }
+        // A chapter's pages all ask at once on a cold start: only the first to get here lists the device.
+        return locked(growing = true) {
+            offer?.find(key) ?: run {
+                val owner = choices.choices().owners[key.id]
+                if (owner != null && (wanted.add(owner) || offer == null)) refresh()
+                offer?.find(key) ?: loadEverything().let { offer?.find(key) }
+            }
+        }
     }
 
     /** Whether a listing was ever started, even one that failed. Written under [mutex]. */
     private var listed = false
+
+    /** Whether every extension that is on is to load, as the list and every Extensions page call need. Guarded by [mutex]. */
+    private var everything = false
+
+    /** Until [everything], the extensions to load (by [ExtensionPackage.identity]): the ones lookups needed. Guarded by [mutex]. */
+    private val wanted = HashSet<String>()
 
     /**
      * Lists the device again once a listing has been tried, so an extension installed, updated, removed, hidden or
@@ -129,9 +163,13 @@ class ExtensionRegistry(
         locked { if (listed) refresh() }
     }
 
-    override suspend fun installed(): List<InstalledExtension> = locked { refresh() }
+    override suspend fun installed(): List<InstalledExtension> = locked(growing = true) {
+        everything = true
+        refresh()
+    }
 
     override suspend fun setOn(id: String, signer: String, on: Boolean): List<InstalledExtension> = locked {
+        everything = true
         val onDevice = packages()
         val extension = onDevice.firstOrNull { it.id == id }
         when {
@@ -148,6 +186,7 @@ class ExtensionRegistry(
     }
 
     override suspend fun setLanguage(id: String, language: String, on: Boolean): List<InstalledExtension> = locked {
+        everything = true
         val onDevice = packages()
         val extension = onDevice.firstOrNull { it.id == id }
         val languages = extension?.let { loaded[it] }?.sources?.map { it.language }
@@ -158,8 +197,8 @@ class ExtensionRegistry(
         refresh(onDevice)
     }
 
-    override suspend fun settings(id: String): List<ExtensionSourceSettings> = locked {
-        if (offer == null) refresh()
+    override suspend fun settings(id: String): List<ExtensionSourceSettings> = locked(growing = true) {
+        loadEverything()
         active[id].orEmpty().mapNotNull(::settingsOf)
     }
 
@@ -173,20 +212,32 @@ class ExtensionRegistry(
     }
 
     /**
-     * Runs [block] alone and off the caller's thread. The revision moves when the sources on offer did or the
-     * extensions on the device did, whatever the cause: a choice made here, or a package installed or removed since
-     * the last listing, also one that is off, which the Extensions page lists. It stays put when a listing finds the
-     * same extensions, as after any other app updates.
+     * Runs [block] alone and off the caller's thread. The revision moves when the extensions on the device changed, a
+     * package installed or removed since the last listing, also one that is off, which the Extensions page lists; or
+     * when the sources on offer changed for any reason but [growing]: loading more of the extensions that were on all
+     * along gives no one a reason to look again, since a list was only ever handed out [complete]. It stays put when a
+     * listing finds the same extensions, as after any other app updates.
      */
-    private suspend fun <T> locked(block: suspend () -> T): T = withContext(Dispatchers.IO) {
+    private suspend fun <T> locked(growing: Boolean = false, block: suspend () -> T): T = withContext(Dispatchers.IO) {
         mutex.withLock {
             val before = offer
-            block().also { if (before?.sources != offer?.sources || before?.packages != offer?.packages) mutableRevision.update { it + 1 } }
+            block().also {
+                val moved = before?.packages != offer?.packages || !growing && before?.sources != offer?.sources
+                if (moved) mutableRevision.update { it + 1 }
+            }
         }
     }
 
+    /** Loads every extension that is on, listing the device unless that was done already. */
+    private suspend fun loadEverything() {
+        if (everything && offer?.complete == true) return
+        everything = true
+        refresh()
+    }
+
     /**
-     * Lists every extension, loading those that are on and not loaded yet, and replaces what is on offer. No settings
+     * Lists every extension, loading those that are on, not loaded yet, and to load ([everything] or [wanted]), and
+     * replaces what is on offer. Records which extension offers each source it loaded, for later lookups. No settings
      * are read here: this runs for the first source lookup and image request, which must not wait on every source's
      * settings screen.
      */
@@ -197,6 +248,7 @@ class ExtensionRegistry(
         val device = deviceLanguages()
         val taken = HashSet<SourceKey>()
         val on = LinkedHashMap<String, List<LoadedSource>>()
+        val learned = HashMap<String, String>()
         // What is no longer on the device as it was loaded is never offered again.
         loaded.keys.retainAll(onDevice.toSet())
         val listed = onDevice.map { extension ->
@@ -211,7 +263,14 @@ class ExtensionRegistry(
                 problem = extension.unsupported ?: NOT_SIGNED.takeIf { extension.signer == null },
             )
             if (!trusted || extension.unsupported != null) return@map listing
-            val code = loaded.getOrPut(extension) { load(extension) }
+            val code = loaded[extension] ?: if (everything || extension.identity in wanted) {
+                load(extension).also { code ->
+                    loaded[extension] = code
+                    code.sources.associateTo(learned) { it.series.key.id to extension.identity }
+                }
+            } else {
+                return@map listing
+            }
             val languages = code.sources.map { it.language }.distinct()
             val chosen = choices.languages[extension.packageName] ?: defaultLanguages(languages, device)
             // The same extension can be on the device twice, installed and as a file; its sources are offered once.
@@ -224,7 +283,12 @@ class ExtensionRegistry(
         images.publish(sources.map { it.source })
         val series = sources.map { it.series }
         // The same list object while nothing changed, so a reader can tell.
-        offer = Offer(offer?.sources?.takeIf { it == series } ?: series, onDevice)
+        offer = Offer(offer?.sources?.takeIf { it == series } ?: series, onDevice, complete = everything)
+        // Only a hint for the next start: failing to keep it leaves that start loading every extension for a lookup.
+        if (learned.isNotEmpty()) {
+            runCatchingPreservingCancellation { this.choices.update { it.copy(owners = it.owners + learned) } }
+                .onFailure { Diagnostics.report(LOG_AREA, "Which extension offers each source could not be kept", it) }
+        }
         return listed
     }
 

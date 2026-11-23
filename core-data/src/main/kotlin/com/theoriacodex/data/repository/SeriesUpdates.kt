@@ -35,8 +35,8 @@ suspend fun SeriesRepository.refresh(source: SeriesSource, series: Series): List
 /**
  * Refreshes every followed series' entry list from its source and returns the ones that gained entries. Sources are
  * checked side by side, but each source's series one at a time, because a source's requests share one rate limit.
- * [sources] is asked again for each series, once its turn has come, so a source switched off or removed while the
- * check ran or waited is not used any further. A series whose source is missing or fails is skipped and the rest go
+ * [source] is asked for each series' source once its turn has come, so a source switched off or removed while the
+ * check ran or waited is not used any further, and only the extensions of followed series load. A series whose source is missing or fails is skipped and the rest go
  * on. Only entry lists are fetched and stored: details cost a request of their own, and the ones the check started
  * with may be older than what a series' page stored meanwhile. The exception is a series stored without a cover,
  * whose details are fetched too.
@@ -45,20 +45,20 @@ suspend fun SeriesRepository.refresh(source: SeriesSource, series: Series): List
  * everything it stored. Sources report side by side.
  */
 suspend fun SeriesRepository.checkFollowed(
-    sources: suspend () -> List<SeriesSource>,
+    source: suspend (SourceKey) -> SeriesSource?,
     onUpdate: suspend (SeriesUpdate) -> Unit = {},
 ): List<SeriesUpdate> = coroutineScope {
     observeFollowed().first().map(FollowedSeries::series).groupBy { it.id.source }.values.map { followed ->
         async {
-            followed.mapNotNull { series -> update(sources, series)?.also { onUpdate(it) } }
+            followed.mapNotNull { series -> update(source, series)?.also { onUpdate(it) } }
         }
     }.awaitAll().flatten()
 }
 
-/** [series]' new entries, fetched from its source among [sources]; null when it gained none or its source is gone or failed. */
-private suspend fun SeriesRepository.update(sources: suspend () -> List<SeriesSource>, series: Series): SeriesUpdate? = try {
+/** [series]' new entries, fetched from the [source] its key names; null when it gained none or its source is gone or failed. */
+private suspend fun SeriesRepository.update(source: suspend (SourceKey) -> SeriesSource?, series: Series): SeriesUpdate? = try {
     refreshLocks.getOrPut(series.id.source, ::Mutex).withLock {
-        sources().firstOrNull { it.key == series.id.source }?.let { source -> storeEntries(series.id, source.entries(series)) }
+        source(series.id.source)?.let { found -> storeEntries(series.id, found.entries(series)) }
     }?.takeIf { it.isNotEmpty() }?.let { SeriesUpdate(series, it) }
 } catch (error: CancellationException) {
     throw error

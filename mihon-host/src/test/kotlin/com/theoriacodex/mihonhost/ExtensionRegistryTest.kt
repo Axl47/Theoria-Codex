@@ -71,6 +71,46 @@ class ExtensionRegistryTest {
         return client.newCall(Request.Builder().url(checkNotNull(images.address(series))).build()).execute().body.string() == "source"
     }
 
+    /** Extensions a and b, both on, offering sources 1 and 2. */
+    private fun twoExtensionsOn() {
+        onDevice = listOf(extension("a", signer = "key-1"), extension("b", signer = "key-1"))
+        store.choices = store.choices.copy(trusted = mapOf("a" to "key-1", "b" to "key-1"))
+        sourcesOf = { listOf(StubSource(if (it.packageName == "a") 1 else 2, "en")) }
+    }
+
+    @Test
+    fun `a lookup loads only the extension that last offered its source`() = runBlocking {
+        twoExtensionsOn()
+        // A first start knows no owners, so the lookup loads every extension that is on and keeps who offers what.
+        assertEquals("custom_mihon_2", registry.source(MihonSeriesSource.sourceKey(2))?.key?.id)
+        assertEquals(listOf("/a.apk", "/b.apk"), loads)
+        assertEquals(mapOf("custom_mihon_1" to "a", "custom_mihon_2" to "b"), store.choices.owners)
+
+        loads.clear()
+        val restarted = registry { error("No source here has settings") }
+        assertEquals("custom_mihon_2", restarted.source(MihonSeriesSource.sourceKey(2))?.key?.id)
+        assertEquals(listOf("/b.apk"), loads)
+        // Loading the rest for the whole list changes nothing anyone was handed, so the revision stays.
+        val revision = restarted.revision.value
+        assertEquals(listOf("custom_mihon_1", "custom_mihon_2"), restarted.sources().map { it.key.id })
+        assertEquals(revision, restarted.revision.value)
+        assertEquals(listOf("/b.apk", "/a.apk"), loads)
+    }
+
+    @Test
+    fun `a source its recorded extension no longer offers is found by loading every extension, once`() = runBlocking {
+        twoExtensionsOn()
+        store.choices = store.choices.copy(owners = mapOf("custom_mihon_2" to "a"))
+
+        assertEquals("custom_mihon_2", registry.source(MihonSeriesSource.sourceKey(2))?.key?.id)
+        assertEquals(listOf("/a.apk", "/b.apk"), loads)
+        assertEquals("b", store.choices.owners["custom_mihon_2"])
+        // Everything that is on has loaded: a source none offers is answered without listing the device again.
+        val before = listings
+        assertNull(registry.source(MihonSeriesSource.sourceKey(9)))
+        assertEquals(before, listings)
+    }
+
     @Test
     fun `an extension that is off is listed without running its code`() = runBlocking {
         val listed = registry.installed().single()

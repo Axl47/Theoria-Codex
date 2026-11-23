@@ -140,7 +140,8 @@ class SeriesDownloads(
     private val store: OfflineMediaStore,
     private val queueFile: File,
     private val repository: SeriesRepository,
-    private val sources: suspend () -> List<SeriesSource>,
+    /** The source a key names when it is on, else null. */
+    private val source: suspend (SourceKey) -> SeriesSource?,
     private val covers: SeriesCovers,
     /** Writes the image at an address into a file and returns its media type; throws unless a whole image arrived. */
     private val fetch: suspend (url: String, into: File) -> String,
@@ -396,7 +397,7 @@ class SeriesDownloads(
         val owner = seriesOfflineOwner(chapter.series)
         // A copy already on the device, such as one saved to a Codex, needs only the series as another owner.
         if (store.retain(PostId(chapter.series.source, entry.address), owner) != null) return
-        val source = sources().firstOrNull { it.key == chapter.series.source } ?: throw IOException("The series' source is not on")
+        val source = this.source(chapter.series.source) ?: throw IOException("The series' source is not on")
         val pages = attempts { source.pages(entry) }.ifEmpty { throw ChapterUnavailable("The chapter has no pages") }
         if (pages.any { it.url == null }) throw ChapterUnavailable("A page has no address")
         fetching.value = chapter to 0f

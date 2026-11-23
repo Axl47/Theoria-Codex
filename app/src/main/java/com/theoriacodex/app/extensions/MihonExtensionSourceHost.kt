@@ -22,6 +22,7 @@ import com.theoriacodex.mihonhost.ExtensionPackages
 import com.theoriacodex.mihonhost.ExtensionRegistry
 import com.theoriacodex.mihonhost.ExtensionSite
 import com.theoriacodex.mihonhost.MihonHost
+import com.theoriacodex.mihonhost.MihonSeriesSource
 import com.theoriacodex.mihonhost.SourceSettings
 import com.theoriacodex.sources.http.ChallengeBrowsers
 import com.theoriacodex.sources.http.HostOutageTracker
@@ -54,8 +55,9 @@ interface ExtensionSites {
  * `adb push <apk> /sdcard/Android/data/com.theoriacodex.debug/files/mihon-extensions/`.
  *
  * Nothing loads at startup, and nothing ever loads but the extensions the user turned on in the Extensions page;
- * [ExtensionRegistry] holds that rule. Those load once, the first time [sources] is called or [mediaInterceptor] is
- * asked for an image only an extension can fetch. [covers] tags a stored cover without loading anything.
+ * [ExtensionRegistry] holds that rule. Each loads once, the first time it is needed: [source] or an image only an
+ * extension can fetch ([mediaInterceptor]) loads the one extension that source needs, and [sources] loads them all.
+ * [covers] tags a stored cover without loading anything.
  */
 internal class MihonExtensionSourceHost : ExtensionSites {
     private lateinit var registry: ExtensionRegistry
@@ -71,7 +73,7 @@ internal class MihonExtensionSourceHost : ExtensionSites {
     /** The user's choices, which open with the app's data, after the HTTP clients that already hold [mediaInterceptor]. */
     private val choices = CompletableDeferred<ExtensionChoiceStore>()
 
-    // Loads the extensions on an HTTP client's thread for the first extension image; after that, images only read its table.
+    // Loads a source's extension on an HTTP client's thread for its first image; after that, its images only read the table.
     private lateinit var images: ExtensionImages
 
     /** Goes on the app's media clients: answers requests only an extension can fetch and passes the rest on. */
@@ -90,7 +92,7 @@ internal class MihonExtensionSourceHost : ExtensionSites {
     fun attach(application: Application, browsers: ChallengeBrowsers, outages: () -> HostOutageTracker) {
         // Release builds run installed packages only; the folder is how tests hand a debug build an APK.
         imageKey = lazy { MihonHost.imageKey(application) }
-        images = ExtensionImages(imageKey) { runBlocking { sources() } }
+        images = ExtensionImages(imageKey) { sourceId -> runBlocking { source(MihonSeriesSource.sourceKey(sourceId)) } }
         packages = ExtensionPackages(application) { if (BuildConfig.DEBUG) application.getExternalFilesDir(DIRECTORY) else null }
         val loader = ExtensionLoader(application, packages)
         // What extensions ask their host for is set up when the first one loads, not at startup.
@@ -165,12 +167,18 @@ internal class MihonExtensionSourceHost : ExtensionSites {
     override suspend fun clearsChallenge(url: String, userAgent: String): Boolean = MihonHost.clearsChallenge(url, userAgent)
 
     /**
-     * The sources of the extensions and languages that are on. The first call loads them, which can take seconds;
-     * later calls answer at once. Never throws: an extension that fails to load is left out.
+     * The sources of the extensions and languages that are on. The first call loads them all, which can take seconds;
+     * later calls answer at once. An extension that fails to load is left out.
      */
     suspend fun sources(): List<SeriesSource> {
         watching.value
         return registry.sources()
+    }
+
+    /** The source [key] names when it is on, else null; loads only its extension when this device knows which that is. */
+    suspend fun source(key: SourceKey): SeriesSource? {
+        watching.value
+        return registry.source(key)
     }
 
     private companion object {

@@ -7,6 +7,7 @@ import com.theoriacodex.data.repository.checkFollowed
 import com.theoriacodex.data.repository.switchSource
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.diagnostics.Diagnostics
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesCovers
 import com.theoriacodex.domain.series.SeriesExtensions
@@ -19,8 +20,10 @@ import kotlinx.coroutines.sync.withLock
 /** The Series area's dependencies; a container without an extension host has none. */
 class SeriesDependencies(
     val repository: SeriesRepository,
-    /** Every source that is on; loads their extensions on first use. */
+    /** Every source that is on; loads all their extensions on first use. */
     val sources: suspend () -> List<SeriesSource>,
+    /** The source a key names when it is on, else null; loads only the extension it needs. */
+    val source: suspend (SourceKey) -> SeriesSource?,
     val extensions: SeriesExtensions,
     val downloads: SeriesDownloads,
     /** Lives as long as the app, for work that must finish after the screen that started it closes. */
@@ -36,7 +39,7 @@ class SeriesDependencies(
      * other's requests midway.
      */
     suspend fun checkFollowed(onUpdate: suspend (SeriesUpdate) -> Unit = {}): List<SeriesUpdate> = checking.withLock {
-        repository.checkFollowed(sources) { update ->
+        repository.checkFollowed(source) { update ->
             runCatchingPreservingCancellation { downloads.downloadNew(update) }
                 .onFailure { Diagnostics.report("series", "New chapters could not be queued for download", it) }
             onUpdate(update)

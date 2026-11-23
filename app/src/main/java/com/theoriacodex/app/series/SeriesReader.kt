@@ -133,7 +133,7 @@ internal class SeriesReader(private val series: SeriesDependencies) {
     }
 
     private suspend fun source(key: SourceKey) =
-        checkNotNull(series.sources().firstOrNull { it.key == key }) { "The extension for this series is not installed" }
+        checkNotNull(series.source(key)) { "The extension for this series is not installed" }
 }
 
 /** [marks] with each downloaded chapter's first page from [firstPages] (by address), so the strip shows it rather than the shared cover. */
