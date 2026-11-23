@@ -57,7 +57,7 @@ class SeriesPageViewModelTest {
         val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
         val stored = StoredSeries(Series(id, "Title"), followed = true)
         val entries = listOf(StoredSeriesEntry(SeriesEntry("/chapter/1", "Ch.1"), sourceOrder = 0, firstSeenAtEpochMs = 1L, read = true, position = 18))
-        val viewModel = SeriesPageViewModel(id, Restored(stored, entries), loadSources = { emptyList() })
+        val viewModel = SeriesPageViewModel(id, Restored(stored, entries), loadSources = { emptyList() }, ioDispatcher = StandardTestDispatcher(testScheduler))
         val collecting = launch { viewModel.state.collect {} }
 
         advanceUntilIdle()
@@ -75,7 +75,7 @@ class SeriesPageViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
         var asked = 0
-        val viewModel = SeriesPageViewModel(id, Restored(StoredSeries(Series(id, "Title")), emptyList()), loadSources = { asked++; emptyList() })
+        val viewModel = SeriesPageViewModel(id, Restored(StoredSeries(Series(id, "Title")), emptyList()), loadSources = { asked++; emptyList() }, ioDispatcher = StandardTestDispatcher(testScheduler))
         advanceUntilIdle()
 
         viewModel.whileMoving { viewModel.refresh(); advanceUntilIdle(); false }
@@ -100,7 +100,7 @@ class SeriesPageViewModelTest {
             StoredSeriesEntry(SeriesEntry("/c/2", "Chapter 2", number = 2f, translatorGroup = "Alpha", uploadedAtEpochMs = 200L), sourceOrder = 2, firstSeenAtEpochMs = 1L),
         )
         val downloadStates = flowOf(mapOf("/c/2" to ChapterDownload.OnDevice))
-        val viewModel = SeriesPageViewModel(id, Restored(stored, entries), loadSources = { emptyList() }, downloadStates = downloadStates)
+        val viewModel = SeriesPageViewModel(id, Restored(stored, entries), loadSources = { emptyList() }, downloadStates = downloadStates, ioDispatcher = StandardTestDispatcher(testScheduler))
         val collecting = launch { viewModel.state.collect {} }
 
         advanceUntilIdle()
@@ -154,7 +154,7 @@ class SeriesPageViewModelTest {
         )
         val repository = Restored(stored, entries)
         val source = WebSeriesSource(id.source, "https://site.example")
-        val viewModel = SeriesPageViewModel(id, repository, loadSources = { listOf(source) })
+        val viewModel = SeriesPageViewModel(id, repository, loadSources = { listOf(source) }, ioDispatcher = StandardTestDispatcher(testScheduler))
         val collecting = launch { viewModel.state.collect {} }
 
         advanceUntilIdle()
@@ -228,7 +228,7 @@ class SeriesPageViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
         val stored = StoredSeries(Series(id, "Title"))
-        val viewModel = SeriesPageViewModel(id, Restored(stored, emptyList()), loadSources = { emptyList() })
+        val viewModel = SeriesPageViewModel(id, Restored(stored, emptyList()), loadSources = { emptyList() }, ioDispatcher = StandardTestDispatcher(testScheduler))
         val collecting = launch { viewModel.state.collect {} }
 
         advanceUntilIdle()
@@ -244,7 +244,7 @@ class SeriesPageViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         fun page(source: String): SeriesPageViewModel {
             val id = SeriesId(SourceKey.parseOrThrow(source), "/title/1")
-            return SeriesPageViewModel(id, Restored(StoredSeries(Series(id, "Title")), emptyList()), { emptyList() }, downloads = downloads())
+            return SeriesPageViewModel(id, Restored(StoredSeries(Series(id, "Title")), emptyList()), { emptyList() }, downloads = downloads(), ioDispatcher = StandardTestDispatcher(testScheduler))
         }
 
         assertTrue(page("custom_mihon_7").canDownload)
@@ -260,7 +260,7 @@ class SeriesPageViewModelTest {
             StoredSeriesEntry(SeriesEntry("/e/2", "Episode 2"), sourceOrder = 0, firstSeenAtEpochMs = 1L),
             StoredSeriesEntry(SeriesEntry("/e/1", "Episode 1"), sourceOrder = 1, firstSeenAtEpochMs = 1L),
         )
-        val viewModel = SeriesPageViewModel(id, Restored(StoredSeries(Series(id, "Title")), entries), loadSources = { emptyList() })
+        val viewModel = SeriesPageViewModel(id, Restored(StoredSeries(Series(id, "Title")), entries), loadSources = { emptyList() }, ioDispatcher = StandardTestDispatcher(testScheduler))
         val collecting = launch { viewModel.state.collect {} }
         advanceUntilIdle()
 
@@ -280,7 +280,7 @@ class SeriesPageViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val id = SeriesId(SourceKey.parseOrThrow("custom_aniyomi_7"), "/title/1")
         val source = Seasons(id.source)
-        val viewModel = SeriesPageViewModel(id, Restored(StoredSeries(Series(id, "Title")), emptyList()), loadSources = { listOf(source) })
+        val viewModel = SeriesPageViewModel(id, Restored(StoredSeries(Series(id, "Title")), emptyList()), loadSources = { listOf(source) }, ioDispatcher = StandardTestDispatcher(testScheduler))
         val collecting = launch { viewModel.state.collect {} }
 
         advanceUntilIdle()

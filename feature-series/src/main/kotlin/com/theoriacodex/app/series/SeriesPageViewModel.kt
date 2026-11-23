@@ -122,7 +122,8 @@ data class RefreshFailure(val message: String, val retryable: Boolean) {
 /**
  * [sourcesChanged] emits once at the start and again whenever [loadSources] may answer differently; each is a refresh.
  * Without [downloads] the page offers none, and an anime offers none either: episodes do not download yet.
- * [chapterPreferences] persists per-series sort and filter choices.
+ * [chapterPreferences] persists per-series sort and filter choices, read at the start on [ioDispatcher]. A test passes
+ * its own dispatcher: on the real one the read can finish after the test, and fail the next test that starts.
  */
 class SeriesPageViewModel(
     private val id: SeriesId,
