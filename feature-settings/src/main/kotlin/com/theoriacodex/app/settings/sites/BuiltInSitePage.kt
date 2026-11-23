@@ -33,18 +33,20 @@ internal fun BuiltInSiteRow(
     }
 }
 
-/** A built-in source's page: its browser check, and its account when it has one. */
+/** A built-in source's page: its browser check while it isn't Working, and its account when it has one. */
 @Composable
 internal fun BuiltInSitePage(site: BuiltInSiteSummary, accounts: BuiltInAccounts, onAction: (CustomSitesAction) -> Unit) {
     SettingsPageColumn {
         SettingsHeader(site.label, onBack = { onAction(CustomSitesAction.CloseBuiltIn) }, parents = SITES_PATH)
-        SettingsGroup("Browser check") {
-            SettingsRow(
-                title = VERIFY_IN_BROWSER_LABEL,
-                summary = "This site is asking for a browser check".takeIf { site.needsVerification },
-                onClick = { onAction(CustomSitesAction.StartVerification(site.host)) },
-                trailing = if (site.working) { { WorkingMark() } } else null,
-            )
+        // A site that works needs no browser check; any later outage clears Working and brings the check back.
+        if (!site.working) {
+            SettingsGroup("Browser check") {
+                SettingsRow(
+                    title = VERIFY_IN_BROWSER_LABEL,
+                    summary = "This site is asking for a browser check".takeIf { site.needsVerification },
+                    onClick = { onAction(CustomSitesAction.StartVerification(site.host)) },
+                )
+            }
         }
         accounts.controls(site.source)
     }

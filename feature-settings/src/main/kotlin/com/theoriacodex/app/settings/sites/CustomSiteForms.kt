@@ -146,16 +146,18 @@ internal fun EditSitePage(
                 IncludeSwitch(form.fields.includeInUnifiedAndForYou, editable, onAction)
             }
         }
-        SettingsGroup("Browser check") {
-            SettingsRow(
-                title = VERIFY_IN_BROWSER_LABEL,
-                enabled = editable,
-                onClick = { onAction(CustomSitesAction.StartVerification(site.host)) },
-                trailing = if (working) { { WorkingMark() } } else null,
-            )
-            // Why the last check failed; a pass shows as the row's mark once the page closes itself.
-            (retest as? RetestStatus.Done)?.takeUnless { it.ok }?.let {
-                AnnouncedText(it.message, Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp), error = true)
+        // A site that works needs no browser check; any later outage clears Working and brings the check back.
+        if (!working) {
+            SettingsGroup("Browser check") {
+                SettingsRow(
+                    title = VERIFY_IN_BROWSER_LABEL,
+                    enabled = editable,
+                    onClick = { onAction(CustomSitesAction.StartVerification(site.host)) },
+                )
+                // Why the last check failed; a pass hides this group once the page closes itself.
+                (retest as? RetestStatus.Done)?.takeUnless { it.ok }?.let {
+                    AnnouncedText(it.message, Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp), error = true)
+                }
             }
         }
         SettingsGroup(null) {
