@@ -3,6 +3,7 @@
 package com.theoriacodex.app.viewer
 
 import android.os.Looper
+import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
 import androidx.media3.common.util.Util
@@ -42,13 +43,31 @@ class ViewerVideoStartTest {
         assertEquals(1_437_000L, replacement.currentPosition)
     }
 
-    /** A player of one episode [durationMs] long that only seeks. */
-    private class EpisodePlayer(private val durationMs: Long = 1_440_000L) : SimpleBasePlayer(Looper.getMainLooper()) {
+    @Test fun `what showed before the start-over seek does not count as being at the start`() {
+        val player = EpisodePlayer(durationMs = C.TIME_UNSET)
+        val started = ViewerVideoStart({ 1_438_000L }) { positionMs, durationMs -> positionMs >= durationMs - 5_000L }.applyTo(player)
+        // A frame at the resume position, before the duration is known.
+        started.onRenderedFirstFrame()
+        player.know(1_440_000L)
+        assertEquals(0L, player.currentPosition)
+        assertFalse(started.atPosition)
+        started.onRenderedFirstFrame()
+        assertTrue(started.atPosition)
+    }
+
+    /** A player of one episode [durationMs] long (unset until [know] gives it) that only seeks. */
+    private class EpisodePlayer(private var durationMs: Long = 1_440_000L) : SimpleBasePlayer(Looper.getMainLooper()) {
         private var positionMs = 0L
+
+        /** The timeline arrives, [durationMs] long. */
+        fun know(durationMs: Long) {
+            this.durationMs = durationMs
+            invalidateState()
+        }
 
         override fun getState(): State = State.Builder()
             .setAvailableCommands(Player.Commands.Builder().addAllCommands().build())
-            .setPlaylist(listOf(MediaItemData.Builder("episode").setDurationUs(Util.msToUs(durationMs)).build()))
+            .setPlaylist(listOf(MediaItemData.Builder("episode").setDurationUs(if (durationMs > 0L) Util.msToUs(durationMs) else C.TIME_UNSET).build()))
             .setContentPositionMs(positionMs)
             .build()
 

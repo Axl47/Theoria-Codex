@@ -415,7 +415,11 @@ internal class ViewerStartedPlayback(
     // The duration is negative (unset) until the timeline is known.
     private fun settle() {
         val durationMs = player.duration.takeIf { it > 0L } ?: return
-        if (startsOver(resumeMs, durationMs)) player.seekTo(0L)
+        if (startsOver(resumeMs, durationMs)) {
+            player.seekTo(0L)
+            // What showed before stood at the resume position: only a frame or playback after this seek is the start.
+            shown = false
+        }
         settled = true
         arrive()
     }
