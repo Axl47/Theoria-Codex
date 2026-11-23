@@ -10,6 +10,8 @@ Leave Kotlin's `-Xbackend-threads` unset. In Kotlin 2.4.21, and still in 2.5.0-R
 
 Robolectric tests need Java 21 or newer because the Android SDK 36 sandbox refuses older JVMs, failing at class setup with `UnsupportedOperationException`. Set `JAVA_HOME` to a compatible JDK before running them; on the Mac, the default JDK is 19 and Homebrew's works: `JAVA_HOME=/opt/homebrew/Cellar/openjdk/26.0.2.1/libexec/openjdk.jdk/Contents/Home`.
 
+Robolectric runs offline against the Android runtime jar Gradle resolves (`robolectricAndroidAll` in the version catalog), never downloading it at test time. When Robolectric or a `robolectric.properties` sdk changes, set that version to the one the new Robolectric's `DefaultSdkProvider` names, or every Robolectric test fails with "Unable to locate dependency".
+
 Gradle also needs a JDK 17 installed for the library modules' `jvmToolchain(17)`, and no toolchain download repository is configured. Gradle finds JDKs only in standard locations, so a JDK installed by mise or another version manager must be listed in `org.gradle.java.installations.paths` in `~/.gradle/gradle.properties`, or the check fails with "Cannot find a Java installation ... languageVersion=17".
 
 Screenshot reference images (`app/src/test/screenshots`) are CI's Linux renders; macOS draws text differently, so a Mac can only capture screens to look at (`scripts/screenshots.sh capture`) and never records or compares references. After a UI change fails Verify's screenshots part, `scripts/screenshots.sh record` pulls that run's Linux renders; commit them. Screenshots use fixture posts with solid-color images, never provider media.
