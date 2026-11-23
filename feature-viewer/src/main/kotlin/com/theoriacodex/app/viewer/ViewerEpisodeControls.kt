@@ -113,16 +113,18 @@ internal sealed interface ViewerTrackChange {
 }
 
 /**
- * What a player offering [tracks] must change to play this choice: nothing it already plays, and nothing for a label
- * this episode does not offer, which keeps the episode's own choice. With no subtitle chosen and none showing, a
- * side-loaded one shows ([defaultSubtitle]); subtitles inside the stream stay Media3's choice.
+ * What a player offering [tracks] must change to play this choice: nothing it already plays. Audio this episode does
+ * not offer keeps the episode's own. Subtitles it does not offer, or none chosen, show what Media3 picked, else the
+ * [defaultSubtitle]; only Off turns them off.
  */
 internal fun ViewerEpisodeChoice.trackChanges(tracks: PlaybackTracks, locale: Locale = Locale.getDefault()): List<ViewerTrackChange> = buildList {
-    when (val wanted = subtitle) {
-        null -> if (tracks.subtitles.none { it.selected }) tracks.subtitles.defaultSubtitle(locale)?.let { add(ViewerTrackChange.Subtitle(it.id)) }
-        ViewerSubtitleChoice.Off -> if (tracks.subtitles.any { it.selected }) add(ViewerTrackChange.Subtitle(null))
-        is ViewerSubtitleChoice.Track -> tracks.subtitles.labelled(wanted.label)?.takeUnless { it.selected }
-            ?.let { add(ViewerTrackChange.Subtitle(it.id)) }
+    val subtitles = tracks.subtitles
+    if (subtitle == ViewerSubtitleChoice.Off) {
+        if (subtitles.any { it.selected }) add(ViewerTrackChange.Subtitle(null))
+    } else {
+        val chosen = (subtitle as? ViewerSubtitleChoice.Track)?.let { subtitles.labelled(it.label) }
+        val shown = chosen ?: subtitles.firstOrNull { it.selected } ?: subtitles.defaultSubtitle(locale)
+        shown?.takeUnless { it.selected }?.let { add(ViewerTrackChange.Subtitle(it.id)) }
     }
     audioLabel?.let { label -> tracks.audio.labelled(label)?.takeUnless { it.selected }?.let { add(ViewerTrackChange.Audio(it.id)) } }
 }
@@ -307,14 +309,14 @@ private fun ViewerTrackButton(icon: ImageVector, description: String, selectedLa
 }
 
 /**
- * The side-loaded subtitle shown before the user chooses: the first whose label names [locale]'s language, in English,
- * in itself or by its code, as a whole word and ignoring case (`English [CC]`, `español`, `en`); else the first.
+ * The subtitle shown when none was chosen and Media3 picked none, whether a side-loaded file or one inside the stream:
+ * the first whose label names [locale]'s language, in English, in itself or by its code, as a whole word and ignoring
+ * case (`English [CC]`, `español`, `en`); else the first.
  */
 internal fun List<PlaybackTrack>.defaultSubtitle(locale: Locale): PlaybackTrack? {
-    val sideLoaded = filter { it.sideLoaded }
     val names = listOf(locale.getDisplayLanguage(Locale.ENGLISH), locale.getDisplayLanguage(locale), locale.language).filter(String::isNotBlank)
     val language = Regex(names.joinToString("|", "(?<!\\p{L})(?:", ")(?!\\p{L})") { Regex.escape(it) }, RegexOption.IGNORE_CASE)
-    return sideLoaded.firstOrNull { language.containsMatchIn(it.label) } ?: sideLoaded.firstOrNull()
+    return firstOrNull { language.containsMatchIn(it.label) } ?: firstOrNull()
 }
 
 /** The track a choice names, by its label. */
