@@ -153,7 +153,7 @@ class ExtensionSourceLiveTest {
             repeat(CONTROL_TAPS) {
                 if (device.hasObject(By.desc("Info"))) {
                     device.click(x, device.displayHeight / 4)
-                    device.wait(Until.gone(By.desc("Info")), CONTROLS_WAIT_MS)
+                    device.wait(Until.gone(By.desc("Info")), SeriesLiveDriver.CONTROLS_WAIT_MS)
                 }
             }
             device.wait(Until.hasObject(By.text("Next")), SeriesLiveDriver.SHORT_WAIT_MS) == true
@@ -508,18 +508,7 @@ class ExtensionSourceLiveTest {
     /** The page strip's tile for [page] of the open chapter. */
     private fun pageTile(page: Int): UiObject2 = viewerControl("the tile for page $page", By.descStartsWith("Go to page $page of "))
 
-    /**
-     * One of the Viewer's controls. The Viewer hides them after a few seconds, often before a chapter's pages have
-     * arrived, so each wait that finds none taps the page to bring them back.
-     */
-    private fun viewerControl(what: String, selector: BySelector): UiObject2 {
-        val deadline = System.currentTimeMillis() + SeriesLiveDriver.RESULTS_TIMEOUT_MS
-        while (System.currentTimeMillis() < deadline) {
-            device.wait(Until.findObject(selector), CONTROLS_WAIT_MS)?.let { return it }
-            device.click(device.displayWidth / 2, device.displayHeight / 2)
-        }
-        error("The Viewer did not show $what; on screen: ${live.screenText()}")
-    }
+    private fun viewerControl(what: String, selector: BySelector): UiObject2 = live.viewerControl(what, selector)
 
     private companion object {
         val CHAPTER_COUNT: Pattern = Pattern.compile("(.+ · )?\\d+ chapters?")
@@ -547,6 +536,5 @@ class ExtensionSourceLiveTest {
         const val CONTROL_TAPS = 3
         const val SWIPE_STEPS = 20
 
-        const val CONTROLS_WAIT_MS = 2_500L
     }
 }
