@@ -24,7 +24,7 @@ internal class OfflineManifestGoldenTest : FileBackedRepositoryTestFixture() {
     @Test
     fun `new manifests keep the version 3 bytes`() = runTest {
         val directory = tempDir("manifest-golden-write")
-        OfflineMediaStore(directory).save(source, source.media, "codex:b") { _, file -> file.writeText("bytes") }
+        OfflineMediaStore(directory).save(source, source.media, "codex:b") { _, file -> file.writeText("bytes"); null }
         OfflineMediaStore(directory).retain(source.id, "codex:a")
         val folder = directory.listFiles().orEmpty().single()
         val generation = folder.listFiles().orEmpty().single(File::isDirectory)

@@ -72,6 +72,28 @@ class SeriesDownloadsTest {
         assertEquals(emptyMap<String, ChapterDownload>() + chapters.associate { it.entry.address to ChapterDownload.OnDevice }, harness.downloads.states(id).first())
     }
 
+    @Test fun `a page whose address names no type is saved under the type its fetch found`() = runTest {
+        val harness = Harness(this)
+        harness.downloads.download(id, listOf("/c1"))
+        harness.downloads.drain(automatic = false)
+
+        val pages = checkNotNull(harness.downloads.chapter(id, "/c1")).media
+        assertEquals(listOf("image/png", "image/png"), pages.map { it.mime })
+        assertTrue(pages.all { checkNotNull(it.localPath).endsWith(".png") })
+    }
+
+    @Test fun `a chapter already kept offline, such as in a Codex, is not fetched again`() = runTest {
+        val harness = Harness(this)
+        val pages = twoPages(chapters.last().entry)
+        val post = chapterPost(Series(id, "Title"), chapters.last().entry, null, pages)
+        harness.store.save(post, pages, "codex:x") { _, file -> file.writeBytes(PAGE); null }
+        harness.downloads.download(id, listOf("/c1"))
+
+        assertEquals(DrainResult(downloaded = 1, failed = 0), harness.downloads.drain(automatic = false))
+        assertEquals(emptyList<String>(), harness.fetched)
+        assertEquals(setOf("/c1"), harness.downloads.downloaded(id))
+    }
+
     @Test fun `cancelling the chapter being fetched stops it, leaves nothing and the queue goes on`() = runTest {
         val harness = Harness(this)
         val never = CompletableDeferred<Unit>()
@@ -289,7 +311,10 @@ class SeriesDownloadsTest {
     private suspend fun OfflineMediaStore.saveChapter(series: SeriesId, address: String) {
         val entry = SeriesEntry(address, address)
         val pages = twoPages(entry)
-        save(chapterPost(Series(series, "Title"), entry, null, pages), pages, seriesOfflineOwner(series)) { _, file -> file.writeBytes(PAGE) }
+        save(chapterPost(Series(series, "Title"), entry, null, pages), pages, seriesOfflineOwner(series)) { _, file ->
+            file.writeBytes(PAGE)
+            "image/png"
+        }
     }
 
     /** Downloads over this test's folder, with a source of two pages per chapter unless [pagesOf] says otherwise, and a fetch that records each page. */
@@ -313,6 +338,7 @@ class SeriesDownloadsTest {
                 onFetch(url)
                 fetched += url
                 file.writeBytes(PAGE)
+                "image/png"
             },
             scheduler = object : DownloadScheduler {
                 override suspend fun schedule(automatic: Boolean) {

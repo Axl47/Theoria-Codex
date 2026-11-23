@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
@@ -139,8 +140,8 @@ class SeriesDownloads(
     private val queueFile: File,
     private val repository: SeriesRepository,
     private val sources: suspend () -> List<SeriesSource>,
-    /** Writes the image at an address into a file; throws unless a whole image arrived. */
-    private val fetch: suspend (url: String, into: File) -> Unit,
+    /** Writes the image at an address into a file and returns its media type; throws unless a whole image arrived. */
+    private val fetch: suspend (url: String, into: File) -> String,
     private val scheduler: DownloadScheduler,
     /** The Delete after reading setting, as it is now. */
     private val deleteAfterReading: suspend () -> Boolean,
@@ -226,9 +227,10 @@ class SeriesDownloads(
 
     /**
      * With Delete after reading on, deletes each downloaded chapter that is read, except the one its series was last
-     * opened at. Called once no reader is open, and at start.
+     * opened at. Called once no reader is open, and at start; it stops once [noReaderOpen] turns false, so a chapter a
+     * reader opened meanwhile keeps its files.
      */
-    suspend fun deleteRead() {
+    suspend fun deleteRead(noReaderOpen: () -> Boolean = { true }) {
         if (!deleteAfterReading()) return
         store.load()
         store.snapshot.value.postsByOwner.forEach { (owner, posts) ->
@@ -236,7 +238,10 @@ class SeriesDownloads(
             val chapters = posts.mapTo(HashSet()) { it.sourcePostId }
             val series = repository.series(id) ?: return@forEach
             val read = repository.entries(id).filter { it.read }.mapTo(HashSet()) { it.entry.address }
-            (chapters intersect read).minus(setOfNotNull(series.lastOpenedEntry)).forEach { delete(id, it) }
+            (chapters intersect read).minus(setOfNotNull(series.lastOpenedEntry)).forEach {
+                if (!noReaderOpen()) return
+                delete(id, it)
+            }
         }
     }
 
@@ -343,8 +348,10 @@ class SeriesDownloads(
      */
     private suspend fun fetchQueued(chapter: QueuedChapter, onPage: (pages: Int, of: Int) -> Unit): Outcome = coroutineScope {
         var outcome = Outcome.REMOVED
-        val job = launch { outcome = fetched(chapter, onPage) }
+        // Registered before it can run, so a removal that does not find it as active knows it will never start.
+        val job = launch(start = CoroutineStart.LAZY) { outcome = fetched(chapter, onPage) }
         lock.withLock { if (chapter in queue.value) active = chapter to job else job.cancel() }
+        job.start()
         try {
             job.join()
         } finally {
@@ -375,6 +382,9 @@ class SeriesDownloads(
         val series = repository.series(chapter.series)?.series ?: throw ChapterUnavailable("The series is not stored")
         val entry = repository.entries(chapter.series).firstOrNull { it.entry.address == chapter.entry && it.sourceOrder >= 0 }?.entry
             ?: throw ChapterUnavailable("The source no longer lists this chapter")
+        val owner = seriesOfflineOwner(chapter.series)
+        // A copy already on the device, such as one saved to a Codex, needs only the series as another owner.
+        if (store.retain(PostId(chapter.series.source, entry.address), owner) != null) return
         val source = sources().firstOrNull { it.key == chapter.series.source } ?: throw IOException("The series' source is not on")
         val pages = attempts { source.pages(entry) }.ifEmpty { throw ChapterUnavailable("The chapter has no pages") }
         if (pages.any { it.url == null }) throw ChapterUnavailable("A page has no address")
@@ -382,11 +392,13 @@ class SeriesDownloads(
         onPage(0, pages.size)
         val done = AtomicInteger()
         val post = chapterPost(series, entry, series.coverUrl, pages)
-        store.save(post, pages, seriesOfflineOwner(chapter.series), parallel = PARALLEL_PAGES) { page, file ->
-            attempts { fetch(checkNotNull(page.url), file) }
+        // Extension pages name no type, and their addresses often no extension, so the type fetched is the page's.
+        store.save(post, pages, owner, parallel = PARALLEL_PAGES) { page, file ->
+            val type = attempts { fetch(checkNotNull(page.url), file) }
             val count = done.incrementAndGet()
             fetching.value = chapter to count.toFloat() / pages.size
             onPage(count, pages.size)
+            type
         }
     }
 

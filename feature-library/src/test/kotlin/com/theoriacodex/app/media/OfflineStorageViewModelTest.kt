@@ -51,7 +51,7 @@ class OfflineStorageViewModelTest {
             codices.ensureCodex("b", "Second")
             val coordinator = coordinator()
             val post = post()
-            coordinator.store.save(post, post.media, "codex:a") { _, file -> file.writeText("media") }
+            coordinator.store.save(post, post.media, "codex:a") { _, file -> file.writeText("media"); null }
             coordinator.store.retain(post.id, "codex:b")
             val owner = owner(coordinator)
             val initial = owner.state.first { it.owners.size == 2 }
@@ -84,7 +84,7 @@ class OfflineStorageViewModelTest {
             val series = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
             val coordinator = coordinator()
             val chapter = post("chapter")
-            coordinator.store.save(chapter, chapter.media, seriesOfflineOwner(series)) { _, file -> file.writeText("media") }
+            coordinator.store.save(chapter, chapter.media, seriesOfflineOwner(series)) { _, file -> file.writeText("media"); null }
             val repository = seriesRepository(StoredSeries(Series(series, "Title")))
             val downloads = SeriesDownloads(
                 coordinator.store, temporary.root.resolve("queue.json"), repository, sources = { emptyList() },
@@ -110,7 +110,7 @@ class OfflineStorageViewModelTest {
         withTimeout(10_000) {
             val coordinator = coordinator()
             val post = post()
-            coordinator.store.save(post, post.media, AUTOMATIC_OFFLINE_OWNER) { _, file -> file.writeText("media") }
+            coordinator.store.save(post, post.media, AUTOMATIC_OFFLINE_OWNER) { _, file -> file.writeText("media"); null }
             var usage = DisposableMediaCacheSnapshot(imageBytes = 100, animationBytes = 20)
             val owner = OfflineStorageViewModel(
                 codices, coordinator, readDisposableUsage = { usage },
@@ -164,7 +164,7 @@ class OfflineStorageViewModelTest {
             val added = post("added")
             codices.addItems("a", listOf(kept))
             val coordinator = coordinator()
-            coordinator.store.save(kept, kept.media, "codex:a") { _, file -> file.writeText("media") }
+            coordinator.store.save(kept, kept.media, "codex:a") { _, file -> file.writeText("media"); null }
             val owner = owner(coordinator)
             owner.state.first { it.codexStates["a"] == CodexOfflineState(1f) }
 
@@ -181,7 +181,7 @@ class OfflineStorageViewModelTest {
             val kept = post()
             codices.addItems("a", listOf(kept))
             val coordinator = coordinator()
-            coordinator.store.save(kept, kept.media, "codex:a") { _, file -> file.writeText("media") }
+            coordinator.store.save(kept, kept.media, "codex:a") { _, file -> file.writeText("media"); null }
             val owner = owner(coordinator)
             owner.state.first { it.codexStates["a"] == CodexOfflineState(1f) }
 
@@ -207,8 +207,8 @@ class OfflineStorageViewModelTest {
             val coordinator = coordinator()
             val first = post("first")
             val second = post("second")
-            coordinator.store.save(first, first.media, "codex:a") { _, file -> file.writeText("media") }
-            coordinator.store.save(second, second.media, "codex:b") { _, file -> file.writeText("media") }
+            coordinator.store.save(first, first.media, "codex:a") { _, file -> file.writeText("media"); null }
+            coordinator.store.save(second, second.media, "codex:b") { _, file -> file.writeText("media"); null }
             val owner = owner(coordinator)
             owner.state.first { it.owners.size == 2 }
 

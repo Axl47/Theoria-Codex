@@ -242,7 +242,12 @@ class OfflineMediaCoordinator(
                     val resolved = resolve(post)
                     check(resolved.id == post.id) { "The provider returned a different post" }
                     val media = selectMedia(resolved)
-                    store.save(resolved, media, owner, admission) { ref, output -> acquire(resolved, ref, output) }
+                    // A collection ref that names no type shows online only by its address's extension, which the
+                    // saved file keeps, so there is no type to report.
+                    store.save(resolved, media, owner, admission) { ref, output ->
+                        acquire(resolved, ref, output)
+                        null
+                    }
                 } ?: throw java.io.IOException("Offline download timed out")
             }
         }

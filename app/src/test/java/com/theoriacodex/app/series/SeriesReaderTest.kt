@@ -1,6 +1,7 @@
 package com.theoriacodex.app.series
 
 import com.theoriacodex.app.di.SeriesDependencies
+import com.theoriacodex.app.media.isLikelyImageLocation
 import com.theoriacodex.app.viewer.decodeViewerPostId
 import com.theoriacodex.app.viewer.encodeViewerPostId
 import com.theoriacodex.data.repository.DownloadScheduler
@@ -132,6 +133,8 @@ class SeriesReaderTest {
         val resolved = checkNotNull(SeriesReader(dependencies).resolve(seriesQueryHash(id), PostId(source, "/c1")))
 
         assertEquals(pagesOf("/c1").map { it.url }, resolved.media.map { File(checkNotNull(it.localPath)).readText() })
+        // Their addresses name no type, yet the Viewer takes the files as images.
+        assertTrue(resolved.media.all { isLikelyImageLocation(it.mime, checkNotNull(it.localPath)) })
         assertEquals("https://cover.test", resolved.preview.url)
         // Anything that stores the chapter stores its source's pages, never the files.
         assertEquals(pagesOf("/c1"), store.withoutOfflineLocations(resolved).media)
@@ -150,6 +153,16 @@ class SeriesReaderTest {
         advanceUntilIdle()
         // Chapter 2 is unread, and the series was last opened at chapter 3.
         assertEquals(listOf("/c2", "/c3"), onDevice())
+    }
+
+    @Test
+    fun aReaderOpenedBeforeDeleteAfterReadingRunsKeepsItsChapters() = runTest {
+        val reader = readerOverDownloadedChapters(deleteAfterReading = true)
+        reader.opened()
+        reader.closed()
+        reader.opened()
+        advanceUntilIdle()
+        assertEquals(listOf("/c1", "/c2", "/c3"), onDevice())
     }
 
     @Test
@@ -178,13 +191,16 @@ class SeriesReaderTest {
 
     private fun TestScope.store() = OfflineMediaStore(folder.root.resolve("downloads"), StandardTestDispatcher(testScheduler))
 
-    private fun pagesOf(address: String) = List(2) { ImageRef(url = "https://pages.test$address/$it.png", localPath = null, mime = null) }
+    private fun pagesOf(address: String) = List(2) { ImageRef(url = "https://pages.test$address/$it", localPath = null, mime = null) }
 
     /** Puts the two pages of the chapter at [address] on the device, each file holding its page's address. */
     private suspend fun TestScope.download(address: String) {
         val pages = pagesOf(address)
         val post = chapterPost(Series(id, "Title"), SeriesEntry(address, address), null, pages)
-        store().save(post, pages, seriesOfflineOwner(id)) { page, file -> file.writeText(checkNotNull(page.url)) }
+        store().save(post, pages, seriesOfflineOwner(id)) { page, file ->
+            file.writeText(checkNotNull(page.url))
+            "image/png"
+        }
     }
 
     /** The reader's dependencies over [repository], with downloads in this test's folder that never fetch. */

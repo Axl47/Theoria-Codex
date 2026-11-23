@@ -86,7 +86,7 @@ internal class SeriesReader(private val series: SeriesDependencies) {
     fun closed() {
         if (open.decrementAndGet() > 0) return
         series.scope.launch {
-            runCatchingPreservingCancellation { series.downloads.deleteRead() }
+            runCatchingPreservingCancellation { series.downloads.deleteRead { open.get() == 0 } }
                 .onFailure { Diagnostics.report("series", "Read chapters could not be deleted", it) }
         }
     }

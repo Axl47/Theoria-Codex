@@ -149,7 +149,8 @@ class OfflineMediaStore internal constructor(
 
     /**
      * Downloads are staged separately so failure or cancellation never replaces a completed copy. [acquire] writes
-     * up to [parallel] of [media] at a time.
+     * one of [media] into the file it is handed, up to [parallel] at a time, and returns the media type it found, or
+     * null to keep the ref's; the saved file and ref take that type, so a page whose address names none still opens.
      */
     suspend fun save(
         post: Post,
@@ -157,7 +158,7 @@ class OfflineMediaStore internal constructor(
         owner: String,
         admission: OfflineMediaAdmission? = null,
         parallel: Int = 1,
-        acquire: suspend (ImageRef, File) -> Unit,
+        acquire: suspend (ImageRef, File) -> String?,
     ): Post = withContext(ioDispatcher) {
         require(owner.isNotBlank())
         require(media.isNotEmpty()) { "This post has no full media to save" }
@@ -171,10 +172,12 @@ class OfflineMediaStore internal constructor(
                 media.mapIndexed { index, ref ->
                     async {
                         slots.withPermit {
-                            val output = File(staged, "$index.${extension(ref)}")
-                            acquire(ref, output)
-                            check(output.isFile && output.length() > 0L) { "No media bytes were saved" }
-                            ref to output.name
+                            val acquired = File(staged, "$index.part")
+                            val saved = acquire(ref, acquired)?.let { ref.copy(mime = it) } ?: ref
+                            check(acquired.isFile && acquired.length() > 0L) { "No media bytes were saved" }
+                            val output = File(staged, "$index.${extension(saved)}")
+                            check(acquired.renameTo(output)) { "Could not save offline media" }
+                            saved to output.name
                         }
                     }
                 }.awaitAll()
@@ -259,7 +262,7 @@ class OfflineMediaStore internal constructor(
         if (owner !in owners) return updateCatalog(folder, record)
         val retained = owners - owner
         when {
-            retained.isEmpty() -> folder.deleteRecursively()
+            retained.isEmpty() -> deleteCopy(folder)
             record != null -> writeManifest(folder, record.post, record.sourcePost, retained)
             else -> writeSalvagedOwners(folder, retained)
         }
@@ -269,9 +272,15 @@ class OfflineMediaStore internal constructor(
     suspend fun clear() = withContext(ioDispatcher) {
         mutex.withLock {
             revision++
-            directory.listFiles().orEmpty().filterNot { it.name.startsWith(".pending-") }.forEach(File::deleteRecursively)
+            directory.listFiles().orEmpty().filterNot { it.name.startsWith(".pending-") }.forEach(::deleteCopy)
             rebuildCatalog()
         }
+    }
+
+    /** The manifest is the commit point, so it goes first: whatever a stopped delete leaves is never a copy. */
+    private fun deleteCopy(folder: File) {
+        File(folder, MANIFEST_NAME).delete()
+        folder.deleteRecursively()
     }
 
     private fun validateAdmission(owner: String, admission: OfflineMediaAdmission) {
@@ -356,9 +365,13 @@ class OfflineMediaStore internal constructor(
     private fun rebuildCatalog() {
         catalog.clear()
         directory.listFiles().orEmpty().forEach { folder ->
-            if (folder.name.startsWith(".pending-")) {
-                if (folder !in activeStaging) folder.deleteRecursively()
-            } else indexFolder(folder, readRecord(folder))
+            when {
+                folder.name.startsWith(".pending-") -> if (folder !in activeStaging) folder.deleteRecursively()
+                // A delete or first save stopped before its manifest. Commits write theirs under the same lock, and an
+                // unreadable manifest is kept so its owners can still be salvaged.
+                folder.isDirectory && !File(folder, MANIFEST_NAME).exists() -> folder.deleteRecursively()
+                else -> indexFolder(folder, readRecord(folder))
+            }
         }
         catalogLoaded = true
         mutableSnapshot.value = catalog.snapshot()
