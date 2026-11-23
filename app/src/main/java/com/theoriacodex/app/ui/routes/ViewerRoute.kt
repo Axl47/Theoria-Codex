@@ -173,9 +173,7 @@ internal fun ViewerRoute(
 ) {
     val viewerReturn = LocalViewerReturnTransition.current
     val latestLevel = rememberUpdatedState(level)
-    DisposableEffect(viewerReturn) {
-        onDispose { if (latestLevel.value.clearsReturnOnDispose()) viewerReturn?.clear() }
-    }
+    DisposableEffect(viewerReturn) { onDispose { if (latestLevel.value.clearsReturnOnDispose()) viewerReturn?.clear() } }
     val latestDependencies = rememberUpdatedState(dependencies)
     val latestEffectCallbacks = rememberUpdatedState(effectCallbacks)
     val latestScreenCallbacks = rememberUpdatedState(screenCallbacks)
@@ -224,6 +222,7 @@ internal fun ViewerRoute(
         config = config,
         saveToCodexQuery = activeSession?.saveQuery,
         saveFromForYou = activeSession?.context?.streamSource == ViewerStreamSource.FOR_YOU,
+        series = activeSession?.series,
         canLoadMoreFromSource = activeSession?.liveSearchBinding == true && sourceState?.canLoadMore == true,
         loadingMoreFromSource = sourceState?.loadingMore == true,
         contextActions = rememberViewerContextActions(related.source, activeSession?.context, latestScreenCallbacks),
@@ -330,6 +329,9 @@ private fun rememberViewerScreenHost(
         },
         onVisibleMediaChanged = { post, viewedMediaNumber ->
             viewerOwner.recordVisibleMedia(post, viewedMediaNumber, callbacks.onVisibleMediaChanged)
+        },
+        onPlaybackProgress = { post, progress ->
+            viewerOwner.recordPlaybackProgress(post, progress, callbacks.onPlaybackProgress)
         },
         // The Viewer's window onto the duration owner, keyed by each post's canonical identity.
         durations = ViewerPostDurations(

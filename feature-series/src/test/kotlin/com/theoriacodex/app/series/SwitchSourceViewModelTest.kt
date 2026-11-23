@@ -3,8 +3,8 @@ package com.theoriacodex.app.series
 import com.theoriacodex.data.repository.NoChaptersToMoveToException
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
-import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
@@ -188,5 +188,5 @@ private class Finding(
         counted++
         return List(chapters) { SeriesEntry("/c$it", "Chapter $it") }
     }
-    override suspend fun pages(entry: SeriesEntry) = emptyList<ImageRef>()
+    override suspend fun media(entry: SeriesEntry) = EntryMedia.Pages(emptyList())
 }

@@ -2,6 +2,8 @@ package com.theoriacodex.app.series
 
 import com.theoriacodex.app.di.SeriesDependencies
 import com.theoriacodex.app.media.isLikelyImageLocation
+import com.theoriacodex.app.viewer.ViewerSeries
+import com.theoriacodex.app.viewer.ViewerSeriesProgress
 import com.theoriacodex.app.viewer.decodeViewerPostId
 import com.theoriacodex.app.viewer.encodeViewerPostId
 import com.theoriacodex.data.repository.DownloadScheduler
@@ -23,8 +25,10 @@ import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.MediaStream
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
@@ -64,8 +68,8 @@ class SeriesReaderTest {
         // The source lists the newest first, so order 0 is chapter 3.
         val entries = listOf(
             StoredSeriesEntry(SeriesEntry("/c3", "Ch. 3"), sourceOrder = 0, firstSeenAtEpochMs = 0),
-            StoredSeriesEntry(SeriesEntry("/c2", "Ch. 2"), sourceOrder = 1, firstSeenAtEpochMs = 0, lastPage = 7, pageCount = 18),
-            StoredSeriesEntry(SeriesEntry("/c1", "Ch. 1"), sourceOrder = 2, firstSeenAtEpochMs = 0, read = true, lastPage = 20, pageCount = 20),
+            StoredSeriesEntry(SeriesEntry("/c2", "Ch. 2"), sourceOrder = 1, firstSeenAtEpochMs = 0, position = 7, length = 18),
+            StoredSeriesEntry(SeriesEntry("/c1", "Ch. 1"), sourceOrder = 2, firstSeenAtEpochMs = 0, read = true, position = 20, length = 20),
         )
         val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), entries), sources = { emptyList() }))
 
@@ -88,10 +92,10 @@ class SeriesReaderTest {
         fun reader(stored: StoredSeries) =
             SeriesReader(dependencies(StoredOnly(stored, listOf(chapter)), sources = { error("No extension may load") }))
 
-        assertEquals(GalleryReadingMode.VERTICAL, reader(webtoon).session(id, "/c1")?.seriesReadingMode)
+        assertEquals(ViewerSeries.Reading(GalleryReadingMode.VERTICAL), reader(webtoon).session(id, "/c1")?.series)
         assertEquals(
-            GalleryReadingMode.LEFT_TO_RIGHT,
-            reader(webtoon.copy(readingMode = GalleryReadingMode.LEFT_TO_RIGHT)).session(id, "/c1")?.seriesReadingMode,
+            ViewerSeries.Reading(GalleryReadingMode.LEFT_TO_RIGHT),
+            reader(webtoon.copy(readingMode = GalleryReadingMode.LEFT_TO_RIGHT)).session(id, "/c1")?.series,
         )
     }
 
@@ -102,12 +106,29 @@ class SeriesReaderTest {
         val session = checkNotNull(reader.session(id, "/c1"))
 
         // The Viewer first reports the chapter while only its cover shows; resolving it reads nothing either.
-        reader.recordProgress(session, session.posts.single(), mediaNumber = 1)
+        reader.recordProgress(session, session.posts.single(), ViewerSeriesProgress.Page(1))
         val resolved = checkNotNull(reader.resolve(session.context.queryHash, session.posts.single().id))
         assertEquals(emptyList<String>(), repository.progress)
 
-        reader.recordProgress(session, resolved, mediaNumber = 1)
+        reader.recordProgress(session, resolved, ViewerSeriesProgress.Page(1))
         assertEquals(listOf("/c1 1/1"), repository.progress)
+    }
+
+    @Test
+    fun anEpisodeResolvesToItsStreamsAndRecordsItsPlaybackPosition() = runTest {
+        val anime = SeriesId(SourceKey.parseOrThrow("custom_aniyomi_7"), "/anime/1")
+        val repository = StoredOnly(StoredSeries(Series(anime, "Title")), listOf(chapter))
+        val stream = MediaStream("https://video.test/1.m3u8", "1080p")
+        val reader = SeriesReader(dependencies(repository, { listOf(Streamed(anime.source, stream)) }))
+        val session = checkNotNull(reader.session(anime, "/c1"))
+
+        val episode = checkNotNull(reader.resolve(session.context.queryHash, PostId(anime.source, "/c1")))
+        assertEquals(listOf(stream), episode.media.single().streams)
+
+        // A duration not known yet records only the entry opened last, as a chapter's pages still loading do.
+        reader.recordProgress(session, episode, ViewerSeriesProgress.Playback(positionMs = 0, durationMs = 0))
+        reader.recordProgress(session, episode, ViewerSeriesProgress.Playback(positionMs = 61_000, durationMs = 1_440_000))
+        assertEquals(listOf("/c1 0/null", "/c1 61000/1440000"), repository.progress)
     }
 
     @Test
@@ -235,7 +256,19 @@ private class OnePage(override val key: SourceKey) : SeriesSource {
     private var asked = 0
     override val name = "Fake"
     override val language = "en"
-    override suspend fun pages(entry: SeriesEntry) = listOf(ImageRef(url = "https://pages.test/${++asked}.jpg", localPath = null, mime = null))
+    override suspend fun media(entry: SeriesEntry) =
+        EntryMedia.Pages(listOf(ImageRef(url = "https://pages.test/${++asked}.jpg", localPath = null, mime = null)))
+    override suspend fun popular(page: Int): SeriesPage = error("unused")
+    override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>): SeriesPage = error("unused")
+    override suspend fun details(series: Series): Series = series
+    override suspend fun entries(series: Series): List<SeriesEntry> = emptyList()
+}
+
+/** An anime source whose every episode plays [stream]. */
+private class Streamed(override val key: SourceKey, private val stream: MediaStream) : SeriesSource {
+    override val name = "Fake"
+    override val language = "en"
+    override suspend fun media(entry: SeriesEntry) = EntryMedia.Streams(listOf(stream))
     override suspend fun popular(page: Int): SeriesPage = error("unused")
     override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>): SeriesPage = error("unused")
     override suspend fun details(series: Series): Series = series
@@ -256,8 +289,8 @@ private class StoredOnly(private val stored: StoredSeries, private val entries: 
     override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) = false
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit
-    override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) {
-        progress += "$entryAddress $page/$pageCount"
+    override suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?) {
+        progress += "$entryAddress $position/$length"
     }
 }
 

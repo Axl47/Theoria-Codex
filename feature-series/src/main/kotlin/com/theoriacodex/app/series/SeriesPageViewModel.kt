@@ -56,7 +56,7 @@ data class SeriesPageState(
     val continueWith: StoredSeriesEntry? get() = stored?.let { continueEntry(it, entries) }
 
     /** Whether any entry has been opened, which is what makes the button Continue. */
-    val started: Boolean get() = entries.any { it.read || it.lastPage > 0 }
+    val started: Boolean get() = entries.any { it.read || it.position > 0 }
 }
 
 /**

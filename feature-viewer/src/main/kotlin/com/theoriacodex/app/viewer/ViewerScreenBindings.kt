@@ -42,6 +42,8 @@ data class ViewerScreenCallbacks(
     val onGalleryReadingModeSelected: (PostId, GalleryReadingMode) -> Unit = { _, _ -> },
     val onVisiblePostChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
     val onVisibleMediaChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
+    /** An episode's playback position in a [ViewerSeries.Watching] session, for its series' progress. */
+    val onPlaybackProgress: suspend (Post, ViewerSeriesProgress.Playback, ViewerSession) -> Unit = { _, _, _ -> },
     val onOpenUrl: (String) -> Unit = {},
     val onGoToSearch: () -> Unit,
     val onDismissRelatedPosts: (ViewerStreamSource) -> Unit = {},
@@ -64,6 +66,12 @@ class ViewerScreenHost(
     val onRequestMediaRecovery: ((Post, ImageRef) -> Unit)? = null,
     val onVisiblePostChanged: ((Post, Int) -> Unit)? = null,
     val onVisibleMediaChanged: ((Post, Int) -> Unit)? = null,
+    /**
+     * Where an episode's playback is, in a [ViewerSeries.Watching] session: its player reports here while it plays,
+     * often enough that a killed process resumes close to where it stopped, and once more when it lets the episode go.
+     * Other sessions never report.
+     */
+    val onPlaybackProgress: ((Post, ViewerSeriesProgress.Playback) -> Unit)? = null,
     val onVideoQualitySelected: (VideoQuality) -> Unit = {},
     val durations: ViewerPostDurations = ViewerPostDurations.None,
 )

@@ -7,8 +7,8 @@ import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.GalleryReadingMode
-import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
@@ -394,7 +394,7 @@ private class Answering(id: String = "custom_mihon_7", private val pages: Int = 
     }
     override suspend fun details(series: Series) = series
     override suspend fun entries(series: Series) = emptyList<SeriesEntry>()
-    override suspend fun pages(entry: SeriesEntry) = emptyList<ImageRef>()
+    override suspend fun media(entry: SeriesEntry) = EntryMedia.Pages(emptyList())
 }
 
 private object NothingStored : SeriesRepository {
@@ -408,6 +408,6 @@ private object NothingStored : SeriesRepository {
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit
-    override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) = Unit
+    override suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?) = Unit
     override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) = false
 }

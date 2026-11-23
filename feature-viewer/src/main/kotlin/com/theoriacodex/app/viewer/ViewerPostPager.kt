@@ -47,6 +47,7 @@ internal fun ViewerPostPagerSurface(
     flingVelocity: Float,
     quality: com.theoriacodex.domain.model.VideoQuality,
     qualityHeight: Int?,
+    streamLabel: String?,
     videoPositions: ViewerVideoPositions,
     host: ViewerScreenHost,
     config: ViewerScreenConfig,
@@ -92,7 +93,7 @@ internal fun ViewerPostPagerSurface(
             ) { postPage ->
                 ViewerPostPage(
                     postPage, frame, postPagerState, viewerTransform, screen, controls, swipe, dismissDrag, levelControls, readReturnProgress, quality,
-                    qualityHeight, videoPositions, host, config,
+                    qualityHeight, streamLabel, videoPositions, host, config,
                 )
             }
         }
@@ -183,6 +184,7 @@ private fun ViewerPostPage(
     readReturnProgress: () -> Float,
     quality: com.theoriacodex.domain.model.VideoQuality,
     qualityHeight: Int?,
+    streamLabel: String?,
     videoPositions: ViewerVideoPositions,
     host: ViewerScreenHost,
     config: ViewerScreenConfig,
@@ -232,7 +234,7 @@ private fun ViewerPostPage(
             transform = viewerTransform,
             onTransformChanged = { viewerTransform.value = it },
             layout = ViewerMediaLayout(frame.isLandscape, frame.inPictureInPicture, frame.touchExplorationEnabled),
-            videoOptions = ViewerVideoOptions(quality, qualityHeight, pageState.terminalResolutionMessage(), config.playbackDiagnosticsEnabled),
+            videoOptions = ViewerVideoOptions(quality, qualityHeight, streamLabel, pageState.terminalResolutionMessage(), config.playbackDiagnosticsEnabled),
             videoPositions = videoPositions,
             levelControls = levelControls,
             mediaError = frame.uiState.mediaError.takeIf { active }?.takeIf { it.mediaKey == key },

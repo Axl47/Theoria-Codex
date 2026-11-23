@@ -3,7 +3,9 @@ package com.theoriacodex.data.repository
 import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.MediaStream
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
@@ -142,17 +144,29 @@ class SeriesDownloadsTest {
 
     @Test fun `a chapter its source answers with no pages, or a page without an address, leaves the queue`() = runTest {
         val harness = Harness(this)
-        harness.pagesOf = { entry ->
+        harness.mediaOf = { entry ->
             when (entry.address) {
-                "/c1" -> emptyList()
-                "/c2" -> listOf(ImageRef(url = null, localPath = null, mime = null))
-                else -> twoPages(entry)
+                "/c1" -> EntryMedia.Pages(emptyList())
+                "/c2" -> EntryMedia.Pages(listOf(ImageRef(url = null, localPath = null, mime = null)))
+                else -> EntryMedia.Pages(twoPages(entry))
             }
         }
         harness.downloads.download(id, listOf("/c1", "/c2", "/c3"))
 
         assertEquals(DrainResult(downloaded = 1, failed = 2), harness.downloads.drain(automatic = false))
         assertEquals(mapOf("/c3" to ChapterDownload.OnDevice), harness.downloads.states(id).first())
+    }
+
+    @Test fun `an entry its source answers with streams fails rather than downloading nothing`() = runTest {
+        val harness = Harness(this)
+        harness.mediaOf = { entry ->
+            if (entry.address == "/c1") EntryMedia.Streams(listOf(MediaStream("https://video.test/1.m3u8", "1080p"))) else EntryMedia.Pages(twoPages(entry))
+        }
+        harness.downloads.download(id, listOf("/c1", "/c2"))
+
+        assertEquals(DrainResult(downloaded = 1, failed = 1), harness.downloads.drain(automatic = false))
+        assertEquals(mapOf("/c2" to ChapterDownload.OnDevice), harness.downloads.states(id).first())
+        assertTrue(harness.fetched.none { "video.test" in it })
     }
 
     @Test fun `delete after reading removes read chapters except where the series was last opened, also at start`() = runTest {
@@ -317,7 +331,7 @@ class SeriesDownloadsTest {
         }
     }
 
-    /** Downloads over this test's folder, with a source of two pages per chapter unless [pagesOf] says otherwise, and a fetch that records each page. */
+    /** Downloads over this test's folder, with a source of two pages per chapter unless [mediaOf] says otherwise, and a fetch that records each page. */
     private inner class Harness(
         scope: TestScope,
         stored: StoredSeries = StoredSeries(Series(id, "Title")),
@@ -327,13 +341,13 @@ class SeriesDownloadsTest {
         val scheduled = mutableListOf<String>()
         val fetched = mutableListOf<String>()
         var onFetch: suspend (String) -> Unit = {}
-        var pagesOf: (SeriesEntry) -> List<ImageRef> = ::twoPages
+        var mediaOf: (SeriesEntry) -> EntryMedia = { EntryMedia.Pages(twoPages(it)) }
         val store = scope.store()
         val downloads = SeriesDownloads(
             store = store,
             queueFile = folder.root.resolve("queue.json"),
             repository = Stored(stored, entries),
-            sources = { listOf(FakeSource(source) { pagesOf(it) }) },
+            sources = { listOf(FakeSource(source) { mediaOf(it) }) },
             fetch = { url, file ->
                 onFetch(url)
                 fetched += url
@@ -362,11 +376,11 @@ class SeriesDownloadsTest {
     /** Two pages, at addresses naming the chapter. */
     private fun twoPages(entry: SeriesEntry) = (1..2).map { ImageRef(url = "$PAGES${entry.address}/$it", localPath = null, mime = null) }
 
-    /** A source whose chapters have the pages [pagesOf] gives. */
-    private class FakeSource(override val key: SourceKey, private val pagesOf: (SeriesEntry) -> List<ImageRef>) : SeriesSource {
+    /** A source whose entries open as [mediaOf] gives. */
+    private class FakeSource(override val key: SourceKey, private val mediaOf: (SeriesEntry) -> EntryMedia) : SeriesSource {
         override val name = "Fake"
         override val language = "en"
-        override suspend fun pages(entry: SeriesEntry) = pagesOf(entry)
+        override suspend fun media(entry: SeriesEntry) = mediaOf(entry)
         override suspend fun popular(page: Int): SeriesPage = error("unused")
         override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>): SeriesPage = error("unused")
         override suspend fun details(series: Series): Series = series
@@ -386,6 +400,6 @@ class SeriesDownloadsTest {
         override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
         override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
         override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit
-        override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) = Unit
+        override suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?) = Unit
     }
 }

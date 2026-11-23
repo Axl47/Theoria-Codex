@@ -170,14 +170,15 @@ class VideoPlaybackInfrastructure(
     }
 
     /**
-     * Binds a player's media to [location]. [boundedLocks] is for players that keep loading while another reader
-     * may want the same stream (a feed card behind the Viewer): each of their requests locks at most a chunk of it.
+     * Binds a player's media to [request]'s location and headers. [boundedLocks] is for players that keep loading
+     * while another reader may want the same stream (a feed card behind the Viewer): each of their requests locks at
+     * most a chunk of it. The request's mime, subtitles, audio tracks and cache choice are not applied yet.
      */
     fun bind(
-        location: String,
-        headers: Map<String, String>,
+        request: VideoPlaybackRequest,
         boundedLocks: Boolean = false,
     ): BoundVideoPlaybackRequest {
+        val (location, headers) = request
         val identity = videoPlaybackIdentity(location, headers)
         val mediaSourceFactory = if (isHttpVideoLocation(location)) {
             DefaultMediaSourceFactory(

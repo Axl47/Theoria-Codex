@@ -22,12 +22,6 @@ fun ImageRef.withVideoQuality(quality: VideoQuality, metered: Boolean, height: I
     return selected?.let { copy(url = it.url, mime = it.mime ?: mime) } ?: this
 }
 
-/** The one stream a Viewer page plays, so prefetch warms the same cache entry that playback reads. */
-fun ImageRef.viewerPlaybackLocation(quality: VideoQuality, metered: Boolean, height: Int? = null): String? {
-    val selected = withVideoQuality(quality, metered, height)
-    return selected.localPath?.takeIf(String::isNotBlank) ?: selected.url?.takeIf(String::isNotBlank)
-}
-
 /**
  * Feed cards are small, so a metered network always previews the Data saver rendition regardless of the
  * Viewer's quality. Cards still autoplay together; unmetered feeds keep the post's default stream.

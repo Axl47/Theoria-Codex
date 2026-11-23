@@ -303,7 +303,7 @@ class ViewerLevelGesturesTest {
                     CompositionLocalProvider(LocalViewerHoldScrub provides holdScrub) {
                         ViewerMediaPage(
                             post, media, 0, controls.value, events, transform, { transform.value = it },
-                            layout.value, ViewerVideoOptions(VideoQuality.AUTO, null, "Unavailable", false),
+                            layout.value, ViewerVideoOptions(VideoQuality.AUTO, null, null, "Unavailable", false),
                             positions, null, imageSession, null, {}, { interactions++ }, { chromeToggles++ }, null,
                             levelControls = levels,
                             onPassiveInteraction = { seekInteractions++ },

@@ -5,7 +5,9 @@ import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.CommentTarget
+import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import java.util.UUID
 
@@ -29,9 +31,38 @@ data class ViewerSession(
     val relatedBinding: ViewerRelatedBinding? = null,
     // A comment link's target on the first post; the Viewer opens its comments on it once, when the session launches.
     val focusComment: CommentTarget? = null,
-    // The mode a series session's chapters open in, known before the first one draws.
-    val seriesReadingMode: com.theoriacodex.domain.model.GalleryReadingMode? = null,
+    /** How a series session's entries open; null for every session that is not a series'. */
+    val series: ViewerSeries? = null,
 )
+
+/**
+ * What a series session opens as. Every rule the Viewer keeps for episodes hangs off [Watching], or off the media
+ * having streams where a rule is about media rather than the session (prefetch, for one).
+ */
+sealed interface ViewerSeries {
+    /** Chapters, each a gallery of pages, read in [mode], which is known before the first one draws. */
+    data class Reading(val mode: GalleryReadingMode) : ViewerSeries
+
+    /**
+     * Episodes, each one long video. An episode in [startPositionsMs] starts there, in milliseconds, and any other at
+     * its start; the positions seed the Viewer's video positions ([rememberViewerVideoPositions]). Where the user
+     * gets to goes back through [ViewerScreenHost.onPlaybackProgress].
+     */
+    data class Watching(val startPositionsMs: Map<PostId, Long> = emptyMap()) : ViewerSeries
+}
+
+/**
+ * Where the user is in a series entry, as the Viewer reports it for the series' progress, in the unit its kind uses.
+ * [ViewerScreenCallbacks.onVisibleMediaChanged] reports a chapter's [Page]; [ViewerScreenCallbacks.onPlaybackProgress]
+ * an episode's [Playback].
+ */
+sealed interface ViewerSeriesProgress {
+    /** On page [number], counted from 1, of a chapter. */
+    data class Page(val number: Int) : ViewerSeriesProgress
+
+    /** At [positionMs] of an episode [durationMs] long; a duration of 0 or less is not known yet. */
+    data class Playback(val positionMs: Long, val durationMs: Long) : ViewerSeriesProgress
+}
 
 internal fun requiresViewerPostResolution(post: Post, streamSource: ViewerStreamSource): Boolean {
     if (requiresLazyMediaResolution(post)) return true

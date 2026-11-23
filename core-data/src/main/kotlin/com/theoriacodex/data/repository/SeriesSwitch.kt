@@ -89,8 +89,8 @@ fun carryProgress(
         val number = stored.entry.number
         when {
             opened != null && stored.entry.address == resumed?.address -> {
-                val page = stored.pageCount?.let { opened.lastPage.coerceAtMost(it) } ?: opened.lastPage
-                stored.copy(read = stored.read || opened.read, lastPage = maxOf(stored.lastPage, page))
+                val position = stored.length?.let { opened.position.coerceAtMost(it) } ?: opened.position
+                stored.copy(read = stored.read || opened.read, position = maxOf(stored.position, position))
             }
             stored.read -> stored
             boundary != null && number != null && number < boundary -> stored.copy(read = true)

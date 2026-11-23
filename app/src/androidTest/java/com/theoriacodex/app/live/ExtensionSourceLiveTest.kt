@@ -73,7 +73,7 @@ class ExtensionSourceLiveTest {
         val (chapter, next) = continueChapters(listed)
         live.tap("the button that starts reading", By.text(Pattern.compile("Start|Continue · .*")))
         viewerControl("the chapter's name as the Viewer's title", By.textStartsWith("${listed.title} · ${chapter.entry.name}"))
-        val pages = pageTile(1.coerceAtLeast(chapter.lastPage)).contentDescription.substringAfterLast(' ').toInt()
+        val pages = pageTile(chapter.position.toInt().coerceAtLeast(1)).contentDescription.substringAfterLast(' ').toInt()
         // The controls are showing here; a chapter is not a post to like or save to a Codex.
         assertNull("A chapter offers no Like", device.findObject(By.desc("Like post")))
         assertNull("A chapter offers no Save", device.findObject(By.desc("Save to Codex")))
@@ -84,7 +84,7 @@ class ExtensionSourceLiveTest {
 
         val target = minOf(TARGET_PAGE, pages)
         pageTile(target).click()
-        awaitProgress(listed, chapter.entry.address) { it.lastPage == target }
+        awaitProgress(listed, chapter.entry.address) { it.position == target.toLong() }
         device.pressBack()
 
         live.tap("Continue naming the chapter left unfinished", By.text("Continue · ${chapter.entry.name}"))
@@ -134,7 +134,7 @@ class ExtensionSourceLiveTest {
         val (chapter, next) = continueChapters(listed)
         live.tap("the button that starts reading", By.text(Pattern.compile("Start|Continue · .*")))
         viewerControl("the chapter's name as the Viewer's title", By.textStartsWith("${listed.title} · ${chapter.entry.name}"))
-        val pages = pageTile(1.coerceAtLeast(chapter.lastPage)).contentDescription.substringAfterLast(' ').toInt()
+        val pages = pageTile(chapter.position.toInt().coerceAtLeast(1)).contentDescription.substringAfterLast(' ').toInt()
         viewerControl("the overview button", By.desc("Open media overview")).click()
         live.tap("the mode \"$VERTICAL\"", By.text(VERTICAL))
         device.pressBack()
@@ -450,10 +450,10 @@ class ExtensionSourceLiveTest {
         while (true) {
             val entry = runBlocking { series.repository.entries(listed.id) }.first { it.entry.address == address }
             if (reached(entry)) {
-                live.report("progress", "stored page ${entry.lastPage} of ${entry.pageCount}, read=${entry.read}")
+                live.report("progress", "stored page ${entry.position} of ${entry.length}, read=${entry.read}")
                 return
             }
-            check(System.currentTimeMillis() < deadline) { "Progress stayed at page ${entry.lastPage} of ${entry.pageCount}, read=${entry.read}" }
+            check(System.currentTimeMillis() < deadline) { "Progress stayed at page ${entry.position} of ${entry.length}, read=${entry.read}" }
             Thread.sleep(SeriesLiveDriver.POLL_MS)
         }
     }
