@@ -1,7 +1,8 @@
 // Theoria's own holders, not AndroidX code. Extension binaries are compiled against `androidx.preference` and build
 // their settings screen by calling these names, so the package, class and member names are fixed by those binaries.
 // Nothing here draws anything: the host reads what an extension put in and shows it with the app's own rows
-// (see SourceSettingsScreen). The members are the ones a survey of 300 extensions found in use, and no more.
+// (see SourceSettingsScreen). The members are the ones surveys of 300 manga and 168 anime extensions found in use, and
+// no more.
 @file:Suppress("unused")
 
 package androidx.preference
@@ -40,6 +41,18 @@ open class Preference(val context: Context) {
 
     internal open fun onAttached(store: SharedPreferences, key: String) = Unit
 
+    /** Stores [value] under [key] once on a screen, for the preferences whose value an extension can set. */
+    internal fun storeString(value: String?) {
+        val key = key ?: return
+        store?.edit()?.putString(key, value)?.apply()
+    }
+
+    internal fun storedString(store: SharedPreferences, key: String): String? = try {
+        store.getString(key, null)
+    } catch (_: ClassCastException) {
+        null
+    }
+
     /** Asked before a new value is stored; false refuses it. */
     fun interface OnPreferenceChangeListener {
         fun onPreferenceChange(preference: Preference, newValue: Any?): Boolean
@@ -75,30 +88,23 @@ class SwitchPreferenceCompat(context: Context) : TwoStatePreference(context)
 class CheckBoxPreference(context: Context) : TwoStatePreference(context)
 
 class EditTextPreference(context: Context) : DialogPreference(context) {
+    private var current: String? = null
+
     /**
      * The stored text, once on a screen. Setting it there stores it, which is how a change listener rewrites what was
      * typed; a text set before that is replaced by the stored one or the default, as in AndroidX.
      */
-    var text: String? = null
+    var text: String?
+        get() = current
         set(value) {
-            field = value
-            val key = key
-            if (key != null && !reading) store?.edit()?.putString(key, value)?.apply()
+            current = value
+            storeString(value)
         }
-
-    /** True while [text] takes the stored value, which is not written back. */
-    private var reading = false
 
     override fun storeDefault(editor: SharedPreferences.Editor, key: String) = (defaultValue as? String)?.let { editor.putString(key, it) }
 
     override fun onAttached(store: SharedPreferences, key: String) {
-        reading = true
-        text = try {
-            store.getString(key, null)
-        } catch (_: ClassCastException) {
-            null
-        }
-        reading = false
+        current = storedString(store, key)
     }
 
     /** Held but never called: there is no `EditText` to bind, the app draws its own field. */
@@ -113,8 +119,24 @@ class EditTextPreference(context: Context) : DialogPreference(context) {
 class ListPreference(context: Context) : DialogPreference(context) {
     var entries: Array<CharSequence>? = null
     var entryValues: Array<CharSequence>? = null
+    private var current: String? = null
+
+    /** The stored value, once on a screen; setting it there stores it, as [EditTextPreference.text] does. */
+    var value: String?
+        get() = current
+        set(value) {
+            current = value
+            storeString(value)
+        }
+
+    /** Where [value] is in [entryValues], or -1: change listeners use it to find the entry that was picked. */
+    fun findIndexOfValue(value: String?): Int = entryValues?.indexOfFirst { it.toString() == value } ?: -1
 
     override fun storeDefault(editor: SharedPreferences.Editor, key: String) = (defaultValue as? String)?.let { editor.putString(key, it) }
+
+    override fun onAttached(store: SharedPreferences, key: String) {
+        current = storedString(store, key)
+    }
 }
 
 /** Any of [entries], stored as the set of their [entryValues]. */

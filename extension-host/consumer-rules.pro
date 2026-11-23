@@ -21,6 +21,10 @@
 -keep class okhttp3.internal._UtilCommonKt { public static void closeQuietly(java.io.Closeable); }
 -keep class okhttp3.internal.connection.RealCall { public okhttp3.OkHttpClient getClient(); }
 
+# JavaScript, which extensions evaluate with QuickJS. Its native library finds the engine's classes and members by name
+# and calls into the interfaces scripts are bound to, which no dex reference shows, so the classes are kept whole.
+-keep class app.cash.quickjs.** { *; }
+
 # HTML parsing.
 -keep class org.jsoup.* { public protected *; }
 -keep class org.jsoup.helper.* { public protected *; }

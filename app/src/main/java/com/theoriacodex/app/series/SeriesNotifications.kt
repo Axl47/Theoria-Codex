@@ -14,8 +14,8 @@ import com.theoriacodex.app.R
 import com.theoriacodex.data.repository.DrainProgress
 import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.seriesKind
 import kotlinx.coroutines.flow.MutableStateFlow
 
 private const val NEW_CHAPTERS_CHANNEL = "new_chapters"
@@ -27,12 +27,13 @@ private const val SUMMARY_NOTIFICATION_ID = 2
 
 /**
  * Posts [update]'s local notification, and the group's summary once two series have one showing. Tapping it opens
- * that series' page. Without the notification permission nothing is posted; the new chapters are stored either way.
+ * that series' page. Without the notification permission nothing is posted; the new entries are stored either way.
+ * Both kinds share one channel, kept under its first id so the user's choices for it carry over.
  */
 internal fun notifySeriesUpdate(context: Context, update: SeriesUpdate) {
     val manager = context.getSystemService(NotificationManager::class.java)
     if (!manager.areNotificationsEnabled()) return
-    manager.createNotificationChannel(NotificationChannel(NEW_CHAPTERS_CHANNEL, "New chapters", NotificationManager.IMPORTANCE_DEFAULT))
+    manager.createNotificationChannel(NotificationChannel(NEW_CHAPTERS_CHANNEL, "New chapters and episodes", NotificationManager.IMPORTANCE_DEFAULT))
     fun notification() = Notification.Builder(context, NEW_CHAPTERS_CHANNEL)
         .setSmallIcon(R.drawable.ic_notification_series)
         .setGroup(NEW_CHAPTERS_GROUP)
@@ -44,7 +45,7 @@ internal fun notifySeriesUpdate(context: Context, update: SeriesUpdate) {
         SERIES_NOTIFICATION_ID,
         notification()
             .setContentTitle(update.series.title)
-            .setContentText(newChaptersText(update.newEntries))
+            .setContentText(newEntriesText(update))
             .setContentIntent(PendingIntent.getActivity(context, 0, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
             .build(),
     )
@@ -132,8 +133,9 @@ class SeriesNotificationActivity : Activity() {
     }
 }
 
-/** The new chapter's name, or how many there are. */
-internal fun newChaptersText(entries: List<SeriesEntry>): String = entries.singleOrNull()?.name ?: "${entries.size} new chapters"
+/** The new entry's name, or how many there are, as chapters or episodes by the series' kind. */
+internal fun newEntriesText(update: SeriesUpdate): String =
+    update.newEntries.singleOrNull()?.name ?: update.series.id.source.seriesKind.words.new(update.newEntries.size)
 
 /** The address a notification's intent carries to [SeriesNotificationActivity]; [seriesIdOfUri] reads it back. */
 internal fun seriesUri(id: SeriesId): Uri = Uri.Builder().scheme(SERIES_URI_SCHEME).authority(SERIES_URI_HOST)

@@ -6,15 +6,19 @@ import com.theoriacodex.domain.series.seriesKind
 
 /**
  * The words the Series screens use for a series' entries, which differ by its kind: chapters that are read, or
- * episodes that are watched. Every string that names an entry is built here, so the two kinds read alike.
+ * episodes that are watched. Every string that names an entry is built here, so the two kinds read alike; the app's
+ * new-entries notification uses them too.
  */
-internal enum class EntryWords(private val one: String, private val many: String, val finished: String, private val unfinished: String) {
+enum class EntryWords(private val one: String, private val many: String, val finished: String, private val unfinished: String) {
     CHAPTERS("chapter", "chapters", "Read", "unread"),
     EPISODES("episode", "episodes", "Watched", "unwatched"),
     ;
 
     /** "1 chapter", "12 episodes". */
     fun count(count: Int): String = if (count == 1) "1 $one" else "$count $many"
+
+    /** "1 new chapter", "3 new episodes". */
+    fun new(count: Int): String = if (count == 1) "1 new $one" else "$count new $many"
 
     val none: String get() = "No $many"
 
@@ -25,7 +29,7 @@ internal enum class EntryWords(private val one: String, private val many: String
     val noneToMoveTo: String get() = "No $many to move your progress to"
 }
 
-internal val SeriesKind.words: EntryWords
+val SeriesKind.words: EntryWords
     get() = when (this) {
         SeriesKind.MANGA -> EntryWords.CHAPTERS
         SeriesKind.ANIME -> EntryWords.EPISODES

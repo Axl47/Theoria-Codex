@@ -145,7 +145,7 @@ class MihonSeriesSourceTest {
         assertEquals(listOf("https://cdn.test/1.jpg", "https://cdn.test/2.jpg"), (media as EntryMedia.Pages).pages.map { it.url })
         assertSame(source.chapters.single(), source.pageListRequests.last())
 
-        series.pages(SeriesEntry("/c/9", "Chapter 9", number = 9f))
+        series.media(SeriesEntry("/c/9", "Chapter 9", number = 9f))
         assertEquals("/c/9", source.pageListRequests.last().url)
         assertEquals(9f, source.pageListRequests.last().chapter_number)
         assertNull(source.pageListRequests.last().scanlator)

@@ -38,7 +38,7 @@ fun interface SourceImages {
 }
 
 /**
- * Fetches extension covers and page images the way Mihon does: through the source's own client ([SourceImages]).
+ * Fetches extension covers and page images the way Mihon and Aniyomi do: through the source's own client ([SourceImages]).
  * MangaDex, for one, answers any other client's cover request with a bot check.
  *
  * Every address handed to the app ends in a fragment naming its source by its full key, so sources of two kinds that

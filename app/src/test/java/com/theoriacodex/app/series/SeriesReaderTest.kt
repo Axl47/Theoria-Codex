@@ -1,28 +1,18 @@
 package com.theoriacodex.app.series
 
-import com.theoriacodex.app.di.SeriesDependencies
 import com.theoriacodex.app.media.isLikelyImageLocation
-import com.theoriacodex.app.viewer.ViewerSeries
 import com.theoriacodex.app.viewer.ViewerPlaybackProgress
+import com.theoriacodex.app.viewer.ViewerSeries
 import com.theoriacodex.app.viewer.decodeViewerPostId
 import com.theoriacodex.app.viewer.encodeViewerPostId
-import com.theoriacodex.data.repository.DownloadScheduler
-import com.theoriacodex.data.repository.FollowedSeries
+import com.theoriacodex.app.viewer.requiresLazyMediaResolution
 import com.theoriacodex.data.repository.OfflineMediaStore
-import com.theoriacodex.data.repository.SeriesDownloads
-import com.theoriacodex.data.repository.chapterPost
-import com.theoriacodex.data.repository.seriesOfflineOwner
-import com.theoriacodex.data.storage.AtomicJsonFileStore
-import java.io.File
-import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.advanceUntilIdle
-import org.junit.Rule
-import org.junit.rules.TemporaryFolder
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.data.repository.chapterPost
+import com.theoriacodex.data.repository.seriesOfflineOwner
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.MediaStream
@@ -31,28 +21,28 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
-import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
-import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
+import java.io.File
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
-import com.theoriacodex.domain.series.ExtensionSetting
-import com.theoriacodex.domain.series.ExtensionSourceSettings
-import com.theoriacodex.domain.series.InstalledExtension
-import com.theoriacodex.domain.series.SeriesExtensions
-import kotlinx.coroutines.flow.MutableStateFlow
+import org.junit.rules.TemporaryFolder
 
 class SeriesReaderTest {
     @get:Rule val folder = TemporaryFolder()
 
     private val source = SourceKey.parseOrThrow("custom_mihon_2499283573021220255")
     private val id = SeriesId(source, "/manga/a1b2:c3?lang=en")
+    private val anime = SeriesId(SourceKey.parseOrThrow("custom_aniyomi_7"), "/anime/1")
+    private val stream = MediaStream("https://video.test/1.m3u8", "1080p")
 
     @Test
     fun chapterAndSeriesAddressesSurviveTheViewersSavedState() {
@@ -102,7 +92,7 @@ class SeriesReaderTest {
     @Test
     fun aChapterIsRecordedOnlyOnceItsPagesShow() = runTest {
         val repository = StoredOnly(StoredSeries(Series(id, "Title")), listOf(chapter))
-        val reader = SeriesReader(dependencies(repository, { listOf(OnePage(source)) }))
+        val reader = SeriesReader(dependencies(repository, { listOf(onePage(source)) }))
         val session = checkNotNull(reader.session(id, "/c1"))
 
         // The Viewer first reports the chapter while only its cover shows; resolving it reads nothing either.
@@ -112,14 +102,15 @@ class SeriesReaderTest {
 
         reader.recordPageProgress(session, resolved, 1)
         assertEquals(listOf("/c1 1/1"), repository.progress)
+        // A chapter has no playback to record.
+        reader.recordPlaybackProgress(session, resolved, ViewerPlaybackProgress(positionMs = 5_000, durationMs = 10_000))
+        assertEquals(listOf("/c1 1/1"), repository.progress)
     }
 
     @Test
     fun anEpisodeResolvesToItsStreamsAndRecordsItsPlaybackPosition() = runTest {
-        val anime = SeriesId(SourceKey.parseOrThrow("custom_aniyomi_7"), "/anime/1")
         val repository = StoredOnly(StoredSeries(Series(anime, "Title")), listOf(chapter))
-        val stream = MediaStream("https://video.test/1.m3u8", "1080p")
-        val reader = SeriesReader(dependencies(repository, { listOf(Streamed(anime.source, stream)) }))
+        val reader = SeriesReader(dependencies(repository, { listOf(FakeSeriesSource(anime.source) { EntryMedia.Streams(listOf(stream)) }) }))
         val session = checkNotNull(reader.session(anime, "/c1"))
 
         val episode = checkNotNull(reader.resolve(session.context.queryHash, PostId(anime.source, "/c1")))
@@ -132,8 +123,81 @@ class SeriesReaderTest {
     }
 
     @Test
+    fun anAnimeSessionStartsEachEpisodeWhereItWasLeftAndNeverAtAPage() = runTest {
+        // The source lists the newest first; episode 1 is watched, episode 2 was left a minute in.
+        val entries = listOf(
+            episode(3, 0),
+            episode(2, 1, position = 61_000, length = 1_440_000),
+            episode(1, 2, position = 1_400_000, length = 1_440_000, read = true),
+        )
+        val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(anime, "Title")), entries), { error("No extension may load") }))
+
+        val session = checkNotNull(reader.session(anime, "/e2", pageIndex = 4))
+
+        assertEquals(listOf("/e1", "/e2", "/e3"), session.posts.map { it.id.sourcePostId })
+        assertEquals(1, session.context.startIndex)
+        val starts = listOf("/e1" to 0L, "/e2" to 61_000L, "/e3" to 0L).associate { (address, ms) -> PostId(anime.source, address) to ms }
+        assertEquals(ViewerSeries.Watching(starts), session.series)
+        assertEquals(emptyMap<PostId, Int>(), session.initialMediaIndices)
+        // Each is one video the Viewer looks up when it gets there, never a gallery to page.
+        assertTrue(session.posts.all { it.mediaCount == 1 && it.media.isEmpty() && requiresLazyMediaResolution(it) })
+    }
+
+    @Test
+    fun anEpisodeIsLookedUpOnceAndThenNeedsNoLookupOfItsOwn() = runTest {
+        val episodes = FakeSeriesSource(anime.source) { EntryMedia.Streams(listOf(stream, stream.copy(url = "https://video.test/2.m3u8", label = "720p"))) }
+        val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(anime, "Title")), listOf(episode(1, 0))), { listOf(episodes) }))
+
+        val opened = checkNotNull(reader.resolve(seriesQueryHash(anime), PostId(anime.source, "/e1")))
+
+        assertEquals(1, episodes.asked)
+        assertEquals(listOf("1080p", "720p"), opened.media.single().streams.map { it.label })
+        // An expired link comes back through the Viewer's media recovery, not a lookup on its own.
+        assertFalse(requiresLazyMediaResolution(opened))
+    }
+
+    @Test
+    fun mediaOfTheWrongShapeOrWithNothingToPlayIsAFailureTheViewerShows() = runTest {
+        val page = ImageRef(url = "https://pages.test/1.jpg", localPath = null, mime = null)
+        val cases = listOf(
+            Triple(anime, EntryMedia.Pages(listOf(page)), "This extension served the wrong kind of media"),
+            Triple(id, EntryMedia.Streams(listOf(stream)), "This extension served the wrong kind of media"),
+            Triple(anime, EntryMedia.Streams(listOf(stream.copy(url = " "))), "No stream found for this episode"),
+        )
+        cases.forEach { (series, media, message) ->
+            val stored = StoredOnly(StoredSeries(Series(series, "Title")), listOf(chapter))
+            val reader = SeriesReader(dependencies(stored, { listOf(FakeSeriesSource(series.source) { media }) }))
+
+            val failure = runCatching { reader.resolve(seriesQueryHash(series), PostId(series.source, "/c1")) }.exceptionOrNull()
+
+            assertEquals(message, failure?.message)
+        }
+    }
+
+    @Test
+    fun anEpisodeRecordsOnlyPlaybackAndResumesWhereItStoppedUntilWatched() = runTest {
+        val repository = StoredOnly(StoredSeries(Series(anime, "Title")), listOf(episode(1, 0)))
+        val reader = SeriesReader(dependencies(repository, { listOf(FakeSeriesSource(anime.source) { EntryMedia.Streams(listOf(stream)) }) }))
+        val session = checkNotNull(reader.session(anime, "/e1"))
+        val opened = checkNotNull(reader.resolve(session.context.queryHash, session.posts.single().id))
+        suspend fun startsAt() = (reader.session(anime, "/e1")?.series as ViewerSeries.Watching).startPositionsMs.values.single()
+
+        // Its one media item showing is not page 1 of 1, which would mark it watched the moment it opens.
+        reader.recordPageProgress(session, opened, 1)
+        assertEquals(emptyList<String>(), repository.progress)
+
+        reader.recordPlaybackProgress(session, opened, ViewerPlaybackProgress(positionMs = 61_000, durationMs = 1_440_000))
+        assertEquals(61_000L, startsAt())
+        assertFalse(repository.entries(anime).single().read)
+        // 85% is watched, and a watched episode starts from its beginning.
+        reader.recordPlaybackProgress(session, opened, ViewerPlaybackProgress(positionMs = 1_224_000, durationMs = 1_440_000))
+        assertTrue(repository.entries(anime).single().read)
+        assertEquals(0L, startsAt())
+    }
+
+    @Test
     fun resolvingAChapterAgainAsksItsSourceForFreshPages() = runTest {
-        val pages = OnePage(source)
+        val pages = onePage(source)
         val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), listOf(chapter)), { listOf(pages) }))
         val chapterId = PostId(source, "/c1")
 
@@ -230,81 +294,15 @@ class SeriesReaderTest {
         sources: suspend () -> List<SeriesSource>,
         deleteAfterReading: Boolean = false,
         store: OfflineMediaStore = store(),
-    ): SeriesDependencies {
-        val downloads = SeriesDownloads(
-            store = store,
-            queueFile = folder.root.resolve("queue.json"),
-            repository = repository,
-            sources = sources,
-            fetch = { _, _ -> error("Nothing downloads here") },
-            scheduler = object : DownloadScheduler {
-                override suspend fun schedule(automatic: Boolean) = Unit
+    ) = seriesDependencies(folder.root, repository, sources, deleteAfterReading, store)
 
-                override suspend fun ensureScheduled(automatic: Boolean) = Unit
-            },
-            deleteAfterReading = { deleteAfterReading },
-            files = AtomicJsonFileStore(StandardTestDispatcher(testScheduler)),
-        )
-        return SeriesDependencies(repository, sources, NoExtensions, downloads, scope = this)
-    }
+    /** Every page of every chapter at an address that changes each time the source is asked. */
+    private fun onePage(key: SourceKey) =
+        FakeSeriesSource(key) { asked -> EntryMedia.Pages(listOf(ImageRef(url = "https://pages.test/$asked.jpg", localPath = null, mime = null))) }
+
+    private fun episode(number: Int, order: Int, position: Long = 0, length: Long? = null, read: Boolean = false) = StoredSeriesEntry(
+        SeriesEntry("/e$number", "Ep. $number"), sourceOrder = order, firstSeenAtEpochMs = 0, read = read, position = position, length = length,
+    )
 
     private val chapter = StoredSeriesEntry(SeriesEntry("/c1", "Ch. 1"), sourceOrder = 0, firstSeenAtEpochMs = 0)
-}
-
-/** A source whose every chapter has one page, at an address that changes each time it is asked for. */
-private class OnePage(override val key: SourceKey) : SeriesSource {
-    private var asked = 0
-    override val name = "Fake"
-    override val language = "en"
-    override suspend fun media(entry: SeriesEntry) =
-        EntryMedia.Pages(listOf(ImageRef(url = "https://pages.test/${++asked}.jpg", localPath = null, mime = null)))
-    override suspend fun popular(page: Int): SeriesPage = error("unused")
-    override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>): SeriesPage = error("unused")
-    override suspend fun details(series: Series): Series = series
-    override suspend fun entries(series: Series): List<SeriesEntry> = emptyList()
-}
-
-/** An anime source whose every episode plays [stream]. */
-private class Streamed(override val key: SourceKey, private val stream: MediaStream) : SeriesSource {
-    override val name = "Fake"
-    override val language = "en"
-    override suspend fun media(entry: SeriesEntry) = EntryMedia.Streams(listOf(stream))
-    override suspend fun popular(page: Int): SeriesPage = error("unused")
-    override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>): SeriesPage = error("unused")
-    override suspend fun details(series: Series): Series = series
-    override suspend fun entries(series: Series): List<SeriesEntry> = emptyList()
-}
-
-/** A repository that only answers what is stored; the reader's session needs nothing else. */
-private class StoredOnly(private val stored: StoredSeries, private val entries: List<StoredSeriesEntry>) : SeriesRepository {
-    val progress = mutableListOf<String>()
-    override suspend fun series(id: SeriesId) = stored.takeIf { it.series.id == id }
-    override suspend fun entries(id: SeriesId) = entries
-    override fun observeFollowed(): Flow<List<FollowedSeries>> = emptyFlow()
-    override fun observeSeries(id: SeriesId): Flow<StoredSeries?> = emptyFlow()
-    override fun observeEntries(id: SeriesId): Flow<List<StoredSeriesEntry>> = emptyFlow()
-    override suspend fun store(series: Series, entries: List<SeriesEntry>?) = emptyList<SeriesEntry>()
-    override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>) = emptyList<SeriesEntry>()
-    override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
-    override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) = false
-    override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
-    override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit
-    override suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?) {
-        progress += "$entryAddress $position/$length"
-    }
-}
-
-/** The reader never asks about extensions. */
-private object NoExtensions : SeriesExtensions {
-    override val revision = MutableStateFlow(0)
-
-    override suspend fun installed(): List<InstalledExtension> = emptyList()
-
-    override suspend fun setOn(id: String, signer: String, on: Boolean) = installed()
-
-    override suspend fun setLanguage(id: String, language: String, on: Boolean) = installed()
-
-    override suspend fun settings(id: String) = emptyList<ExtensionSourceSettings>()
-
-    override suspend fun change(id: String, sourceId: String, setting: ExtensionSetting) = settings(id)
 }

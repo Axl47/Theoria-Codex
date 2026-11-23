@@ -499,15 +499,14 @@ private suspend fun handleViewerEffect(
 ) {
     val currentState = viewerOwner.state.value
     if (!effect.isCurrentFor(currentState)) return
+    // A series' chapters and episodes are not posts: whichever control asked, none is saved, liked, tagged or downloaded.
+    if (effect.collectsPost && viewerOwner.session.value?.series != null) return
     fun post(postId: PostId): Post? = currentState.pages.firstOrNull { page -> page.post.id == postId }?.post
     when (effect) {
         is ViewerEffect.SavePost -> post(effect.postId)?.let { selected ->
             viewerOwner.session.value?.context?.let { context -> callbacks.onSavePost(selected, context) }
         }
-        // A chapter's pages load only through its extension's client, which the device download does not use.
-        is ViewerEffect.DownloadMedia -> if (viewerOwner.session.value?.context?.streamSource != ViewerStreamSource.SERIES) {
-            callbacks.onDownloadMedia(viewerDownloadRequest(effect, currentState))
-        }
+        is ViewerEffect.DownloadMedia -> callbacks.onDownloadMedia(viewerDownloadRequest(effect, currentState))
         is ViewerEffect.SetLiked -> post(effect.postId)?.let { selected ->
             val launchAction = viewerOwner.session.value?.onToggleLike
             if (launchAction != null) launchAction(selected) else callbacks.onToggleLike(selected)
@@ -531,6 +530,11 @@ private suspend fun handleViewerEffect(
         }
     }
 }
+
+/** Whether this effect keeps the post somewhere of the user's: a Codex, likes, tags or the device. */
+private val ViewerEffect.Route.collectsPost: Boolean
+    get() = this is ViewerEffect.SavePost || this is ViewerEffect.SetLiked || this is ViewerEffect.ApplyTag ||
+        this is ViewerEffect.DownloadMedia
 
 private fun viewerDownloadRequest(effect: ViewerEffect.DownloadMedia, state: ViewerUiState): ViewerDownloadRequest? {
     val page = state.pages.firstOrNull { candidate -> candidate.post.id == effect.postId } ?: return null

@@ -9,8 +9,8 @@ class ExtensionRejectedException(message: String, cause: Throwable? = null) : Ex
 
 /**
  * Loads an extension's code into this process. Its manifest names the classes to create, its [ExtensionKind] turns
- * them into sources, and its code links against the host API in this module (`eu.kanade.tachiyomi`,
- * `androidx.preference`) and against the libraries the app already ships.
+ * them into sources, and its code links against the host API in this module (`eu.kanade.tachiyomi`, which holds both
+ * Mihon's and Aniyomi's, `androidx.preference`) and against the libraries the app already ships.
  *
  * Loaded code runs with the app's own permissions and can read the app's data, so the caller loads only extensions the
  * user turned on (see [ExtensionRegistry]). [ExtensionHost.install] must have run first.
@@ -64,7 +64,7 @@ class ExtensionLoader(private val context: Context, private val packages: Extens
     private fun createSources(classLoader: ClassLoader, className: String, extension: ExtensionPackage, host: HostServices): List<HostedSource> = try {
         val instance = Class.forName(className, false, classLoader).getDeclaredConstructor().newInstance()
         extension.kind.adapt(instance, host)
-            ?: throw ExtensionRejectedException("$className in ${extension.packageName} is neither a Source nor a SourceFactory")
+            ?: throw ExtensionRejectedException("$className in ${extension.packageName} is not a source of its kind")
     } catch (error: ExtensionRejectedException) {
         throw error
     } catch (error: Throwable) {

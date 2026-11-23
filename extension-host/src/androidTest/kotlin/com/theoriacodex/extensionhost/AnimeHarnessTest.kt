@@ -1,0 +1,105 @@
+package com.theoriacodex.extensionhost
+
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.cash.quickjs.QuickJs
+import com.theoriacodex.domain.model.MediaStream
+import com.theoriacodex.domain.series.EntryMedia
+import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesEntry
+import com.theoriacodex.domain.series.SeriesSource
+import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeNotNull
+import org.junit.Test
+import org.junit.runner.RunWith
+
+/**
+ * Runs one real anime extension APK end to end on a device, in this module's own test package: load it, list series,
+ * open one, list its episodes and resolve an episode's streams through [AniyomiSeriesSource], then ask the first stream
+ * for its opening bytes. It reports counts, types and timings as text only, and never plays, shows or saves media.
+ *
+ * Skipped unless an APK is named: push it to this test package's external files directory, then run with
+ * `-e animeApk <file name>` (see this module's README).
+ */
+@RunWith(AndroidJUnit4::class)
+class AnimeHarnessTest {
+    private val harness = Harness(TAG)
+
+    @Test
+    fun animeExtensionStreamsEndToEnd() = runBlocking {
+        val apkName = harness.apkNamed("animeApk")
+        assumeNotNull(apkName)
+        val (_, sources) = harness.load(apkName!!, HostServices(ExtensionImages()) { _, host -> report("source", "challenged at $host") })
+        val source = sources.firstOrNull { it.language == "en" } ?: sources.first()
+        val series = source.series
+        assertTrue("${source.name} is not served by the anime adapter", series is AniyomiSeriesSource)
+        report("source", "${source.name} lang=${source.language} kind=${series.kind} supportsLatest=${series.supportsLatest}")
+
+        val listing = harness.timed("popular") { series.popular(1) }
+        report("popular", "${listing.series.size} series, covers=${listing.series.count { it.coverUrl != null }}, more=${listing.hasNextPage}")
+        assertTrue("The popular listing is empty", listing.series.isNotEmpty())
+
+        val episode = firstEpisode(series, listing.series)
+        val streams = harness.timed("streams") { (series.media(episode) as EntryMedia.Streams).streams }
+        report("streams", "${streams.size} streams, types=${streams.groupingBy { it.mime ?: "unstated" }.eachCount()}")
+        report("streams", "with headers=${streams.count { it.headers.isNotEmpty() }}, subtitles=${streams.sumOf { it.subtitles.size }}, audio=${streams.sumOf { it.audioTracks.size }}")
+        assertTrue("The episode has no streams", streams.isNotEmpty())
+        report("first stream", runCatching { withContext(Dispatchers.IO) { opening(streams.first()) } }.getOrElse { "failed: $it" })
+        report("quickjs", "evaluated a script=${quickJsLoaded()}")
+    }
+
+    /** The engine extensions evaluate scripts with loads in this package, whose ABIs match the app's. */
+    @Test
+    fun quickJsEvaluates() {
+        val answer = QuickJs.create().use { it.evaluate("[6, 7].reduce((a, b) => a * b)") }
+
+        assertEquals(42, (answer as Number).toInt())
+        assertTrue("QuickJS ran without its native library mapped", quickJsLoaded())
+    }
+
+    /** Whether QuickJS's native library is in this process, which happens only once something creates an engine. */
+    private fun quickJsLoaded(): Boolean = File("/proc/self/maps").readText().contains("libquickjs")
+
+    /**
+     * The earliest episode of the first listed series that has one, with its details and episode list timed for the
+     * first series tried. Some series list no episode yet, so listed series are opened until one does.
+     */
+    private suspend fun firstEpisode(source: SeriesSource, listed: List<Series>): SeriesEntry =
+        listed.take(MAX_SERIES_TRIED).firstNotNullOfOrNull { series ->
+            val details = harness.timed("details") { source.details(series) }
+            val entries = harness.timed("episodes") { source.entries(details) }
+            report("episodes", "${entries.size} episodes")
+            entries.lastOrNull()
+        } ?: error("None of the first $MAX_SERIES_TRIED series had an episode")
+
+    /** What the stream's first bytes are, asked for with its headers; nothing depends on the server's content type. */
+    private fun opening(stream: MediaStream): String {
+        val request = Request.Builder().url(stream.url).header("Range", "bytes=0-2047").apply { stream.headers.forEach { (name, value) -> header(name, value) } }.build()
+        return OkHttpClient().newCall(request).execute().use { response ->
+            val head = response.body.byteStream().readNBytes(PROBE_BYTES)
+            val text = String(head, Charsets.ISO_8859_1)
+            val kind = when {
+                text.startsWith("#EXTM3U") -> "HLS playlist"
+                text.contains("<MPD") -> "DASH manifest"
+                text.regionMatches(4, "ftyp", 0, 4) -> "MP4"
+                head.size >= 4 && head[0] == 0x1A.toByte() && head[1] == 0x45.toByte() -> "WebM"
+                else -> "not media"
+            }
+            "$kind, HTTP ${response.code}"
+        }
+    }
+
+    private fun report(key: String, message: String) = harness.report(key, message)
+
+    private companion object {
+        const val TAG = "AniyomiHarness"
+        const val MAX_SERIES_TRIED = 5
+        const val PROBE_BYTES = 2048
+    }
+}

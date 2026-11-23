@@ -62,9 +62,14 @@ class SeriesUpdateScheduleTest {
     }
 
     @Test
-    fun `a notification names the one new chapter or counts several`() {
-        assertEquals("Chapter 5", newChaptersText(listOf(SeriesEntry("/c/5", "Chapter 5"))))
-        assertEquals("2 new chapters", newChaptersText(listOf(SeriesEntry("/c/6", "Chapter 6"), SeriesEntry("/c/5", "Chapter 5"))))
+    fun `a notification names the one new entry or counts several as chapters or episodes`() {
+        val manga = Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_1"), "/manga/a"), "Manga")
+        val anime = Series(SeriesId(SourceKey.parseOrThrow("custom_aniyomi_1"), "/anime/a"), "Anime")
+        val two = listOf(SeriesEntry("/e/6", "6"), SeriesEntry("/e/5", "5"))
+
+        assertEquals("Chapter 5", newEntriesText(SeriesUpdate(manga, listOf(SeriesEntry("/c/5", "Chapter 5")))))
+        assertEquals("2 new chapters", newEntriesText(SeriesUpdate(manga, two)))
+        assertEquals("2 new episodes", newEntriesText(SeriesUpdate(anime, two)))
     }
 
     @Test

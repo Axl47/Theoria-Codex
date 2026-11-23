@@ -97,7 +97,7 @@ class SeriesPageViewModelTest {
 
     /** As an Aniyomi source that groups an anime's episodes into seasons reports it. */
     @Test
-    fun aSourceThatCannotListTheEntriesSaysWhyInItsOwnWords() = runTest {
+    fun aSourceThatCannotListTheEntriesSaysWhyInItsOwnWordsWithoutRetry() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val id = SeriesId(SourceKey.parseOrThrow("custom_aniyomi_7"), "/title/1")
         val source = Seasons(id.source)
@@ -105,7 +105,8 @@ class SeriesPageViewModelTest {
         val collecting = launch { viewModel.state.collect {} }
 
         advanceUntilIdle()
-        assertEquals(Seasons.MESSAGE, viewModel.state.value.failure)
+        // Trying again cannot help, so the page offers no Retry.
+        assertEquals(RefreshFailure(Seasons.MESSAGE, retryable = false), viewModel.state.value.failure)
         collecting.cancel()
     }
 

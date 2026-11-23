@@ -299,12 +299,12 @@ private fun SectionTitle(title: String, count: Int? = null) {
     }
 }
 
-/** One line for a source that failed, where a full-height failure would push the other sources away. */
+/** One line for a source that failed, where a full-height failure would push the other sources away; Retry when [onRetry] is given. */
 @Composable
-internal fun FailureRow(onRetry: () -> Unit, modifier: Modifier = Modifier, message: String = LOAD_FAILED, actionLabel: String = "Retry") {
+internal fun FailureRow(onRetry: (() -> Unit)?, modifier: Modifier = Modifier, message: String = LOAD_FAILED, actionLabel: String = "Retry") {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Text(message, Modifier.weight(1f, fill = false), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = onRetry) { Text(actionLabel) }
+        if (onRetry != null) TextButton(onClick = onRetry) { Text(actionLabel) }
     }
 }
 
