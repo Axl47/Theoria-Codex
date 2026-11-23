@@ -38,6 +38,7 @@ import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -202,6 +203,19 @@ class SeriesReaderTest {
     }
 
     @Test
+    fun anOpenReadersStripPicturesAChapterOnceItDownloads() = runTest {
+        val store = store()
+        val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), listOf(chapter)), { error("unused") }, store = store))
+        val session = checkNotNull(reader.session(id, "/c1"))
+        assertEquals(emptyMap<PostId, ViewerStripMark>(), session.stripMarks)
+
+        download("/c1", store)
+
+        val firstPage = checkNotNull(reader.stripMarks(session).first()[PostId(source, "/c1")]?.image?.localPath)
+        assertEquals(pagesOf("/c1").first().url, File(firstPage).readText())
+    }
+
+    @Test
     fun deleteAfterReadingWaitsForTheLastReaderToClose() = runTest {
         val reader = readerOverDownloadedChapters(deleteAfterReading = true)
         reader.opened()
@@ -255,10 +269,10 @@ class SeriesReaderTest {
     private fun pagesOf(address: String) = List(2) { ImageRef(url = "https://pages.test$address/$it", localPath = null, mime = null) }
 
     /** Puts the two pages of the chapter at [address] on the device, each file holding its page's address. */
-    private suspend fun TestScope.download(address: String) {
+    private suspend fun TestScope.download(address: String, store: OfflineMediaStore = store()) {
         val pages = pagesOf(address)
         val post = chapterPost(Series(id, "Title"), SeriesEntry(address, address), null, pages)
-        store().save(post, pages, seriesOfflineOwner(id)) { page, file ->
+        store.save(post, pages, seriesOfflineOwner(id)) { page, file ->
             file.writeText(checkNotNull(page.url))
             "image/png"
         }
