@@ -330,6 +330,17 @@ class ProfileBackupServiceTest {
         assertTrue(runCatching { codec.encode(twice) }.isFailure)
     }
 
+    @Test fun `a series' choice to download new chapters round trips and older backups restore with it off`() {
+        val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
+        val series = BackupSeries(StoredSeries(Series(id, "Title"), followed = true, downloadNewChapters = true), emptyList())
+        val encoded = codec.encode(backup().let { it.copy(library = it.library.copy(series = listOf(series))) }).toString(Charsets.UTF_8)
+
+        assertEquals(listOf(series), codec.decode(encoded.toByteArray()).library.series)
+        val older = encoded.replace("\"downloadNewChapters\":true,", "")
+        assertTrue(older != encoded)
+        assertFalse(codec.decode(older.toByteArray()).library.series.single().series.downloadNewChapters)
+    }
+
     @Test fun `a backup the app writes is one it restores even for a series over the chapter limit`() {
         val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
         fun entry(index: Int, order: Int, read: Boolean = false) =

@@ -1,6 +1,8 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.DurableJson
+import com.theoriacodex.data.storage.mediaFileExtension
+import com.theoriacodex.data.storage.sha256
 import com.theoriacodex.data.storage.PostStorageCodec
 import com.theoriacodex.data.storage.PostStorageRecord
 import com.theoriacodex.domain.model.ImageRef
@@ -11,7 +13,6 @@ import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption.ATOMIC_MOVE
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
-import java.security.MessageDigest
 import java.util.UUID
 import java.lang.ref.ReferenceQueue
 import java.lang.ref.WeakReference
@@ -345,20 +346,9 @@ class OfflineMediaStore internal constructor(
     }
 
     private fun postDirectory(id: PostId) = File(directory, digest("${id.source.id}:${id.sourcePostId}"))
-    private fun digest(value: String) = MessageDigest.getInstance("SHA-256").digest(value.toByteArray())
-        .joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
+    private fun digest(value: String) = value.toByteArray().sha256()
 
-    private fun extension(ref: ImageRef): String = when (ref.mime?.substringBefore(';')?.lowercase()) {
-        "image/ugoira" -> "zip"
-        "image/jpeg" -> "jpg"
-        "image/png" -> "png"
-        "image/webp" -> "webp"
-        "image/gif" -> "gif"
-        "video/mp4" -> "mp4"
-        "video/webm" -> "webm"
-        else -> ref.url?.substringBefore('?')?.substringAfterLast('.', "")
-            ?.takeIf { it.matches(Regex("[A-Za-z0-9]{1,8}")) } ?: "bin"
-    }
+    private fun extension(ref: ImageRef): String = mediaFileExtension(ref.mime, ref.url)
 
     /** Identity matters: equal refs decoded by a later read must not replace an existing Viewer's weak key. */
     private class OfflineRefKey(ref: ImageRef, queue: ReferenceQueue<ImageRef>? = null) : WeakReference<ImageRef>(ref, queue) {

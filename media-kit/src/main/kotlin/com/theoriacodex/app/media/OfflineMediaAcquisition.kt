@@ -1,6 +1,7 @@
 package com.theoriacodex.app.media
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.SettingsRepository
@@ -92,7 +93,7 @@ class OfflineMediaAcquisition(
  * Streams a media response to a staging file with bounded memory; callers publish only a complete,
  * recognized media file. Offline saves use the 2 GiB default; caches pass their own [maxBytes].
  */
-internal suspend fun downloadMediaFile(
+suspend fun downloadMediaFile(
     url: String,
     headers: Map<String, String>,
     destination: File,
@@ -105,7 +106,7 @@ internal suspend fun downloadMediaFile(
         header("Accept-Encoding", "identity")
     }.build()
     client.newCall(request).await { response ->
-        if (response.code != MEDIA_HTTP_OK) throw IOException("Media download returned HTTP ${response.code}")
+        if (response.code != MEDIA_HTTP_OK) throw MediaHttpException(response.code)
         val contentType = response.header("Content-Type").orEmpty().substringBefore(';').lowercase()
         if (contentType.startsWith("text/") || contentType.contains("json") || contentType.contains("html")) {
             throw IOException("The provider returned a page instead of media")
@@ -144,6 +145,19 @@ private fun mediaTooLarge(maxBytes: Long) = IOException(
     if (maxBytes == MAX_OFFLINE_MEDIA_BYTES) "This file exceeds the 2 GiB offline limit" else "Media exceeds its byte limit",
 )
 
+/** A media response other than 200, with its [code]. */
+class MediaHttpException(val code: Int) : IOException("Media download returned HTTP $code")
+
+/** A whole response that is not image or video media. */
+class UnsupportedMediaException : IOException("The downloaded file is not supported image or video media")
+
+/** The image type [file] decodes as, reading only its header; null when the platform cannot decode it as an image. */
+fun decodableImageType(file: File): String? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(file.path, bounds)
+    return bounds.outMimeType?.takeIf { bounds.outWidth > 0 && bounds.outHeight > 0 }
+}
+
 /** A successful HTML/error response must never become an apparently available offline image. */
 fun validateOfflineMediaFile(file: File) {
     val header = file.inputStream().use { input ->
@@ -163,7 +177,7 @@ fun validateOfflineMediaFile(file: File) {
         header.drop(4).take(4) == listOf(0x66, 0x74, 0x79, 0x70) || // MP4/AVIF/HEIF
         header.take(4) == listOf(0x52, 0x49, 0x46, 0x46) &&
         header.drop(8).take(4) == listOf(0x57, 0x45, 0x42, 0x50) // WebP
-    if (!recognized) throw IOException("The downloaded file is not supported image or video media")
+    if (!recognized) throw UnsupportedMediaException()
 }
 
 private const val MAX_OFFLINE_MEDIA_BYTES = 2L * 1024 * 1024 * 1024

@@ -13,6 +13,7 @@ import kotlinx.serialization.Serializable
  * A series in a profile backup (`library.series`): what its source said, what the user did with it, and its entries
  * with their progress. Series are stored once for the whole app, not per profile, so a backup holds them once.
  * Pages are never stored, so none are here; opening a restored chapter needs the series' extension installed and on.
+ * Downloads are neither: the files stay on the device they were made on.
  *
  * The cover is the address the source gave, as stored. Which client fetches it is decided when it is loaded, by the
  * series' own source, so a file cannot pick one; it can name the address that source's client is sent to, as it can
@@ -33,6 +34,8 @@ internal data class BackupSeriesRecord(
     @SerialName("readingMode") val readingMode: String? = null,
     @SerialName("lastOpenedEntry") val lastOpenedEntry: String? = null,
     @SerialName("lastCheckedAt") val lastCheckedAt: Long? = null,
+    /** Absent from backups written before the setting existed, which restore with it off. */
+    @SerialName("downloadNewChapters") val downloadNewChapters: Boolean = false,
     @SerialName("entries") val entries: List<BackupSeriesEntryRecord> = emptyList(),
 ) {
     /** A status or mode this build does not know is dropped; [validateBackupSeries] refuses what no build wrote. */
@@ -53,6 +56,7 @@ internal data class BackupSeriesRecord(
                 readingMode = GalleryReadingMode.entries.firstOrNull { it.name == readingMode },
                 lastOpenedEntry = lastOpenedEntry,
                 lastCheckedAtEpochMs = lastCheckedAt,
+                downloadNewChapters = downloadNewChapters,
             ),
             entries = entries.map(BackupSeriesEntryRecord::toDomain),
         )
@@ -74,6 +78,7 @@ internal data class BackupSeriesRecord(
                 readingMode = readingMode?.name,
                 lastOpenedEntry = lastOpenedEntry,
                 lastCheckedAt = lastCheckedAtEpochMs,
+                downloadNewChapters = downloadNewChapters,
                 entries = backup.entries.map(BackupSeriesEntryRecord::fromDomain),
             )
         }

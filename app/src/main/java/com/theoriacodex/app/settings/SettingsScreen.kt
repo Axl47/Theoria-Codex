@@ -54,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.di.SeriesDependencies
 import com.theoriacodex.app.media.videoQualityLabel
 import com.theoriacodex.app.statistics.StatisticsSummary
 import com.theoriacodex.app.statistics.allProfileCodices
@@ -92,8 +93,8 @@ fun SettingsScreen(
     statsActions: StatsActions = StatsActions(),
     diagnostics: SettingsDiagnosticsEntry? = null,
     storageTools: (@Composable () -> Unit)? = null,
-    /** Whether this build has series to check, and so the setting for how often. */
-    seriesUpdates: Boolean = false,
+    /** The Series area, in a build with extensions: how often followed series are checked, and chapter downloads. */
+    series: SeriesDependencies? = null,
     onClose: () -> Unit = {},
     closesFrom: SettingsPage = SettingsPage.HOME,
     /** Opens the Extensions page, which lives outside Settings; null in a build without extensions. */
@@ -111,7 +112,7 @@ fun SettingsScreen(
         label = "Settings page",
     ) { page ->
         when (page) {
-            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, storageSummary, sites, backup, diagnostics != null, seriesUpdates, onClose, onOpenExtensions)
+            SettingsPage.HOME -> SettingsHome(state, statistics, onAction, storageSummary, sites, backup, diagnostics != null, series, onClose, onOpenExtensions)
             SettingsPage.SITES -> sites?.page?.invoke(
                 openHome,
                 BuiltInAccounts(
@@ -151,7 +152,7 @@ private fun SettingsHome(
     sites: SettingsSitesEntry?,
     backup: SettingsBackupEntry?,
     showDiagnostics: Boolean,
-    seriesUpdates: Boolean,
+    series: SeriesDependencies?,
     onClose: () -> Unit,
     onOpenExtensions: (() -> Unit)?,
 ) {
@@ -175,7 +176,7 @@ private fun SettingsHome(
                 open(SettingsPage.STATS_COMPARE)
             })
         }
-        SettingsHomeGroups(state, onAction, storageSummary, sites, backup, showDiagnostics, seriesUpdates, onOpenExtensions) { sheet -> onAction(SettingsAction.OpenPage(SettingsPage.HOME, sheet)) }
+        SettingsHomeGroups(state, onAction, storageSummary, sites, backup, showDiagnostics, series, onOpenExtensions) { sheet -> onAction(SettingsAction.OpenPage(SettingsPage.HOME, sheet)) }
         if (state.showDeveloperScenarios) DeveloperScenarios(state, onAction)
     }
     if (showAddProfile) {
@@ -216,12 +217,13 @@ private fun SettingsHome(
     }
 }
 
-/** Where content comes from: sites, extensions, links, and the check for new chapters of followed series. */
+/** Where content comes from: sites, extensions, links, and for series the check for new chapters and downloads. */
 @Composable
 private fun SettingsSourcesGroup(
     state: SettingsUiState,
     sites: SettingsSitesEntry?,
-    seriesUpdates: Boolean,
+    series: SeriesDependencies?,
+    onAction: (SettingsAction) -> Unit,
     onOpenExtensions: (() -> Unit)?,
     onOpenSites: () -> Unit,
     onSheet: (SettingsSheet) -> Unit,
@@ -239,9 +241,14 @@ private fun SettingsSourcesGroup(
             SettingsRowDivider()
         }
         OpenLinksRow()
-        if (seriesUpdates) {
+        if (series != null) {
             SettingsRowDivider()
             SeriesUpdatesRow(state.settings.seriesUpdateInterval) { onSheet(SettingsSheet.SERIES_UPDATES) }
+            SettingsRowDivider()
+            val deleteAfterReading = SettingToggles.SeriesDeleteAfterReading
+            SwitchRow(deleteAfterReading, state.settings) { onAction(SettingsAction.SetToggle(deleteAfterReading, it)) }
+            SettingsRowDivider()
+            ChapterDownloadsRow(series.downloads)
         }
     }
 }
@@ -280,12 +287,12 @@ private fun SettingsHomeGroups(
     sites: SettingsSitesEntry?,
     backup: SettingsBackupEntry?,
     showDiagnostics: Boolean,
-    seriesUpdates: Boolean,
+    series: SeriesDependencies?,
     onOpenExtensions: (() -> Unit)?,
     onSheet: (SettingsSheet) -> Unit,
 ) {
     val open = { page: SettingsPage -> onAction(SettingsAction.OpenPage(page)) }
-    SettingsSourcesGroup(state, sites, seriesUpdates, onOpenExtensions, { open(SettingsPage.SITES) }, onSheet)
+    SettingsSourcesGroup(state, sites, series, onAction, onOpenExtensions, { open(SettingsPage.SITES) }, onSheet)
     SettingsGroup("Viewing") {
         SettingsRow(SettingDestinations.Controls.title, "Search bar, seeking, swipes, rotation", Icons.Default.TouchApp, onClick = {
             onSheet(SettingsSheet.CONTROLS)

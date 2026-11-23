@@ -38,11 +38,12 @@ class SeriesMoveTest {
 
     @After fun close() = database.close()
 
-    /** [old] followed in [mode], chapters 1 and 2 read, and chapter 3 left at page 4. */
+    /** [old] followed in [mode] with new chapters downloading, chapters 1 and 2 read, and chapter 3 left at page 4. */
     private suspend fun readOld(mode: GalleryReadingMode = GalleryReadingMode.entries.last()) {
         repository.store(old, (3 downTo 1).map { SeriesEntry("/o$it", "Chapter $it", it.toFloat()) })
         repository.setFollowed(old.id, true)
         repository.setReadingMode(old.id, mode)
+        repository.setDownloadNewChapters(old.id, true)
         repository.recordProgress(old.id, "/o1", 5, 5)
         repository.recordProgress(old.id, "/o2", 5, 5)
         repository.recordProgress(old.id, "/o3", 4, 10)
@@ -64,6 +65,7 @@ class SeriesMoveTest {
         val moved = repository.series(new.id)!!
         assertTrue(moved.followed)
         assertEquals(GalleryReadingMode.entries.last(), moved.readingMode)
+        assertTrue(moved.downloadNewChapters)
         assertEquals("/n3", moved.lastOpenedEntry)
         val entries = repository.entries(new.id).associateBy { it.entry.address }
         assertEquals(listOf("/n1", "/n2"), entries.values.filter { it.read }.map { it.entry.address }.sorted())
