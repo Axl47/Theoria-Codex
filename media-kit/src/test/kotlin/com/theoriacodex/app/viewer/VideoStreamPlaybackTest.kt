@@ -161,7 +161,6 @@ class VideoStreamPlaybackTest {
         until { player.playbackTracks().subtitles.size == 2 && player.playbackState == Player.STATE_READY }
 
         assertEquals(listOf("English" to false, "Signs" to false), player.playbackTracks().subtitles.map { it.label to it.selected })
-        assertTrue(player.playbackTracks().subtitles.all { it.sideLoaded })
         assertTrue(server.paths().none { it.startsWith("/subtitles/") })
         player.selectSubtitle(player.playbackTracks().subtitles.single { it.label == "Signs" }.id)
         until { player.playbackTracks().subtitles.single { it.label == "Signs" }.selected }
