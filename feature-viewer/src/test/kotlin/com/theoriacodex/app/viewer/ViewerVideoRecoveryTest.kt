@@ -72,6 +72,20 @@ class ViewerVideoRecoveryTest {
     }
 
     @Test
+    fun `a lookup cancelled before it ended gives the ask back`() {
+        val attempts = ViewerStreamAttempts()
+        // Swiped away while the expired links were looked up: back on the page, the old links fail again and ask again.
+        val first = recovery(attempts).apply { onPlayed() }
+        assertEquals(AskForFreshLinks, first.decide(PlayerError(badStatus)))
+        first.onAskCancelled()
+        assertEquals(AskForFreshLinks, recovery(attempts).decide(PlayerError(badStatus)))
+        // Left during Retry's opening lookup: the Retry still opens with the ask on return.
+        val retried = ViewerStreamAttempts()
+        recovery(retried, loadGeneration = 1).apply { assertEquals(AskForFreshLinks, opening(0)) }.onAskCancelled()
+        assertEquals(AskForFreshLinks, recovery(retried, loadGeneration = 1).opening(0))
+    }
+
+    @Test
     fun `a load falls back at most three times, never to a stream that failed`() {
         val attempts = ViewerStreamAttempts()
         assertEquals(FallBack("B"), recovery(attempts, playing = "A").decide(PlayerError(badStatus)))

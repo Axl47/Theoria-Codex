@@ -98,7 +98,7 @@ internal class ViewerEpisodeStreams(
  * - An episode stream that had played in this load, or whose links are old (looked up more than
  *   [VIEWER_LINKS_OLD_AFTER_MS] before the load began), asks for fresh links once on an I/O or parsing error: an
  *   expired link answers with an error status, or with an error page that reads as a malformed manifest. A rendered
- *   frame gives the ask back ([onPlayed]).
+ *   frame gives the ask back ([onPlayed]), and so does a lookup cancelled before it ended ([onAskCancelled]).
  * - Otherwise (a stream that never played on fresh links: a dead server), or when fresh links brought nothing new, the
  *   episode falls back to its next stream not tried yet, at most [VIEWER_MAX_STREAM_FALLBACKS] times a load, unless
  *   the user picked the stream playing by hand; then it fails, with the picker.
@@ -144,6 +144,11 @@ internal class ViewerVideoRecovery(
         val attempts = attempts ?: return
         attempts.played = true
         attempts.askSpentAtMs = null
+    }
+
+    /** The lookup ended without an outcome (the page left, or another stream was picked): the ask was not used. */
+    fun onAskCancelled() {
+        attempts?.askSpentAtMs = null
     }
 
     private fun playerError(error: ViewerRecoveryEvent.PlayerError): ViewerRecoveryDecision {

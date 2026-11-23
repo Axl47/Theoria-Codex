@@ -323,7 +323,8 @@ private fun ViewerVideoState.handlePlayingChanged(isPlaying: Boolean, events: ()
  * Carries out the recovery under way ([ViewerVideoState.pending]), through the latest [episode] (its post may have
  * been replaced since this player started). A retry in place binds a new player after a moment. An ask for fresh links
  * returns once the route's lookup ends: recovered media is a new [ViewerVideoKey], so a new state and player; nothing
- * new goes back to [recovery]. A fallback stream is a new key too. Leaving the page cancels the ask.
+ * new goes back to [recovery]. A fallback stream is a new key too. Leaving the page, or another stream picked, cancels
+ * the ask, which gives it back to the load.
  */
 @Composable
 private fun ViewerVideoStreamRecovery(state: ViewerVideoState, recovery: ViewerVideoRecovery, episode: ViewerEpisodeStreams?, events: ViewerRendererEvents) {
@@ -338,7 +339,12 @@ private fun ViewerVideoStreamRecovery(state: ViewerVideoState, recovery: ViewerV
                 state.bindings += 1
             }
             ViewerRecoveryDecision.AskForFreshLinks -> {
-                val outcome = latestEpisode?.ask?.invoke() ?: ViewerMediaRecovery.NOTHING_NEW
+                var outcome: ViewerMediaRecovery? = null
+                try {
+                    outcome = latestEpisode?.ask?.invoke() ?: ViewerMediaRecovery.NOTHING_NEW
+                } finally {
+                    if (outcome == null) recovery.onAskCancelled()
+                }
                 if (outcome == ViewerMediaRecovery.NOTHING_NEW) {
                     state.follow(recovery.decide(ViewerRecoveryEvent.NothingNew), VIEWER_VIDEO_FAILED) { latestEvents }
                 }
