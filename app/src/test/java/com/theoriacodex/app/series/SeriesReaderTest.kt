@@ -23,6 +23,9 @@ import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.PostId
@@ -109,6 +112,35 @@ class SeriesReaderTest {
     }
 
     @Test
+    fun aSessionShowsTheCoverItsLoadedSourceGivesAndNoneBeforeItLoads() = runTest {
+        val stored = StoredOnly(StoredSeries(Series(id, "Title", coverUrl = "https://cover.test")), listOf(chapter))
+        suspend fun cover(loaded: List<SeriesSource>) =
+            SeriesReader(dependencies(stored, { error("No extension may load") }, loaded = loaded)).session(id, "/c1")?.posts?.single()?.preview?.url
+        val tagging = object : SeriesSource by OnePage(source) {
+            override fun coverAddress(series: Series) = series.coverUrl + "#tagged"
+        }
+
+        assertEquals("https://cover.test#tagged", cover(listOf(tagging)))
+        assertNull(cover(emptyList()))
+    }
+
+    @Test
+    fun aChapterThatFailsIsLoggedByKindWithoutTheExtensionsMessages() = runTest {
+        val logged = mutableListOf<String>()
+        Diagnostics.install { _, message, error -> logged += message + error?.message.orEmpty() }
+        val failing = object : SeriesSource by OnePage(source) {
+            override suspend fun pages(entry: SeriesEntry): List<ImageRef> = throw SourceAdapterException(
+                SourceFailureReason.NETWORK, "Invalid page /chapter/private-title?sig=x", IllegalStateException("private-title"),
+            )
+        }
+        val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), listOf(chapter)), { listOf(failing) }))
+
+        runCatching { reader.resolve(seriesQueryHash(id), PostId(source, "/c1")) }
+
+        assertEquals(listOf("${source.id} chapter pages failed to load: SourceAdapterException(NETWORK) < IllegalStateException"), logged)
+    }
+
+    @Test
     fun aChapterIsRecordedOnlyOnceItsPagesShow() = runTest {
         val repository = StoredOnly(StoredSeries(Series(id, "Title")), listOf(chapter))
         val reader = SeriesReader(dependencies(repository, { listOf(OnePage(source)) }))
@@ -148,7 +180,8 @@ class SeriesReaderTest {
         assertEquals(pagesOf("/c1").map { it.url }, resolved.media.map { File(checkNotNull(it.localPath)).readText() })
         // Their addresses name no type, yet the Viewer takes the files as images.
         assertTrue(resolved.media.all { isLikelyImageLocation(it.mime, checkNotNull(it.localPath)) })
-        assertEquals("https://cover.test", resolved.preview.url)
+        // Without its source loaded, no cover: the stored address can need the source's own client.
+        assertNull(resolved.preview.url)
         // Anything that stores the chapter stores its source's pages, never the files.
         assertEquals(pagesOf("/c1"), store.withoutOfflineLocations(resolved).media)
     }
@@ -222,6 +255,7 @@ class SeriesReaderTest {
         sources: suspend () -> List<SeriesSource>,
         deleteAfterReading: Boolean = false,
         store: OfflineMediaStore = store(),
+        loaded: List<SeriesSource> = emptyList(),
     ): SeriesDependencies {
         val downloads = SeriesDownloads(
             store = store,
@@ -237,7 +271,7 @@ class SeriesReaderTest {
             deleteAfterReading = { deleteAfterReading },
             files = AtomicJsonFileStore(StandardTestDispatcher(testScheduler)),
         )
-        return SeriesDependencies(repository, sources, NoExtensions, downloads, scope = this)
+        return SeriesDependencies(repository, sources, NoExtensions, downloads, scope = this, loadedSources = { loaded })
     }
 
     private val chapter = StoredSeriesEntry(SeriesEntry("/c1", "Ch. 1"), sourceOrder = 0, firstSeenAtEpochMs = 0)

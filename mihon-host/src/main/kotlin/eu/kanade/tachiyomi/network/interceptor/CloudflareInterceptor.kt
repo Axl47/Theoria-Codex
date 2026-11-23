@@ -2,13 +2,17 @@
 // The simple class name is fixed by extension binaries, which look for it in the client they rebuild.
 package eu.kanade.tachiyomi.network.interceptor
 
+import com.theoriacodex.domain.diagnostics.Diagnostics
+import com.theoriacodex.sources.http.CLEARANCE_COOKIE
 import com.theoriacodex.sources.http.ChallengePass
 import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.HostOutageTracker
 import com.theoriacodex.sources.http.HostUnavailableException
 import com.theoriacodex.sources.http.RefusedRequest
 import com.theoriacodex.sources.http.challengedRequest
+import com.theoriacodex.sources.http.cookieValue
 import com.theoriacodex.sources.http.isCloudflareChallenge
+import java.util.concurrent.ConcurrentHashMap
 import okhttp3.Interceptor
 import okhttp3.Response
 
@@ -25,14 +29,31 @@ class CloudflareInterceptor internal constructor(
     private val pass: ChallengePass,
     private val outages: HostOutageTracker,
 ) : Interceptor {
+    /** The hosts and statuses [reportRefusal] has logged: a site refusing every image would otherwise fill the log. */
+    private val refusals = ConcurrentHashMap.newKeySet<String>()
+
     override fun intercept(chain: Interceptor.Chain): Response {
         val response = pass.intercept(chain)
-        if (!response.isCloudflareChallenge()) return response.also(::clearRecovered)
+        if (!response.isCloudflareChallenge()) return response.also(::clearRecovered).also(::reportRefusal)
         response.close()
         val challenged = response.challengedRequest
         val url = challenged.url.toString()
         outages.recordChallenge(url, RefusedRequest(url, challenged.header("User-Agent").orEmpty()))
         throw HostUnavailableException(HostOutageTracker.normalizeHost(challenged.url.host), HostOutageKind.CHALLENGE)
+    }
+
+    /**
+     * Records a refusal that is not a challenge, which reaches the extension as a plain HTTP error: whether it carried a
+     * clearance tells a rejected clearance (such as one from a hidden pass) from a site that refuses outright. Once
+     * per host and status; the server is named only as Cloudflare or not, since the header is the site's free text.
+     */
+    private fun reportRefusal(response: Response) {
+        if (response.code != HTTP_FORBIDDEN && response.code != HTTP_UNAVAILABLE) return
+        val sent = response.challengedRequest
+        if (!refusals.add("${sent.url.host} ${response.code}")) return
+        val clearance = if (cookieValue(sent.header("Cookie"), CLEARANCE_COOKIE) != null) "with" else "without"
+        val server = if (response.header("Server").equals("cloudflare", ignoreCase = true)) "Cloudflare" else "another server"
+        Diagnostics.report("extension-network", "${sent.url.host} refused ${response.code} $clearance a clearance, no challenge, from $server")
     }
 
     /** Ends the challenge record of a host that answered [response] successfully; looks only while records exist. */
@@ -41,5 +62,10 @@ class CloudflareInterceptor internal constructor(
         if (recorded.isEmpty() || !response.isSuccessful) return
         val host = HostOutageTracker.normalizeHost(response.request.url.host)
         if (recorded[host]?.kind == HostOutageKind.CHALLENGE) outages.pass(host)
+    }
+
+    private companion object {
+        const val HTTP_FORBIDDEN = 403
+        const val HTTP_UNAVAILABLE = 503
     }
 }

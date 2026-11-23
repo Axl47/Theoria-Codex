@@ -24,6 +24,8 @@ class SeriesDependencies(
     val downloads: SeriesDownloads,
     /** Lives as long as the app, for work that must finish after the screen that started it closes. */
     val scope: CoroutineScope,
+    /** The sources whose extensions have loaded already; never loads one. */
+    val loadedSources: () -> List<SeriesSource> = { emptyList() },
 ) {
     private val checking = Mutex()
 

@@ -60,6 +60,8 @@ internal fun ViewerImageRenderer(
     onRequestMediaRecovery: ((Post, ImageRef) -> Unit)?,
     /** Hears each painted image's own size, for layouts that size the page to its image. */
     onPainted: ((Size) -> Unit)? = null,
+    /** Places the loading spinner, which otherwise sits in the middle of [modifier]'s area. */
+    spinnerModifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val generation = controls.loadGeneration
@@ -102,7 +104,7 @@ internal fun ViewerImageRenderer(
                     },
                     onError = { onError(it.result.throwable) },
                 )
-                if (state.loading && !state.visible) CircularProgressIndicator()
+                if (state.loading && !state.visible) CircularProgressIndicator(spinnerModifier)
             }
             else -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(post.id.source.displayName(), style = MaterialTheme.typography.titleLarge)

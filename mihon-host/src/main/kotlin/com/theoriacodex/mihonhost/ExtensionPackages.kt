@@ -56,12 +56,20 @@ class ExtensionPackages(private val context: Context, private val folder: () -> 
         return installed.sortedBy(ExtensionPackage::name) + files
     }
 
+    /** The number Android gave the latest package change, as of the last [stamp]; numbering restarts at boot. */
+    private var packageChanges = 0
+
     /**
-     * Changes whenever [list] would answer differently, and reads no APK to tell: every package's name and last
-     * update, and the folder's file names, lengths and write times. Cheap enough to ask before every use.
+     * Changes whenever [list] would answer differently, and reads no APK to tell: the number of the device's latest
+     * package install, update or removal, and the folder's file names, lengths and write times. Cheap enough to ask
+     * before every image: listing every package instead sends hundreds of records over binder, and a chapter's pages
+     * asking at once filled the process's binder buffer and failed.
      */
     fun stamp(): Any {
-        val installed = context.packageManager.getInstalledPackages(PackageManager.PackageInfoFlags.of(0)).mapTo(HashSet()) { "${it.packageName} ${it.lastUpdateTime}" }
+        val installed = synchronized(this) {
+            context.packageManager.getChangedPackages(packageChanges)?.let { packageChanges = it.sequenceNumber }
+            packageChanges
+        }
         return installed to apkFiles().map { "${it.name} ${it.length()} ${it.lastModified()}" }
     }
 

@@ -119,12 +119,23 @@ class ExtensionRegistry(
      * changed that check is all a call costs, and when something did only the extensions that changed load.
      */
     suspend fun sources(): List<SeriesSource> = withContext(Dispatchers.IO) {
-        offer?.takeIf { stamp() == it.stamp }?.sources ?: locked { refresh().let { offer?.sources.orEmpty() } }
+        current() ?: locked {
+            // A chapter's pages all ask at once after a change: only the first to get here lists the device again.
+            current() ?: refresh().let { offer?.sources.orEmpty() }
+        }
     }
 
-    /** Looks for a change on the device once the extensions have loaded, moving [revision] when there is one; before that, does nothing. */
+    private fun current(): List<SeriesSource>? = offer?.takeIf { stamp() == it.stamp }?.sources
+
+    /** The sources [sources] last offered, without loading or checking anything; empty before the first load. */
+    fun loadedSources(): List<SeriesSource> = offer?.sources.orEmpty()
+
+    /**
+     * Lists the device again once the extensions have loaded, moving [revision] when something changed; before that,
+     * does nothing. For a package broadcast: hiding or unhiding a package changes the listing without moving [stamp].
+     */
     suspend fun recheck() {
-        if (offer != null) sources()
+        if (offer != null) locked { refresh() }
     }
 
     override suspend fun installed(): List<InstalledExtension> = locked { refresh() }
