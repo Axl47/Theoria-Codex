@@ -128,6 +128,14 @@ class ViewerVideoRecoveryTest {
         val two = ViewerStreamAttempts()
         assertEquals(FallBack("B"), recovery(two, labels = listOf("A", "B"), playing = "A").decide(PlayerError(badStatus)))
         assertEquals(Fail, recovery(two, labels = listOf("A", "B"), playing = "B").decide(PlayerError(badStatus)))
+
+        // Fresh links dropped B, the stream fallen back to, and A plays again: its failures still count.
+        val dropped = ViewerStreamAttempts()
+        val refreshed = listOf("A", "C", "D", "E")
+        assertEquals(FallBack("B"), recovery(dropped, playing = "A").decide(PlayerError(badStatus)))
+        assertEquals(FallBack("C"), recovery(dropped, labels = refreshed, playing = "A").decide(PlayerError(badStatus)))
+        assertEquals(FallBack("D"), recovery(dropped, labels = refreshed, playing = "C").decide(PlayerError(badStatus)))
+        assertEquals(Fail, recovery(dropped, labels = refreshed, playing = "D").decide(PlayerError(badStatus)))
     }
 
     @Test

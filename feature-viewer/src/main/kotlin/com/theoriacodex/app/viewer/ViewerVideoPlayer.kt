@@ -90,13 +90,10 @@ internal fun ViewerVideoPlayer(
     // One showing of the page: the players it goes through share where it started (see ViewerVideoStart).
     val start = remember(mediaKey, positions) { ViewerVideoStart({ positions.position(mediaKey) }, positions::startsOver) }
     // A Retry's opening ask holds the player back: the address that failed is not replayed before fresh links come.
-    if (state.pending != ViewerRecoveryDecision.AskForFreshLinks || state.player != null) ViewerVideoBinding(state, playback, controls, events, recovery, start) { progress ->
-        // A finished video resumes from the start: seeking back to its end would finish it again and,
-        // in Queue next mode, skip straight past it.
-        val resumeMs = if (progress.positionMs >= progress.durationMs) 0L else progress.positionMs
+    if (state.pending != ViewerRecoveryDecision.AskForFreshLinks || state.player != null) ViewerVideoBinding(state, playback, controls, events, recovery, start) { resumeMs, progress ->
         positions.save(mediaKey, resumeMs)
         context.videoPlaybackInfrastructure().feedPositionHandoff.publish(mediaKey, resumeMs)
-        events.onPlaybackProgress?.invoke(progress)
+        progress?.let { events.onPlaybackProgress?.invoke(it) }
     }
     ViewerVideoStreamRecovery(state, recovery, episode, events)
     ReportViewerPlaybackProgress(state, events.onPlaybackProgress)
@@ -207,8 +204,11 @@ private fun ViewerVideoBinding(
     events: ViewerRendererEvents,
     recovery: ViewerVideoRecovery,
     start: ViewerVideoStart,
-    /** Hears where the player stopped as it lets go ([ViewerStartedPlayback.releaseProgress]). */
-    onRelease: (ViewerPlaybackProgress) -> Unit,
+    /**
+     * Hears where to resume the video as its player lets go ([ViewerStartedPlayback.resumeMs]), and where it stopped
+     * once its duration is known ([ViewerStartedPlayback.releaseProgress]).
+     */
+    onRelease: (resumeMs: Long, progress: ViewerPlaybackProgress?) -> Unit,
 ) {
     val context = LocalContext.current
     val latestEvents by rememberUpdatedState(events)
@@ -232,7 +232,7 @@ private fun ViewerVideoBinding(
         state.player = player
         state.setPlaying(controls.isActive && controls.isPlaying)
         onDispose {
-            started.releaseProgress()?.let(latestOnRelease)
+            started.resumeMs()?.let { latestOnRelease(it, started.releaseProgress()) }
             player.removeListener(started)
             player.removeListener(seeks)
             player.removeListener(listener)
@@ -383,7 +383,7 @@ internal class ViewerVideoStart(
  * was known, and any seek that took), then a frame rendered there or playback ran (a stream may carry audio only).
  *
  * Every report of the player's position goes through [progress]: its seeks ([ViewerSeekReports]), its pauses and
- * periodic reports while it plays ([reportPlaybackProgress]), and its release ([releaseProgress]). Before it is at its
+ * periodic reports while it plays ([reportPlaybackProgress]), and its release ([releaseProgress], [resumeMs]). Before it is at its
  * position nothing is reported: a player rebuilt or short-lived still stands at its unplayed start and would write it
  * over the real position, and the start's own seeks are not the user's.
  */
@@ -443,9 +443,17 @@ internal class ViewerStartedPlayback(
     fun progress(positionMs: Long = player.currentPosition): ViewerPlaybackProgress? =
         if (atPosition) viewerPlaybackProgress(positionMs, player.duration) else null
 
-    /** Where the player stopped as it lets go: its end once it ended (a finished video resumes from the start). */
-    fun releaseProgress(): ViewerPlaybackProgress? =
-        progress(if (player.playbackState == Player.STATE_ENDED) player.duration else player.currentPosition)
+    /** Where the player stopped as it lets go: its end once it ended. */
+    fun releaseProgress(): ViewerPlaybackProgress? = progress(if (ended) player.duration else player.currentPosition)
+
+    /**
+     * Where the video resumes after this player lets go, whether or not its duration was ever known; null before the
+     * player is [atPosition]. A finished video resumes from the start: seeking back to its end would finish it again
+     * and, in Queue next mode, skip straight past it.
+     */
+    fun resumeMs(): Long? = if (!atPosition) null else if (ended) 0L else player.currentPosition.coerceAtLeast(0L)
+
+    private val ended get() = player.playbackState == Player.STATE_ENDED
 }
 
 /**

@@ -67,8 +67,14 @@ internal class ViewerLoadAttempts {
     /** A frame of this load rendered. */
     var played = false
 
-    /** The streams that failed in this load; all but the first were fallbacks. */
+    /** The streams that failed in this load: none is fallen back to again. */
     val failedStreams = mutableSetOf<String>()
+
+    /**
+     * How often this load fell back to another stream. Counted on its own: fresh links can drop the stream fallen back
+     * to and play one that failed before, which adds nothing to [failedStreams].
+     */
+    var fallbacks = 0
 }
 
 /** Each episode load's [ViewerLoadAttempts] in one Viewer session; another session starts with none ([forSession]). */
@@ -181,8 +187,9 @@ internal class ViewerVideoRecovery(
         val attempts = attempts ?: return ViewerRecoveryDecision.Fail
         playingLabel?.let(attempts.failedStreams::add)
         val playingPicked = playingLabel != null && playingLabel == episode.pickedLabel
-        if (playingPicked || attempts.failedStreams.size > VIEWER_MAX_STREAM_FALLBACKS) return ViewerRecoveryDecision.Fail
+        if (playingPicked || attempts.fallbacks >= VIEWER_MAX_STREAM_FALLBACKS) return ViewerRecoveryDecision.Fail
         val next = episode.labels.firstOrNull { it !in attempts.failedStreams } ?: return ViewerRecoveryDecision.Fail
+        attempts.fallbacks += 1
         return ViewerRecoveryDecision.FallBack(next)
     }
 

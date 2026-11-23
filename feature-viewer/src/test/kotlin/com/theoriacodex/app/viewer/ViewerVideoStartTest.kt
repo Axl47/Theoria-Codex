@@ -68,6 +68,7 @@ class ViewerVideoStartTest {
         assertEquals(emptyList<ViewerPlaybackProgress>(), reports)
         assertNull(started.progress())
         assertNull(started.releaseProgress())
+        assertNull(started.resumeMs())
 
         started.onIsPlayingChanged(true)
         assertEquals(ViewerPlaybackProgress(30_000, 1_440_000), started.progress())
@@ -87,6 +88,15 @@ class ViewerVideoStartTest {
         player.seekTo(90_000L)
         assertEquals(listOf(ViewerPlaybackProgress(60_000, 1_440_000), ViewerPlaybackProgress(90_000, 1_440_000)), reports)
         assertEquals(ViewerPlaybackProgress(90_000, 1_440_000), started.releaseProgress())
+    }
+
+    @Test fun `a started video whose duration is never known still resumes where it stopped`() {
+        val player = EpisodePlayer(durationMs = C.TIME_UNSET)
+        val started = ViewerVideoStart({ 0L }) { _, _ -> false }.applyTo(player).apply { onRenderedFirstFrame() }
+        player.seekTo(12_000L)
+        // Its place is kept for the Viewer and the feed, though there is no progress to report without a duration.
+        assertEquals(12_000L, started.resumeMs())
+        assertNull(started.releaseProgress())
     }
 
     /** A player of one episode [durationMs] long (unset until [know] gives it) that only seeks. */
