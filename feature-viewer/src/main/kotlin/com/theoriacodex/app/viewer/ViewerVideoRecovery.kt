@@ -37,9 +37,10 @@ internal class ViewerFreshLinksBudget {
 
 /**
  * How media whose links expire (an episode's streams) has them fetched again: [ask]
- * ([ViewerScreenHost.onRequestMediaRecovery]), at most once per load from the screen's [budget].
+ * ([ViewerScreenHost.onRequestMediaRecovery]), at most once per load from the screen's [budget]. The ask returns once
+ * the route's lookup ends, within its limit, with what it came to.
  */
-internal class ViewerFreshLinks(val budget: ViewerFreshLinksBudget, val ask: () -> Unit)
+internal class ViewerFreshLinks(val budget: ViewerFreshLinksBudget, val ask: suspend () -> ViewerMediaRecovery)
 
 /**
  * How one video [load] recovers from player errors. A decoder failure retries in place, once. An I/O error (an HTTP

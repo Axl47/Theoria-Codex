@@ -65,7 +65,7 @@ class ViewerScreenHost(
     val onGoToSearch: () -> Unit = {},
     val onOpenCreatorFallback: ((Post) -> Unit)? = null,
     val onGalleryReadingModeSelected: (PostId, GalleryReadingMode) -> Unit = { _, _ -> },
-    val onRequestMediaRecovery: ((Post, ImageRef) -> Unit)? = null,
+    val onRequestMediaRecovery: ViewerMediaRecoveryRequest? = null,
     val onVisiblePostChanged: ((Post, Int) -> Unit)? = null,
     val onVisibleMediaChanged: ((Post, Int) -> Unit)? = null,
     /**

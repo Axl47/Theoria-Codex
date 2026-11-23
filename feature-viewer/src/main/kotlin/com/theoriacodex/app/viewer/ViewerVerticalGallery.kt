@@ -276,7 +276,7 @@ private fun VerticalGalleryPage(
     sharedError: ViewerMediaError?,
     onRetry: () -> Unit,
     onPainted: (Float, Float) -> Unit,
-    onRequestMediaRecovery: ((Post, com.theoriacodex.domain.model.ImageRef) -> Unit)?,
+    onRequestMediaRecovery: ViewerMediaRecoveryRequest?,
 ) {
     val media = pageState.media[index]
     val key = ViewerMediaKey(post.id, index)

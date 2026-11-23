@@ -29,7 +29,7 @@ internal fun ViewerMediaContent(
     imageSession: ViewerImageSession,
     pixivUgoiraClient: PixivUgoiraClient?,
     modifier: Modifier,
-    onRequestMediaRecovery: ((Post, ImageRef) -> Unit)?,
+    onRequestMediaRecovery: ViewerMediaRecoveryRequest?,
 ) {
     when (kind) {
         ViewerMediaKind.UGOIRA -> if (pixivUgoiraClient != null) PixivUgoiraPlayer(
@@ -49,7 +49,7 @@ internal fun ViewerMediaContent(
             mediaKey = key, positions = videoPositions,
             loadingPreview = { ViewerLoadingPreview(post, media, modifier) },
             freshLinks = videoOptions.freshLinks?.takeIf { media.streams.isNotEmpty() && onRequestMediaRecovery != null }?.let { budget ->
-                ViewerFreshLinks(budget) { onRequestMediaRecovery?.invoke(post, media) }
+                ViewerFreshLinks(budget) { onRequestMediaRecovery?.invoke(post, media) ?: ViewerMediaRecovery.NOTHING_NEW }
             },
         )
         ViewerMediaKind.GIF -> {

@@ -85,7 +85,8 @@ internal fun ViewerVideoPlayer(
         Box(modifier.background(Color.Black)) { loadingPreview?.invoke() }
         return
     }
-    val recovery = remember(mediaKey, playback, controls.loadGeneration, freshLinks?.budget) {
+    // New stream links are a new player even when the chosen stream's request reads the same: a REPLACED ask waits on it.
+    val recovery = remember(mediaKey, playback, media.streams, controls.loadGeneration, freshLinks?.budget) {
         ViewerVideoRecovery(ViewerMediaLoad(mediaKey, controls.loadGeneration), freshLinks?.budget)
     }
     var recoveryGeneration by remember(recovery) { mutableIntStateOf(0) }
@@ -342,8 +343,8 @@ private fun ViewerVideoState.handleError(error: PlaybackException, recovery: Vie
 /**
  * Asks for fresh links when [recovery] decided so, through the latest [freshLinks] (its post may have been replaced
  * since this player started), and gives the ask back once the media plays. Recovered media replaces this player, along
- * with this state. When none arrives within a lookup's time (the links could not be fetched again, or came back
- * unchanged), the stream shows as failed, and another can be picked.
+ * with this state and this ask. Nothing new (no links in the route's time, a failure, the same links) fails the stream
+ * at once, so another can be picked. Leaving the page cancels the ask.
  */
 @Composable
 private fun ViewerVideoFreshLinks(state: ViewerVideoState, recovery: ViewerVideoRecovery, freshLinks: ViewerFreshLinks?, events: ViewerRendererEvents) {
@@ -352,10 +353,8 @@ private fun ViewerVideoFreshLinks(state: ViewerVideoState, recovery: ViewerVideo
     val latestEvents by rememberUpdatedState(events)
     LaunchedEffect(state, state.recoveringStream) {
         if (!state.recoveringStream) return@LaunchedEffect
-        latestFreshLinks?.ask?.invoke()
-        // Only an episode has streams, and looking one up again can take as long as finding it did.
-        delay(VIEWER_SERIES_RESOLUTION_TIMEOUT_MS)
-        state.fail("Could not play video") { latestEvents }
+        val outcome = latestFreshLinks?.ask?.invoke() ?: ViewerMediaRecovery.NOTHING_NEW
+        if (outcome == ViewerMediaRecovery.NOTHING_NEW) state.fail("Could not play video") { latestEvents }
     }
 }
 

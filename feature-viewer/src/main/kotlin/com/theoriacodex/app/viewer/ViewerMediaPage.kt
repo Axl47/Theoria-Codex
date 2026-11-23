@@ -90,7 +90,7 @@ internal fun ViewerMediaPage(
     onAction: (ViewerAction) -> Unit,
     onInteraction: () -> Unit,
     onToggleChrome: () -> Unit,
-    onRequestMediaRecovery: ((Post, ImageRef) -> Unit)?,
+    onRequestMediaRecovery: ViewerMediaRecoveryRequest?,
     levelControls: ViewerLevelControls? = null,
     returnProgress: () -> Float = { 0f },
     dismissDrag: ViewerDismissDrag? = null,
