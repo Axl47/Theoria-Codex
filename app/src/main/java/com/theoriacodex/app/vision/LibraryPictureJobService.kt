@@ -35,7 +35,10 @@ class LibraryPictureJobService : JobService() {
     private var run: Job? = null
 
     override fun onStartJob(params: JobParameters): Boolean {
-        running.set(true)
+        synchronized(runLock) {
+            running.set(true)
+            restartWanted = false
+        }
         requested.set(false)
         run = scope.launch {
             val more = try {
@@ -47,9 +50,17 @@ class LibraryPictureJobService : JobService() {
                 Diagnostics.report("similarity", "The Library's pictures could not be indexed", error)
                 false
             }
-            // Work that arrived during the run (a post saved while charging) gets a run of its own.
-            running.set(false)
-            jobFinished(params, more || requested.getAndSet(false))
+            val restart = synchronized(runLock) {
+                running.set(false)
+                restartWanted.also { restartWanted = false }
+            }
+            if (restart) {
+                jobFinished(params, false)
+                restartLibraryPictures(this@LibraryPictureJobService)
+            } else {
+                // Work that arrived during the run (a post saved while charging) gets a run of its own.
+                jobFinished(params, more || requested.getAndSet(false))
+            }
         }
         return true
     }
@@ -71,6 +82,10 @@ class LibraryPictureJobService : JobService() {
 private val running = AtomicBoolean(false)
 private val requested = AtomicBoolean(false)
 
+/** Whether a restart was asked for during the current run; [runLock] guards it and a run's start and end. */
+private val runLock = Any()
+private var restartWanted = false
+
 /**
  * Asks for [LibraryPictureJobService] to run while the device charges on an unmetered network and its battery is not
  * low, since a run may fetch previews the cache lost and video frames. The job survives a reboot. A job already waiting
@@ -88,9 +103,16 @@ internal fun scheduleLibraryPictures(context: Context) {
 /**
  * Replaces any waiting or finishing [LibraryPictureJobService] run with a fresh one, free of a retry's back-off, for
  * video frames a finished run left until the app left the screen. Unlike [scheduleLibraryPictures], a run that is
- * ending (and so still listed) cannot swallow the request.
+ * ending (and so still listed) cannot swallow the request. A run under way is never replaced, since that would drop
+ * its unstored batch: the restart waits for it to end.
  */
 private fun restartLibraryPictures(context: Context) {
+    synchronized(runLock) {
+        if (running.get()) {
+            restartWanted = true
+            return
+        }
+    }
     context.getSystemService(JobScheduler::class.java).schedule(libraryPicturesJob(context))
 }
 

@@ -32,7 +32,10 @@ class LibraryVisionBackfill(
      */
     private val away: Flow<Boolean>,
 ) {
-    /** Whether the last [drain] left playing posts for the app to leave the screen; [whenAway] takes it. */
+    /**
+     * Whether a [drain] left playing posts for the app to leave the screen; [whenAway] takes it. A drain that stops
+     * before reaching the end of the backlog (the device ran warm, say) leaves it as it was, since it cannot tell.
+     */
     private val framesWaiting = MutableStateFlow(false)
 
     /**
@@ -46,14 +49,15 @@ class LibraryVisionBackfill(
      */
     suspend fun drain(): Boolean {
         val pass = Pass()
-        // This run will say what it leaves; an earlier run's waiting frames must not restart it on leaving the screen.
-        framesWaiting.value = false
         try {
             while (tagger.ready.value) {
                 if (hot()) return true
                 // The posts this run left are the backlog's first rows, since newest come first and the rest got stored.
                 val batch = signatures.libraryPostsWithoutVision(tagger.modelId, BATCH, offset = pass.left)
-                if (batch.isEmpty()) return pass.retry
+                if (batch.isEmpty()) {
+                    pass.finished = true
+                    return pass.retry
+                }
                 val started = TimeSource.Monotonic.markNow()
                 val results = analyze(batch, pass)
                 if (PictureResult.Unavailable in results.values) return tagger.ready.value
@@ -62,7 +66,7 @@ class LibraryVisionBackfill(
             }
             return false
         } finally {
-            framesWaiting.value = pass.waiting
+            if (pass.waiting) framesWaiting.value = true else if (pass.finished) framesWaiting.value = false
         }
     }
 
@@ -105,8 +109,12 @@ class LibraryVisionBackfill(
         }
     }
 
-    /** What one [drain] left unstored: how many posts, whether any wait for a retry, and whether any wait for [away]. */
+    /**
+     * What one [drain] left unstored: how many posts, whether any wait for a retry, and whether any wait for [away]; and
+     * whether it reached the end of the backlog.
+     */
     private class Pass {
+        var finished = false
         var left = 0
             private set
         var retry = false

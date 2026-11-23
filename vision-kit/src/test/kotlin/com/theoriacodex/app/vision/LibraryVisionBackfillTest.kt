@@ -205,6 +205,26 @@ class LibraryVisionBackfillTest {
     }
 
     @Test
+    fun `a run cut short by heat keeps the frames an earlier run left waiting`() = runBlocking {
+        val library = Library(listOf(post("video")))
+        val away = MutableStateFlow(false)
+        var warm = false
+        val pictures = Pictures(plays = { true })
+        val backfill = backfill(PictureTagger(readyStore(), library, pictures, scope), library, away, hot = { warm })
+        var scheduled = 0
+        val watching = launch { backfill.whenAway { scheduled++ } }
+
+        assertFalse(backfill.drain())
+        warm = true
+        assertTrue(backfill.drain())
+        away.value = true
+        repeat(10) { yield() }
+
+        assertEquals(1, scheduled)
+        watching.cancel()
+    }
+
+    @Test
     fun `frames that cannot be read now wait for a later run, and an unreadable file leaves the still alone`() = runBlocking {
         val library = Library(listOf(post("offline"), post("broken")))
         val analysed = mutableListOf<Pattern>()
@@ -223,8 +243,12 @@ class LibraryVisionBackfillTest {
         assertNull(library.stored.firstOrNull { it.postId.sourcePostId == "offline" })
     }
 
-    private fun backfill(tagger: PictureTagger, library: Library, away: Flow<Boolean> = flowOf(true)) =
-        LibraryVisionBackfill(tagger, library, hot = { false }, away = away)
+    private fun backfill(
+        tagger: PictureTagger,
+        library: Library,
+        away: Flow<Boolean> = flowOf(true),
+        hot: () -> Boolean = { false },
+    ) = LibraryVisionBackfill(tagger, library, hot = hot, away = away)
 
     /** Stills and frames as a test sets them; by default every post has a still that fails to load and none plays. */
     private class Pictures(
