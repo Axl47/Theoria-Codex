@@ -193,10 +193,10 @@ class SeriesTabViewModel(
             )
         }
         if (hadDedicated && state.value.dedicated == null) closeFilters()
-        val dedicatedKey = state.value.dedicated?.source?.key
-        if (dedicatedKey != null && fresh.any { it.key == dedicatedKey }) {
+        val currentDedicated = state.value.dedicated
+        if (currentDedicated != null && fresh.any { it.key == currentDedicated.source.key }) {
             closeFilters()
-            source(dedicatedKey)?.let { showDedicated(it, BrowseKind.Popular) }
+            source(currentDedicated.source.key)?.let { showDedicated(it, currentDedicated.kind) }
         }
         val browsedKey = state.value.browse?.key
         if (browsedKey != null && fresh.any { it.key == browsedKey }) browse(browsedKey)
@@ -236,7 +236,8 @@ class SeriesTabViewModel(
         if (query.isNotEmpty() && existing != null) {
             dedicatedRun++
             val run = dedicatedRun
-            mutableState.update { it.copy(dedicated = DedicatedSourceState(source.toListing(sources, existing), kind, run)) }
+            val seeded = existing.copy(loadingMore = false, moreFailed = false)
+            mutableState.update { it.copy(dedicated = DedicatedSourceState(source.toListing(sources, seeded), kind, run)) }
         } else {
             showDedicated(source, kind)
         }

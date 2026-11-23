@@ -2,6 +2,7 @@ package com.theoriacodex.app.series
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +35,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -97,20 +102,21 @@ internal fun EntryRow(
     onToggleDownload: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    val rowAlpha = when {
+        !enabled -> DISABLED_ALPHA
+        entry.read -> READ_ALPHA
+        else -> 1f
+    }
     Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp)) {
         Surface(
             shape = CHAPTER_CARD_SHAPE,
             color = MaterialTheme.colorScheme.surfaceContainerLow,
-            modifier = Modifier.fillMaxWidth().alpha(if (entry.read) READ_ALPHA else 1f),
+            modifier = Modifier.fillMaxWidth().alpha(rowAlpha),
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .combinedClickable(
-                        onClick = { if (enabled) onClick() },
-                        onLongClick = { menuOpen = true },
-                        onLongClickLabel = "Chapter actions",
-                    )
+                    .entryRowInteraction(entry.entry.address, enabled, onClick) { menuOpen = true }
                     .padding(start = 16.dp, end = if (canToggleDownload) 6.dp else 16.dp, top = 12.dp, bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -151,6 +157,18 @@ internal fun EntryRow(
         )
     }
 }
+
+@OptIn(ExperimentalFoundationApi::class)
+private fun Modifier.entryRowInteraction(key: String, enabled: Boolean, onClick: () -> Unit, onLongPress: () -> Unit): Modifier =
+    if (enabled) {
+        combinedClickable(onClick = onClick, onLongClick = onLongPress, onLongClickLabel = "Chapter actions")
+    } else {
+        pointerInput(key) { detectTapGestures(onLongPress = { onLongPress() }) }
+            .semantics {
+                disabled()
+                onLongClick(label = "Chapter actions") { onLongPress(); true }
+            }
+    }
 
 @Composable
 private fun EntryContextMenu(
@@ -233,3 +251,4 @@ private val CHAPTER_CARD_SHAPE = RoundedCornerShape(12.dp)
 private val DOWNLOAD_RING = 22.dp
 private val DOWNLOAD_STOP = 12.dp
 private const val READ_ALPHA = 0.5f
+private const val DISABLED_ALPHA = 0.38f

@@ -203,6 +203,22 @@ class SeriesPageViewModelTest {
         assertEquals("", reopened.state.value.chapterQuery)
         collecting.cancel()
     }
+
+    @Test
+    fun manualRefreshClearsUserRefreshingEvenWhenSourceIsMissingOrFailsImmediately() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
+        val stored = StoredSeries(Series(id, "Title"))
+        val viewModel = SeriesPageViewModel(id, Restored(stored, emptyList()), loadSources = { emptyList() })
+        val collecting = launch { viewModel.state.collect {} }
+
+        advanceUntilIdle()
+        viewModel.refresh(userInitiated = true)
+        advanceUntilIdle()
+        assertFalse(viewModel.state.value.userRefreshing)
+        assertFalse(viewModel.state.value.refreshing)
+        collecting.cancel()
+    }
 }
 
 private class MemoryChapterPreferences : SeriesChapterPreferences {

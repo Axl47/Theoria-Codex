@@ -7,10 +7,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -64,9 +63,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -117,14 +118,12 @@ fun SeriesPageScreen(
     val listState = rememberLazyListState()
     var topBarVisible by rememberSaveable { mutableStateOf(true) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf(state.chapterQuery) }
     var optionsSheetOpen by rememberSaveable { mutableStateOf(false) }
     var coverLightboxOpen by rememberSaveable { mutableStateOf(false) }
-    val scrolled by remember(listState) {
-        derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 48 }
-    }
-    LaunchedEffect(listState) {
-        snapshotFlow { !listState.canScrollBackward }.collectLatest { atTop -> if (atTop) topBarVisible = true }
-    }
+    val scrolled by remember(listState) { derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 48 } }
+    LaunchedEffect(listState) { snapshotFlow { !listState.canScrollBackward }.collectLatest { atTop -> if (atTop) topBarVisible = true } }
+    val clearQuery = { searchQuery = ""; viewModel.setChapterQuery("") }
     val quickReturn = rememberQuickReturn { revealed -> topBarVisible = revealed }
 
     Box(modifier.fillMaxSize().nestedScroll(quickReturn)) {
@@ -142,20 +141,22 @@ fun SeriesPageScreen(
             onMarkPreviousRead = { offerBulkUndo(viewModel.markPreviousRead(it)) },
             onOpenExtensions = onOpenExtensions,
             onOpenChapterOptions = { optionsSheetOpen = true },
-            onClearChapterFilters = { viewModel.resetChapterOptions(); viewModel.setChapterQuery("") },
+            onClearQuery = clearQuery,
+            onClearChapterFilters = { viewModel.resetChapterOptions(); clearQuery() },
         )
         SeriesPageTopBar(
             state = state,
             visible = topBarVisible,
             scrolled = scrolled,
             searchOpen = searchOpen,
+            searchQuery = searchQuery,
             canDownload = viewModel.canDownload,
             switchSource = switchSource,
             onBack = onBack,
             onOpenSearch = { searchOpen = true; topBarVisible = true },
-            onCloseSearch = { searchOpen = false; viewModel.setChapterQuery("") },
-            onQueryChange = viewModel::setChapterQuery,
-            onRefresh = viewModel::refresh,
+            onCloseSearch = { searchOpen = false; clearQuery() },
+            onQueryChange = { searchQuery = it; viewModel.setChapterQuery(it) },
+            onRefresh = { viewModel.refresh() },
             onMarkAllRead = { offerBulkUndo(viewModel.markAllRead(it)) },
             onDownload = viewModel::download,
             onDeleteDownloads = viewModel::deleteDownloads,
@@ -246,27 +247,19 @@ private fun SeriesPageBody(
     onMarkPreviousRead: (String) -> Unit,
     onOpenExtensions: () -> Unit,
     onOpenChapterOptions: () -> Unit,
+    onClearQuery: () -> Unit,
     onClearChapterFilters: () -> Unit,
 ) {
-    var pullRefreshing by remember { mutableStateOf(false) }
-    LaunchedEffect(state.refreshing) {
-        if (!state.refreshing) pullRefreshing = false
-    }
     val pullState = rememberPullToRefreshState()
     PullToRefreshBox(
-        isRefreshing = pullRefreshing,
-        onRefresh = {
-            if (!state.sourceMissing) {
-                pullRefreshing = true
-                viewModel.refresh()
-            }
-        },
+        isRefreshing = state.userRefreshing,
+        onRefresh = { if (!state.sourceMissing) viewModel.refresh(userInitiated = true) },
         state = pullState,
         modifier = Modifier.fillMaxSize(),
         indicator = {
             PullToRefreshDefaults.Indicator(
                 state = pullState,
-                isRefreshing = pullRefreshing,
+                isRefreshing = state.userRefreshing,
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = SERIES_TOP_BAR_HEIGHT),
             )
         },
@@ -291,8 +284,8 @@ private fun SeriesPageBody(
                     }
                 }
             }
-            statusRows(state, viewModel::refresh, onOpenExtensions)
-            chapterList(state, viewModel, onOpenEntry, onMarkPreviousRead, onOpenChapterOptions, onClearChapterFilters)
+            statusRows(state, { viewModel.refresh() }, onOpenExtensions)
+            chapterList(state, viewModel, onOpenEntry, onMarkPreviousRead, onOpenChapterOptions, onClearQuery, onClearChapterFilters)
         }
     }
 }
@@ -327,6 +320,7 @@ private fun LazyListScope.chapterList(
     onOpenEntry: (String) -> Unit,
     onMarkPreviousRead: (String) -> Unit,
     onOpenChapterOptions: () -> Unit,
+    onClearQuery: () -> Unit,
     onClearChapterFilters: () -> Unit,
 ) {
     if (state.entries.isEmpty()) return
@@ -345,7 +339,7 @@ private fun LazyListScope.chapterList(
             state = state,
             onClearFilter = { viewModel.setChapterFilter(ChapterFilter.ALL) },
             onClearSort = viewModel::resetChapterSort,
-            onClearQuery = { viewModel.setChapterQuery("") },
+            onClearQuery = onClearQuery,
         )
     }
     if (state.visibleEntries.isEmpty()) {
@@ -435,7 +429,6 @@ private fun HeroBackdrop(series: Series, modifier: Modifier = Modifier) {
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HeroMetadata(series: Series, sourceName: String, onCopyTitle: (String) -> Unit, modifier: Modifier = Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -445,11 +438,9 @@ private fun HeroMetadata(series: Series, sourceName: String, onCopyTitle: (Strin
             fontWeight = FontWeight.SemiBold,
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.combinedClickable(
-                onClick = {},
-                onLongClick = { onCopyTitle(series.title) },
-                onLongClickLabel = "Copy title",
-            ),
+            modifier = Modifier
+                .pointerInput(series.title) { detectTapGestures(onLongPress = { onCopyTitle(series.title) }) }
+                .semantics { onLongClick(label = "Copy title") { onCopyTitle(series.title); true } },
         )
         series.author?.let { author ->
             Text(

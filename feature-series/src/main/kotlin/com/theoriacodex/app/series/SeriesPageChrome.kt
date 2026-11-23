@@ -99,6 +99,7 @@ internal fun SeriesPageTopBar(
     visible: Boolean,
     scrolled: Boolean,
     searchOpen: Boolean,
+    searchQuery: String,
     canDownload: Boolean,
     switchSource: SwitchSourceViewModel,
     onBack: () -> Unit,
@@ -128,7 +129,7 @@ internal fun SeriesPageTopBar(
             Column(Modifier.fillMaxWidth()) {
                 if (searchOpen) {
                     SeriesTopBarSearchRow(
-                        query = state.chapterQuery,
+                        query = searchQuery,
                         onQueryChange = onQueryChange,
                         onClose = onCloseSearch,
                     )
@@ -147,7 +148,7 @@ internal fun SeriesPageTopBar(
                         onDownloadNewChapters = onDownloadNewChapters,
                     )
                 }
-                if (state.refreshing && state.entries.isNotEmpty()) {
+                if (state.refreshing && !state.userRefreshing && state.entries.isNotEmpty()) {
                     LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
                 }
             }

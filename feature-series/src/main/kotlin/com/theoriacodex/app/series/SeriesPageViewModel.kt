@@ -63,6 +63,8 @@ data class SeriesPageState(
     /** What the screens call [source], by [label]; blank without it. */
     val sourceName: String = "",
     val refreshing: Boolean = true,
+    /** True while a manual pull-to-refresh is running; drives the pull indicator without getting stuck on fast failures. */
+    val userRefreshing: Boolean = false,
     val failure: String? = null,
     /**
      * No source on offer is the series' own. The app cannot tell why: its extension may be off, removed or blocked,
@@ -157,10 +159,10 @@ class SeriesPageViewModel(
     }
 
     /** Fetches the series' details and entries from its source and stores them. */
-    fun refresh() {
+    fun refresh(userInitiated: Boolean = false) {
         if (moving) return
         refreshJob?.cancel()
-        refreshJob = viewModelScope.launch { refreshNow() }
+        refreshJob = viewModelScope.launch { refreshNow(userInitiated) }
     }
 
     /**
@@ -170,7 +172,7 @@ class SeriesPageViewModel(
     suspend fun whileMoving(move: suspend () -> Boolean): Boolean {
         moving = true
         refreshJob?.cancelAndJoin()
-        refresh.update { it.copy(refreshing = false) }
+        refresh.update { it.copy(refreshing = false, userRefreshing = false) }
         var moved = false
         try {
             moved = move()
@@ -180,12 +182,12 @@ class SeriesPageViewModel(
         return moved
     }
 
-    private suspend fun refreshNow() {
-        refresh.update { it.copy(refreshing = true, failure = null) }
+    private suspend fun refreshNow(userInitiated: Boolean) {
+        refresh.update { it.copy(refreshing = true, userRefreshing = userInitiated, failure = null) }
         val sources = loadSources()
         val source = sources.firstOrNull { it.key == id.source }
         if (source == null) {
-            refresh.update { it.copy(refreshing = false, source = null, sourceName = "", sourceMissing = true) }
+            refresh.update { it.copy(refreshing = false, userRefreshing = false, source = null, sourceName = "", sourceMissing = true) }
             return
         }
         refresh.update { it.copy(source = source, sourceName = source.label(sources), sourceMissing = false) }
@@ -197,7 +199,7 @@ class SeriesPageViewModel(
         } catch (error: Exception) {
             error
         }
-        refresh.update { it.copy(refreshing = false, failure = failure?.let(::failureLine)) }
+        refresh.update { it.copy(refreshing = false, userRefreshing = false, failure = failure?.let(::failureLine)) }
     }
 
     /** Selects [sort]; selecting the active sort flips ascending vs descending order. */

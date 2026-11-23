@@ -110,8 +110,8 @@ internal fun SeriesPageDestination(shell: TheoriaShell, entry: NavBackStackEntry
             }
         },
         onSearchGenre = { genre ->
-            runCatching { shell.navController.getBackStackEntry(AppRoute.Home).savedStateHandle[PENDING_SERIES_SEARCH] = genre }
             shell.navigation.goToTab(TopLevelDestination.Series)
+            runCatching { shell.navController.getBackStackEntry(AppRoute.Home).savedStateHandle[PENDING_SERIES_SEARCH] = genre }
         },
     )
 }
