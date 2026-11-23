@@ -144,21 +144,29 @@ internal fun ViewerInfoSheet(
     controls: ViewerControls,
     host: ViewerScreenHost,
     config: ViewerScreenConfig,
+    series: ViewerSeries?,
     saveToCodexQuery: Query?,
     contextActions: ViewerContextActions,
     comments: ViewerComments,
 ) {
     val post = selection.post
-    if (config.seriesChapters) {
+    if (series != null) {
         AdaptiveViewerInfo(onDismiss = { controls.setInfoSheetVisible(false) }) {
-            ViewerChapterActions(post) { controls.jumpToMedia(post.id, 0) }
+            ViewerChapterActions(post) {
+                controls.jumpToMedia(post.id, 0)
+                if (series is ViewerSeries.Watching) {
+                    // An episode is one video: starting over plays it from its start, which the sheet would hide.
+                    host.onAction(ViewerAction.RestartPlayback)
+                    controls.setInfoSheetVisible(false)
+                }
+            }
         }
     } else {
         PostInfoSheet(selection, controls, host, config, saveToCodexQuery, contextActions, comments)
     }
 }
 
-/** A post's sheet: its actions, tags and comments. A series chapter has none of these, so it never gets this sheet. */
+/** A post's sheet: its actions, tags and comments. A series entry has none of these, so it never gets this sheet. */
 @Composable
 private fun PostInfoSheet(
     selection: ViewerSelection,
@@ -294,9 +302,9 @@ private fun ViewerInfoActions(
 }
 
 /**
- * All a series chapter's sheet holds: its title, without the address that stands in for a post id, and Start over. A
- * chapter is not a post to collect, share or search from: it has no link, tags or creator, its pages load only through
- * its extension, and Search cannot reach its source.
+ * All a series entry's sheet holds: its title, without the address that stands in for a post id, and Start over. A
+ * chapter or episode is not a post to collect, share or search from: it has no link, tags or creator, its media loads
+ * only through its extension, and Search cannot reach its source.
  */
 @Composable
 private fun ViewerChapterActions(post: Post, onStartOver: () -> Unit) {

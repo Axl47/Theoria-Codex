@@ -3,6 +3,7 @@ package com.theoriacodex.app.viewer
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.MediaStream
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -238,7 +239,7 @@ class ViewerSessionCoordinatorTest {
     }
 
     @Test
-    fun `local url progressive and preview locations all count as attemptable Viewer media`() {
+    fun `local url progressive preview and stream locations all count as attemptable Viewer media`() {
         val blank = ImageRef(url = null, localPath = null, mime = "image/jpeg")
         val local = samplePost(SourceKey.PIXIV, preview = blank, full = blank.copy(localPath = "/cache/p.jpg"))
         val remote = samplePost(SourceKey.PIXIV, preview = blank, full = blank.copy(url = "https://example.test/p.jpg"))
@@ -248,8 +249,10 @@ class ViewerSessionCoordinatorTest {
             full = blank.copy(progressiveUrls = listOf("https://example.test/progressive.jpg")),
         )
         val preview = samplePost(SourceKey.PIXIV)
+        // An episode's media has no address of its own, only its streams'.
+        val episode = samplePost(SourceKey.PIXIV, preview = blank, full = blank.copy(mime = "video/mp4", streams = listOf(MediaStream("https://example.test/e.m3u8", "A"))))
 
-        assertTrue(listOf(local, remote, progressive, preview).all(::hasUsableViewerMedia))
+        assertTrue(listOf(local, remote, progressive, preview, episode).all(::hasUsableViewerMedia))
         assertFalse(hasUsableViewerMedia(samplePost(SourceKey.PIXIV, preview = blank, full = null)))
     }
 

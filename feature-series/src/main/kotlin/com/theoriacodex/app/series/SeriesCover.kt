@@ -2,13 +2,19 @@ package com.theoriacodex.app.series
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Badge
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -32,6 +38,8 @@ import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.ui.theme.TextOverMediaShadow
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesCovers
+import com.theoriacodex.domain.series.SeriesKind
+import com.theoriacodex.domain.series.seriesKind
 
 /** What turns a stored cover into the address to load; the app provides its extension host's. */
 val LocalSeriesCovers = staticCompositionLocalOf { SeriesCovers.Stored }
@@ -75,7 +83,8 @@ internal fun SeriesCover(series: Series, modifier: Modifier = Modifier) {
 
 /**
  * A cover card with the title overlaid at the bottom over a scrim; [unread] above zero shows as a badge at top right,
- * and [followed] marks series already in the user's Following list with a subtle pill at top left.
+ * and [followed] marks series already in the user's Following list with a subtle pill at top left. [marked] puts a
+ * play pill there on an anime's cover, where manga and anime show together.
  */
 @Composable
 internal fun SeriesCard(
@@ -84,7 +93,10 @@ internal fun SeriesCard(
     modifier: Modifier = Modifier,
     unread: Int = 0,
     followed: Boolean = false,
+    marked: Boolean = false,
 ) {
+    val kind = series.id.source.seriesKind
+    val anime = marked && kind == SeriesKind.ANIME
     Box(
         modifier
             .aspectRatio(COVER_ASPECT)
@@ -94,11 +106,9 @@ internal fun SeriesCard(
         SeriesCover(series, Modifier.fillMaxSize())
         if (followed) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.22f)))
         Box(Modifier.fillMaxSize().background(TITLE_SCRIM))
-        if (followed) {
-            FollowingCardBadge(Modifier.align(Alignment.TopStart).padding(6.dp))
-        }
+        if (followed || anime) CardMarks(anime, followed, Modifier.align(Alignment.TopStart))
         if (unread > 0) {
-            Badge(Modifier.align(Alignment.TopEnd).padding(6.dp).semantics { contentDescription = "$unread unread" }) {
+            Badge(Modifier.align(Alignment.TopEnd).padding(6.dp).semantics { contentDescription = kind.words.unfinished(unread) }) {
                 Text("$unread")
             }
         }
@@ -118,14 +128,25 @@ internal fun SeriesCard(
     }
 }
 
+/** The pills at a card's top left: the anime mark, then Following. */
 @Composable
-private fun FollowingCardBadge(modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier,
-        shape = FOLLOWING_BADGE_SHAPE,
-        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.92f),
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-    ) {
+private fun CardMarks(anime: Boolean, followed: Boolean, modifier: Modifier) {
+    Row(modifier.padding(6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (anime) AnimeCardBadge()
+        if (followed) FollowingCardBadge()
+    }
+}
+
+@Composable
+private fun AnimeCardBadge() {
+    CardBadge {
+        Icon(Icons.Default.PlayArrow, contentDescription = SeriesKind.ANIME.label, Modifier.padding(horizontal = 2.dp).size(ANIME_MARK_SIZE))
+    }
+}
+
+@Composable
+private fun FollowingCardBadge() {
+    CardBadge {
         Text(
             text = "Following",
             style = MaterialTheme.typography.labelSmall,
@@ -134,9 +155,20 @@ private fun FollowingCardBadge(modifier: Modifier = Modifier) {
     }
 }
 
+@Composable
+private fun CardBadge(content: @Composable () -> Unit) {
+    Surface(
+        shape = BADGE_SHAPE,
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.92f),
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        content = content,
+    )
+}
+
 private const val COVER_ASPECT = 2f / 3f
+private val ANIME_MARK_SIZE = 16.dp
 private val COVER_SHAPE = RoundedCornerShape(8.dp)
-private val FOLLOWING_BADGE_SHAPE = RoundedCornerShape(6.dp)
+private val BADGE_SHAPE = RoundedCornerShape(6.dp)
 private val TITLE_SCRIM = Brush.verticalGradient(
     0.45f to Color.Transparent,
     0.78f to Color.Black.copy(alpha = 0.55f),

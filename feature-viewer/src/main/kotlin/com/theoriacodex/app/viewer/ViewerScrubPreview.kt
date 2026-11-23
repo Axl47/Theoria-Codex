@@ -29,8 +29,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
-import com.theoriacodex.app.source.requestHeaders
-import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
@@ -43,13 +41,13 @@ import kotlinx.coroutines.withTimeout
  * keeps one while its timeline is composed; each drag's popup follows it through [ViewerVideoScrubPreview].
  */
 @Composable
-internal fun rememberViewerScrubPreviews(player: ExoPlayer?, source: SourceKey): ViewerScrubPreviews? {
+internal fun rememberViewerScrubPreviews(player: ExoPlayer?, playback: VideoPlaybackRequest): ViewerScrubPreviews? {
     val context = LocalContext.current
     // Extract at the size actually shown: fixed small frames were enlarged about threefold on high-density screens.
     val frameSize = viewerScrubFrameSize(LocalViewerMediaAspectRatio.current)
     val (widthPx, heightPx) = with(LocalDensity.current) { frameSize.width.roundToPx().even() to frameSize.height.roundToPx().even() }
-    val previews = remember(player, source, widthPx, heightPx) {
-        player?.let { ViewerScrubPreviews(context, it, source, widthPx, heightPx) }
+    val previews = remember(player, playback, widthPx, heightPx) {
+        player?.let { ViewerScrubPreviews(context, it, playback, widthPx, heightPx) }
     }
     DisposableEffect(previews) { onDispose { previews?.close() } }
     return previews
@@ -89,10 +87,14 @@ internal fun ViewerVideoScrubPreview(previews: ViewerScrubPreviews, positionMs: 
 /** Video encoders and effects expect even dimensions. */
 private fun Int.even(): Int = this and 1.inv()
 
-/** Scrub previews of [player]'s stream from [source], read by a [ScrubPreviewPlayer] at [widthPx] × [heightPx]. */
-fun ViewerScrubPreviews(context: Context, player: ExoPlayer, source: SourceKey, widthPx: Int, heightPx: Int): ViewerScrubPreviews =
+/**
+ * Scrub previews of [player]'s stream, requested as its [playback] is (headers, container type, cache), read by a
+ * [ScrubPreviewPlayer] at [widthPx] × [heightPx]. Frames need neither subtitles nor separate audio.
+ */
+fun ViewerScrubPreviews(context: Context, player: ExoPlayer, playback: VideoPlaybackRequest, widthPx: Int, heightPx: Int): ViewerScrubPreviews =
     ViewerScrubPreviews(player) { location ->
-        ScrubPreviewPlayer(context, context.videoPlaybackInfrastructure().bind(location, source.requestHeaders()), widthPx, heightPx)
+        val frames = playback.copy(location = location, subtitles = emptyList(), audioTracks = emptyList())
+        ScrubPreviewPlayer(context, context.videoPlaybackInfrastructure().bind(frames), widthPx, heightPx)
     }
 
 /**

@@ -7,7 +7,10 @@ import android.os.Looper
 import android.os.SystemClock
 import android.os.Trace
 import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.ScrubbingModeParameters
 import androidx.media3.exoplayer.SeekParameters
@@ -20,12 +23,13 @@ class ViewerVideoPlayerPool(
     private val handler: Handler = Handler(Looper.getMainLooper()),
     clock: () -> Long = SystemClock::elapsedRealtime,
 ) {
-    private val slots = ReusableVideoSlotPool<ExoPlayer, VideoPlaybackIdentity>(
+    private val slots = ReusableVideoSlotPool<ExoPlayer, VideoPlaybackRequest>(
         maxIdleResources = 1,
         idleTimeoutMs = VIEWER_PLAYER_IDLE_TIMEOUT_MS,
         clock = clock,
         createResource = ::createPlayer,
     )
+    private val separateAudio = HashMap<VideoPlayerLease, FirstSeparateAudio>()
     private val cleanup = object : Runnable {
         override fun run() {
             if (infrastructure.feedPreviewPlayerPool.activePlayerCount() == 0) {
@@ -38,21 +42,30 @@ class ViewerVideoPlayerPool(
         }
     }
 
-    fun acquire(location: String, headers: Map<String, String>): VideoPlayerLease {
+    /**
+     * A player prepared with [playback]; give it back with [recycle]. [loop] sets its repeat mode for this lease:
+     * players are reused, so the next lease may hand back the same player object, still in whatever mode the previous
+     * caller left, and only this call is sure to run for every lease. Separate audio starts on the request's first track.
+     */
+    fun acquire(playback: VideoPlaybackRequest, loop: Boolean = true): VideoPlayerLease {
         checkMainThread()
         infrastructure.onViewerStreamAcquired()
-        val request = infrastructure.bind(location, headers)
-        val lease = slots.acquire(request.identity)
+        val request = infrastructure.bind(playback)
+        val lease = slots.acquire(request.request)
         val player = lease.resource
         traceMediaSection(MediaTraceSections.VIEWER_PREPARE) {
             // Returned players have no media binding; every lease starts at the requested item.
             player.setMediaSource(request.mediaSourceFactory.createMediaSource(request.mediaItem), true)
-            player.repeatMode = Player.REPEAT_MODE_ONE
+            player.repeatMode = if (loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
             player.prepare()
+        }
+        val playerLease = VideoPlayerLease(lease)
+        if (request.mediaItem.localConfiguration?.tag is SeparateAudioLabels) {
+            separateAudio[playerLease] = FirstSeparateAudio(player).also(player::addListener)
         }
         publishCounters()
         scheduleCleanup()
-        return VideoPlayerLease(lease)
+        return playerLease
     }
 
     fun recycle(lease: VideoPlayerLease) {
@@ -64,6 +77,8 @@ class ViewerVideoPlayerPool(
             lease.player.pause()
             lease.player.stop()
             lease.player.clearMediaItems()
+            separateAudio.remove(lease)?.let(lease.player::removeListener)
+            lease.player.clearTrackChoices()
         }
         slots.recycle(lease.slotLease, retainBinding = false)
         publishCounters()
@@ -117,8 +132,31 @@ fun ExoPlayer.endScrub(): Boolean = isScrubbingModeEnabled.also { scrubbing -> i
  * Scrubbing mode for instant-seek drags: Media3's defaults, with each seek snapped to the keyframe at or before its
  * target. A keyframe shows after its own bytes and one decode, where an exact seek first downloads and decodes up to
  * the target; the release's exact seek then reads on from the keyframe the drag fetched.
+ *
+ * Subtitles are off during the drag too: a side-loaded file is decoded whole after every seek (about 20 ms for an
+ * episode's 360 KB of ASS on a desktop JVM, several times that on a phone), and is decoded once more when it ends.
  */
 private val VIEWER_SCRUBBING = ScrubbingModeParameters.DEFAULT.buildUpon()
     // Fractions of the duration: any distance before the target, none after it.
     .setFractionalSeekTolerance(1.0, 0.0)
+    .setDisabledTrackTypes(ScrubbingModeParameters.DEFAULT.disabledTrackTypes + C.TRACK_TYPE_TEXT)
     .build()
+
+/**
+ * Plays the first of a request's separate audio tracks once the player has read them, over whichever Media3 would rank
+ * higher (more channels, a higher bitrate, the video's own audio), unless an audio track was already chosen. It stops
+ * listening once those tracks are known.
+ *
+ * An override rather than Media3's preferred audio label: separate audio carries no label of its own, and giving its
+ * formats one means wrapping each merged child's media period and mapping track selections back to its own groups.
+ */
+private class FirstSeparateAudio(private val player: Player) : Player.Listener {
+    override fun onTracksChanged(tracks: Tracks) {
+        val group = tracks.groups.firstOrNull { player.separateAudioIndex(it) == 0 } ?: return
+        player.removeListener(this)
+        val parameters = player.trackSelectionParameters
+        if (parameters.overrides.values.any { it.type == C.TRACK_TYPE_AUDIO }) return
+        val track = (0 until group.length).firstOrNull(group::isTrackSupported) ?: return
+        player.trackSelectionParameters = parameters.buildUpon().setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, track)).build()
+    }
+}

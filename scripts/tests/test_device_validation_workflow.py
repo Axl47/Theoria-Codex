@@ -12,7 +12,7 @@ class DeviceValidationWorkflowTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.workflow = WORKFLOW.read_text(encoding="utf-8")
 
-    def test_connected_lane_executes_and_retains_both_instrumentation_owners(self) -> None:
+    def test_connected_lane_executes_and_retains_every_instrumentation_owner(self) -> None:
         self.assertIn("script: bash scripts/verify_ci_emulator.sh debug", self.workflow)
         wrapper = (REPOSITORY_ROOT / "scripts/verify_ci_emulator.sh").read_text(encoding="utf-8")
         self.assertIn("scripts/verify_debug_device.sh all", wrapper)
@@ -20,15 +20,11 @@ class DeviceValidationWorkflowTest(unittest.TestCase):
         self.assertIn("DEVICE_TEST_SHARD: ${{ matrix.shard }}/2", self.workflow)
         lane = (REPOSITORY_ROOT / "scripts/verify_debug_device.sh").read_text(encoding="utf-8")
         self.assertIn(":app:connectedDebugAndroidTest", lane)
-        self.assertIn(":core-data-android:connectedDebugAndroidTest", lane)
-        self.assertIn(
-            "core-data-android/build/outputs/androidTest-results/connected/",
-            self.workflow,
-        )
-        self.assertIn(
-            "core-data-android/build/reports/androidTests/connected/",
-            self.workflow,
-        )
+        for module in ("core-data-android", "media-kit"):
+            self.assertIn(f":{module}:connectedDebugAndroidTest", lane)
+            self.assertIn(f":{module}:assembleDebugAndroidTest", self.workflow)
+            self.assertIn(f"{module}/build/outputs/androidTest-results/connected/", self.workflow)
+            self.assertIn(f"{module}/build/reports/androidTests/connected/", self.workflow)
 
     def test_only_an_attempt_without_a_verdict_is_retried(self) -> None:
         for owner, step in (("debug", "device-tests"), ("acceptance", "acceptance")):
@@ -60,7 +56,7 @@ class DeviceValidationWorkflowTest(unittest.TestCase):
             (
                 "connected-tests",
                 connected,
-                "run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest :core-data-android:assembleDebugAndroidTest",
+                "run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest :core-data-android:assembleDebugAndroidTest :media-kit:assembleDebugAndroidTest",
                 "uses: reactivecircus/android-emulator-runner@v2",
             ),
             (

@@ -7,7 +7,10 @@ import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
 import androidx.media3.session.MediaSession
 
-/** External controls belong to the current Viewer, never to concurrently autoplaying feed cards. */
+/**
+ * External controls belong to the current Viewer, never to concurrently autoplaying feed cards. They play and pause,
+ * but never set repeat: whether a video loops is the Viewer's playback mode, and an episode never loops.
+ */
 fun createViewerMediaSession(
     context: Context,
     player: Player,
@@ -26,6 +29,10 @@ fun createViewerMediaSession(
             onPlaybackIntentChanged(playWhenReady)
             super.setPlayWhenReady(playWhenReady)
         }
+        override fun getAvailableCommands(): Player.Commands =
+            super.getAvailableCommands().buildUpon().remove(Player.COMMAND_SET_REPEAT_MODE).build()
+        override fun isCommandAvailable(command: Int) = command != Player.COMMAND_SET_REPEAT_MODE && super.isCommandAvailable(command)
+        override fun setRepeatMode(repeatMode: Int) = Unit
     }
     return MediaSession.Builder(context.applicationContext, controlledPlayer)
         // Compose can attach the next page before disposing the previous page's session.

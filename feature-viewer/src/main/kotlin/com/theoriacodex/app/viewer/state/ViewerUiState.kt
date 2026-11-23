@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer.state
 
+import com.theoriacodex.app.viewer.ViewerSeries
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -46,6 +47,8 @@ data class ViewerResolutionState(
     val attempt: Int = 0,
     val message: String? = null,
     val recoverable: Boolean = true,
+    /** When the post's media was last looked up, in wall-clock milliseconds: an episode's links expire with age. */
+    val resolvedAtMs: Long? = null,
 ) {
     init {
         require(attempt >= 0) { "Viewer resolution attempt must not be negative" }
@@ -91,6 +94,10 @@ enum class ViewerPanel(
     ACTIONS_MENU(inChrome = true),
     PLAYBACK_SETTINGS(inChrome = true),
     INFO(inChrome = false),
+    /** An episode's streams, subtitles and audio ([ViewerEpisodeChoice]). */
+    EPISODE_STREAM(inChrome = true),
+    EPISODE_SUBTITLES(inChrome = true),
+    EPISODE_AUDIO(inChrome = true),
 }
 
 data class ViewerControlsState(
@@ -100,6 +107,7 @@ data class ViewerControlsState(
     val playback: ViewerPlaybackControlsState = ViewerPlaybackControlsState(),
     /** A slideshow is moving through the queue; session-only, never saved. */
     val slideshow: Boolean = false,
+    val episode: ViewerEpisodeChoice = ViewerEpisodeChoice(),
 )
 
 data class ViewerOverviewState(
@@ -136,6 +144,14 @@ data class ViewerRelatedBranch(
 
 data class ViewerUiState(
     val session: ViewerSessionIdentity? = null,
+    /**
+     * The session's [com.theoriacodex.app.viewer.ViewerSession.series], set with its pages and kept by the presentation
+     * a closing Viewer retains, so every rule for a series' entries reads one source, even after the session ended.
+     * A series' entries are never collected: the top bar names the entry in place of the source, Like and Save are
+     * hidden, and the info sheet holds only Start over. [ViewerSeries.Reading] adds the chapter rules (the series'
+     * reading mode, the chapter strip, reading on into the next chapter); [ViewerSeries.Watching] the episode rules.
+     */
+    val series: ViewerSeries? = null,
     val pages: List<ViewerPageState> = emptyList(),
     val currentPageIndex: Int = 0,
     val controls: ViewerControlsState = ViewerControlsState(),

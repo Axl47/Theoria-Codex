@@ -16,7 +16,10 @@ import com.theoriacodex.data.repository.continueEntry
 import com.theoriacodex.data.repository.refresh
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.SeriesSource
+import com.theoriacodex.domain.series.UnsupportedEntriesException
+import com.theoriacodex.domain.series.seriesKind
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -34,10 +37,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** How the chapter list on a series page is ordered. */
+/** How the entry list on a series page is ordered. */
 enum class ChapterSort { SOURCE_ORDER, CHAPTER_NUMBER, UPLOAD_DATE }
 
-/** Which chapters on a series page are shown. */
+/** Which entries on a series page are shown. */
 enum class ChapterFilter { ALL, UNREAD, DOWNLOADED }
 
 private data class ChapterViewOptions(
@@ -56,10 +59,12 @@ data class BulkReadUndo(
 /**
  * One series' page: what is stored of it, its entries in the source's order (newest first), the filtered and sorted
  * [visibleEntries] for display, and how the refresh from its source is going. A failed refresh leaves the stored
- * series and entries on screen. So does a series whose source is [sourceMissing], but its chapters cannot be opened
+ * series and entries on screen. So does a series whose source is [sourceMissing], but its entries cannot be opened
  * until the extension is back.
  */
 data class SeriesPageState(
+    /** Read from the series' source id, so it is known before anything loads and while the extension is gone. */
+    val kind: SeriesKind = SeriesKind.MANGA,
     val stored: StoredSeries? = null,
     val entries: List<StoredSeriesEntry> = emptyList(),
     /** [entries] narrowed by [chapterFilter] and [chapterQuery], then ordered by [chapterSort] and [sortDescending]. */
@@ -71,27 +76,27 @@ data class SeriesPageState(
     val refreshing: Boolean = true,
     /** True while a manual pull-to-refresh is running; drives the pull indicator without getting stuck on fast failures. */
     val userRefreshing: Boolean = false,
-    val failure: String? = null,
+    val failure: RefreshFailure? = null,
     /**
      * No source on offer is the series' own. The app cannot tell why: its extension may be off, removed or blocked,
      * or the source's language off.
      */
     val sourceMissing: Boolean = false,
-    /** Each chapter queued for download or on the device, by address; empty in a build that cannot download. */
+    /** Each chapter queued for download or on the device, by address; empty when the page offers no downloads. */
     val downloads: Map<String, ChapterDownload> = emptyMap(),
     val chapterSort: ChapterSort = ChapterSort.SOURCE_ORDER,
     val sortDescending: Boolean = true,
     val chapterFilter: ChapterFilter = ChapterFilter.ALL,
     val chapterQuery: String = "",
 ) {
-    /** Whether the chapter at [entry] can be read now: through its source, or from the device without one. */
+    /** Whether the entry at [entry] can be opened now: through its source, or from the device without one. */
     fun canOpen(entry: String): Boolean = !sourceMissing || downloads[entry] == ChapterDownload.OnDevice
 
     /** The entry Continue opens. */
     val continueWith: StoredSeriesEntry? get() = stored?.let { continueEntry(it, entries) }
 
     /** Whether any entry has been opened, which is what makes the button Continue. */
-    val started: Boolean get() = entries.any { it.read || it.lastPage > 0 }
+    val started: Boolean get() = entries.any { it.read || it.position > 0 }
 
     /** Whether any sort or filter option differs from the default listing. */
     val hasActiveChapterOptions: Boolean
@@ -107,25 +112,37 @@ data class SeriesPageState(
 }
 
 /**
+ * Why the page's last refresh failed, in words for the user. Trying again cannot list a series the source cannot list
+ * ([UnsupportedEntriesException]), so the page offers Retry only when [retryable].
+ */
+data class RefreshFailure(val message: String, val retryable: Boolean) {
+    constructor(error: Exception) : this(failureLine(error), error !is UnsupportedEntriesException)
+}
+
+/**
  * [sourcesChanged] emits once at the start and again whenever [loadSources] may answer differently; each is a refresh.
- * Without [downloads] the page offers none. [chapterPreferences] persists per-series chapter sort and filter choices.
+ * Without [downloads] the page offers none, and an anime offers none either: episodes do not download yet.
+ * [chapterPreferences] persists per-series sort and filter choices, read at the start on [ioDispatcher]. A test passes
+ * its own dispatcher: on the real one the read can finish after the test, and fail the next test that starts.
  */
 class SeriesPageViewModel(
     private val id: SeriesId,
     private val repository: SeriesRepository,
     private val loadSources: suspend () -> List<SeriesSource>,
     sourcesChanged: Flow<*> = flowOf(Unit),
-    private val downloads: SeriesDownloads? = null,
+    downloads: SeriesDownloads? = null,
     downloadStates: Flow<Map<String, ChapterDownload>> = downloads?.states(id) ?: flowOf(emptyMap()),
     private val chapterPreferences: SeriesChapterPreferences = NoOpSeriesChapterPreferences,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
-    private val refresh = MutableStateFlow(SeriesPageState())
+    private val kind = id.source.seriesKind
+    private val downloads = downloads.takeIf { kind == SeriesKind.MANGA }
+    private val refresh = MutableStateFlow(SeriesPageState(kind = kind))
     private val chapterOptions = MutableStateFlow(ChapterViewOptions())
     private var optionsTouched = false
 
     /** Whether this page offers downloads. */
-    val canDownload: Boolean = downloads != null
+    val canDownload: Boolean = this.downloads != null
 
     /** Synchronous search bar state kept alongside [chapterOptions]; survives rotation and resets on process death. */
     var chapterSearchOpen: Boolean by mutableStateOf(false)
@@ -137,7 +154,7 @@ class SeriesPageViewModel(
         repository.observeSeries(id),
         repository.observeEntries(id),
         refresh,
-        downloadStates,
+        if (kind == SeriesKind.MANGA) downloadStates else flowOf(emptyMap()),
         chapterOptions,
     ) { stored, entries, refresh, downloads, options ->
         val ordered = entries.sortedBy { it.sourceOrder }
@@ -152,7 +169,7 @@ class SeriesPageViewModel(
             chapterFilter = options.filter,
             chapterQuery = options.query,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SeriesPageState())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), refresh.value)
 
     /** The refresh running, which a newer one replaces. */
     private var refreshJob: Job? = null
@@ -164,7 +181,7 @@ class SeriesPageViewModel(
         viewModelScope.launch {
             val saved = withContext(ioDispatcher) { chapterPreferences.read(id) }
             if (!optionsTouched && !saved.isDefault) {
-                val filter = if (downloads == null && saved.filter == ChapterFilter.DOWNLOADED) ChapterFilter.ALL else saved.filter
+                val filter = if (!canDownload && saved.filter == ChapterFilter.DOWNLOADED) ChapterFilter.ALL else saved.filter
                 chapterOptions.update { it.copy(sort = saved.sort, descending = saved.descending, filter = filter) }
             }
         }
@@ -212,7 +229,7 @@ class SeriesPageViewModel(
         } catch (error: Exception) {
             error
         }
-        refresh.update { it.copy(refreshing = false, userRefreshing = false, failure = failure?.let(::failureLine)) }
+        refresh.update { it.copy(refreshing = false, userRefreshing = false, failure = failure?.let(::RefreshFailure)) }
     }
 
     /** Selects [sort]; selecting the active sort flips ascending vs descending order. */
@@ -255,12 +272,12 @@ class SeriesPageViewModel(
         chapterOptions.update { it.copy(query = query) }
     }
 
-    /** Marks a single chapter read or unread. */
+    /** Marks a single entry finished or not. */
     fun setEntryRead(entryAddress: String, read: Boolean) {
         viewModelScope.launch { repository.setEntriesRead(id, listOf(entryAddress), read) }
     }
 
-    /** Marks all unread chapters earlier in reading order than [entryAddress] as read and delivers an undo snapshot. */
+    /** Marks every unfinished entry earlier in reading order than [entryAddress] finished and delivers an undo snapshot. */
     fun markPreviousRead(entryAddress: String, onUndo: (BulkReadUndo) -> Unit) {
         val current = state.value
         val target = current.entries.firstOrNull { it.entry.address == entryAddress } ?: return
@@ -268,16 +285,16 @@ class SeriesPageViewModel(
         if (previousAddresses.isEmpty()) return
         viewModelScope.launch {
             val restore = repository.setEntriesRead(id, previousAddresses, read = true)
-            if (!restore.isEmpty) onUndo(BulkReadUndo("Marked ${chapterCount(restore.entries.size)} as read", restore))
+            if (!restore.isEmpty) onUndo(BulkReadUndo("Marked ${kind.words.count(restore.entries.size)} as ${kind.words.done}", restore))
         }
     }
 
-    /** Marks all chapters read or unread and delivers a transaction-scoped undo snapshot when anything changed. */
+    /** Marks every entry finished or not and delivers a transaction-scoped undo snapshot when anything changed. */
     fun markAllRead(read: Boolean, onUndo: (BulkReadUndo) -> Unit) {
         viewModelScope.launch {
             val restore = repository.setAllRead(id, read)
             if (!restore.isEmpty) {
-                val label = if (read) "Marked all as read" else "Marked all as unread"
+                val label = "Marked all as ${if (read) kind.words.done else kind.words.notDone}"
                 onUndo(BulkReadUndo(label, restore))
             }
         }

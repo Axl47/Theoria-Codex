@@ -4,7 +4,7 @@ import android.content.Context
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.domain.series.ExtensionChoiceStore
 import com.theoriacodex.domain.series.ExtensionChoices
-import com.theoriacodex.mihonhost.MihonHost
+import com.theoriacodex.extensionhost.ExtensionHost
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -72,5 +72,5 @@ internal class DeviceExtensionChoices(private val file: File) : ExtensionChoiceS
  */
 internal suspend fun forgetLegacyExtensionData(context: Context, settings: SettingsRepository) {
     if (settings.observeSettings().first().extensions != ExtensionChoices()) settings.updateSettings { it.copy(extensions = ExtensionChoices()) }
-    MihonHost.deleteLegacyPreferences(context)
+    ExtensionHost.deleteLegacyPreferences(context)
 }

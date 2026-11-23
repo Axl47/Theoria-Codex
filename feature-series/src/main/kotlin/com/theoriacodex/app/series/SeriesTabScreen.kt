@@ -29,6 +29,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -61,15 +64,18 @@ import com.theoriacodex.app.ui.components.EmptyState
 import com.theoriacodex.app.ui.components.FilterChoiceChip
 import com.theoriacodex.app.ui.components.LoadingState
 import com.theoriacodex.app.ui.components.rememberQuickReturn
-import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SeriesKind
+import java.util.Locale
 
 /**
  * The Series tab: a collapsing search across every source, the followed series, and one source's popular or latest
  * series (or filtered search) to browse. A search across sources replaces the shelf and browse grid with one section
  * per source; tapping a source's header opens its dedicated search. Pulling down checks followed series for updates.
+ * With series of both kinds, an All / Manga / Anime filter at the top narrows the shelf, the sources to browse and the
+ * search results to one kind.
  */
 @Composable
 fun SeriesTabScreen(
@@ -80,8 +86,8 @@ fun SeriesTabScreen(
     oldSearchBar: Boolean = false,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val followed by viewModel.followed.collectAsStateWithLifecycle()
-    val followedIds = remember(followed) { followed.mapTo(HashSet()) { it.series.id } }
+    val content by viewModel.content.collectAsStateWithLifecycle()
+    val followedIds = remember(content.followed) { content.followed.mapTo(HashSet()) { it.series.id } }
     val open: (Series) -> Unit = { viewModel.open(it, onOpenSeries) }
     // Hoisted above the dedicated-source switch so returning from a source's search keeps the query and scroll positions.
     var query by rememberSaveable { mutableStateOf(state.searchQuery) }
@@ -108,7 +114,7 @@ fun SeriesTabScreen(
     } else {
         SeriesTabHomeContent(
             state = state,
-            followed = followed,
+            content = content,
             followedIds = followedIds,
             query = query,
             onQueryChange = { query = it },
@@ -132,7 +138,7 @@ fun SeriesTabScreen(
 @Composable
 private fun SeriesTabHomeContent(
     state: SeriesTabState,
-    followed: List<FollowedSeries>,
+    content: SeriesTabContent,
     followedIds: Set<SeriesId>,
     query: String,
     onQueryChange: (String) -> Unit,
@@ -193,14 +199,14 @@ private fun SeriesTabHomeContent(
             )
         },
     ) {
-        SeriesTabBody(state, followed, followedIds, grid, searchList, browseControlsVisible, { browseControlsVisible = it }, viewModel, onOpenSeries, onOpenExtensions)
+        SeriesTabBody(state, content, followedIds, grid, searchList, browseControlsVisible, { browseControlsVisible = it }, viewModel, onOpenSeries, onOpenExtensions)
     }
 }
 
 @Composable
 private fun SeriesTabBody(
     state: SeriesTabState,
-    followed: List<FollowedSeries>,
+    content: SeriesTabContent,
     followedIds: Set<SeriesId>,
     grid: LazyGridState,
     searchList: LazyListState,
@@ -210,11 +216,13 @@ private fun SeriesTabBody(
     onOpenSeries: (Series) -> Unit,
     onOpenExtensions: () -> Unit,
 ) {
-    val search = state.search
+    val search = content.search
     if (search != null) {
         GlobalSearchBody(
             sourcesLoaded = state.sources != null,
             results = search,
+            content = content,
+            onChooseKind = viewModel::chooseKind,
             followedIds = followedIds,
             listState = searchList,
             onOpenSeries = onOpenSeries,
@@ -223,14 +231,14 @@ private fun SeriesTabBody(
             onMore = viewModel::searchMore,
         )
     } else {
-        BrowseTabBody(state, followed, followedIds, grid, controlsVisible, rememberQuickReturn(onRevealControls), viewModel, onOpenSeries, onOpenExtensions)
+        BrowseTabBody(state, content, followedIds, grid, controlsVisible, rememberQuickReturn(onRevealControls), viewModel, onOpenSeries, onOpenExtensions)
     }
 }
 
 @Composable
 private fun BrowseTabBody(
     state: SeriesTabState,
-    followed: List<FollowedSeries>,
+    content: SeriesTabContent,
     followedIds: Set<SeriesId>,
     grid: LazyGridState,
     controlsVisible: Boolean,
@@ -239,7 +247,7 @@ private fun BrowseTabBody(
     onOpenSeries: (Series) -> Unit,
     onOpenExtensions: () -> Unit,
 ) {
-    val browsed = state.browse
+    val browsed = content.browse
     val supportsLatest = state.sources?.firstOrNull { it.key == browsed?.key }?.supportsLatest == true
     PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = viewModel::refresh, modifier = Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().nestedScroll(quickReturn)) {
@@ -256,8 +264,9 @@ private fun BrowseTabBody(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                followingShelf(followed, onOpenSeries)
-                browse(state, followedIds, viewModel, onOpenSeries, onOpenExtensions)
+                if (content.offersFilter) fullWidth("kinds") { KindFilter(content.filter, viewModel::chooseKind) }
+                followingShelf(content, onOpenSeries)
+                browse(state, content, followedIds, viewModel, onOpenSeries, onOpenExtensions)
             }
             if (browsed != null) {
                 BrowseControlsBar(
@@ -277,6 +286,8 @@ private fun BrowseTabBody(
 private fun GlobalSearchBody(
     sourcesLoaded: Boolean,
     results: List<SeriesSourceListing>,
+    content: SeriesTabContent,
+    onChooseKind: (SeriesKind?) -> Unit,
     followedIds: Set<SeriesId>,
     listState: LazyListState,
     onOpenSeries: (Series) -> Unit,
@@ -290,15 +301,26 @@ private fun GlobalSearchBody(
         contentPadding = PaddingValues(top = 4.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        if (content.offersFilter) item(key = "kinds") { KindFilter(content.filter, onChooseKind, Modifier.padding(horizontal = 16.dp)) }
         if (!sourcesLoaded) {
             item(key = "search-waiting") { LoadingState() }
         } else {
-            searchResults(results, followedIds, onOpenSeries, onOpenSource, onRetry, onMore)
+            searchResults(results, content, followedIds, onOpenSeries, onOpenSource, onRetry, onMore)
         }
     }
 }
 
-private fun LazyGridScope.followingShelf(followed: List<FollowedSeries>, open: (Series) -> Unit) {
+/** All, Manga or Anime: what the shelf, the sources to browse and the search results are narrowed to. */
+@Composable
+private fun KindFilter(chosen: SeriesKind?, onChoose: (SeriesKind?) -> Unit, modifier: Modifier = Modifier) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilterChoiceChip("All", selected = chosen == null) { onChoose(null) }
+        SeriesKind.entries.forEach { kind -> FilterChoiceChip(kind.label, selected = chosen == kind) { onChoose(kind) } }
+    }
+}
+
+private fun LazyGridScope.followingShelf(content: SeriesTabContent, open: (Series) -> Unit) {
+    val followed = content.followed
     if (followed.isEmpty()) return
     fullWidth("following-title") { SectionTitle("Following") }
     fullWidth("following") {
@@ -308,22 +330,26 @@ private fun LazyGridScope.followingShelf(followed: List<FollowedSeries>, open: (
             modifier = Modifier.bleedHorizontal(16.dp),
             contentPadding = PaddingValues(horizontal = 16.dp),
         ) { item ->
-            SeriesCard(item.series, { open(item.series) }, Modifier.width(CARD_WIDTH), item.unreadCount)
+            SeriesCard(item.series, { open(item.series) }, Modifier.width(CARD_WIDTH), item.unreadCount, marked = content.marked)
         }
     }
 }
 
+/** [state]'s sources label the chips, so two sources sharing a name stay told apart under any filter. */
 private fun LazyGridScope.browse(
     state: SeriesTabState,
+    content: SeriesTabContent,
     followedIds: Set<SeriesId>,
     viewModel: SeriesTabViewModel,
     open: (Series) -> Unit,
     onOpenExtensions: () -> Unit,
 ) {
-    val sources = state.sources
+    val sources = content.sources
     when {
         sources == null -> fullWidth("sources-loading") { LoadingState() }
-        sources.isEmpty() -> fullWidth("sources-empty") { EmptyState(NO_EXTENSIONS_ON, actionLabel = EXTENSIONS_TITLE, onAction = onOpenExtensions) }
+        sources.isEmpty() -> fullWidth("sources-empty") {
+            EmptyState(noExtensionsOn(content.filter), actionLabel = EXTENSIONS_TITLE, onAction = onOpenExtensions)
+        }
         else -> {
             fullWidth("browse-title") { SectionTitle("Browse") }
             fullWidth("browse-sources") {
@@ -333,18 +359,34 @@ private fun LazyGridScope.browse(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(sources, key = { it.key.id }) { source ->
-                        FilterChoiceChip(source.label(sources), selected = source.key == state.browse?.key) { viewModel.browse(source.key) }
+                        SourceChip(source.label(state.sources.orEmpty()), selected = source.key == content.browse?.key, marked = content.marked && source.kind == SeriesKind.ANIME) {
+                            viewModel.browse(source.key)
+                        }
                     }
                 }
             }
-            state.browse?.let { browse ->
-                browseListing(browse, state.browseRun, followedIds, viewModel::retryBrowse, viewModel::browseMore, open)
+            content.browse?.let { browse ->
+                browseListing(browse, state.browseRun, followedIds, viewModel::retryBrowse, viewModel::browseMore, open, marked = content.marked)
             }
         }
     }
 }
 
-/** [run] keys the next page's request, so a listing that replaced another with the same next page still asks for it. */
+/** A source to browse; an anime source is [marked] with a play glyph. */
+@Composable
+private fun SourceChip(label: String, selected: Boolean, marked: Boolean, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label) },
+        leadingIcon = if (marked) { { Icon(Icons.Default.PlayArrow, contentDescription = SeriesKind.ANIME.label, Modifier.size(FilterChipDefaults.IconSize)) } } else null,
+    )
+}
+
+/**
+ * [run] keys the next page's request, so a listing that replaced another with the same next page still asks for it.
+ * [marked] marks anime covers apart.
+ */
 internal fun LazyGridScope.browseListing(
     browse: SeriesSourceListing,
     run: Int,
@@ -352,6 +394,7 @@ internal fun LazyGridScope.browseListing(
     onRetry: () -> Unit,
     onMore: () -> Unit,
     open: (Series) -> Unit,
+    marked: Boolean = false,
 ) {
     when (val listing = browse.listing) {
         SeriesListing.Loading -> fullWidth("browse-loading") { LoadingState() }
@@ -361,7 +404,7 @@ internal fun LazyGridScope.browseListing(
         is SeriesListing.Loaded -> {
             if (listing.series.isEmpty()) fullWidth("browse-empty") { EmptyState("No series") }
             items(listing.series, key = { it.id.toString() }) { series ->
-                SeriesCard(series, { open(series) }, followed = series.id in followedIds)
+                SeriesCard(series, { open(series) }, followed = series.id in followedIds, marked = marked)
             }
             when {
                 listing.moreFailed -> fullWidth("browse-more-failed") {
@@ -376,15 +419,17 @@ internal fun LazyGridScope.browseListing(
     }
 }
 
+/** [results] are [content]'s search results: those of the sources of the kind the tab is narrowed to, when it is. */
 private fun LazyListScope.searchResults(
     results: List<SeriesSourceListing>,
+    content: SeriesTabContent,
     followedIds: Set<SeriesId>,
     open: (Series) -> Unit,
     openSource: (SourceKey) -> Unit,
     retry: (SourceKey) -> Unit,
     more: (SourceKey) -> Unit,
 ) {
-    if (results.isEmpty()) item(key = "search-no-sources") { EmptyState(NO_EXTENSIONS_ON) }
+    if (results.isEmpty()) item(key = "search-no-sources") { EmptyState(noExtensionsOn(content.filter)) }
     results.forEach { result ->
         val listing = result.listing
         item(key = "search-title-${result.key.id}") {
@@ -420,7 +465,7 @@ private fun LazyListScope.searchResults(
                                 contentPadding = PaddingValues(horizontal = 16.dp),
                                 after = moreResults(listing, result) { more(result.key) },
                             ) { series ->
-                                SeriesCard(series, { open(series) }, Modifier.width(CARD_WIDTH), followed = series.id in followedIds)
+                                SeriesCard(series, { open(series) }, Modifier.width(CARD_WIDTH), followed = series.id in followedIds, marked = content.marked)
                             }
                         }
                 }
@@ -500,12 +545,12 @@ private fun SectionTitle(title: String) {
     Text(title, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleMedium)
 }
 
-/** One line for a source that failed, where a full-height failure would push the other sources away. */
+/** One line for a source that failed, where a full-height failure would push the other sources away; Retry when [onRetry] is given. */
 @Composable
-internal fun FailureRow(onRetry: () -> Unit, modifier: Modifier = Modifier, message: String = LOAD_FAILED, actionLabel: String = "Retry") {
+internal fun FailureRow(onRetry: (() -> Unit)?, modifier: Modifier = Modifier, message: String = LOAD_FAILED, actionLabel: String = "Retry") {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Text(message, Modifier.weight(1f, fill = false), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = onRetry) { Text(actionLabel) }
+        if (onRetry != null) TextButton(onClick = onRetry) { Text(actionLabel) }
     }
 }
 
@@ -525,4 +570,6 @@ private fun LazyGridScope.fullWidth(key: String, content: @Composable () -> Unit
 internal val CARD_WIDTH = 104.dp
 internal val BROWSE_GRID_BOTTOM_PADDING = 80.dp
 private val FAILURE_WIDTH = 280.dp
-private const val NO_EXTENSIONS_ON = "No extensions on"
+/** "No extensions on", or under the kind filter "No anime extensions on". */
+private fun noExtensionsOn(kind: SeriesKind?): String =
+    kind?.let { "No ${it.label.lowercase(Locale.getDefault())} extensions on" } ?: "No extensions on"

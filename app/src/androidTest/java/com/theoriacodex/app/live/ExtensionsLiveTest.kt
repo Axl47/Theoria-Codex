@@ -12,7 +12,7 @@ import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.domain.series.ExtensionLanguage
 import com.theoriacodex.domain.series.ExtensionSetting
 import com.theoriacodex.domain.series.InstalledExtension
-import com.theoriacodex.mihonhost.MihonHost
+import com.theoriacodex.extensionhost.ExtensionHost
 import java.util.Locale
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -25,7 +25,7 @@ import org.junit.runner.RunWith
 
 /**
  * Proves the trust step and the Extensions page in the real debug app, with a real extension installed as a package
- * the way Mihon installs one (`adb install`, see `mihon-host/README.md`). Runs only with `-e extensionSourceLive true`.
+ * the way Mihon installs one (`adb install`, see `extension-host/README.md`). Runs only with `-e extensionSourceLive true`.
  *
  * The tests are one story across app restarts, so run each as its own `am instrument` call, which starts the app's
  * process anew: [anInstalledExtensionRunsOnlyOnceTurnedOn], then [aChangedSettingSurvivesARestart], then
@@ -108,7 +108,7 @@ class ExtensionsLiveTest {
         assertEquals("The changed setting kept its value", expected, stored.on)
         // The value is in the source's own preferences file, which the host names apart from the app's files.
         val sourceId = settingsOf(on).single().sourceId.substringAfterLast('_')
-        val file = MihonHost.preferencesFile(live.context, "source_$sourceId")
+        val file = ExtensionHost.preferencesFile(live.context, "source_$sourceId")
         assertTrue("The source's preferences file holds the value", file.readText().contains("\"$key\":{\"b\":$expected}"))
         live.report("restart", "\"${stored.title}\" is still $expected, kept in ${file.name} outside Android's backup")
 
@@ -195,7 +195,7 @@ class ExtensionsLiveTest {
 
     /** The host's "Loaded <extension>" log lines since this process started: one per extension whose code ran. */
     private fun loadedLines(): List<String> =
-        ProcessBuilder("logcat", "-d", "--pid=${Process.myPid()}", "-s", "MihonHost:I").start().inputStream.bufferedReader().readLines()
+        ProcessBuilder("logcat", "-d", "--pid=${Process.myPid()}", "-s", "ExtensionHost:I").start().inputStream.bufferedReader().readLines()
             .filter { ": Loaded " in it }
             .map { it.substringAfter(": Loaded ").substringBefore(", signer") }
 

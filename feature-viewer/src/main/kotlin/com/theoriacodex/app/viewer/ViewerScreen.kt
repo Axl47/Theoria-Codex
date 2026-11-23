@@ -23,6 +23,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.withFrameNanos
@@ -38,6 +39,7 @@ import com.theoriacodex.app.comments.ViewerComments
 import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.app.viewer.state.ViewerAction
+import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.Post
@@ -70,12 +72,13 @@ fun ViewerScreen(
     val activity = LocalContext.current.viewerActivity()
     val quality = rememberViewerVideoQuality(config.videoQuality, host.onVideoQualitySelected)
     val qualityHeight = remember(uiState.currentMedia?.key) { mutableStateOf<Int?>(null) }
-    val pendingPostId = remember(uiState.session) { mutableStateOf<PostId?>(null) }
+    val session = rememberPresentedSession(uiState.session)
+    val pendingPostId = remember(session) { mutableStateOf<PostId?>(null) }
     val navigation = remember(uiState.pages, uiState.currentPageIndex, uiState.related.navigation, uiState.related.extraPostIds, pendingPostId.value) {
         viewerPostNavigation(uiState, pendingPostId.value)
     }
     val posts = remember(navigation.pages) { navigation.pages.map { it.post } }
-    val videoPositions = rememberViewerVideoPositions(uiState.session)
+    val videoPositions = rememberViewerVideoPositions(session, uiState.series)
     if (posts.isEmpty()) {
         ViewerNoPosts()
         return
@@ -85,17 +88,30 @@ fun ViewerScreen(
         LocalViewerAutoRotateVideos provides config.autoRotateVideos,
     ) {
         ViewerLoadedScreen(
-            uiState, navigation, posts, returnProgress, returning, opening, dismissDrag, activity, quality, qualityHeight, pendingPostId,
+            uiState, session, navigation, posts, returnProgress, returning, opening, dismissDrag, activity, quality, qualityHeight, pendingPostId,
             videoPositions, host, config, ViewerSaveContext(saveToCodexQuery, saveFromForYou), canLoadMoreFromSource, loadingMoreFromSource, contextActions,
             relatedShelf, comments, trail,
         )
     }
 }
 
+/**
+ * The session the screen presents: [current], or while a closing Viewer retains its presentation with none, the last
+ * one. The pages, players and positions keyed on it stay as they were for the return transition; a player rebuilt
+ * there would start over at 0 and report that as the episode's position.
+ */
+@Composable
+private fun rememberPresentedSession(current: ViewerSessionIdentity?): ViewerSessionIdentity? {
+    val presented = remember { object { var last = current } }
+    if (current != null) presented.last = current
+    return presented.last
+}
+
 /** The screen once there is at least one post to show. */
 @Composable
 private fun ViewerLoadedScreen(
     uiState: ViewerUiState,
+    session: ViewerSessionIdentity?,
     navigation: ViewerPostNavigation,
     posts: List<Post>,
     returnProgress: State<Float>,
@@ -124,12 +140,12 @@ private fun ViewerLoadedScreen(
     val scope = rememberCoroutineScope()
     val screen = remember { ViewerScreenState() }
     DisposableEffect(screen) { onDispose { screen.trailForks.close() } }
-    val postPagerState = key(uiState.session, navigation.branchAnchor) {
+    val postPagerState = key(session, navigation.branchAnchor) {
         rememberPagerState(initialPage = navigation.currentIndex, pageCount = { posts.size })
     }
     LaunchedEffect(posts, navigation.currentIndex, videoPositions) { videoPositions.retainAround(posts.map { it.id }, navigation.currentIndex) }
     // Starting a slideshow also returns zoomed media to fit, so the next touch reaches the gesture that stops it.
-    val viewerTransform = remember(uiState.session?.value, uiState.currentMedia?.key, uiState.controls.slideshow) { mutableStateOf(ViewerTransformState()) }
+    val viewerTransform = remember(session, uiState.currentMedia?.key, uiState.controls.slideshow) { mutableStateOf(ViewerTransformState()) }
     LaunchedEffect(uiState.controls.slideshow) { if (uiState.controls.slideshow) screen.verticalGalleries.values.forEach { it.resetZoom() } }
     val selection = rememberViewerSelection(uiState, navigation.pages[navigation.currentIndex], config.pixivUgoiraClient != null)
     WarmViewerPageThumbnails(selection.post.id, selection.overviewItems, selection.mediaIndex)
@@ -150,11 +166,14 @@ private fun ViewerLoadedScreen(
         frame, screen, controls, swipe, dismissDrag, postPagerState, pendingPostId, canLoadMoreFromSource,
         loadingMoreFromSource, loadMoreFromStrip, onAction, host.onVisiblePostChanged, config,
     )
+    SideEffect { screen.activeTracks.choice = uiState.controls.episode }
     val viewerAccent = rememberViewerAccent(selection.post, enabled = !opening && !returning)
     CompositionLocalProvider(
         LocalViewerTimelineInset provides if (chromeVisible) viewerDockInset() else 0.dp,
         LocalViewerAccent provides viewerAccent,
         LocalViewerHoldScrub provides holdScrub,
+        // Only episodes offer their tracks; no other video's player is followed for them.
+        LocalViewerActiveTracks provides screen.activeTracks.takeIf { uiState.series is ViewerSeries.Watching },
     ) {
         ViewerBackdrop(returnProgress, dismissDrag) {
             if (frame.mediaOverviewVisible && selection.overviewAvailable) {
@@ -172,7 +191,7 @@ private fun ViewerLoadedScreen(
         }
     }
     if (uiState.controls.panel == ViewerPanel.INFO && !inPictureInPicture) {
-        ViewerInfoSheet(selection, controls, host, config, saveContext.query, contextActions, comments)
+        ViewerInfoSheet(selection, controls, host, config, uiState.series, saveContext.query, contextActions, comments)
     }
 }
 
@@ -232,7 +251,7 @@ private fun ViewerOverview(
     val selection = frame.selection
     val page = frame.navigation.pages[frame.navigation.currentIndex]
     val readingModes = ViewerReadingModeChoice(
-        selected = config.readingModeOf(page),
+        selected = config.readingModeOf(page, frame.uiState.series),
         available = GalleryReadingMode.entries.filter { it != GalleryReadingMode.VERTICAL || page.verticalReadingAvailable() },
         onSelect = { mode ->
             host.onGalleryReadingModeSelected(selection.post.id, mode)

@@ -69,7 +69,7 @@ class ViewerUgoiraReadyTest {
                     isActive = active.value, isPlaying = false, showControls = true, loopPlayback = true,
                     playbackRate = 1f, restartRequest = 0L, loadGeneration = 0L, isPreloading = !active.value,
                 ),
-                events, ViewerVideoOptions(VideoQuality.AUTO, null, null, false), ViewerVideoPositions(),
+                events, ViewerVideoOptions(VideoQuality.AUTO, null, null, null, false), ViewerVideoPositions(),
                 ViewerImageSession(), client, Modifier, onRequestMediaRecovery = null,
             )
         }

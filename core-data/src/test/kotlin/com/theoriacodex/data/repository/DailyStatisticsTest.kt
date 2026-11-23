@@ -31,6 +31,9 @@ class DailyStatisticsTest {
         val dst = splitDailyUsage(dstStart, zone, UsageDurationDelta(totalMs = 24 * 3_600_000L,
             watchingMs = 24 * 3_600_000L))
         assertEquals(listOf(23 * 3_600_000L, 3_600_000L), dst.map { it.usage.watchingMs })
+        val series = splitDailyUsage(start, zone, UsageDurationDelta(totalMs = 3_000L, animeMs = 3_000L))
+        assertEquals(listOf(1_000L, 2_000L), series.map { it.usage.animeMs })
+        assertTrue(series.all { it.usage.readingMs == 0L && it.usage.watchingMs == 0L })
     }
 
     @Test fun `history is bounded by calendar age and count without changing lifetime totals`() = runTest {

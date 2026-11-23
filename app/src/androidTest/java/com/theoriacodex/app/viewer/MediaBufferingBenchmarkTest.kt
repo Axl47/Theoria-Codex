@@ -101,7 +101,7 @@ class MediaBufferingBenchmarkTest {
         val atOpen = serverStats()
         val viewer = onMain {
             feed.forEach { (probe, _) -> probe.player.playWhenReady = false }
-            val lease = infrastructure.viewerVideoPlayerPool.acquire(clips.first(), headers)
+            val lease = infrastructure.viewerVideoPlayerPool.acquire(VideoPlaybackRequest(clips.first(), headers))
             PlayerProbe(lease.player, surfaces.last().surface).also { probe ->
                 probe.attach()
                 lease.player.playWhenReady = true
@@ -180,7 +180,7 @@ class MediaBufferingBenchmarkTest {
         resetServer()
         val surface = BenchSurface()
         val (probe, lease) = onMain {
-            val lease = infrastructure.viewerVideoPlayerPool.acquire(video, headers)
+            val lease = infrastructure.viewerVideoPlayerPool.acquire(VideoPlaybackRequest(video, headers))
             PlayerProbe(lease.player, surface.surface).also { probe ->
                 probe.attach()
                 lease.player.playWhenReady = true
@@ -200,7 +200,7 @@ class MediaBufferingBenchmarkTest {
         val frameSize = viewerScrubFrameSize(16f / 9f)
         val previews = onMain {
             ViewerScrubPreviews(
-                context, probe.player, SourceKey.GELBOORU,
+                context, probe.player, VideoPlaybackRequest(video, headers),
                 (frameSize.width.value * density).roundToInt() and 1.inv(),
                 (frameSize.height.value * density).roundToInt() and 1.inv(),
             )
@@ -551,7 +551,7 @@ class MediaBufferingBenchmarkTest {
         cards.forEach { (probe, _) -> probe.awaitPlaying() }
         val allPlaying = SystemClock.elapsedRealtime() - returnedAt
         val reopened = onMain {
-            val lease = infrastructure.viewerVideoPlayerPool.acquire(clips[1], headers)
+            val lease = infrastructure.viewerVideoPlayerPool.acquire(VideoPlaybackRequest(clips[1], headers))
             infrastructure.viewerVideoPlayerPool.recycle(lease)
             cards.forEach { (probe, _) -> check(probe.player.playbackState == Player.STATE_IDLE) { "Feed player kept loading" } }
             SystemClock.elapsedRealtime()
@@ -582,7 +582,7 @@ class MediaBufferingBenchmarkTest {
         play: Boolean,
         requestHeaders: Map<String, String> = headers,
     ): Pair<PlayerProbe, VideoPlayerLease> {
-        val lease = context.videoPlaybackInfrastructure().viewerVideoPlayerPool.acquire(location, requestHeaders)
+        val lease = context.videoPlaybackInfrastructure().viewerVideoPlayerPool.acquire(VideoPlaybackRequest(location, requestHeaders))
         return PlayerProbe(lease.player, surface.surface).also { probe ->
             probe.attach()
             lease.player.playWhenReady = play

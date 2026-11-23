@@ -39,6 +39,8 @@ data class InstalledExtension(
     val problem: String? = null,
     /** Every language it has a source for; empty until it is on, because finding them runs its code. */
     val languages: List<ExtensionLanguage> = emptyList(),
+    /** What its sources offer, known from its package before any of its code runs. */
+    val kind: SeriesKind = SeriesKind.MANGA,
 )
 
 data class ExtensionLanguage(val code: String, val on: Boolean)

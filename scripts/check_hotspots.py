@@ -134,7 +134,7 @@ def source_files(root: pathlib.Path, modules: list[str]) -> tuple[dict[str, int]
             parts = path.relative_to(module_root).parts
             if len(parts) < 3 or parts[0] != "src":
                 continue
-            owner = tests if parts[1] in {"test", "androidTest", "testFixtures"} else production
+            owner = tests if parts[1] in {"test", "androidTest", "sharedTest", "testFixtures"} else production
             owner[relative] = physical_line_count(path)
     return production, tests
 

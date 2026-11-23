@@ -31,6 +31,14 @@ extensions.configure<LibraryExtension> {
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
+
+    // The stream fixture and its loopback server serve both the host tests and the device playback test.
+    sourceSets {
+        listOf("test", "androidTest").forEach { name ->
+            getByName(name).kotlin.directories.add("src/sharedTest/kotlin")
+            getByName(name).assets.directories.add("src/sharedTest/assets")
+        }
+    }
 }
 
 dependencies {
@@ -57,6 +65,8 @@ dependencies {
         exclude(group = "androidx.appcompat", module = "appcompat")
     }
     implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.exoplayer.hls)
+    implementation(libs.androidx.media3.exoplayer.dash)
     implementation(libs.androidx.media3.datasource.okhttp)
     implementation(libs.androidx.media3.ui)
     implementation(libs.kotlinx.coroutines.core)
@@ -71,6 +81,8 @@ dependencies {
     testImplementation(project(":core-stubs"))
     testImplementation(testFixtures(project(":core-data")))
     testImplementation(testFixtures(project(":ui-kit")))
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.test.runner)
 }
 
 // PixivUgoiraArchiveTest reads this :feed-kit source file, which :media-kit does not depend on, so it has

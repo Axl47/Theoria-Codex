@@ -70,6 +70,8 @@ data class DailyStatistic(
     val browsingMs: Long = 0L,
     val watchingMs: Long = 0L,
     val codexMs: Long = 0L,
+    val readingMs: Long = 0L,
+    val animeMs: Long = 0L,
     val watchedPostCount: Long = 0L,
     val searchCount: Long = 0L,
 )
@@ -90,6 +92,10 @@ data class StatisticsSummary(
     val browsingMs: Long = 0L,
     val watchingMs: Long = 0L,
     val codexMs: Long = 0L,
+    /** Time in series sessions that read chapters. */
+    val readingMs: Long = 0L,
+    /** Time in series sessions that play episodes. */
+    val animeMs: Long = 0L,
     val watchedPostCount: Long = 0L,
     val watchedSources: List<SourceStatistic> = emptyList(),
     val savedPostCount: Long = 0L,
@@ -138,6 +144,8 @@ object StatisticsProjection {
             browsingMs = lifetime.browsingMs.saturatingAdd(liveUsage.browsingMs),
             watchingMs = lifetime.watchingMs.saturatingAdd(liveUsage.watchingMs),
             codexMs = lifetime.codexMs.saturatingAdd(liveUsage.codexMs),
+            readingMs = lifetime.readingMs.saturatingAdd(liveUsage.readingMs),
+            animeMs = lifetime.animeMs.saturatingAdd(liveUsage.animeMs),
             watchedPostCount = lifetime.watchedPostCount,
             watchedSources = sourceRows(lifetime.watchedBySource, lifetime.watchedPostCount),
             savedPostCount = savedContent.postCount,
@@ -205,12 +213,14 @@ object StatisticsProjection {
 /** Overlay live monotonic time without rebuilding content, source or tag statistics. */
 fun StatisticsSummary.withLiveUsage(usage: UsageDurationDelta): StatisticsSummary = copy(
     history = dailyRows(history.associate { it.date to DailyActivity(it.appOpenCount, it.totalForegroundMs,
-        it.browsingMs, it.watchingMs, it.codexMs, it.watchedPostCount, it.searchCount) }
+        it.browsingMs, it.watchingMs, it.codexMs, it.readingMs, it.animeMs, it.watchedPostCount, it.searchCount) }
         .withDailyUsage(usage.dailyUsage)),
     totalForegroundMs = totalForegroundMs.saturatingAdd(usage.totalMs),
     browsingMs = browsingMs.saturatingAdd(usage.browsingMs),
     watchingMs = watchingMs.saturatingAdd(usage.watchingMs),
     codexMs = codexMs.saturatingAdd(usage.codexMs),
+    readingMs = readingMs.saturatingAdd(usage.readingMs),
+    animeMs = animeMs.saturatingAdd(usage.animeMs),
 )
 
 fun statisticsTagsForPost(post: Post): Set<String> {
@@ -282,5 +292,5 @@ fun statisticsPostKey(id: PostId): String = "${id.source.id}:${id.sourcePostId}"
 private fun dailyRows(history: Map<LocalDate, DailyActivity>): List<DailyStatistic> =
     history.retainedHistory(LocalDate.now()).map { (date, day) -> DailyStatistic(
         date, day.appOpenCount, day.totalForegroundMs, day.browsingMs, day.watchingMs,
-        day.codexMs, day.watchedPostCount, day.searchCount,
+        day.codexMs, day.readingMs, day.animeMs, day.watchedPostCount, day.searchCount,
     ) }

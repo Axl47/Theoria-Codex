@@ -119,7 +119,8 @@ private val VIEWER_TOP_SCRIM_HEIGHT = 170.dp
 @Composable
 internal fun PlaybackSettingsMenu(
     playbackRateEnabled: Boolean,
-    playbackMode: com.theoriacodex.app.viewer.state.ViewerPlaybackMode,
+    /** The mode the choices mark; null leaves them out. */
+    playbackMode: com.theoriacodex.app.viewer.state.ViewerPlaybackMode?,
     onPlaybackModeSelected: (com.theoriacodex.app.viewer.state.ViewerPlaybackMode) -> Unit,
     quality: com.theoriacodex.domain.model.VideoQuality,
     qualityHeight: Int?,
@@ -157,7 +158,7 @@ internal fun PlaybackSettingsMenu(
                 }
             },
         ) {
-            PlaybackModeChoices(playbackMode, { interact(); onPlaybackModeSelected(it) }, ::interact)
+            if (playbackMode != null) PlaybackModeChoices(playbackMode, { interact(); onPlaybackModeSelected(it) }, ::interact)
             VideoQualityChoices(videoVariants, quality, qualityHeight, { selected, height ->
                 interact(); onQualitySelected(selected, height)
             })

@@ -19,8 +19,8 @@ import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.domain.model.GalleryReadingMode
-import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
@@ -44,8 +44,8 @@ class SeriesTabScreenTest {
     @Test
     fun globalSearchHeadersShowLanguageSubtitleAndOpenDedicatedSourceSearch() {
         val sources = listOf(
-            FakeSeriesSource("custom_mihon_1", "MangaDex", "en", count = 4),
-            FakeSeriesSource("custom_mihon_2", "MangaDex", "es-419", count = 4),
+            FakeSeriesSource("custom_mihon_1", "Paper Lantern", "en", count = 4),
+            FakeSeriesSource("custom_mihon_2", "Paper Lantern", "es-419", count = 4),
         )
         val viewModel = SeriesTabViewModel(EmptySeriesRepository, { sources }) {}
         compose.setContent {
@@ -77,7 +77,7 @@ class SeriesTabScreenTest {
 
     @Test
     fun browseControlsHideOnDownwardScrollAndReturnOnUpwardScroll() {
-        val sources = listOf(FakeSeriesSource("custom_mihon_1", "Asura Scans", "en", count = 30))
+        val sources = listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 30))
         val viewModel = SeriesTabViewModel(EmptySeriesRepository, { sources }) {}
         compose.setContent {
             MaterialTheme {
@@ -130,7 +130,7 @@ private class FakeSeriesSource(
     override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>) = page(text, page)
     override suspend fun details(series: Series) = series
     override suspend fun entries(series: Series) = emptyList<SeriesEntry>()
-    override suspend fun pages(entry: SeriesEntry) = emptyList<ImageRef>()
+    override suspend fun media(entry: SeriesEntry) = EntryMedia.Pages(emptyList())
 
     private fun page(prefix: String, page: Int): SeriesPage = SeriesPage(
         series = (1..count).map { index ->
@@ -154,6 +154,6 @@ private object EmptySeriesRepository : SeriesRepository {
     override suspend fun setAllRead(id: SeriesId, read: Boolean) = EntryProgressRestore()
     override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean) = EntryProgressRestore()
     override suspend fun restoreProgress(id: SeriesId, restore: EntryProgressRestore) = Unit
-    override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) = Unit
+    override suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?) = Unit
     override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) = false
 }

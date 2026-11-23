@@ -5,7 +5,6 @@ import android.app.job.JobScheduler
 import android.database.sqlite.SQLiteDatabase
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.UiObject2
@@ -34,12 +33,12 @@ import org.junit.runner.RunWith
 /**
  * Proves reading a series from a Mihon extension end to end in the real debug app. It talks to the live site, so it
  * runs only with `-e extensionSourceLive true`, after an extension has been turned on, which `ExtensionsLiveTest` does
- * (see `mihon-host/README.md`).
+ * (see `extension-host/README.md`).
  *
  * The tests are one story across app restarts, so run each as its own `am instrument` call, which starts the app's
  * process anew: [aSeriesIsBrowsedReadResumedAndFollowed], [aFollowedSeriesIsOnTheShelfAfterARestart], then the
  * new-chapter story: [followingASeriesAsksToNotifyAndSchedulesTheCheck], [aFollowedSeriesForgetsItsNewestChapter], the background check run by hand from a shell
- * (`cmd jobscheduler run`, see `mihon-host/README.md`), [aNewChapterNotificationOpensItsSeries], [aNotificationOpensItsSeriesOverAnotherSeriesPage] and
+ * (`cmd jobscheduler run`, see `extension-host/README.md`), [aNewChapterNotificationOpensItsSeries], [aNotificationOpensItsSeriesOverAnotherSeriesPage] and
  * [unfollowingTheLastSeriesCancelsTheCheck].
  *
  * The report is counts and labels only, never images: provider media stays off screenshots and logs.
@@ -71,9 +70,9 @@ class ExtensionSourceLiveTest {
         readAbout(listed)
 
         val (chapter, next) = continueChapters(listed)
-        live.tap("the button that starts reading", By.text(Pattern.compile("Start|Continue · .*")))
+        live.tap("the button that starts reading", By.text(Pattern.compile("Start reading|Continue reading .+")))
         viewerControl("the chapter's name as the Viewer's title", By.textStartsWith("${listed.title} · ${chapter.entry.name}"))
-        val pages = pageTile(1.coerceAtLeast(chapter.lastPage)).contentDescription.substringAfterLast(' ').toInt()
+        val pages = pageTile(chapter.position.toInt().coerceAtLeast(1)).contentDescription.substringAfterLast(' ').toInt()
         // The controls are showing here; a chapter is not a post to like or save to a Codex.
         assertNull("A chapter offers no Like", device.findObject(By.desc("Like post")))
         assertNull("A chapter offers no Save", device.findObject(By.desc("Save to Codex")))
@@ -84,10 +83,10 @@ class ExtensionSourceLiveTest {
 
         val target = minOf(TARGET_PAGE, pages)
         pageTile(target).click()
-        awaitProgress(listed, chapter.entry.address) { it.lastPage == target }
+        awaitProgress(listed, chapter.entry.address) { it.position == target.toLong() }
         device.pressBack()
 
-        live.tap("Continue naming the chapter left unfinished", By.text("Continue · ${chapter.entry.name}"))
+        live.tap("Continue naming the chapter left unfinished", By.text("Continue reading ${chapter.entry.name}"))
         // The top bar counts the page on screen; the chapter opens on its first page until its pages arrive.
         viewerControl("page $target as the page Continue resumes on", By.textEndsWith("$target / $pages"))
         live.report("resume", "Continue reopened \"${chapter.entry.name}\" on page $target of $pages")
@@ -114,7 +113,7 @@ class ExtensionSourceLiveTest {
         device.pressBack()
 
         live.waitFor("the finished chapter marked Read on the series page", By.text("Read"))
-        live.tap("Continue naming the next chapter", By.text("Continue · ${next.entry.name}"))
+        live.tap("Continue naming the next chapter", By.text("Continue reading ${next.entry.name}"))
         viewerControl("the next chapter's name as the title", By.textStartsWith("${listed.title} · ${next.entry.name}"))
         assertTrue("The series reopens in the chosen mode", readingModeChecked(mode))
         live.report("reopen", "\"${chapter.entry.name}\" shows Read; the series reopened in \"$mode\"")
@@ -132,9 +131,9 @@ class ExtensionSourceLiveTest {
         live.tap("the listed series", scrolledTo(By.text(listed.title)))
         live.waitFor("the chapter count", By.text(CHAPTER_COUNT), SeriesLiveDriver.RESULTS_TIMEOUT_MS)
         val (chapter, next) = continueChapters(listed)
-        live.tap("the button that starts reading", By.text(Pattern.compile("Start|Continue · .*")))
+        live.tap("the button that starts reading", By.text(Pattern.compile("Start reading|Continue reading .+")))
         viewerControl("the chapter's name as the Viewer's title", By.textStartsWith("${listed.title} · ${chapter.entry.name}"))
-        val pages = pageTile(1.coerceAtLeast(chapter.lastPage)).contentDescription.substringAfterLast(' ').toInt()
+        val pages = pageTile(chapter.position.toInt().coerceAtLeast(1)).contentDescription.substringAfterLast(' ').toInt()
         viewerControl("the overview button", By.desc("Open media overview")).click()
         live.tap("the mode \"$VERTICAL\"", By.text(VERTICAL))
         device.pressBack()
@@ -153,7 +152,7 @@ class ExtensionSourceLiveTest {
             repeat(CONTROL_TAPS) {
                 if (device.hasObject(By.desc("Info"))) {
                     device.click(x, device.displayHeight / 4)
-                    device.wait(Until.gone(By.desc("Info")), CONTROLS_WAIT_MS)
+                    device.wait(Until.gone(By.desc("Info")), SeriesLiveDriver.CONTROLS_WAIT_MS)
                 }
             }
             device.wait(Until.hasObject(By.text("Next")), SeriesLiveDriver.SHORT_WAIT_MS) == true
@@ -201,7 +200,7 @@ class ExtensionSourceLiveTest {
             live.waitFor("the button to the Extensions page", By.text("Extensions"))
             live.waitFor("the stored chapter list", By.text(CHAPTER_COUNT))
             live.waitFor("Unfollow still on offer", By.text("Following"))
-            val start = live.waitFor("the button that starts reading", By.text(Pattern.compile("Start|Continue · .*")))
+            val start = live.waitFor("the button that starts reading", By.text(Pattern.compile("Start reading|Continue reading .+")))
             // The label sits inside the button, which is what is disabled.
             val enabled = generateSequence(start) { it.parent }.take(3).all { it.isEnabled }
             val titled = device.findObjects(By.text(followed.series.title)).size
@@ -210,7 +209,7 @@ class ExtensionSourceLiveTest {
         } finally {
             runBlocking { series.extensions.setOn(extension.id, signer, true) }
         }
-        live.waitFor("Continue working again once the extension is on", By.text(Pattern.compile("Start|Continue · .*")).enabled(true))
+        live.waitFor("Continue working again once the extension is on", By.text(Pattern.compile("Start reading|Continue reading .+")).enabled(true))
         live.report("off", "turning the extension on again made the page readable")
     }
 
@@ -337,19 +336,11 @@ class ExtensionSourceLiveTest {
         live.waitFor("the chapter's sheet after a tap", By.desc("Start over"))
         assertNull("A chapter's sheet has no tag search", device.findObject(By.text("Your search")))
         device.pressBack()
-        viewerControl("the dock's Info button", By.desc("Info"))
-        val node = checkNotNull(described(InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow, "Info")) { "No Info node" }
+        val node = viewerControl("the dock's Info button", By.desc("Info")).accessibilityNodeInfo
         assertTrue("Info takes an accessibility click", node.performAction(AccessibilityNodeInfo.ACTION_CLICK))
         live.waitFor("the chapter's sheet after an accessibility click", By.desc("Start over"))
         live.report("info", "a tap and an accessibility click on Info each opened the chapter's sheet, with no tag search")
         device.pressBack()
-    }
-
-    /** The node under [root] whose description is [description]. */
-    private fun described(root: AccessibilityNodeInfo?, description: String): AccessibilityNodeInfo? {
-        root ?: return null
-        if (root.contentDescription?.toString() == description) return root
-        return (0 until root.childCount).firstNotNullOfOrNull { described(root.getChild(it), description) }
     }
 
     /** Follows the series whose page is open, answering the notification question a follow asks while the permission is missing. */
@@ -450,10 +441,10 @@ class ExtensionSourceLiveTest {
         while (true) {
             val entry = runBlocking { series.repository.entries(listed.id) }.first { it.entry.address == address }
             if (reached(entry)) {
-                live.report("progress", "stored page ${entry.lastPage} of ${entry.pageCount}, read=${entry.read}")
+                live.report("progress", "stored page ${entry.position} of ${entry.length}, read=${entry.read}")
                 return
             }
-            check(System.currentTimeMillis() < deadline) { "Progress stayed at page ${entry.lastPage} of ${entry.pageCount}, read=${entry.read}" }
+            check(System.currentTimeMillis() < deadline) { "Progress stayed at page ${entry.position} of ${entry.length}, read=${entry.read}" }
             Thread.sleep(SeriesLiveDriver.POLL_MS)
         }
     }
@@ -508,18 +499,7 @@ class ExtensionSourceLiveTest {
     /** The page strip's tile for [page] of the open chapter. */
     private fun pageTile(page: Int): UiObject2 = viewerControl("the tile for page $page", By.descStartsWith("Go to page $page of "))
 
-    /**
-     * One of the Viewer's controls. The Viewer hides them after a few seconds, often before a chapter's pages have
-     * arrived, so each wait that finds none taps the page to bring them back.
-     */
-    private fun viewerControl(what: String, selector: BySelector): UiObject2 {
-        val deadline = System.currentTimeMillis() + SeriesLiveDriver.RESULTS_TIMEOUT_MS
-        while (System.currentTimeMillis() < deadline) {
-            device.wait(Until.findObject(selector), CONTROLS_WAIT_MS)?.let { return it }
-            device.click(device.displayWidth / 2, device.displayHeight / 2)
-        }
-        error("The Viewer did not show $what; on screen: ${live.screenText()}")
-    }
+    private fun viewerControl(what: String, selector: BySelector): UiObject2 = live.viewerControl(what, selector)
 
     private companion object {
         val CHAPTER_COUNT: Pattern = Pattern.compile("(.+ · )?\\d+ chapters?")
@@ -547,6 +527,5 @@ class ExtensionSourceLiveTest {
         const val CONTROL_TAPS = 3
         const val SWIPE_STEPS = 20
 
-        const val CONTROLS_WAIT_MS = 2_500L
     }
 }

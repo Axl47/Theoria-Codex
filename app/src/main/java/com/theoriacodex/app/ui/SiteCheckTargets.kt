@@ -3,7 +3,7 @@ package com.theoriacodex.app.ui
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.source.SiteCheckTarget
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.domain.series.EXTENSION_SOURCE_ID_PREFIX
+import com.theoriacodex.domain.series.isExtensionSource
 import com.theoriacodex.sources.http.HostOutageTracker
 
 /**
@@ -14,7 +14,7 @@ import com.theoriacodex.sources.http.HostOutageTracker
  * passed once the extensions' own client gets through.
  */
 internal fun siteCheckTarget(container: TheoriaAppContainer, source: SourceKey): SiteCheckTarget? {
-    if (source.id.startsWith(EXTENSION_SOURCE_ID_PREFIX)) return extensionCheckTarget(container, source)
+    if (source.isExtensionSource()) return extensionCheckTarget(container, source)
     val sites = container.customSites
     val stored = sites.sites.value.firstOrNull { it.sourceId == source.id }
     val (title, host) = stored?.let { it.label to it.host }

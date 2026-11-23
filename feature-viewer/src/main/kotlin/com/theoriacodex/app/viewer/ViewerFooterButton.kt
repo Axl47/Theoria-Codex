@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 
@@ -35,10 +36,12 @@ internal fun BoxScope.ViewerFooterButton(
     icon: ImageVector,
     contentDescription: String,
     testTag: String,
+    /** The row at the footer's top: the post strip, or a watched episode's controls in its place. */
+    bottomRowHeight: Dp = VIEWER_POST_STRIP_HEIGHT,
     onClick: () -> Unit,
 ) {
-    // The dock's inset already follows the chrome; the timeline or page scrubber and the strip above it hide with it too.
-    val footer = LocalViewerTimelineInset.current + if (chromeVisible) viewerFooterBarHeight(selection) + VIEWER_POST_STRIP_HEIGHT else 0.dp
+    // The dock's inset already follows the chrome; the timeline or page scrubber and the row above it hide with it too.
+    val footer = LocalViewerTimelineInset.current + if (chromeVisible) viewerFooterBarHeight(selection) + bottomRowHeight else 0.dp
     val lift by animateDpAsState(footer, tween(TheoriaMotion.SHORT_MS), label = "Viewer footer button lift")
     ViewerChromeVisibility(
         visible,

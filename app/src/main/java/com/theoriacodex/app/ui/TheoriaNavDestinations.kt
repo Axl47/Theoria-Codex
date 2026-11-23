@@ -76,6 +76,7 @@ import com.theoriacodex.app.viewer.ViewerReturnLifetime
 import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.ViewerScreenCallbacks
 import com.theoriacodex.app.viewer.ViewerScreenConfig
+import com.theoriacodex.app.viewer.ViewerSeries
 import com.theoriacodex.app.viewer.viewerMediaPrefetcher
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.SettingChoices
@@ -361,7 +362,8 @@ private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
 
 /**
  * What a series session changes in the Viewer's configuration: every chapter reads in the series' mode, the strip
- * numbers its chapters, and none of the collecting controls show. Any other session's configuration passes through unchanged.
+ * numbers its chapters, and none of the collecting controls show. Any other session's configuration passes through
+ * unchanged.
  */
 @Composable
 private fun rememberSeriesViewerConfig(shell: TheoriaShell): (ViewerScreenConfig) -> ViewerScreenConfig {
@@ -379,12 +381,16 @@ private fun rememberSeriesViewerConfig(shell: TheoriaShell): (ViewerScreenConfig
             owner.addCloseable(SERIES_READER_KEY, AutoCloseable(reader::closed))
         }
     }
-    val mode by remember(session.context.queryHash) { shell.seriesReader?.readingMode(session) ?: emptyFlow() }
-        .collectAsStateWithLifecycle(initialValue = session.seriesReadingMode)
+    // Only chapters are read in a mode; an episode plays.
+    val reading = session.series as? ViewerSeries.Reading
+    val mode by remember(session.context.queryHash, reading != null) {
+        shell.seriesReader?.takeIf { reading != null }?.readingMode(session) ?: emptyFlow()
+    }.collectAsStateWithLifecycle(initialValue = reading?.mode)
     val modes = mode?.let { chosen -> session.posts.associate { it.id to chosen } }.orEmpty()
+    // Strip marks number chapters and show their first pages; an episode session carries none.
     val marks by remember(session.sessionId) { shell.seriesReader?.stripMarks(session) ?: emptyFlow() }
         .collectAsStateWithLifecycle(initialValue = session.stripMarks)
-    return { it.copy(seriesChapters = true, galleryReadingModes = modes, stripMarks = marks) }
+    return { it.copy(galleryReadingModes = modes, stripMarks = marks) }
 }
 
 private const val SERIES_READER_KEY = "series-reader"
@@ -495,6 +501,7 @@ private fun viewerScreenCallbacks(shell: TheoriaShell) = ViewerScreenCallbacks(
     onVisibleMediaChanged = { post, viewedMediaNumber, session ->
         shell.viewerRouteWorkflow.recordVisibleMediaProgress(post, viewedMediaNumber, session)
     },
+    onPlaybackProgress = { post, progress, session -> shell.viewerRouteWorkflow.recordPlaybackProgress(post, progress, session) },
     onOpenUrl = { url -> openInBrowser(shell.appContext, url) },
     onGoToSearch = {
         shell.scope.launch { shell.features.search.setViewerLaunchContext(null) }

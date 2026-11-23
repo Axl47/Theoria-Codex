@@ -14,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
@@ -125,6 +126,7 @@ internal fun BoxScope.ViewerRotationControl(
     inPictureInPicture: Boolean,
     chromeVisible: Boolean,
     suppressed: Boolean,
+    bottomRowHeight: Dp = VIEWER_POST_STRIP_HEIGHT,
 ) {
     val offer = rememberViewerRotation(selection, rotation, inPictureInPicture)
     var hinting by remember { mutableStateOf(false) }
@@ -139,7 +141,7 @@ internal fun BoxScope.ViewerRotationControl(
     ViewerFooterButton(
         selection, chromeVisible, visible = (chromeVisible || hinting) && !suppressed, alignment = Alignment.BottomStart,
         icon = Icons.Default.ScreenRotation, contentDescription = if (offer.fits) "Rotate to fit" else "Rotate", testTag = "viewer-rotate",
-        onClick = offer.rotate,
+        bottomRowHeight = bottomRowHeight, onClick = offer.rotate,
     )
 }
 

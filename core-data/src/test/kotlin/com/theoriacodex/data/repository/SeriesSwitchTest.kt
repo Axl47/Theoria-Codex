@@ -7,11 +7,19 @@ import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class SeriesSwitchTest {
     private val from = StoredSeries(Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_1"), "/a"), "Series"))
     private val to = StoredSeries(Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_2"), "/b"), "Series"))
+
+    @Test
+    fun `progress does not move between a manga and an anime`() {
+        val anime = StoredSeries(Series(SeriesId(SourceKey.parseOrThrow("custom_aniyomi_2"), "/b"), "Series"))
+
+        assertThrows(IllegalArgumentException::class.java) { carryProgress(from, emptyList(), anime, emptyList()) }
+    }
 
     @Test
     fun `a number matches the same translator group, else the first in reading order`() {
@@ -46,12 +54,12 @@ class SeriesSwitchTest {
     fun `the chapter the user is in bounds what is read, and a chapter read beyond it is read alone`() {
         val old = listOf(
             stored(SeriesEntry("/o200", "200", 200f), order = 0, read = true),
-            stored(SeriesEntry("/o12", "12", 12f, "A"), order = 1, lastPage = 12),
+            stored(SeriesEntry("/o12", "12", 12f, "A"), order = 1, position = 12),
             stored(SeriesEntry("/o1", "1", 1f), order = 2),
         )
         val new = listOf(200f, 13f, 12f, 12f, 11f, 1f).mapIndexed { order, number ->
             val group = if (order == 2) "B" else if (order == 3) "A" else null
-            stored(SeriesEntry("/n${number.toInt()}${group.orEmpty()}", "$number", number, group), order = order, pageCount = if (group == "A") 8 else null)
+            stored(SeriesEntry("/n${number.toInt()}${group.orEmpty()}", "$number", number, group), order = order, length = if (group == "A") 8 else null)
         }
 
         val (series, changed) = carryProgress(from.copy(lastOpenedEntry = "/o12"), old, to, new)
@@ -59,13 +67,13 @@ class SeriesSwitchTest {
         val byAddress = changed.associateBy { it.entry.address }
         assertEquals(setOf("/n1", "/n11", "/n200"), changed.filter { it.read }.map { it.entry.address }.toSet())
         val resumed = byAddress.getValue("/n12A")
-        assertEquals("Unfinished, capped at the new chapter's page count", 8 to false, resumed.lastPage to resumed.read)
+        assertEquals("Unfinished, capped at the new chapter's page count", 8L to false, resumed.position to resumed.read)
         assertEquals("/n12A", series.lastOpenedEntry)
     }
 
     @Test
     fun `a finished chapter stays finished, and without one opened only chapters read there are read`() {
-        val old = listOf(stored(SeriesEntry("/o3", "3", 3f), order = 0, read = true, lastPage = 9), stored(SeriesEntry("/o1", "1", 1f), order = 1))
+        val old = listOf(stored(SeriesEntry("/o3", "3", 3f), order = 0, read = true, position = 9), stored(SeriesEntry("/o1", "1", 1f), order = 1))
         val new = listOf(3f, 2f, 1f).mapIndexed { order, number -> stored(SeriesEntry("/n$number", "$number", number), order) }
 
         val (_, finished) = carryProgress(from.copy(lastOpenedEntry = "/o3"), old, to, new)
@@ -78,7 +86,7 @@ class SeriesSwitchTest {
 
     @Test
     fun `with nothing to match, only the settings carry`() {
-        val old = listOf(stored(SeriesEntry("/o1", "Prologue"), order = 0, read = true, lastPage = 4))
+        val old = listOf(stored(SeriesEntry("/o1", "Prologue"), order = 0, read = true, position = 4))
         val new = listOf(stored(SeriesEntry("/n1", "Chapter 1", 1f), order = 0))
         val chosen = from.copy(followed = true, readingMode = GalleryReadingMode.entries.last(), lastOpenedEntry = "/o1")
 
@@ -90,10 +98,10 @@ class SeriesSwitchTest {
 
     @Test
     fun `a series already read further keeps its own progress`() {
-        val old = listOf(stored(SeriesEntry("/o1", "1", 1f), order = 0, lastPage = 3))
+        val old = listOf(stored(SeriesEntry("/o1", "1", 1f), order = 0, position = 3))
         val new = listOf(
-            stored(SeriesEntry("/n2", "2", 2f), order = 0, read = true, lastPage = 9, pageCount = 9),
-            stored(SeriesEntry("/n1", "1", 1f), order = 1, lastPage = 5, pageCount = 9),
+            stored(SeriesEntry("/n2", "2", 2f), order = 0, read = true, position = 9, length = 9),
+            stored(SeriesEntry("/n1", "1", 1f), order = 1, position = 5, length = 9),
         )
 
         val (series, changed) = carryProgress(from.copy(lastOpenedEntry = "/o1"), old, to.copy(followed = true, lastOpenedEntry = "/n2"), new)
@@ -102,6 +110,6 @@ class SeriesSwitchTest {
         assertEquals(to.copy(followed = true, lastOpenedEntry = "/n2"), series)
     }
 
-    private fun stored(entry: SeriesEntry, order: Int, read: Boolean = false, lastPage: Int = 0, pageCount: Int? = null) =
-        StoredSeriesEntry(entry, order, firstSeenAtEpochMs = 0, read = read, lastPage = lastPage, pageCount = pageCount)
+    private fun stored(entry: SeriesEntry, order: Int, read: Boolean = false, position: Long = 0, length: Long? = null) =
+        StoredSeriesEntry(entry, order, firstSeenAtEpochMs = 0, read = read, position = position, length = length)
 }

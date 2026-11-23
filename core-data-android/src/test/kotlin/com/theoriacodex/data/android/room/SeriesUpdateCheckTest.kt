@@ -5,8 +5,8 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.data.repository.checkFollowed
-import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
@@ -166,7 +166,7 @@ private class FakeSource(id: String, private val fails: Boolean = false) : Serie
         series.id == stopsAt -> throw CancellationException("stopped")
         else -> chapters[series.id].orEmpty()
     }
-    override suspend fun pages(entry: SeriesEntry) = emptyList<ImageRef>()
+    override suspend fun media(entry: SeriesEntry) = EntryMedia.Pages(emptyList())
 }
 
 /** A source lookup that finds [sources] by key, as the extension host's does. */

@@ -8,13 +8,14 @@ import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.GalleryReadingMode
-import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Inclusion
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
 import kotlinx.coroutines.CompletableDeferred
@@ -23,6 +24,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -32,6 +34,8 @@ import kotlinx.coroutines.test.setMain
 import androidx.lifecycle.SavedStateHandle
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -353,6 +357,66 @@ class SeriesTabViewModelTest {
     }
 
     @Test
+    fun theKindFilterShowsOnlyWithBothKindsAndNarrowsTheShelfSourcesAndSearch() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val manga = Answering("custom_mihon_7")
+        val anime = Answering("custom_aniyomi_7")
+        val followed = MutableStateFlow(listOf(FollowedSeries(Series(SeriesId(manga.key, "/m"), "M"), unreadCount = 0)))
+        var offered = listOf<SeriesSource>(manga)
+        val changed = MutableStateFlow(0)
+        val viewModel = SeriesTabViewModel(Following(followed), { offered }, changed) {}
+        val collecting = launch { viewModel.content.collect {} }
+        advanceUntilIdle()
+        assertFalse(viewModel.content.value.offersFilter)
+
+        followed.value += FollowedSeries(Series(SeriesId(anime.key, "/a"), "A"), unreadCount = 0)
+        offered = listOf(manga, anime)
+        changed.value = 1
+        viewModel.search("one punch")
+        advanceUntilIdle()
+        assertTrue("Both kinds show together, marked apart", viewModel.content.value.offersFilter && viewModel.content.value.marked)
+
+        viewModel.chooseKind(SeriesKind.ANIME)
+        advanceUntilIdle()
+        val content = viewModel.content.value
+        assertFalse(content.marked)
+        assertEquals(listOf(anime.key), content.followed.map { it.series.id.source })
+        assertEquals(listOf(anime.key), content.sources?.map { it.key })
+        assertEquals("The browsed manga source gives way", anime.key, content.browse?.key)
+        assertEquals(listOf(anime.key), content.search?.map { it.key })
+        collecting.cancel()
+    }
+
+    @Test
+    fun aSourceOfTheNarrowedKindThatComesOnIsBrowsed() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val manga = Answering("custom_mihon_7")
+        val anime = Answering("custom_aniyomi_7")
+        // A followed anime whose extension is off: both kinds exist, with only a manga source to browse.
+        val followed = MutableStateFlow(
+            listOf(
+                FollowedSeries(Series(SeriesId(manga.key, "/m"), "M"), unreadCount = 0),
+                FollowedSeries(Series(SeriesId(anime.key, "/a"), "A"), unreadCount = 0),
+            ),
+        )
+        var offered = listOf<SeriesSource>(manga)
+        val changed = MutableStateFlow(0)
+        val viewModel = SeriesTabViewModel(Following(followed), { offered }, changed) {}
+        val collecting = launch { viewModel.content.collect {} }
+        advanceUntilIdle()
+        viewModel.chooseKind(SeriesKind.ANIME)
+        advanceUntilIdle()
+        assertNull("No anime source is on yet", viewModel.content.value.browse)
+
+        offered = listOf(manga, anime)
+        changed.value = 1
+        advanceUntilIdle()
+
+        assertEquals(anime.key, viewModel.content.value.browse?.key)
+        collecting.cancel()
+    }
+
+    @Test
     fun openingDedicatedSearchFromGlobalSearchReusesLoadedResultsAndPreservesGlobalSearch() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val first = Answering("custom_mihon_7", pages = 2, language = "en")
@@ -524,7 +588,11 @@ private class Answering(id: String = "custom_mihon_7", private val pages: Int = 
     }
     override suspend fun details(series: Series) = series
     override suspend fun entries(series: Series) = emptyList<SeriesEntry>()
-    override suspend fun pages(entry: SeriesEntry) = emptyList<ImageRef>()
+    override suspend fun media(entry: SeriesEntry) = EntryMedia.Pages(emptyList())
+}
+
+private class Following(private val followed: Flow<List<FollowedSeries>>) : SeriesRepository by NothingStored {
+    override fun observeFollowed() = followed
 }
 
 private object NothingStored : SeriesRepository {
@@ -541,6 +609,6 @@ private object NothingStored : SeriesRepository {
     override suspend fun setAllRead(id: SeriesId, read: Boolean) = EntryProgressRestore()
     override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean) = EntryProgressRestore()
     override suspend fun restoreProgress(id: SeriesId, restore: EntryProgressRestore) = Unit
-    override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) = Unit
+    override suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?) = Unit
     override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) = false
 }

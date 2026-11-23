@@ -43,18 +43,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.data.repository.ChapterDownload
+import com.theoriacodex.app.ui.formatTimelineTime
 import com.theoriacodex.data.repository.StoredSeriesEntry
+import com.theoriacodex.domain.series.SeriesKind
 import java.text.DateFormat
 import java.util.Date
 
+/** The entry count ("12 episodes", or "3 of 12 episodes" while narrowed) and the sort and filter button. */
 @Composable
 internal fun ChapterListHeader(
+    words: EntryWords,
     totalCount: Int,
     visibleCount: Int,
     filterActive: Boolean,
     onOpenOptions: () -> Unit,
 ) {
-    val label = if (visibleCount == totalCount) chapterCount(totalCount) else "$visibleCount of ${chapterCount(totalCount)}"
+    val label = if (visibleCount == totalCount) words.count(totalCount) else "$visibleCount of ${words.count(totalCount)}"
     Row(
         modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -68,7 +72,7 @@ internal fun ChapterListHeader(
         IconButton(onClick = onOpenOptions) {
             Icon(
                 imageVector = Icons.Default.FilterList,
-                contentDescription = "Sort and filter chapters",
+                contentDescription = "Sort and filter ${words.many}",
                 tint = if (filterActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -76,22 +80,26 @@ internal fun ChapterListHeader(
 }
 
 @Composable
-internal fun EmptyFilteredChapters(onClear: () -> Unit) {
+internal fun EmptyFilteredChapters(words: EntryWords, onClear: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("No matching chapters", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("No matching ${words.many}", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         TextButton(onClick = onClear) { Text("Clear filters") }
     }
 }
 
-/** A chapter card: title, upload date / scanlator / progress line, optional download mark, and long-press quick actions. */
+/**
+ * An entry card: title, upload date / scanlator / progress line, optional download mark, and long-press quick actions,
+ * worded for the series' [kind].
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun EntryRow(
     entry: StoredSeriesEntry,
+    kind: SeriesKind,
     enabled: Boolean,
     hasPreviousUnread: Boolean,
     download: ChapterDownload?,
@@ -116,7 +124,7 @@ internal fun EntryRow(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .entryRowInteraction(entry.entry.address, enabled, onClick) { menuOpen = true }
+                    .entryRowInteraction(entry.entry.address, "${kind.words.one.capitalized()} actions", enabled, onClick) { menuOpen = true }
                     .padding(start = 16.dp, end = if (canToggleDownload) 6.dp else 16.dp, top = 12.dp, bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -128,7 +136,7 @@ internal fun EntryRow(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    entryDetail(entry)?.let { detail ->
+                    entryDetail(entry, kind)?.let { detail ->
                         Text(
                             text = detail,
                             style = MaterialTheme.typography.bodySmall,
@@ -146,6 +154,7 @@ internal fun EntryRow(
         }
         EntryContextMenu(
             expanded = menuOpen,
+            words = kind.words,
             read = entry.read,
             hasPreviousUnread = hasPreviousUnread,
             download = download,
@@ -159,20 +168,21 @@ internal fun EntryRow(
 }
 
 @OptIn(ExperimentalFoundationApi::class)
-private fun Modifier.entryRowInteraction(key: String, enabled: Boolean, onClick: () -> Unit, onLongPress: () -> Unit): Modifier =
+private fun Modifier.entryRowInteraction(key: String, actionsLabel: String, enabled: Boolean, onClick: () -> Unit, onLongPress: () -> Unit): Modifier =
     if (enabled) {
-        combinedClickable(onClick = onClick, onLongClick = onLongPress, onLongClickLabel = "Chapter actions")
+        combinedClickable(onClick = onClick, onLongClick = onLongPress, onLongClickLabel = actionsLabel)
     } else {
         pointerInput(key) { detectTapGestures(onLongPress = { onLongPress() }) }
             .semantics {
                 disabled()
-                onLongClick(label = "Chapter actions") { onLongPress(); true }
+                onLongClick(label = actionsLabel) { onLongPress(); true }
             }
     }
 
 @Composable
 private fun EntryContextMenu(
     expanded: Boolean,
+    words: EntryWords,
     read: Boolean,
     hasPreviousUnread: Boolean,
     download: ChapterDownload?,
@@ -184,12 +194,12 @@ private fun EntryContextMenu(
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         DropdownMenuItem(
-            text = { Text(if (read) "Mark as unread" else "Mark as read") },
+            text = { Text("Mark as ${if (read) words.notDone else words.done}") },
             onClick = { onDismiss(); onToggleRead() },
         )
         if (hasPreviousUnread) {
             DropdownMenuItem(
-                text = { Text("Mark previous as read") },
+                text = { Text("Mark previous as ${words.done}") },
                 onClick = { onDismiss(); onMarkPreviousRead() },
             )
         }
@@ -233,15 +243,20 @@ private fun DownloadMark(download: ChapterDownload?, onClick: () -> Unit) {
     }
 }
 
-internal fun chapterCount(count: Int): String = if (count == 1) "1 chapter" else "$count chapters"
-
-/** Date, translator group, and reading progress / "Read" status joined cleanly on one subtitle line. */
-internal fun entryDetail(entry: StoredSeriesEntry): String? {
+/**
+ * Date, translator group, and progress joined on one subtitle line. Progress is how far the user is in an entry left
+ * unfinished ("Page 7 of 18", or "8:12 / 23:40" as the Viewer's timeline writes it), or what a finished one is ("Read",
+ * "Watched").
+ */
+internal fun entryDetail(entry: StoredSeriesEntry, kind: SeriesKind): String? {
     val date = entry.entry.uploadedAtEpochMs?.let { DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it)) }
     val group = entry.entry.translatorGroup?.trim()?.takeIf(String::isNotEmpty)
     val status = when {
-        entry.read -> "Read"
-        entry.lastPage > 0 -> entry.pageCount?.let { "Page ${entry.lastPage} of $it" } ?: "Page ${entry.lastPage}"
+        entry.read -> kind.words.finished
+        entry.position > 0 -> when (kind) {
+            SeriesKind.MANGA -> entry.length?.let { "Page ${entry.position} of $it" } ?: "Page ${entry.position}"
+            SeriesKind.ANIME -> listOfNotNull(entry.position, entry.length).joinToString(" / ", transform = ::formatTimelineTime)
+        }
         else -> null
     }
     return listOfNotNull(date, group, status).joinToString(" · ").takeIf(String::isNotEmpty)

@@ -49,7 +49,7 @@ class ViewerMediaErrorInteractionTest {
                         events = events, transform = remember { mutableStateOf(ViewerTransformState()) }, onTransformChanged = {},
                         layout = ViewerMediaLayout(false, false, false),
                         // Avoid hardware playback while exercising the actual video-page gesture layers.
-                        videoOptions = ViewerVideoOptions(VideoQuality.AUTO, null, "Unavailable", false),
+                        videoOptions = ViewerVideoOptions(VideoQuality.AUTO, null, null, "Unavailable", false),
                         videoPositions = positions, mediaError = error.value, imageSession = imageSession,
                         pixivUgoiraClient = null, onAction = { actions += it }, onInteraction = {},
                         onToggleChrome = {}, onRequestMediaRecovery = null,

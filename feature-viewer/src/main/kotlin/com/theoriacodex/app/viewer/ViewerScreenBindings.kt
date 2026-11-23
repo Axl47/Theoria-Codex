@@ -26,11 +26,6 @@ data class ViewerScreenConfig(
     /** Galleries whose reading mode the user chose; the rest follow [invertMultiImageScrollDirection]. */
     val galleryReadingModes: Map<PostId, GalleryReadingMode> = emptyMap(),
     val playbackDiagnosticsEnabled: Boolean = false,
-    /**
-     * The posts are one series' chapters, which are read and never collected: the top bar names the series and
-     * chapter in place of the source, and Like and Save are hidden.
-     */
-    val seriesChapters: Boolean = false,
     /** Marks over strip thumbnails, such as series chapters' numbers on their shared cover. */
     val stripMarks: Map<PostId, ViewerStripMark> = emptyMap(),
 )
@@ -51,6 +46,8 @@ data class ViewerScreenCallbacks(
     val onGalleryReadingModeSelected: (PostId, GalleryReadingMode) -> Unit = { _, _ -> },
     val onVisiblePostChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
     val onVisibleMediaChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
+    /** An episode's playback position in a [ViewerSeries.Watching] session, for its series' progress. */
+    val onPlaybackProgress: suspend (Post, ViewerPlaybackProgress, ViewerSession) -> Unit = { _, _, _ -> },
     val onOpenUrl: (String) -> Unit = {},
     val onGoToSearch: () -> Unit,
     val onDismissRelatedPosts: (ViewerStreamSource) -> Unit = {},
@@ -70,9 +67,15 @@ class ViewerScreenHost(
     val onGoToSearch: () -> Unit = {},
     val onOpenCreatorFallback: ((Post) -> Unit)? = null,
     val onGalleryReadingModeSelected: (PostId, GalleryReadingMode) -> Unit = { _, _ -> },
-    val onRequestMediaRecovery: ((Post, ImageRef) -> Unit)? = null,
+    val onRequestMediaRecovery: ViewerMediaRecoveryRequest? = null,
     val onVisiblePostChanged: ((Post, Int) -> Unit)? = null,
     val onVisibleMediaChanged: ((Post, Int) -> Unit)? = null,
+    /**
+     * Where an episode's playback is, in a [ViewerSeries.Watching] session: its player reports here while it plays,
+     * often enough that a killed process resumes close to where it stopped, and once more when it lets the episode go.
+     * Other sessions never report.
+     */
+    val onPlaybackProgress: ((Post, ViewerPlaybackProgress) -> Unit)? = null,
     val onVideoQualitySelected: (VideoQuality) -> Unit = {},
     val durations: ViewerPostDurations = ViewerPostDurations.None,
 )

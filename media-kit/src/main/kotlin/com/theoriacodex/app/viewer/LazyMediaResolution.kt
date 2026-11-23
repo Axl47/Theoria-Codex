@@ -32,6 +32,8 @@ fun requiresLazyMediaResolution(post: Post): Boolean {
         addAll(post.media)
         post.full?.let { add(it) }
     }
+    // An episode's streams were fetched as it opened; links that expire come back through the Viewer's media recovery.
+    if (mediaRefs.any { ref -> ref.streams.isNotEmpty() }) return false
     if (
         post.id.source.hasRefreshableRemoteMedia() &&
         mediaRefs.any { ref -> isVideoMediaRef(ref) && ref.localPath.isNullOrBlank() && !ref.url.isNullOrBlank() }

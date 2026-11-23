@@ -5,7 +5,9 @@ import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.CommentTarget
+import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import java.util.UUID
 
@@ -29,11 +31,29 @@ data class ViewerSession(
     val relatedBinding: ViewerRelatedBinding? = null,
     // A comment link's target on the first post; the Viewer opens its comments on it once, when the session launches.
     val focusComment: CommentTarget? = null,
-    // The mode a series session's chapters open in, known before the first one draws.
-    val seriesReadingMode: com.theoriacodex.domain.model.GalleryReadingMode? = null,
+    /** How a series session's entries open; null for every session that is not a series'. */
+    val series: ViewerSeries? = null,
     // What the strip draws over a post's thumbnail and reads for its tile, such as a series chapter's number.
     val stripMarks: Map<com.theoriacodex.domain.model.PostId, ViewerStripMark> = emptyMap(),
 )
+
+/**
+ * What a series session opens as. Every rule the Viewer keeps for episodes hangs off [Watching], or off the media
+ * having streams where a rule is about media rather than the session (prefetch, for one).
+ */
+sealed interface ViewerSeries {
+    /** Chapters, each a gallery of pages, read in [mode], which is known before the first one draws. */
+    data class Reading(val mode: GalleryReadingMode) : ViewerSeries
+
+    /**
+     * Episodes, each one long video. [startPositionsMs] holds where the user stopped in each episode that has saved
+     * progress, in milliseconds: it starts there, and any other episode at its start. A position within
+     * [VIEWER_EPISODE_END_MARGIN_MS] of the episode's end counts as watched to the end, so that episode starts over
+     * rather than ending at once. The positions seed the Viewer's video positions ([rememberViewerVideoPositions]);
+     * where the user gets to goes back through [ViewerScreenHost.onPlaybackProgress].
+     */
+    data class Watching(val startPositionsMs: Map<PostId, Long> = emptyMap()) : ViewerSeries
+}
 
 internal fun requiresViewerPostResolution(post: Post, streamSource: ViewerStreamSource): Boolean {
     if (requiresLazyMediaResolution(post)) return true
@@ -51,6 +71,7 @@ internal fun requiresPrelaunchViewerPostResolution(post: Post): Boolean {
     return !hasUsableViewerMedia(post)
 }
 
+/** Whether [post] has media the Viewer can try to show: a file, an address, or an episode's streams (which have no address). */
 internal fun hasUsableViewerMedia(post: Post): Boolean {
     return sequence {
         yieldAll(post.media)
@@ -60,7 +81,8 @@ internal fun hasUsableViewerMedia(post: Post): Boolean {
         !media.localPath.isNullOrBlank() ||
             !media.url.isNullOrBlank() ||
             media.progressiveUrls.any { location -> location.isNotBlank() } ||
-            media.fallbackUrls.any { location -> location.isNotBlank() }
+            media.fallbackUrls.any { location -> location.isNotBlank() } ||
+            media.streams.any { stream -> stream.url.isNotBlank() }
     }
 }
 

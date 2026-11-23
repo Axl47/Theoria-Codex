@@ -1,20 +1,25 @@
 package com.theoriacodex.app.series
 
 import com.theoriacodex.data.repository.ChapterDownload
+import com.theoriacodex.data.repository.DownloadScheduler
 import com.theoriacodex.data.repository.EntryProgressRestore
 import com.theoriacodex.data.repository.FollowedSeries
+import com.theoriacodex.data.repository.OfflineMediaStore
+import com.theoriacodex.data.repository.SeriesDownloads
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.domain.model.GalleryReadingMode
-import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
+import com.theoriacodex.domain.series.SeriesCovers
+import com.theoriacodex.domain.series.UnsupportedEntriesException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -33,10 +38,15 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SeriesPageViewModelTest {
+    @get:Rule
+    val folder = TemporaryFolder()
+
     @After
     fun resetMainDispatcher() = Dispatchers.resetMain()
 
@@ -46,8 +56,8 @@ class SeriesPageViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
         val stored = StoredSeries(Series(id, "Title"), followed = true)
-        val entries = listOf(StoredSeriesEntry(SeriesEntry("/chapter/1", "Ch.1"), sourceOrder = 0, firstSeenAtEpochMs = 1L, read = true, lastPage = 18))
-        val viewModel = SeriesPageViewModel(id, Restored(stored, entries), loadSources = { emptyList() })
+        val entries = listOf(StoredSeriesEntry(SeriesEntry("/chapter/1", "Ch.1"), sourceOrder = 0, firstSeenAtEpochMs = 1L, read = true, position = 18))
+        val viewModel = SeriesPageViewModel(id, Restored(stored, entries), loadSources = { emptyList() }, ioDispatcher = StandardTestDispatcher(testScheduler))
         val collecting = launch { viewModel.state.collect {} }
 
         advanceUntilIdle()
@@ -65,7 +75,7 @@ class SeriesPageViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
         var asked = 0
-        val viewModel = SeriesPageViewModel(id, Restored(StoredSeries(Series(id, "Title")), emptyList()), loadSources = { asked++; emptyList() })
+        val viewModel = SeriesPageViewModel(id, Restored(StoredSeries(Series(id, "Title")), emptyList()), loadSources = { asked++; emptyList() }, ioDispatcher = StandardTestDispatcher(testScheduler))
         advanceUntilIdle()
 
         viewModel.whileMoving { viewModel.refresh(); advanceUntilIdle(); false }
@@ -90,7 +100,7 @@ class SeriesPageViewModelTest {
             StoredSeriesEntry(SeriesEntry("/c/2", "Chapter 2", number = 2f, translatorGroup = "Alpha", uploadedAtEpochMs = 200L), sourceOrder = 2, firstSeenAtEpochMs = 1L),
         )
         val downloadStates = flowOf(mapOf("/c/2" to ChapterDownload.OnDevice))
-        val viewModel = SeriesPageViewModel(id, Restored(stored, entries), loadSources = { emptyList() }, downloadStates = downloadStates)
+        val viewModel = SeriesPageViewModel(id, Restored(stored, entries), loadSources = { emptyList() }, downloadStates = downloadStates, ioDispatcher = StandardTestDispatcher(testScheduler))
         val collecting = launch { viewModel.state.collect {} }
 
         advanceUntilIdle()
@@ -140,11 +150,11 @@ class SeriesPageViewModelTest {
         val entries = listOf(
             StoredSeriesEntry(SeriesEntry("/c/3", "Chapter 3"), sourceOrder = 0, firstSeenAtEpochMs = 1L),
             StoredSeriesEntry(SeriesEntry("/c/2", "Chapter 2"), sourceOrder = 1, firstSeenAtEpochMs = 1L),
-            StoredSeriesEntry(SeriesEntry("/c/1", "Chapter 1"), sourceOrder = 2, firstSeenAtEpochMs = 1L, lastPage = 4, pageCount = 10),
+            StoredSeriesEntry(SeriesEntry("/c/1", "Chapter 1"), sourceOrder = 2, firstSeenAtEpochMs = 1L, position = 4, length = 10),
         )
         val repository = Restored(stored, entries)
         val source = WebSeriesSource(id.source, "https://site.example")
-        val viewModel = SeriesPageViewModel(id, repository, loadSources = { listOf(source) })
+        val viewModel = SeriesPageViewModel(id, repository, loadSources = { listOf(source) }, ioDispatcher = StandardTestDispatcher(testScheduler))
         val collecting = launch { viewModel.state.collect {} }
 
         advanceUntilIdle()
@@ -168,7 +178,7 @@ class SeriesPageViewModelTest {
         viewModel.undoBulkRead(prevUndo!!)
         advanceUntilIdle()
         assertEquals(listOf(true, true, false), viewModel.state.value.entries.map { it.read })
-        assertEquals(4, viewModel.state.value.entries.last().lastPage)
+        assertEquals(4, viewModel.state.value.entries.last().position)
 
         // Mark all read + undo.
         var allUndo: BulkReadUndo? = null
@@ -218,7 +228,7 @@ class SeriesPageViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
         val stored = StoredSeries(Series(id, "Title"))
-        val viewModel = SeriesPageViewModel(id, Restored(stored, emptyList()), loadSources = { emptyList() })
+        val viewModel = SeriesPageViewModel(id, Restored(stored, emptyList()), loadSources = { emptyList() }, ioDispatcher = StandardTestDispatcher(testScheduler))
         val collecting = launch { viewModel.state.collect {} }
 
         advanceUntilIdle()
@@ -227,6 +237,86 @@ class SeriesPageViewModelTest {
         assertFalse(viewModel.state.value.userRefreshing)
         assertFalse(viewModel.state.value.refreshing)
         collecting.cancel()
+    }
+
+    @Test
+    fun anAnimeOffersNoDownloads() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        fun page(source: String): SeriesPageViewModel {
+            val id = SeriesId(SourceKey.parseOrThrow(source), "/title/1")
+            return SeriesPageViewModel(id, Restored(StoredSeries(Series(id, "Title")), emptyList()), { emptyList() }, downloads = downloads(), ioDispatcher = StandardTestDispatcher(testScheduler))
+        }
+
+        assertTrue(page("custom_mihon_7").canDownload)
+        assertFalse(page("custom_aniyomi_7").canDownload)
+    }
+
+    /** The undo bar names what happened in the kind's own words. */
+    @Test
+    fun markingAnAnimeSaysWatched() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val id = SeriesId(SourceKey.parseOrThrow("custom_aniyomi_7"), "/title/1")
+        val entries = listOf(
+            StoredSeriesEntry(SeriesEntry("/e/2", "Episode 2"), sourceOrder = 0, firstSeenAtEpochMs = 1L),
+            StoredSeriesEntry(SeriesEntry("/e/1", "Episode 1"), sourceOrder = 1, firstSeenAtEpochMs = 1L),
+        )
+        val viewModel = SeriesPageViewModel(id, Restored(StoredSeries(Series(id, "Title")), entries), loadSources = { emptyList() }, ioDispatcher = StandardTestDispatcher(testScheduler))
+        val collecting = launch { viewModel.state.collect {} }
+        advanceUntilIdle()
+
+        var undo: BulkReadUndo? = null
+        viewModel.markPreviousRead("/e/2") { undo = it }
+        advanceUntilIdle()
+        assertEquals("Marked 1 episode as watched", undo?.label)
+        viewModel.markAllRead(false) { undo = it }
+        advanceUntilIdle()
+        assertEquals("Marked all as unwatched", undo?.label)
+        collecting.cancel()
+    }
+
+    /** As an Aniyomi source that groups an anime's episodes into seasons reports it. */
+    @Test
+    fun aSourceThatCannotListTheEntriesSaysWhyInItsOwnWordsWithoutRetry() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val id = SeriesId(SourceKey.parseOrThrow("custom_aniyomi_7"), "/title/1")
+        val source = Seasons(id.source)
+        val viewModel = SeriesPageViewModel(id, Restored(StoredSeries(Series(id, "Title")), emptyList()), loadSources = { listOf(source) }, ioDispatcher = StandardTestDispatcher(testScheduler))
+        val collecting = launch { viewModel.state.collect {} }
+
+        advanceUntilIdle()
+        // Trying again cannot help, so the page offers no Retry.
+        assertEquals(RefreshFailure(Seasons.MESSAGE, retryable = false), viewModel.state.value.failure)
+        collecting.cancel()
+    }
+
+    /** Downloads over this test's folder that never run: the page only asks whether it offers them. */
+    private fun downloads() = SeriesDownloads(
+        store = OfflineMediaStore(folder.newFolder()),
+        queueFile = folder.root.resolve("queue.json"),
+        repository = Restored(StoredSeries(Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/"), "")), emptyList()),
+        source = { null },
+        covers = SeriesCovers.Stored,
+        fetch = { _, _ -> error("Nothing downloads") },
+        scheduler = object : DownloadScheduler {
+            override suspend fun schedule(automatic: Boolean) = Unit
+            override suspend fun ensureScheduled(automatic: Boolean) = Unit
+        },
+        deleteAfterReading = { false },
+    )
+}
+
+/** Fails every entry list the way a source that groups episodes into seasons does. */
+private class Seasons(override val key: SourceKey) : SeriesSource {
+    override val name = "Fake"
+    override val language = "en"
+    override suspend fun popular(page: Int) = SeriesPage(emptyList(), hasNextPage = false)
+    override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>) = popular(page)
+    override suspend fun details(series: Series) = series
+    override suspend fun entries(series: Series): List<SeriesEntry> = throw UnsupportedEntriesException(MESSAGE)
+    override suspend fun media(entry: SeriesEntry) = EntryMedia.Streams(emptyList())
+
+    companion object {
+        const val MESSAGE = "Anime split into seasons aren't supported yet"
     }
 }
 
@@ -254,22 +344,22 @@ private class Restored(stored: StoredSeries, entries: List<StoredSeriesEntry>) :
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit
     override suspend fun setAllRead(id: SeriesId, read: Boolean): EntryProgressRestore {
-        val changed = entryFlow.value.filter { if (read) !it.read else (it.read || it.lastPage > 0) }
+        val changed = entryFlow.value.filter { if (read) !it.read else (it.read || it.position > 0) }
         val prevLast = storedFlow.value?.lastOpenedEntry
         val clearLast = !read && prevLast != null
-        entryFlow.value = entryFlow.value.map { it.copy(read = read, lastPage = if (read) it.lastPage else 0) }
+        entryFlow.value = entryFlow.value.map { it.copy(read = read, position = if (read) it.position else 0) }
         if (clearLast) storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = null)
         return EntryProgressRestore(changed, restoreLastOpened = clearLast, lastOpenedEntry = prevLast)
     }
 
     override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean): EntryProgressRestore {
         val targets = entryAddresses.toHashSet()
-        val changed = entryFlow.value.filter { it.entry.address in targets && (if (read) !it.read else (it.read || it.lastPage > 0)) }
+        val changed = entryFlow.value.filter { it.entry.address in targets && (if (read) !it.read else (it.read || it.position > 0)) }
         val prevLast = storedFlow.value?.lastOpenedEntry
         val clearLast = !read && prevLast in targets
         entryFlow.value = entryFlow.value.map { entry ->
             if (entry.entry.address !in targets) entry
-            else entry.copy(read = read, lastPage = if (read) entry.lastPage else 0)
+            else entry.copy(read = read, position = if (read) entry.position else 0)
         }
         if (clearLast) storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = null)
         return EntryProgressRestore(changed, restoreLastOpened = clearLast, lastOpenedEntry = prevLast)
@@ -279,12 +369,12 @@ private class Restored(stored: StoredSeries, entries: List<StoredSeriesEntry>) :
         val byAddress = restore.entries.associateBy { it.entry.address }
         entryFlow.value = entryFlow.value.map { current ->
             val target = byAddress[current.entry.address] ?: return@map current
-            current.copy(read = target.read, lastPage = target.lastPage, pageCount = target.pageCount)
+            current.copy(read = target.read, position = target.position, length = target.length)
         }
         if (restore.restoreLastOpened) storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = restore.lastOpenedEntry)
     }
 
-    override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) = Unit
+    override suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?) = Unit
     override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) = false
 }
 
@@ -295,6 +385,6 @@ private class WebSeriesSource(override val key: SourceKey, private val baseUrl: 
     override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>) = SeriesPage(emptyList(), false)
     override suspend fun details(series: Series) = series
     override suspend fun entries(series: Series) = emptyList<SeriesEntry>()
-    override suspend fun pages(entry: SeriesEntry) = emptyList<ImageRef>()
+    override suspend fun media(entry: SeriesEntry) = EntryMedia.Pages(emptyList())
     override fun webUrl(series: Series): String = "$baseUrl${series.id.address}"
 }

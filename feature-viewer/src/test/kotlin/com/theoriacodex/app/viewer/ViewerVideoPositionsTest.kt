@@ -3,12 +3,17 @@ package com.theoriacodex.app.viewer
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 class ViewerVideoPositionsTest {
     private val posts = (0..12).map { PostId(SourceKey.RULE34VIDEO, "video-$it") }
     private fun key(index: Int, mediaIndex: Int = 0) = ViewerMediaKey(posts[index], mediaIndex)
+    private fun identity(id: String) = ViewerSessionIdentity(value = id, queryHash = "series:$id", streamKey = "SERIES")
 
     @Test
     fun `backward and forward revisits keep independently updated positions`() {
@@ -57,6 +62,31 @@ class ViewerVideoPositionsTest {
     }
 
     @Test
+    fun `a watching session's episodes start where they were left and keep where they got to`() {
+        val positions = ViewerVideoPositionStore().forSession(identity("watching"), ViewerSeries.Watching(mapOf(posts[0] to 90_000L)))
+        positions.retainAround(posts, 0)
+        assertEquals(90_000L, positions.position(key(0)))
+        assertEquals(0L, positions.position(key(1)))
+
+        positions.save(key(0), 120_000L)
+        positions.save(key(1), 30_000L)
+        // Leaving the retained window drops a post's saved position, but not where an episode got to, seeded or not.
+        positions.retainAround(posts, 7)
+        positions.retainAround(posts, 0)
+        assertEquals(120_000L, positions.position(key(0)))
+        assertEquals(30_000L, positions.position(key(1)))
+    }
+
+    @Test
+    fun `a session's starts seed only the positions it begins with`() {
+        val store = ViewerVideoPositionStore()
+        val positions = store.forSession(identity("watching"), ViewerSeries.Watching(mapOf(posts[0] to 90_000L)))
+
+        assertSame(positions, store.forSession(identity("watching"), ViewerSeries.Watching(mapOf(posts[0] to 1L))))
+        assertEquals(0L, store.forSession(identity("other")).position(key(0)))
+    }
+
+    @Test
     fun `gallery items and Viewer sessions have independent positions`() {
         val positions = ViewerVideoPositions()
         positions.retainAround(posts, 0)
@@ -65,5 +95,13 @@ class ViewerVideoPositionsTest {
         assertEquals(12_000L, positions.position(key(0)))
         assertEquals(24_000L, positions.position(key(0, 1)))
         assertEquals(0L, ViewerVideoPositions().position(key(0)))
+    }
+
+    @Test
+    fun `an episode left at its end starts over, any other video resumes anywhere`() {
+        val watching = ViewerVideoPositions(ViewerSeries.Watching())
+        assertTrue(watching.startsOver(1_436_000L, 1_440_000L))
+        assertFalse(watching.startsOver(1_400_000L, 1_440_000L))
+        assertFalse(ViewerVideoPositions().startsOver(5_900L, 6_000L))
     }
 }

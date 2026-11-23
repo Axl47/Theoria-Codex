@@ -63,8 +63,23 @@ internal data class ViewerMediaLayout(
 internal data class ViewerVideoOptions(
     val quality: com.theoriacodex.domain.model.VideoQuality,
     val height: Int?,
+    /** The stream this media plays, for media with streams; see [com.theoriacodex.app.viewer.viewerPlayback]. */
+    val streamLabel: String?,
     val terminalMessage: String?,
     val diagnosticsEnabled: Boolean,
+    /** What an episode's stream recovery needs from the screen; used only by media with streams. */
+    val episode: ViewerEpisodeOptions? = null,
+)
+
+/**
+ * The screen's side of an episode's stream recovery ([ViewerEpisodeStreams]): its [attempts], whether the stream
+ * the user picked by hand there ([pickedLabel]), when the page's links were looked up, and how to [fallBack] to another stream.
+ */
+internal class ViewerEpisodeOptions(
+    val attempts: ViewerStreamAttempts,
+    val pickedLabel: String?,
+    val linksResolvedAtMs: Long?,
+    val fallBack: (label: String) -> Unit,
 )
 
 /** Owns taps and pinches and selects a renderer; swipes and route state stay in ViewerScreen. */
@@ -86,7 +101,7 @@ internal fun ViewerMediaPage(
     onAction: (ViewerAction) -> Unit,
     onInteraction: () -> Unit,
     onToggleChrome: () -> Unit,
-    onRequestMediaRecovery: ((Post, ImageRef) -> Unit)?,
+    onRequestMediaRecovery: ViewerMediaRecoveryRequest?,
     levelControls: ViewerLevelControls? = null,
     returnProgress: () -> Float = { 0f },
     dismissDrag: ViewerDismissDrag? = null,

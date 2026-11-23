@@ -190,9 +190,10 @@ internal fun ShellUsageEffect(shell: TheoriaShell, currentRoute: String?, statis
     val appUsageTracker = shell.features.appUsageTracker
     val homeTabRoute = shell.navigation.homeTabRoute
     val librarySection by shell.data.librarySections.section.collectAsStateWithLifecycle()
-    val viewerStream = shell.routes.viewer.current?.session?.collectAsStateWithLifecycle()?.value?.context?.streamSource
-    LaunchedEffect(appUsageTracker, currentRoute, homeTabRoute, librarySection, statisticsCodexId, viewerStream) {
-        appUsageTracker.onCategoryChanged(statisticsUsageCategory(currentRoute, homeTabRoute, librarySection, viewerStream))
+    val viewerSession = shell.routes.viewer.current?.session?.collectAsStateWithLifecycle()?.value
+    val category = statisticsUsageCategory(currentRoute, homeTabRoute, librarySection, viewerSession)
+    LaunchedEffect(appUsageTracker, currentRoute, category, statisticsCodexId) {
+        appUsageTracker.onCategoryChanged(category)
         if (currentRoute != AppRoute.Viewer) {
             appUsageTracker.onCodexTargetChanged(
                 statisticsCodexId?.takeIf { currentRoute == AppRoute.CodexDetail }

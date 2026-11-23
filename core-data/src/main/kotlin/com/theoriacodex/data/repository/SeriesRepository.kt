@@ -4,6 +4,8 @@ import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SeriesKind
+import com.theoriacodex.domain.series.seriesKind
 import kotlinx.coroutines.flow.Flow
 
 /** A series as stored: what its source said, and what the user did with it. */
@@ -20,17 +22,22 @@ data class StoredSeries(
     val downloadNewChapters: Boolean = false,
 )
 
-/** An entry as stored, with the user's progress through it. */
+/**
+ * An entry as stored, with the user's progress through it. [position] and [length] are one pair for both kinds, in the
+ * unit the series' [SeriesKind] fixes: a page (from 1) of a page count for manga, milliseconds for anime. Whatever does
+ * not read their size (started, Continue, a switch of source) treats them alike.
+ */
 data class StoredSeriesEntry(
     val entry: SeriesEntry,
     /** The entry's place in its source's list, which runs newest first. */
     val sourceOrder: Int,
     val firstSeenAtEpochMs: Long,
+    /** Finished: every page reached, or most of the episode watched. Stays set once set. */
     val read: Boolean = false,
-    /** The page the user was on when they left, counted from 1; 0 before the entry was ever opened. */
-    val lastPage: Int = 0,
-    /** Known once the entry has been opened. */
-    val pageCount: Int? = null,
+    /** Where the user was when they left; 0 before the entry was ever opened. */
+    val position: Long = 0,
+    /** The entry's page count or duration; known once the entry has been opened. */
+    val length: Long? = null,
 )
 
 data class FollowedSeries(val series: Series, val unreadCount: Int)
@@ -93,13 +100,13 @@ interface SeriesRepository {
 
     /**
      * Marks every listed entry of [id] as read or unread and returns the prior state of only the entries changed.
-     * Marking unread also resets partial page progress and clears last-opened entry.
+     * Marking unread also resets partial progress and clears last-opened entry.
      */
     suspend fun setAllRead(id: SeriesId, read: Boolean): EntryProgressRestore
 
     /**
      * Marks the listed entries at [entryAddresses] as read or unread and returns the prior state of only the entries
-     * changed. Marking unread resets their partial page progress.
+     * changed. Marking unread resets their partial progress.
      */
     suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean): EntryProgressRestore
 
@@ -107,10 +114,11 @@ interface SeriesRepository {
     suspend fun restoreProgress(id: SeriesId, restore: EntryProgressRestore)
 
     /**
-     * The user is on [page] (from 1) of the entry at [entryAddress]. [pageCount] is null while the entry's pages are
-     * still loading, when only the series' last opened entry is recorded.
+     * The user is at [position] of [length] in the entry at [entryAddress], in the unit its series' kind fixes (see
+     * [StoredSeriesEntry]); whether that finishes the entry is [withProgress]' rule. [length] is null while the entry's
+     * media is still loading, when only the series' last opened entry is recorded.
      */
-    suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?)
+    suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?)
 
     /**
      * Replaces the stored series [from] with [to], the same work on another source, in one step: stores [to] with
@@ -122,32 +130,58 @@ interface SeriesRepository {
     suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>): Boolean
 }
 
-/** [this] after the user reached [page] of [pageCount]: an entry is read once its last page was reached, and stays read. */
-fun StoredSeriesEntry.withProgress(page: Int, pageCount: Int): StoredSeriesEntry {
-    val reached = page.coerceIn(1, pageCount.coerceAtLeast(1))
-    return copy(lastPage = reached, pageCount = pageCount, read = read || reached >= pageCount)
+/**
+ * [this] after the user reached [position] of [length] in a series of [kind]. A chapter is read once its last page was
+ * reached; an episode once [ANIME_FINISHED_PERCENT] of it was watched, as Aniyomi counts it. Either stays read. An
+ * episode whose [length] is not known yet (zero) records nothing, so it is never finished by opening it.
+ */
+fun StoredSeriesEntry.withProgress(position: Long, length: Long, kind: SeriesKind): StoredSeriesEntry = when (kind) {
+    SeriesKind.MANGA -> {
+        val reached = position.coerceIn(1, length.coerceAtLeast(1))
+        copy(position = reached, length = length, read = read || reached >= length)
+    }
+    SeriesKind.ANIME -> if (length <= 0) this else {
+        val reached = position.coerceIn(0, length)
+        copy(position = reached, length = length, read = read || reached * 100 >= length * ANIME_FINISHED_PERCENT)
+    }
 }
+
+/** How much of an episode, in percent of its duration, counts as watching it. */
+const val ANIME_FINISHED_PERCENT = 85
 
 /** [entries] oldest first, the order they are read in. */
 fun List<StoredSeriesEntry>.inReadingOrder(): List<StoredSeriesEntry> = sortedByDescending { it.sourceOrder }
 
 /**
  * Where Continue resumes, the first of these that exists: the entry opened last, while it is unfinished; the entry
- * after it in reading order, while unread; the latest entry the user is partway through (past its first page); the
+ * after it in reading order, while unread; the latest entry the user is partway through (past its first page, or its
+ * first moment); the
  * first unread entry in reading order, which is the first entry while nothing is read; and, with everything read, the
  * entry opened last. Null when the series has no entries.
  */
 fun continueEntry(series: StoredSeries, entries: List<StoredSeriesEntry>): StoredSeriesEntry? {
     val ordered = entries.inReadingOrder()
+    // Where an untouched entry stands: page 1 of a chapter, the start of an episode.
+    val started = if (series.series.id.source.seriesKind == SeriesKind.ANIME) 0L else 1L
     val opened = ordered.indexOfFirst { it.entry.address == series.lastOpenedEntry }
     val lastOpened = ordered.getOrNull(opened)
     return lastOpened?.takeIf { !it.read }
         ?: lastOpened?.let { ordered.getOrNull(opened + 1) }?.takeIf { !it.read }
-        ?: ordered.lastOrNull { !it.read && it.lastPage > 1 }
+        ?: ordered.lastOrNull { !it.read && it.position > started }
         ?: ordered.firstOrNull { !it.read }
         ?: lastOpened
         ?: ordered.lastOrNull()
 }
 
-/** The page (from 0) an entry opens at: where the user left an unfinished entry, the start otherwise. */
-fun StoredSeriesEntry.resumePageIndex(): Int = if (read) 0 else (lastPage - 1).coerceAtLeast(0)
+/** The page (from 0) a chapter opens at: where the user left an unfinished chapter, the start otherwise. */
+fun StoredSeriesEntry.resumePageIndex(): Int = if (read) 0 else (position - 1).coerceAtLeast(0).toInt()
+
+/**
+ * The playback position, in milliseconds, an episode starts at: where the user left it, while that is short of the
+ * point that counts as watching it ([ANIME_FINISHED_PERCENT]), else 0. A watched episode left partway through a rewatch
+ * resumes too.
+ */
+fun StoredSeriesEntry.resumePositionMs(): Long {
+    val length = length ?: return if (read) 0 else position
+    return if (position * 100 < length * ANIME_FINISHED_PERCENT) position else 0
+}

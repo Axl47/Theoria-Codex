@@ -18,12 +18,10 @@ import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.exoplayer.DefaultLoadControl
-import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.analytics.PlayerId
 import androidx.media3.exoplayer.upstream.DefaultAllocator
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import com.theoriacodex.app.diagnostics.NetworkUsage
 import com.theoriacodex.app.viewer.state.ViewerPrefetchOutcome
@@ -69,11 +67,6 @@ internal enum class VideoPlaybackProfile(val usesPlatformDiagnostics: Boolean) {
     FEED_PREVIEW(usesPlatformDiagnostics = false),
     VIEWER(usesPlatformDiagnostics = true),
 }
-
-data class VideoPlaybackIdentity(
-    val location: String,
-    val cacheKey: String,
-)
 
 /** Immutable shared policy; each player receives a fresh state-owning LoadControl instance. */
 internal object VideoLoadControlFactory {
@@ -162,7 +155,6 @@ class VideoPlaybackInfrastructure(
             StandaloneDatabaseProvider(appContext),
         ),
     )
-    private val localMediaSourceFactory = DefaultMediaSourceFactory(sharedFactories.local)
 
     /** A Viewer stream is starting: the feed previews hidden behind it stop loading. */
     internal fun onViewerStreamAcquired() {
@@ -170,30 +162,35 @@ class VideoPlaybackInfrastructure(
     }
 
     /**
-     * Binds a player's media to [location]. [boundedLocks] is for players that keep loading while another reader
-     * may want the same stream (a feed card behind the Viewer): each of their requests locks at most a chunk of it.
+     * Binds a player's media to [request]: its location and mime choose a progressive, HLS or DASH source; its headers go
+     * on every request the stream causes (playlists, segments, keys, separate audio and subtitles), across redirects;
+     * its separate audio and subtitles are merged in ([StreamMediaSourceFactory]). Only a request that
+     * [usesSharedCache] reads and writes the shared cache, under its [videoCacheKey]. [boundedLocks] is for players that keep
+     * loading while another reader may want the same stream (a feed card behind the Viewer): each of their requests
+     * locks at most a chunk of it.
      */
     fun bind(
-        location: String,
-        headers: Map<String, String>,
+        request: VideoPlaybackRequest,
         boundedLocks: Boolean = false,
     ): BoundVideoPlaybackRequest {
-        val identity = videoPlaybackIdentity(location, headers)
-        val mediaSourceFactory = if (isHttpVideoLocation(location)) {
-            DefaultMediaSourceFactory(
-                cacheDataSourceFactory(headers, lockChunkBytes = VIDEO_CACHE_CHUNK_BYTES.takeIf { boundedLocks }),
-            )
+        val cached = request.usesSharedCache()
+        val upstream = requestScopedHttp(request.headers)
+        val dataSourceFactory = if (cached) {
+            videoCacheDataSourceFactory(sharedFactories.cache, upstream, lockChunkBytes = VIDEO_CACHE_CHUNK_BYTES.takeIf { boundedLocks })
         } else {
-            localMediaSourceFactory
+            DefaultDataSource.Factory(appContext, upstream)
         }
-        val mediaItemBuilder = MediaItem.Builder().setUri(videoLocationToUri(location))
-        if (isHttpVideoLocation(location)) {
-            mediaItemBuilder.setCustomCacheKey(identity.cacheKey)
-        }
+        val separateAudio = request.audioTracks.filter { it.url.isNotBlank() }
+        val mediaItem = MediaItem.Builder()
+            .setUri(videoLocationToUri(request.location))
+            .setMimeType(streamMimeType(request.mime))
+            .setCustomCacheKey(if (cached) videoCacheKey(request.location, request.headers) else null)
+            .setTag(separateAudio.takeIf { it.isNotEmpty() }?.let { tracks -> SeparateAudioLabels(tracks.map { it.label }) })
+            .build()
         return BoundVideoPlaybackRequest(
-            identity = identity,
-            mediaSourceFactory = mediaSourceFactory,
-            mediaItem = mediaItemBuilder.build(),
+            request = request,
+            mediaSourceFactory = StreamMediaSourceFactory(dataSourceFactory, separateAudio, request.subtitles.filter { it.url.isNotBlank() }),
+            mediaItem = mediaItem,
         )
     }
 
@@ -203,7 +200,7 @@ class VideoPlaybackInfrastructure(
      * waits for already-buffered audio, so hold-to-speed-up lagged its indicator on both edges.
      */
     internal fun playerBuilder(profile: VideoPlaybackProfile): ExoPlayer.Builder {
-        val renderers = DefaultRenderersFactory(appContext)
+        val renderers = SideLoadedSubtitleRenderersFactory(appContext)
             .setEnableDecoderFallback(true)
             .setEnableAudioTrackPlaybackParams(true)
         return ExoPlayer.Builder(appContext, renderers)
@@ -211,17 +208,21 @@ class VideoPlaybackInfrastructure(
             .setUsePlatformDiagnostics(profile.usesPlatformDiagnostics)
     }
 
-    /** Caches at most [maxBytes] from the start of [location] into the shared video cache. */
+    /**
+     * Caches at most [maxBytes] from the start of [request]'s stream into the shared video cache. Skips every stream
+     * playback would not read from there ([usesSharedCache]): one that opts out of the cache, such as a full-length
+     * episode, and a segmented one (HLS, DASH), whose opening bytes are a playlist rather than video.
+     */
     suspend fun prefetch(
-        location: String,
-        headers: Map<String, String>,
+        request: VideoPlaybackRequest,
         maxBytes: Long = VIEWER_VIDEO_PREFETCH_BYTES,
     ): ViewerPrefetchResult {
-        if (!isHttpVideoLocation(location)) {
+        if (!request.usesSharedCache()) {
             return ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED)
         }
+        val (location, headers) = request
         return withContext(Dispatchers.IO) {
-            val cacheKey = videoPlaybackIdentity(location, headers).cacheKey
+            val cacheKey = videoCacheKey(location, headers)
             val dataSpec = DataSpec.Builder()
                 .setUri(videoLocationToUri(location))
                 .setKey(cacheKey)
@@ -259,7 +260,7 @@ class VideoPlaybackInfrastructure(
     ): Boolean {
         if (!isHttpVideoLocation(location)) return false
         return withContext(Dispatchers.IO) {
-            copyFullyCachedVideo(sharedFactories.cache, videoPlaybackIdentity(location, headers).cacheKey, destination)
+            copyFullyCachedVideo(sharedFactories.cache, videoCacheKey(location, headers), destination)
         }
     }
 
@@ -290,7 +291,7 @@ class VideoPlaybackInfrastructure(
             .setCacheWriteDataSinkFactory(null)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
             .createDataSource()
-        sampleVideoFrames(source, uri, videoPlaybackIdentity(location, headers).cacheKey, count, sizePx, job)
+        sampleVideoFrames(source, uri, videoCacheKey(location, headers), count, sizePx, job)
     }
 
     /** Remove entries through Media3's owner; never delete its open database or cache directory. */
@@ -300,12 +301,12 @@ class VideoPlaybackInfrastructure(
 
     /** Bytes of one stream held in the shared cache, from its start. */
     suspend fun cachedBytes(location: String, headers: Map<String, String>): Long = withContext(Dispatchers.IO) {
-        sharedFactories.cache.getCachedBytes(videoPlaybackIdentity(location, headers).cacheKey, 0L, Long.MAX_VALUE)
+        sharedFactories.cache.getCachedBytes(videoCacheKey(location, headers), 0L, Long.MAX_VALUE)
     }
 
     /** Drops one stream's cached bytes, leaving every other entry in place. */
     suspend fun removeCached(location: String, headers: Map<String, String>) = withContext(Dispatchers.IO) {
-        sharedFactories.cache.removeResource(videoPlaybackIdentity(location, headers).cacheKey)
+        sharedFactories.cache.removeResource(videoCacheKey(location, headers))
     }
 
     internal suspend fun disposableCacheBytes(): Long = withContext(Dispatchers.IO) {
@@ -317,12 +318,13 @@ class VideoPlaybackInfrastructure(
         headers: Map<String, String>,
         blockOnCache: Boolean = false,
         lockChunkBytes: Long? = null,
-    ): CacheDataSource.Factory {
+    ): CacheDataSource.Factory =
+        videoCacheDataSourceFactory(sharedFactories.cache, requestScopedHttp(headers), blockOnCache, lockChunkBytes)
+
+    /** The shared HTTP factory with [headers] added to each request, redirects included; the shared factory never keeps them. */
+    private fun requestScopedHttp(headers: Map<String, String>): DataSource.Factory {
         val immutableHeaders = headers.toMap()
-        val requestScopedUpstream = ResolvingDataSource.Factory(sharedFactories.http) { dataSpec ->
-            dataSpec.withAdditionalHeaders(immutableHeaders)
-        }
-        return videoCacheDataSourceFactory(sharedFactories.cache, requestScopedUpstream, blockOnCache, lockChunkBytes)
+        return ResolvingDataSource.Factory(sharedFactories.http) { dataSpec -> dataSpec.withAdditionalHeaders(immutableHeaders) }
     }
 }
 
@@ -382,8 +384,12 @@ private suspend fun CacheWriter.cacheCancellable() {
     }
 }
 
+/**
+ * A [request] made playable: [mediaSourceFactory] builds its source from [mediaItem]. Pools reuse a player's slot only
+ * for an equal [request] (location, headers, mime, separate audio, subtitles and cache choice alike).
+ */
 data class BoundVideoPlaybackRequest(
-    val identity: VideoPlaybackIdentity,
+    val request: VideoPlaybackRequest,
     val mediaSourceFactory: MediaSource.Factory,
     val mediaItem: MediaItem,
 )
@@ -399,10 +405,14 @@ fun Context.videoPlaybackInfrastructure(): VideoPlaybackInfrastructure {
     return owner.videoPlaybackInfrastructure
 }
 
-internal fun videoPlaybackIdentity(
+/**
+ * The shared-cache key of the stream at [location] requested with [headers]: the same for any header order and name
+ * case, different for different credentials, and naming neither.
+ */
+internal fun videoCacheKey(
     location: String,
     headers: Map<String, String>,
-): VideoPlaybackIdentity {
+): String {
     val digest = MessageDigest.getInstance("SHA-256")
     digest.updateLengthPrefixed(location)
     headers.entries
@@ -412,10 +422,7 @@ internal fun videoPlaybackIdentity(
             digest.updateLengthPrefixed(name.lowercase())
             digest.updateLengthPrefixed(value)
         }
-    return VideoPlaybackIdentity(
-        location = location,
-        cacheKey = "theoria-video-v1-${digest.digest().toHexString()}",
-    )
+    return "theoria-video-v1-${digest.digest().toHexString()}"
 }
 
 private data class SharedVideoFactories(
@@ -432,11 +439,6 @@ private fun MessageDigest.updateLengthPrefixed(value: String) {
 
 private fun ByteArray.toHexString(): String = joinToString(separator = "") { byte ->
     (byte.toInt() and 0xff).toString(16).padStart(2, '0')
-}
-
-private fun isHttpVideoLocation(location: String): Boolean {
-    return location.startsWith("http://", ignoreCase = true) ||
-        location.startsWith("https://", ignoreCase = true)
 }
 
 private const val VIDEO_PLAYBACK_CACHE_DIRECTORY = "theoria_codex/media3/previews"

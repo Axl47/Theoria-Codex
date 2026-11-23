@@ -21,6 +21,34 @@ data class VideoVariant(val url: String, val height: Int? = null, val original: 
 
 enum class VideoQuality { AUTO, DATA_SAVER, BEST }
 
+/**
+ * One way to play a series episode, as its source resolved it. Unlike a [VideoVariant] it is chosen by [label], not
+ * height, and is never stored: its address can expire within minutes, so streams are asked for each time the episode
+ * opens.
+ */
+data class MediaStream(
+    val url: String,
+    /**
+     * The source's name for it, such as `1080p · Server A`; the Viewer remembers a choice by it, since URLs change.
+     * Within one episode labels are unique and not blank, which [playable] sees to.
+     */
+    val label: String,
+    /** The container or manifest type when the source names one (HLS, DASH); null leaves it to the player. */
+    val mime: String? = null,
+    /**
+     * Request headers its host requires, sent as they are. The extension host fills them in: a stream without headers
+     * of its own gets its source's, browser agent included, so empty means the host needs none.
+     */
+    val headers: Map<String, String> = emptyMap(),
+    /** External subtitle files, rendered by the player. */
+    val subtitles: List<MediaTrack> = emptyList(),
+    /** Audio served apart from the video, merged by the player. */
+    val audioTracks: List<MediaTrack> = emptyList(),
+)
+
+/** A subtitle or audio file served beside a [MediaStream]; [label] is what a picker shows, such as a language. */
+data class MediaTrack(val url: String, val label: String)
+
 data class ImageRef(
     val url: String?,
     val localPath: String?,
@@ -33,7 +61,38 @@ data class ImageRef(
     val thumbnailUrl: String? = null,
     /** Equivalent copies of [url] (mirrors, other formats, other shards); tried only when it fails, never shown as a lighter step. */
     val fallbackUrls: List<String> = emptyList(),
+    /**
+     * A series episode's streams, in its source's preferred order; empty for every other media. Live data only: no
+     * storage, backup, share or offline record carries them, so a stored post has none.
+     */
+    val streams: List<MediaStream> = emptyList(),
 )
+
+/**
+ * The streams of one episode that can play, as the Viewer lists them: those with an address, each under a label of
+ * its own. A stream the source left unnamed is `Stream 2` by its place; a repeated label gains its count, `1080p (2)`.
+ */
+fun List<MediaStream>.playable(): List<MediaStream> {
+    val streams = filter { it.url.isNotBlank() }
+    return streams.zip(uniqueLabels(streams.map { it.label }) { "Stream $it" }) { stream, label -> stream.copy(label = label) }
+}
+
+/**
+ * [labels] fit to choose between by name: trimmed, a blank one named [unnamed] of its 1-based place, and a repeated
+ * one with the first count no other label holds, `English (2)`. Episode streams ([playable]) and the player's tracks
+ * follow this one rule.
+ */
+fun uniqueLabels(labels: List<String>, unnamed: (place: Int) -> String): List<String> {
+    val named = labels.mapIndexed { index, raw -> raw.trim().ifEmpty { unnamed(index + 1) } }
+    val taken = named.toHashSet()
+    val seen = HashSet<String>()
+    return named.map { label ->
+        if (seen.add(label)) return@map label
+        var count = 2
+        while (!taken.add("$label ($count)")) count++
+        "$label ($count)"
+    }
+}
 
 data class PostTaxonomyTerm(
     val value: String,

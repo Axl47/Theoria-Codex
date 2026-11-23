@@ -24,12 +24,13 @@ import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.domain.model.GalleryReadingMode
-import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
 import com.theoriacodex.domain.series.SeriesStatus
@@ -79,12 +80,12 @@ class SeriesPageScreenTest {
         }
         compose.waitForIdle()
 
-        compose.onNodeWithText("Suicidal Battle God").assertIsDisplayed()
-        compose.onNodeWithText("Asura Scans").assertIsDisplayed()
+        compose.onNodeWithText("Last Lantern Saga").assertIsDisplayed()
+        compose.onNodeWithText("Ink Harbor").assertIsDisplayed()
         compose.onNodeWithContentDescription("Open in browser").performClick()
         compose.onNodeWithContentDescription("Share").performClick()
-        assertEquals(listOf("https://asura.example/series/1"), openedUrls)
-        assertEquals(listOf("https://asura.example/series/1"), sharedUrls)
+        assertEquals(listOf("https://inkharbor.example/series/1"), openedUrls)
+        assertEquals(listOf("https://inkharbor.example/series/1"), sharedUrls)
 
         // Tapping cover opens the full-screen lightbox and Close dismisses it.
         compose.onNodeWithTag(COVER_LIGHTBOX_TAG).assertDoesNotExist()
@@ -208,14 +209,14 @@ class SeriesPageScreenTest {
     @Test
     fun entryDetailIncludesTranslatorGroupAlongsideDateAndProgress() {
         val entry = StoredSeriesEntry(
-            entry = SeriesEntry("/c/1", "Chapter 1", translatorGroup = "Asura", uploadedAtEpochMs = 1_700_000_000_000L),
+            entry = SeriesEntry("/c/1", "Chapter 1", translatorGroup = "Driftwood", uploadedAtEpochMs = 1_700_000_000_000L),
             sourceOrder = 0,
             firstSeenAtEpochMs = 1L,
-            lastPage = 3,
-            pageCount = 12,
+            position = 3,
+            length = 12,
         )
-        val detail = entryDetail(entry).orEmpty()
-        assertTrue(detail.contains("Asura"))
+        val detail = entryDetail(entry, SeriesKind.MANGA).orEmpty()
+        assertTrue(detail.contains("Driftwood"))
         assertTrue(detail.contains("Page 3 of 12"))
     }
 }
@@ -227,13 +228,13 @@ private class PageHarness(
 )
 
 private fun pageHarness(chapterCount: Int, readIndices: Set<Int> = emptySet()): PageHarness {
-    val primary = PageFakeSource("custom_mihon_1", "Asura Scans", "https://asura.example")
-    val alternate = PageFakeSource("custom_mihon_2", "MangaDex", "https://mangadex.example")
+    val primary = PageFakeSource("custom_mihon_1", "Ink Harbor", "https://inkharbor.example")
+    val alternate = PageFakeSource("custom_mihon_2", "Paper Lantern", "https://paperlantern.example")
     val id = SeriesId(primary.key, "/series/1")
     val series = Series(
         id = id,
-        title = "Suicidal Battle God",
-        author = "Blue-Deep",
+        title = "Last Lantern Saga",
+        author = "Ren Hollow",
         genres = listOf("Fantasy", "Action"),
         description = "A time travel action fantasy of the strongest of mankind.",
         status = SeriesStatus.ONGOING,
@@ -260,7 +261,7 @@ private class PageFakeSource(id: String, override val name: String, private val 
     override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>) = SeriesPage(emptyList(), false)
     override suspend fun details(series: Series) = series
     override suspend fun entries(series: Series) = emptyList<SeriesEntry>()
-    override suspend fun pages(entry: SeriesEntry) = emptyList<ImageRef>()
+    override suspend fun media(entry: SeriesEntry) = EntryMedia.Pages(emptyList())
     override fun webUrl(series: Series): String = "$baseUrl${series.id.address}"
 }
 
@@ -282,22 +283,22 @@ private class PageMemoryRepository(stored: StoredSeries, entries: List<StoredSer
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit
     override suspend fun setAllRead(id: SeriesId, read: Boolean): EntryProgressRestore {
-        val changed = entriesFlow.value.filter { if (read) !it.read else (it.read || it.lastPage > 0) }
+        val changed = entriesFlow.value.filter { if (read) !it.read else (it.read || it.position > 0) }
         val prevLast = storedFlow.value?.lastOpenedEntry
         val clearLast = !read && prevLast != null
-        entriesFlow.value = entriesFlow.value.map { it.copy(read = read, lastPage = if (read) it.lastPage else 0) }
+        entriesFlow.value = entriesFlow.value.map { it.copy(read = read, position = if (read) it.position else 0) }
         if (clearLast) storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = null)
         return EntryProgressRestore(changed, restoreLastOpened = clearLast, lastOpenedEntry = prevLast)
     }
 
     override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean): EntryProgressRestore {
         val targets = entryAddresses.toHashSet()
-        val changed = entriesFlow.value.filter { it.entry.address in targets && (if (read) !it.read else (it.read || it.lastPage > 0)) }
+        val changed = entriesFlow.value.filter { it.entry.address in targets && (if (read) !it.read else (it.read || it.position > 0)) }
         val prevLast = storedFlow.value?.lastOpenedEntry
         val clearLast = !read && prevLast in targets
         entriesFlow.value = entriesFlow.value.map { entry ->
             if (entry.entry.address !in targets) entry
-            else entry.copy(read = read, lastPage = if (read) entry.lastPage else 0)
+            else entry.copy(read = read, position = if (read) entry.position else 0)
         }
         if (clearLast) storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = null)
         return EntryProgressRestore(changed, restoreLastOpened = clearLast, lastOpenedEntry = prevLast)
@@ -307,11 +308,11 @@ private class PageMemoryRepository(stored: StoredSeries, entries: List<StoredSer
         val byAddress = restore.entries.associateBy { it.entry.address }
         entriesFlow.value = entriesFlow.value.map { current ->
             val target = byAddress[current.entry.address] ?: return@map current
-            current.copy(read = target.read, lastPage = target.lastPage, pageCount = target.pageCount)
+            current.copy(read = target.read, position = target.position, length = target.length)
         }
         if (restore.restoreLastOpened) storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = restore.lastOpenedEntry)
     }
 
-    override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) = Unit
+    override suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?) = Unit
     override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) = false
 }

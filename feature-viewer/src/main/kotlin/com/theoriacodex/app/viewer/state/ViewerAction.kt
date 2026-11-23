@@ -2,6 +2,7 @@ package com.theoriacodex.app.viewer.state
 
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.app.viewer.ViewerSeries
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 
@@ -12,6 +13,7 @@ sealed interface ViewerAction {
         val initialPageIndex: Int = 0,
         val resolutionRequiredPostIds: Set<PostId> = emptySet(),
         val initialMediaIndices: Map<PostId, Int> = emptyMap(),
+        val series: ViewerSeries? = null,
     ) : ViewerAction
 
     /** Adds [posts] after the live [session]'s pages, leaving the pages, selection and controls it has untouched. */
@@ -56,6 +58,17 @@ sealed interface ViewerAction {
     data object TogglePlayback : ViewerAction
     data object RestartPlayback : ViewerAction
     data class SetPlaybackRate(val rate: Float) : ViewerAction
+    /**
+     * Plays the episode stream labelled [label], from where playback is. It closes the episode menus, and clears a
+     * failure shown on the media and plays again, so a stream picked after another failed starts at once.
+     */
+    data class ChooseStream(val label: String) : ViewerAction
+    /** The episode [media] plays its stream [label] after the one before failed, without changing the session's choice. */
+    data class FallBackToStream(val media: ViewerMediaKey, val label: String) : ViewerAction
+    /** Applies [choice] to this episode and every later one; it closes the episode menus. */
+    data class ChooseSubtitle(val choice: ViewerSubtitleChoice) : ViewerAction
+    /** Plays the audio labelled [label] in this episode and every later one that has it; it closes the episode menus. */
+    data class ChooseAudio(val label: String) : ViewerAction
 
     data class RequestPageResolution(val postId: PostId) : ViewerAction
     data class ResolutionCancelled(val session: ViewerSessionIdentity, val postId: PostId) : ViewerAction
@@ -67,6 +80,14 @@ sealed interface ViewerAction {
     data class ResolutionCompleted(
         val session: ViewerSessionIdentity,
         val post: Post,
+        /** When the lookup answered, in wall-clock milliseconds; see [ViewerResolutionState.resolvedAtMs]. */
+        val resolvedAtMs: Long? = null,
+        /**
+         * The lookup asked again for media that failed while its page showed it ([com.theoriacodex.app.viewer.recoverMedia]):
+         * the load in progress continues on the new media, so each media keeps its load generation (what a Retry
+         * started, and what the load has tried), and a current page keeps its playback controls (paused stays paused).
+         */
+        val recovered: Boolean = false,
     ) : ViewerAction
 
     data class ResolutionFailed(

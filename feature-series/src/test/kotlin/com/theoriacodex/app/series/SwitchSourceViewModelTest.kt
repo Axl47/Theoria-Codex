@@ -3,8 +3,8 @@ package com.theoriacodex.app.series
 import com.theoriacodex.data.repository.NoChaptersToMoveToException
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
-import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
@@ -54,7 +54,7 @@ class SwitchSourceViewModelTest {
         assertEquals("The series' own source is not searched", listOf(titled.key, empty.key), results.map { it.key })
         val found = results[0].listing as SwitchListing.Found
         assertEquals(listOf("the hero!", "The Hero 2", "Hero Again"), found.matches.map { it.series.title })
-        assertEquals(listOf(12, 12, 12), found.matches.map { it.chapters })
+        assertEquals(listOf(12, 12, 12), found.matches.map { it.entries })
         assertEquals("Only the rows shown are counted", 3, titled.counted)
         assertEquals(SwitchListing.Found(emptyList()), results[1].listing)
     }
@@ -138,17 +138,35 @@ class SwitchSourceViewModelTest {
 
     @Test
     fun aSeriesWithoutChaptersSaysSoAndSourcesOfOneNameAreToldApartByLanguage() = runTest {
-        val french = Finding("custom_mihon_2", listOf("Hero"), name = "MangaDex", language = "fr")
-        val viewModel = viewModel(french, Finding("custom_mihon_3", name = "MangaDex")) { _, _ -> throw NoChaptersToMoveToException() }
+        val french = Finding("custom_mihon_2", listOf("Hero"), name = "Paper Lantern", language = "fr")
+        val viewModel = viewModel(french, Finding("custom_mihon_3", name = "Paper Lantern")) { _, _ -> throw NoChaptersToMoveToException() }
         advanceUntilIdle()
         viewModel.open("Hero")
         advanceUntilIdle()
         val result = viewModel.state.value.sheet!!.results.first()
-        assertEquals("MangaDex · ${languageName("fr")}", result.name)
+        assertEquals("Paper Lantern · ${languageName("fr")}", result.name)
 
         viewModel.switchTo((result.listing as SwitchListing.Found).matches.single()) {}
         advanceUntilIdle()
-        assertEquals(NO_CHAPTERS, viewModel.state.value.sheet!!.failure)
+        assertEquals("No chapters to move your progress to", viewModel.state.value.sheet!!.failure)
+    }
+
+    @Test
+    fun anAnimeSwitchesOnlyBetweenAnimeSourcesAndSaysEpisodes() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val own = Finding("custom_aniyomi_1")
+        val anime = Finding("custom_aniyomi_2", listOf("Hero"))
+        val viewModel = SwitchSourceViewModel(SeriesId(own.key, "/mine"), { listOf(own, Finding("custom_mihon_2", listOf("Hero")), anime) }, store = {}) { _, _ ->
+            throw NoChaptersToMoveToException()
+        }
+        advanceUntilIdle()
+
+        assertEquals(listOf(anime.key), viewModel.state.value.others.map { it.key })
+        viewModel.open("Hero")
+        advanceUntilIdle()
+        viewModel.switchTo((viewModel.state.value.sheet!!.results.single().listing as SwitchListing.Found).matches.single()) {}
+        advanceUntilIdle()
+        assertEquals("No episodes to move your progress to", viewModel.state.value.sheet!!.failure)
     }
 }
 
@@ -188,5 +206,5 @@ private class Finding(
         counted++
         return List(chapters) { SeriesEntry("/c$it", "Chapter $it") }
     }
-    override suspend fun pages(entry: SeriesEntry) = emptyList<ImageRef>()
+    override suspend fun media(entry: SeriesEntry) = EntryMedia.Pages(emptyList())
 }

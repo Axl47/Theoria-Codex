@@ -32,6 +32,8 @@ class SeriesDependencies(
     val covers: SeriesCovers,
     /** Which page pictures each series' chapters on the Viewer's strip; lives as long as the app. */
     val pictures: ChapterPictures = ChapterPictures(),
+    /** Writes a line to the app's log, such as when an entry's lookup starts. */
+    val log: (String) -> Unit,
 ) {
     private val checking = Mutex()
 

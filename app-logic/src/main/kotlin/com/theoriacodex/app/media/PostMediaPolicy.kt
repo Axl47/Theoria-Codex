@@ -93,7 +93,9 @@ fun mediaKind(mime: String?, location: String?): PostMediaKind {
     }
 }
 
+/** A series episode is video by its streams, whose addresses (HLS, DASH) often name no type the location shows. */
 fun mediaKind(ref: ImageRef): PostMediaKind {
+    if (ref.streams.isNotEmpty()) return PostMediaKind.VIDEO
     return mediaKind(
         mime = ref.mime,
         location = ref.localPath ?: ref.url,

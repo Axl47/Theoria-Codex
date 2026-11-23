@@ -14,6 +14,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.seriesKind
 import com.theoriacodex.domain.series.SeriesStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -145,7 +146,7 @@ class RoomSeriesRepository(
                 .map(SeriesEntryEntity::toStored)
                 .mapNotNull { current ->
                     val target = byAddress[current.entry.address] ?: return@mapNotNull null
-                    val next = current.copy(read = target.read, lastPage = target.lastPage, pageCount = target.pageCount)
+                    val next = current.copy(read = target.read, position = target.position, length = target.length)
                     next.takeIf { it != current }?.toEntity(id)
                 }
             if (restored.isNotEmpty()) dao.upsertEntries(restored)
@@ -158,14 +159,14 @@ class RoomSeriesRepository(
         }
     }
 
-    override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) {
+    override suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?) {
         // A series moved to another source while its chapter was open is gone with its entries, so this writes nothing.
         database.withTransaction {
             val entry = dao.entry(id.source.id, id.address, entryAddress)?.toStored() ?: return@withTransaction
             val series = dao.series(id.source.id, id.address)?.toStored() ?: return@withTransaction
             // Unchanged rows are not written, so observers are not woken on every page of a chapter already recorded.
             if (series.lastOpenedEntry != entryAddress) dao.upsertSeries(series.copy(lastOpenedEntry = entryAddress).toEntity())
-            val progressed = if (pageCount == null || pageCount <= 0) entry else entry.withProgress(page, pageCount)
+            val progressed = if (length == null || length <= 0) entry else entry.withProgress(position, length, id.source.seriesKind)
             if (progressed != entry) dao.upsertEntries(listOf(progressed.toEntity(id)))
         }
     }
@@ -176,7 +177,7 @@ class RoomSeriesRepository(
             val old = dao.series(from.source.id, from.address)?.toStored() ?: return@withTransaction false
             val oldEntries = dao.allEntries(from.source.id, from.address).map(SeriesEntryEntity::toStored)
             // All stored entries count, also ones the old source no longer lists: their progress goes with the series.
-            if (entries.isEmpty() && oldEntries.any { it.read || it.lastPage > 0 }) throw NoChaptersToMoveToException()
+            if (entries.isEmpty() && oldEntries.any { it.read || it.position > 0 }) throw NoChaptersToMoveToException()
             write(to, entries)
             val target = dao.series(to.id.source.id, to.id.address).toStored()
             val (moved, changed) = carryProgress(old, oldEntries, target, dao.entries(to.id.source.id, to.id.address).map(SeriesEntryEntity::toStored))
@@ -201,7 +202,7 @@ private val SeriesEntry.release: Pair<Float, String?>? get() = number?.let { it 
 
 private fun StoredSeriesEntry.withReadState(targets: Set<String>?, read: Boolean): StoredSeriesEntry? {
     if (targets != null && entry.address !in targets) return null
-    val next = if (read) copy(read = true) else copy(read = false, lastPage = 0)
+    val next = if (read) copy(read = true) else copy(read = false, position = 0)
     return next.takeIf { it != this }
 }
 
@@ -270,8 +271,8 @@ internal fun SeriesEntryEntity.toStored() = StoredSeriesEntry(
     sourceOrder = sourceOrder,
     firstSeenAtEpochMs = firstSeenAtEpochMs,
     read = read,
-    lastPage = lastPage,
-    pageCount = pageCount,
+    position = lastPage,
+    length = pageCount,
 )
 
 internal fun StoredSeriesEntry.toEntity(series: SeriesId) = SeriesEntryEntity(
@@ -285,6 +286,6 @@ internal fun StoredSeriesEntry.toEntity(series: SeriesId) = SeriesEntryEntity(
     sourceOrder,
     firstSeenAtEpochMs,
     read,
-    lastPage,
-    pageCount,
+    position,
+    length,
 )

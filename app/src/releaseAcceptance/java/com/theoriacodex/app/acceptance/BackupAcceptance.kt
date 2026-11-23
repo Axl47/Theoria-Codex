@@ -31,6 +31,9 @@ import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 
 /**
  * Backups, pinned searches, and the restore journal under R8: what this build writes survives a process restart as
@@ -60,7 +63,7 @@ internal suspend fun writeBackups(directory: File, post: Post) {
 internal suspend fun verifyBackups(directory: File, post: Post) {
     val codec = ProfileBackupCodec()
     val written = directory.resolve("backup.json").readText()
-    check(Json.parseToJsonElement(written) == Json.parseToJsonElement(SHIPPED_BACKUP))
+    check(Json.parseToJsonElement(written) == shippedBackupWithSeriesTime())
     val expected = codec.decode(codec.encode(acceptanceBackup(post)))
     check(codec.decode(written.toByteArray()) == expected && codec.decode(SHIPPED_BACKUP.toByteArray()) == expected)
     check(expected.library.posts.single() == post && expected.customSources.single().label == "Safe & 'sound'")
@@ -102,6 +105,13 @@ private fun acceptanceSearch() = RecentSearchEntry(
     Query(QueryMode.Unified, listOf(SearchTerm("a & b", SearchFacet.ARTIST, "artist")), emptyList(), SortMode.NEWEST, null, null),
     "acceptance-search", 5L, RecentSearchKind.MULTI_SEARCH, listOf(SourceKey.GELBOORU, SourceKey.PIXIV),
 )
+
+/** [SHIPPED_BACKUP] as this build writes it: series time, which began counting later, is present as zero. */
+private fun shippedBackupWithSeriesTime(): JsonObject {
+    val shipped = Json.parseToJsonElement(SHIPPED_BACKUP).jsonObject
+    val statistics = shipped.getValue("statistics").jsonObject + listOf("readingMs", "animeMs").associateWith { JsonPrimitive(0L) }
+    return JsonObject(shipped + ("statistics" to JsonObject(statistics)))
+}
 
 /** The values behind [SHIPPED_BACKUP]; edit only together with a backup a Gson build wrote. */
 private fun acceptanceBackup(post: Post): ProfileBackup {

@@ -1,6 +1,7 @@
 package com.theoriacodex.app.viewer.state
 
 import com.theoriacodex.app.media.PostMediaKind
+import com.theoriacodex.app.viewer.ViewerSeries
 import com.theoriacodex.app.media.isAnimatedImageMediaRef
 import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isPixivUgoiraMedia
@@ -16,12 +17,14 @@ fun createViewerUiState(
     initialPageIndex: Int = 0,
     requiresResolution: (Post) -> Boolean = { false },
     initialMediaIndices: Map<PostId, Int> = emptyMap(),
+    series: ViewerSeries? = null,
 ): ViewerUiState {
     val pages = posts.map { post -> post.toNewViewerPageState(requiresResolution, initialMediaIndices) }
     val currentPageIndex = initialPageIndex.coerceInPages(pages)
     val currentPage = pages.getOrNull(currentPageIndex)
     return ViewerUiState(
         session = session,
+        series = series,
         pages = pages,
         currentPageIndex = currentPageIndex,
         controls = ViewerControlsState(
@@ -128,6 +131,12 @@ fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReducti
         ViewerAction.TogglePlayback -> ViewerReduction(state.setPlaying(!state.controls.playback.playing))
         ViewerAction.RestartPlayback -> ViewerReduction(state.restartPlayback())
         is ViewerAction.SetPlaybackRate -> ViewerReduction(state.setPlaybackRate(action.rate))
+        is ViewerAction.ChooseStream -> ViewerReduction(state.chooseStream(action.label))
+        is ViewerAction.FallBackToStream -> ViewerReduction(state.copy(controls = state.controls.copy(
+            episode = state.controls.episode.let { it.copy(episodeStreams = it.episodeStreams + (action.media to ViewerEpisodeStream(action.label, pickedByHand = false))) },
+        )))
+        is ViewerAction.ChooseSubtitle -> ViewerReduction(state.chooseEpisodeTracks { copy(subtitle = action.choice) })
+        is ViewerAction.ChooseAudio -> ViewerReduction(state.chooseEpisodeTracks { copy(audioLabel = action.label) })
         is ViewerAction.RequestPageResolution -> state.requestResolution(session, action.postId)
         is ViewerAction.ResolutionCancelled,
         is ViewerAction.ResolutionStarted,
@@ -162,6 +171,21 @@ fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReducti
 private fun ViewerUiState.withControls(controls: ViewerControlsState): ViewerReduction =
     ViewerReduction(copy(controls = controls))
 
+private fun ViewerUiState.chooseEpisodeTracks(change: ViewerEpisodeChoice.() -> ViewerEpisodeChoice): ViewerUiState =
+    copy(controls = controls.copy(episode = controls.episode.change(), panel = controls.panel?.takeUnless(ViewerPanel::inChrome)))
+
+/** A new stream replaces the player, and with it any failure the last one showed. */
+private fun ViewerUiState.chooseStream(label: String): ViewerUiState {
+    // The session's new choice replaces every episode's own stream; the episode playing keeps it as picked by hand.
+    val picked = currentMedia?.key?.let { mapOf(it to ViewerEpisodeStream(label, pickedByHand = true)) }.orEmpty()
+    val chosen = chooseEpisodeTracks { copy(streamLabel = label, episodeStreams = picked) }
+    val failedHere = mediaError != null && mediaError.mediaKey.let { it == null || it == currentMedia?.key }
+    return chosen.copy(
+        mediaError = mediaError.takeUnless { failedHere },
+        controls = chosen.controls.copy(playback = chosen.controls.playback.copy(playing = chosen.controls.playback.available)),
+    )
+}
+
 private fun ViewerUiState.replaceSession(action: ViewerAction.ReplaceSession): ViewerReduction {
     return ViewerReduction(
         createViewerUiState(
@@ -169,6 +193,7 @@ private fun ViewerUiState.replaceSession(action: ViewerAction.ReplaceSession): V
             posts = action.posts,
             initialPageIndex = action.initialPageIndex,
             requiresResolution = { post -> post.id in action.resolutionRequiredPostIds },
+            series = action.series,
             initialMediaIndices = action.initialMediaIndices + if (session == action.session) {
                 pages.associate { it.post.id to it.targetMediaIndex }
             } else {
@@ -252,7 +277,7 @@ private fun ViewerUiState.reduceResolution(action: ViewerAction): ViewerReductio
     }
     is ViewerAction.ResolutionStarted -> this.reduceResolutionStarted(action)
     is ViewerAction.ResolutionCompleted -> this.ifCurrentSession(action.session) {
-        replaceResolvedPost(action.post)
+        replaceResolvedPost(action.post, action.resolvedAtMs, action.recovered)
     }
     is ViewerAction.ResolutionFailed -> this.ifCurrentSession(action.session) {
         resolutionFailed(action)
@@ -459,27 +484,32 @@ private fun ViewerUiState.requestResolution(session: ViewerSessionIdentity, post
     )
 }
 
-private fun ViewerUiState.replaceResolvedPost(post: Post): ViewerUiState {
+/** The page of [post] replaced by its lookup's answer; see [ViewerAction.ResolutionCompleted.recovered]. */
+private fun ViewerUiState.replaceResolvedPost(post: Post, resolvedAtMs: Long?, recovered: Boolean): ViewerUiState {
     val pageIndex = pages.indexOfFirst { page -> page.post.id == post.id }
     if (pageIndex < 0) return this
     val previous = pages[pageIndex]
-    val replacement = post.toViewerPageState(
+    val resolved = post.toViewerPageState(
         selectedMediaIndex = previous.targetMediaIndex,
         resolution = previous.resolution.copy(
             status = ViewerResolutionStatus.RESOLVED,
             message = null,
             recoverable = true,
+            resolvedAtMs = resolvedAtMs,
         ),
+    )
+    val replacement = if (!recovered) resolved else resolved.copy(
+        media = resolved.media.map { media ->
+            previous.media.firstOrNull { it.key == media.key }?.let { media.copy(loadGeneration = it.loadGeneration) } ?: media
+        },
     )
     val updatedPages = pages.toMutableList().also { values -> values[pageIndex] = replacement }
     if (pageIndex != currentPageIndex) return copy(pages = updatedPages)
+    val playback = playbackControlsFor(media = replacement.selectedMedia, playbackRate = controls.playback.playbackRate)
     return copy(
         pages = updatedPages,
         controls = controls.copy(
-            playback = playbackControlsFor(
-                media = replacement.selectedMedia,
-                playbackRate = controls.playback.playbackRate,
-            ),
+            playback = if (recovered && playback.available) controls.playback.copy(available = true) else playback,
         ),
         overview = overviewFor(replacement, visible = overview.visible),
         mediaError = null,
@@ -564,6 +594,9 @@ private fun ViewerUiState.retryMedia(session: ViewerSessionIdentity): ViewerRedu
     if (page.resolution.status == ViewerResolutionStatus.FAILED && page.resolution.recoverable) {
         return retried.requestResolution(session, page.post.id)
     }
+    // An episode's next load asks for fresh links itself, and replays in place when none come
+    // (ViewerVideoRecovery.opening); a route recovery beside it would look the episode up twice.
+    if (retriedMedia.ref.streams.isNotEmpty()) return ViewerReduction(retried)
     return ViewerReduction(retried, listOf(ViewerEffect.RetryMedia(session, recoverable.mediaKey)))
 }
 

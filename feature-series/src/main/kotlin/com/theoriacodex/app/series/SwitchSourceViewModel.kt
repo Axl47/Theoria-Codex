@@ -8,6 +8,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesSource
+import com.theoriacodex.domain.series.seriesKind
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -21,8 +22,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
-/** A series found on another source; [chapters] is null while its count loads, or when that failed. */
-data class SwitchMatch(val series: Series, val chapters: Int? = null)
+/** A series found on another source; [entries] is null while its count loads, or when that failed. */
+data class SwitchMatch(val series: Series, val entries: Int? = null)
 
 /** What one other source found: still searching, failed, or its best matches, none when it found nothing. */
 sealed interface SwitchListing {
@@ -48,7 +49,10 @@ data class SwitchSourceSheet(
     fun sourceName(key: SourceKey): String = results.firstOrNull { it.key == key }?.name.orEmpty()
 }
 
-/** [others] are the sources that are on besides the series' own; [sheet] is null while the sheet is closed. */
+/**
+ * [others] are the sources that are on besides the series' own, of its kind: progress moves only between lists of the
+ * same kind of entry. [sheet] is null while the sheet is closed.
+ */
 data class SwitchSourceState(val others: List<SeriesSource> = emptyList(), val sheet: SwitchSourceSheet? = null)
 
 /**
@@ -83,7 +87,7 @@ class SwitchSourceViewModel(
         viewModelScope.launch {
             sourcesChanged.collectLatest {
                 sources = loadSources()
-                mutableState.update { state -> state.copy(others = sources.filter { it.key != from.source }) }
+                mutableState.update { state -> state.copy(others = sources.filter { it.key != from.source && it.kind == from.source.seriesKind }) }
             }
         }
     }
@@ -145,7 +149,7 @@ class SwitchSourceViewModel(
             } catch (error: CancellationException) {
                 throw error
             } catch (_: NoChaptersToMoveToException) {
-                return@launch updateSheet { it.copy(switching = false, failure = NO_CHAPTERS) }
+                return@launch updateSheet { it.copy(switching = false, failure = from.source.seriesKind.words.noneToMoveTo) }
             } catch (error: Exception) {
                 return@launch updateSheet { it.copy(switching = false, failure = failureLine(error)) }
             }
@@ -154,7 +158,7 @@ class SwitchSourceViewModel(
         }
     }
 
-    /** Searches [source] for the title, then counts the chapters of each match shown, each as its own call. */
+    /** Searches [source] for the title, then counts the entries of each match shown, each as its own call. */
     private fun search(source: SeriesSource, job: Job) {
         val query = title
         viewModelScope.launch(job) {
@@ -163,11 +167,11 @@ class SwitchSourceViewModel(
             updateResult(source.key) {
                 it.copy(listing = matches?.let { found -> SwitchListing.Found(found.map(::SwitchMatch)) } ?: SwitchListing.Failed((listing as SeriesListing.Failed).message))
             }
-            matches?.forEach { series -> launch { chapterCount(source, series)?.let { count -> setChapters(source.key, series.id, count) } } }
+            matches?.forEach { series -> launch { entryCount(source, series)?.let { count -> setEntries(source.key, series.id, count) } } }
         }
     }
 
-    private suspend fun chapterCount(source: SeriesSource, series: Series): Int? = calls.withPermit {
+    private suspend fun entryCount(source: SeriesSource, series: Series): Int? = calls.withPermit {
         try {
             source.entries(series).size
         } catch (error: CancellationException) {
@@ -177,9 +181,9 @@ class SwitchSourceViewModel(
         }
     }
 
-    private fun setChapters(key: SourceKey, id: SeriesId, count: Int) = updateResult(key) { result ->
+    private fun setEntries(key: SourceKey, id: SeriesId, count: Int) = updateResult(key) { result ->
         val found = result.listing as? SwitchListing.Found ?: return@updateResult result
-        result.copy(listing = SwitchListing.Found(found.matches.map { if (it.series.id == id) it.copy(chapters = count) else it }))
+        result.copy(listing = SwitchListing.Found(found.matches.map { if (it.series.id == id) it.copy(entries = count) else it }))
     }
 
     private fun updateResult(key: SourceKey, change: (SwitchSourceResult) -> SwitchSourceResult) =
@@ -195,6 +199,5 @@ internal fun bestMatches(title: String, found: List<Series>): List<Series> {
     return found.sortedByDescending { matchKey(it.title) == key }.take(MAX_MATCHES)
 }
 
-internal const val NO_CHAPTERS = "No chapters to move your progress to"
 private const val MAX_MATCHES = 3
 private const val MAX_SOURCE_CALLS = 4

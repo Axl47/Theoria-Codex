@@ -3,7 +3,9 @@ package com.theoriacodex.data.repository
 import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.MediaStream
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
@@ -152,17 +154,29 @@ class SeriesDownloadsTest {
 
     @Test fun `a chapter its source answers with no pages, or a page without an address, leaves the queue`() = runTest {
         val harness = Harness(this)
-        harness.pagesOf = { entry ->
+        harness.mediaOf = { entry ->
             when (entry.address) {
-                "/c1" -> emptyList()
-                "/c2" -> listOf(ImageRef(url = null, localPath = null, mime = null))
-                else -> twoPages(entry)
+                "/c1" -> EntryMedia.Pages(emptyList())
+                "/c2" -> EntryMedia.Pages(listOf(ImageRef(url = null, localPath = null, mime = null)))
+                else -> EntryMedia.Pages(twoPages(entry))
             }
         }
         harness.downloads.download(id, listOf("/c1", "/c2", "/c3"))
 
         assertEquals(DrainResult(downloaded = 1, failed = 2), harness.downloads.drain(automatic = false))
         assertEquals(mapOf("/c3" to ChapterDownload.OnDevice), harness.downloads.states(id).first())
+    }
+
+    @Test fun `an entry its source answers with streams fails rather than downloading nothing`() = runTest {
+        val harness = Harness(this)
+        harness.mediaOf = { entry ->
+            if (entry.address == "/c1") EntryMedia.Streams(listOf(MediaStream("https://video.test/1.m3u8", "1080p"))) else EntryMedia.Pages(twoPages(entry))
+        }
+        harness.downloads.download(id, listOf("/c1", "/c2"))
+
+        assertEquals(DrainResult(downloaded = 1, failed = 1), harness.downloads.drain(automatic = false))
+        assertEquals(mapOf("/c2" to ChapterDownload.OnDevice), harness.downloads.states(id).first())
+        assertTrue(harness.fetched.none { "video.test" in it })
     }
 
     @Test fun `delete after reading removes read chapters except where the series was last opened, also at start`() = runTest {
@@ -299,6 +313,16 @@ class SeriesDownloadsTest {
         assertEquals(listOf("/c2", "/c2", "/c3", "/c3"), on.fetched.map { it.substringBeforeLast('/').removePrefix(PAGES) })
     }
 
+    @Test fun `new episodes never download, whatever the anime's setting says`() = runTest {
+        val anime = Series(SeriesId(SourceKey.parseOrThrow("custom_aniyomi_7"), "/anime/1"), "Anime")
+        val harness = Harness(this, StoredSeries(anime, followed = true, downloadNewChapters = true))
+
+        harness.downloads.downloadNew(SeriesUpdate(anime, listOf(SeriesEntry("/e2", "2"))))
+
+        assertEquals(emptyMap<String, ChapterDownload>(), harness.downloads.states(anime.id).first())
+        assertEquals(emptyList<String>(), harness.scheduled)
+    }
+
     @Test fun `each menu choice picks its chapters oldest first, leaving out those already there`() {
         // Chapter 1 was skipped, 2 is read and was opened last, so Continue is at 3; 4 is already downloaded.
         val entries = (9 downTo 1).mapIndexed { order, number -> chapter(number, order, read = number == 2) }
@@ -327,7 +351,7 @@ class SeriesDownloadsTest {
         }
     }
 
-    /** Downloads over this test's folder, with a source of two pages per chapter unless [pagesOf] says otherwise, and a fetch that records each page. */
+    /** Downloads over this test's folder, with a source of two pages per chapter unless [mediaOf] says otherwise, and a fetch that records each page. */
     private inner class Harness(
         scope: TestScope,
         stored: StoredSeries = StoredSeries(Series(id, "Title")),
@@ -337,13 +361,13 @@ class SeriesDownloadsTest {
         val scheduled = mutableListOf<String>()
         val fetched = mutableListOf<String>()
         var onFetch: suspend (String) -> Unit = {}
-        var pagesOf: (SeriesEntry) -> List<ImageRef> = ::twoPages
+        var mediaOf: (SeriesEntry) -> EntryMedia = { EntryMedia.Pages(twoPages(it)) }
         val store = scope.store()
         val downloads = SeriesDownloads(
             store = store,
             queueFile = folder.root.resolve("queue.json"),
             repository = Stored(stored, entries),
-            source = { key -> FakeSource(source) { pagesOf(it) }.takeIf { it.key == key } },
+            source = { key -> FakeSource(source) { mediaOf(it) }.takeIf { it.key == key } },
             covers = { series -> series.coverUrl?.let { "$it#loadable" } },
             fetch = { url, file ->
                 onFetch(url)
@@ -373,11 +397,11 @@ class SeriesDownloadsTest {
     /** Two pages, at addresses naming the chapter. */
     private fun twoPages(entry: SeriesEntry) = (1..2).map { ImageRef(url = "$PAGES${entry.address}/$it", localPath = null, mime = null) }
 
-    /** A source whose chapters have the pages [pagesOf] gives. */
-    private class FakeSource(override val key: SourceKey, private val pagesOf: (SeriesEntry) -> List<ImageRef>) : SeriesSource {
+    /** A source whose entries open as [mediaOf] gives. */
+    private class FakeSource(override val key: SourceKey, private val mediaOf: (SeriesEntry) -> EntryMedia) : SeriesSource {
         override val name = "Fake"
         override val language = "en"
-        override suspend fun pages(entry: SeriesEntry) = pagesOf(entry)
+        override suspend fun media(entry: SeriesEntry) = mediaOf(entry)
         override suspend fun popular(page: Int): SeriesPage = error("unused")
         override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>): SeriesPage = error("unused")
         override suspend fun details(series: Series): Series = series
@@ -400,6 +424,6 @@ class SeriesDownloadsTest {
         override suspend fun setAllRead(id: SeriesId, read: Boolean) = EntryProgressRestore()
         override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean) = EntryProgressRestore()
         override suspend fun restoreProgress(id: SeriesId, restore: EntryProgressRestore) = Unit
-        override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) = Unit
+        override suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?) = Unit
     }
 }

@@ -8,8 +8,6 @@ import coil.request.SuccessResult
 import coil.size.Precision
 import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.media.isMediaNetworkMetered
-import com.theoriacodex.app.media.viewerPlaybackLocation
-import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.viewer.state.ViewerMediaKind
 import com.theoriacodex.app.viewer.state.ViewerMediaState
 import com.theoriacodex.app.viewer.state.ViewerPrefetchOutcome
@@ -53,13 +51,10 @@ suspend fun prefetchViewerMedia(
         return ViewerPrefetchResult(if (ready) ViewerPrefetchOutcome.WARMED else ViewerPrefetchOutcome.FAILED)
     }
     if (media.kind == ViewerMediaKind.VIDEO) {
-        val metered = context.isMediaNetworkMetered()
-        return prefetchViewerVideoMedia(
-            context,
-            media.ref.viewerPlaybackLocation(videoQuality, metered),
-            media.key.postId.source.requestHeaders(),
-            maxBytes = VIEWER_VIDEO_PREFETCH_BYTES,
-        )
+        // The page's own request, so what is warmed is the cache entry its player reads. A neighbour has no height
+        // chosen for it yet, so it gets the rendition its player starts with.
+        val playback = media.ref.viewerPlayback(media.key.postId.source, videoQuality, context.isMediaNetworkMetered())
+        return prefetchViewerVideoMedia(context, playback, maxBytes = VIEWER_VIDEO_PREFETCH_BYTES)
     }
 
     val location = media.displayLocation
@@ -134,15 +129,14 @@ internal suspend fun warmViewerPageThumbnails(context: Context, source: SourceKe
 
 private suspend fun prefetchViewerVideoMedia(
     context: Context,
-    playbackLocation: String?,
-    headers: Map<String, String>,
+    playback: VideoPlaybackRequest?,
     maxBytes: Long,
 ): ViewerPrefetchResult {
-    val location = playbackLocation ?: return ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED)
-    if (location.startsWith("http://", true) || location.startsWith("https://", true)) {
-        return context.videoPlaybackInfrastructure().prefetch(location, headers, maxBytes)
-    }
-    if (location.startsWith("content://", true)) {
+    if (playback == null) return ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED)
+    // Only a web stream that playback reads through the shared cache is worth warming there.
+    if (playback.usesSharedCache()) return context.videoPlaybackInfrastructure().prefetch(playback, maxBytes)
+    val location = playback.location
+    if (!playback.readsAheadFreely() || !playback.cache || location.startsWith("content://", true)) {
         return ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED)
     }
     val bytes = File(location).takeIf(File::isFile)?.length()?.takeIf { it > 0L }

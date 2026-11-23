@@ -14,7 +14,7 @@ data class ViewerRendererControls(
     val isPreloading: Boolean = false,
     val seekJumpSerial: Int = 0,
     val seekJumpDeltaMs: Long = 0L,
-    /** False while the Viewer opens: system media controls wait for it to land, since connecting them costs frames. */
+    /** Whether the player may take the system's media controls and picture-in-picture (the Viewer's frame decides). */
     val systemControlsReady: Boolean = true,
     /** The media's length as known before its player loads; timelines show it at 0:00 meanwhile instead of vanishing. */
     val expectedDurationMs: Long? = null,
@@ -28,6 +28,12 @@ data class ViewerRendererControls(
     }
 }
 
+/**
+ * Where an episode's playback is, at [positionMs] of an episode [durationMs] long, as the Viewer reports it for its
+ * series' progress ([ViewerRendererEvents.onPlaybackProgress]).
+ */
+data class ViewerPlaybackProgress(val positionMs: Long, val durationMs: Long)
+
 data class ViewerRendererEvents(
     val onPlaybackCompleted: () -> Unit,
     val onError: (String) -> Unit,
@@ -37,6 +43,11 @@ data class ViewerRendererEvents(
     val onRestartPlayback: () -> Unit,
     val onPlaybackIntentChanged: (Boolean) -> Unit,
     val onTimelineInteractionActiveChanged: (Boolean) -> Unit,
+    /**
+     * Hears where an episode's playback is: periodically while it plays, when it pauses, after a seek, and as its
+     * player lets go; never while the duration is unknown. Null for every other video, which reports nothing.
+     */
+    val onPlaybackProgress: ((ViewerPlaybackProgress) -> Unit)? = null,
 ) {
     companion object {
         /** A feed card's events: it reports only the duration it learns. */

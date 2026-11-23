@@ -46,9 +46,10 @@ internal fun viewerDockActions(
     commentCount: CommentCount?,
     onAction: (ViewerAction) -> Unit,
     moreExtras: List<ViewerMenuItem> = emptyList(),
-    /** Whether the post can be liked and saved; a series' chapter cannot. */
-    collectable: Boolean = true,
+    /** The series the post is an entry of, if any; an entry cannot be liked or saved, and an episode always plays on. */
+    series: ViewerSeries? = null,
 ): ViewerDockActions {
+    val collectable = series == null
     val selection = frame.selection
     val pictureInPicture = viewerPictureInPictureAction(activity, selection.post, selection.media, frame.uiState.mediaError != null)
     return ViewerDockActions(
@@ -77,7 +78,7 @@ internal fun viewerDockActions(
             }
         } else null,
         playbackSettings = if (frame.uiState.controls.playback.available) {
-            { ViewerPlaybackSettings(frame, controls, quality, qualityHeight, onAction) }
+            { ViewerPlaybackSettings(frame, controls, quality, qualityHeight, series is ViewerSeries.Watching, onAction) }
         } else null,
     )
 }
@@ -88,6 +89,7 @@ private fun ViewerPlaybackSettings(
     controls: ViewerControls,
     quality: MutableState<VideoQuality>,
     qualityHeight: MutableState<Int?>,
+    watching: Boolean,
     onAction: (ViewerAction) -> Unit,
 ) {
     val uiState = frame.uiState
@@ -103,7 +105,8 @@ private fun ViewerPlaybackSettings(
             onAction(ViewerAction.SetPlaybackRate(selectedRate.speed))
             controls.markInteraction()
         },
-        playbackMode = uiState.controls.playbackMode,
+        // An episode always goes on to the next one, so it offers no choice of mode.
+        playbackMode = uiState.controls.playbackMode.takeUnless { watching },
         onPlaybackModeSelected = { onAction(ViewerAction.SetPlaybackMode(it)) },
         quality = quality.value,
         qualityHeight = qualityHeight.value,

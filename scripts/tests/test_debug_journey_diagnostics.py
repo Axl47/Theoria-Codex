@@ -59,7 +59,7 @@ fi
             connected = [line for line in (repo / "gradle.log").read_text().splitlines() if "connected" in line]
             self.assertEqual(2, len(connected))  # The dry-run task graph and the real run match.
             for line in connected:
-                self.assertIn(":app:connectedDebugAndroidTest :core-data-android:connectedDebugAndroidTest", line)
+                self.assertIn(":app:connectedDebugAndroidTest :core-data-android:connectedDebugAndroidTest :media-kit:connectedDebugAndroidTest", line)
                 self.assertIn("-Pandroid.testInstrumentationRunnerArguments.numShards=2", line)
                 self.assertIn("-Pandroid.testInstrumentationRunnerArguments.shardIndex=1", line)
 

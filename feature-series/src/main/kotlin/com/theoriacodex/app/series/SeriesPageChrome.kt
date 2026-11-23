@@ -129,6 +129,7 @@ internal fun SeriesPageTopBar(
             Column(Modifier.fillMaxWidth()) {
                 if (searchOpen) {
                     SeriesTopBarSearchRow(
+                        words = state.kind.words,
                         query = searchQuery,
                         onQueryChange = onQueryChange,
                         onClose = onCloseSearch,
@@ -190,7 +191,7 @@ private fun SeriesTopBarNormalRow(
             }
         }
         IconButton(onClick = onOpenSearch) {
-            Icon(Icons.Default.Search, contentDescription = "Search chapters")
+            Icon(Icons.Default.Search, contentDescription = "Search ${state.kind.words.many}")
         }
         if (canDownload) {
             SeriesDownloadMenu(state, onDownload, onDeleteDownloads, onDownloadNewChapters)
@@ -209,6 +210,7 @@ private fun SeriesTopBarNormalRow(
 
 @Composable
 private fun SeriesTopBarSearchRow(
+    words: EntryWords,
     query: String,
     onQueryChange: (String) -> Unit,
     onClose: () -> Unit,
@@ -227,12 +229,12 @@ private fun SeriesTopBarSearchRow(
             focus.clearFocus()
             onClose()
         }) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close chapter search")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close ${words.one} search")
         }
         Box(Modifier.weight(1f).padding(horizontal = 4.dp), contentAlignment = Alignment.CenterStart) {
             if (query.isEmpty()) {
                 Text(
-                    text = "Filter chapters",
+                    text = "Filter ${words.many}",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -252,7 +254,7 @@ private fun SeriesTopBarSearchRow(
         }
         if (query.isNotEmpty()) {
             IconButton(onClick = { onQueryChange("") }) {
-                Icon(Icons.Default.Close, contentDescription = "Clear chapter filter")
+                Icon(Icons.Default.Close, contentDescription = "Clear ${words.one} filter")
             }
         }
     }
@@ -313,14 +315,15 @@ private fun SeriesOverflowMenu(
                 open = false
                 action()
             }
+            val words = state.kind.words
             DropdownMenuItem(
-                text = { Text("Mark all as read") },
+                text = { Text("Mark all as ${words.done}") },
                 enabled = state.entries.any { !it.read },
                 onClick = { choose { onMarkAllRead(true) } },
             )
             DropdownMenuItem(
-                text = { Text("Mark all as unread") },
-                enabled = state.entries.any { it.read || it.lastPage > 0 },
+                text = { Text("Mark all as ${words.notDone}") },
+                enabled = state.entries.any { it.read || it.position > 0 },
                 onClick = { choose { onMarkAllRead(false) } },
             )
             DropdownMenuItem(
@@ -349,13 +352,14 @@ private fun DownloadNewChaptersItem(on: Boolean, onChange: (Boolean) -> Unit) {
     )
 }
 
-/** Bottom sheet for sorting and filtering the series' chapter list. */
+/** Bottom sheet for sorting and filtering the series' entry list. */
 @Composable
 internal fun ChapterOptionsSheet(
     sort: ChapterSort,
     descending: Boolean,
     filter: ChapterFilter,
     canDownload: Boolean,
+    words: EntryWords,
     hasActiveOptions: Boolean,
     onSelectSort: (ChapterSort) -> Unit,
     onSelectFilter: (ChapterFilter) -> Unit,
@@ -372,9 +376,9 @@ internal fun ChapterOptionsSheet(
             modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            ChapterFilterSection(filter, canDownload, onSelectFilter)
+            ChapterFilterSection(filter, canDownload, words, onSelectFilter)
             HorizontalDivider()
-            ChapterSortSection(sort, descending, onSelectSort)
+            ChapterSortSection(sort, descending, words, onSelectSort)
         }
     }
 }
@@ -384,6 +388,7 @@ internal fun ChapterOptionsSheet(
 private fun ChapterFilterSection(
     selected: ChapterFilter,
     canDownload: Boolean,
+    words: EntryWords,
     onSelect: (ChapterFilter) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -391,7 +396,7 @@ private fun ChapterFilterSection(
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             val options = buildList {
                 add(ChapterFilter.ALL to "All")
-                add(ChapterFilter.UNREAD to "Unread")
+                add(ChapterFilter.UNREAD to words.notDone.capitalized())
                 if (canDownload) add(ChapterFilter.DOWNLOADED to "Downloaded")
             }
             options.forEach { (option, label) ->
@@ -409,13 +414,14 @@ private fun ChapterFilterSection(
 private fun ChapterSortSection(
     selected: ChapterSort,
     descending: Boolean,
+    words: EntryWords,
     onSelect: (ChapterSort) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("Sort", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(2.dp))
-        CHAPTER_SORT_OPTIONS.forEach { (option, label) ->
-            ChapterSortRow(label = label, active = selected == option, descending = descending) {
+        ChapterSort.entries.forEach { option ->
+            ChapterSortRow(label = option.label(words), active = selected == option, descending = descending) {
                 onSelect(option)
             }
         }
@@ -444,7 +450,7 @@ private fun ChapterSortRow(label: String, active: Boolean, descending: Boolean, 
     }
 }
 
-/** Removable pills below the chapter header showing active filters, non-default sorts, or search text. */
+/** Removable pills below the entry header showing active filters, non-default sorts, or search text. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ActiveChapterOptionPills(
@@ -453,14 +459,14 @@ internal fun ActiveChapterOptionPills(
     onClearSort: () -> Unit,
     onClearQuery: () -> Unit,
 ) {
+    val words = state.kind.words
     val filterLabel = when (state.chapterFilter) {
         ChapterFilter.ALL -> null
-        ChapterFilter.UNREAD -> "Unread"
+        ChapterFilter.UNREAD -> words.notDone.capitalized()
         ChapterFilter.DOWNLOADED -> "Downloaded"
     }
     val sortLabel = if (state.chapterSort != ChapterSort.SOURCE_ORDER || !state.sortDescending) {
-        val name = CHAPTER_SORT_OPTIONS.first { it.first == state.chapterSort }.second
-        "$name ${if (state.sortDescending) "↓" else "↑"}"
+        "${state.chapterSort.label(words)} ${if (state.sortDescending) "↓" else "↑"}"
     } else null
     val queryLabel = state.chapterQuery.trim().takeIf(String::isNotEmpty)?.let { "\"$it\"" }
     if (filterLabel == null && sortLabel == null && queryLabel == null) return
@@ -470,8 +476,8 @@ internal fun ActiveChapterOptionPills(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         filterLabel?.let { ActiveOptionChip(it, "Clear $it filter", onClearFilter) }
-        sortLabel?.let { ActiveOptionChip(it, "Reset chapter sort", onClearSort) }
-        queryLabel?.let { ActiveOptionChip(it, "Clear chapter search", onClearQuery) }
+        sortLabel?.let { ActiveOptionChip(it, "Reset ${words.one} sort", onClearSort) }
+        queryLabel?.let { ActiveOptionChip(it, "Clear ${words.one} search", onClearQuery) }
     }
 }
 
@@ -553,11 +559,11 @@ private val DOWNLOAD_CHOICES = listOf(
     DownloadChoice.ALL to "All",
 )
 
-private val CHAPTER_SORT_OPTIONS = listOf(
-    ChapterSort.SOURCE_ORDER to "Source order",
-    ChapterSort.CHAPTER_NUMBER to "Chapter number",
-    ChapterSort.UPLOAD_DATE to "Upload date",
-)
+private fun ChapterSort.label(words: EntryWords): String = when (this) {
+    ChapterSort.SOURCE_ORDER -> "Source order"
+    ChapterSort.CHAPTER_NUMBER -> "${words.one.capitalized()} number"
+    ChapterSort.UPLOAD_DATE -> "Upload date"
+}
 
 internal val SERIES_TOP_BAR_HEIGHT = 56.dp
 internal const val SERIES_TOP_BAR_TAG = "Series page top bar"

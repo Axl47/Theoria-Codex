@@ -27,6 +27,9 @@ internal enum class InfoSheetTarget { Top, Comments }
 @Stable
 internal class ViewerScreenState {
     val imageSession = ViewerImageSession()
+    /** The selected video's tracks, for the episode controls. */
+    val activeTracks = ViewerActiveTracks()
+    val streamAttempts = ViewerStreamAttempts()
     val mediaPagers = mutableMapOf<PostId, PagerState>()
     /** Galleries shown as one vertical column, by post; observed, so the screen's gestures follow a new one at once. */
     val verticalGalleries = mutableStateMapOf<PostId, ViewerVerticalGalleryState>()
@@ -90,7 +93,7 @@ internal class ViewerControls(
     fun setPlaybackSettingsExpanded(expanded: Boolean) = setPanelOpen(ViewerPanel.PLAYBACK_SETTINGS, expanded)
 
     /** Opening a panel closes the one that was open. */
-    private fun setPanelOpen(panel: ViewerPanel, open: Boolean) {
+    fun setPanelOpen(panel: ViewerPanel, open: Boolean) {
         onAction(if (open) ViewerAction.ShowPanel(panel) else ViewerAction.HidePanel(panel))
     }
 
@@ -206,4 +209,11 @@ internal class ViewerFrame(
 
     // Media pages drop the portrait top gap in landscape and in PiP, where it would frame the media in black bars.
     val mediaEdgeToEdge = isLandscape || inPictureInPicture
+
+    /**
+     * Whether the selected video may take the system's media controls and picture-in-picture: not while the Viewer
+     * opens (connecting them costs frames), nor once its session ended, while a closing Viewer's paused pages stay
+     * for the return transition (a system Play would start the closed Viewer's player).
+     */
+    val systemControlsReady = !opening && uiState.session != null
 }

@@ -29,6 +29,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.ui.components.ExpandedBottomSheet
 import com.theoriacodex.app.ui.components.SheetHeader
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SeriesKind
+import com.theoriacodex.domain.series.seriesKind
 
 /**
  * The Switch source sheet while [viewModel] has it open: the series' matches on every other source, then a confirmation
@@ -42,7 +44,7 @@ internal fun SwitchSourceSheet(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val sheet = state.sheet ?: return
-    // While a switch runs the sheet stays open, so nothing else on the page, such as a chapter to read, can be opened
+    // While a switch runs the sheet stays open, so nothing else on the page, such as an entry to open, can be opened
     // until the series it belongs to has moved or stayed.
     ExpandedBottomSheet(onDismiss = viewModel::close, dismissible = !sheet.switching) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
@@ -58,7 +60,7 @@ internal fun SwitchSourceSheet(
         AlertDialog(
             onDismissRequest = { viewModel.confirm(null) },
             title = { Text("Switch to ${sheet.sourceName(match.series.id.source)}?") },
-            text = { Text("The current series leaves the shelf and its downloads are deleted.") },
+            text = { Text(switchConsequence(match.series.id.source.seriesKind)) },
             confirmButton = { TextButton(onClick = { viewModel.switchTo(match, onSwitched) }) { Text("Switch") } },
             dismissButton = {
                 Row {
@@ -85,7 +87,7 @@ private fun SourceResult(result: SwitchSourceResult, enabled: Boolean, onRetry: 
     }
 }
 
-/** A match: its cover and title over its source and, once counted, its chapters. */
+/** A match: its cover and title over its source and, once counted, its entries. */
 @Composable
 private fun MatchRow(match: SwitchMatch, sourceName: String, enabled: Boolean, onClick: () -> Unit) {
     Row(
@@ -96,7 +98,7 @@ private fun MatchRow(match: SwitchMatch, sourceName: String, enabled: Boolean, o
         SeriesCover(match.series, Modifier.width(40.dp))
         Column(Modifier.weight(1f)) {
             Text(match.series.title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            SourceLine(match.chapters?.let { "$sourceName · ${chapterCount(it)}" } ?: sourceName)
+            SourceLine(match.entries?.let { "$sourceName · ${match.series.id.source.seriesKind.words.count(it)}" } ?: sourceName)
         }
     }
 }
@@ -104,6 +106,12 @@ private fun MatchRow(match: SwitchMatch, sourceName: String, enabled: Boolean, o
 @Composable
 private fun SourceLine(text: String, modifier: Modifier = Modifier) {
     Text(text, modifier, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+}
+
+/** What a switch to another source costs; episodes do not download, so an anime has no downloads to lose. */
+private fun switchConsequence(kind: SeriesKind): String = when (kind) {
+    SeriesKind.MANGA -> "The current series leaves the shelf and its downloads are deleted."
+    SeriesKind.ANIME -> "The current series leaves the shelf."
 }
 
 internal const val SWITCH_SOURCE = "Switch source"

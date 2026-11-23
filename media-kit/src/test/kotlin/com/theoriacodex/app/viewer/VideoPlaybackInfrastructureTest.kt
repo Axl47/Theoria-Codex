@@ -18,23 +18,23 @@ import org.junit.Test
 
 class VideoPlaybackInfrastructureTest {
     @Test
-    fun `cache identity is deterministic order independent and credential isolated`() {
+    fun `cache key is deterministic order independent and credential isolated`() {
         val location = "https://media.example/protected.mp4"
-        val first = videoPlaybackIdentity(
+        val first = videoCacheKey(
             location = location,
             headers = linkedMapOf(
                 "Referer" to "https://source.example/",
                 "Authorization" to "Bearer secret-a",
             ),
         )
-        val reordered = videoPlaybackIdentity(
+        val reordered = videoCacheKey(
             location = location,
             headers = linkedMapOf(
                 "Authorization" to "Bearer secret-a",
                 "Referer" to "https://source.example/",
             ),
         )
-        val differentCredential = videoPlaybackIdentity(
+        val differentCredential = videoCacheKey(
             location = location,
             headers = mapOf(
                 "Authorization" to "Bearer secret-b",
@@ -43,10 +43,10 @@ class VideoPlaybackInfrastructureTest {
         )
 
         assertEquals(first, reordered)
-        assertNotEquals(first.cacheKey, differentCredential.cacheKey)
-        assertFalse(first.cacheKey.contains("secret-a"))
-        assertFalse(first.cacheKey.contains(location))
-        assertTrue(first.cacheKey.matches(Regex("theoria-video-v1-[0-9a-f]{64}")))
+        assertNotEquals(first, differentCredential)
+        assertFalse(first.contains("secret-a"))
+        assertFalse(first.contains(location))
+        assertTrue(first.matches(Regex("theoria-video-v1-[0-9a-f]{64}")))
     }
 
     @Test

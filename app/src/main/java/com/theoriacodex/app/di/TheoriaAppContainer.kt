@@ -2,6 +2,7 @@ package com.theoriacodex.app.di
 
 import com.theoriacodex.app.network.AppHttpClients
 import android.content.Context
+import android.util.Log
 import androidx.core.net.toUri
 import com.theoriacodex.app.backup.AndroidAutoBackupFolder
 import com.theoriacodex.app.backup.AutoBackupWorkflow
@@ -10,7 +11,7 @@ import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
 import com.theoriacodex.app.customsites.CustomSitesController
 import com.theoriacodex.app.extensions.ExtensionSites
-import com.theoriacodex.app.extensions.MihonExtensionSourceHost
+import com.theoriacodex.app.extensions.ExtensionSourceHost
 import com.theoriacodex.app.customsites.SharedPreferencesBuiltInAgentStore
 import com.theoriacodex.app.customsites.SiteCookieBridge
 import com.theoriacodex.app.media.BoundedMediaDurationProbe
@@ -259,7 +260,7 @@ internal class DefaultTheoriaAppContainer(
     private val httpClients: AppHttpClients,
     private val hostOutages: HostOutageTracker,
     private val networkOnline: StateFlow<Boolean>,
-    private val extensionHost: MihonExtensionSourceHost? = null,
+    private val extensionHost: ExtensionSourceHost? = null,
 ) : TheoriaAppContainer {
     private val appContext = context.applicationContext
     private val storageDirectory = File(appContext.filesDir, "theoria_codex")
@@ -593,7 +594,7 @@ internal class DefaultTheoriaAppContainer(
         SeriesDependencies(
             repository, host::sources, host::source, host.extensions, downloads, scope = durableStoreScope, covers = host.covers,
             pictures = ChapterPictures { source, page -> (page.localPath ?: page.url)?.let { pictureHashAt(appContext, it, source, cachedOnly = true) } },
-        )
+        ) { Log.i("SeriesReader", it) }
     }
 
     /** Keeps the new-chapter check scheduled; started by [awaitDurableStores], once. */

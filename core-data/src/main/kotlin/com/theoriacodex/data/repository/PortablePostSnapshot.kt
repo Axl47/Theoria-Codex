@@ -33,6 +33,8 @@ private fun portableBackupImage(image: ImageRef): ImageRef = image.copy(
     videoVariants = image.videoVariants.mapNotNull { variant ->
         portableMediaUrl(variant.url)?.let { variant.copy(url = it) }
     },
+    // Expiring, header-bound addresses; the storage records cannot carry them either.
+    streams = emptyList(),
 )
 
 fun portableMediaUrl(value: String?): String? = value?.takeIf { raw ->

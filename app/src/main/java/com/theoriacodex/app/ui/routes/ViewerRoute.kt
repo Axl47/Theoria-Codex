@@ -56,6 +56,8 @@ import com.theoriacodex.app.viewer.ViewerTrail
 import com.theoriacodex.app.ui.trails.ViewerLevel
 import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.newViewerPosts
+import com.theoriacodex.app.viewer.ViewerMediaRecoveryRequest
+import com.theoriacodex.app.viewer.recoverMedia
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.viewer.state.ViewerEffect
@@ -173,9 +175,7 @@ internal fun ViewerRoute(
 ) {
     val viewerReturn = LocalViewerReturnTransition.current
     val latestLevel = rememberUpdatedState(level)
-    DisposableEffect(viewerReturn) {
-        onDispose { if (latestLevel.value.clearsReturnOnDispose()) viewerReturn?.clear() }
-    }
+    DisposableEffect(viewerReturn) { onDispose { if (latestLevel.value.clearsReturnOnDispose()) viewerReturn?.clear() } }
     val latestDependencies = rememberUpdatedState(dependencies)
     val latestEffectCallbacks = rememberUpdatedState(effectCallbacks)
     val latestScreenCallbacks = rememberUpdatedState(screenCallbacks)
@@ -215,12 +215,14 @@ internal fun ViewerRoute(
         )
         return
     }
-    ViewerDurationSync(activeSession, viewerState, durationOwner, dependencies.canonicalizePost)
+    // A series' entry is not a post: its duration is the player's, never probed at its stream nor cached as a post's.
+    val seriesSession = viewerState.series != null
+    if (!seriesSession) ViewerDurationSync(activeSession, viewerState, durationOwner, dependencies.canonicalizePost)
     val sourceState = liveSourceState.matching(activeSession)
     val related = rememberViewerRelatedPosts(activeSession, liveSourceState)
     ViewerScreen(
         uiState = viewerState,
-        host = rememberViewerScreenHost(viewerOwner, durationOwner, screenCallbacks, latestDependencies, latestEffectCallbacks, routeScope),
+        host = rememberViewerScreenHost(viewerOwner, durationOwner.takeUnless { seriesSession }, screenCallbacks, latestDependencies, latestEffectCallbacks, routeScope),
         config = config,
         saveToCodexQuery = activeSession?.saveQuery,
         saveFromForYou = activeSession?.context?.streamSource == ViewerStreamSource.FOR_YOU,
@@ -293,12 +295,13 @@ private fun ViewerDurationSync(
 
 /**
  * The screen's callbacks, bound to [viewerOwner]. One per owner and shell, so the screen's controls stay put while
- * Search, For You or settings change; the callbacks read the owner's current session when they run.
+ * Search, For You or settings change; the callbacks read the owner's current session when they run. A series session
+ * passes no [durationOwner], so its entries get no post durations.
  */
 @Composable
 private fun rememberViewerScreenHost(
     viewerOwner: ViewerViewModel,
-    durationOwner: MediaDurationRouteViewModel,
+    durationOwner: MediaDurationRouteViewModel?,
     callbacks: ViewerScreenCallbacks,
     latestDependencies: State<ViewerRouteDependencies>,
     latestEffectCallbacks: State<ViewerRouteEffectCallbacks>,
@@ -317,11 +320,13 @@ private fun rememberViewerScreenHost(
         },
         onOpenCreatorFallback = callbacks.onOpenCreatorFallback,
         onGalleryReadingModeSelected = callbacks.onGalleryReadingModeSelected,
-        onRequestMediaRecovery = { post, failedMedia ->
-            routeScope.launch {
-                if (viewerOwner.session.value == null) return@launch
-                recoverAndApplyMedia(viewerOwner, post, failedMedia, latestEffectCallbacks.value)
+        onRequestMediaRecovery = object : ViewerMediaRecoveryRequest {
+            override fun ask(post: Post, failedMedia: ImageRef) {
+                routeScope.launch { recoverAndApplyMedia(viewerOwner, post, failedMedia, latestEffectCallbacks.value) }
             }
+
+            override suspend fun recoverStreams(post: Post, failedMedia: ImageRef) =
+                recoverAndApplyMedia(viewerOwner, post, failedMedia, latestEffectCallbacks.value)
         },
         onVisiblePostChanged = { post, viewedMediaNumber ->
             viewerOwner.state.value.session?.let { identity ->
@@ -331,16 +336,21 @@ private fun rememberViewerScreenHost(
         onVisibleMediaChanged = { post, viewedMediaNumber ->
             viewerOwner.recordVisibleMedia(post, viewedMediaNumber, callbacks.onVisibleMediaChanged)
         },
-        // The Viewer's window onto the duration owner, keyed by each post's canonical identity.
-        durations = ViewerPostDurations(
-            observe = { post ->
-                durationOwner.observeState(latestDependencies.value.canonicalizePost(post))
-                    .map { state -> (state as? MediaDurationState.Known)?.durationMs }
-            },
-            onPlayerDuration = { post, durationMs ->
-                durationOwner.publishPlayerDuration(latestDependencies.value.canonicalizePost(post), durationMs)
-            },
-        ),
+        onPlaybackProgress = { post, progress ->
+            viewerOwner.recordPlaybackProgress(post, progress, callbacks.onPlaybackProgress)
+        },
+        // The Viewer's window onto the duration owner, keyed by each post's canonical identity; none for a series.
+        durations = durationOwner?.let { owner ->
+            ViewerPostDurations(
+                observe = { post ->
+                    owner.observeState(latestDependencies.value.canonicalizePost(post))
+                        .map { state -> (state as? MediaDurationState.Known)?.durationMs }
+                },
+                onPlayerDuration = { post, durationMs ->
+                    owner.publishPlayerDuration(latestDependencies.value.canonicalizePost(post), durationMs)
+                },
+            )
+        } ?: ViewerPostDurations.None,
     )
 }
 
@@ -498,15 +508,14 @@ private suspend fun handleViewerEffect(
 ) {
     val currentState = viewerOwner.state.value
     if (!effect.isCurrentFor(currentState)) return
+    // A series' chapters and episodes are not posts: whichever control asked, none is saved, liked, tagged or downloaded.
+    if (effect.collectsPost && viewerOwner.session.value?.series != null) return
     fun post(postId: PostId): Post? = currentState.pages.firstOrNull { page -> page.post.id == postId }?.post
     when (effect) {
         is ViewerEffect.SavePost -> post(effect.postId)?.let { selected ->
             viewerOwner.session.value?.context?.let { context -> callbacks.onSavePost(selected, context) }
         }
-        // A chapter's pages load only through its extension's client, which the device download does not use.
-        is ViewerEffect.DownloadMedia -> if (viewerOwner.session.value?.context?.streamSource != ViewerStreamSource.SERIES) {
-            callbacks.onDownloadMedia(viewerDownloadRequest(effect, currentState))
-        }
+        is ViewerEffect.DownloadMedia -> callbacks.onDownloadMedia(viewerDownloadRequest(effect, currentState))
         is ViewerEffect.SetLiked -> post(effect.postId)?.let { selected ->
             val launchAction = viewerOwner.session.value?.onToggleLike
             if (launchAction != null) launchAction(selected) else callbacks.onToggleLike(selected)
@@ -530,6 +539,11 @@ private suspend fun handleViewerEffect(
         }
     }
 }
+
+/** Whether this effect keeps the post somewhere of the user's: a Codex, likes, tags or the device. */
+private val ViewerEffect.Route.collectsPost: Boolean
+    get() = this is ViewerEffect.SavePost || this is ViewerEffect.SetLiked || this is ViewerEffect.ApplyTag ||
+        this is ViewerEffect.DownloadMedia
 
 private fun viewerDownloadRequest(effect: ViewerEffect.DownloadMedia, state: ViewerUiState): ViewerDownloadRequest? {
     val page = state.pages.firstOrNull { candidate -> candidate.post.id == effect.postId } ?: return null
@@ -629,32 +643,15 @@ private fun rememberViewerRelatedPosts(
     return remember(relatedSource, relatedState, relatedPosts) { ViewerRelatedPosts(relatedSource, relatedState, relatedPosts) }
 }
 
-private fun ViewerViewModel.hasNoPage(post: Post): Boolean = state.value.pages.none { page -> page.post.id == post.id }
-
 /** Prevents buffered or suspended effects from crossing a Viewer session replacement. */
 internal fun ViewerEffect.isCurrentFor(state: ViewerUiState): Boolean = session == state.session
 
-/**
- * Asks the source for working media for [post] and applies the result. A source may return [post] itself with only the
- * failed media refreshed, so the result is dropped, before the feed records it too, when the session changed or the
- * page's post did (its lookup finished): applying it would replace the newer post with the older one.
- */
+/** Asks the source for working media for [post], in the session's launch context; see [recoverMedia]. */
 private suspend fun recoverAndApplyMedia(
     viewerOwner: ViewerViewModel,
     post: Post,
     failedMedia: ImageRef,
     callbacks: ViewerRouteEffectCallbacks,
-) {
-    val session = viewerOwner.session.value ?: return
-    if (viewerOwner.hasNoPage(post)) return
-    fun stillApplies() = viewerOwner.session.value?.sessionId == session.sessionId &&
-        viewerOwner.state.value.pages.any { page -> page.post == post }
-    val recovered = try {
-        callbacks.onRecoverMedia(post, failedMedia, session.context, ::stillApplies)
-    } catch (error: CancellationException) {
-        throw error
-    } catch (_: Exception) {
-        null
-    } ?: return
-    if (stillApplies()) viewerOwner.applyResolvedPost(recovered)
+) = viewerOwner.recoverMedia(post, failedMedia) { session, stillApplies ->
+    callbacks.onRecoverMedia(post, failedMedia, session.context, stillApplies)
 }

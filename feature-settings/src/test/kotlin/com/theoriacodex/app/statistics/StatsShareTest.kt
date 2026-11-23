@@ -32,7 +32,9 @@ class StatsShareTest {
 
     @Test
     fun `a file survives the round trip and rejects anything else`() {
-        val file = buildStatsShare(listOf(portraits), overall = StatsShareOverall(timeInAppMs = 43_200_000L, searches = 12L))
+        val overall = StatisticsSummary(totalForegroundMs = 43_200_000L, readingMs = 60_000L, animeMs = 90_000L, searchCount = 12L)
+            .shareOverall()
+        val file = buildStatsShare(listOf(portraits), overall = overall)
 
         assertEquals(file, parseStatsShare(encodeStatsShare(file)))
         assertEquals(null, parseStatsShare(encodeStatsShare(buildStatsShare(listOf(portraits))))?.overall)
@@ -50,7 +52,7 @@ class StatsShareTest {
             """{"format":"theoria-codex-stats","version":1,"codices":[null,{"name":""},
             {"name":"Ok","watchingMs":-5,"entries":9000000000000000000,"posts":[
               {"key":"NOT_A_SOURCE:1","label":"x"},{"key":"GELBOORU:2","label":"Fine","opens":-1}]}],
-            "overall":{"timeInAppMs":-1,"searches":9000000000000000000}}""",
+            "overall":{"timeInAppMs":-1,"animeMs":9000000000000000000,"searches":9000000000000000000}}""",
         )
         val codex = parsed?.codices.orEmpty().filterNotNull().single()
 
@@ -58,7 +60,10 @@ class StatsShareTest {
         assertEquals(1_000_000_000_000_000L, codex.entries)
         assertEquals(listOf("GELBOORU:2"), codex.posts.orEmpty().map { it?.key })
         assertEquals(0L, codex.posts.orEmpty().single()?.opens)
-        assertEquals(StatsShareOverall(timeInAppMs = 0L, searches = 1_000_000_000_000_000L), parsed?.overall)
+        assertEquals(
+            StatsShareOverall(timeInAppMs = 0L, animeMs = 1_000_000_000_000_000L, searches = 1_000_000_000_000_000L),
+            parsed?.overall,
+        )
     }
 
     @Test

@@ -90,13 +90,15 @@ import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.SeriesStatus
 import kotlinx.coroutines.flow.collectLatest
 
 /**
  * One series: blurred cover backdrop, cover and metadata, Follow / open-in-browser / Share actions, expandable
- * description with clickable genre pills, Continue button, chapter search and sort/filter controls, and chapter cards
- * with long-press read actions, undo support, and downloads.
+ * description with clickable genre pills, Continue button, entry search and sort/filter controls, and entry cards
+ * with long-press read actions, undo support, and downloads. Entries are chapters or episodes by the series' kind;
+ * episodes do not download.
  */
 @Composable
 fun SeriesPageScreen(
@@ -218,6 +220,7 @@ private fun SeriesPageOverlays(
             descending = state.sortDescending,
             filter = state.chapterFilter,
             canDownload = viewModel.canDownload,
+            words = state.kind.words,
             hasActiveOptions = state.hasActiveChapterOptions,
             onSelectSort = viewModel::setChapterSort,
             onSelectFilter = viewModel::setChapterFilter,
@@ -278,7 +281,7 @@ private fun SeriesPageBody(
                 state.continueWith?.let { entry ->
                     item("continue") {
                         ContinueReadingButton(
-                            label = continueLabel(state.started, entry),
+                            label = continueLabel(state.started, entry, state.kind),
                             enabled = state.canOpen(entry.entry.address),
                             onClick = { onOpenEntry(entry.entry.address) },
                         )
@@ -301,20 +304,20 @@ private fun LazyListScope.statusRows(
         state.sourceMissing -> item("missing") { MissingSourceRow(onOpenExtensions) }
         failure != null -> item("failure") {
             SourceLoadFailure(
-                message = failure,
+                message = failure.message,
                 source = state.source?.key,
                 sourceName = state.sourceName,
-                onRetry = onRefresh,
+                onRetry = onRefresh.takeIf { failure.retryable },
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 compact = state.entries.isNotEmpty(),
             )
         }
         state.refreshing && state.entries.isEmpty() -> item("loading") { LoadingState() }
-        state.entries.isEmpty() -> item("empty") { EmptyState("No chapters") }
+        state.entries.isEmpty() -> item("empty") { EmptyState(state.kind.words.none) }
     }
 }
 
-/** The chapter count with sort/filter controls, active filter pills, and every visible chapter card. */
+/** The entry count with sort/filter controls, active filter pills, and every visible entry card. */
 private fun LazyListScope.chapterList(
     state: SeriesPageState,
     viewModel: SeriesPageViewModel,
@@ -329,6 +332,7 @@ private fun LazyListScope.chapterList(
     val maxUnreadSourceOrder = state.entries.lastOrNull { !it.read }?.sourceOrder ?: -1
     item("chapters") {
         ChapterListHeader(
+            words = state.kind.words,
             totalCount = state.entries.size,
             visibleCount = state.visibleEntries.size,
             filterActive = state.hasActiveChapterOptions,
@@ -344,7 +348,7 @@ private fun LazyListScope.chapterList(
         )
     }
     if (state.visibleEntries.isEmpty()) {
-        item("filtered-empty") { EmptyFilteredChapters(onClearChapterFilters) }
+        item("filtered-empty") { EmptyFilteredChapters(state.kind.words, onClearChapterFilters) }
         return
     }
     items(state.visibleEntries, key = { it.entry.address }) { entry ->
@@ -353,6 +357,7 @@ private fun LazyListScope.chapterList(
         val canDownloadEntry = downloads && (download != null || !state.sourceMissing)
         EntryRow(
             entry = entry,
+            kind = state.kind,
             enabled = state.canOpen(address),
             hasPreviousUnread = maxUnreadSourceOrder > entry.sourceOrder,
             download = download,
@@ -658,7 +663,7 @@ private fun ContinueReadingButton(label: String, enabled: Boolean, onClick: () -
     }
 }
 
-/** Says the series' extension cannot be used, which is why its chapters cannot be opened, and leads to where to fix it. */
+/** Says the series' extension cannot be used, which is why its entries cannot be opened, and leads to where to fix it. */
 @Composable
 private fun MissingSourceRow(onOpenExtensions: () -> Unit) {
     Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -667,8 +672,9 @@ private fun MissingSourceRow(onOpenExtensions: () -> Unit) {
     }
 }
 
-internal fun continueLabel(started: Boolean, entry: StoredSeriesEntry): String =
-    if (started) "Continue reading ${entry.entry.name}" else "Start reading"
+/** "Continue reading Chapter 4" or "Start watching", by the series' [kind]. */
+internal fun continueLabel(started: Boolean, entry: StoredSeriesEntry, kind: SeriesKind): String =
+    if (started) "Continue ${kind.words.doing} ${entry.entry.name}" else "Start ${kind.words.doing}"
 
 private val SeriesStatus.label: String?
     get() = when (this) {
@@ -679,6 +685,7 @@ private val SeriesStatus.label: String?
         SeriesStatus.PUBLISHING_FINISHED -> "Finished"
         SeriesStatus.CANCELLED -> "Cancelled"
         SeriesStatus.ON_HIATUS -> "Hiatus"
+        SeriesStatus.UPCOMING -> "Upcoming"
     }
 
 private const val SERIES_UNDO_SCOPE = "series-page"

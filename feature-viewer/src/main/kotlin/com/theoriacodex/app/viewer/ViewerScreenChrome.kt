@@ -25,21 +25,21 @@ import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
-/** What the top bar names: a series chapter by its title, any other post by its source. */
-private fun ViewerScreenConfig.topBarTitle(post: Post): String =
-    post.title?.takeIf { seriesChapters } ?: post.id.source.displayName()
+/** What the top bar names: a series entry by its title, any other post by its source. */
+private fun ViewerSeries?.topBarTitle(post: Post): String =
+    post.title?.takeIf { this != null } ?: post.id.source.displayName()
 
-/** The dock's Save button; a series chapter is not a post to save, so its dock has none. */
+/** The dock's Save button; a series entry is not a post to save, so its dock has none. */
 @Composable
 private fun ViewerDockSave(
-    config: ViewerScreenConfig,
+    series: ViewerSeries?,
     post: Post,
     saveContext: ViewerSaveContext,
     screen: ViewerScreenState,
     controls: ViewerControls,
     host: ViewerScreenHost,
 ) {
-    if (config.seriesChapters) return
+    if (series != null) return
     ViewerSaveButton(post, saveContext, screen.saveFan, controls::markInteraction) { host.onAction(ViewerAction.Save) }
 }
 
@@ -74,19 +74,21 @@ internal fun BoxScope.ViewerChromeOverlays(
     val scrubFade by animateFloatAsState(if (screen.timelineInteractionActive) 0f else 1f, tween(TheoriaMotion.SHORT_MS), label = "Viewer scrub fade")
     val fadesWhileScrubbing = Modifier.graphicsLayer { alpha = scrubFade }
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_STRIPS && !frame.mediaOverviewVisible, Modifier.align(Alignment.BottomCenter)) {
-        ViewerBottomStack(frame, postPagerState, controls, pendingPostId, config, loadMoreFromStrip, fadesWhileScrubbing)
+        ViewerBottomStack(frame, postPagerState, controls, pendingPostId, config, loadMoreFromStrip, fadesWhileScrubbing) {
+            ViewerEpisodeBar(frame, screen.activeTracks, controls, nextPostOpener(navigation.currentIndex, frame, swipe, config), host.onAction)
+        }
     }
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_TOP_BAR, Modifier.align(Alignment.BottomCenter).then(fadesWhileScrubbing)) {
         val dock = viewerDockActions(
             frame, controls, activity, quality, qualityHeight, selection.post.id in config.likedPostIds, comments.countOf(selection.post), host.onAction,
-            collectable = !config.seriesChapters,
+            series = frame.uiState.series,
         )
-        ViewerDock(dock) { ViewerDockSave(config, selection.post, saveContext, screen, controls, host) }
+        ViewerDock(dock) { ViewerDockSave(frame.uiState.series, selection.post, saveContext, screen, controls, host) }
     }
-    ViewerFooterButtons(frame, screen, activity, host.onAction)
+    ViewerFooterButtons(frame, screen, activity, config, host.onAction)
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_TOP_BAR, Modifier.align(Alignment.TopCenter).then(fadesWhileScrubbing)) {
         ViewerChrome(
-            source = config.topBarTitle(selection.post),
+            source = frame.uiState.series.topBarTitle(selection.post),
             indexLabel = if (selection.mediaItems.size > 1) "${selection.mediaIndex + 1} / ${selection.mediaItems.size}" else null,
             onBack = { controls.requestDismiss() },
         ) { ViewerTrailRow(selection.post, frame.posts, trail, config.creatorBrowsingSources, screen.trailForks, controls::markInteraction) }
@@ -111,7 +113,10 @@ internal fun BoxScope.ViewerChromeOverlays(
     ViewerSaveFanOverlay(screen.saveFan)
 }
 
-/** The post strip and, on multi-page posts, the page scrubber below it, lifted above the dock and any timeline. */
+/**
+ * The post strip and, on multi-page posts, the page scrubber below it, lifted above the dock and any timeline. While a
+ * series is watched, [episodeControls] take the strip's place: every episode shows the same cover.
+ */
 @Composable
 private fun ViewerBottomStack(
     frame: ViewerFrame,
@@ -121,10 +126,11 @@ private fun ViewerBottomStack(
     config: ViewerScreenConfig,
     loadMoreFromStrip: () -> Unit,
     fadesWhileScrubbing: Modifier,
+    episodeControls: @Composable () -> Unit,
 ) {
     val selection = frame.selection
     val navigation = frame.navigation
-    val mirrored = config.readingModeOf(navigation.pages.getOrNull(navigation.currentIndex)).reversed
+    val mirrored = config.readingModeOf(navigation.pages.getOrNull(navigation.currentIndex), frame.uiState.series).reversed
     val stripIndex = navigation.originalPosts.indexOfFirst { it.id == frame.posts.getOrNull(postPagerState.currentPage)?.id }
         .takeIf { it >= 0 } ?: navigation.stripAnchorIndex
     ViewerBottomChrome(
@@ -148,22 +154,33 @@ private fun ViewerBottomStack(
             }
         },
     ) {
-        ViewerPostStrip(navigation.originalPosts, stripIndex, { index ->
-            pendingPostId.value = navigation.originalPosts[index].id
-        }, Modifier.testTag("viewer-post-navigation-strip"),
-            onLoadMore = loadMoreFromStrip, onInteraction = { controls.markInteraction() },
-            openPages = ViewerStripPages(selection.post.id, selection.overviewItems, selection.mediaIndex, mirrored) {
-                controls.jumpToMedia(selection.post.id, it)
-            }, chapters = config.seriesChapters, stripMarks = config.stripMarks)
+        if (frame.uiState.series is ViewerSeries.Watching) {
+            episodeControls()
+        } else {
+            ViewerPostStrip(navigation.originalPosts, stripIndex, { index ->
+                pendingPostId.value = navigation.originalPosts[index].id
+            }, Modifier.testTag("viewer-post-navigation-strip"),
+                onLoadMore = loadMoreFromStrip, onInteraction = { controls.markInteraction() },
+                openPages = ViewerStripPages(selection.post.id, selection.overviewItems, selection.mediaIndex, mirrored) {
+                    controls.jumpToMedia(selection.post.id, it)
+                }, chapters = frame.uiState.series is ViewerSeries.Reading, stripMarks = config.stripMarks)
+        }
     }
 }
 
-/** The rotate button on the left and the slideshow button on the right, hidden while another surface owns the bottom. */
+/**
+ * The rotate button on the left and the slideshow button on the right, hidden while another surface owns the bottom.
+ * A watched series offers no slideshow: it would move through episodes while one is still loading.
+ */
 @Composable
-private fun BoxScope.ViewerFooterButtons(frame: ViewerFrame, screen: ViewerScreenState, activity: ViewerHostActivity?, onAction: (ViewerAction) -> Unit) {
+private fun BoxScope.ViewerFooterButtons(
+    frame: ViewerFrame, screen: ViewerScreenState, activity: ViewerHostActivity?, config: ViewerScreenConfig, onAction: (ViewerAction) -> Unit,
+) {
     val bottomOwned = frame.mediaOverviewVisible || screen.timelineInteractionActive
+    val watching = frame.uiState.series is ViewerSeries.Watching
     // A running slideshow keeps the image clear, including of the rotate hint.
     val rotationSuppressed = bottomOwned || frame.uiState.controls.slideshow
-    ViewerRotationControl(frame.selection, activity?.viewerRotation, frame.inPictureInPicture, frame.chromeVisible, rotationSuppressed)
-    ViewerSlideshowControl(frame, suppressed = bottomOwned || frame.inPictureInPicture, onAction)
+    val bottomRow = if (watching) VIEWER_EPISODE_CONTROLS_HEIGHT else VIEWER_POST_STRIP_HEIGHT
+    ViewerRotationControl(frame.selection, activity?.viewerRotation, frame.inPictureInPicture, frame.chromeVisible, rotationSuppressed, bottomRow)
+    ViewerSlideshowControl(frame, suppressed = bottomOwned || frame.inPictureInPicture || watching, onAction)
 }

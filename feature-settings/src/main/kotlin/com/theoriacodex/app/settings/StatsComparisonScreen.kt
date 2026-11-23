@@ -108,6 +108,8 @@ private fun ComparedOverall(yours: StatsShareOverall, theirs: StatsShareOverall?
             Triple("Time browsing", { it.browsingMs }, ::formatStatsDuration),
             Triple("Time watching", { it.watchingMs }, ::formatStatsDuration),
             Triple("Time in Codices", { it.codexMs }, ::formatStatsDuration),
+            Triple("Time reading", { it.readingMs }, ::formatStatsDuration),
+            Triple("Time on anime", { it.animeMs }, ::formatStatsDuration),
             Triple("App opens", { it.appOpens }, Long::toString),
             Triple("Posts watched", { it.postsWatched }, Long::toString),
             Triple("Posts saved", { it.postsSaved }, Long::toString),
