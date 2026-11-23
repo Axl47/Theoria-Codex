@@ -228,6 +228,12 @@ class RoomSeriesRepositoryTest {
         repository.restoreProgress(id, unreadRestore)
         assertEquals(4, repository.entries(id).last().lastPage)
         assertEquals("/c/1", repository.series(id)!!.lastOpenedEntry)
+
+        // If another chapter was opened after Mark all unread, Undo keeps that newer Continue destination.
+        val allUnreadRestore = repository.setAllRead(id, read = false)
+        repository.recordProgress(id, "/c/3", page = 2, pageCount = 8)
+        repository.restoreProgress(id, allUnreadRestore)
+        assertEquals("/c/3", repository.series(id)!!.lastOpenedEntry)
     }
 
     @Test

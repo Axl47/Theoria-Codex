@@ -48,6 +48,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -118,13 +119,10 @@ fun SeriesPageScreen(
     val toggleFollowed = rememberFollowToggle(viewModel)
     val listState = rememberLazyListState()
     var topBarVisible by rememberSaveable { mutableStateOf(true) }
-    var searchOpen by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf(state.chapterQuery) }
     var optionsSheetOpen by rememberSaveable { mutableStateOf(false) }
     var coverLightboxOpen by rememberSaveable { mutableStateOf(false) }
     val scrolled by remember(listState) { derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 48 } }
     LaunchedEffect(listState) { snapshotFlow { !listState.canScrollBackward }.collectLatest { atTop -> if (atTop) topBarVisible = true } }
-    val clearQuery = { searchQuery = ""; viewModel.setChapterQuery("") }
     val quickReturn = rememberQuickReturn { revealed -> topBarVisible = revealed }
 
     Box(modifier.fillMaxSize().nestedScroll(quickReturn)) {
@@ -142,21 +140,21 @@ fun SeriesPageScreen(
             onMarkPreviousRead = { viewModel.markPreviousRead(it, offerBulkUndo) },
             onOpenExtensions = onOpenExtensions,
             onOpenChapterOptions = { optionsSheetOpen = true },
-            onClearQuery = clearQuery,
-            onClearChapterFilters = { viewModel.resetChapterOptions(); clearQuery() },
+            onClearQuery = { viewModel.setChapterQuery("") },
+            onClearChapterFilters = { viewModel.resetChapterOptions(); viewModel.setChapterQuery("") },
         )
         SeriesPageTopBar(
             state = state,
             visible = topBarVisible,
             scrolled = scrolled,
-            searchOpen = searchOpen,
-            searchQuery = searchQuery,
+            searchOpen = viewModel.chapterSearchOpen,
+            searchQuery = viewModel.chapterSearchInput,
             canDownload = viewModel.canDownload,
             switchSource = switchSource,
             onBack = onBack,
-            onOpenSearch = { searchOpen = true; topBarVisible = true },
-            onCloseSearch = { searchOpen = false; clearQuery() },
-            onQueryChange = { searchQuery = it; viewModel.setChapterQuery(it) },
+            onOpenSearch = { viewModel.openChapterSearch(); topBarVisible = true },
+            onCloseSearch = viewModel::closeChapterSearch,
+            onQueryChange = viewModel::setChapterQuery,
             onRefresh = { viewModel.refresh() },
             onMarkAllRead = { viewModel.markAllRead(it, offerBulkUndo) },
             onDownload = viewModel::download,
@@ -172,9 +170,16 @@ fun SeriesPageScreen(
 @Composable
 private fun rememberBulkReadUndo(anchor: UndoAnchor, viewModel: SeriesPageViewModel): (BulkReadUndo) -> Unit {
     val undoSlot = LocalUndoSlot.current
+    val mounted = remember { booleanArrayOf(true) }
+    DisposableEffect(Unit) {
+        mounted[0] = true
+        onDispose { mounted[0] = false }
+    }
     UndoLeaveEffect(SERIES_UNDO_SCOPE)
     return { snapshot ->
-        undoSlot.offer(undoSlot.scope, UndoOffer(snapshot.label, anchor) { viewModel.undoBulkRead(snapshot) })
+        if (mounted[0]) {
+            undoSlot.offer(undoSlot.scope, UndoOffer(snapshot.label, anchor) { viewModel.undoBulkRead(snapshot) })
+        }
     }
 }
 

@@ -1,5 +1,8 @@
 package com.theoriacodex.app.series
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theoriacodex.data.repository.ChapterDownload
@@ -127,6 +130,12 @@ class SeriesPageViewModel(
     /** Whether this page offers downloads. */
     val canDownload: Boolean = downloads != null
 
+    /** Synchronous search bar state owned alongside [chapterOptions] so rotation and process death keep them in sync. */
+    var chapterSearchOpen: Boolean by mutableStateOf(false)
+        private set
+    var chapterSearchInput: String by mutableStateOf("")
+        private set
+
     val state: StateFlow<SeriesPageState> = combine(
         repository.observeSeries(id),
         repository.observeEntries(id),
@@ -227,7 +236,17 @@ class SeriesPageViewModel(
         chapterPreferences.write(id, ChapterDisplayPreferences(next.sort, next.descending, next.filter))
     }
 
+    fun openChapterSearch() {
+        chapterSearchOpen = true
+    }
+
+    fun closeChapterSearch() {
+        chapterSearchOpen = false
+        setChapterQuery("")
+    }
+
     fun setChapterQuery(query: String) {
+        chapterSearchInput = query
         chapterOptions.update { it.copy(query = query) }
     }
 

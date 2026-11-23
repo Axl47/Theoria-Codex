@@ -149,9 +149,9 @@ class RoomSeriesRepository(
                     next.takeIf { it != current }?.toEntity(id)
                 }
             if (restored.isNotEmpty()) dao.upsertEntries(restored)
-            if (restore.restoreLastOpened) {
+            if (restore.restoreLastOpened && restore.lastOpenedEntry != null) {
                 val series = dao.series(id.source.id, id.address)?.toStored()
-                if (series != null && series.lastOpenedEntry != restore.lastOpenedEntry) {
+                if (series != null && series.lastOpenedEntry == null) {
                     dao.upsertSeries(series.copy(lastOpenedEntry = restore.lastOpenedEntry).toEntity())
                 }
             }
