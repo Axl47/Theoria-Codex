@@ -43,10 +43,9 @@ class ViewerVideoPlayerPool(
     }
 
     /**
-     * A player prepared with [playback]; give it back with [recycle]. [loop] is its repeat mode until the caller
-     * changes it, so callers pass their own playback mode here: a player handed back and leased again for the next
-     * stream is the same object, and an effect keyed on the player would not run again to set it. Separate audio
-     * starts on the request's first track.
+     * A player prepared with [playback]; give it back with [recycle]. [loop] sets its repeat mode for this lease:
+     * players are reused, so the next lease may hand back the same player object, still in whatever mode the previous
+     * caller left, and only this call is sure to run for every lease. Separate audio starts on the request's first track.
      */
     fun acquire(playback: VideoPlaybackRequest, loop: Boolean = true): VideoPlayerLease {
         checkMainThread()
