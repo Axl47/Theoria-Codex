@@ -52,6 +52,15 @@
 - In Settings, below Check for new chapters: Delete after reading removes the downloaded chapters you've read when you close the reader.
 - Downloaded chapters are listed under Offline in the Library's sheet, one row per series, and count toward offline storage. Removing a series' row deletes its chapters and cancels the ones waiting to download; Remove all offline copies does both for every series.
 - The app now reads the list of installed apps to find extensions, and asks to send notifications when you follow a series.
+- Series: anime from Aniyomi extensions, beside manga. Turn an anime extension on under Extensions, then browse, search and follow anime in the same Series tab; anime covers carry a play mark, and All, Manga and Anime chips narrow the tab once you have both.
+- Episodes play in the Viewer. An episode resumes where you stopped, counts as watched once you're 85% through, and goes on to the next one when it ends.
+- While an episode plays, the stream button lists every server and quality the source found, with subtitles and audio beside it and next episode on the right. Double-tap a side of the picture to skip 10 seconds.
+- Subtitles come on by themselves, in your phone's language when the episode has it. Off stays off for the episodes that follow.
+- When a stream doesn't start, the next one is tried for you; when one stops partway because its link expired, a fresh link is fetched and playback picks up where it was. Retry fetches fresh links too.
+- New episodes of an anime you follow are checked and notified like new chapters.
+- Switch source works for anime too, between anime sources, and keeps the episodes you've watched.
+- Extensions that stream by torrent are listed but can't be turned on, and an anime its source splits into seasons says seasons aren't supported yet. Episodes can't be downloaded yet.
+- Statistics count time spent reading series and watching anime as their own categories, Reading and Anime, also in shared stats and comparisons.
 
 ### Changed
 
