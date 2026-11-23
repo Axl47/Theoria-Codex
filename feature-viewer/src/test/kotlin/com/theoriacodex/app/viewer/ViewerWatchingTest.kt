@@ -32,6 +32,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Locale
 
 /** The rules a series being watched follows: one episode at a time, played through, its progress reported. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -225,6 +226,22 @@ class ViewerWatchingTest {
         // Off turns off a track Media3 picked by itself.
         val defaulted = next.copy(subtitles = next.subtitles.map { it.copy(selected = it.label == "Español") })
         assertEquals(listOf(ViewerTrackChange.Subtitle(null)), ViewerEpisodeChoice(subtitle = ViewerSubtitleChoice.Off).trackChanges(defaulted))
+    }
+
+    @Test
+    fun `with no choice, a side-loaded subtitle in the device's language shows, else the first, unless the stream shows one`() {
+        fun subtitles(vararg labels: String) = PlaybackTracks(subtitles = labels.mapIndexed { index, label -> PlaybackTrack("$index:/0", label, selected = false, sideLoaded = true) })
+        val none = ViewerEpisodeChoice()
+        assertEquals(listOf(ViewerTrackChange.Subtitle("1:/0")), none.trackChanges(subtitles("Signs", "English [CC]"), Locale.US))
+        assertEquals(listOf(ViewerTrackChange.Subtitle("2:/0")), none.trackChanges(subtitles("English", "Signs", "ESPAÑOL"), Locale.forLanguageTag("es-PR")))
+        assertEquals(listOf(ViewerTrackChange.Subtitle("1:/0")), none.trackChanges(subtitles("Signs", "pt-BR", "Portugal"), Locale.forLanguageTag("pt")))
+        // A word that only contains the name is not it.
+        assertEquals(listOf(ViewerTrackChange.Subtitle("0:/0")), none.trackChanges(subtitles("Signs", "Englishman"), Locale.US))
+        // The stream's own subtitle, shown by Media3, stays; only Off turns a side-loaded one off.
+        val embedded = PlaybackTrack("0:subtitle:0/0", "English", selected = true)
+        val withEmbedded = subtitles("English").let { it.copy(subtitles = listOf(embedded) + it.subtitles) }
+        assertEquals(emptyList<ViewerTrackChange>(), none.trackChanges(withEmbedded, Locale.US))
+        assertEquals(emptyList<ViewerTrackChange>(), ViewerEpisodeChoice(subtitle = ViewerSubtitleChoice.Off).trackChanges(subtitles("English"), Locale.US))
     }
 
     @Test

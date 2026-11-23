@@ -3,7 +3,9 @@ package com.theoriacodex.app.viewer.state
 /**
  * What the user chose while watching a series. It holds for every episode of the session and survives the screen
  * leaving composition. Choices go by label, since stream links and track ids change from one episode, or one player,
- * to the next. A null field leaves the choice to the episode: its first stream, Media3's own subtitle and audio.
+ * to the next. A null field leaves the choice to the episode: its first stream, Media3's own audio, and the subtitles
+ * Media3 picks inside the stream, else a side-loaded file in the device's language, else the first one. Only [ViewerSubtitleChoice.Off]
+ * turns subtitles off.
  */
 data class ViewerEpisodeChoice(
     val streamLabel: String? = null,

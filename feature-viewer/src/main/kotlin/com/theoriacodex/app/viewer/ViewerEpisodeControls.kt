@@ -50,6 +50,7 @@ import com.theoriacodex.app.viewer.state.ViewerEpisodeChoice
 import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.app.viewer.state.ViewerSubtitleChoice
 import com.theoriacodex.domain.model.MediaStream
+import java.util.Locale
 
 /**
  * The subtitle and audio tracks of the episode on screen. Its player publishes them ([FollowViewerActiveTracks]) for the
@@ -110,11 +111,12 @@ internal sealed interface ViewerTrackChange {
 
 /**
  * What a player offering [tracks] must change to play this choice: nothing it already plays, and nothing for a label
- * this episode does not offer, which keeps the episode's own choice.
+ * this episode does not offer, which keeps the episode's own choice. With no subtitle chosen and none showing, a
+ * side-loaded one shows ([defaultSubtitle]); subtitles inside the stream stay Media3's choice.
  */
-internal fun ViewerEpisodeChoice.trackChanges(tracks: PlaybackTracks): List<ViewerTrackChange> = buildList {
+internal fun ViewerEpisodeChoice.trackChanges(tracks: PlaybackTracks, locale: Locale = Locale.getDefault()): List<ViewerTrackChange> = buildList {
     when (val wanted = subtitle) {
-        null -> Unit
+        null -> if (tracks.subtitles.none { it.selected }) tracks.subtitles.defaultSubtitle(locale)?.let { add(ViewerTrackChange.Subtitle(it.id)) }
         ViewerSubtitleChoice.Off -> if (tracks.subtitles.any { it.selected }) add(ViewerTrackChange.Subtitle(null))
         is ViewerSubtitleChoice.Track -> tracks.subtitles.labelled(wanted.label)?.takeUnless { it.selected }
             ?.let { add(ViewerTrackChange.Subtitle(it.id)) }
@@ -294,6 +296,17 @@ private fun ViewerTrackButton(icon: ImageVector, description: String, selectedLa
     IconButton(onClick = open, modifier = Modifier.testTag(tag).semantics { stateDescription = selectedLabel }) {
         Icon(icon, contentDescription = description, tint = Color.White)
     }
+}
+
+/**
+ * The side-loaded subtitle shown before the user chooses: the first whose label names [locale]'s language, in English,
+ * in itself or by its code, as a whole word and ignoring case (`English [CC]`, `español`, `en`); else the first.
+ */
+internal fun List<PlaybackTrack>.defaultSubtitle(locale: Locale): PlaybackTrack? {
+    val sideLoaded = filter { it.sideLoaded }
+    val names = listOf(locale.getDisplayLanguage(Locale.ENGLISH), locale.getDisplayLanguage(locale), locale.language).filter(String::isNotBlank)
+    val language = Regex(names.joinToString("|", "(?<!\\p{L})(?:", ")(?!\\p{L})") { Regex.escape(it) }, RegexOption.IGNORE_CASE)
+    return sideLoaded.firstOrNull { language.containsMatchIn(it.label) } ?: sideLoaded.firstOrNull()
 }
 
 /** The track a choice names, by its label. */
