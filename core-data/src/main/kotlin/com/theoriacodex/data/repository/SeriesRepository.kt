@@ -149,5 +149,12 @@ fun continueEntry(series: StoredSeries, entries: List<StoredSeriesEntry>): Store
 /** The page (from 0) a chapter opens at: where the user left an unfinished chapter, the start otherwise. */
 fun StoredSeriesEntry.resumePageIndex(): Int = if (read) 0 else (position - 1).coerceAtLeast(0).toInt()
 
-/** The playback position, in milliseconds, an episode starts at: where the user left an unfinished one, else 0. */
-fun StoredSeriesEntry.resumePositionMs(): Long = if (read) 0 else position
+/**
+ * The playback position, in milliseconds, an episode starts at: where the user left it, while that is short of the
+ * point that counts as watching it ([ANIME_FINISHED_PERCENT]), else 0. A watched episode left partway through a rewatch
+ * resumes too.
+ */
+fun StoredSeriesEntry.resumePositionMs(): Long {
+    val length = length ?: return if (read) 0 else position
+    return if (position * 100 < length * ANIME_FINISHED_PERCENT) position else 0
+}
