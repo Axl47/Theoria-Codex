@@ -11,6 +11,8 @@ import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.SeriesStatus
 import com.theoriacodex.domain.series.UnsupportedEntriesException
+import com.theoriacodex.sources.http.HostOutageKind
+import com.theoriacodex.sources.http.HostUnavailableException
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.FetchType
 import eu.kanade.tachiyomi.animesource.model.Hoster
@@ -143,6 +145,34 @@ class AniyomiSeriesSourceTest {
     }
 
     @Test
+    fun `a browser check behind every video is the answer, and one that stopped a server is heard even when another answers`() = runBlocking {
+        val heard = mutableListOf<String>()
+        val challenged = Hoster(hosterName = "Checked", videoList = listOf(Video(url = "https://checked.example/watch/1", quality = "720p", videoUrl = null)))
+        val checkedOrBroken = ServerSource(
+            servers = listOf(Hoster(hosterName = "Broken"), challenged),
+            videos = mapOf("Broken" to { throw IOException("Gone") }),
+            addressOf = { throw HostUnavailableException("checked.example", HostOutageKind.CHALLENGE) },
+        )
+        val failure = assertFailsWith<SourceAdapterException> { streamsOf(checkedOrBroken, onChallenged = { heard += it }) }
+        assertTrue(failure.isBrowserCheck())
+        assertEquals(listOf("checked.example"), heard)
+
+        heard.clear()
+        val checkedAndFine = ServerSource(
+            servers = listOf(challenged, Hoster(hosterName = "Fine", videoList = listOf(Video("https://fine.example/v.mp4", "720p")))),
+            addressOf = { throw HostUnavailableException("checked.example", HostOutageKind.CHALLENGE) },
+        )
+        assertEquals(listOf("720p · Fine"), streamsOf(checkedAndFine, onChallenged = { heard += it }).map { it.label })
+        assertEquals(listOf("checked.example"), heard)
+    }
+
+    @Test
+    fun `servers that answer with no videos give no streams, which is no failure`() = runBlocking {
+        assertEquals(emptyList<MediaStream>(), streamsOf(ServerSource(servers = listOf(Hoster(hosterName = "Empty")), videos = mapOf("Empty" to { emptyList() }))))
+        assertEquals(emptyList<MediaStream>(), streamsOf(ServerSource()))
+    }
+
+    @Test
     fun `an anime grouped into seasons is refused in words the series page shows, unwrapped`() = runBlocking {
         val source = ServerSource(listing = listOf(anime("/a/1", "Grouped").apply { fetch_type = FetchType.Seasons }))
         val series = AniyomiSeriesSource(source, HostServices(ExtensionImages()))
@@ -160,8 +190,9 @@ class AniyomiSeriesSourceTest {
         assertEquals(SeriesStatus.UPCOMING, AniyomiSeriesSource(source, HostServices(ExtensionImages())).popular(1).series.single().status)
     }
 
-    private suspend fun streamsOf(source: AnimeHttpSource, serverLimitMs: Long = 60_000): List<MediaStream> {
-        val series = AniyomiSeriesSource(source, HostServices(ExtensionImages()), AniyomiStreams.Limits(serverMs = serverLimitMs))
+    private suspend fun streamsOf(source: AnimeHttpSource, serverLimitMs: Long = 60_000, onChallenged: (String) -> Unit = {}): List<MediaStream> {
+        val host = HostServices(ExtensionImages(), onChallenged = { _, challenged -> onChallenged(challenged) })
+        val series = AniyomiSeriesSource(source, host, AniyomiStreams.Limits(serverMs = serverLimitMs))
         return (series.media(SeriesEntry("/episode/1", "Episode 1")) as EntryMedia.Streams).streams
     }
 
@@ -185,11 +216,15 @@ class AniyomiSeriesSourceTest {
         override fun headersBuilder() = Headers.Builder().apply { sourceHeaders.forEach { (name, value) -> add(name, value) } }
     }
 
-    /** A source built against the server list: [videos] answers each of [servers] that came without its videos. */
+    /**
+     * A source built against the server list: [videos] answers each of [servers] that came without its videos, and
+     * [addressOf] gives the address of a video that came without one.
+     */
     private inner class ServerSource(
         private val servers: List<Hoster> = emptyList(),
         private val videos: Map<String, suspend () -> List<Video>> = emptyMap(),
         private val listing: List<SAnime> = emptyList(),
+        private val addressOf: suspend (Video) -> String = { it.url },
     ) : FakeAnimeSource() {
         override val id = 7L
 
@@ -200,6 +235,8 @@ class AniyomiSeriesSourceTest {
         override suspend fun getVideoList(hoster: Hoster): List<Video> = videos.getValue(hoster.hosterName)()
 
         override fun List<Video>.sortVideos(): List<Video> = sortedByDescending { it.videoTitle == "720p" }
+
+        override suspend fun getVideoUrl(video: Video): String = addressOf(video)
     }
 
     /**

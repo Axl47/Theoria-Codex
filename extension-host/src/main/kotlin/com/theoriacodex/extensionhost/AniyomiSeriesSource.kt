@@ -33,7 +33,7 @@ class AniyomiSeriesSource internal constructor(
     override val key: SourceKey = AnimeKind.sourceKey(source.id)
     private val calls = ExtensionCalls(source.name, host.log) { challenged -> host.onChallenged(key, challenged) }
     private val http = source as? AnimeHttpSource
-    private val streams = AniyomiStreams(source, host, limits)
+    private val streams = AniyomiStreams(source, host, calls, limits)
 
     /** Fetches its covers through its own client, with its headers; only an HTTP source has one. */
     internal val sourceImages: SourceImages? = http?.let { SourceImages { _, url, _ -> it.imageCall(url.toString()).execute() } }

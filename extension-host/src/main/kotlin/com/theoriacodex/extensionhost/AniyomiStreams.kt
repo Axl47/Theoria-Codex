@@ -24,26 +24,45 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
  * source's images. Streams are asked for from every server at once. A server gets [Limits.serverMs] and listing the
  * servers [Limits.listMs], since some sources resolve every server inside that one call. Extension code can ignore
  * cancellation, so work past its limit, or whose caller stopped waiting, is abandoned in [HostServices.abandoned] and
- * never joined.
+ * never joined. Failures go through [calls], which reports each browser check that stopped a server.
  */
-internal class AniyomiStreams(private val source: AnimeSource, private val host: HostServices, private val limits: Limits = Limits()) {
+internal class AniyomiStreams(
+    private val source: AnimeSource,
+    private val host: HostServices,
+    private val calls: ExtensionCalls,
+    private val limits: Limits = Limits(),
+) {
     private val http = source as? AnimeHttpSource
     private val hasServerList = declaresServerList(source.javaClass)
 
-    /** How long a server and the server list each get; tests shorten them. */
+    /**
+     * How long a server and the server list each get; tests shorten them. A server's limit also bounds a hidden-browser
+     * pass one of its requests starts (which may take 10 s), and that is accepted: when the limit cuts a server off, its
+     * work is cancelled, a request it was waiting on is cancelled with it, and the pass ends there without being
+     * recorded as a failure, so the next try starts it again. A request the extension made outside any coroutine is not
+     * cancelled: its pass runs on, and a clearance it earns serves the next try.
+     */
     data class Limits(val serverMs: Long = SERVER_LIMIT_MS, val listMs: Long = LIST_LIMIT_MS)
 
     /**
      * Every server's streams in one list, in the order the source's settings prefer. Some servers answering is
-     * enough; none answering, in time or at all, is a failure.
+     * enough. When none has a video, the most useful failure is thrown, else running out of time is; servers that
+     * answered with no videos give an empty list.
      */
     suspend fun of(episode: SEpisode): EntryMedia.Streams {
         val servers = abandoning("the server list", limits.listMs) { servers(episode) } ?: throw noServerAnswered()
+        // Null for a server that ran out of time.
         val answers = coroutineScope {
             servers.map { server -> async { attempt { abandoning(server.hosterName, limits.serverMs) { videos(server) } } } }.awaitAll()
         }
+        // Each is made the app's failure even when another server answers, so a browser check that stopped one is reported.
+        val failures = answers.mapNotNull { it.exceptionOrNull() }.map(calls::failure)
         val found = answers.zip(servers).flatMap { (answer, server) -> answer.getOrNull().orEmpty().map { it to server } }
-        if (found.isEmpty()) throw answers.firstNotNullOfOrNull { it.exceptionOrNull() } ?: noServerAnswered()
+        if (found.isEmpty()) {
+            failures.mostUseful()?.let { throw it }
+            if (answers.any { it.isSuccess && it.getOrNull() == null }) throw noServerAnswered()
+            return EntryMedia.Streams(emptyList())
+        }
         // By identity: two servers can offer equal videos, and each keeps its own server's name.
         val serverOf = found.toMap(IdentityHashMap())
         val videos = found.map { it.first }.let { all -> http?.run { all.sortVideos() } ?: all }
@@ -70,10 +89,20 @@ internal class AniyomiStreams(private val source: AnimeSource, private val host:
         return http?.run { servers.sortHosters() } ?: servers
     }
 
-    /** [server]'s videos that can play: those it came with, else the ones the source finds for it. */
+    /**
+     * [server]'s videos that can play: those it came with, else the ones the source finds for it. When none can, the
+     * server answers with the most useful failure among them, if any failed.
+     */
     private suspend fun videos(server: Hoster): List<Video> = coroutineScope {
-        (server.videoList ?: source.getVideoList(server)).map { video -> async { attempt { finished(video) }.getOrNull() } }.awaitAll().filterNotNull()
+        val outcomes = (server.videoList ?: source.getVideoList(server)).map { video -> async { attempt { finished(video) } } }.awaitAll()
+        outcomes.mapNotNull { it.getOrNull() }.ifEmpty {
+            outcomes.mapNotNull { it.exceptionOrNull() }.mostUseful()?.let { throw it }
+            emptyList()
+        }
     }
+
+    /** The failure to show: a browser check first, since the user can pass it, else the first. */
+    private fun List<Throwable>.mostUseful(): Throwable? = firstOrNull { it.isBrowserCheck() } ?: firstOrNull()
 
     /** [video] finished by the source, with its address asked for when it came without one; null when it has none. */
     private suspend fun finished(video: Video): Video? {
