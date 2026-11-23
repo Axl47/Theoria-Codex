@@ -386,7 +386,7 @@ private fun rememberSeriesViewerConfig(shell: TheoriaShell): (ViewerScreenConfig
         shell.seriesReader?.takeIf { reading != null }?.readingMode(session) ?: emptyFlow()
     }.collectAsStateWithLifecycle(initialValue = reading?.mode)
     val modes = mode?.let { chosen -> session.posts.associate { it.id to chosen } }.orEmpty()
-    return { it.copy(series = session.series, galleryReadingModes = modes) }
+    return { it.copy(galleryReadingModes = modes) }
 }
 
 private const val SERIES_READER_KEY = "series-reader"
