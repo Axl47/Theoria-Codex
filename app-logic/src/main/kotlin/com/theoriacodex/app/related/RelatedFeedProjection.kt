@@ -3,9 +3,11 @@ package com.theoriacodex.app.related
 import com.theoriacodex.domain.model.Post
 
 sealed interface RelatedFeedEntry {
+    /** [post] at [canonicalIndex] in the feed's own list and [visibleIndex] in its filtered list, the one the Viewer opens. */
     data class PostEntry(
         val post: Post,
         val canonicalIndex: Int,
+        val visibleIndex: Int,
     ) : RelatedFeedEntry
 
     data class ShelfEntry(
@@ -73,8 +75,8 @@ fun buildRelatedFeedProjection(
     val canonicalIndexById = canonicalPosts
         .mapIndexed { index, post -> post.id to index }
         .toMap()
-    val postEntries = visiblePosts.mapNotNull { post ->
-        canonicalIndexById[post.id]?.let { index -> RelatedFeedEntry.PostEntry(post, index) }
+    val postEntries = visiblePosts.mapIndexedNotNull { visibleIndex, post ->
+        canonicalIndexById[post.id]?.let { index -> RelatedFeedEntry.PostEntry(post, index, visibleIndex) }
     }
     val request = relatedState.requestOrNull ?: return RelatedFeedProjection(postEntries)
     // Follows the seed when the canonical order changes under an open shelf, as a length sort does.

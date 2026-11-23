@@ -247,7 +247,7 @@ class ViewerReturnTransitionTest {
                         })
                     }
                     val modifier = Modifier.height(600.dp).onGloballyPositioned { viewport = it.boundsInWindow() }
-                    val entries = posts.mapIndexed { index, post -> RelatedFeedEntry.PostEntry(post, index) }
+                    val entries = posts.mapIndexed { index, post -> RelatedFeedEntry.PostEntry(post, index, index) }
                         .toMutableList<RelatedFeedEntry>()
                     if (projected) {
                         entries.add(5, RelatedFeedEntry.ShelfEntry(
@@ -341,7 +341,7 @@ class ViewerReturnTransitionTest {
         val seed = post("seed")
         val loaded = RelatedPostsUiState.Loaded(RelatedPostsRequest(seed, 29, 1), related)
         val regular = listOf(target) + (1..60).map { post("regular-$it") }
-        val entries = regular.mapIndexed { index, post -> RelatedFeedEntry.PostEntry(post, index) }.toMutableList<RelatedFeedEntry>()
+        val entries = regular.mapIndexed { index, post -> RelatedFeedEntry.PostEntry(post, index, index) }.toMutableList<RelatedFeedEntry>()
         entries.add(30, RelatedFeedEntry.ShelfEntry(loaded, 29))
         val projection = RelatedFeedProjection(entries)
         var origin: String? = null

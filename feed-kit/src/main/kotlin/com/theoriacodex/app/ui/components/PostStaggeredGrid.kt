@@ -44,7 +44,6 @@ fun FeedGrid(
     shelf: @Composable LazyStaggeredGridItemScope.(RelatedFeedEntry.ShelfEntry) -> Unit,
     post: @Composable (visibleIndex: Int, post: Post) -> Unit,
 ) {
-    val visibleIndexById = remember(view.visiblePosts) { view.visiblePosts.withIndex().associate { it.value.id to it.index } }
     TwoColumnProjectedPostStaggeredGrid(
         projection = view.related.projection,
         state = state,
@@ -52,7 +51,9 @@ fun FeedGrid(
         showPagingTile = showPagingTile,
         footerMessage = footerMessage,
         divider = divider,
-        postContent = { _, entry -> post(visibleIndexById.getValue(entry.id), entry) },
+        // Each item carries its own index: a card the grid composed ahead of time can recompose with its old entry
+        // after the post left the feed, so a lookup beside the items could miss.
+        postContent = { visibleIndex, entry -> post(visibleIndex, entry) },
         shelfContent = shelf,
     )
 }
@@ -72,7 +73,7 @@ fun TwoColumnProjectedPostStaggeredGrid(
     showPagingTile: Boolean = false,
     footerMessage: String? = null,
     divider: FeedGridDivider? = null,
-    postContent: @Composable LazyStaggeredGridItemScope.(canonicalIndex: Int, post: Post) -> Unit,
+    postContent: @Composable LazyStaggeredGridItemScope.(visibleIndex: Int, post: Post) -> Unit,
     shelfContent: @Composable LazyStaggeredGridItemScope.(RelatedFeedEntry.ShelfEntry) -> Unit,
     footerContent: (@Composable () -> Unit)? = null,
 ) {
@@ -108,7 +109,7 @@ private fun <T> List<T?>.withGapAt(index: Int?): List<T?> = if (index == null) t
 
 private fun LazyStaggeredGridScope.projectedEntries(
     entries: List<RelatedFeedEntry>,
-    postContent: @Composable LazyStaggeredGridItemScope.(canonicalIndex: Int, post: Post) -> Unit,
+    postContent: @Composable LazyStaggeredGridItemScope.(visibleIndex: Int, post: Post) -> Unit,
     shelfContent: @Composable LazyStaggeredGridItemScope.(RelatedFeedEntry.ShelfEntry) -> Unit,
 ) {
     itemsIndexed(
@@ -133,7 +134,7 @@ private fun LazyStaggeredGridScope.projectedEntries(
         },
     ) { _, entry ->
         when (entry) {
-            is RelatedFeedEntry.PostEntry -> postContent(entry.canonicalIndex, entry.post)
+            is RelatedFeedEntry.PostEntry -> postContent(entry.visibleIndex, entry.post)
             is RelatedFeedEntry.ShelfEntry -> shelfContent(entry)
         }
     }
