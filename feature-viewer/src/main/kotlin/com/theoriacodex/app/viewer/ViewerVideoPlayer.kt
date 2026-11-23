@@ -32,14 +32,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import kotlinx.coroutines.delay
 import com.theoriacodex.app.media.isMediaNetworkMetered
-import com.theoriacodex.app.media.viewerPlaybackLocation
 
 /** Each mounted renderer leases its player and owns its surface/progress; the route sends commands. */
 @Composable
@@ -47,6 +45,7 @@ internal fun ViewerVideoPlayer(
     media: ImageRef,
     quality: com.theoriacodex.domain.model.VideoQuality,
     qualityHeight: Int?,
+    streamLabel: String?,
     postId: PostId,
     sourceKey: SourceKey,
     playbackDiagnosticsEnabled: Boolean,
@@ -62,14 +61,14 @@ internal fun ViewerVideoPlayer(
 ) {
     val context = LocalContext.current
     // The metered check is a system call, so it runs when the page picks its stream, not on every recomposition.
-    val location = remember(media, quality, qualityHeight) {
-        media.viewerPlaybackLocation(quality, context.isMediaNetworkMetered(), qualityHeight)
+    val playback = remember(media, sourceKey, quality, qualityHeight, streamLabel) {
+        media.viewerPlayback(sourceKey, quality, context.isMediaNetworkMetered(), qualityHeight, streamLabel)
     }
     if (!terminalMessage.isNullOrBlank()) {
         ViewerVideoMessage(terminalMessage, modifier)
         return
     }
-    if (location.isNullOrBlank()) {
+    if (playback == null) {
         LaunchedEffect(media, controls.loadGeneration) { events.onError("Video unavailable") }
         ViewerVideoMessage("Video unavailable", modifier)
         return
@@ -78,7 +77,7 @@ internal fun ViewerVideoPlayer(
         Box(modifier.background(Color.Black)) { loadingPreview?.invoke() }
         return
     }
-    val recovery = remember(mediaKey, location, sourceKey, controls.loadGeneration) { ViewerVideoRecovery() }
+    val recovery = remember(mediaKey, playback, controls.loadGeneration) { ViewerVideoRecovery() }
     var recoveryGeneration by remember(recovery) { mutableIntStateOf(0) }
     val state = remember(recovery, recoveryGeneration) { ViewerVideoState() }
     LaunchedEffect(state, state.retryPending) {
@@ -87,7 +86,7 @@ internal fun ViewerVideoPlayer(
             recoveryGeneration += 1
         }
     }
-    ViewerVideoBinding(state, location, sourceKey, controls, events, recovery, { positions.position(mediaKey) }) {
+    ViewerVideoBinding(state, playback, controls, events, recovery, { positions.position(mediaKey) }) {
         positions.save(mediaKey, it)
         context.videoPlaybackInfrastructure().feedPositionHandoff.publish(mediaKey, it)
     }
@@ -96,7 +95,7 @@ internal fun ViewerVideoPlayer(
     ViewerVideoCommands(state, controls)
     ViewerVideoLifecycle(state, controls)
     ViewerVideoProgress(state, events)
-    ViewerVideoContent(state, postId, playbackDiagnosticsEnabled, controls, events, modifier, mediaModifier, aspectRatio, loadingPreview)
+    ViewerVideoContent(state, postId, playback.headers, playbackDiagnosticsEnabled, controls, events, modifier, mediaModifier, aspectRatio, loadingPreview)
 }
 
 private class ViewerVideoState {
@@ -175,8 +174,7 @@ private class ViewerVideoState {
 @Composable
 private fun ViewerVideoBinding(
     state: ViewerVideoState,
-    location: String,
-    source: SourceKey,
+    playback: VideoPlaybackRequest,
     controls: ViewerRendererControls,
     events: ViewerRendererEvents,
     recovery: ViewerVideoRecovery,
@@ -185,9 +183,9 @@ private fun ViewerVideoBinding(
 ) {
     val context = LocalContext.current
     val latestEvents by rememberUpdatedState(events)
-    DisposableEffect(state, location, source) {
+    DisposableEffect(state, playback) {
         val pool = context.videoPlaybackInfrastructure().viewerVideoPlayerPool
-        val lease = pool.acquire(location, source.requestHeaders())
+        val lease = pool.acquire(playback)
         val player = lease.player
         // Read after the previous binding's disposal has saved its final position.
         resumePosition().takeIf { it > 0L }?.let(player::seekTo)
@@ -355,6 +353,7 @@ private fun ViewerVideoProgress(state: ViewerVideoState, events: ViewerRendererE
 private fun ViewerVideoContent(
     state: ViewerVideoState,
     postId: PostId,
+    headers: Map<String, String>,
     diagnosticsEnabled: Boolean,
     controls: ViewerRendererControls,
     events: ViewerRendererEvents,
@@ -382,13 +381,13 @@ private fun ViewerVideoContent(
         if ((!controls.isActive || !state.hasRenderedFirstFrame) && !state.failed) loadingPreview?.invoke()
         if (state.loading && !state.failed) CircularProgressIndicator()
         if (state.failed) Text("Could not play video", color = MaterialTheme.colorScheme.onBackground)
-        ViewerVideoTimelineOverlay(state, postId.source, controls, events, state.aspectRatio ?: aspectRatio, Modifier.align(Alignment.BottomCenter))
+        ViewerVideoTimelineOverlay(state, headers, controls, events, state.aspectRatio ?: aspectRatio, Modifier.align(Alignment.BottomCenter))
     }
 }
 
 @Composable
 private fun ViewerVideoTimelineOverlay(
-    state: ViewerVideoState, source: SourceKey, controls: ViewerRendererControls,
+    state: ViewerVideoState, headers: Map<String, String>, controls: ViewerRendererControls,
     events: ViewerRendererEvents, aspectRatio: Float?, modifier: Modifier,
 ) {
     if (!controls.isActive && !controls.isPreloading || state.failed) return
@@ -398,7 +397,7 @@ private fun ViewerVideoTimelineOverlay(
     }
     ViewerChromeVisibility(controls.showControls, modifier) {
         // Inside the visibility, so scrub previews are prepared only while the timeline shows.
-        val previews = rememberViewerScrubPreviews(state.player, source)
+        val previews = rememberViewerScrubPreviews(state.player, headers)
         ViewerPlaybackTimeline(
             controls, events, { state.position }, state.duration,
             seek = ViewerTimelineSeek(

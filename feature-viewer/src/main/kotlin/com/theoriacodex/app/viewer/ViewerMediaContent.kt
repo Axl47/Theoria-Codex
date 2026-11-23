@@ -40,7 +40,7 @@ internal fun ViewerMediaContent(
         )
         ViewerMediaKind.VIDEO -> ViewerVideoPlayer(
             media = media, postId = post.id, sourceKey = post.id.source,
-            quality = videoOptions.quality, qualityHeight = videoOptions.height,
+            quality = videoOptions.quality, qualityHeight = videoOptions.height, streamLabel = videoOptions.streamLabel,
             playbackDiagnosticsEnabled = videoOptions.diagnosticsEnabled,
             terminalMessage = videoOptions.terminalMessage,
             modifier = Modifier.fillMaxSize(), mediaModifier = modifier,

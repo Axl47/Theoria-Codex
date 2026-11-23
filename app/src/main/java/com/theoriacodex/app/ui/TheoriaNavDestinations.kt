@@ -76,6 +76,7 @@ import com.theoriacodex.app.viewer.ViewerReturnLifetime
 import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.ViewerScreenCallbacks
 import com.theoriacodex.app.viewer.ViewerScreenConfig
+import com.theoriacodex.app.viewer.ViewerSeries
 import com.theoriacodex.app.viewer.viewerMediaPrefetcher
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.SettingChoices
@@ -380,7 +381,7 @@ private fun rememberSeriesViewerConfig(shell: TheoriaShell): (ViewerScreenConfig
         }
     }
     val mode by remember(session.context.queryHash) { shell.seriesReader?.readingMode(session) ?: emptyFlow() }
-        .collectAsStateWithLifecycle(initialValue = session.seriesReadingMode)
+        .collectAsStateWithLifecycle(initialValue = (session.series as? ViewerSeries.Reading)?.mode)
     val modes = mode?.let { chosen -> session.posts.associate { it.id to chosen } }.orEmpty()
     return { it.copy(seriesChapters = true, galleryReadingModes = modes) }
 }
@@ -493,6 +494,7 @@ private fun viewerScreenCallbacks(shell: TheoriaShell) = ViewerScreenCallbacks(
     onVisibleMediaChanged = { post, viewedMediaNumber, session ->
         shell.viewerRouteWorkflow.recordVisibleMediaProgress(post, viewedMediaNumber, session)
     },
+    onPlaybackProgress = { post, progress, session -> shell.viewerRouteWorkflow.recordPlaybackProgress(post, progress, session) },
     onOpenUrl = { url -> openInBrowser(shell.appContext, url) },
     onGoToSearch = {
         shell.scope.launch { shell.features.search.setViewerLaunchContext(null) }

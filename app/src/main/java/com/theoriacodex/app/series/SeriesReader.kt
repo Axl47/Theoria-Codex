@@ -1,17 +1,21 @@
 package com.theoriacodex.app.series
 
 import com.theoriacodex.app.di.SeriesDependencies
+import com.theoriacodex.app.viewer.ViewerSeries
+import com.theoriacodex.app.viewer.ViewerSeriesProgress
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.repository.chapterPost
+import com.theoriacodex.data.repository.episodePost
 import com.theoriacodex.data.repository.inReadingOrder
 import com.theoriacodex.data.repository.resumePageIndex
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.seriesReadingMode
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -45,11 +49,14 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         val context = ViewerLaunchContext(seriesQueryHash(id), start, ViewerStreamSource.SERIES, scrollOffsetHint = 0)
         val resume = entries.associate { PostId(id.source, it.entry.address) to it.resumePageIndex() } +
             listOfNotNull(pageIndex?.let { posts[start].id to it })
-        val session = ViewerSession(posts, context, initialMediaIndices = resume, seriesReadingMode = stored.readingModeOrGuess())
+        val session = ViewerSession(posts, context, initialMediaIndices = resume, series = ViewerSeries.Reading(stored.readingModeOrGuess()))
         return if (sessionId == null) session else session.copy(sessionId = sessionId)
     }
 
-    /** The chapter [postId] of the series [queryHash] names, with its pages; null when the source lists none for it. */
+    /**
+     * The entry [postId] of the series [queryHash] names, with its pages, or its streams when it is an episode; null
+     * when the source lists none for it.
+     */
     suspend fun resolve(queryHash: String?, postId: PostId): Post? {
         val id = checkNotNull(seriesIdOf(queryHash)) { "Not a series session" }
         val stored = checkNotNull(series.repository.series(id)) { "The series is not stored" }
@@ -59,19 +66,30 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         // Nothing is asked of the source for a downloaded chapter; the cover is the stored address, as in a session.
         val downloaded = series.downloads.chapter(id, entry.entry.address)?.media
         val source = if (downloaded == null) source(id.source) else null
-        val pages = downloaded ?: checkNotNull(source).pages(entry.entry)
-        if (pages.isEmpty()) return null
-        return chapterPost(stored.series, entry.entry, source?.coverAddress(stored.series) ?: stored.series.coverUrl, pages)
+        val media = downloaded?.let(EntryMedia::Pages) ?: checkNotNull(source).media(entry.entry)
+        val cover = source?.coverAddress(stored.series) ?: stored.series.coverUrl
+        return when (media) {
+            is EntryMedia.Pages -> media.pages.takeIf { it.isNotEmpty() }?.let { chapterPost(stored.series, entry.entry, cover, it) }
+            is EntryMedia.Streams -> media.streams.takeIf { it.isNotEmpty() }?.let { episodePost(stored.series, entry.entry, cover, it) }
+        }
     }
 
     /**
-     * The user is on page [mediaNumber] (from 1) of the chapter [post]. A chapter whose pages have not arrived shows
-     * only its cover, which is not a page read; the Viewer reports the chapter again once they have.
+     * The user is at [progress] in the entry [post], which the series records in the unit its kind uses. A chapter
+     * whose pages have not arrived shows only its cover, which is not a page read; the Viewer reports the chapter again
+     * once they have. An episode whose duration is not known yet records only that it was the last one opened.
      */
-    suspend fun recordProgress(session: ViewerSession, post: Post, mediaNumber: Int) {
+    suspend fun recordProgress(session: ViewerSession, post: Post, progress: ViewerSeriesProgress) {
         val id = seriesIdOf(session.context.queryHash) ?: return
-        if (post.media.isEmpty()) return
-        series.repository.recordProgress(id, post.id.sourcePostId, mediaNumber, post.media.size)
+        val address = post.id.sourcePostId
+        when (progress) {
+            is ViewerSeriesProgress.Page -> {
+                if (post.media.isEmpty()) return
+                series.repository.recordProgress(id, address, progress.number.toLong(), post.media.size.toLong())
+            }
+            is ViewerSeriesProgress.Playback ->
+                series.repository.recordProgress(id, address, progress.positionMs, progress.durationMs.takeIf { it > 0 })
+        }
     }
 
     /** A Viewer started reading a series; [closed] says when it stops. */

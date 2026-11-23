@@ -271,6 +271,22 @@ class ViewerViewModel(
         }
     }
 
+    /**
+     * An episode's playback position, written by the retained route like [recordVisibleMedia]. Unlike it, a post that
+     * is no longer the current one still reports: its player's last report comes as it is swiped away.
+     */
+    fun recordPlaybackProgress(
+        post: Post,
+        progress: ViewerSeriesProgress.Playback,
+        record: suspend (Post, ViewerSeriesProgress.Playback, ViewerSession) -> Unit,
+    ) {
+        val current = mutableSession.value ?: return
+        if (state.value.pages.none { it.post.id == post.id }) return
+        workScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            runCatchingPreservingCancellation { record(post, progress, current) }
+        }
+    }
+
     /** Exit may retain paused render pages until navigation disposes the outgoing destination. */
     fun clearSession(retainPresentation: Boolean = false) {
         synchronized(lock) {

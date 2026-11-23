@@ -63,6 +63,8 @@ internal data class ViewerMediaLayout(
 internal data class ViewerVideoOptions(
     val quality: com.theoriacodex.domain.model.VideoQuality,
     val height: Int?,
+    /** The session's chosen stream, for media with streams; see [com.theoriacodex.app.viewer.viewerPlayback]. */
+    val streamLabel: String?,
     val terminalMessage: String?,
     val diagnosticsEnabled: Boolean,
 )

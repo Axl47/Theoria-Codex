@@ -3,12 +3,15 @@ package com.theoriacodex.app.viewer
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 class ViewerVideoPositionsTest {
     private val posts = (0..12).map { PostId(SourceKey.RULE34VIDEO, "video-$it") }
     private fun key(index: Int, mediaIndex: Int = 0) = ViewerMediaKey(posts[index], mediaIndex)
+    private fun identity(id: String) = ViewerSessionIdentity(value = id, queryHash = "series:$id", streamKey = "SERIES")
 
     @Test
     fun `backward and forward revisits keep independently updated positions`() {
@@ -54,6 +57,29 @@ class ViewerVideoPositionsTest {
         positions.save(key(0), 13_000L)
         positions.retainAround(posts, 0)
         assertEquals(0L, positions.position(key(0)))
+    }
+
+    @Test
+    fun `a watching session's episodes start where they were left, and what is saved replaces that start`() {
+        val positions = ViewerVideoPositionStore().forSession(identity("watching"), mapOf(posts[0] to 90_000L))
+        positions.retainAround(posts, 0)
+        assertEquals(90_000L, positions.position(key(0)))
+        assertEquals(0L, positions.position(key(1)))
+
+        positions.save(key(0), 120_000L)
+        // Leaving the retained window drops the saved position, but not where the episode got to.
+        positions.retainAround(posts, 6)
+        positions.retainAround(posts, 0)
+        assertEquals(120_000L, positions.position(key(0)))
+    }
+
+    @Test
+    fun `a session's starts seed only the positions it begins with`() {
+        val store = ViewerVideoPositionStore()
+        val positions = store.forSession(identity("watching"), mapOf(posts[0] to 90_000L))
+
+        assertSame(positions, store.forSession(identity("watching"), mapOf(posts[0] to 1L)))
+        assertEquals(0L, store.forSession(identity("other")).position(key(0)))
     }
 
     @Test
