@@ -2,6 +2,7 @@ package com.theoriacodex.app.viewer
 
 import androidx.media3.common.Player
 import androidx.media3.common.text.CueGroup
+import androidx.media3.exoplayer.mediacodec.MediaCodecDecoderException
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.theoriacodex.domain.model.MediaTrack
@@ -9,6 +10,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeFalse
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -49,12 +51,14 @@ class StreamPlaybackDeviceTest {
             val player = lease.player
             try {
                 awaitOnMain { player.playbackState == Player.STATE_READY || player.playerError != null }
+                skipIfTheEmulatorDecoderFailed(player)
                 onMain {
                     player.selectSubtitle(player.playbackTracks().subtitles.single { it.label == "English" }.id)
                     player.play()
                 }
                 awaitOnMain { player.currentPosition >= 1_500L || player.playerError != null }
                 awaitOnMain { "Fixture cue" in cues || player.playerError != null }
+                skipIfTheEmulatorDecoderFailed(player)
 
                 onMain {
                     assertNull(player.playerError)
@@ -67,6 +71,16 @@ class StreamPlaybackDeviceTest {
                 onMain { player.release() }
             }
         }
+    }
+
+    /**
+     * Skips the test when the decoder that failed is the emulator's own (`c2.goldfish.*`, which no phone has). The
+     * Android 17 emulator image denies that decoder the app's input buffers (SELinux, `memfd_file`), so it decodes no
+     * video at all; the Android 16 emulator still runs this test in full.
+     */
+    private fun skipIfTheEmulatorDecoderFailed(player: Player) = onMain {
+        val decoder = (player.playerError?.cause as? MediaCodecDecoderException)?.codecInfo?.name
+        assumeFalse("This emulator's $decoder cannot decode", decoder?.startsWith("c2.goldfish") == true)
     }
 
     private fun <T> onMain(block: () -> T): T {
