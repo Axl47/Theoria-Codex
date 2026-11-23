@@ -523,6 +523,8 @@ enum class SeriesUpdateInterval(val hours: Int?) {
 data class AppSettings(
     val oldSearchBar: Boolean = false,
     val seriesUpdateInterval: SeriesUpdateInterval = SeriesUpdateInterval.HOURS_12,
+    /** Deletes a downloaded chapter once it is read and the reader has left it. */
+    val seriesDeleteAfterReading: Boolean = false,
     val codexLibrarySort: CodexLibrarySort = CodexLibrarySort.MANUAL,
     val followedCreators: List<FollowedCreator> = emptyList(),
     val runtime: SourceRuntimeSettings = SourceRuntimeSettings(),

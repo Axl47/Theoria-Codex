@@ -31,6 +31,7 @@ class DataStoreFormatTest {
             invertMultiImageScrollDirection = true,
             oldSearchBar = true,
             seriesUpdateInterval = "HOURS_6",
+            seriesDeleteAfterReading = true,
             codexLibrarySort = "NAME",
             instantSeek = true,
             viewerAutoRotateVideos = false,

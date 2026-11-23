@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.di.SeriesDependencies
 import androidx.compose.runtime.Composable
 import com.theoriacodex.app.ui.components.FeedMarks
 import com.theoriacodex.app.ui.components.FeedTraceSections
@@ -422,7 +423,7 @@ internal fun SettingsDestinationStateBoundary(
     statsActions: StatsActions = StatsActions(),
     diagnostics: SettingsDiagnosticsEntry? = null,
     storageTools: (@Composable () -> Unit)? = null,
-    seriesUpdates: Boolean = false,
+    series: SeriesDependencies? = null,
     onClose: () -> Unit = {},
     closesFrom: SettingsPage = SettingsPage.HOME,
     onOpenExtensions: (() -> Unit)? = null,
@@ -434,7 +435,7 @@ internal fun SettingsDestinationStateBoundary(
         SettingsScreen(
             state = it, onAction = owner::onAction, statistics = statistics.value,
             storageSummary = storageSummary, sites = sites, backup = backup, statsActions = statsActions, diagnostics = diagnostics,
-            storageTools = storageTools, seriesUpdates = seriesUpdates, onClose = onClose, closesFrom = closesFrom,
+            storageTools = storageTools, series = series, onClose = onClose, closesFrom = closesFrom,
             onOpenExtensions = onOpenExtensions,
         )
     }
