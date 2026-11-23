@@ -129,8 +129,8 @@ internal fun ViewerPostStrip(
     openPages: ViewerStripPages? = null,
     /** Whether the posts are a series' chapters, which are named by their titles: their ids are addresses. */
     chapters: Boolean = false,
-    /** Numbers drawn over chapters' thumbnails, which would otherwise all be the same cover. */
-    chapterNumbers: Map<PostId, Float> = emptyMap(),
+    /** Marks over thumbnails, such as chapters' numbers on what would otherwise all be the same cover. */
+    stripMarks: Map<PostId, ViewerStripMark> = emptyMap(),
 ) {
     val list = rememberLazyListState(initialFirstVisibleItemIndex = selectedIndex)
     RequestMorePostsNearEnd(list, posts.lastIndex, onLoadMore)
@@ -158,9 +158,9 @@ internal fun ViewerPostStrip(
                         val pagesWidth = viewerStripUnfoldedWidth(pages.items.size, cell, gap, slots)
                         ViewerUnfoldedPages(post.id.source, pages, cell, onInteraction, Modifier.requiredWidth(pagesWidth).height(cell))
                     } else {
-                        val number = chapterNumbers[post.id]?.let(::viewerChapterNumber)
-                        val label = post.title?.takeIf { chapters }?.let { "Open ${viewerChapterTitle(it, number)}" } ?: viewerPostLabel(post)
-                        ViewerPostThumbnail(post, index == selectedIndex, Modifier.size(cell), postMediaCount(post), label, badge = number) { onSelect(index) }
+                        val mark = stripMarks[post.id]
+                        val label = (mark?.label ?: post.title?.takeIf { chapters })?.let { "Open $it" } ?: viewerPostLabel(post)
+                        ViewerPostThumbnail(post, index == selectedIndex, Modifier.size(cell), postMediaCount(post), label, badge = mark?.badge) { onSelect(index) }
                     }
                 }
             }
@@ -334,13 +334,6 @@ internal fun ViewerPostThumbnail(
 }
 
 private fun viewerPostLabel(post: Post) = "Open post ${post.id.sourcePostId}"
-
-/** A chapter number as a reader writes it: 12, or 10.5 for a part-chapter. */
-internal fun viewerChapterNumber(number: Float): String = if (number % 1f == 0f) number.toLong().toString() else number.toString()
-
-/** A chapter's spoken name: its [title], led by the [number] its tile shows when the title does not already say it. */
-internal fun viewerChapterTitle(title: String, number: String?): String =
-    if (number == null || Regex("(?<![\\d.])${Regex.escape(number)}(?![\\d]|\\.\\d)").containsMatchIn(title)) title else "Chapter $number, $title"
 
 /** One tappable image in the Viewer's strips, whether it stands for a post or for one of a post's pages. [badge] is drawn over the image. */
 @Composable

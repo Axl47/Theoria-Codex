@@ -31,9 +31,12 @@ data class ViewerScreenConfig(
      * chapter in place of the source, and Like and Save are hidden.
      */
     val seriesChapters: Boolean = false,
-    /** Series chapters' numbers, drawn over their strip thumbnails, which all show the series cover. */
-    val chapterNumbers: Map<PostId, Float> = emptyMap(),
+    /** Marks over strip thumbnails, such as series chapters' numbers on their shared cover. */
+    val stripMarks: Map<PostId, ViewerStripMark> = emptyMap(),
 )
+
+/** Text drawn over a post's strip thumbnail ([badge], which TalkBack skips) and the name TalkBack reads for the tile. */
+data class ViewerStripMark(val badge: String, val label: String)
 
 /** What the Viewer asks of the app: navigation, persistence and platform behavior. The app builds one per shell. */
 data class ViewerScreenCallbacks(

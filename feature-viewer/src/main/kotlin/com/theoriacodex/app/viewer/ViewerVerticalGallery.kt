@@ -147,7 +147,8 @@ internal fun ViewerVerticalGallery(
         screen.verticalGalleries[post.id] = gallery
         onDispose { if (screen.verticalGalleries[post.id] === gallery) screen.verticalGalleries.remove(post.id) }
     }
-    // Width over height per page once painted; unpainted pages borrow the latest known shape, then the post's.
+    // Width over height per page once painted; unpainted pages borrow the latest known shape, then the post's, and
+    // keep the one they first laid out with, so a neighbour painting does not shift the pages on screen.
     val shapes = remember(post.id) { mutableStateMapOf<Int, Float>() }
     var latestShape by remember(post.id) { mutableFloatStateOf(viewerAspectRatio(post) ?: DEFAULT_PAGE_SHAPE) }
     VerticalGalleryEffects(post, pageState, gallery, isCurrentPost, screen, host)
@@ -168,7 +169,8 @@ internal fun ViewerVerticalGallery(
             .verticalGalleryTaps(gallery, controls, scope, host.onAction),
     ) {
         items(pages.size, key = { index -> index }) { index ->
-            val shape = shapes[index] ?: latestShape
+            val placeholder = remember { latestShape }
+            val shape = shapes[index] ?: placeholder
             VerticalGalleryPage(
                 post, pageState, index, shape, gallery, screen.imageSession,
                 active = isCurrentPost && index == frame.selection.mediaIndex,
@@ -209,7 +211,8 @@ private fun VerticalGalleryEffects(
     // still resolving, or a restored page not yet scrolled to) publishing it would overwrite the saved page.
     var aligned by remember(list) { mutableStateOf(false) }
     VerticalGalleryScrollSelection(list, pageCount, selected, enabled = isCurrentPost && aligned, host)
-    LaunchedEffect(selected, isCurrentPost, aligned) {
+    // Keyed by the post too, so a chapter whose pages arrive while it shows is reported again, now with its pages.
+    LaunchedEffect(post, selected, isCurrentPost, aligned) {
         if (isCurrentPost && aligned) host.onVisibleMediaChanged?.invoke(post, selected + 1)
     }
     // A page bar, overview or strip pick, or a resumed page, moves the list to the selection.
@@ -271,7 +274,10 @@ private fun LazyListState.focusedPage(pageCount: Int): Int {
 
 private fun LazyListState.selectionLine(): Int = with(layoutInfo) { viewportStartOffset + (viewportEndOffset - viewportStartOffset) / 3 }
 
-/** Scrolls [index] to the top, then, if it ends above the selection line, down until it crosses it. */
+/**
+ * Scrolls [index] to the top, then, if it ends above the selection line, down until it crosses it. Both moves are
+ * instant, so composition never sees them as a scroll in progress, which would count them as the reader's.
+ */
 private suspend fun LazyListState.scrollToSelection(index: Int) {
     scrollToItem(index)
     val page = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } ?: return
