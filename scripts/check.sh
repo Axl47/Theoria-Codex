@@ -157,6 +157,14 @@ configuration_cache_check() {
   fi
 }
 
+# On GitHub's 4-vCPU runners this build is CPU-bound: Robolectric suites slow each other down, so the
+# task order and one-runner layout are deliberate. Measured in Nov 2026 (3+ runs each, all tasks executed):
+# - Requesting :app's tasks first ran slower (median 561s vs 451s): :app's suite took ~190s beside the
+#   others instead of ~55s alone at the end.
+# - Splitting these tasks across two runners saved ~75s (median 376s for the slower half); after a
+#   Kover merge job and with lint (~5 min) as the next floor, not worth a second coverage path.
+# - The ~25s of configuration on PRs stays: setup-gradle restores the configuration cache only on an
+#   exact Gradle Home cache match, which a PR never gets.
 test_tasks=(
   :core-domain:test
   :core-data:test
