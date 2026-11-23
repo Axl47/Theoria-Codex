@@ -47,12 +47,15 @@ fun Request.siteRoot(): Request = Request.Builder()
 /**
  * The hidden browsers every client shares: one pass per host at a time and at most [MAX_BROWSERS] across hosts,
  * whichever client asked, since all of them write the same [cookies]. A request challenged while its host's pass runs
- * waits for it and then uses the cookie it earned. Every wait gives up as soon as the call is cancelled. No hidden
+ * waits for it and then uses the cookie it earned, or shares its failure. Every wait gives up as soon as the call is cancelled. No hidden
  * browser runs for the site whose check the user has on screen ([showCheck]).
  */
 class ChallengeBrowsers(private val cookies: BrowserCookieStore, private val browser: ChallengeBrowser) {
     private val passing = ConcurrentHashMap<String, ReentrantLock>()
     private val browsers = Semaphore(MAX_BROWSERS)
+
+    /** When each host's last hidden pass failed, by [System.nanoTime]. */
+    private val failed = ConcurrentHashMap<String, Long>()
 
     @Volatile
     private var shownSite: String? = null
@@ -80,10 +83,19 @@ class ChallengeBrowsers(private val cookies: BrowserCookieStore, private val bro
         // A pass that finished while this request's answer was on the way has stored another clearance, which must
         // count as new rather than be taken for the refused one and deleted.
         val refused = cookieValue(challenged.header("Cookie"), CLEARANCE_COOKIE)
-        val lock = passing.computeIfAbsent(HostOutageTracker.normalizeHost(challenged.url.host)) { ReentrantLock() }
+        val host = HostOutageTracker.normalizeHost(challenged.url.host)
+        val asked = System.nanoTime()
+        val lock = passing.computeIfAbsent(host) { ReentrantLock() }
         while (!lock.tryLock(POLL_MS, TimeUnit.MILLISECONDS)) call.throwIfCanceled()
         return try {
-            cookies.hasNewClearance(url, refused) || stillNeeded() && !isShown(challenged.url.host) && passSilently(page, url, refused, call)
+            when {
+                cookies.hasNewClearance(url, refused) -> true
+                // A pass that failed while this request waited for it: the caller records that only after the turn
+                // passes on, and a browser of its own would fail the same way after the same wait.
+                failed[host]?.let { it - asked > 0 } == true -> false
+                !stillNeeded() || isShown(challenged.url.host) -> false
+                else -> passSilently(page, url, refused, call).also { if (!it) failed[host] = System.nanoTime() }
+            }
         } finally {
             lock.unlock()
         }

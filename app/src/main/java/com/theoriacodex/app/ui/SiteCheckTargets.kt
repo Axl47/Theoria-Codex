@@ -34,7 +34,10 @@ private fun extensionCheckTarget(container: TheoriaAppContainer, source: SourceK
     val site = extensions.sites()[source] ?: return null
     val outages = container.sources.outages
     val (host, refused) = outages.outages.value.entries.firstNotNullOfOrNull { (host, outage) ->
-        outage.refused?.takeIf { site.hosts.any { HostOutageTracker.hostBelongsToSite(host, it) } }?.let { host to it }
+        // Records outlive their challenge until the host is asked again, and one of those may no longer be reachable.
+        outage.refused
+            ?.takeIf { outages.isChallenged(it.url) && site.hosts.any { owned -> HostOutageTracker.hostBelongsToSite(host, owned) } }
+            ?.let { host to it }
     } ?: return null
     return SiteCheckTarget(
         title = site.name,

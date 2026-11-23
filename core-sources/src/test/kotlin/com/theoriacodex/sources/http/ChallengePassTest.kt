@@ -211,6 +211,34 @@ class ChallengePassTest {
         assertEquals(ChallengeBrowsers.MAX_BROWSERS, most.get())
     }
 
+    @Test
+    fun `a request that waited on a pass that failed shares the failure, with no browser of its own`() {
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val browsersRun = AtomicInteger()
+        browser = object : ChallengeBrowser {
+            override fun mayWait() = true
+
+            override fun pass(request: Request, passed: () -> Boolean, cancelled: () -> Boolean): Boolean {
+                browsersRun.incrementAndGet()
+                started.countDown()
+                release.await(5, TimeUnit.SECONDS)
+                return false
+            }
+        }
+        answers += { _, request -> challenge(request) }
+
+        val first = thread { call("https://site.test/a").close() }
+        assertTrue(started.await(5, TimeUnit.SECONDS))
+        val second = thread { call("https://site.test/b").close() }
+        // Long enough for the second request to be challenged and queue behind the first one's pass.
+        Thread.sleep(500)
+        release.countDown()
+        listOf(first, second).forEach(Thread::join)
+
+        assertEquals(1, browsersRun.get())
+    }
+
     private fun call(url: String, client: OkHttpClient = this.client): Response =
         client.newCall(Request.Builder().url(url).header("User-Agent", "agent/1").header("Authorization", "key").build()).execute()
 
