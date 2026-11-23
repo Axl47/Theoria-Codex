@@ -169,7 +169,8 @@ internal class AniyomiStreams(
      * [block]'s outcome, with a failure kept and sent to the redacted log, since its message is the extension's and can
      * hold an address; the caller's cancellation passes through (see [extensionFailure]).
      */
-    @Suppress("TooGenericExceptionCaught")
+    // As in [ExtensionCalls.calling]: only the caller's own cancellation is rethrown.
+    @Suppress("TooGenericExceptionCaught", "SuspendFunSwallowedCancellation")
     private suspend fun <T> attempt(block: suspend () -> T): Result<T> = try {
         Result.success(block())
     } catch (error: Throwable) {

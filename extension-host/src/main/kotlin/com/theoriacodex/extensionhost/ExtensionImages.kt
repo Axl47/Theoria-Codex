@@ -23,8 +23,10 @@ import okhttp3.Response
 @Suppress("TooGenericExceptionCaught")
 internal inline fun <T> failingAsIo(block: () -> T): T = try {
     block()
+} catch (failure: IOException) {
+    throw failure
 } catch (failure: Throwable) {
-    if (failure is IOException || failure.endsTheProcess()) throw failure
+    if (failure.endsTheProcess()) throw failure
     throw IOException(failure)
 }
 

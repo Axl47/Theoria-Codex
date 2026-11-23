@@ -32,7 +32,9 @@ internal class ExtensionCalls(private val name: String, private val onChallenged
      * message and never its class name, which screens would show. A [SourceAdapterException] the adapter threw
      * itself passes as it is.
      */
-    @Suppress("TooGenericExceptionCaught")
+    // A cancellation is not rethrown blindly: only the caller's own passes; one the extension threw is its failure
+    // ([extensionFailure]), or a screen waiting on the call would stop without an error.
+    @Suppress("TooGenericExceptionCaught", "SuspendFunSwallowedCancellation")
     suspend fun <T> calling(block: suspend () -> T): T = try {
         withContext(Dispatchers.IO) { block() }
     } catch (error: Throwable) {
