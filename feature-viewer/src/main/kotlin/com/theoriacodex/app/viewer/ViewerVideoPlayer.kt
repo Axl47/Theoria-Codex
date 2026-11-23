@@ -38,8 +38,6 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.launch
 import androidx.compose.runtime.snapshotFlow
 import com.theoriacodex.app.media.isMediaNetworkMetered
 
@@ -122,8 +120,8 @@ private class ViewerVideoState(pending: ViewerRecoveryDecision?) {
     /** Counts this state's players: a retry in place binds the next one. */
     var bindings by mutableIntStateOf(0)
     val failed get() = pending == ViewerRecoveryDecision.Fail
-    /** Counts the player's seeks, from any controller, so an episode's progress is reported after each. */
-    var seeks by mutableIntStateOf(0)
+    /** Where [player] started, and whether it got there. */
+    var started: ViewerStartedPlayback? = null
     var duration by mutableLongStateOf(0L)
     var position by mutableLongStateOf(0L)
     var scrubbing by mutableStateOf(false)
@@ -156,8 +154,15 @@ private class ViewerVideoState(pending: ViewerRecoveryDecision?) {
         runCatching { player?.seekTo(target) }
     }
 
-    /** Where playback is; null while the duration is unknown. */
-    fun progress(): ViewerPlaybackProgress? = viewerPlaybackProgress(position, duration)
+    /**
+     * Where playback is: read from the player, since a seek from the media session moves it before the poll that
+     * updates [position] runs; null while the duration is unknown, or before the player got to its start.
+     */
+    fun progress(): ViewerPlaybackProgress? {
+        val active = player ?: return viewerPlaybackProgress(position, duration)
+        if (started?.atPosition != true) return null
+        return viewerPlaybackProgress(active.currentPosition, active.duration)
+    }
 
     /** Takes [decision] on: shows the failure, which the route hears through [ViewerRendererEvents.onError], or recovers. */
     fun follow(decision: ViewerRecoveryDecision, message: String, events: () -> ViewerRendererEvents) {
@@ -230,9 +235,10 @@ private fun ViewerVideoBinding(
         val started = start.applyTo(player)
         player.playbackParameters = PlaybackParameters(controls.playbackRate)
         val listener = viewerVideoListener(player, state, recovery) { latestEvents }
-        val seeks = ViewerSeekCounter({ state.scrubbing }) { state.seeks += 1 }
+        val seeks = ViewerSeekReports({ state.scrubbing }, player::getDuration) { progress -> latestEvents.onPlaybackProgress?.invoke(progress) }
         player.addListener(listener)
         player.addListener(seeks)
+        state.started = started
         state.player = player
         state.setPlaying(controls.isActive && controls.isPlaying)
         onDispose {
@@ -437,12 +443,18 @@ internal class ViewerStartedPlayback(
 }
 
 /**
- * Counts a player's seeks, from whichever controller made them (the timeline, a double-tap, the media session), as
- * [counted] calls. A drag's instant seeks while [scrubbing] are one seek, counted when the drag is released.
+ * Reports where each of a player's seeks lands, from whichever controller made it (the timeline, a double-tap, the
+ * media session), of the video's [durationMs]. A drag's instant seeks while [scrubbing] are one seek, reported when the
+ * drag is released. Nothing is reported while the duration is unknown.
  */
-internal class ViewerSeekCounter(private val scrubbing: () -> Boolean, private val counted: () -> Unit) : Player.Listener {
+internal class ViewerSeekReports(
+    private val scrubbing: () -> Boolean,
+    private val durationMs: () -> Long,
+    private val report: (ViewerPlaybackProgress) -> Unit,
+) : Player.Listener {
     override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
-        if (reason == Player.DISCONTINUITY_REASON_SEEK && !scrubbing()) counted()
+        if (reason != Player.DISCONTINUITY_REASON_SEEK || scrubbing()) return
+        viewerPlaybackProgress(newPosition.positionMs, durationMs())?.let(report)
     }
 }
 
@@ -455,15 +467,15 @@ private fun viewerPlaybackProgress(positionMs: Long, durationMs: Long): ViewerPl
     durationMs.takeIf { it > 0L }?.let { ViewerPlaybackProgress(positionMs.coerceIn(0L, it), it) }
 
 /**
- * Reports an episode's playback to [report] while it plays, when it stops, and after each seek; the player's release
- * reports once more ([ViewerVideoBinding]). Nothing is reported while the duration is unknown.
+ * Reports an episode's playback to [report] while it plays and when it stops; each seek reports where it lands
+ * ([ViewerSeekReports]), and the player's release once more ([ViewerVideoBinding]). Nothing is reported while the
+ * duration is unknown.
  */
 @Composable
 private fun ReportViewerPlaybackProgress(state: ViewerVideoState, report: ((ViewerPlaybackProgress) -> Unit)?) {
     if (report == null) return
     val latestReport by rememberUpdatedState(report)
     LaunchedEffect(state) {
-        launch { snapshotFlow { state.seeks }.drop(1).collect { state.progress()?.let(latestReport) } }
         reportPlaybackProgress(snapshotFlow { state.actuallyPlaying }, state::progress) { latestReport(it) }
     }
 }

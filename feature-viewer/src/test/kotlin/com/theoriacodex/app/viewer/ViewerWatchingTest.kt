@@ -267,18 +267,22 @@ class ViewerWatchingTest {
     }
 
     @Test
-    fun `every seek reports once, a drag's at its release, and a released player reports where it stopped`() {
+    fun `every seek reports where it landed, a drag's at its release, and a released player reports where it stopped`() {
         var scrubbing = false
-        var seeks = 0
-        val counter = ViewerSeekCounter({ scrubbing }) { seeks++ }
-        fun discontinuity(reason: Int) = counter.onPositionDiscontinuity(position(0), position(60_000), reason)
+        var durationMs = 1_440_000L
+        val reports = mutableListOf<ViewerPlaybackProgress>()
+        val seeks = ViewerSeekReports({ scrubbing }, { durationMs }) { reports += it }
+        fun discontinuity(reason: Int, toMs: Long = 60_000) = seeks.onPositionDiscontinuity(position(0), position(toMs), reason)
+        // A paused player that the media session seeks reports the new position, though nothing on screen polled it yet.
         discontinuity(Player.DISCONTINUITY_REASON_SEEK)
         discontinuity(Player.DISCONTINUITY_REASON_AUTO_TRANSITION)
         scrubbing = true
         repeat(3) { discontinuity(Player.DISCONTINUITY_REASON_SEEK) }
         scrubbing = false
+        discontinuity(Player.DISCONTINUITY_REASON_SEEK, toMs = 90_000)
+        durationMs = C.TIME_UNSET
         discontinuity(Player.DISCONTINUITY_REASON_SEEK)
-        assertEquals(2, seeks)
+        assertEquals(listOf(ViewerPlaybackProgress(60_000, 1_440_000), ViewerPlaybackProgress(90_000, 1_440_000)), reports)
 
         assertEquals(ViewerPlaybackProgress(61_000, 1_440_000), viewerReleaseProgress(61_000, 1_440_000, ended = false))
         assertEquals(ViewerPlaybackProgress(1_440_000, 1_440_000), viewerReleaseProgress(1_439_000, 1_440_000, ended = true))
