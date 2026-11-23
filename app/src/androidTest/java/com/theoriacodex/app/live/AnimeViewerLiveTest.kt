@@ -7,11 +7,14 @@ import com.theoriacodex.app.live.AnimeViewerHand.Companion.EXTENSION_NAME
 import com.theoriacodex.app.live.AnimeViewerHand.Companion.PLAYING
 import com.theoriacodex.app.live.AnimeViewerHand.Companion.SERIES_QUERY
 import com.theoriacodex.app.live.AnimeViewerHand.Companion.seconds
+import com.theoriacodex.app.live.AnimeViewerHand.Companion.tenths
 import com.theoriacodex.app.ui.TopLevelDestination
 import java.util.regex.Pattern
+import kotlin.math.abs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeFalse
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -63,6 +66,65 @@ class AnimeViewerLiveTest {
         hand.leaveViewer()
     }
 
+    /** An episode started over from its sheet and left partway resumes where it was left, not at its start. */
+    @Test
+    fun aRestartedEpisodeResumesWhereItWasLeft() {
+        val (_, episode) = watch()
+        val before = hand.awaitPosition("playback past ${RESTART_FROM_MS.seconds()} s") { it >= RESTART_FROM_MS }
+        hand.press("Info", By.desc(Pattern.compile("Info.*")))
+        live.tap("Start over", By.desc(START_OVER))
+        val restarted = hand.awaitPosition("\"$episode\" to start over") { it < PLAYED_MS }
+        hand.awaitPosition("playback past ${PARTWAY_MS.seconds()} s") { it >= PARTWAY_MS }
+        live.report("restart", "\"$episode\" at ${before.seconds()} s started over at ${restarted.seconds()} s")
+        val left = hand.leavePlaying(episode)
+        live.tap("Continue naming the episode", By.text("Continue · $episode"))
+        hand.assertResumesAt("restart", episode, left, "after starting it over")
+        hand.leaveViewer()
+    }
+
+    /** A stream switched in an episode's last seconds, while paused, takes over where the last one stopped. */
+    @Test
+    fun aStreamSwitchedInTheLastSecondsTakesOverThere() {
+        val (_, episode) = watch()
+        hand.awaitPlayback("\"$episode\" to play") { it.state == PLAYING }
+        hand.press("Pause", By.desc("Pause"))
+        hand.awaitPlayback("the player to pause") { it.state == PAUSED }
+        val durationMs = hand.durationOnScreen()
+        hand.seekTo(durationMs - END_SEEK_MS)
+        val before = hand.awaitPlayback("the seek into the last seconds") { it.state == PAUSED && it.positionMs >= durationMs - END_MARGIN_MS }.positionMs
+        val (from, to) = hand.switchStream()
+        live.tap("the stream \"$to\"", By.text(to))
+        live.await("the stream pill to name \"$to\"", hand::streamOnScreen) { it == to }
+        // The new player reports once it has opened; give it the time a switch takes before reading where it is.
+        Thread.sleep(SETTLE_MS)
+        val after = hand.awaitPlayback("\"$to\" to open") { it.state == PAUSED }.positionMs
+        live.report("switch", "\"$from\" at ${before.tenths()} s of ${durationMs.seconds()} s became \"$to\" at ${after.tenths()} s")
+        assertTrue("The switch keeps the position", after >= durationMs - END_MARGIN_MS)
+        hand.leaveViewer()
+    }
+
+    /** A seek made while paused is where the episode reopens after the app is stopped; the acceptance build only. */
+    @Test
+    fun aSeekWhilePausedSurvivesAForceStop() {
+        assumeFalse("Stopping the app would stop this test", live.targetIsThisApp)
+        val (title, episode) = watch()
+        val playing = hand.awaitPosition("playback past ${PLAYED_MS.seconds()} s") { it >= PLAYED_MS }
+        hand.press("Pause", By.desc("Pause"))
+        hand.awaitPlayback("the player to pause") { it.state == PAUSED }
+        val target = minOf(playing + SEEK_BY_MS, hand.durationOnScreen() / 2)
+        hand.seekTo(target)
+        val sought = hand.awaitPlayback("the seek to ${target.seconds()} s") { it.state == PAUSED && abs(it.positionMs - target) < SEEK_NEAR_MS }.positionMs
+        // The seek's report is written as it lands; a moment later the app is gone without leaving the Viewer.
+        Thread.sleep(SETTLE_MS)
+        device.executeShellCommand("am force-stop ${live.targetPackage}")
+        live.report("seek", "paused \"$episode\" at ${playing.tenths()} s, sought to ${sought.tenths()} s, then stopped the app")
+        live.openSeriesTab()
+        assertEquals(title, hand.openSeries(hand.argument(SERIES_QUERY)))
+        live.tap("Continue naming the episode", By.text("Continue · $episode"), SeriesLiveDriver.RESULTS_TIMEOUT_MS)
+        hand.assertResumesAt("seek", episode, sought, "after seeking while paused and a force-stop")
+        hand.leaveViewer()
+    }
+
     /** After some watching, the Stats screen splits out time on anime. */
     @Test
     fun statsShowTimeOnAnime() {
@@ -108,6 +170,19 @@ class AnimeViewerLiveTest {
         const val OFF = "Off"
         const val ANIME = "Anime"
         const val PLAYED_MS = 5_000L
+        const val START_OVER = "Start over"
+        const val PAUSED = "PAUSED"
+        const val RESTART_FROM_MS = 20_000L
+        const val PARTWAY_MS = 10_000L
+
+        /** Where the near-the-end switch aims, before the end, and how near the end the seek must land to count. */
+        const val END_SEEK_MS = 2_000L
+        const val END_MARGIN_MS = 5_000L
+        const val SEEK_BY_MS = 60_000L
+
+        /** How far a seek may land from where the timeline was let go: a stream seeks to its nearest key frame. */
+        const val SEEK_NEAR_MS = 10_000L
+        const val SETTLE_MS = 3_000L
         const val STATS_PUSHES = 6
         const val SWIPE_STEPS = 20
     }
