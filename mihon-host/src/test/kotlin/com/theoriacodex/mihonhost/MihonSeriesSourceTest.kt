@@ -1,6 +1,5 @@
 package com.theoriacodex.mihonhost
 
-import com.theoriacodex.domain.adapter.BrowserCheck
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.series.Series
@@ -156,17 +155,6 @@ class MihonSeriesSourceTest {
         assertEquals(SourceFailureReason.NETWORK, failureOf(IOException("offline")))
         assertEquals(SourceFailureReason.UNKNOWN, failureOf(NoSuchMethodError("missing")))
         assertEquals(SourceFailureReason.PARSE, failureOf(IllegalStateException("bad html")))
-    }
-
-    @Test
-    fun `a browser check, even one the extension wrapped, says where it can be passed`() = runTest {
-        val check = BrowserCheck("https://site.test/list", "agent/1")
-        source.failure = IllegalStateException("wrapped", BrowserCheckException(check))
-
-        val failure = assertFailsWith<SourceAdapterException> { series.popular(1) }
-
-        assertEquals(SourceFailureReason.BROWSER_CHECK, failure.reason)
-        assertEquals(check, failure.browserCheck)
     }
 
     @Test

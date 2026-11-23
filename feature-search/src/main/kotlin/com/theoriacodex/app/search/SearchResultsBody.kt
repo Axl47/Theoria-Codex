@@ -19,7 +19,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
@@ -40,9 +42,12 @@ import com.theoriacodex.app.ui.components.FeedPageDemandControl
 import com.theoriacodex.app.ui.components.FeedPostCard
 import com.theoriacodex.app.ui.components.FeedRelatedPostsShelf
 import com.theoriacodex.app.ui.components.TwoColumnProjectedPostStaggeredGrid
+import com.theoriacodex.app.source.retryWhenVerified
+import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.SourceKey
 
 @Composable
 internal fun ColumnScope.SearchResultsBody(
@@ -72,6 +77,8 @@ internal fun ColumnScope.SearchResultsBody(
         if (scope is SearchSourceScope.Single) emptyList() else sourceOutageNotices(state.content.statuses, issues)
     }
     SourceOutageNotices(outageNotices)
+    val failedSources = state.content.statuses.filter { it.state == SourceRunState.FAILED }.map { it.source }
+    RetryVerifiedSources(state, failedSources, retrySearch, onAction)
     state.pageFailure?.let { failure ->
         DismissibleFailure(failure) { dismiss ->
             SearchFailureSurface(failure, state.content.statuses, retrySearch, onDismiss = dismiss)
@@ -224,3 +231,29 @@ private fun SearchStartSplash(
     }
 }
 
+/**
+ * Loads a failed source again by itself once its browser check passes, here or anywhere else: one at a time, and only
+ * once the search is not asking anything else, since a retry is ignored while a request runs.
+ */
+@Composable
+private fun RetryVerifiedSources(
+    state: SearchUiState,
+    failedSources: List<SourceKey>,
+    retrySearch: () -> Unit,
+    onAction: (SearchAction) -> Unit,
+) {
+    val verified = remember { mutableStateListOf<SourceKey>() }
+    retryWhenVerified(failedSources) { verified += it }
+    val busy = state.execution.activeRequestId != null
+    val next = verified.firstOrNull()
+    LaunchedEffect(busy, next) {
+        if (busy || next == null) return@LaunchedEffect
+        if (state.content.results.isEmpty()) {
+            verified.clear()
+            retrySearch()
+        } else {
+            verified.remove(next)
+            onAction(SearchAction.RetrySource(next))
+        }
+    }
+}

@@ -112,16 +112,6 @@ class SourceFailureUiTextTest {
             ),
         )
         assertEquals(
-            "R34V needs a browser check",
-            sourceStatusChipText(
-                SourceRunStatus(
-                    source = SourceKey.RULE34VIDEO,
-                    state = SourceRunState.FAILED,
-                    failureReason = SourceFailureReason.BROWSER_CHECK,
-                ),
-            ),
-        )
-        assertEquals(
             "R34V unreachable",
             sourceStatusChipText(
                 SourceRunStatus(

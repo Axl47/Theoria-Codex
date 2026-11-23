@@ -4,7 +4,6 @@ import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
-import com.theoriacodex.domain.adapter.BrowserCheck
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.GalleryReadingMode
@@ -147,34 +146,14 @@ class SeriesTabViewModelTest {
     }
 
     @Test
-    fun aNextPageBehindABrowserCheckKeepsWhatLoadedAndSaysWhereToPassIt() = runTest {
+    fun aFailedSourceSaysSoAndRetriesTheSameSearch() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        val check = BrowserCheck("https://site.test/search?page=2", "agent/1")
-        val source = Answering(pages = 2)
+        val source = Answering().apply { failure = SourceAdapterException(SourceFailureReason.NETWORK) }
         val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) {}
         advanceUntilIdle()
         viewModel.search("one punch")
         advanceUntilIdle()
-
-        source.failure = SourceAdapterException(SourceFailureReason.BROWSER_CHECK, browserCheck = check)
-        viewModel.searchMore(source.key)
-        advanceUntilIdle()
-
-        val listing = viewModel.state.value.search?.single()?.listing as SeriesListing.Loaded
-        assertEquals(listOf("/found"), listing.series.map { it.id.address })
-        assertEquals(check, listing.moreCheck)
-    }
-
-    @Test
-    fun aSourceBehindABrowserCheckSaysWhereItCanBePassedAndRetriesAfterIt() = runTest {
-        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        val check = BrowserCheck("https://site.test/search", "agent/1")
-        val source = Answering().apply { failure = SourceAdapterException(SourceFailureReason.BROWSER_CHECK, browserCheck = check) }
-        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) {}
-        advanceUntilIdle()
-        viewModel.search("one punch")
-        advanceUntilIdle()
-        assertEquals(check, (viewModel.state.value.search?.single()?.listing as SeriesListing.Failed).browserCheck)
+        assertTrue(viewModel.state.value.search?.single()?.listing is SeriesListing.Failed)
 
         source.failure = null
         viewModel.retrySearch(source.key)
@@ -286,33 +265,31 @@ class SeriesTabViewModelTest {
     }
 
     @Test
-    fun aBrowsedListingBehindABrowserCheckIsRetriedAsTheSameKindAndPage() = runTest {
+    fun aFailedBrowsedListingIsRetriedAsTheSameKindAndPage() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        val check = BrowserCheck("https://site.test/latest", "agent/1")
         val source = Answering(pages = 2)
         val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) {}
         advanceUntilIdle()
-        source.failure = SourceAdapterException(SourceFailureReason.BROWSER_CHECK, browserCheck = check)
+        source.failure = SourceAdapterException(SourceFailureReason.NETWORK)
         viewModel.choose(BrowseKind.Latest)
         advanceUntilIdle()
-        assertEquals(check, (viewModel.state.value.browse?.listing as SeriesListing.Failed).browserCheck)
+        assertTrue(viewModel.state.value.browse?.listing is SeriesListing.Failed)
 
         source.failure = null
         viewModel.retryBrowse()
         advanceUntilIdle()
         assertEquals(listOf("latest"), browsed(viewModel))
 
-        source.failure = SourceAdapterException(SourceFailureReason.BROWSER_CHECK, browserCheck = check)
+        source.failure = SourceAdapterException(SourceFailureReason.NETWORK)
         viewModel.browseMore()
         advanceUntilIdle()
-        assertEquals(check, (viewModel.state.value.browse?.listing as SeriesListing.Loaded).moreCheck)
+        assertEquals(true, (viewModel.state.value.browse?.listing as SeriesListing.Loaded).moreFailed)
 
         source.failure = null
         viewModel.browseMore()
         advanceUntilIdle()
         val listing = viewModel.state.value.browse?.listing as SeriesListing.Loaded
         assertEquals(listOf("latest", "latest"), browsed(viewModel))
-        assertEquals(null, listing.moreCheck)
         assertEquals(false, listing.moreFailed)
     }
 

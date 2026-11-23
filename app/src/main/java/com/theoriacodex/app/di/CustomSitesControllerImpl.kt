@@ -14,6 +14,7 @@ import com.theoriacodex.app.customsites.SiteCookieBridge
 import com.theoriacodex.app.customsites.SitesRequest
 import com.theoriacodex.app.sourceauth.CredentialStoreUnavailableException
 import com.theoriacodex.app.source.clearSource
+import com.theoriacodex.app.source.passSource
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.app.source.ownsHost
@@ -34,12 +35,14 @@ import com.theoriacodex.domain.source.SiteCredentials
 import com.theoriacodex.domain.source.SiteHeaders
 import com.theoriacodex.domain.source.SiteProbeResult
 import com.theoriacodex.domain.source.SiteProfile
+import com.theoriacodex.domain.source.clearedChallenge
 import com.theoriacodex.sources.custom.SiteProber
 import com.theoriacodex.sources.http.HostOutage
 import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.HostOutageTracker
 import java.io.IOException
 import java.net.URI
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.SharingStarted
@@ -102,15 +105,14 @@ internal class CustomSitesControllerImpl(
         )
     }
 
+    /** Each stored site's last verification probe, which its completion reads. */
+    private val lastChecks = ConcurrentHashMap<String, SiteProbeResult>()
+
     private val pendingSetup = MutableStateFlow<SitesRequest?>(null)
     override val setupRequest: StateFlow<SitesRequest?> = pendingSetup.asStateFlow()
 
     override fun requestSetup(address: String, linkAfterSetup: String?) {
         pendingSetup.value = SitesRequest.Add(address, linkAfterSetup)
-    }
-
-    override fun requestVerification(sourceId: String) {
-        pendingSetup.value = SitesRequest.Verify(sourceId)
     }
 
     override fun requestKeyEntry(sourceId: String) {
@@ -183,7 +185,7 @@ internal class CustomSitesControllerImpl(
         // A different family is reported to the user, never adopted (remove and re-add to switch).
         val working = result is SiteProbeResult.Supported && result.family == profile.family
         if (working) {
-            outages.clear(profile.address.host)
+            outages.pass(profile.address.host)
             // Re-testing also picks up an icon the site declared since, or one missed before.
             profiles.update(sourceId) { it.copy(verifiedAtEpochMs = clock(), iconUrl = result.iconUrl ?: it.iconUrl) }
         }
@@ -191,23 +193,6 @@ internal class CustomSitesControllerImpl(
         return result
     }
 
-    override suspend fun checkVerification(sourceId: String, userAgent: String): SiteProbeResult {
-        val profile = requireNotNull(find(sourceId)) { "Verification needs a stored site" }
-        return prober.probe(
-            profile.address.baseUrl,
-            credentials.get(sourceId),
-            profile.headers.copy(userAgent = userAgent),
-            knownFamily = profile.family,
-        )
-    }
-
-    override suspend fun completeVerification(sourceId: String, userAgent: String, working: Boolean) {
-        val profile = requireNotNull(find(sourceId)) { "Verification needs a stored site" }
-        profiles.update(sourceId) { it.copy(headers = it.headers.copy(userAgent = userAgent), verifiedAtEpochMs = clock()) }
-        outages.clearSource(SourceKey.of(profile))
-        outages.setWorking(profile.address.baseUrl, working)
-        cookieBridge.flush()
-    }
 
     override suspend fun testBuiltIn(source: SourceKey): BuiltInTestResult {
         outages.clearSource(source)
@@ -232,18 +217,37 @@ internal class CustomSitesControllerImpl(
         return result
     }
 
-    override suspend fun checkBuiltInVerification(source: SourceKey, userAgent: String): Boolean {
-        // An API host is often what challenged, and it can stay challenged after the home page clears.
-        val outageHosts = outages.outages.value.keys.filter(source::ownsHost).map { "https://$it/" }
-        return (listOf(source.presentation().referer) + outageHosts).all { clearsChallenge(it, userAgent) }
+    override suspend fun checkVerification(source: SourceKey, userAgent: String): Boolean {
+        if (!source.isCustom) {
+            // An API host is often what challenged, and it can stay challenged after the home page clears.
+            val outageHosts = outages.outages.value.keys.filter(source::ownsHost).map { "https://$it/" }
+            return (listOf(source.presentation().referer) + outageHosts).all { clearsChallenge(it, userAgent) }
+        }
+        val profile = requireNotNull(find(source.id)) { "Verification needs a stored site" }
+        val result = prober.probe(
+            profile.address.baseUrl,
+            credentials.get(source.id),
+            profile.headers.copy(userAgent = userAgent),
+            knownFamily = profile.family,
+        )
+        lastChecks[source.id] = result
+        return result.clearedChallenge
     }
 
-    override suspend fun completeBuiltInVerification(source: SourceKey, userAgent: String) {
-        val home = source.presentation().referer
-        builtInAgents.save(requireNotNull(HostOutageTracker.hostKey(home)), userAgent)
-        cookieBridge.updateBuiltInAgents(builtInAgents.read())
-        outages.clearSource(source)
-        outages.setWorking(home, true)
+    override suspend fun completeVerification(source: SourceKey, userAgent: String) {
+        if (source.isCustom) {
+            val profile = requireNotNull(find(source.id)) { "Verification needs a stored site" }
+            profiles.update(source.id) { it.copy(headers = it.headers.copy(userAgent = userAgent), verifiedAtEpochMs = clock()) }
+            // Working when the check also found the expected booru, rather than merely getting past the challenge.
+            val checked = lastChecks.remove(source.id)
+            outages.setWorking(profile.address.baseUrl, checked is SiteProbeResult.Supported && checked.family == profile.family)
+        } else {
+            val home = source.presentation().referer
+            builtInAgents.save(requireNotNull(HostOutageTracker.hostKey(home)), userAgent)
+            cookieBridge.updateBuiltInAgents(builtInAgents.read())
+            outages.setWorking(home, true)
+        }
+        outages.passSource(source)
         cookieBridge.flush()
     }
 

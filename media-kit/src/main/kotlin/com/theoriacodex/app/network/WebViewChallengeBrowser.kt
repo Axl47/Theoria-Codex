@@ -1,4 +1,4 @@
-package com.theoriacodex.mihonhost
+package com.theoriacodex.app.network
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -10,46 +10,27 @@ import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import com.theoriacodex.domain.adapter.BrowserCheck
-import java.io.IOException
+import com.theoriacodex.sources.http.ChallengeBrowser
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import okhttp3.Request
 
 /**
- * A browser check stood in front of [check]'s address and could not be passed out of sight; only a visible browser,
- * with the same agent, can pass it.
- */
-class BrowserCheckException(val check: BrowserCheck) : IOException("Needs a browser check")
-
-/** Where `CloudflareInterceptor` passes a check out of sight; a port so its decisions are tested without a WebView. */
-interface ChallengeBrowser {
-    /** Whether the calling thread may wait for a pass: not the main thread, which the browser itself runs on. */
-    fun mayWait(): Boolean
-
-    /**
-     * Loads [request] until [passed] answers true, the time runs out or [cancelled] answers true, and says whether it
-     * passed. A missing browser, or one whose renderer died, is a failed pass, never an exception.
-     */
-    fun pass(request: Request, passed: () -> Boolean, cancelled: () -> Boolean): Boolean
-}
-
-/**
- * The request's headers a browser would send on its own: the language, so the site answers as it did the extension,
+ * The request's headers a browser would send on its own: the language, so the site answers as it did the client,
  * and the referrer, which some sites' checks expect from the page that linked there. Everything else stays out,
- * `Authorization`, `Cookie` and any key an extension adds above all, because the page can redirect anywhere.
+ * `Authorization`, `Cookie` and any key a source adds above all, because the page can redirect anywhere.
  */
 internal fun browserHeaders(request: Request): Map<String, String> =
     listOf("Accept-Language", "Referer").mapNotNull { name -> request.header(name)?.let { name to it } }.toMap()
 
 /**
- * Mihon's way through a check: a WebView no one sees, with JavaScript and DOM storage on and the request's agent,
- * loads the challenged page, whose script then runs the check. [pass] polls from the request's thread for up to
+ * Mihon's way through a check, for `ChallengePass`: a WebView no one sees, with JavaScript and DOM storage on and the
+ * request's agent, loads the challenged page, whose script then runs the check. [pass] polls from the request's thread for up to
  * [TIMEOUT_MS]; the WebView is made and destroyed on the main thread. It goes only to web addresses, and a renderer
  * that dies ends the pass instead of the app. No main thread (plain unit tests) or a missing or updating WebView
  * counts as a failed pass.
  */
-internal class WebViewChallengeBrowser(private val context: Context) : ChallengeBrowser {
+class WebViewChallengeBrowser(private val context: Context) : ChallengeBrowser {
     override fun mayWait(): Boolean = Looper.getMainLooper()?.isCurrentThread != true
 
     override fun pass(request: Request, passed: () -> Boolean, cancelled: () -> Boolean): Boolean {

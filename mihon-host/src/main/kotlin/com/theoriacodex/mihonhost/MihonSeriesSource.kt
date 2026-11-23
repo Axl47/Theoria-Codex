@@ -13,6 +13,8 @@ import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
 import com.theoriacodex.domain.series.SeriesStatus
 import com.theoriacodex.domain.series.withChoices
+import com.theoriacodex.sources.http.HostOutageKind
+import com.theoriacodex.sources.http.HostUnavailableException
 import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.FilterList
@@ -29,12 +31,14 @@ import kotlinx.coroutines.withContext
 
 /**
  * One Mihon extension source as the app's [SeriesSource]: a Mihon manga is a series, a chapter an entry, and a
- * chapter's pages are image addresses [images] can fetch through the source's own client.
+ * chapter's pages are image addresses [images] can fetch through the source's own client. [onChallenged] hears of
+ * each host whose browser check stopped one of its calls, which can be an API or image host besides its site's.
  */
 class MihonSeriesSource(
     private val source: Source,
     private val images: ExtensionImages,
     private val log: (String) -> Unit = {},
+    private val onChallenged: (host: String) -> Unit = {},
 ) : SeriesSource {
     override val key: SourceKey = sourceKey(source)
     override val name: String get() = source.name
@@ -177,9 +181,9 @@ class MihonSeriesSource(
     }
 
     private fun failure(error: Exception): SourceAdapterException {
-        // Extensions sometimes wrap what the client threw, so the check is looked for among the causes.
-        val check = generateSequence<Throwable>(error) { it.cause }.firstNotNullOfOrNull { it as? BrowserCheckException }
-        if (check != null) return SourceAdapterException(SourceFailureReason.BROWSER_CHECK, check.message, check, check.check)
+        generateSequence<Throwable>(error) { it.cause }.firstNotNullOfOrNull { it as? HostUnavailableException }
+            ?.takeIf { it.kind == HostOutageKind.CHALLENGE }
+            ?.let { onChallenged(it.host) }
         val reason = when (error) {
             // A refusal (401, 403) is not reported as a missing key: the app holds no key for an extension source, and
             // would point the user at a Settings field that does not exist.

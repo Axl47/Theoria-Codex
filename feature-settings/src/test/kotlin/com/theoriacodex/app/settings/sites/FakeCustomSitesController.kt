@@ -16,6 +16,12 @@ import com.theoriacodex.domain.source.SiteAddressParse
 import com.theoriacodex.domain.source.SiteCredentials
 import com.theoriacodex.domain.source.SiteHeaders
 import com.theoriacodex.domain.source.SiteProbeResult
+import com.theoriacodex.app.source.SiteCheckTarget
+import com.theoriacodex.app.source.SiteChecks
+import com.theoriacodex.sources.http.BrowserCookieStore
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /** Scriptable [CustomSitesController] that records every call; successful adds and removals update [sites]. */
@@ -25,29 +31,14 @@ internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = empt
     override val sites: MutableStateFlow<List<CustomSiteSummary>> = MutableStateFlow(initial)
     override val workingSourceIds = MutableStateFlow<Set<String>>(emptySet())
     override val builtInSites = MutableStateFlow<List<BuiltInSiteSummary>>(emptyList())
-    var onCheckBuiltIn: suspend (SourceKey, String) -> Boolean = { _, _ -> error("No built-in check scripted") }
-
-    /** Source and agent of every [completeBuiltInVerification] call. */
-    val builtInCompletions = mutableListOf<Pair<SourceKey, String>>()
-
     var onTestBuiltIn: suspend (SourceKey) -> BuiltInTestResult = { BuiltInTestResult.WORKING }
 
     override suspend fun testBuiltIn(source: SourceKey): BuiltInTestResult = onTestBuiltIn(source)
-
-    override suspend fun checkBuiltInVerification(source: SourceKey, userAgent: String): Boolean = onCheckBuiltIn(source, userAgent)
-
-    override suspend fun completeBuiltInVerification(source: SourceKey, userAgent: String) {
-        builtInCompletions += source to userAgent
-    }
 
     override val setupRequest = MutableStateFlow<SitesRequest?>(null)
 
     override fun requestSetup(address: String, linkAfterSetup: String?) {
         setupRequest.value = SitesRequest.Add(address, linkAfterSetup)
-    }
-
-    override fun requestVerification(sourceId: String) {
-        setupRequest.value = SitesRequest.Verify(sourceId)
     }
 
     override fun requestKeyEntry(sourceId: String) {
@@ -68,16 +59,16 @@ internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = empt
     var onRetest: suspend (String) -> SiteProbeResult = { error("No re-test result scripted") }
     var onUpdate: suspend (String, CustomSiteEdit) -> CustomSiteMutation = { _, _ -> CustomSiteMutation.Success }
     var onRemove: suspend (String) -> CustomSiteMutation = { CustomSiteMutation.Success }
-    var onCheckVerification: suspend (String, String) -> SiteProbeResult = { _, _ -> error("No verification check scripted") }
+    var onCheckVerification: suspend (SourceKey, String) -> Boolean = { _, _ -> error("No verification check scripted") }
 
     val probes = mutableListOf<ProbeCall>()
     val drafts = mutableListOf<CustomSiteDraft>()
     val edits = mutableListOf<Pair<String, CustomSiteEdit>>()
     val removals = mutableListOf<String>()
 
-    /** Source id and agent of every [checkVerification] and [completeVerification] call. */
-    val checks = mutableListOf<Pair<String, String>>()
-    val completions = mutableListOf<Pair<String, String>>()
+    /** Source and agent of every [checkVerification] and [completeVerification] call. */
+    val checks = mutableListOf<Pair<SourceKey, String>>()
+    val completions = mutableListOf<Pair<SourceKey, String>>()
 
     /** Every [setSetupHost] value, in order. */
     val setupHosts = mutableListOf<String?>()
@@ -97,13 +88,13 @@ internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = empt
 
     override suspend fun retest(sourceId: String): SiteProbeResult = onRetest(sourceId)
 
-    override suspend fun checkVerification(sourceId: String, userAgent: String): SiteProbeResult {
-        checks += sourceId to userAgent
-        return onCheckVerification(sourceId, userAgent)
+    override suspend fun checkVerification(source: SourceKey, userAgent: String): Boolean {
+        checks += source to userAgent
+        return onCheckVerification(source, userAgent)
     }
 
-    override suspend fun completeVerification(sourceId: String, userAgent: String, working: Boolean) {
-        completions += sourceId to userAgent
+    override suspend fun completeVerification(source: SourceKey, userAgent: String) {
+        completions += source to userAgent
     }
 
     override fun setSetupHost(host: String?) {
@@ -121,6 +112,34 @@ internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = empt
             if (result == CustomSiteMutation.Success) sites.value = sites.value.filterNot { it.sourceId == sourceId }
         }
     }
+}
+
+/** The app's check page as [controller]'s sites see it: each source's check runs through [controller]. */
+internal fun siteChecks(controller: CustomSitesController, scope: CoroutineScope? = null, io: CoroutineDispatcher = Dispatchers.Unconfined) =
+    SiteChecks(
+        NoCookies,
+        shown = {},
+        targetFor = { source ->
+            SiteCheckTarget(
+                title = source.id,
+                url = "https://site.test/",
+                cookieHost = "site.test",
+                passes = { controller.checkVerification(source, it) },
+                complete = { controller.completeVerification(source, it) },
+            )
+        },
+        coroutineScope = scope,
+        io = io,
+    )
+
+private object NoCookies : BrowserCookieStore {
+    override fun cookieHeader(url: String): String? = null
+
+    override fun setCookie(url: String, setCookie: String) = Unit
+
+    override fun flush() = Unit
+
+    override fun expire(url: String, name: String?) = Unit
 }
 
 internal fun address(input: String): SiteAddress = (SiteAddress.parse(input) as SiteAddressParse.Valid).address

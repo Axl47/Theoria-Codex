@@ -28,7 +28,6 @@ private fun sourceFailureShortLabel(reason: SourceFailureReason?): String {
         SourceFailureReason.RATE_LIMITED -> "rate limited"
         SourceFailureReason.NETWORK -> "unreachable"
         SourceFailureReason.PARSE -> "changed response"
-        SourceFailureReason.BROWSER_CHECK -> "needs a browser check"
         SourceFailureReason.UNKNOWN, null -> "failed"
     }
 }

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.settings.sites
 
+import com.theoriacodex.app.source.VERIFY_IN_BROWSER_LABEL
 import com.theoriacodex.data.repository.SettingDestinations
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
@@ -54,10 +55,6 @@ fun CustomSitesScreen(
     SurfaceLeaveEffect { onAction(CustomSitesAction.CommitRemovals) }
     BackHandler(enabled = state.form != null) { onAction(CustomSitesAction.CloseForm) }
     BackHandler(enabled = state.form == null && state.openBuiltIn != null) { onAction(CustomSitesAction.CloseBuiltIn) }
-    state.verification?.let { verification ->
-        SiteVerificationPage(verification, verificationSiteName(state, verification.host), onAction)
-        return
-    }
     val builtIn = state.builtInSites.firstOrNull { it.source == state.openBuiltIn }
     when (val form = state.form) {
         null -> if (builtIn != null) BuiltInSitePage(builtIn, accounts, onAction) else SitesListPage(state, accounts, onAction, onBack)
@@ -68,12 +65,6 @@ fun CustomSitesScreen(
     }
     ReconnectDialog(state.form, onAction)
 }
-
-/** The page title's name for the site being verified: its label, or its address while it is being added. */
-private fun verificationSiteName(state: CustomSitesUiState, host: String): String =
-    state.sites.firstOrNull { it.host == host }?.label
-        ?: state.builtInSites.firstOrNull { it.host == host }?.label
-        ?: host
 
 @Composable
 private fun SitesListPage(
@@ -163,7 +154,7 @@ internal fun RetestFailure(retest: RetestStatus?, host: String, onAction: (Custo
     val offeredKey = keyAction?.takeIf { retest.needsKey || (retest.blocked && !it.hasKey) }
     Row(Modifier.padding(start = 4.dp)) {
         if (retest.blocked) {
-            TextButton(onClick = { onAction(CustomSitesAction.StartVerification(host, afterRefusal = true)) }) { Text(VERIFY_IN_BROWSER_LABEL) }
+            TextButton(onClick = { onAction(CustomSitesAction.StartVerification(host)) }) { Text(VERIFY_IN_BROWSER_LABEL) }
         }
         offeredKey?.let { action ->
             TextButton(onClick = { onAction(CustomSitesAction.StartEdit(action.sourceId, expandKeys = true)) }) {

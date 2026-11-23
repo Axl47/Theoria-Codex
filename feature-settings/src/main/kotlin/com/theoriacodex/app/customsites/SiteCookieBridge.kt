@@ -34,6 +34,9 @@ class SiteCookieBridge(private val store: BrowserCookieStore) {
     @Volatile
     private var setupHost: String? = null
 
+    @Volatile
+    private var checkHost: String? = null
+
     /** The hosts of every saved custom site. */
     fun updateSiteHosts(hosts: Set<String>) {
         siteHosts = hosts.mapTo(HashSet(), HostOutageTracker::normalizeHost)
@@ -76,9 +79,17 @@ class SiteCookieBridge(private val store: BrowserCookieStore) {
         return path == address.path || path.startsWith("${address.path}/")
     }
 
-    /** The site being verified before it is saved, or null once that ends. */
+    /** The site the Add form is setting up, or null once the form gives way. Only the Add form sets it. */
     fun setSetupHost(host: String?) {
         setupHost = host?.let(HostOutageTracker::normalizeHost)
+    }
+
+    /**
+     * The not-yet-kept site whose browser check is on screen, or null once it closes. Only the check page sets it, so
+     * a check ending never takes away the Add form's [setSetupHost], nor the reverse.
+     */
+    fun setCheckHost(host: String?) {
+        checkHost = host?.let(HostOutageTracker::normalizeHost)
     }
 
     fun flush() {
@@ -97,10 +108,19 @@ class SiteCookieBridge(private val store: BrowserCookieStore) {
     /** Whether [host] shares the browser's identity. On every image and API request: no allocation, and no parsing beyond the host's normalization. */
     fun isAllowed(host: String?): Boolean {
         if (host == null) return false
-        return siteHosts.any { HostOutageTracker.hostBelongsToSite(host, it) } ||
-            builtInAgents.keys.any { HostOutageTracker.hostBelongsToSite(host, it) } ||
-            setupHost?.let { HostOutageTracker.hostBelongsToSite(host, it) } == true
+        return keepsCookies(host) || setupHost.covers(host) || checkHost.covers(host)
     }
+
+    private fun String?.covers(host: String): Boolean = this != null && HostOutageTracker.hostBelongsToSite(host, this)
+
+    /**
+     * Whether [host] keeps the browser's cookies for good: a saved custom site, or a built-in one verified by hand. The
+     * app's own requests try a hidden browser check only for these, so an expired clearance renews out of sight while a
+     * never-verified built-in site still asks the user, and a hidden check never widens which hosts get cookies.
+     */
+    fun keepsCookies(host: String): Boolean =
+        siteHosts.any { HostOutageTracker.hostBelongsToSite(host, it) } ||
+            builtInAgents.keys.any { HostOutageTracker.hostBelongsToSite(host, it) }
 
     val cookieJar: CookieJar = BrowserCookieJar(store, ::isAllowed)
 }

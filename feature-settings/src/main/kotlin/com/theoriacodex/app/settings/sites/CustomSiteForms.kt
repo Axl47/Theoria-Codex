@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.customsites.CustomSiteSummary
 import com.theoriacodex.app.settings.ExpandableSection
+import com.theoriacodex.app.source.VERIFY_IN_BROWSER_LABEL
 import com.theoriacodex.app.ui.components.AnnouncedText
 import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.domain.source.ProtocolFamily
@@ -79,7 +80,7 @@ private fun AddStageControls(form: SiteForm.Add, onAction: (CustomSitesAction) -
         is AddStage.Address -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { onAction(CustomSitesAction.Probe) }) { Text("Check site") }
             stage.blockedHost?.let { host ->
-                TextButton(onClick = { onAction(CustomSitesAction.StartVerification(host, afterRefusal = true)) }) { Text(VERIFY_IN_BROWSER_LABEL) }
+                TextButton(onClick = { onAction(CustomSitesAction.StartVerification(host)) }) { Text(VERIFY_IN_BROWSER_LABEL) }
             }
         }
         AddStage.Probing -> Progress("Checking site…")
@@ -148,9 +149,8 @@ internal fun EditSitePage(
         SettingsGroup("Browser check") {
             SettingsRow(
                 title = VERIFY_IN_BROWSER_LABEL,
-                summary = "Open this site to pass its browser check",
                 enabled = editable,
-                onClick = { onAction(CustomSitesAction.StartVerification(site.host, afterRefusal = false)) },
+                onClick = { onAction(CustomSitesAction.StartVerification(site.host)) },
                 trailing = if (working) { { WorkingMark() } } else null,
             )
             // Why the last check failed; a pass shows as the row's mark once the page closes itself.

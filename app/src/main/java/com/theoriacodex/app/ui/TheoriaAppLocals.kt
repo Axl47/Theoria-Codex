@@ -18,6 +18,7 @@ import com.theoriacodex.app.related.LocalRelatedPostsSupport
 import com.theoriacodex.app.search.LocalPostWatchPresentation
 import com.theoriacodex.app.search.rememberPostWatchPresentation
 import com.theoriacodex.app.source.LocalSourceHealth
+import com.theoriacodex.app.source.SiteCheckOverlay
 import com.theoriacodex.app.ui.components.LocalPostMenuActions
 import com.theoriacodex.app.ui.navigation.LocalHiddenTagsOpener
 import com.theoriacodex.app.ui.navigation.LocalLiftController
@@ -55,8 +56,10 @@ internal fun ShellCompositionLocals(shell: TheoriaShell, content: @Composable ()
         LocalTriageOpener provides rememberTriageOpener(shell),
         LocalNewCodexOpener provides remember { NewCodexRequests() },
         LocalHiddenTagsOpener provides remember { HiddenTagsRequests() },
-        content = content,
-    )
+    ) {
+        content()
+        SiteCheckOverlay(shell.owners.siteChecks)
+    }
 }
 
 /** Ranks Codices for "Save to Codex" from the saved library. */

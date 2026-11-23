@@ -6,7 +6,11 @@ import java.net.InetSocketAddress
 import java.net.UnknownHostException
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.system.measureTimeMillis
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -16,6 +20,20 @@ import org.junit.Test
 class HostOutageTrackerTest {
     private var now = 1_000L
     private val tracker = HostOutageTracker(clock = { now }, outageMs = 60_000L)
+
+    @Test fun `a passed check clears the challenge and is announced, an expired one is not`() = runTest {
+        val passed = mutableListOf<String>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { tracker.passes.toList(passed) }
+        tracker.record("https://www.site.test/", HostOutageKind.CHALLENGE)
+        tracker.record("https://old.test/", HostOutageKind.CHALLENGE)
+        now += 60_000L
+
+        assertFalse(tracker.isChallenged("https://old.test/"))
+        tracker.pass("WWW.site.test")
+
+        assertEquals(listOf("site.test"), passed)
+        assertEquals(setOf("old.test"), tracker.outages.value.keys)
+    }
 
     @Test fun `down statuses and challenges are outages, ordinary failures are not`() {
         assertEquals(HostOutageKind.MAINTENANCE, tracker.recordResponse("https://www.danbooru.donmai.us/x", 503, emptyMap()))
@@ -39,6 +57,18 @@ class HostOutageTrackerTest {
         now += 60_001L
         tracker.ensureAvailable("https://danbooru.donmai.us/")
         assertTrue(tracker.outages.value.isEmpty())
+    }
+
+    @Test fun `a challenge keeps the request it refused and counts as challenged until it expires`() {
+        val refused = RefusedRequest("https://api.site.test/list", "agent/1")
+        tracker.record(refused.url, HostOutageKind.CHALLENGE, refused)
+        tracker.record("https://down.test/", HostOutageKind.MAINTENANCE)
+
+        assertEquals(refused, tracker.outages.value["api.site.test"]?.refused)
+        assertTrue(tracker.isChallenged("https://api.site.test/other"))
+        assertFalse(tracker.isChallenged("https://down.test/"))
+        now += 60_001L
+        assertFalse(tracker.isChallenged("https://api.site.test/other"))
     }
 
     @Test fun `an unresolved domain counts only while online`() {
@@ -80,6 +110,29 @@ class HostOutageTrackerTest {
         tracker.setWorking("https://b.example/", true)
         tracker.setWorking("https://b.example/", false)
         assertTrue(tracker.working.value.isEmpty())
+    }
+
+    @Test fun `a Cloudflare challenge served as a 503 is a challenge, not maintenance, and is not retried`() = runBlocking {
+        val hits = AtomicInteger()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            createContext("/") { exchange ->
+                hits.incrementAndGet()
+                exchange.responseHeaders.add("cf-mitigated", "challenge")
+                exchange.sendResponseHeaders(503, -1)
+                exchange.close()
+            }
+            start()
+        }
+        val outages = HostOutageTracker()
+        val url = "http://127.0.0.1:${server.address.port}/posts.json"
+        try {
+            val refused = runCatching { DefaultSourceHttpClient(maxRetries = 2, outages = outages).get(url) }.exceptionOrNull()
+            assertEquals(HostOutageKind.CHALLENGE, (refused as HostUnavailableException).kind)
+            assertEquals(1, hits.get())
+            assertTrue(outages.isChallenged(url))
+        } finally {
+            server.stop(0)
+        }
     }
 
     @Test fun `a maintenance page fails at once and the next request never reaches the host`() = runBlocking {

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import com.theoriacodex.app.customsites.BuiltInSiteSummary
 import com.theoriacodex.app.settings.BuiltInAccounts
+import com.theoriacodex.app.source.VERIFY_IN_BROWSER_LABEL
 import com.theoriacodex.app.ui.components.SettingsHeader
 import com.theoriacodex.app.ui.components.SettingsGroup
 import com.theoriacodex.app.ui.components.SettingsRow
@@ -40,8 +41,8 @@ internal fun BuiltInSitePage(site: BuiltInSiteSummary, accounts: BuiltInAccounts
         SettingsGroup("Browser check") {
             SettingsRow(
                 title = VERIFY_IN_BROWSER_LABEL,
-                summary = if (site.needsVerification) "This site is asking for a browser check" else "Open this site to pass its browser check",
-                onClick = { onAction(CustomSitesAction.StartVerification(site.host, afterRefusal = site.needsVerification)) },
+                summary = "This site is asking for a browser check".takeIf { site.needsVerification },
+                onClick = { onAction(CustomSitesAction.StartVerification(site.host)) },
                 trailing = if (site.working) { { WorkingMark() } } else null,
             )
         }

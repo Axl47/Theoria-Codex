@@ -10,8 +10,10 @@ import com.theoriacodex.domain.series.SeriesExtensions
 import com.theoriacodex.domain.series.SeriesSource
 import com.theoriacodex.domain.series.defaultLanguages
 import com.theoriacodex.domain.series.trusts
+import com.theoriacodex.sources.http.HostOutageTracker
 import eu.kanade.tachiyomi.source.ConfigurableSource
 import eu.kanade.tachiyomi.source.Source
+import eu.kanade.tachiyomi.source.online.HttpSource
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -23,6 +25,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+
+/** An extension source's [name] and the [hosts] it is known to call: its site's, and any whose check stopped it. */
+data class ExtensionSite(val name: String, val hosts: Set<String>)
 
 /**
  * Decides which extension code runs and which of its sources the app offers.
@@ -68,8 +73,29 @@ class ExtensionRegistry(
      */
     private val loaded = HashMap<ExtensionPackage, Loaded>()
 
-    /** Per extension id, its sources that are on, as of the last listing. Guarded by [mutex]. */
+    /** Per extension id, its sources that are on, as of the last listing. Written under [mutex]; [sites] reads it without. */
+    @Volatile
     private var active: Map<String, List<LoadedSource>> = emptyMap()
+
+    private val challengedHosts = MutableStateFlow<Map<SourceKey, Set<String>>>(emptyMap())
+
+    /** Changes when a source is found to call another host, which [sites] then includes; held for this process. */
+    val siteChanges: StateFlow<*> = challengedHosts
+
+    /**
+     * The sources that are on, with their names and the hosts they call (an HTTP source's base address, and any host
+     * whose challenge stopped one of its calls), so a challenged host can be traced to the sources it stops. Loads
+     * nothing: a source that never loaded made no request.
+     */
+    fun sites(): Map<SourceKey, ExtensionSite> {
+        val challenged = challengedHosts.value
+        return active.values.flatten().mapNotNull { loaded ->
+            // An extension's address can depend on its settings, and its code can fail.
+            val base = (loaded.source as? HttpSource)?.let { runCatching { it.baseUrl }.getOrNull() }?.let(HostOutageTracker::hostKey)
+            val hosts = setOfNotNull(base) + challenged[loaded.series.key].orEmpty()
+            if (hosts.isEmpty()) null else loaded.series.key to ExtensionSite(loaded.name, hosts)
+        }.toMap()
+    }
 
     /** The sources on offer, with the [packages] they were listed from and [stamp] as it was read before that listing. */
     private class Offer(val sources: List<SeriesSource>, val stamp: Any, val packages: List<ExtensionPackage>)
@@ -201,9 +227,17 @@ class ExtensionRegistry(
         return listed
     }
 
+    /** [source] as a series source, whose challenged hosts join its [sites] entry. */
+    private fun series(source: Source): MihonSeriesSource {
+        val key = MihonSeriesSource.sourceKey(source)
+        return MihonSeriesSource(source, images, log) { host ->
+            challengedHosts.update { hosts -> hosts + (key to hosts[key].orEmpty() + host) }
+        }
+    }
+
     private fun load(extension: ExtensionPackage): Loaded = limited(extension.name) {
         // A source's name, language and id are its code too, so they are read here, within the limit.
-        load.invoke(extension).map { source -> LoadedSource(source, MihonSeriesSource(source, images, log), source.name, source.lang) }
+        load.invoke(extension).map { source -> LoadedSource(source, series(source), source.name, source.lang) }
     }.fold(
         onSuccess = { sources ->
             log("Loaded ${extension.name} ${extension.versionName}: ${sources.size} sources, signer ${extension.signer}")

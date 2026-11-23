@@ -7,12 +7,15 @@ import com.theoriacodex.app.customsites.CredentialEdit
 import com.theoriacodex.app.customsites.CustomSiteDraft
 import com.theoriacodex.app.customsites.CustomSiteEdit
 import com.theoriacodex.app.customsites.CustomSiteMutation
-import com.theoriacodex.app.customsites.CustomSiteSummary
 import com.theoriacodex.app.customsites.CustomSitesController
 import com.theoriacodex.app.customsites.SitesRequest
+import com.theoriacodex.app.source.OpenSiteCheck
+import com.theoriacodex.app.source.SiteCheckTarget
+import com.theoriacodex.app.source.SiteChecks
 import com.theoriacodex.app.sourceauth.parseCredentialSnippet
 import com.theoriacodex.app.ui.undo.DeferredRemovals
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.ProbeFailure
 import com.theoriacodex.domain.source.SiteCredentials
 import com.theoriacodex.domain.source.SiteHeaders
@@ -38,6 +41,8 @@ import kotlin.time.Duration
  */
 class CustomSitesViewModel(
     private val controller: CustomSitesController,
+    /** The app's browser check page, which this opens for a site. */
+    private val checks: SiteChecks,
     coroutineScope: CoroutineScope? = null,
     removalScope: CoroutineScope? = null,
 ) : ViewModel() {
@@ -58,18 +63,7 @@ class CustomSitesViewModel(
     /** The add form's probe or save; closing the form cancels it. */
     private var formJob: Job? = null
 
-    /** The browser-check loop: the running checks, the one waiting after them, and the cookies last seen. */
-    private var checkJob: Job? = null
-    private var pendingCheck: VerificationCheck? = null
-    private var seenCookies: CookieSnapshot? = null
-
     private var testAllJob: Job? = null
-
-    /** [explicit] for Done, which always completes on a pass; a page load only closes the page after a refusal. */
-    private data class VerificationCheck(val userAgent: String, val explicit: Boolean)
-
-    /** Wraps the cookies so that "none yet" differs from "nothing seen". */
-    private data class CookieSnapshot(val cookies: String?)
 
     init {
         scope.launch {
@@ -109,8 +103,6 @@ class CustomSitesViewModel(
                         openForm(SiteForm.Add(address = request.address, linkAfterSetup = request.linkAfterSetup))
                         probe()
                     }
-                    // A challenged source: open its browser check; completing it saves the agent and shows on the row.
-                    is SitesRequest.Verify -> verificationHost(request.sourceId)?.let { startVerification(it, afterRefusal = true) }
                     is SitesRequest.EnterKey -> startEdit(request.sourceId, expandKeys = true)
                 }
             }
@@ -145,99 +137,55 @@ class CustomSitesViewModel(
             is CustomSitesAction.ActOnRemoval -> removals.act(action.sourceId)
             CustomSitesAction.CommitRemovals -> removals.commitAll()
             CustomSitesAction.DismissNotice -> mutableState.update { it.copy(notice = null) }
-            is CustomSitesAction.StartVerification -> startVerification(action.host, action.afterRefusal)
-            CustomSitesAction.CancelVerification -> endVerification()
-            is CustomSitesAction.ConfirmVerification -> requestCheck(VerificationCheck(action.userAgent, explicit = true))
-            is CustomSitesAction.VerificationPageLoaded -> verificationPageLoaded(action.userAgent, action.cookies)
+            is CustomSitesAction.StartVerification -> startVerification(action.host)
         }
     }
 
-    /** The address the browser check opens for a stored or built-in source. */
-    private fun verificationHost(sourceId: String): String? =
-        state.value.sites.firstOrNull { it.sourceId == sourceId }?.host
-            ?: state.value.builtInSites.firstOrNull { it.source.id == sourceId }?.host
-
-    /** Opens the browser check for [host] and lets its cookies through; a host with no saved site is the Add form's. */
-    private fun startVerification(host: String, afterRefusal: Boolean) {
-        endVerification()
-        mutableState.update { it.copy(verification = SiteVerification(host, sawRefusal = afterRefusal), notice = null) }
-        controller.setSetupHost(host)
-    }
-
-    /** Ends the browser check without completing it: stops its work and releases the setup host. */
-    private fun endVerification() {
-        checkJob?.cancel()
-        pendingCheck = null
-        seenCookies = null
-        mutableState.update { it.copy(verification = null) }
-        controller.setSetupHost(null)
-    }
-
-    /** A page finished loading: check only when the browser's cookies differ from the last ones checked. */
-    private fun verificationPageLoaded(userAgent: String, cookies: String?) {
-        if (seenCookies == CookieSnapshot(cookies)) return
-        seenCookies = CookieSnapshot(cookies)
-        requestCheck(VerificationCheck(userAgent, explicit = false))
-    }
-
-    /** One check runs at a time; a request made during one runs after it, and Done outranks a waiting page load. */
-    private fun requestCheck(check: VerificationCheck) {
-        if (state.value.verification == null) return
-        if (pendingCheck?.explicit != true) pendingCheck = check
-        if (checkJob?.isActive == true) return
-        checkJob = scope.launch {
-            while (true) {
-                val next = pendingCheck ?: break
-                pendingCheck = null
-                runVerificationCheck(next)
-            }
-        }
-    }
+    /** The check page this screen opened, whose callbacks write here. */
+    private var ownCheck: OpenSiteCheck? = null
 
     /**
-     * Tests whether the app's own request gets through with the browser's agent; a check changes nothing.
-     * A pass closes the page when the person said Done or a refusal is known, and only then completes:
-     * a saved site records the agent, the Add form takes its probe. Otherwise the page stays open.
+     * Opens the app's browser check for [host]: a stored or built-in site's, or else the Add form's, whose site keeps
+     * the browser's cookies until the check is dismissed, the address changes or the form closes or saves. A pass fills
+     * the Add form, or updates the site's row.
      */
-    private suspend fun runVerificationCheck(check: VerificationCheck) {
-        val host = state.value.verification?.host ?: return
-        updateVerification { copy(checking = true, message = if (check.explicit) null else message) }
-        state.value.builtInSites.firstOrNull { it.host == host }?.let { builtIn ->
-            runBuiltInCheck(builtIn, check)
+    private fun startVerification(host: String) {
+        val source = state.value.sites.firstOrNull { it.host == host }?.let { SourceKey.parse(it.sourceId) }
+            ?: state.value.builtInSites.firstOrNull { it.host == host }?.source
+        if (source != null) {
+            checks.open(source) { userAgent -> verified(source.id, userAgent) }
+            ownCheck = checks.opened
             return
         }
-        val site = state.value.sites.firstOrNull { it.host == host }
-        val result = runCatchingPreservingCancellation {
-            if (site != null) controller.checkVerification(site.sourceId, check.userAgent) else probeAddTarget(check.userAgent)
-        }.getOrNull()
-        if (result?.clearedChallenge == true && verificationPassed(host, site, check, result)) return
-        verificationRefused(
-            host,
-            check,
-            blocked = (result as? SiteProbeResult.Unreachable)?.reason == ProbeFailure.BLOCKED,
-            failure = result?.let(::probeMessage) ?: UNEXPECTED_FAILURE_MESSAGE,
+        if (state.value.form !is SiteForm.Add) return
+        controller.setSetupHost(host)
+        var probe: SiteProbeResult? = null
+        checks.open(
+            SiteCheckTarget(
+                title = host,
+                url = "https://$host/",
+                passes = { userAgent -> probeAddTarget(userAgent).also { probe = it }?.clearedChallenge == true },
+                complete = { userAgent -> updateAdd { verified(userAgent, probe) } },
+                dismissed = { controller.setSetupHost(null) },
+            ),
+        )
+        ownCheck = checks.opened
+    }
+
+    /** A stored or built-in site passed its check: its row shows its live status, and an open Edit form takes the agent. */
+    private fun verified(sourceId: String, userAgent: String) = mutableState.update { current ->
+        current.copy(
+            retests = current.retests - sourceId,
+            // The open Edit form's agent field follows, or a later Save would revert the saved agent.
+            form = (current.form as? SiteForm.Edit)?.takeIf { it.sourceId == sourceId }
+                ?.let { it.copy(fields = it.fields.copy(userAgent = userAgent)) } ?: current.form,
         )
     }
 
-    /** The built-in counterpart of a check: the same rules for closing the page, without a site to probe. */
-    private suspend fun runBuiltInCheck(site: BuiltInSiteSummary, check: VerificationCheck) {
-        val cleared = runCatchingPreservingCancellation { controller.checkBuiltInVerification(site.source, check.userAgent) }.getOrNull()
-        val passed = cleared == true && when {
-            check.explicit || state.value.verification?.sawRefusal == true -> completeBuiltIn(site, check.userAgent)
-            else -> {
-                updateVerification { copy(checking = false, message = verificationAlreadyOpenMessage(site.host), messageIsError = false) }
-                true
-            }
-        }
-        if (!passed) verificationRefused(site.host, check, blocked = cleared == false, failure = unreachableMessage(site.host, ProbeFailure.TIMEOUT))
-    }
-
-    private suspend fun completeBuiltIn(site: BuiltInSiteSummary, userAgent: String): Boolean {
-        runCatchingPreservingCancellation { controller.completeBuiltInVerification(site.source, userAgent) }.getOrNull() ?: return false
-        mutableState.update { it.copy(verification = null) }
-        controller.setSetupHost(null)
-        return true
-    }
+    /** The Add form's site passed its check with [userAgent]; [probe] is what the check found. */
+    private fun SiteForm.Add.verified(userAgent: String, probe: SiteProbeResult?): SiteForm.Add =
+        // A site that made the app prove itself may limit visitors without an account, so offer the key now.
+        copy(fields = fields.copy(userAgent = userAgent), showCredentials = true).applyProbe(probe)
 
     private suspend fun probeAddTarget(userAgent: String): SiteProbeResult? {
         val form = state.value.form as? SiteForm.Add ?: return null
@@ -246,69 +194,18 @@ class CustomSitesViewModel(
         return controller.probe(form.address, credentials.value, headers.value.copy(userAgent = userAgent))
     }
 
-    /** Returns false when completing failed, which then reads as a failed check. */
-    private suspend fun verificationPassed(host: String, site: CustomSiteSummary?, check: VerificationCheck, result: SiteProbeResult): Boolean {
-        val closes = check.explicit || state.value.verification?.sawRefusal == true
-        if (!closes) {
-            updateVerification {
-                copy(checking = false, message = verificationAlreadyOpenMessage(host), messageIsError = false)
-            }
-            return true
-        }
-        if (site != null) {
-            val working = retestStatus(site, result).ok
-            runCatchingPreservingCancellation { controller.completeVerification(site.sourceId, check.userAgent, working) }.getOrNull() ?: return false
-        }
-        mutableState.update { current ->
-            if (current.verification == null) return@update current
-            val applied = if (site != null) {
-                // The open Edit form's agent field follows, or a later Save would revert the saved agent.
-                current.copy(
-                    retests = current.retests + (site.sourceId to retestStatus(site, result)),
-                    form = (current.form as? SiteForm.Edit)?.takeIf { it.sourceId == site.sourceId }
-                        ?.let { it.copy(fields = it.fields.copy(userAgent = check.userAgent)) } ?: current.form,
-                )
-            } else {
-                (current.form as? SiteForm.Add)?.let { add ->
-                    // A site that made the app prove itself may limit visitors without an account, so offer the key now.
-                    current.copy(form = add.copy(fields = add.fields.copy(userAgent = check.userAgent), showCredentials = true).applyProbe(result))
-                } ?: current
-            }
-            applied.copy(verification = null)
-        }
-        // A saved site's cookies need no setup host; the Add form's stay allowed until it closes or saves.
-        if (site != null) controller.setSetupHost(null)
-        return true
-    }
-
-    /** [blocked] when a challenge answered; [failure] explains any other refusal to someone who tapped Done. */
-    private fun verificationRefused(host: String, check: VerificationCheck, blocked: Boolean, failure: String) {
-        updateVerification {
-            copy(
-                checking = false,
-                sawRefusal = sawRefusal || blocked,
-                messageIsError = messageIsError || check.explicit,
-                message = when {
-                    !check.explicit -> message
-                    blocked -> verificationRefusedMessage(host)
-                    else -> failure
-                },
-            )
-        }
-    }
-
     override fun onCleared() {
+        // The check page outlives this screen, but its callbacks write to this one, so it closes with it.
+        if (ownCheck != null && checks.opened === ownCheck) checks.close()
         liveEdits.close()
         removals.commitAll()
-    }
-
-    private fun updateVerification(transform: SiteVerification.() -> SiteVerification) = mutableState.update { current ->
-        current.copy(verification = current.verification?.transform())
+        controller.setSetupHost(null)
     }
 
     private fun openForm(form: SiteForm) {
         liveEdits.flush()
-        endVerification()
+        // An Add form's site stops sharing the browser's cookies once the form gives way.
+        controller.setSetupHost(null)
         formJob?.cancel()
         mutableState.update { it.copy(form = form, notice = null) }
     }
@@ -332,14 +229,18 @@ class CustomSitesViewModel(
 
     private fun closeForm() {
         liveEdits.flush()
-        endVerification()
+        // An Add form's site stops sharing the browser's cookies once the form gives way.
+        controller.setSetupHost(null)
         formJob?.cancel()
         mutableState.update { it.copy(form = null) }
     }
 
-    private fun setAddress(value: String) = updateAdd {
-        // A different address is a different site, which the waiting link doesn't belong to.
-        if (stage.busy) this else copy(address = value, stage = AddStage.Address(), linkAfterSetup = null)
+    private fun setAddress(value: String) {
+        val form = state.value.form as? SiteForm.Add ?: return
+        if (form.stage.busy) return
+        // A different address is a different site, which neither the waiting link nor the old one's cookies belong to.
+        controller.setSetupHost(null)
+        updateAdd { copy(address = value, stage = AddStage.Address(), linkAfterSetup = null) }
     }
 
     /** Which field edits invalidate a finished probe, so a draft always matches what was checked. */

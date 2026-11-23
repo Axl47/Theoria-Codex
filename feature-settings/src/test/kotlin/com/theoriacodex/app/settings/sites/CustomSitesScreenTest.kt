@@ -38,7 +38,7 @@ class CustomSitesScreenTest {
     @get:Rule val compose = createComposeRule()
 
     private fun show(controller: FakeCustomSitesController, accountControls: @Composable (SourceKey) -> Unit = {}) {
-        val owner = CustomSitesViewModel(controller)
+        val owner = CustomSitesViewModel(controller, siteChecks(controller))
         val accounts = BuiltInAccounts(summary = { null }, controls = accountControls)
         compose.setContent {
             val state by owner.state.collectAsStateWithLifecycle()
@@ -174,6 +174,5 @@ class CustomSitesScreenTest {
 
         compose.onNodeWithText("Browser check").assertExists()
         compose.onNodeWithText("Verify in browser").assertExists()
-        compose.onNodeWithText("Open this site to pass its browser check").assertExists()
     }
 }
