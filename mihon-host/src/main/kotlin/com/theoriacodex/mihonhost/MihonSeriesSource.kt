@@ -112,6 +112,13 @@ class MihonSeriesSource(
         if (source is HttpSource) images.coverAddress(source, address) else address
     }
 
+    override fun webUrl(series: Series): String? {
+        val http = source as? HttpSource ?: return super.webUrl(series)
+        return runCatching { http.getMangaUrl(manga(series)) }.getOrNull()?.takeIf(String::isNotBlank)
+            ?: super.webUrl(series)
+            ?: http.baseUrl.takeIf(String::isNotBlank)?.let { "${it.trimEnd('/')}/${series.id.address.trimStart('/')}" }
+    }
+
     private fun MangasPage.listed() = SeriesPage(
         series = mangas.map { manga ->
             listedSeries[manga.url] = manga

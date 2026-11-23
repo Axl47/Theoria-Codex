@@ -67,6 +67,15 @@ public interface SeriesDao {
     @Query("DELETE FROM series WHERE source = :source AND address = :address")
     void deleteSeries(String source, String address);
 
+    @Query("UPDATE series_entries SET read = 1 WHERE source = :source AND series_address = :seriesAddress AND source_order >= 0")
+    void markAllRead(String source, String seriesAddress);
+
+    @Query("UPDATE series_entries SET read = 0, last_page = 0 WHERE source = :source AND series_address = :seriesAddress AND source_order >= 0")
+    void markAllUnread(String source, String seriesAddress);
+
+    @Query("UPDATE series SET last_opened_entry = NULL WHERE source = :source AND address = :address")
+    void clearLastOpenedEntry(String source, String address);
+
     /** An update in place: replacing the row would cascade its entries away. */
     @Upsert void upsertSeries(SeriesEntity entity);
 

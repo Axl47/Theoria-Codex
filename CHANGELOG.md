@@ -86,6 +86,8 @@
 - Series cards now show their title inside the bottom of the cover over a scrim, and the Series search bar matches the Search tab's collapsing pill bar.
 - In global Series search, each source header shows its language underneath and opens that source's dedicated search when tapped.
 - In Series browse and dedicated source search, Popular, Latest and Filter now float in a pill at the bottom that hides as you scroll down and returns as you scroll back up.
+- Series pages now open with a blurred cover backdrop, a Follow button beside Open in browser and Share, an expandable About section with genre tags, a full-width Continue reading button, card-styled chapters, and a floating top bar that hides as you scroll down and returns as you scroll up.
+- On a series page, the top bar now searches chapters inline, the overflow menu adds Mark all as read, Mark all as unread, Refresh and Switch source, and the chapter list's filter button sorts by source order, chapter number or upload date and filters by All, Unread or Downloaded.
 
 ### Removed
 

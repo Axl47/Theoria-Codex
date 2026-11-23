@@ -187,4 +187,21 @@ class RoomSeriesRepositoryTest {
         assertEquals(1, repository.entries(id).size)
         assertEquals("Other", repository.series(id)!!.series.author)
     }
+
+    @Test
+    fun `marking all chapters read or unread updates listed chapters and resets progress when unread`() = runTest {
+        repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))
+        repository.setFollowed(id, true)
+        repository.recordProgress(id, "/c/1", page = 5, pageCount = 10)
+
+        repository.setAllRead(id, read = true)
+        assertTrue(repository.entries(id).all { it.read })
+        assertEquals(0, repository.observeFollowed().first().single().unreadCount)
+
+        repository.setAllRead(id, read = false)
+        assertTrue(repository.entries(id).none { it.read })
+        assertTrue(repository.entries(id).all { it.lastPage == 0 })
+        assertNull(repository.series(id)!!.lastOpenedEntry)
+        assertEquals(2, repository.observeFollowed().first().single().unreadCount)
+    }
 }

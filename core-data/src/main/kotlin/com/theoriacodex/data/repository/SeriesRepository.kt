@@ -79,6 +79,9 @@ interface SeriesRepository {
 
     suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean)
 
+    /** Marks every listed entry of [id] as read or unread. Marking unread also resets partial page progress. */
+    suspend fun setAllRead(id: SeriesId, read: Boolean)
+
     /**
      * The user is on [page] (from 1) of the entry at [entryAddress]. [pageCount] is null while the entry's pages are
      * still loading, when only the series' last opened entry is recorded.

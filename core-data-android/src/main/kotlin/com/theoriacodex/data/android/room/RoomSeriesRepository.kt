@@ -104,6 +104,17 @@ class RoomSeriesRepository(
 
     override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = update(id) { it.copy(downloadNewChapters = on) }
 
+    override suspend fun setAllRead(id: SeriesId, read: Boolean) {
+        database.withTransaction {
+            if (read) {
+                dao.markAllRead(id.source.id, id.address)
+            } else {
+                dao.markAllUnread(id.source.id, id.address)
+                dao.clearLastOpenedEntry(id.source.id, id.address)
+            }
+        }
+    }
+
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) {
         // A series moved to another source while its chapter was open is gone with its entries, so this writes nothing.
         database.withTransaction {

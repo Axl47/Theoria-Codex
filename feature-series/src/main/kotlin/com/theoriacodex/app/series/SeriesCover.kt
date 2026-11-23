@@ -26,6 +26,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.ui.theme.TextOverMediaShadow
 import com.theoriacodex.domain.series.Series
@@ -34,19 +35,25 @@ import com.theoriacodex.domain.series.SeriesSource
 /** The sources that are on, for the covers drawn below: each cover loads through its series' own source. */
 internal val LocalSeriesSources = staticCompositionLocalOf<List<SeriesSource>> { emptyList() }
 
+/** Builds the Coil request for [series]' cover through its active source when available. */
+@Composable
+internal fun rememberSeriesCoverRequest(series: Series, targetWidthPx: Int = COVER_WIDTH_PX): ImageRequest? {
+    val context = LocalContext.current
+    val source = LocalSeriesSources.current.firstOrNull { it.key == series.id.source }
+    return remember(context, series.id, series.coverUrl, source, targetWidthPx) {
+        (if (source != null) source.coverAddress(series) else series.coverUrl)?.let { url ->
+            MediaRequestFactory.imageRequest(context, url, series.id.source, crossfade = true, targetWidthPx = targetWidthPx)
+        }
+    }
+}
+
 /**
  * A series' cover at book proportions; a plain tile while it loads or when the series has none. A series whose source
  * is not among [LocalSeriesSources] loads the stored address as it is.
  */
 @Composable
 internal fun SeriesCover(series: Series, modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    val source = LocalSeriesSources.current.firstOrNull { it.key == series.id.source }
-    val request = remember(context, series.id, series.coverUrl, source) {
-        (if (source != null) source.coverAddress(series) else series.coverUrl)?.let { url ->
-            MediaRequestFactory.imageRequest(context, url, series.id.source, crossfade = true, targetWidthPx = COVER_WIDTH_PX)
-        }
-    }
+    val request = rememberSeriesCoverRequest(series)
     Box(
         modifier
             .aspectRatio(COVER_ASPECT)
