@@ -7,6 +7,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.sources.http.BrowserCookieStore
 import java.io.File
 import kotlin.time.TimeSource
 import kotlinx.coroutines.Dispatchers
@@ -38,7 +39,7 @@ class ExtensionHarnessTest {
         val apkName = InstrumentationRegistry.getArguments().getString("extensionApk")
         assumeNotNull(apkName)
         val context = instrumentation.targetContext
-        MihonHost.install(context.applicationContext as Application, versionName = "harness", versionCode = 1)
+        MihonHost.install(context.applicationContext as Application, versionName = "harness", versionCode = 1, cookies = NoCookies)
 
         val packages = ExtensionPackages(context)
         val extension = checkNotNull(packages.read(File(context.getExternalFilesDir(null), apkName!!))) { "$apkName is not an extension" }
@@ -111,6 +112,20 @@ class ExtensionHarnessTest {
     private fun report(key: String, message: String) {
         Log.i(TAG, "$key: $message")
         instrumentation.sendStatus(0, Bundle().apply { putString("harness", "$key: $message") })
+    }
+
+    /**
+     * The harness measures an extension alone, without the app's browser cookies (the WebView store lives in the app's
+     * modules), so a site behind a browser check fails here as it would before any check is passed.
+     */
+    private object NoCookies : BrowserCookieStore {
+        override fun cookieHeader(url: String): String? = null
+
+        override fun setCookie(url: String, setCookie: String) = Unit
+
+        override fun flush() = Unit
+
+        override fun expire(url: String, name: String?) = Unit
     }
 
     private companion object {

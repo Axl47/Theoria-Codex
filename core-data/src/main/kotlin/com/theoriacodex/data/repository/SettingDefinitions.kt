@@ -84,9 +84,15 @@ object SettingToggles {
         write = { settings, on -> settings.copy(contentFilters = settings.contentFilters.copy(resolveUnknownAnimatedDurations = on)) },
     )
 
+    /** Only in a build with extensions, which alone has chapters to download. */
+    val SeriesDeleteAfterReading = SettingToggle(
+        "series-delete-after-reading", "Delete after reading", listOf("series", "chapters", "downloads"),
+        read = { it.seriesDeleteAfterReading }, write = { settings, on -> settings.copy(seriesDeleteAfterReading = on) },
+    )
+
     val all: List<SettingToggle> = listOf(
         OldSearchBar, InstantSeek, InvertScrollDirection, AutoRotateVideos,
-        DownloadsOverMetered, DownloadsOverRoaming, KeepMediaOffline, FindAnimationDurations,
+        DownloadsOverMetered, DownloadsOverRoaming, KeepMediaOffline, FindAnimationDurations, SeriesDeleteAfterReading,
     )
 }
 

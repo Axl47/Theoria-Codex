@@ -50,6 +50,19 @@ val lintAuthorChecks = setOf("UElementAsPsi", "UastImplementation")
 // so ordinary local test runs skip the agent. Abbreviated task names (e.g. `kXR`) are not detected.
 val coverageRequested = gradle.startParameter.taskNames.any { "kover" in it.lowercase() }
 
+// Points Robolectric at the Android runtime Gradle resolved, and turns off its own download. Left alone,
+// Robolectric fetches that jar over HTTP into ~/.m2 when the first test class starts, outside Gradle's
+// dependency cache, so a failed download failed the run before any test ran.
+class RobolectricOfflineRuntime(
+    @get:InputFiles @get:PathSensitive(PathSensitivity.NAME_ONLY) val runtime: FileCollection,
+) : CommandLineArgumentProvider {
+    override fun asArguments(): List<String> {
+        // Robolectric reads one directory; every robolectric.properties names the same sdk, so one jar.
+        val dir = runtime.files.map { it.parentFile }.distinct().single()
+        return listOf("-Drobolectric.offline=true", "-Drobolectric.dependency.dir=$dir")
+    }
+}
+
 // The aggregate quality report merges each module's "quality" variant (declared below), so
 // release, benchmark, and baseline-profile variants are never compiled just for coverage.
 kover {
@@ -105,6 +118,17 @@ subprojects {
     }
     pluginManager.withPlugin("com.android.library") {
         extensions.configure<LibraryExtension> { lint { ignoreTestSources = true; disable += lintAuthorChecks } }
+    }
+
+    listOf("com.android.application", "com.android.library").forEach { androidPlugin ->
+        pluginManager.withPlugin(androidPlugin) {
+            val robolectricRuntime = configurations.create("robolectricRuntime") {
+                isCanBeConsumed = false
+                isTransitive = false
+            }
+            dependencies.add(robolectricRuntime.name, libs.robolectric.android.all)
+            tasks.withType<Test>().configureEach { jvmArgumentProviders += RobolectricOfflineRuntime(robolectricRuntime) }
+        }
     }
 
     tasks.withType<Test>().configureEach {

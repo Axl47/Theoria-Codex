@@ -3,6 +3,7 @@ package com.theoriacodex.app.network
 import android.content.Context
 import com.theoriacodex.app.diagnostics.NetworkUsage
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.sources.http.BrowserAddressDns
 import com.theoriacodex.sources.http.await
 import com.theoriacodex.sources.http.unexpectedFailuresAsIoExceptions
 import com.theoriacodex.sources.http.unqueuedSourceDispatcher
@@ -20,8 +21,9 @@ import okhttp3.Request
 /**
  * Every HTTP client in the app, derived from one so they share a connection pool. OkHttp 5 races IPv6 against IPv4
  * on each new connection, so a network with broken IPv6 costs a quarter of a second instead of a whole connect
- * timeout per address, and [memory] removes even that once it has seen the pattern. Each client below differs only
- * in how it queues requests and how long it waits.
+ * timeout per address, and [memory] removes even that once it has seen the pattern. A host whose requests carry a
+ * browser identity connects as the WebView would ([BrowserAddressDns]), where its clearance cookie is accepted. Each
+ * client below differs only in how it queues requests and how long it waits.
  */
 class AppHttpClients(
     cookieJar: CookieJar,
@@ -38,7 +40,7 @@ class AppHttpClients(
     val shared: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .fastFallback(true)
-            .dns(memory)
+            .dns(BrowserAddressDns(memory, sharesBrowserIdentity))
             .eventListener(memory)
             .connectionPool(ConnectionPool(MAX_IDLE_CONNECTIONS, IDLE_KEEP_ALIVE_MINUTES, TimeUnit.MINUTES))
             .cookieJar(cookieJar)

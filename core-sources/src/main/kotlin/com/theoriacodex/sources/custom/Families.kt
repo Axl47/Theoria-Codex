@@ -146,6 +146,7 @@ private suspend fun SiteFamily.verifyWithAdapter(
             SourceFailureReason.AUTH_REQUIRED, SourceFailureReason.AUTH_EXPIRED -> FamilyProbe.NeedsCredentials
             SourceFailureReason.NETWORK -> FamilyProbe.Failed((error.cause as? IOException)?.let(::probeFailureOf) ?: ProbeFailure.HTTP_ERROR)
             SourceFailureReason.RATE_LIMITED -> FamilyProbe.Failed(ProbeFailure.HTTP_ERROR)
+            SourceFailureReason.BROWSER_CHECK -> FamilyProbe.Failed(ProbeFailure.BLOCKED)
             SourceFailureReason.PARSE, SourceFailureReason.UNKNOWN -> FamilyProbe.NoMatch
         }
     }

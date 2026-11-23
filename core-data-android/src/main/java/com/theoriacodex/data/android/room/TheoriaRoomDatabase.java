@@ -31,7 +31,7 @@ import org.json.JSONObject;
                 SeriesEntity.class,
                 SeriesEntryEntity.class
         },
-        version = 15,
+        version = 16,
         exportSchema = true
 )
 public abstract class TheoriaRoomDatabase extends RoomDatabase {
@@ -135,6 +135,12 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             deleteSpikeSearches(database);
         }
     };
+    // The per-series choice to download the chapters the background check finds; off for every series stored before.
+    public static final Migration MIGRATION_14_15 = new Migration(14, 15) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("ALTER TABLE `series` ADD COLUMN `download_new` INTEGER NOT NULL DEFAULT 0");
+        }
+    };
     // A spike id is `custom_mihon_` and digits only: a Custom Site can be named `custom_mihon_example_org`.
     private static final String SPIKE_SOURCE = "`source` GLOB 'custom_mihon_[0-9]*' AND `source` NOT GLOB 'custom_mihon_*[^0-9]*'";
     private static final Pattern SPIKE_SOURCE_ID = Pattern.compile("custom_mihon_[0-9]+");
@@ -174,7 +180,7 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
         }
     }
     // Pictures also get what the on-device tagger saw. Every existing row had its hash tried, hence the default of 1.
-    public static final Migration MIGRATION_14_15 = new Migration(14, 15) {
+    public static final Migration MIGRATION_15_16 = new Migration(15, 16) {
         @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
             database.execSQL("ALTER TABLE `post_visual_signatures` ADD COLUMN `phash_checked` INTEGER NOT NULL DEFAULT 1");
             database.execSQL("ALTER TABLE `post_visual_signatures` ADD COLUMN `model_id` TEXT");
@@ -196,7 +202,8 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             MIGRATION_11_12,
             MIGRATION_12_13,
             MIGRATION_13_14,
-            MIGRATION_14_15
+            MIGRATION_14_15,
+            MIGRATION_15_16
     };
 
     public abstract CodexLikesDao codexLikesDao();

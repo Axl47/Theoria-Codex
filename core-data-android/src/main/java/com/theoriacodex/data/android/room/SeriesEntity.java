@@ -24,6 +24,8 @@ public final class SeriesEntity {
     @Nullable @ColumnInfo(name = "description") private final String description;
     /** A `SeriesStatus` name; null while the source has not said. */
     @Nullable @ColumnInfo(name = "status") private final String status;
+    /** Whether new chapters the background check finds are downloaded. */
+    @ColumnInfo(name = "download_new", defaultValue = "0") private final boolean downloadNew;
 
     public SeriesEntity(
             @NonNull String source,
@@ -38,7 +40,8 @@ public final class SeriesEntity {
             @Nullable String lastOpenedEntry,
             @Nullable Long lastCheckedAtEpochMs,
             @Nullable String description,
-            @Nullable String status
+            @Nullable String status,
+            boolean downloadNew
     ) {
         this.source = source;
         this.address = address;
@@ -53,6 +56,7 @@ public final class SeriesEntity {
         this.lastCheckedAtEpochMs = lastCheckedAtEpochMs;
         this.description = description;
         this.status = status;
+        this.downloadNew = downloadNew;
     }
 
     @NonNull public String getSource() { return source; }
@@ -68,4 +72,5 @@ public final class SeriesEntity {
     @Nullable public Long getLastCheckedAtEpochMs() { return lastCheckedAtEpochMs; }
     @Nullable public String getDescription() { return description; }
     @Nullable public String getStatus() { return status; }
+    public boolean getDownloadNew() { return downloadNew; }
 }

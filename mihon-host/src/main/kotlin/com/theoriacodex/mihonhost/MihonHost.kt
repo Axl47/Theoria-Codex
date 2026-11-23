@@ -8,6 +8,9 @@ import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.interceptor.CloudflareInterceptor
 import eu.kanade.tachiyomi.network.interceptor.UncaughtExceptionInterceptor
 import eu.kanade.tachiyomi.network.interceptor.UserAgentInterceptor
+import com.theoriacodex.sources.http.BrowserAddressDns
+import com.theoriacodex.sources.http.BrowserCookieJar
+import com.theoriacodex.sources.http.BrowserCookieStore
 import java.io.File
 import java.net.URLEncoder
 import java.nio.file.Files
@@ -24,30 +27,40 @@ import uy.kohesive.injekt.Injekt
  * `Application`, a `Json` and a `NetworkHelper`, and the host's version. Installed once, before any extension loads.
  *
  * Extensions get an HTTP client of their own, with Mihon's timeouts and interceptor names and none of the app's
- * interceptors or cookies, so they behave here as they do in Mihon.
+ * interceptors, so they behave here as they do in Mihon. Like Mihon's, it shares the system browser's cookies.
  */
 object MihonHost {
     /** HTTP requests extensions have started, so a caller can report what one step cost. */
     val requestCount = AtomicLong()
 
-    fun install(application: Application, versionName: String, versionCode: Int) {
+    /** [cookies] is the system browser's cookie store, which the extensions' client and its browser checks share. */
+    fun install(application: Application, versionName: String, versionCode: Int, cookies: BrowserCookieStore) {
         AppInfo.hostVersionName = versionName
         AppInfo.hostVersionCode = versionCode
         val extensionApplication = ExtensionApplication(application)
         Injekt.bind(Application::class.java, extensionApplication)
         Injekt.bind(Context::class.java, extensionApplication)
         Injekt.bind(Json::class.java, Json { ignoreUnknownKeys = true; explicitNulls = false })
-        Injekt.bind(NetworkHelper::class.java, NetworkHelper(extensionClient()) { DEFAULT_USER_AGENT })
+        Injekt.bind(NetworkHelper::class.java, NetworkHelper(extensionClient(cookies, WebViewChallengeBrowser(application))) { DEFAULT_USER_AGENT })
     }
 
-    // Extensions rebuild this client and require the three named interceptors, in Mihon's order.
-    internal fun extensionClient(): OkHttpClient = OkHttpClient.Builder()
+    /**
+     * Extensions rebuild this client and require the three named interceptors, in Mihon's order. Its cookie jar holds
+     * every host's cookies, as Mihon's does: extensions are written against it, and many keep a session in cookies. It
+     * is not limited to the hosts the app's own clients may send browser cookies to (`SiteCookieBridge`), because
+     * extension code runs in the app's process and could read the store directly, so such a limit would be no barrier.
+     * It resolves hosts as the WebView would connect to them ([BrowserAddressDns]), since a clearance cookie a browser
+     * check earns is only accepted from the address it was earned from.
+     */
+    internal fun extensionClient(cookies: BrowserCookieStore, browser: ChallengeBrowser): OkHttpClient = OkHttpClient.Builder()
+        .dns(BrowserAddressDns())
         .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .callTimeout(CALL_TIMEOUT_MINUTES, TimeUnit.MINUTES)
+        .cookieJar(BrowserCookieJar(cookies) { true })
         .addInterceptor(UncaughtExceptionInterceptor())
         .addInterceptor(UserAgentInterceptor { DEFAULT_USER_AGENT })
-        .addInterceptor(CloudflareInterceptor())
+        .addInterceptor(CloudflareInterceptor(cookies, browser))
         .addNetworkInterceptor { chain ->
             requestCount.incrementAndGet()
             chain.proceed(chain.request())

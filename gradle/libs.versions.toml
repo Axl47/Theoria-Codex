@@ -28,6 +28,9 @@ jspecify = "1.0.1"
 room = "2.8.5"
 androidxTestCore = "1.7.0"
 robolectric = "4.17"
+# The Android runtime Robolectric loads for the sdk in robolectric.properties. Robolectric picks this version, not us:
+# after a Robolectric bump, take the new one from its DefaultSdkProvider (offline tests name it if it is missing).
+robolectricAndroidAll = "16-robolectric-13921718-i7"
 roborazzi = "1.79.0"
 baselineProfile = "1.5.0"
 benchmark = "1.5.0"
@@ -87,6 +90,7 @@ androidx-room-testing = { group = "androidx.room", name = "room-testing", versio
 androidx-test-core = { group = "androidx.test", name = "core", version.ref = "androidxTestCore" }
 androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestCore" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+robolectric-android-all = { group = "org.robolectric", name = "android-all-instrumented", version.ref = "robolectricAndroidAll" }
 roborazzi = { group = "io.github.takahirom.roborazzi", name = "roborazzi", version.ref = "roborazzi" }
 roborazzi-compose = { group = "io.github.takahirom.roborazzi", name = "roborazzi-compose", version.ref = "roborazzi" }
 androidx-benchmark-macro-junit4 = { group = "androidx.benchmark", name = "benchmark-macro-junit4", version.ref = "benchmark" }

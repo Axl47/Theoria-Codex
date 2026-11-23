@@ -16,6 +16,7 @@ import com.theoriacodex.app.ui.routes.rememberRetained
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.data.repository.SettingChoices
+import com.theoriacodex.data.repository.SettingToggles
 import com.theoriacodex.data.repository.SettingDestinations
 import com.theoriacodex.domain.model.CreatorProfile
 import kotlinx.coroutines.launch
@@ -66,6 +67,7 @@ internal fun rememberSearchOmniboxEntries(shell: TheoriaShell, state: BrowsingDe
             val hidden = setOfNotNull(
                 SettingDestinations.Diagnostics.id.takeIf { shell.diagnosticsEntry == null },
                 SettingChoices.SeriesUpdates.id.takeIf { shell.container.series == null },
+                SettingToggles.SeriesDeleteAfterReading.id.takeIf { shell.container.series == null },
                 SettingDestinations.PictureTags.id.takeIf { shell.container.pictures == null },
             )
             addAll(searchSettingEntries(state.settings, hidden, shell.owners.settings::onAction) { binding ->

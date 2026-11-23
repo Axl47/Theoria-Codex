@@ -60,7 +60,7 @@ internal fun SeriesPageDestination(shell: TheoriaShell, entry: NavBackStackEntry
     val source = entry.arguments?.getString("source")?.let(SourceKey::parse) ?: return
     val id = SeriesId(source, entry.arguments?.getString("address") ?: return)
     val viewModel = viewModel {
-        SeriesPageViewModel(id, series.repository, series.sources, series.extensions.revision)
+        SeriesPageViewModel(id, series.repository, series.sources, series.extensions.revision, series.downloads)
     }
     val switchSource = viewModel {
         SwitchSourceViewModel(id, series.sources, series.extensions.revision, store = { series.repository.store(it) }) { source, to ->

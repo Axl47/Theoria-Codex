@@ -43,6 +43,8 @@ internal data class SettingsStoreRecord(
     @SerialName("oldSearchBar") val oldSearchBar: Boolean = false,
     /** Absent while the setting is at its default, so files written before it existed stay byte-for-byte current. */
     @SerialName("seriesUpdateInterval") val seriesUpdateInterval: String? = null,
+    /** Absent while off, as [seriesUpdateInterval] is while at its default. */
+    @SerialName("seriesDeleteAfterReading") val seriesDeleteAfterReading: Boolean? = null,
     @SerialName("codexLibrarySort") val codexLibrarySort: String? = null,
     @SerialName("instantSeek") val instantSeek: Boolean = false,
     @SerialName("viewerAutoRotateVideos") val viewerAutoRotateVideos: Boolean? = null,
@@ -93,6 +95,7 @@ internal data class SettingsStoreRecord(
                 oldSearchBar = oldSearchBar,
                 seriesUpdateInterval = SeriesUpdateInterval.entries.firstOrNull { it.name == seriesUpdateInterval }
                     ?: AppSettings().seriesUpdateInterval,
+                seriesDeleteAfterReading = seriesDeleteAfterReading ?: false,
                 codexLibrarySort = CodexLibrarySort.entries.firstOrNull { it.name == codexLibrarySort }
                     ?: CodexLibrarySort.MANUAL,
                 followedCreators = followedCreators.orEmpty().mapNotNull { it.toDomain() }.distinctBy { it.creator.followKey() }.take(MAX_FOLLOWED_CREATORS),
@@ -167,6 +170,7 @@ internal data class SettingsStoreRecord(
                 sourceCatalogVersion = SHARED_SOURCE_CATALOG_VERSION,
                 oldSearchBar = settings.oldSearchBar,
                 seriesUpdateInterval = settings.seriesUpdateInterval.takeIf { it != AppSettings().seriesUpdateInterval }?.name,
+                seriesDeleteAfterReading = settings.seriesDeleteAfterReading.takeIf { it },
                 codexLibrarySort = settings.codexLibrarySort.name,
                 enabledSources = settings.runtime.enabledSources.map { it.id },
                 sourceWeights = settings.runtime.sourceWeights.mapKeys { it.key.id },

@@ -9,10 +9,12 @@
     <!-- To find the extensions Mihon installed. They are ordinary packages that share only a declared feature, which a
          <queries> element cannot match; Mihon holds the same permission for the same reason. -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission" />
-    <!-- New-chapter checks for followed series, which come from extensions: the notifications, and keeping the
-         periodic check scheduled across a reboot. -->
+    <!-- New-chapter checks for followed series, which come from extensions, and chapter downloads: the notifications,
+         and keeping the periodic check and queued downloads scheduled across a reboot. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Chapter downloads the user starts run as user-initiated data transfer jobs, which keep going off screen. -->
+    <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
 
     <application
         android:name=".TheoriaApplication"
@@ -121,6 +123,8 @@
         <activity android:name=".series.SeriesNotificationActivity"
             android:exported="false" android:theme="@android:style/Theme.NoDisplay" />
         <service android:name=".series.SeriesUpdateJobService"
+            android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
+        <service android:name=".series.SeriesDownloadJobService"
             android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
         <service android:name=".vision.LibraryPictureJobService"
             android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
