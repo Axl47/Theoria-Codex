@@ -113,14 +113,15 @@ fun chapterPost(series: Series, entry: SeriesEntry, cover: String?, pages: List<
 
 /**
  * One episode as the Viewer's post, identified as [chapterPost] identifies a chapter. With [streams] its one media item
- * is a video carrying them; the item's address is the default stream's, for code that only asks whether media has
- * one, while what plays is chosen from [ImageRef.streams], here the [playable] ones. Without them it is its cover, which the Viewer resolves as
- * it does a chapter without pages, but counted as exactly one media item, so it is never paged as a gallery. Like a
+ * is a video carrying the [playable] ones and no address of its own: a stream's address expires and needs that
+ * stream's headers, so nothing that reads only [ImageRef.url] (sharing, downloads, duration probes, frame sampling) may
+ * act on it, and what plays is chosen from [ImageRef.streams]. Without them it is its cover, which the Viewer resolves
+ * as it does a chapter without pages, but counted as exactly one media item, so it is never paged as a gallery. Like a
  * chapter's, the post is never stored: a series session's posts stay out of History and every Codex.
  */
 fun episodePost(series: Series, entry: SeriesEntry, cover: String?, streams: List<MediaStream> = emptyList()): Post {
     val playable = streams.playable()
-    val video = playable.firstOrNull()?.let { ImageRef(url = it.url, localPath = null, mime = null, streams = playable) }
+    val video = playable.takeIf { it.isNotEmpty() }?.let { ImageRef(url = null, localPath = null, mime = null, streams = it) }
     return entryPost(series, entry, cover, listOfNotNull(video), mediaCount = 1)
 }
 
