@@ -5,15 +5,13 @@ import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.data.repository.chapterPost
 import com.theoriacodex.data.repository.inReadingOrder
 import com.theoriacodex.data.repository.resumePageIndex
 import com.theoriacodex.domain.model.GalleryReadingMode
-import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.domain.series.Series
-import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.seriesReadingMode
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -59,16 +57,11 @@ internal class SeriesReader(private val series: SeriesDependencies) {
             "The chapter is not stored"
         }
         // Nothing is asked of the source for a downloaded chapter; the cover is the stored address, as in a session.
-        val downloaded = series.downloads.pages(id, entry.entry.address)
+        val downloaded = series.downloads.chapter(id, entry.entry.address)?.media
         val source = if (downloaded == null) source(id.source) else null
         val pages = downloaded ?: checkNotNull(source).pages(entry.entry)
         if (pages.isEmpty()) return null
-        return chapterPost(stored.series, entry.entry, source?.coverAddress(stored.series) ?: stored.series.coverUrl).copy(
-            full = pages.first(),
-            media = pages,
-            mediaCount = pages.size,
-            galleryLengthUnknown = false,
-        )
+        return chapterPost(stored.series, entry.entry, source?.coverAddress(stored.series) ?: stored.series.coverUrl, pages)
     }
 
     /**
@@ -121,25 +114,6 @@ internal fun seriesIdOf(queryHash: String?): SeriesId? {
     if (pieces == null || pieces.size != 2 || pieces[1].isEmpty()) return null
     return SourceKey.parse(pieces[0])?.let { SeriesId(it, pieces[1]) }
 }
-
-/**
- * One chapter as the Viewer's post: its id is the chapter's address on the series' source, and it names no pages, so
- * the Viewer asks for them when it gets there. The title is what the Viewer's top bar shows.
- */
-internal fun chapterPost(series: Series, entry: SeriesEntry, cover: String?) = Post(
-    id = PostId(series.id.source, entry.address),
-    preview = ImageRef(url = cover, localPath = null, mime = null),
-    full = null,
-    pageUrl = null,
-    width = null,
-    height = null,
-    canonicalTags = emptyList(),
-    rawTags = emptyList(),
-    authorName = null,
-    createdAtEpochMs = entry.uploadedAtEpochMs,
-    title = "${series.title} · ${entry.name}",
-    galleryLengthUnknown = true,
-)
 
 /** The user's choice for the series, else a guess from what is stored about it. */
 private fun StoredSeries.readingModeOrGuess() = seriesReadingMode(readingMode, series.genres, series.language)

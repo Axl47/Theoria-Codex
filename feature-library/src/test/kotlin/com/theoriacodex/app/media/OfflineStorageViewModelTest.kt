@@ -6,9 +6,19 @@ import com.theoriacodex.app.ui.undo.UndoLifetime
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.InMemoryCodexRepository
+import com.theoriacodex.data.repository.ChapterDownload
+import com.theoriacodex.data.repository.DownloadScheduler
 import com.theoriacodex.data.repository.OfflineMediaStore
+import com.theoriacodex.data.repository.SeriesDownloads
+import com.theoriacodex.data.repository.SeriesRepository
+import com.theoriacodex.data.repository.StoredSeries
+import com.theoriacodex.data.repository.seriesOfflineOwner
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesId
+import java.lang.reflect.Proxy
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -16,6 +26,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
@@ -65,6 +76,33 @@ class OfflineStorageViewModelTest {
             owner.commitRemovals()
             owner.state.first { !it.working && it.hiddenOwners.isEmpty() && it.offline.postCount == 0 }
             assertNull(coordinator.find(post.id))
+        }
+    }
+
+    @Test fun `a series' chapters are one row under its title, and removing it also drops its queued chapters`() = runBlocking {
+        withTimeout(10_000) {
+            val series = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
+            val coordinator = coordinator()
+            val chapter = post("chapter")
+            coordinator.store.save(chapter, chapter.media, seriesOfflineOwner(series)) { _, file -> file.writeText("media") }
+            val repository = seriesRepository(StoredSeries(Series(series, "Title")))
+            val downloads = SeriesDownloads(
+                coordinator.store, temporary.root.resolve("queue.json"), repository, sources = { emptyList() },
+                fetch = { _, _ -> error("unused") }, scheduler = NoScheduler, deleteAfterReading = { false },
+            )
+            downloads.download(series, listOf("/queued"))
+            val owner = OfflineStorageViewModel(
+                codices, coordinator, readDisposableUsage = { DisposableMediaCacheSnapshot() }, clearDisposable = { true },
+                removalScope = scope, seriesRepository = repository, seriesDownloads = downloads, scopeOverride = scope,
+            )
+            val row = owner.state.first { it.owners.singleOrNull()?.name == "Title" }.owners.single()
+            assertEquals("1 chapter offline", offlineOwnerStatus(row))
+
+            owner.removeDeferred(row.id, UndoLifetime.UntilLeft)
+            owner.commitRemovals()
+            owner.state.first { !it.working && it.hiddenOwners.isEmpty() && it.owners.isEmpty() }
+            assertNull(coordinator.find(chapter.id))
+            assertEquals(emptyMap<String, ChapterDownload>(), downloads.states(series).first())
         }
     }
 
@@ -259,6 +297,16 @@ class OfflineStorageViewModelTest {
         repository, coordinator, readDisposableUsage = { DisposableMediaCacheSnapshot() },
         clearDisposable = { true }, removalScope = scope, scopeOverride = scope,
     )
+
+    /** A repository that only observes [stored]; nothing else here asks it anything. */
+    private fun seriesRepository(stored: StoredSeries) = Proxy.newProxyInstance(
+        SeriesRepository::class.java.classLoader, arrayOf(SeriesRepository::class.java),
+    ) { _, method, _ -> if (method.name == "observeSeries") flowOf(stored) else error("unused: ${method.name}") } as SeriesRepository
+
+    private object NoScheduler : DownloadScheduler {
+        override suspend fun schedule(automatic: Boolean) = Unit
+        override suspend fun ensureScheduled(automatic: Boolean) = Unit
+    }
 
     private fun post(id: String = "offline"): Post {
         val image = ImageRef(url = "https://example.test/$id.jpg", localPath = null, mime = "image/jpeg")

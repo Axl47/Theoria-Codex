@@ -45,7 +45,7 @@ internal class OfflineManifestGoldenTest : FileBackedRepositoryTestFixture() {
         assertEquals(source.media.indices.map { File(generation, "$it.png").absolutePath }, loaded.media.map { it.localPath })
         assertEquals(loaded.media.first(), loaded.full)
         assertEquals(source, store.withoutOfflineLocations(loaded))
-        assertEquals(mapOf("codex:a" to 1, "codex:b" to 1), store.snapshot.value.postsByOwner)
+        assertEquals(mapOf("codex:a" to setOf(source.id), "codex:b" to setOf(source.id)), store.snapshot.value.postsByOwner)
     }
 
     // v3.json is what Gson and kotlinx both write; kotlinx-full.json is captured from current kotlinx output and also

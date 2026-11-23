@@ -382,7 +382,7 @@ private suspend fun verifyOfflineCopy(offline: File) {
     val found = requireNotNull(store.find(post.id))
     check(found.media.single().localPath?.let(::File)?.readText() == "offline bytes")
     check(store.withoutOfflineLocations(found) == post)
-    check(store.snapshot.value.postsByOwner == mapOf("acceptance" to 1))
+    check(store.snapshot.value.postsByOwner == mapOf("acceptance" to setOf(post.id)))
 }
 
 private fun offlineFolderName(id: PostId) = MessageDigest.getInstance("SHA-256")

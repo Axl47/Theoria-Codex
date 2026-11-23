@@ -101,7 +101,7 @@ class OfflineMediaCoordinatorTest {
         coordinator.jobs.first { it[AUTOMATIC_OFFLINE_OWNER]?.isRunning == false }
         cache.clearFullImageCache()
         assertNotNull(coordinator.find(post("saved").id))
-        assertEquals(mapOf(AUTOMATIC_OFFLINE_OWNER to 1), store.snapshot.value.postsByOwner)
+        assertEquals(mapOf(AUTOMATIC_OFFLINE_OWNER to setOf(post("saved").id)), store.snapshot.value.postsByOwner)
     }
 
     @Test
@@ -188,7 +188,7 @@ class OfflineMediaCoordinatorTest {
 
         assertEquals(1, topped.getValue("codex:a").completedPosts)
         assertEquals(listOf("a", "b"), acquisitions)
-        assertEquals(mapOf("codex:a" to 2), store.snapshot.value.postsByOwner)
+        assertEquals(mapOf("codex:a" to setOf(post("a").id, post("b").id)), store.snapshot.value.postsByOwner)
         assertNull(coordinator.jobs.value["codex:other"])
     }
 

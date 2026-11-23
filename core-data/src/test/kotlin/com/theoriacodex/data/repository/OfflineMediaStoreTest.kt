@@ -6,6 +6,7 @@ import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.VideoVariant
 import java.io.File
 import java.io.IOException
@@ -57,7 +58,8 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
             assertEquals(1, scans.get())
             assertEquals(size, reads.get())
             assertEquals(size, store.snapshot.value.postCount)
-            assertEquals(mapOf("all" to size, "shared" to size), store.snapshot.value.postsByOwner)
+            val ids = posts.mapTo(HashSet(), Post::id)
+            assertEquals(mapOf("all" to ids, "shared" to ids), store.snapshot.value.postsByOwner)
             store.load()
             assertEquals(1, scans.get())
             val beforeRefresh = store.snapshot.value
@@ -65,7 +67,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
             assertEquals(beforeRefresh, store.snapshot.value)
             assertEquals(size * 2, reads.get())
             store.removeOwner("shared")
-            assertEquals(mapOf("all" to size), store.snapshot.value.postsByOwner)
+            assertEquals(mapOf("all" to ids), store.snapshot.value.postsByOwner)
         }
     }
 
@@ -83,7 +85,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         val restored = OfflineMediaStore(directory)
         restored.refresh()
         assertEquals(completed, restored.find(post.id))
-        assertEquals(mapOf("codex:a" to 1, "codex:b" to 1), restored.snapshot.value.postsByOwner)
+        assertEquals(mapOf("codex:a" to setOf(post.id), "codex:b" to setOf(post.id)), restored.snapshot.value.postsByOwner)
         assertEquals(2, restored.snapshot.value.mediaCount)
         assertEquals(directory.walkTopDown().filter(File::isFile).sumOf(File::length), restored.snapshot.value.bytes)
 
@@ -92,6 +94,36 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         restored.removeOwner("codex:b")
         assertNull(restored.find(post.id))
         assertEquals(0L, restored.snapshot.value.bytes)
+    }
+
+    @Test
+    fun `removing one post from an owner keeps its other posts, another owner's copy and its admitted work`() = runTest {
+        val store = OfflineMediaStore(tempDir("one-post"))
+        val (a, b, c) = listOf("a", "b", "c").map { samplePost(it, null) }
+        val admission = store.admit("series")
+        for (post in listOf(a, b)) store.save(post, listOf(requireNotNull(post.full)), "series", admission) { _, file -> file.writeText("media") }
+        store.retain(a.id, "codex:x")
+
+        store.removeOwner("series", a.id)
+        store.removeOwner("series", b.id)
+        assertEquals(mapOf("codex:x" to setOf(a.id)), store.snapshot.value.postsByOwner)
+        assertNotNull(store.find(a.id))
+        assertNull(store.find(b.id))
+        store.save(c, listOf(requireNotNull(c.full)), "series", admission) { _, file -> file.writeText("media") }
+        assertEquals(setOf(c.id), store.snapshot.value.postsByOwner["series"])
+    }
+
+    @Test
+    fun `a save acquires up to its parallel media at once and keeps gallery order`() = runTest {
+        val store = OfflineMediaStore(tempDir("parallel"))
+        val post = gallery()
+        val secondStarted = CompletableDeferred<Unit>()
+        // The first page finishes only once the second has started, so acquiring one at a time never completes.
+        val saved = store.save(post, post.media, "series", parallel = 2) { ref, file ->
+            if (ref == post.media.first()) secondStarted.await() else secondStarted.complete(Unit)
+            file.writeText(ref.url!!)
+        }
+        assertEquals(post.media.map { it.url }, saved.media.map { File(it.localPath!!).readText() })
     }
 
     @Test
@@ -175,7 +207,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         val first = store.save(post, post.media, "codex:a") { _, file -> file.writeText("first") }
         store.save(post, post.media, "codex:b") { _, file -> file.writeText("second") }
         assertTrue(first.media.all { File(it.localPath!!).readText() == "first" })
-        assertEquals(mapOf("codex:a" to 1, "codex:b" to 1), store.snapshot.value.postsByOwner)
+        assertEquals(mapOf("codex:a" to setOf(post.id), "codex:b" to setOf(post.id)), store.snapshot.value.postsByOwner)
         assertEquals(1, directory.listFiles().orEmpty().single().listFiles().orEmpty().count(File::isDirectory))
     }
 
@@ -355,7 +387,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         }
 
         val store = OfflineMediaStore(directory).apply { load() }
-        assertEquals(mapOf("codex:a" to 0, "codex:z" to 0), store.snapshot.value.postsByOwner)
+        assertEquals(mapOf("codex:a" to emptySet<PostId>(), "codex:z" to emptySet()), store.snapshot.value.postsByOwner)
         store.removeOwner("codex:a")
         assertEquals(listOf("codex:z"), ownersOf(manifestOf(directory)))
         assertEquals(2, manifestOf(directory).getValue("version").jsonPrimitive.int)

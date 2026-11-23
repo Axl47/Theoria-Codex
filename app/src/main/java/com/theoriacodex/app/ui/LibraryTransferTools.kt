@@ -86,6 +86,7 @@ internal fun rememberLibraryTransferTools(
     val offline = viewModel<OfflineStorageViewModel>(key = "offline-storage",
         factory = OfflineStorageViewModel.factory(
             container.data.codexRepository, container.features.offlineMedia, maintenance, container.applicationScope,
+            container.series?.repository, container.series?.downloads,
         ),
     )
     val downloadRemovals = viewModel(key = "download-removals") { DownloadRemovals(downloads::removeNow, container.applicationScope) }

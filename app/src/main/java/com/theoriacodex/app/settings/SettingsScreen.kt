@@ -93,7 +93,7 @@ fun SettingsScreen(
     statsActions: StatsActions = StatsActions(),
     diagnostics: SettingsDiagnosticsEntry? = null,
     storageTools: (@Composable () -> Unit)? = null,
-    /** The Series area, in a build with extensions: how often followed series are checked, and chapter downloads. */
+    /** The Series area, in a build with extensions: how often followed series are checked, and Delete after reading. */
     series: SeriesDependencies? = null,
     onClose: () -> Unit = {},
     closesFrom: SettingsPage = SettingsPage.HOME,
@@ -217,7 +217,7 @@ private fun SettingsHome(
     }
 }
 
-/** Where content comes from: sites, extensions, links, and for series the check for new chapters and downloads. */
+/** Where content comes from: sites, extensions, links, and for series the check for new chapters and Delete after reading. */
 @Composable
 private fun SettingsSourcesGroup(
     state: SettingsUiState,
@@ -247,8 +247,6 @@ private fun SettingsSourcesGroup(
             SettingsRowDivider()
             val deleteAfterReading = SettingToggles.SeriesDeleteAfterReading
             SwitchRow(deleteAfterReading, state.settings) { onAction(SettingsAction.SetToggle(deleteAfterReading, it)) }
-            SettingsRowDivider()
-            ChapterDownloadsRow(series.downloads)
         }
     }
 }

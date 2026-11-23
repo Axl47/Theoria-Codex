@@ -18,12 +18,17 @@ import java.lang.ref.ReferenceQueue
 import java.lang.ref.WeakReference
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.KSerializer
@@ -37,6 +42,7 @@ import kotlinx.serialization.json.jsonObject
 
 /**
  * Completed offline copies live outside disposable caches. The manifest is the commit point.
+ * Every copy is a post kept by one or more owners: a Codex, saved posts, or a series for its downloaded chapters.
  * [manifests] reads and writes each [OfflineManifest]; tests wrap it to count decodes.
  */
 class OfflineMediaStore internal constructor(
@@ -141,12 +147,16 @@ class OfflineMediaStore internal constructor(
         }
     }
 
-    /** Downloads are staged separately so failure or cancellation never replaces a completed copy. */
+    /**
+     * Downloads are staged separately so failure or cancellation never replaces a completed copy. [acquire] writes
+     * up to [parallel] of [media] at a time.
+     */
     suspend fun save(
         post: Post,
         media: List<ImageRef>,
         owner: String,
         admission: OfflineMediaAdmission? = null,
+        parallel: Int = 1,
         acquire: suspend (ImageRef, File) -> Unit,
     ): Post = withContext(ioDispatcher) {
         require(owner.isNotBlank())
@@ -156,12 +166,18 @@ class OfflineMediaStore internal constructor(
         directory.mkdirs()
         val staged = File(directory, ".pending-${UUID.randomUUID()}").also { activeStaging.add(it); it.mkdirs() }
         try {
-            val stagedMedia = media.mapIndexed { index, ref ->
-                currentCoroutineContext().ensureActive()
-                val output = File(staged, "$index.${extension(ref)}")
-                acquire(ref, output)
-                check(output.isFile && output.length() > 0L) { "No media bytes were saved" }
-                ref to output.name
+            val slots = Semaphore(parallel)
+            val stagedMedia = coroutineScope {
+                media.mapIndexed { index, ref ->
+                    async {
+                        slots.withPermit {
+                            val output = File(staged, "$index.${extension(ref)}")
+                            acquire(ref, output)
+                            check(output.isFile && output.length() > 0L) { "No media bytes were saved" }
+                            ref to output.name
+                        }
+                    }
+                }.awaitAll()
             }
             currentCoroutineContext().ensureActive()
             mutex.withLock { commit(post, stagedMedia, owner, admitted, staged) }
@@ -216,24 +232,38 @@ class OfflineMediaStore internal constructor(
         return completed
     }
 
+    /** Drops [owner] from every copy, deleting those no other owner keeps, and refuses its admitted work. */
     suspend fun removeOwner(owner: String) = withContext(ioDispatcher) {
         mutex.withLock {
             ownerRevisions[owner] = (ownerRevisions[owner] ?: 0L) + 1L
             ensureCatalogLoaded()
-            catalog.foldersOwnedBy(owner).forEach { folder ->
-                val record = readRecord(folder)
-                val owners = record?.owners ?: salvageOwners(folder)
-                // Ownership is confirmed on disk, so a manifest that cannot be read now never deletes the folder.
-                if (owner !in owners) { updateCatalog(folder, record); return@forEach }
-                val retained = owners - owner
-                when {
-                    retained.isEmpty() -> folder.deleteRecursively()
-                    record != null -> writeManifest(folder, record.post, record.sourcePost, retained)
-                    else -> writeSalvagedOwners(folder, retained)
-                }
-                updateCatalog(folder, record?.takeIf { retained.isNotEmpty() }?.copy(owners = retained))
-            }
+            catalog.foldersOwnedBy(owner).forEach { release(it, owner) }
         }
+    }
+
+    /**
+     * Drops [owner] from [id]'s copy alone, deleting it when no other owner keeps it. [owner]'s other admitted work
+     * stays valid, so a caller stops its own save of [id] before calling this.
+     */
+    suspend fun removeOwner(owner: String, id: PostId) = withContext(ioDispatcher) {
+        mutex.withLock {
+            ensureCatalogLoaded()
+            release(postDirectory(id), owner)
+        }
+    }
+
+    private fun release(folder: File, owner: String) {
+        val record = readRecord(folder)
+        val owners = record?.owners ?: salvageOwners(folder)
+        // Ownership is confirmed on disk, so a manifest that cannot be read now never deletes the folder.
+        if (owner !in owners) return updateCatalog(folder, record)
+        val retained = owners - owner
+        when {
+            retained.isEmpty() -> folder.deleteRecursively()
+            record != null -> writeManifest(folder, record.post, record.sourcePost, retained)
+            else -> writeSalvagedOwners(folder, retained)
+        }
+        updateCatalog(folder, record?.takeIf { retained.isNotEmpty() }?.copy(owners = retained))
     }
 
     suspend fun clear() = withContext(ioDispatcher) {
@@ -394,8 +424,8 @@ data class OfflineMediaSnapshot(
     val postCount: Int = 0,
     val mediaCount: Int = 0,
     val bytes: Long = 0L,
-    /** Every owner with a folder on disk, and how many of its posts are available; 0 when none of its copies open. */
-    val postsByOwner: Map<String, Int> = emptyMap(),
+    /** Every owner with a folder on disk, and the ids of its posts that are available; empty when none of its copies open. */
+    val postsByOwner: Map<String, Set<PostId>> = emptyMap(),
     val availablePostIds: Set<PostId> = emptySet(),
 )
 

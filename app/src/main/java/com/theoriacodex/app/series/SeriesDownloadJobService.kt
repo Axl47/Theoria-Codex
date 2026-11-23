@@ -35,10 +35,10 @@ internal const val USER_DOWNLOAD_JOB_ID = 3102
 internal const val AUTOMATIC_DOWNLOAD_JOB_ID = 3103
 
 /**
- * Downloads the chapter page at [url] into [file] through [client] and returns its image type. A page that is gone or
- * not an image makes its chapter [unavailable][ChapterUnavailable]; any other failure may pass and throws as it is.
+ * Downloads the chapter page at [url] into [file] through [client]. A page that is gone or not an image makes its
+ * chapter [unavailable][ChapterUnavailable]; any other failure may pass and throws as it is.
  */
-internal suspend fun downloadChapterPage(url: String, file: File, client: OkHttpClient): String {
+internal suspend fun downloadChapterPage(url: String, file: File, client: OkHttpClient) {
     try {
         downloadMediaFile(url, emptyMap(), file, client = client)
     } catch (error: MediaHttpException) {
@@ -47,7 +47,7 @@ internal suspend fun downloadChapterPage(url: String, file: File, client: OkHttp
     } catch (_: UnsupportedMediaException) {
         throw ChapterUnavailable("A page is not an image")
     }
-    return decodableImageType(file) ?: throw ChapterUnavailable("A page is not an image")
+    decodableImageType(file) ?: throw ChapterUnavailable("A page is not an image")
 }
 
 private const val HTTP_NOT_FOUND = 404

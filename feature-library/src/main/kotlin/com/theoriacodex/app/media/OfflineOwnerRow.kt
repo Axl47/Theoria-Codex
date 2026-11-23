@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.data.repository.seriesIdOfOfflineOwner
 
 /**
  * One offline owner in the Library's sheet: name, what is kept, its job's progress and any message about
@@ -90,10 +91,11 @@ private fun OfflineOwnerMenu(owner: OfflineStorageOwner, enabled: Boolean, actio
     }
 }
 
-/** What the row says is kept: posts available, or the running job's progress. */
+/** What the row says is kept: posts (a series' chapters) available, or the running job's progress. */
 internal fun offlineOwnerStatus(owner: OfflineStorageOwner): String {
     val job = owner.job
-    val kept = if (owner.availablePosts == 1) "1 post offline" else "${owner.availablePosts} posts offline"
+    val unit = if (seriesIdOfOfflineOwner(owner.id) != null) "chapter" else "post"
+    val kept = if (owner.availablePosts == 1) "1 $unit offline" else "${owner.availablePosts} ${unit}s offline"
     return when {
         owner.preparing -> "Loading Codex"
         job?.isRunning == true -> "Saving ${job.completedPosts} of ${job.totalPosts}"
