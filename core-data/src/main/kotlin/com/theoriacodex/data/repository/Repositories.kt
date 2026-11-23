@@ -216,11 +216,19 @@ data class SearchedTagKey(
     val term: SearchTerm,
 )
 
+/**
+ * Foreground time to add to statistics. [totalMs] counts every screen; at most one category beside it holds the
+ * same time, since categories are mutually exclusive and screens such as Settings have none.
+ */
 data class UsageDurationDelta(
     val totalMs: Long = 0L,
     val browsingMs: Long = 0L,
     val watchingMs: Long = 0L,
     val codexMs: Long = 0L,
+    /** In a series session that reads chapters. */
+    val readingMs: Long = 0L,
+    /** In a series session that plays episodes. */
+    val animeMs: Long = 0L,
     val dailyUsage: List<DailyUsageDuration> = emptyList(),
 )
 
@@ -251,6 +259,8 @@ data class LifetimeStatistics(
     val browsingMs: Long = 0L,
     val watchingMs: Long = 0L,
     val codexMs: Long = 0L,
+    val readingMs: Long = 0L,
+    val animeMs: Long = 0L,
     val watchedPostCount: Long = 0L,
     val watchedBySource: Map<SourceKey, Long> = emptyMap(),
     val watchedByTag: Map<StatisticsTagKey, Long> = emptyMap(),

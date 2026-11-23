@@ -191,7 +191,8 @@ private fun verifyStatsShare(json: String) {
     check(codex.getValue("posts").jsonArray.single().jsonObject.keys == setOf("key", "label", "opens", "videoMs", "imageMs"))
     check(wire.getValue("overall").jsonObject.keys == STATS_OVERALL_KEYS)
     check(parseStatsShare(json) == statsShare)
-    check(parseStatsShare(LEGACY_STATS_SHARE) == statsShare)
+    // The Gson export predates series time, which reads as zero.
+    check(parseStatsShare(LEGACY_STATS_SHARE) == statsShare.copy(overall = statsShare.overall?.copy(readingMs = 0L, animeMs = 0L)))
 }
 
 private val statsShare = StatsShareFile(
@@ -199,11 +200,15 @@ private val statsShare = StatsShareFile(
     version = 1,
     name = "Sam & <Al>'s",
     codices = listOf(StatsShareCodex("Land & <scapes>", 3L, 4L, 5L, 6L, listOf(StatsSharePost("GELBOORU:1", "Post = 1", 7L, 8L, 9L)))),
-    overall = StatsShareOverall(10L, 11L, 12L, 13L, 14L, 15L, 16L, 17L),
+    overall = StatsShareOverall(
+        timeInAppMs = 10L, browsingMs = 11L, watchingMs = 12L, codexMs = 13L, readingMs = 18L, animeMs = 19L,
+        appOpens = 14L, postsWatched = 15L, postsSaved = 16L, searches = 17L,
+    ),
 )
 
 private val STATS_OVERALL_KEYS = setOf(
-    "timeInAppMs", "browsingMs", "watchingMs", "codexMs", "appOpens", "postsWatched", "postsSaved", "searches",
+    "timeInAppMs", "browsingMs", "watchingMs", "codexMs", "readingMs", "animeMs", "appOpens", "postsWatched", "postsSaved",
+    "searches",
 )
 
 /**

@@ -14,9 +14,16 @@ class StatsShareGoldenTest {
         assertEquals(shared, parseStatsShare(encodeStatsShare(shared)))
     }
 
+    // export-series.json is what this build writes once series time counts; the Gson export predates it.
     @Test
-    fun `the Gson exports hold every stored key`() {
-        assertStoredFormat(golden("gson-export.json") to shared)
+    fun `the exports hold every stored key`() {
+        val series = StatsShareFile(
+            format = "theoria-codex-stats",
+            version = 1,
+            codices = emptyList(),
+            overall = StatsShareOverall(timeInAppMs = 30L, readingMs = 10L, animeMs = 20L),
+        )
+        assertStoredFormat(golden("gson-export.json") to shared, golden("export-series.json") to series)
     }
 
     private val shared = StatsShareFile(
@@ -30,7 +37,10 @@ class StatsShareGoldenTest {
             ),
             StatsShareCodex("Empty", 1L, 0L, 0L, 0L, emptyList()),
         ),
-        overall = StatsShareOverall(10L, 11L, 12L, 13L, 14L, 15L, 16L, 17L),
+        overall = StatsShareOverall(
+            timeInAppMs = 10L, browsingMs = 11L, watchingMs = 12L, codexMs = 13L,
+            appOpens = 14L, postsWatched = 15L, postsSaved = 16L, searches = 17L,
+        ),
     )
 
     private fun golden(name: String) =

@@ -81,6 +81,8 @@ import com.theoriacodex.app.ui.components.SettingsPageColumn
 internal val BrowsingColor = Color(0xFF5A99DD)
 internal val WatchingColor = Color(0xFFCC689C)
 private val CodexColor = Color(0xFFA58C3A)
+private val ReadingColor = Color(0xFF22A39A)
+private val AnimeColor = Color(0xFF8E7FE0)
 private val OtherColor = Color(0xFF6F7A8C)
 
 internal data class TimeSegment(val label: String, val ms: Long, val color: Color)
@@ -159,7 +161,7 @@ private fun TimeSection(statistics: StatisticsSummary) {
 /** All time spent in the app and how it divides; the share preview shows the same card. */
 @Composable
 internal fun OverallTimeCard(caption: String, overall: StatsShareOverall) {
-    val categorized = overall.browsingMs + overall.watchingMs + overall.codexMs
+    val categorized = overall.browsingMs + overall.watchingMs + overall.codexMs + overall.readingMs + overall.animeMs
     StatsCard {
         StatsCaption(caption)
         StatsHeadline(formatStatsDuration(overall.timeInAppMs))
@@ -169,6 +171,8 @@ internal fun OverallTimeCard(caption: String, overall: StatsShareOverall) {
                 TimeSegment("Browsing", overall.browsingMs, BrowsingColor),
                 TimeSegment("Watching", overall.watchingMs, WatchingColor),
                 TimeSegment("In Codices", overall.codexMs, CodexColor),
+                TimeSegment("Reading", overall.readingMs, ReadingColor),
+                TimeSegment("Watching anime", overall.animeMs, AnimeColor),
                 // Foreground time also counts screens without a category, such as Settings.
                 TimeSegment("Other", (overall.timeInAppMs - categorized).coerceAtLeast(0L), OtherColor),
             ),

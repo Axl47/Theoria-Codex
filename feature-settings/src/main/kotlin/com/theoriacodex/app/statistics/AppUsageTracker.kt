@@ -18,10 +18,16 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+/** What foreground time counts as; at most one at a time, and none for screens such as Settings. */
 enum class StatisticsUsageCategory {
     BROWSING,
+    /** Watching posts in the Viewer. */
     WATCHING,
     CODEX,
+    /** Reading a series' chapters in the Viewer. */
+    READING,
+    /** Watching a series' episodes in the Viewer. */
+    ANIME,
 }
 
 /** Process-lifetime owner for monotonic foreground and mutually exclusive route-category timing. */
@@ -175,6 +181,8 @@ internal fun usageDelta(
         browsingMs = normalized.takeIf { category == StatisticsUsageCategory.BROWSING } ?: 0L,
         watchingMs = normalized.takeIf { category == StatisticsUsageCategory.WATCHING } ?: 0L,
         codexMs = normalized.takeIf { category == StatisticsUsageCategory.CODEX } ?: 0L,
+        readingMs = normalized.takeIf { category == StatisticsUsageCategory.READING } ?: 0L,
+        animeMs = normalized.takeIf { category == StatisticsUsageCategory.ANIME } ?: 0L,
     )
 }
 
