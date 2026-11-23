@@ -35,7 +35,10 @@ data class MediaStream(
     val label: String,
     /** The container or manifest type when the source names one (HLS, DASH); null leaves it to the player. */
     val mime: String? = null,
-    /** Request headers its host requires; when empty, the source's own are sent. */
+    /**
+     * Request headers its host requires, sent as they are. The extension host fills them in: a stream without headers
+     * of its own gets its source's, browser agent included, so empty means the host needs none.
+     */
     val headers: Map<String, String> = emptyMap(),
     /** External subtitle files, rendered by the player. */
     val subtitles: List<MediaTrack> = emptyList(),
