@@ -205,31 +205,26 @@ private fun ViewerStreamMenu(streams: List<MediaStream>, current: MediaStream, m
 @Composable
 private fun ViewerSubtitlesMenu(subtitles: List<PlaybackTrack>, menus: ViewerEpisodeMenus) {
     val panel = ViewerPanel.EPISODE_SUBTITLES
-    val selected = subtitles.withIndex().firstOrNull { it.value.selected }
+    val selected = subtitles.firstOrNull { it.selected }
     val off = menus.item("Off", selected == null, panel) { ViewerAction.ChooseSubtitle(ViewerSubtitleChoice.Off) }
     ViewerEpisodeMenu(
         panel, menus, VIEWER_EPISODE_SUBTITLES_TAG,
-        listOf(off) + subtitles.mapIndexed { index, track ->
-            val label = track.choiceLabel(index)
-            menus.item(label, track.selected, panel) { ViewerAction.ChooseSubtitle(ViewerSubtitleChoice.Track(label)) }
+        listOf(off) + subtitles.map { track ->
+            menus.item(track.label, track.selected, panel) { ViewerAction.ChooseSubtitle(ViewerSubtitleChoice.Track(track.label)) }
         },
     ) { open ->
         val icon = if (selected == null) Icons.Default.ClosedCaptionDisabled else Icons.Default.ClosedCaption
-        ViewerTrackButton(icon, "Subtitles", selected?.let { (index, track) -> track.choiceLabel(index) } ?: "Off", VIEWER_EPISODE_SUBTITLES_TAG, open)
+        ViewerTrackButton(icon, "Subtitles", selected?.label ?: "Off", VIEWER_EPISODE_SUBTITLES_TAG, open)
     }
 }
 
 @Composable
 private fun ViewerAudioMenu(audio: List<PlaybackTrack>, menus: ViewerEpisodeMenus) {
     val panel = ViewerPanel.EPISODE_AUDIO
-    val selected = audio.withIndex().firstOrNull { it.value.selected }
     ViewerEpisodeMenu(
         panel, menus, VIEWER_EPISODE_AUDIO_TAG,
-        audio.mapIndexed { index, track ->
-            val label = track.choiceLabel(index)
-            menus.item(label, track.selected, panel) { ViewerAction.ChooseAudio(label) }
-        },
-    ) { open -> ViewerTrackButton(Icons.Default.Audiotrack, "Audio", selected?.let { (index, track) -> track.choiceLabel(index) }.orEmpty(), VIEWER_EPISODE_AUDIO_TAG, open) }
+        audio.map { track -> menus.item(track.label, track.selected, panel) { ViewerAction.ChooseAudio(track.label) } },
+    ) { open -> ViewerTrackButton(Icons.Default.Audiotrack, "Audio", audio.firstOrNull { it.selected }?.label.orEmpty(), VIEWER_EPISODE_AUDIO_TAG, open) }
 }
 
 /** How the episode lists open, close and choose: as chrome panels, with choices sent through [onAction]. */
@@ -301,12 +296,8 @@ private fun ViewerTrackButton(icon: ImageVector, description: String, selectedLa
     }
 }
 
-/** A track's name, or its place in the list when the stream names it neither by label nor by language. */
-private fun PlaybackTrack.choiceLabel(index: Int): String = label.ifBlank { "Track ${index + 1}" }
-
-/** The track a choice names: by the label the controls show for it. */
-private fun List<PlaybackTrack>.labelled(label: String): PlaybackTrack? =
-    withIndex().firstOrNull { (index, track) -> track.choiceLabel(index) == label }?.value
+/** The track a choice names, by its label. */
+private fun List<PlaybackTrack>.labelled(label: String): PlaybackTrack? = firstOrNull { it.label == label }
 
 internal val VIEWER_EPISODE_CONTROLS_HEIGHT = 48.dp
 internal const val VIEWER_EPISODE_CONTROLS_TAG = "viewer-episode-controls"

@@ -6,10 +6,12 @@ import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
+import com.theoriacodex.domain.model.uniqueLabels
 
 /**
  * One subtitle or audio track the playing video offers. [id] names it for [selectSubtitle] and [selectAudio] while
  * this video plays; it is built from the track's group id, so it stays valid as more of the stream's tracks arrive.
+ * [label] is unique among the video's tracks of its kind and never blank ([uniqueLabels]).
  */
 data class PlaybackTrack(val id: String, val label: String, val selected: Boolean)
 
@@ -49,16 +51,20 @@ internal fun Player.clearTrackChoices() {
 /** Separates a track group's id from the track's index in [PlaybackTrack.id]. */
 private const val TRACK_ID_SEPARATOR = '/'
 
-private fun Player.tracksOf(type: Int): List<PlaybackTrack> = currentTracks.groups.filter { it.type == type }.flatMap { group ->
-    val separateLabel = separateAudioIndex(group)?.let { index -> separateAudioLabels()?.labels?.get(index) }
-    (0 until group.length).filter(group::isTrackSupported).map { track ->
-        val format = group.getTrackFormat(track)
-        PlaybackTrack(
-            id = "${group.mediaTrackGroup.id}$TRACK_ID_SEPARATOR$track",
-            label = separateLabel ?: format.label ?: format.language ?: "",
-            selected = group.isTrackSelected(track),
-        )
+/** The supported tracks of [type], each labelled by its request label, its own label or its language, else `Track N`. */
+private fun Player.tracksOf(type: Int): List<PlaybackTrack> {
+    val tracks = currentTracks.groups.filter { it.type == type }.flatMap { group ->
+        val separateLabel = separateAudioIndex(group)?.let { index -> separateAudioLabels()?.labels?.get(index) }
+        (0 until group.length).filter(group::isTrackSupported).map { track ->
+            val format = group.getTrackFormat(track)
+            PlaybackTrack(
+                id = "${group.mediaTrackGroup.id}$TRACK_ID_SEPARATOR$track",
+                label = separateLabel ?: format.label ?: format.language ?: "",
+                selected = group.isTrackSelected(track),
+            )
+        }
     }
+    return tracks.zip(uniqueLabels(tracks.map { it.label }) { "Track $it" }) { track, label -> track.copy(label = label) }
 }
 
 private fun Player.overrideFor(type: Int, id: String): TrackSelectionOverride? {

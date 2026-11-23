@@ -124,7 +124,8 @@ class VideoStreamPlaybackTest {
         until { player.playbackTracks().audio.any { it.label == "Japanese" && it.selected } }
         val tracks = player.playbackTracks().audio
 
-        assertEquals(listOf("", "Japanese", "English"), tracks.map { it.label })
+        // The video's own audio is unnamed, so it is named by its place.
+        assertEquals(listOf("Track 1", "Japanese", "English"), tracks.map { it.label })
         player.selectAudio(tracks.single { it.label == "English" }.id)
         until { player.playbackTracks().audio.single { it.selected }.label == "English" }
         assertEquals(tracks.map { it.id }, player.playbackTracks().audio.map { it.id })

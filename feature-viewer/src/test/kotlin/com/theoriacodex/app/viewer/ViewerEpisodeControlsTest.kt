@@ -56,16 +56,15 @@ class ViewerEpisodeControlsTest {
 
     @Test fun `subtitles turn off and on, by the label shown`() {
         val state = episodeState()
-        val tracks = PlaybackTracks(subtitles = listOf(PlaybackTrack("0:1/0", "English", selected = true), PlaybackTrack("0:2/0", "", selected = false)))
+        val tracks = PlaybackTracks(subtitles = listOf(PlaybackTrack("0:1/0", "English", selected = true), PlaybackTrack("0:2/0", "Signs", selected = false)))
         setControls(state, tracks)
         compose.onNodeWithTag(VIEWER_EPISODE_SUBTITLES_TAG).assert(stateDescription("English"))
         compose.onNodeWithContentDescription("Subtitles").performClick()
         compose.onNodeWithTag("$VIEWER_EPISODE_SUBTITLES_TAG:Off").performClick()
         waitUntil { state.value.controls.episode.subtitle == ViewerSubtitleChoice.Off }
         compose.onNodeWithContentDescription("Subtitles").performClick()
-        // A track named by neither label nor language is offered by its place.
-        compose.onNodeWithTag("$VIEWER_EPISODE_SUBTITLES_TAG:Track 2").performClick()
-        waitUntil { state.value.controls.episode.subtitle == ViewerSubtitleChoice.Track("Track 2") }
+        compose.onNodeWithTag("$VIEWER_EPISODE_SUBTITLES_TAG:Signs").performClick()
+        waitUntil { state.value.controls.episode.subtitle == ViewerSubtitleChoice.Track("Signs") }
     }
 
     @Test fun `audio is offered only with more than one track`() {
