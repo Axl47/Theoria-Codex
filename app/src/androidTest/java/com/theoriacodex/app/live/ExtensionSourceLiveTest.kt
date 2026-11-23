@@ -34,12 +34,12 @@ import org.junit.runner.RunWith
 /**
  * Proves reading a series from a Mihon extension end to end in the real debug app. It talks to the live site, so it
  * runs only with `-e extensionSourceLive true`, after an extension has been turned on, which `ExtensionsLiveTest` does
- * (see `mihon-host/README.md`).
+ * (see `extension-host/README.md`).
  *
  * The tests are one story across app restarts, so run each as its own `am instrument` call, which starts the app's
  * process anew: [aSeriesIsBrowsedReadResumedAndFollowed], [aFollowedSeriesIsOnTheShelfAfterARestart], then the
  * new-chapter story: [followingASeriesAsksToNotifyAndSchedulesTheCheck], [aFollowedSeriesForgetsItsNewestChapter], the background check run by hand from a shell
- * (`cmd jobscheduler run`, see `mihon-host/README.md`), [aNewChapterNotificationOpensItsSeries], [aNotificationOpensItsSeriesOverAnotherSeriesPage] and
+ * (`cmd jobscheduler run`, see `extension-host/README.md`), [aNewChapterNotificationOpensItsSeries], [aNotificationOpensItsSeriesOverAnotherSeriesPage] and
  * [unfollowingTheLastSeriesCancelsTheCheck].
  *
  * The report is counts and labels only, never images: provider media stays off screenshots and logs.

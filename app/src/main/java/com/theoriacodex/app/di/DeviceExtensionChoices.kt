@@ -4,7 +4,7 @@ import android.content.Context
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.domain.series.ExtensionChoiceStore
 import com.theoriacodex.domain.series.ExtensionChoices
-import com.theoriacodex.mihonhost.MihonHost
+import com.theoriacodex.extensionhost.MihonHost
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption

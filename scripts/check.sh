@@ -174,8 +174,8 @@ test_tasks=(
   :app-logic:test
   :core-data-android:testDebugUnitTest
   :core-data-android:compileDebugAndroidTestKotlin
-  :mihon-host:testDebugUnitTest
-  :mihon-host:compileDebugAndroidTestKotlin
+  :extension-host:testDebugUnitTest
+  :extension-host:compileDebugAndroidTestKotlin
   :ui-kit:testDebugUnitTest
   :media-kit:testDebugUnitTest
   :vision-kit:testDebugUnitTest
@@ -196,7 +196,7 @@ detekt_tasks=(
   :app:detektDebug
   :app-logic:detektMain
   :core-data-android:detektDebug
-  :mihon-host:detektDebug
+  :extension-host:detektDebug
   :ui-kit:detektDebug
   :media-kit:detektDebug
   :vision-kit:detektDebug
@@ -212,7 +212,7 @@ detekt_tasks=(
   :core-sources:detektMain
   :core-stubs:detektMain
 )
-lint_tasks=(:app:lint :core-data-android:lintDebug :mihon-host:lintDebug :ui-kit:lintDebug :media-kit:lintDebug :vision-kit:lintDebug :feed-kit:lintDebug :feature-viewer:lintDebug :feature-search:lintDebug :feature-library:lintDebug :feature-discover:lintDebug :feature-series:lintDebug :feature-settings:lintDebug)
+lint_tasks=(:app:lint :core-data-android:lintDebug :extension-host:lintDebug :ui-kit:lintDebug :media-kit:lintDebug :vision-kit:lintDebug :feed-kit:lintDebug :feature-viewer:lintDebug :feature-search:lintDebug :feature-library:lintDebug :feature-discover:lintDebug :feature-series:lintDebug :feature-settings:lintDebug)
 # Everything lint shares with the tests and Detekt: all compilation and code generation. Once these
 # are built, a lint build and a tests-and-Detekt build have no task left in common, so the two can
 # run at the same time without writing the same output or reading sources mid-generation.
@@ -226,10 +226,10 @@ shared_tasks=(
   :core-data-android:compileDebugUnitTestJavaWithJavac
   :core-data-android:compileDebugAndroidTestKotlin
   :core-data-android:bundleLibRuntimeToJarDebug
-  :mihon-host:compileDebugUnitTestKotlin
-  :mihon-host:compileDebugUnitTestJavaWithJavac
-  :mihon-host:compileDebugAndroidTestKotlin
-  :mihon-host:bundleLibRuntimeToJarDebug
+  :extension-host:compileDebugUnitTestKotlin
+  :extension-host:compileDebugUnitTestJavaWithJavac
+  :extension-host:compileDebugAndroidTestKotlin
+  :extension-host:bundleLibRuntimeToJarDebug
   :ui-kit:compileDebugUnitTestKotlin
   :ui-kit:compileDebugUnitTestJavaWithJavac
   :ui-kit:bundleLibRuntimeToJarDebug
@@ -385,10 +385,10 @@ run_release() {
 }
 
 # Extensions call the app's classes by name, which the shrinker cannot see. Every name a sample of them used
-# (mihon-host/extension-symbols.txt) must be one R8 reports it was told to keep. A list or report that is missing or
+# (extension-host/extension-symbols.txt) must be one R8 reports it was told to keep. A list or report that is missing or
 # empty fails the check: neither can show that anything was kept.
 extension_symbols_kept() {
-  local symbols=mihon-host/extension-symbols.txt seeds=app/build/outputs/mapping/release/seeds.txt wanted missing status=0
+  local symbols=extension-host/extension-symbols.txt seeds=app/build/outputs/mapping/release/seeds.txt wanted missing status=0
   [[ -s "$symbols" && -r "$symbols" ]] || { echo "$symbols is missing or empty." >&2; return 1; }
   [[ -s "$seeds" && -r "$seeds" ]] || { echo "$seeds is missing or empty: the release build did not report what R8 kept." >&2; return 1; }
   wanted="$(grep -v '^#' "$symbols")" || { echo "$symbols lists no symbols." >&2; return 1; }
@@ -396,7 +396,7 @@ extension_symbols_kept() {
   missing="$(grep -Fvxf "$seeds" <<<"$wanted")" || status=$?
   ((status <= 1)) || { echo "Could not compare $symbols with $seeds." >&2; return 1; }
   [[ -z "$missing" ]] && return
-  printf 'mihon-host/consumer-rules.pro no longer keeps what extensions call:\n%s\n' "$missing" >&2
+  printf 'extension-host/consumer-rules.pro no longer keeps what extensions call:\n%s\n' "$missing" >&2
   return 1
 }
 

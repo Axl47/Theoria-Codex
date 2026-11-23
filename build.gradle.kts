@@ -27,7 +27,7 @@ dependencies {
     kover(project(":core-data"))
     kover(project(":core-data-android"))
     kover(project(":core-sources"))
-    kover(project(":mihon-host"))
+    kover(project(":extension-host"))
     kover(project(":core-stubs"))
     kover(project(":ui-kit"))
     kover(project(":media-kit"))

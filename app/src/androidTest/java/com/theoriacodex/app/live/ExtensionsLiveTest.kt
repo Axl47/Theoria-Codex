@@ -12,7 +12,7 @@ import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.domain.series.ExtensionLanguage
 import com.theoriacodex.domain.series.ExtensionSetting
 import com.theoriacodex.domain.series.InstalledExtension
-import com.theoriacodex.mihonhost.MihonHost
+import com.theoriacodex.extensionhost.MihonHost
 import java.util.Locale
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -25,7 +25,7 @@ import org.junit.runner.RunWith
 
 /**
  * Proves the trust step and the Extensions page in the real debug app, with a real extension installed as a package
- * the way Mihon installs one (`adb install`, see `mihon-host/README.md`). Runs only with `-e extensionSourceLive true`.
+ * the way Mihon installs one (`adb install`, see `extension-host/README.md`). Runs only with `-e extensionSourceLive true`.
  *
  * The tests are one story across app restarts, so run each as its own `am instrument` call, which starts the app's
  * process anew: [anInstalledExtensionRunsOnlyOnceTurnedOn], then [aChangedSettingSurvivesARestart], then
