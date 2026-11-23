@@ -13,7 +13,7 @@
 #
 # --record (pre-PR check only) publishes the pass as refs/verified/<key>, where the key names the
 # inputs that can affect the result (scripts/release_gate.py input-key), so GitHub's Verify and
-# Release can reuse it. It needs a clean checkout. Run it before opening a PR.
+# Release can reuse it. It needs a clean checkout. Optional locally; PRs normally let Verify run it.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -275,9 +275,10 @@ lint_build() {
 # The pre-PR check keeps a daemon that only ever runs lint: warm, it analyses the app in about 50s
 # where a fresh process takes 80s. Its heap size differs from the main daemon's on purpose: Gradle
 # only keeps a second daemon when its JVM settings differ, and only then does no other analysis
-# share lint's process. The periodic collection hands its heap back while it idles; it exits after an
-# hour unused. If lint fails there, that daemon is stopped and a fresh process decides, so a stale
-# analysis session cannot fail the check and real findings still do.
+# share lint's process. The periodic collection hands its heap back while it idles, and it inherits
+# the environment's daemon idle timeout instead of pinning RAM for an hour. If lint fails there,
+# that daemon is stopped and a fresh process decides, so a stale analysis session cannot fail the
+# check and real findings still do.
 lint_daemon_jvmargs='-Xmx2048m -XX:G1PeriodicGCInterval=60000 -Dfile.encoding=UTF-8'
 
 # Gradle gives a build to any idle daemon started with the same JVM settings, so the daemons carrying
@@ -293,7 +294,7 @@ stop_lint_daemons() {
 
 lint_in_daemon() {
   ./gradlew "${task_timings[@]}" "${lint_tasks[@]}" --offline --warning-mode=all --console=plain \
-    "-Dorg.gradle.jvmargs=$lint_daemon_jvmargs" -Dorg.gradle.daemon.idletimeout=3600000 && return
+    "-Dorg.gradle.jvmargs=$lint_daemon_jvmargs" && return
   echo 'Lint failed in its daemon. Stopping that daemon and retrying in a fresh process.'
   stop_lint_daemons
   lint_build
@@ -397,10 +398,36 @@ run_screenshots() {
     -Proborazzi.test.verify=true --rerun --warning-mode=all --console=plain
 }
 
+# Limit concurrent local check runs across worktrees and wards so multiple agents don't exhaust RAM.
+# Held by a helper process so persistent Gradle/Kotlin daemons never inherit the lock FD; stop_lanes
+# terminates the helper on exit and releases the slot. Set THEORIA_CHECK_SLOTS=0 to bypass.
+acquire_check_slot() {
+  [[ "${GITHUB_ACTIONS:-}" != true ]] || return 0
+  local slots="${THEORIA_CHECK_SLOTS:-2}"
+  [[ "$slots" =~ ^(0|[1-9][0-9]*)$ ]] || { echo "THEORIA_CHECK_SLOTS must be a non-negative integer: $slots" >&2; exit 2; }
+  (( slots > 0 )) || return 0
+  local lock_dir="${THEORIA_CHECK_LOCK_DIR:-/tmp/theoria-codex-check-slots-$(id -u)}"
+  local ready_file="$temp/check-slot.ready"
+  python3 scripts/check_slot.py \
+    --dir "$lock_dir" \
+    --slots "$slots" \
+    --ready-file "$ready_file" \
+    --parent-pid "$$" &
+  local holder_pid=$!
+  while [[ ! -f "$ready_file" ]]; do
+    if ! kill -0 "$holder_pid" 2>/dev/null; then
+      wait "$holder_pid" || return $?
+      [[ -f "$ready_file" ]] || return 1
+    fi
+    sleep 0.2
+  done
+}
+
 phase 'Hotspot check' line_budgets "$base"
 phase 'Module layering' module_layering
 phase 'Module registration' module_registration
 [[ "$part" != static ]] || phase 'Python unittests' python_tests
+acquire_check_slot
 
 case "$part" in
   '') run_check ;;
