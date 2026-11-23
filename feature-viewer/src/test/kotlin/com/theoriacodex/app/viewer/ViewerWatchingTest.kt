@@ -222,26 +222,35 @@ class ViewerWatchingTest {
             audio = next.audio.map { it.copy(selected = it.label == "Japanese") },
         )
         assertEquals(emptyList<ViewerTrackChange>(), choice.trackChanges(applied))
-        assertEquals(emptyList<ViewerTrackChange>(), ViewerEpisodeChoice(audioLabel = "Korean").trackChanges(next))
+        assertEquals(emptyList<ViewerTrackChange>(), ViewerEpisodeChoice(audioLabel = "Korean").trackChanges(applied))
         // Off turns off a track Media3 picked by itself.
         val defaulted = next.copy(subtitles = next.subtitles.map { it.copy(selected = it.label == "Español") })
         assertEquals(listOf(ViewerTrackChange.Subtitle(null)), ViewerEpisodeChoice(subtitle = ViewerSubtitleChoice.Off).trackChanges(defaulted))
     }
 
     @Test
-    fun `with no choice, a side-loaded subtitle in the device's language shows, else the first, unless the stream shows one`() {
-        fun subtitles(vararg labels: String) = PlaybackTracks(subtitles = labels.mapIndexed { index, label -> PlaybackTrack("$index:/0", label, selected = false, sideLoaded = true) })
+    fun `with no choice, the subtitle in the device's language shows, else the first, unless Media3 shows one`() {
+        fun subtitles(vararg labels: String) = PlaybackTracks(subtitles = labels.mapIndexed { index, label -> PlaybackTrack("$index:/0", label, selected = false) })
         val none = ViewerEpisodeChoice()
         assertEquals(listOf(ViewerTrackChange.Subtitle("1:/0")), none.trackChanges(subtitles("Signs", "English [CC]"), Locale.US))
         assertEquals(listOf(ViewerTrackChange.Subtitle("2:/0")), none.trackChanges(subtitles("English", "Signs", "ESPAÑOL"), Locale.forLanguageTag("es-PR")))
         assertEquals(listOf(ViewerTrackChange.Subtitle("1:/0")), none.trackChanges(subtitles("Signs", "pt-BR", "Portugal"), Locale.forLanguageTag("pt")))
         // A word that only contains the name is not it.
         assertEquals(listOf(ViewerTrackChange.Subtitle("0:/0")), none.trackChanges(subtitles("Signs", "Englishman"), Locale.US))
-        // The stream's own subtitle, shown by Media3, stays; only Off turns a side-loaded one off.
-        val embedded = PlaybackTrack("0:subtitle:0/0", "English", selected = true)
-        val withEmbedded = subtitles("English").let { it.copy(subtitles = listOf(embedded) + it.subtitles) }
-        assertEquals(emptyList<ViewerTrackChange>(), none.trackChanges(withEmbedded, Locale.US))
+        // Whether a file beside the stream or inside it, one Media3 shows stays; only Off turns subtitles off.
+        val shownByMedia3 = PlaybackTracks(subtitles = listOf(PlaybackTrack("0:/0", "English", selected = false), PlaybackTrack("subtitle:0/0", "Signs", selected = true)))
+        assertEquals(emptyList<ViewerTrackChange>(), none.trackChanges(shownByMedia3, Locale.US))
         assertEquals(emptyList<ViewerTrackChange>(), ViewerEpisodeChoice(subtitle = ViewerSubtitleChoice.Off).trackChanges(subtitles("English"), Locale.US))
+    }
+
+    @Test
+    fun `a chosen subtitle the next episode lacks shows its default instead of none`() {
+        val english = ViewerEpisodeChoice(subtitle = ViewerSubtitleChoice.Track("English"))
+        val next = PlaybackTracks(subtitles = listOf(PlaybackTrack("0:/0", "Español", selected = false), PlaybackTrack("1:/0", "English [CC]", selected = false)))
+        assertEquals(listOf(ViewerTrackChange.Subtitle("1:/0")), english.trackChanges(next, Locale.US))
+        // The choice holds: an episode offering "English" again shows it.
+        val later = PlaybackTracks(subtitles = listOf(PlaybackTrack("0:/0", "English [CC]", selected = true), PlaybackTrack("1:/0", "English", selected = false)))
+        assertEquals(listOf(ViewerTrackChange.Subtitle("1:/0")), english.trackChanges(later, Locale.US))
     }
 
     @Test

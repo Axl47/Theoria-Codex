@@ -25,7 +25,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
 import com.theoriacodex.app.viewer.state.ViewerAction
-import com.theoriacodex.app.viewer.state.ViewerEpisodeChoice
+import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.domain.model.GalleryReadingMode
@@ -233,7 +233,7 @@ private fun ViewerPostPage(
             transform = viewerTransform,
             onTransformChanged = { viewerTransform.value = it },
             layout = ViewerMediaLayout(frame.isLandscape, frame.inPictureInPicture, frame.touchExplorationEnabled),
-            videoOptions = host.videoOptions(key, pageState, frame.uiState.controls.episode, screen, quality, qualityHeight, config),
+            videoOptions = host.videoOptions(key, pageState, frame.uiState, screen, quality, qualityHeight, config),
             videoPositions = videoPositions,
             levelControls = levelControls,
             mediaError = frame.uiState.mediaError.takeIf { active }?.takeIf { it.mediaKey == key },
@@ -252,17 +252,20 @@ private fun ViewerPostPage(
 private fun ViewerScreenHost.videoOptions(
     key: ViewerMediaKey,
     pageState: ViewerPageState,
-    episode: ViewerEpisodeChoice,
+    uiState: ViewerUiState,
     screen: ViewerScreenState,
     quality: com.theoriacodex.domain.model.VideoQuality,
     qualityHeight: Int?,
     config: ViewerScreenConfig,
-) = ViewerVideoOptions(
-    quality, qualityHeight, episode.streamLabelFor(key), pageState.terminalResolutionMessage(), config.playbackDiagnosticsEnabled,
-    ViewerEpisodeOptions(screen.streamAttempts, episode.pickedByHand(key), pageState.resolution.resolvedAtMs) { label ->
-        onAction(ViewerAction.FallBackToStream(key, label))
-    },
-)
+): ViewerVideoOptions {
+    val episode = uiState.controls.episode
+    return ViewerVideoOptions(
+        quality, qualityHeight, episode.streamLabelFor(key), pageState.terminalResolutionMessage(), config.playbackDiagnosticsEnabled,
+        ViewerEpisodeOptions(screen.streamAttempts.forSession(uiState.session), episode.pickedByHand(key), pageState.resolution.resolvedAtMs) { label ->
+            onAction(ViewerAction.FallBackToStream(key, label))
+        },
+    )
+}
 
 /**
  * Where [post]'s playback goes while a series is watched: its series records it. Null for every other video. [series]
