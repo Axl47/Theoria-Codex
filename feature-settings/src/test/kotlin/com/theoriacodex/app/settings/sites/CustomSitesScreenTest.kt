@@ -174,6 +174,5 @@ class CustomSitesScreenTest {
 
         compose.onNodeWithText("Browser check").assertExists()
         compose.onNodeWithText("Verify in browser").assertExists()
-        compose.onNodeWithText("Open this site to pass its browser check").assertExists()
     }
 }

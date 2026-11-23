@@ -149,7 +149,6 @@ internal fun EditSitePage(
         SettingsGroup("Browser check") {
             SettingsRow(
                 title = VERIFY_IN_BROWSER_LABEL,
-                summary = "Open this site to pass its browser check",
                 enabled = editable,
                 onClick = { onAction(CustomSitesAction.StartVerification(site.host)) },
                 trailing = if (working) { { WorkingMark() } } else null,

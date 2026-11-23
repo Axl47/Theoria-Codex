@@ -69,23 +69,26 @@ for the app's own.
 **Browser checks.** The extensions' HTTP client keeps its cookies in the system WebView's store, for every host, as
 Mihon's does: extensions are written against that, and many keep a session in cookies. It is not limited to the hosts
 the app's own clients may send browser cookies to (`SiteCookieBridge`), since extension code runs in the app's process
-and could read the store anyway. When Cloudflare answers with its challenge (403 or 503 from its server, marked
-`cf-mitigated: challenge`; a hard block or a maintenance page passes through untouched), `CloudflareInterceptor` does
-what Mihon's does: it drops the clearance cookie the challenged request carried, loads the challenged address in a
-WebView no one sees, with the request's agent and only the headers a browser would send itself (language, referrer),
-waits up to 10 s for a new clearance cookie, stores it to disk, and sends the original request once more. A check it
-cannot pass fails with `BrowserCheckException`, which the source reports as `BROWSER_CHECK` with the address and agent.
-The Series tab's listings (popular, latest and filtered) and search results, on their first or a later page, and the
-series page then offer Open check: a full-screen in-app browser with that agent, showing the host it is on, which
-closes itself and loads again once the site lets a page through or a new clearance cookie arrives (the address checked
-can be an endpoint that answers a browser with an error even after the check). If the site let the browser through but
-still refuses the app, the failure shows as an ordinary one for five minutes, since a browser cannot help. Cloudflare
-accepts a clearance only from the network address it was earned from, so the client connects over the address family
-the WebView uses (`BrowserAddressDns`): where IPv6 and IPv4 leave the device from different addresses, OkHttp's usual
-IPv6-first race would otherwise send the cookie from the other one and be refused. A host whose check failed out of sight fails at once for five minutes, or
-until it answers without a challenge, so a screen of covers or the background chapter check does not wait once per
-request. Every wait ends when the call is cancelled. A missing or updating WebView, or one whose renderer dies, counts
-as a failed check, never a crash.
+and could read the store anyway. When Cloudflare answers with its challenge (403 or 503 marked `cf-mitigated: challenge`; a hard block or a
+maintenance page passes through untouched), `CloudflareInterceptor` first lets the app's shared `ChallengePass` try it
+out of sight, as Mihon does: it drops the clearance cookie the challenged request carried, loads the challenged address
+in a WebView no one sees, with the request's agent and only the headers a browser would send itself (language,
+referrer), waits up to 10 s for a new clearance cookie, stores it to disk, and sends the original request once more.
+Requests to one host wait for a single pass, and at most two hidden browsers run at once across the extensions' client
+and the app's own. A challenge still standing after that is recorded in the app's `HostOutageTracker` as a challenge,
+with the refused address and agent, and the request fails with `HostUnavailableException`, so extensions never parse a
+challenge page. The source then needs browser verification exactly like a built-in source or a Custom Site: the Series
+tab and the series page say so with Verify in browser, which opens the app's one check page over the current screen,
+with that agent and the host on screen. It closes itself once the extension's client gets through, and the screen that
+asked loads again; if the browser got through and the client is still refused, the page says so and stays open. Hosts
+other than the source's base address are traced back to the source that hit them, so a challenged image or API host
+marks the right source. Cloudflare accepts a clearance only from the network address it was earned from, so the client
+connects over the address family the WebView uses (`BrowserAddressDns`): where IPv6 and IPv4 leave the device from
+different addresses, OkHttp's usual IPv6-first race would otherwise send the cookie from the other one and be refused.
+While a host's challenge record lasts, no hidden browser is tried for it, so a screen of covers or the background
+chapter check does not wait once per request; the record ends when it expires, when the check passes, or as soon as
+the host answers a request successfully. Every wait ends when the call is cancelled. A missing or updating WebView, or
+one whose renderer dies, counts as a failed check, never a crash.
 
 **Android's backup and device transfer.** Neither carries extension data. The choices (which extensions are on, their
 languages) and every extension's preferences, which can hold a server's address and password, are in

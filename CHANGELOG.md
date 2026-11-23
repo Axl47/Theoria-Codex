@@ -42,7 +42,7 @@
 - A source in the Series tab can show its latest series as well as its popular ones, where the source offers them. Filter searches just that source, with its own filters (genres, status, sort and so on); the chip shows how many you changed. Choices last until you pick another source or leave the tab.
 - Chapters open in the Viewer, read left to right, right to left, or as one vertical scroll, with the mode kept per series. A chapter resumes at the page you left, is marked read when you finish it, and continues into the next one.
 - Follow a series to keep it on the Series tab with its unread count. Followed series are checked for new chapters when you pull down on the tab and in the background (Settings, Check for new chapters), and a notification for a new chapter opens the series.
-- Extension sources behind a browser check, such as Cloudflare's, get through on their own when the site allows it. When the site wants a tap, the source says it needs a browser check, and Open check shows the site's page; once you pass the check, the page closes and the source loads.
+- Extension sources behind a browser check, such as Cloudflare's, get through on their own when the site allows it. When the site needs you to pass it yourself, the source says it needs browser verification, and Verify in browser opens the site over the screen you're on; once Theoria gets through, the page closes and the source loads again.
 - When a source falls behind or breaks, Switch source in a series' ⋮ menu finds the same series on your other sources and moves it there. Follow and reading mode carry over; chapters before the one you were reading count as read, it resumes at the same page, and a later chapter you read stays read. The chapters already out are not announced as new. Open shows the other source's page first without moving anything.
 - When an extension is on in several languages, the Series tab and series pages name the language next to the source.
 - Profile backups include the series you follow or started, with each chapter's read state and last page and the series' reading mode. Restoring only adds: nothing already on the device is undone. Which extensions are turned on is never in a backup, so a restored series says "Extension unavailable" until its extension is installed and turned on.
@@ -80,6 +80,7 @@
 - Custom site edits apply as you make them, without a Save button. Keys still have Save.
 - Backup has its own page in Settings. Back up profiles opens the file picker directly, with a switch for including History and statistics.
 - The app says "posts" where it sometimes said "items", and "Codices" where backups said "collections". Empty lists show a short label instead of a sentence.
+- Every site that wants a browser check, built-in, added in Sites or from an extension, now asks the same way: Verify in browser opens the site over the screen you're on instead of sending you to Settings, and closes by itself once Theoria gets through, so the screen you were on loads again. If the site lets the browser in but still refuses Theoria, the page says so. A built-in site you've verified once renews its check out of sight when it expires, as added sites and extensions do.
 
 ### Removed
 
