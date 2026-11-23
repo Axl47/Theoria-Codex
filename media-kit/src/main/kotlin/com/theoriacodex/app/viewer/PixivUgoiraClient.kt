@@ -436,7 +436,8 @@ class PixivUgoiraClient constructor(
                 status in 200..299 -> return response to tokens
 
                 status == 401 || status == 403 -> {
-                    if (didRefreshAfterAuthFailure) throw UgoiraRefused("Pixiv ugoira $label request failed ($status)")
+                    // Signed out, a rate limit, or an account mid-change: a later try may pass.
+                    if (didRefreshAfterAuthFailure) throw IOException("Pixiv ugoira $label request failed ($status)")
                     tokens = tokenCoordinator.refreshAfterAuthFailure(tokens)
                     didRefreshAfterAuthFailure = true
                 }
@@ -627,7 +628,7 @@ internal const val UGOIRA_DECODED_CACHE_MAX_BYTES = 96L * 1024L * 1024L
 internal const val UGOIRA_ARCHIVE_CACHE_MAX_BYTES = 512L * 1024L * 1024L
 private const val UGOIRA_ARCHIVE_MEMORY_ENTRY_LIMIT = 32
 
-/** Pixiv answered a request with a refusal that another try will not change (a 4xx, or 401/403 after a token refresh). */
+/** Pixiv answered a request with a refusal that another try will not change (a 4xx other than 401/403 or "try later"). */
 private class UgoiraRefused(message: String) : IOException(message)
 
 /** A downloaded archive that does not hold the frames its metadata lists. */

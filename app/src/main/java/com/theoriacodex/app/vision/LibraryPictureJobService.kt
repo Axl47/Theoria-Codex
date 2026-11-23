@@ -50,11 +50,7 @@ class LibraryPictureJobService : JobService() {
                 Diagnostics.report("similarity", "The Library's pictures could not be indexed", error)
                 false
             }
-            val restart = synchronized(runLock) {
-                running.set(false)
-                restartWanted.also { restartWanted = false }
-            }
-            if (restart) {
+            if (endRun()) {
                 jobFinished(params, false)
                 restartLibraryPictures(this@LibraryPictureJobService)
             } else {
@@ -67,9 +63,11 @@ class LibraryPictureJobService : JobService() {
 
     /** Unplugged, or the battery ran low: the next charge picks up where this run stopped. */
     override fun onStopJob(params: JobParameters): Boolean {
-        running.set(false)
+        val restart = endRun()
         run?.cancel()
-        return true
+        // A restart held for this run replaces the system's retry, so it waits out no back-off.
+        if (restart) restartLibraryPictures(this)
+        return !restart
     }
 
     override fun onDestroy() {
@@ -85,6 +83,12 @@ private val requested = AtomicBoolean(false)
 /** Whether a restart was asked for during the current run; [runLock] guards it and a run's start and end. */
 private val runLock = Any()
 private var restartWanted = false
+
+/** Ends the current run in this process; returns whether a restart was asked for during it. */
+private fun endRun(): Boolean = synchronized(runLock) {
+    running.set(false)
+    restartWanted.also { restartWanted = false }
+}
 
 /**
  * Asks for [LibraryPictureJobService] to run while the device charges on an unmetered network and its battery is not

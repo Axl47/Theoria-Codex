@@ -133,13 +133,22 @@ private class AppPictureSource(
         FrameSample.Refused, FrameSample.Unreadable -> PostFrames.Unreadable
     }
 
-    /** Whether [error] is a network failure or a source asking for a later try, which a later run may get past. */
+    /**
+     * Whether [error] is a network failure, a source asking for a later try, or one that wants a sign-in or a browser
+     * check: a later run may get past any of them, so the post's frames wait rather than its still being stored alone.
+     */
     private fun mayPass(error: Throwable): Boolean = generateSequence(error, Throwable::cause).any {
         it is IOException || it is SourceAdapterException && it.reason in PASSING_FAILURES
     }
 }
 
-private val PASSING_FAILURES = setOf(SourceFailureReason.NETWORK, SourceFailureReason.RATE_LIMITED)
+private val PASSING_FAILURES = setOf(
+    SourceFailureReason.NETWORK,
+    SourceFailureReason.RATE_LIMITED,
+    SourceFailureReason.AUTH_REQUIRED,
+    SourceFailureReason.AUTH_EXPIRED,
+    SourceFailureReason.BROWSER_CHECK,
+)
 
 /** The model reads 448 px squares; decoding the preview larger only costs memory. */
 private const val INPUT_PX = 448

@@ -60,8 +60,9 @@ class LibraryVisionBackfill(
                 }
                 val started = TimeSource.Monotonic.markNow()
                 val results = analyze(batch, pass)
-                if (PictureResult.Unavailable in results.values) return tagger.ready.value
+                // What the batch finished is kept even when the model went: a playing post's frames cost a download.
                 if (!tagger.store(results)) return false
+                if (PictureResult.Unavailable in results.values) return tagger.ready.value
                 delay(started.elapsedNow())
             }
             return false
