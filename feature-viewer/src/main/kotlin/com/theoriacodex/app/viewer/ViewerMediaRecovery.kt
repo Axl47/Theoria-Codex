@@ -48,7 +48,7 @@ suspend fun ViewerViewModel.recoverMedia(
         null
     }
     if (recovered == null || !recovered.refreshes(failedMedia) || !stillApplies()) return ViewerMediaRecovery.NOTHING_NEW
-    applyResolvedPost(recovered)
+    applyResolvedPost(recovered, recovered = true)
     return ViewerMediaRecovery.REPLACED
 }
 

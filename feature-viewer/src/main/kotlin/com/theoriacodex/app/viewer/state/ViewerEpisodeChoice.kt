@@ -17,8 +17,8 @@ data class ViewerEpisodeChoice(
     /** The stream [media] plays: the one it fell back to or was picked by hand in, else the session's choice. */
     fun streamLabelFor(media: ViewerMediaKey?): String? = episodeStream?.takeIf { it.media == media }?.label ?: streamLabel
 
-    /** Whether the user picked [media]'s stream by hand: a stream they chose gets no automatic fallback. */
-    fun pickedByHand(media: ViewerMediaKey?): Boolean = episodeStream?.let { it.media == media && it.pickedByHand } == true
+    /** The stream the user picked by hand in [media], if any: a stream they chose gets no automatic fallback. */
+    fun pickedStream(media: ViewerMediaKey?): String? = episodeStream?.takeIf { it.media == media && it.pickedByHand }?.label
 }
 
 /**

@@ -50,7 +50,7 @@ internal fun ViewerMediaContent(
             loadingPreview = { ViewerLoadingPreview(post, media, modifier) },
             episode = videoOptions.episode?.takeIf { media.streams.isNotEmpty() }?.let { options ->
                 ViewerEpisodeStreams(
-                    options.attempts, media.streams.map { it.label }, options.pickedByHand, options.linksResolvedAtMs,
+                    options.attempts, media.streams.map { it.label }, options.pickedLabel, options.linksResolvedAtMs,
                     ask = { onRequestMediaRecovery?.recoverStreams(post, media) ?: ViewerMediaRecovery.NOTHING_NEW },
                     fallBack = options.fallBack,
                 )

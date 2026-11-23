@@ -2,6 +2,7 @@ package com.theoriacodex.app.viewer.state
 
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.MediaStream
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
@@ -262,6 +263,29 @@ class ViewerStateReducerTest {
         assertEquals(ViewerEffect.RetryMedia(session, mediaKey), retry.effects.single())
         assertNull(retry.state.mediaError)
         assertEquals(1L, retry.state.currentMedia?.loadGeneration)
+    }
+
+    @Test
+    fun `fresh links for failed media continue its load as it was`() {
+        val session = session("fresh-links")
+        fun episode(link: String) = samplePost("episode", media = listOf(media("video/mp4", "episode.mp4").copy(streams = listOf(MediaStream(link, "Server A")))))
+        val state = createViewerUiState(session, listOf(episode("https://media.example/old.m3u8")))
+        val mediaKey = requireNotNull(state.currentMedia?.key)
+        val retried = listOf(
+            ViewerAction.MediaFailed(session, ViewerMediaError.Recoverable(mediaKey, "temporary media failure")),
+            ViewerAction.RetryMedia,
+            ViewerAction.Pause,
+        ).fold(state) { current, action -> reduceViewerState(current, action).state }
+
+        val refreshed = reduceViewerState(
+            retried,
+            ViewerAction.ResolutionCompleted(session, episode("https://media.example/new.m3u8"), recovered = true),
+        ).state
+
+        assertEquals("https://media.example/new.m3u8", refreshed.currentMedia?.ref?.streams?.single()?.url)
+        // The next Retry starts a load of its own rather than the one whose lookup and streams are spent.
+        assertEquals(1L, refreshed.currentMedia?.loadGeneration)
+        assertFalse(refreshed.controls.playback.playing)
     }
 
     @Test

@@ -173,6 +173,19 @@ class ViewerWatchingTest {
     }
 
     @Test
+    fun `closing after a replay only pauses the closing player`() = runTest {
+        val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this)
+        val episode = post("episode", media = listOf(ViewerOwnerTestData.video("episode.mp4")))
+        owner.replaceSession(session("watching", listOf(episode)).copy(series = ViewerSeries.Watching()))
+        owner.onAction(ViewerAction.RestartPlayback)
+        val playing = owner.state.value.controls.playback
+        owner.clearSession(retainPresentation = true)
+        assertEquals(1L, playing.restartRequest)
+        // A replay count back at 0 would read as another replay, seeking the closing player to the start it then saves.
+        assertEquals(playing.copy(playing = false), owner.state.value.controls.playback)
+    }
+
+    @Test
     fun `a watched session's seeds arrive with its first state, before anything can save`() = runTest {
         val seeds = ViewerSeries.Watching(mapOf(episodes[0].id to 90_000L))
         val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this)
@@ -254,18 +267,22 @@ class ViewerWatchingTest {
     }
 
     @Test
-    fun `every seek reports once, a drag's at its release, and a released player reports where it stopped`() {
+    fun `every seek reports where it landed, a drag's at its release, and a released player reports where it stopped`() {
         var scrubbing = false
-        var seeks = 0
-        val counter = ViewerSeekCounter({ scrubbing }) { seeks++ }
-        fun discontinuity(reason: Int) = counter.onPositionDiscontinuity(position(0), position(60_000), reason)
+        var durationMs = 1_440_000L
+        val reports = mutableListOf<ViewerPlaybackProgress>()
+        val seeks = ViewerSeekReports({ scrubbing }, { durationMs }) { reports += it }
+        fun discontinuity(reason: Int, toMs: Long = 60_000) = seeks.onPositionDiscontinuity(position(0), position(toMs), reason)
+        // A paused player that the media session seeks reports the new position, though nothing on screen polled it yet.
         discontinuity(Player.DISCONTINUITY_REASON_SEEK)
         discontinuity(Player.DISCONTINUITY_REASON_AUTO_TRANSITION)
         scrubbing = true
         repeat(3) { discontinuity(Player.DISCONTINUITY_REASON_SEEK) }
         scrubbing = false
+        discontinuity(Player.DISCONTINUITY_REASON_SEEK, toMs = 90_000)
+        durationMs = C.TIME_UNSET
         discontinuity(Player.DISCONTINUITY_REASON_SEEK)
-        assertEquals(2, seeks)
+        assertEquals(listOf(ViewerPlaybackProgress(60_000, 1_440_000), ViewerPlaybackProgress(90_000, 1_440_000)), reports)
 
         assertEquals(ViewerPlaybackProgress(61_000, 1_440_000), viewerReleaseProgress(61_000, 1_440_000, ended = false))
         assertEquals(ViewerPlaybackProgress(1_440_000, 1_440_000), viewerReleaseProgress(1_439_000, 1_440_000, ended = true))
@@ -320,11 +337,11 @@ class ViewerWatchingTest {
         state = reduceViewerState(state, ViewerAction.FallBackToStream(first, "B")).state
         assertEquals("B", state.controls.episode.streamLabelFor(first))
         assertNull(state.controls.episode.streamLabelFor(second))
-        assertFalse(state.controls.episode.pickedByHand(first))
+        assertNull(state.controls.episode.pickedStream(first))
 
         state = reduceViewerState(state, ViewerAction.ChooseStream("A")).state
         assertEquals("A", state.controls.episode.streamLabelFor(first))
-        assertTrue(state.controls.episode.pickedByHand(first))
+        assertEquals("A", state.controls.episode.pickedStream(first))
         assertEquals("A", state.controls.episode.streamLabelFor(second))
 
         state = reduceViewerState(state, ViewerAction.MediaFailed(identity, ViewerMediaError.Recoverable(first, "Could not play video"))).state
