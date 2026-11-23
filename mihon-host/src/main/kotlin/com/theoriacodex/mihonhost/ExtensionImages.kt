@@ -61,7 +61,8 @@ internal inline fun <T> failingAsIo(block: () -> T): T = try {
  * Only the sources last handed to [publish] answer: the ones whose extension loaded completely and whose extension
  * and language are on. Whoever publishes keeps that table current as extensions change ([ExtensionRegistry.recheck]);
  * a request only reads it, with no system call or lock. Until the first [publish], a tagged request calls [load],
- * which loads the extensions and publishes their sources, and returns once that is done; it must not throw.
+ * which loads the extensions and publishes their sources, and returns once that is done. A load that fails counts as
+ * publishing nothing, so later images do not retry it; the next publish replaces that.
  */
 class ExtensionImages(
     /** Kept for the install, where Android does not back it up; read on first use, best warmed off the main thread. */
@@ -82,8 +83,22 @@ class ExtensionImages(
     )
 
     /** Makes [active] the only sources that fetch, all at once: one whose extension or language was turned off stops answering. */
+    @Synchronized
     internal fun publish(active: List<Source>) {
         sources = active.filterIsInstance<HttpSource>().associateBy { it.id }
+    }
+
+    /** The published sources, loading the extensions first when nothing was published yet. */
+    @Suppress("TooGenericExceptionCaught")
+    private fun published(): Map<Long, HttpSource> = sources ?: run {
+        try {
+            load()
+        } catch (failure: Exception) {
+            reportOnce("extensions failed to load for an image: ${failure.javaClass.simpleName}")
+            // Unless a publish landed meanwhile, nothing is on until the next one.
+            synchronized(this) { if (sources == null) sources = emptyMap() }
+        }
+        sources.orEmpty()
     }
 
     /**
@@ -148,11 +163,7 @@ class ExtensionImages(
             reportOnce("${url.host} image sent without its source: tag not issued here")
             return null
         }
-        val published = sources ?: run {
-            load()
-            sources.orEmpty()
-        }
-        val source = published[sourceId]
+        val source = published()[sourceId]
         if (source == null) reportOnce("${url.host} image of source $sourceId sent without its source: source not on")
         return source
     }

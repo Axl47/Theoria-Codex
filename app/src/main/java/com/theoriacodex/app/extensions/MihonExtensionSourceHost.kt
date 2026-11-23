@@ -30,6 +30,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
@@ -128,14 +129,19 @@ internal class MihonExtensionSourceHost : ExtensionSites {
             addAction(Intent.ACTION_PACKAGE_REPLACED)
             addDataScheme("package")
         }
+        // A burst of changes, such as a wave of app updates, lists the device once more after the listing under way.
+        val rechecks = Channel<Unit>(Channel.CONFLATED)
+        scope.launch { for (change in rechecks) registry.recheck() }
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                scope.launch { registry.recheck() }
+                // An update also sends REMOVED and ADDED marked as replacing; its REPLACED is enough.
+                if (intent.action != Intent.ACTION_PACKAGE_REPLACED && intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) return
+                rechecks.trySend(Unit)
             }
         }
         application.registerReceiver(receiver, changed, Context.RECEIVER_NOT_EXPORTED)
         // Finding the folder can create it, which is kept off the main thread.
-        scope.launch(Dispatchers.IO) { folderWatch = packages.watchFolder { scope.launch { registry.recheck() } } }
+        scope.launch(Dispatchers.IO) { folderWatch = packages.watchFolder { rechecks.trySend(Unit) } }
     }
 
     /** Says where the user's choices are kept. Called once, when the app's data opens; everything else waits for it. */

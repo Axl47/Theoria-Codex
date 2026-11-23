@@ -69,7 +69,8 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         val entry = checkNotNull(series.repository.entries(id).firstOrNull { it.entry.address == postId.sourcePostId }) {
             "The chapter is not stored"
         }
-        // Nothing is asked of the source for a downloaded chapter.
+        // A downloaded chapter's pages are its files. Its cover is tagged as in a session, so only the Viewer's
+        // request for that cover can load the extension; offline, the cover fails and the pages still read.
         val downloaded = series.downloads.chapter(id, entry.entry.address)?.media
         val source = if (downloaded == null) source(id.source) else null
         val pages = downloaded ?: runCatchingPreservingCancellation { checkNotNull(source).pages(entry.entry) }

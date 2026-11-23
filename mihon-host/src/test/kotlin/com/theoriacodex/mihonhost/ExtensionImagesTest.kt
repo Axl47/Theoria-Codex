@@ -158,6 +158,22 @@ class ExtensionImagesTest {
     }
 
     @Test
+    fun `a load that fails is not retried per image and the request goes out as an ordinary one`() {
+        var loads = 0
+        val failing = ExtensionImages(key) {
+            loads += 1
+            error("The device could not be listed")
+        }
+        val address = images.cover(source, "https://covers.test/1.jpg")
+
+        repeat(2) { assertEquals("app https://covers.test/1.jpg", fetch(address, failing)) }
+        assertEquals(1, loads)
+        // The next listing that succeeds publishes as usual.
+        failing.publish(listOf(source))
+        assertEquals("source-token https://covers.test/1.jpg", fetch(address, failing))
+    }
+
+    @Test
     fun `a chapter's pages are handed out without asking where each image is`() = runTest {
         val reader = PagePerImageSource().also { images.publish(listOf(it)) }
 
