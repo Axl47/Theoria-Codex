@@ -2,78 +2,103 @@ package com.theoriacodex.app.series
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DownloadDone
-import androidx.compose.material.icons.outlined.Download
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.toggleableState
-import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
+import com.theoriacodex.app.media.copyTextToClipboard
 import com.theoriacodex.app.ui.components.EmptyState
-import com.theoriacodex.app.ui.formatTimelineTime
 import com.theoriacodex.app.ui.components.LoadingState
-import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
-import com.theoriacodex.data.repository.ChapterDownload
-import com.theoriacodex.data.repository.DownloadChoice
-import com.theoriacodex.data.repository.SeriesDownloads
+import com.theoriacodex.app.ui.components.LocalPostMenuActions
+import com.theoriacodex.app.ui.components.rememberQuickReturn
+import com.theoriacodex.app.ui.undo.LocalUndoSlot
+import com.theoriacodex.app.ui.undo.UndoAnchor
+import com.theoriacodex.app.ui.undo.UndoLeaveEffect
+import com.theoriacodex.app.ui.undo.UndoOffer
+import com.theoriacodex.app.ui.undo.UndoPill
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.SeriesStatus
-import java.text.DateFormat
-import java.util.Date
+import kotlinx.coroutines.flow.collectLatest
 
 /**
- * One series: its cover and names, Follow, a button that continues where the user left off, and every entry (chapter or
- * episode, by the series' kind) with whether it was finished and how far, and whether it is downloaded. [onOpenEntry]
- * gets the address of the entry to open.
- * The overflow menu moves the series to another source through [switchSource]: [onOpenSeries] shows another series'
- * page, and [onSwitched] shows the series once moved, in place of this page.
+ * One series: blurred cover backdrop, cover and metadata, Follow / open-in-browser / Share actions, expandable
+ * description with clickable genre pills, Continue button, entry search and sort/filter controls, and entry cards
+ * with long-press read actions, undo support, and downloads. Entries are chapters or episodes by the series' kind;
+ * episodes do not download.
  */
 @Composable
 fun SeriesPageScreen(
@@ -85,149 +110,364 @@ fun SeriesPageScreen(
     onOpenSeries: (SeriesId) -> Unit,
     onSwitched: (SeriesId) -> Unit,
     modifier: Modifier = Modifier,
+    onSearchGenre: ((String) -> Unit)? = null,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    // New entries of followed series are announced, so each follow asks for the permission while it is missing.
-    // Refusing changes nothing else: the series is followed and the shelf still counts its new entries.
+    val postActions = LocalPostMenuActions.current
+    val undoAnchor = remember(state.stored?.series?.id) { UndoAnchor(SERIES_UNDO_SCOPE, state.stored?.series?.id?.toString()) }
+    val offerBulkUndo = rememberBulkReadUndo(undoAnchor, viewModel)
+    val toggleFollowed = rememberFollowToggle(viewModel)
+    val listState = rememberLazyListState()
+    var topBarVisible by rememberSaveable { mutableStateOf(true) }
+    var optionsSheetOpen by rememberSaveable { mutableStateOf(false) }
+    var coverLightboxOpen by rememberSaveable { mutableStateOf(false) }
+    val scrolled by remember(listState) { derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 48 } }
+    LaunchedEffect(listState) { snapshotFlow { !listState.canScrollBackward }.collectLatest { atTop -> if (atTop) topBarVisible = true } }
+    val quickReturn = rememberQuickReturn { revealed -> topBarVisible = revealed }
+
+    Box(modifier.fillMaxSize().nestedScroll(quickReturn)) {
+        SeriesPageBody(
+            state = state,
+            listState = listState,
+            viewModel = viewModel,
+            onToggleFollowed = toggleFollowed,
+            onOpenInBrowser = { state.webUrl?.let(postActions.openInBrowser) },
+            onShare = { state.webUrl?.let(postActions.share) },
+            onOpenCover = { coverLightboxOpen = true },
+            onCopyTitle = { copySeriesTitle(context, it) },
+            onSearchGenre = onSearchGenre,
+            onOpenEntry = onOpenEntry,
+            onMarkPreviousRead = { viewModel.markPreviousRead(it, offerBulkUndo) },
+            onOpenExtensions = onOpenExtensions,
+            onOpenChapterOptions = { optionsSheetOpen = true },
+            onClearQuery = { viewModel.setChapterQuery("") },
+            onClearChapterFilters = { viewModel.resetChapterOptions(); viewModel.setChapterQuery("") },
+        )
+        SeriesPageTopBar(
+            state = state,
+            visible = topBarVisible,
+            scrolled = scrolled,
+            searchOpen = viewModel.chapterSearchOpen,
+            searchQuery = viewModel.chapterSearchInput,
+            canDownload = viewModel.canDownload,
+            switchSource = switchSource,
+            onBack = onBack,
+            onOpenSearch = { viewModel.openChapterSearch(); topBarVisible = true },
+            onCloseSearch = viewModel::closeChapterSearch,
+            onQueryChange = viewModel::setChapterQuery,
+            onRefresh = { viewModel.refresh() },
+            onMarkAllRead = { viewModel.markAllRead(it, offerBulkUndo) },
+            onDownload = viewModel::download,
+            onDeleteDownloads = viewModel::deleteDownloads,
+            onDownloadNewChapters = viewModel::setDownloadNewChapters,
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
+        UndoPill(undoAnchor, Modifier.align(Alignment.BottomCenter).padding(horizontal = 16.dp, vertical = 16.dp))
+        SeriesPageOverlays(state, viewModel, switchSource, optionsSheetOpen, coverLightboxOpen, { optionsSheetOpen = false }, { coverLightboxOpen = false }, onOpenSeries, onSwitched)
+    }
+}
+
+@Composable
+private fun rememberBulkReadUndo(anchor: UndoAnchor, viewModel: SeriesPageViewModel): (BulkReadUndo) -> Unit {
+    val undoSlot = LocalUndoSlot.current
+    val mounted = remember { booleanArrayOf(true) }
+    DisposableEffect(Unit) {
+        mounted[0] = true
+        onDispose { mounted[0] = false }
+    }
+    UndoLeaveEffect(SERIES_UNDO_SCOPE)
+    return { snapshot ->
+        if (mounted[0]) {
+            undoSlot.offer(undoSlot.scope, UndoOffer(snapshot.label, anchor) { viewModel.undoBulkRead(snapshot) })
+        }
+    }
+}
+
+private fun copySeriesTitle(context: android.content.Context, title: String) {
+    if (copyTextToClipboard(context, "series_title", title)) {
+        Toast.makeText(context, "Title copied", Toast.LENGTH_SHORT).show()
+    }
+}
+
+@Composable
+private fun rememberFollowToggle(viewModel: SeriesPageViewModel): () -> Unit {
+    val context = LocalContext.current
     val askToNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
-    val toggleFollowed = {
+    return {
         viewModel.toggleFollowed {
             val permission = Manifest.permission.POST_NOTIFICATIONS
             if (context.checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) askToNotify.launch(permission)
         }
     }
-    val missing = state.sourceMissing
-    Column(modifier.fillMaxSize()) {
-        // Without its source the page has no source name to show.
-        SecondaryScreenAppBar(title = state.sourceName, onBack = onBack, actions = {
-            state.stored?.let { stored -> SeriesPageMenu(switchSource) { switchSource.open(stored.series.title) } }
-        })
-        SwitchSourceSheet(switchSource, onOpenSeries, onSwitched)
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+}
+
+@Composable
+private fun SeriesPageOverlays(
+    state: SeriesPageState,
+    viewModel: SeriesPageViewModel,
+    switchSource: SwitchSourceViewModel,
+    optionsSheetOpen: Boolean,
+    coverLightboxOpen: Boolean,
+    onDismissOptions: () -> Unit,
+    onDismissCover: () -> Unit,
+    onOpenSeries: (SeriesId) -> Unit,
+    onSwitched: (SeriesId) -> Unit,
+) {
+    if (optionsSheetOpen) {
+        ChapterOptionsSheet(
+            sort = state.chapterSort,
+            descending = state.sortDescending,
+            filter = state.chapterFilter,
+            canDownload = viewModel.canDownload,
+            words = state.kind.words,
+            hasActiveOptions = state.hasActiveChapterOptions,
+            onSelectSort = viewModel::setChapterSort,
+            onSelectFilter = viewModel::setChapterFilter,
+            onReset = viewModel::resetChapterOptions,
+            onDismiss = onDismissOptions,
+        )
+    }
+    if (coverLightboxOpen) {
+        state.stored?.series?.let { series ->
+            CoverLightboxDialog(series, onDismiss = onDismissCover)
+        }
+    }
+    SwitchSourceSheet(switchSource, onOpenSeries, onSwitched)
+}
+
+@Composable
+private fun SeriesPageBody(
+    state: SeriesPageState,
+    listState: LazyListState,
+    viewModel: SeriesPageViewModel,
+    onToggleFollowed: () -> Unit,
+    onOpenInBrowser: () -> Unit,
+    onShare: () -> Unit,
+    onOpenCover: () -> Unit,
+    onCopyTitle: (String) -> Unit,
+    onSearchGenre: ((String) -> Unit)?,
+    onOpenEntry: (String) -> Unit,
+    onMarkPreviousRead: (String) -> Unit,
+    onOpenExtensions: () -> Unit,
+    onOpenChapterOptions: () -> Unit,
+    onClearQuery: () -> Unit,
+    onClearChapterFilters: () -> Unit,
+) {
+    val pullState = rememberPullToRefreshState()
+    PullToRefreshBox(
+        isRefreshing = state.userRefreshing,
+        onRefresh = { if (!state.sourceMissing) viewModel.refresh(userInitiated = true) },
+        state = pullState,
+        modifier = Modifier.fillMaxSize(),
+        indicator = {
+            PullToRefreshDefaults.Indicator(
+                state = pullState,
+                isRefreshing = state.userRefreshing,
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = SERIES_TOP_BAR_HEIGHT),
+            )
+        },
+    ) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(top = if (state.stored == null) SERIES_TOP_BAR_HEIGHT else 0.dp, bottom = 28.dp),
+        ) {
             state.stored?.let { stored ->
-                item("header") { SeriesHeader(stored, state, toggleFollowed, onOpenEntry) }
-                item("about") { SeriesAbout(stored.series) }
-            }
-            val failure = state.failure
-            when {
-                missing -> item("missing") { MissingSourceRow(onOpenExtensions) }
-                failure != null -> item("failure") {
-                    SourceLoadFailure(
-                        failure.message, state.source?.key, state.sourceName, viewModel::refresh.takeIf { failure.retryable },
-                        Modifier.padding(horizontal = 16.dp), compact = state.entries.isNotEmpty(),
-                    )
+                item("hero") {
+                    SeriesHeroHeader(stored, state, onToggleFollowed, onOpenInBrowser, onShare, onOpenCover, onCopyTitle)
                 }
-                state.refreshing && state.entries.isEmpty() -> item("loading") { LoadingState() }
-                state.entries.isEmpty() -> item("empty") { EmptyState(state.kind.words.none) }
+                item("about") { SeriesAbout(stored.series, onSearchGenre) }
+                state.continueWith?.let { entry ->
+                    item("continue") {
+                        ContinueReadingButton(
+                            label = continueLabel(state.started, entry, state.kind),
+                            enabled = state.canOpen(entry.entry.address),
+                            onClick = { onOpenEntry(entry.entry.address) },
+                        )
+                    }
+                }
             }
-            entryList(state, viewModel, onOpenEntry)
+            statusRows(state, { viewModel.refresh() }, onOpenExtensions)
+            chapterList(state, viewModel, onOpenEntry, onMarkPreviousRead, onOpenChapterOptions, onClearQuery, onClearChapterFilters)
         }
     }
 }
 
-/** The entry count with the Download menu, then every entry, each with its download mark where the page offers downloads. */
-private fun LazyListScope.entryList(state: SeriesPageState, viewModel: SeriesPageViewModel, onOpenEntry: (String) -> Unit) {
-    val downloads = viewModel.canDownload
-    if (state.entries.isNotEmpty()) {
-        item("entries") {
-            EntryListHeader(state, downloads, viewModel::download, viewModel::deleteDownloads, viewModel::setDownloadNewChapters)
+private fun LazyListScope.statusRows(
+    state: SeriesPageState,
+    onRefresh: () -> Unit,
+    onOpenExtensions: () -> Unit,
+) {
+    val failure = state.failure
+    when {
+        state.sourceMissing -> item("missing") { MissingSourceRow(onOpenExtensions) }
+        failure != null -> item("failure") {
+            SourceLoadFailure(
+                message = failure.message,
+                source = state.source?.key,
+                sourceName = state.sourceName,
+                onRetry = onRefresh.takeIf { failure.retryable },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                compact = state.entries.isNotEmpty(),
+            )
         }
+        state.refreshing && state.entries.isEmpty() -> item("loading") { LoadingState() }
+        state.entries.isEmpty() -> item("empty") { EmptyState(state.kind.words.none) }
     }
-    items(state.entries, key = { it.entry.address }) { entry ->
+}
+
+/** The entry count with sort/filter controls, active filter pills, and every visible entry card. */
+private fun LazyListScope.chapterList(
+    state: SeriesPageState,
+    viewModel: SeriesPageViewModel,
+    onOpenEntry: (String) -> Unit,
+    onMarkPreviousRead: (String) -> Unit,
+    onOpenChapterOptions: () -> Unit,
+    onClearQuery: () -> Unit,
+    onClearChapterFilters: () -> Unit,
+) {
+    if (state.entries.isEmpty()) return
+    val downloads = viewModel.canDownload
+    val maxUnreadSourceOrder = state.entries.lastOrNull { !it.read }?.sourceOrder ?: -1
+    item("chapters") {
+        ChapterListHeader(
+            words = state.kind.words,
+            totalCount = state.entries.size,
+            visibleCount = state.visibleEntries.size,
+            filterActive = state.hasActiveChapterOptions,
+            onOpenOptions = onOpenChapterOptions,
+        )
+    }
+    item("active-chapter-pills") {
+        ActiveChapterOptionPills(
+            state = state,
+            onClearFilter = { viewModel.setChapterFilter(ChapterFilter.ALL) },
+            onClearSort = viewModel::resetChapterSort,
+            onClearQuery = onClearQuery,
+        )
+    }
+    if (state.visibleEntries.isEmpty()) {
+        item("filtered-empty") { EmptyFilteredChapters(state.kind.words, onClearChapterFilters) }
+        return
+    }
+    items(state.visibleEntries, key = { it.entry.address }) { entry ->
         val address = entry.entry.address
         val download = state.downloads[address]
+        val canDownloadEntry = downloads && (download != null || !state.sourceMissing)
         EntryRow(
-            entry,
-            state.kind,
+            entry = entry,
+            kind = state.kind,
             enabled = state.canOpen(address),
+            hasPreviousUnread = maxUnreadSourceOrder > entry.sourceOrder,
+            download = download,
+            canToggleDownload = canDownloadEntry,
             onClick = { onOpenEntry(address) },
-            // Without its source a chapter cannot download; one queued or on the device can still be cancelled or deleted.
-            trailing = if (downloads && (download != null || !state.sourceMissing)) {
-                { DownloadMark(download) { viewModel.toggleDownload(address) } }
-            } else null,
+            onToggleRead = { viewModel.setEntryRead(address, !entry.read) },
+            onMarkPreviousRead = { onMarkPreviousRead(address) },
+            onToggleDownload = { viewModel.toggleDownload(address) },
         )
     }
 }
 
-/** The page's overflow menu, shown while another source is on to switch to. */
+/** Hero section: blurred cover backdrop behind the floating top bar, cover + metadata, and action buttons. */
 @Composable
-private fun SeriesPageMenu(switchSource: SwitchSourceViewModel, onSwitchSource: () -> Unit) {
-    val offered = switchSource.state.collectAsStateWithLifecycle().value.others.isNotEmpty()
-    if (!offered) return
-    var open by remember { mutableStateOf(false) }
-    Box {
-        IconButton(onClick = { open = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More options") }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(text = { Text(SWITCH_SOURCE) }, onClick = {
-                open = false
-                onSwitchSource()
-            })
-        }
-    }
-}
-
-/** Says the series' extension cannot be used, which is why its entries cannot be opened, and leads to where to fix it. */
-@Composable
-private fun MissingSourceRow(onOpenExtensions: () -> Unit) {
-    Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("Extension unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = onOpenExtensions) { Text(EXTENSIONS_TITLE) }
-    }
-}
-
-@Composable
-private fun SeriesHeader(stored: StoredSeries, state: SeriesPageState, onToggleFollowed: () -> Unit, onOpenEntry: (String) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        CompositionLocalProvider(LocalSeriesSources provides listOfNotNull(state.source)) { SeriesCover(stored.series, Modifier.width(112.dp)) }
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(stored.series.title, style = MaterialTheme.typography.titleLarge, maxLines = 3, overflow = TextOverflow.Ellipsis)
-            stored.series.author?.let { author ->
-                Text(author, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun SeriesHeroHeader(
+    stored: StoredSeries,
+    state: SeriesPageState,
+    onToggleFollowed: () -> Unit,
+    onOpenInBrowser: () -> Unit,
+    onShare: () -> Unit,
+    onOpenCover: () -> Unit,
+    onCopyTitle: (String) -> Unit,
+) {
+    Box(Modifier.fillMaxWidth()) {
+        HeroBackdrop(stored.series, Modifier.matchParentSize())
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = SERIES_TOP_BAR_HEIGHT + 8.dp, start = 16.dp, end = 16.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                SeriesCover(
+                    stored.series,
+                    Modifier
+                        .width(HERO_COVER_WIDTH)
+                        .testTag(HERO_COVER_TAG)
+                        .clickable(role = Role.Image, onClickLabel = "View cover", onClick = onOpenCover),
+                )
+                HeroMetadata(stored.series, state.sourceName, onCopyTitle, Modifier.weight(1f))
             }
-            // The entry count heads the entry list.
-            stored.series.status.label?.let { line ->
-                Text(line, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            FilterChip(
-                selected = stored.followed,
-                onClick = onToggleFollowed,
-                label = { Text(if (stored.followed) "Following" else "Follow") },
+            HeroActionRow(
+                followed = stored.followed,
+                hasWebUrl = state.webUrl != null,
+                onToggleFollowed = onToggleFollowed,
+                onOpenInBrowser = onOpenInBrowser,
+                onShare = onShare,
             )
-            state.continueWith?.let { entry ->
-                Button(onClick = { onOpenEntry(entry.entry.address) }, enabled = state.canOpen(entry.entry.address)) {
-                    Text(continueLabel(state.started, entry), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
         }
     }
 }
 
-/**
- * The synopsis, cut to a few lines that a tap opens in full when it is longer, then the genres on one line. Both come
- * from storage, so they show before the source answers and while its extension is off.
- */
 @Composable
-private fun SeriesAbout(series: Series) {
-    val description = series.description
-    if (description == null && series.genres.isEmpty()) return
-    Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (description != null) {
-            var expanded by rememberSaveable(series.id) { mutableStateOf(false) }
-            var cut by remember(description) { mutableStateOf(false) }
+private fun HeroBackdrop(series: Series, modifier: Modifier = Modifier) {
+    val background = MaterialTheme.colorScheme.background
+    val request = rememberSeriesCoverRequest(series)
+    val scrim = remember(background) {
+        Brush.verticalGradient(
+            0f to background.copy(alpha = 0.42f),
+            0.55f to background.copy(alpha = 0.72f),
+            1f to background,
+        )
+    }
+    Box(modifier) {
+        if (request != null) {
+            AsyncImage(
+                model = request,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize().blur(HERO_BLUR_RADIUS),
+                contentScale = ContentScale.Crop,
+            )
+        }
+        Box(Modifier.fillMaxSize().background(scrim))
+    }
+}
+
+@Composable
+private fun HeroMetadata(series: Series, sourceName: String, onCopyTitle: (String) -> Unit, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = series.title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .pointerInput(series.title) { detectTapGestures(onLongPress = { onCopyTitle(series.title) }) }
+                .semantics { onLongClick(label = "Copy title") { onCopyTitle(series.title); true } },
+        )
+        series.author?.let { author ->
             Text(
-                description,
-                Modifier.fillMaxWidth().clickable(enabled = cut || expanded) { expanded = !expanded },
+                text = author,
                 style = MaterialTheme.typography.bodyMedium,
-                maxLines = if (expanded) Int.MAX_VALUE else DESCRIPTION_LINES,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                onTextLayout = { cut = it.hasVisualOverflow },
             )
         }
-        if (series.genres.isNotEmpty()) {
+        series.status.label?.let { status ->
             Text(
-                series.genres.joinToString(" · "),
-                style = MaterialTheme.typography.labelMedium,
+                text = status,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (sourceName.isNotBlank()) {
+            Text(
+                text = sourceName,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -236,111 +476,205 @@ private fun SeriesAbout(series: Series) {
     }
 }
 
-private const val DESCRIPTION_LINES = 4
-
-/** An entry: its name, then [entryDetail], and [trailing] at the end. Finished ones fade. */
 @Composable
-private fun EntryRow(entry: StoredSeriesEntry, kind: SeriesKind, enabled: Boolean, onClick: () -> Unit, trailing: (@Composable () -> Unit)?) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
-            .alpha(if (entry.read) READ_ALPHA else 1f)
-            .padding(start = 16.dp, end = if (trailing == null) 16.dp else 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f).padding(vertical = 10.dp)) {
-            Text(entry.entry.name, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            entryDetail(entry, kind)?.let { detail ->
-                Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+private fun HeroActionRow(
+    followed: Boolean,
+    hasWebUrl: Boolean,
+    onToggleFollowed: () -> Unit,
+    onOpenInBrowser: () -> Unit,
+    onShare: () -> Unit,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+        FollowActionButton(followed, onToggleFollowed)
+        if (hasWebUrl) {
+            HeroCircleAction(Icons.Default.Public, "Open in browser", onOpenInBrowser)
+            HeroCircleAction(Icons.Default.Share, "Share", onShare)
         }
-        trailing?.invoke()
+    }
+}
+
+@Composable
+private fun FollowActionButton(followed: Boolean, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        color = if (followed) colors.secondaryContainer else colors.surfaceContainerHigh,
+        contentColor = if (followed) colors.onSecondaryContainer else colors.onSurface,
+        modifier = Modifier.height(ACTION_BUTTON_HEIGHT).semantics { selected = followed },
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = if (followed) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Text(
+                text = if (followed) "Following" else "Follow",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun HeroCircleAction(icon: ImageVector, contentDescription: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.7f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier.size(ACTION_BUTTON_HEIGHT),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = contentDescription, modifier = Modifier.size(20.dp))
+        }
     }
 }
 
 /**
- * The entry count, and the Download menu where the page offers downloads: chapters to queue, deleting the series'
- * downloads, and for a followed series whether new chapters download by themselves.
+ * Expandable synopsis and genres: 3 lines with a bottom-right "More" fade when collapsed; full synopsis, wrapped
+ * genre pills, and "Less" when expanded.
  */
 @Composable
-private fun EntryListHeader(
-    state: SeriesPageState,
-    downloads: Boolean,
-    onDownload: (DownloadChoice) -> Unit,
-    onDeleteDownloads: () -> Unit,
-    onDownloadNewChapters: (Boolean) -> Unit,
+private fun SeriesAbout(series: Series, onSearchGenre: ((String) -> Unit)?) {
+    val description = series.description
+    val hasGenres = series.genres.isNotEmpty()
+    if (description == null && !hasGenres) return
+    var expanded by rememberSaveable(series.id) { mutableStateOf(false) }
+    var overflowed by remember(description) { mutableStateOf(false) }
+    val expandable = overflowed || hasGenres || expanded
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize()
+            .clickable(enabled = expandable, role = Role.Button) { expanded = !expanded }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text("About this series", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        if (description != null) {
+            AboutDescriptionBlock(
+                description = description,
+                expanded = expanded,
+                showMoreAffordance = !expanded && (overflowed || hasGenres),
+                onOverflowDetected = { overflowed = it },
+            )
+        }
+        if (expanded && hasGenres) {
+            SeriesGenreChips(series.genres, onSearchGenre)
+        }
+        if (expanded || (description == null && hasGenres)) {
+            AboutExpandToggle(expanded = expanded, modifier = Modifier.align(Alignment.End))
+        }
+    }
+}
+
+@Composable
+private fun AboutDescriptionBlock(
+    description: String,
+    expanded: Boolean,
+    showMoreAffordance: Boolean,
+    onOverflowDetected: (Boolean) -> Unit,
 ) {
-    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+    val background = MaterialTheme.colorScheme.background
+    Box(Modifier.fillMaxWidth()) {
         Text(
-            state.kind.words.count(state.entries.size),
-            Modifier.weight(1f).padding(vertical = 12.dp),
-            style = MaterialTheme.typography.titleSmall,
+            text = description,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = if (expanded) Int.MAX_VALUE else DESCRIPTION_LINES,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { if (!expanded) onOverflowDetected(it.hasVisualOverflow) },
         )
-        if (!downloads) return@Row
-        var open by remember { mutableStateOf(false) }
-        Box {
-            TextButton(onClick = { open = true }) { Text("Download") }
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                fun choose(action: () -> Unit) {
-                    open = false
-                    action()
-                }
-                if (!state.sourceMissing) {
-                    DOWNLOAD_CHOICES.forEach { (choice, label) ->
-                        DropdownMenuItem(text = { Text(label) }, onClick = { choose { onDownload(choice) } })
-                    }
-                }
-                DropdownMenuItem(text = { Text("Delete downloads") }, enabled = state.downloads.isNotEmpty(), onClick = { choose(onDeleteDownloads) })
-                val stored = state.stored
-                if (stored?.followed == true) {
-                    HorizontalDivider()
-                    DownloadNewChaptersItem(stored.downloadNewChapters) { choose { onDownloadNewChapters(it) } }
-                }
+        if (showMoreAffordance) {
+            val fade = remember(background) {
+                Brush.horizontalGradient(0f to Color.Transparent, 0.35f to background, 1f to background)
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .background(fade)
+                    .padding(start = 28.dp),
+            ) {
+                AboutExpandToggle(expanded = false)
             }
         }
     }
 }
 
-/** Checked as other menus show their choice, and said as checked or not to accessibility services. */
 @Composable
-private fun DownloadNewChaptersItem(on: Boolean, onChange: (Boolean) -> Unit) {
-    DropdownMenuItem(
-        text = { Text("Download new chapters") },
-        trailingIcon = { if (on) Icon(Icons.Default.Check, contentDescription = null) },
-        onClick = { onChange(!on) },
-        modifier = Modifier.semantics { toggleableState = ToggleableState(on) },
-    )
+private fun AboutExpandToggle(expanded: Boolean, modifier: Modifier = Modifier) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = if (expanded) "Less" else "More",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Icon(
+            imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.size(18.dp),
+        )
+    }
 }
 
-private val DOWNLOAD_CHOICES = listOf(
-    DownloadChoice.NEXT_UNREAD to "Next ${SeriesDownloads.NEXT_UNREAD_COUNT} unread",
-    DownloadChoice.ALL_UNREAD to "All unread",
-    DownloadChoice.ALL to "All",
-)
-
-/** A chapter row's download state, which a tap moves on: download, stop the download, or delete it from the device. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DownloadMark(download: ChapterDownload?, onClick: () -> Unit) {
-    IconButton(onClick = onClick) {
-        when (download) {
-            null -> Icon(Icons.Outlined.Download, contentDescription = "Download")
-            is ChapterDownload.Queued -> Box(contentAlignment = Alignment.Center) {
-                val ring = Modifier.size(DOWNLOAD_RING)
-                val progress = download.progress
-                if (progress == null) CircularProgressIndicator(ring, strokeWidth = 2.dp) else CircularProgressIndicator({ progress }, ring, strokeWidth = 2.dp)
-                Icon(Icons.Default.Close, contentDescription = "Cancel download", Modifier.size(DOWNLOAD_STOP))
+private fun SeriesGenreChips(genres: List<String>, onSearchGenre: ((String) -> Unit)?) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        genres.forEach { genre ->
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = if (onSearchGenre != null) Modifier.clickable(role = Role.Button) { onSearchGenre(genre) } else Modifier,
+            ) {
+                Text(
+                    text = genre,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                )
             }
-            ChapterDownload.OnDevice -> Icon(Icons.Default.DownloadDone, contentDescription = "Delete download")
         }
     }
 }
 
-private val DOWNLOAD_RING = 22.dp
-private val DOWNLOAD_STOP = 12.dp
+@Composable
+private fun ContinueReadingButton(label: String, enabled: Boolean, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        shape = CircleShape,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .height(48.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
 
-internal fun continueLabel(started: Boolean, entry: StoredSeriesEntry): String =
-    if (started) "Continue · ${entry.entry.name}" else "Start"
+/** Says the series' extension cannot be used, which is why its entries cannot be opened, and leads to where to fix it. */
+@Composable
+private fun MissingSourceRow(onOpenExtensions: () -> Unit) {
+    Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("Extension unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        TextButton(onClick = onOpenExtensions) { Text(EXTENSIONS_TITLE) }
+    }
+}
+
+/** "Continue reading Chapter 4" or "Start watching", by the series' [kind]. */
+internal fun continueLabel(started: Boolean, entry: StoredSeriesEntry, kind: SeriesKind): String =
+    if (started) "Continue ${kind.words.doing} ${entry.entry.name}" else "Start ${kind.words.doing}"
 
 private val SeriesStatus.label: String?
     get() = when (this) {
@@ -354,17 +688,9 @@ private val SeriesStatus.label: String?
         SeriesStatus.UPCOMING -> "Upcoming"
     }
 
-/**
- * How far the user is in an entry left unfinished ("Page 7 of 18", or "8:12 / 23:40" as the Viewer's timeline writes
- * it), what a finished one is ("Read", "Watched"), else when it came out, when the source says.
- */
-internal fun entryDetail(entry: StoredSeriesEntry, kind: SeriesKind): String? = when {
-    entry.read -> kind.words.finished
-    entry.position > 0 -> when (kind) {
-        SeriesKind.MANGA -> entry.length?.let { "Page ${entry.position} of $it" } ?: "Page ${entry.position}"
-        SeriesKind.ANIME -> listOfNotNull(entry.position, entry.length).joinToString(" / ", transform = ::formatTimelineTime)
-    }
-    else -> entry.entry.uploadedAtEpochMs?.let { DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it)) }
-}
-
-private const val READ_ALPHA = 0.5f
+private const val SERIES_UNDO_SCOPE = "series-page"
+internal const val HERO_COVER_TAG = "Series hero cover"
+private val HERO_COVER_WIDTH = 108.dp
+private val HERO_BLUR_RADIUS = 20.dp
+private val ACTION_BUTTON_HEIGHT = 44.dp
+private const val DESCRIPTION_LINES = 3

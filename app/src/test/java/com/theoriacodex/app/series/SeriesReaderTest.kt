@@ -3,6 +3,7 @@ package com.theoriacodex.app.series
 import com.theoriacodex.app.media.isLikelyImageLocation
 import com.theoriacodex.app.viewer.ViewerPlaybackProgress
 import com.theoriacodex.app.viewer.ViewerSeries
+import com.theoriacodex.app.viewer.ViewerStripMark
 import com.theoriacodex.app.viewer.decodeViewerPostId
 import com.theoriacodex.app.viewer.encodeViewerPostId
 import com.theoriacodex.app.viewer.requiresLazyMediaResolution
@@ -13,6 +14,9 @@ import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.repository.chapterPost
 import com.theoriacodex.data.repository.seriesOfflineOwner
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.MediaStream
@@ -20,10 +24,12 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesCovers
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesSource
 import java.io.File
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -44,6 +50,15 @@ class SeriesReaderTest {
     private val anime = SeriesId(SourceKey.parseOrThrow("custom_aniyomi_7"), "/anime/1")
     private val stream = MediaStream("https://video.test/1.m3u8", "1080p")
 
+    @Test fun `a chapter's mark says its number once, from the chapter's own name`() {
+        assertEquals(ViewerStripMark("10", "S · Chapter 10"), seriesChapterMark("S", "Chapter 10", 10f))
+        assertEquals(ViewerStripMark("0", "S · Chapter 0, Prologue"), seriesChapterMark("S", "Prologue", 0f))
+        assertEquals(ViewerStripMark("1", "S · Chapter 1, Chapter 10"), seriesChapterMark("S", "Chapter 10", 1f))
+        assertEquals(ViewerStripMark("10.5", "S · Ch. 10.5"), seriesChapterMark("S", "Ch. 10.5", 10.5f))
+        // A number in the series' title does not count as the chapter saying its own.
+        assertEquals(ViewerStripMark("8", "Kaiju No. 8 · Chapter 8, The Test"), seriesChapterMark("Kaiju No. 8", "The Test", 8f))
+    }
+
     @Test
     fun chapterAndSeriesAddressesSurviveTheViewersSavedState() {
         val chapter = PostId(source, "/chapter/9f:8e/1?x=a:b")
@@ -58,12 +73,14 @@ class SeriesReaderTest {
         // The source lists the newest first, so order 0 is chapter 3.
         val entries = listOf(
             StoredSeriesEntry(SeriesEntry("/c3", "Ch. 3"), sourceOrder = 0, firstSeenAtEpochMs = 0),
-            StoredSeriesEntry(SeriesEntry("/c2", "Ch. 2"), sourceOrder = 1, firstSeenAtEpochMs = 0, position = 7, length = 18),
+            StoredSeriesEntry(SeriesEntry("/c2", "Ch. 2", number = 2f), sourceOrder = 1, firstSeenAtEpochMs = 0, position = 7, length = 18),
             StoredSeriesEntry(SeriesEntry("/c1", "Ch. 1"), sourceOrder = 2, firstSeenAtEpochMs = 0, read = true, position = 20, length = 20),
         )
         val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), entries), sources = { emptyList() }))
 
         val session = checkNotNull(reader.session(id, "/c2"))
+        // Only chapters with a number carry one, for the strip to show.
+        assertEquals(mapOf(PostId(source, "/c2") to ViewerStripMark("2", "Title · Ch. 2")), session.stripMarks)
 
         assertEquals(listOf("/c1", "/c2", "/c3"), session.posts.map { it.id.sourcePostId })
         assertEquals(1, session.context.startIndex)
@@ -86,6 +103,35 @@ class SeriesReaderTest {
         assertEquals(
             ViewerSeries.Reading(GalleryReadingMode.LEFT_TO_RIGHT),
             reader(webtoon.copy(readingMode = GalleryReadingMode.LEFT_TO_RIGHT)).session(id, "/c1")?.series,
+        )
+    }
+
+    @Test
+    fun aSessionShowsTheLoadableCoverWithoutLoadingAnExtension() = runTest {
+        val stored = StoredOnly(StoredSeries(Series(id, "Title", coverUrl = "https://cover.test")), listOf(chapter))
+        val reader = SeriesReader(dependencies(stored, { error("No extension may load") }))
+
+        assertEquals("https://cover.test#loadable", reader.session(id, "/c1")?.posts?.single()?.preview?.url)
+    }
+
+    @Test
+    fun anEntryThatFailsIsLoggedByKindWithoutTheExtensionsMessages() = runTest {
+        val logged = mutableListOf<String>()
+        Diagnostics.install { _, message, error -> logged += message + error?.message.orEmpty() }
+        val failure = SourceAdapterException(
+            SourceFailureReason.NETWORK, "Invalid page /chapter/private-title?sig=x", IllegalStateException("private-title"),
+        )
+        listOf(id, anime).forEach { series ->
+            val failing = FakeSeriesSource(series.source) { throw failure }
+            val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(series, "Title")), listOf(chapter)), { listOf(failing) }))
+
+            runCatching { reader.resolve(seriesQueryHash(series), PostId(series.source, "/c1")) }
+        }
+
+        val kinds = "SourceAdapterException(NETWORK) < IllegalStateException"
+        assertEquals(
+            listOf("${source.id} chapter pages failed to load: $kinds", "${anime.source.id} episode streams failed to load: $kinds"),
+            logged,
         )
     }
 
@@ -139,6 +185,8 @@ class SeriesReaderTest {
         val starts = listOf("/e1" to 0L, "/e2" to 61_000L, "/e3" to 0L).associate { (address, ms) -> PostId(anime.source, address) to ms }
         assertEquals(ViewerSeries.Watching(starts), session.series)
         assertEquals(emptyMap<PostId, Int>(), session.initialMediaIndices)
+        // Strip marks number chapters; an episode session has none.
+        assertEquals(emptyMap<PostId, ViewerStripMark>(), session.stripMarks)
         // Each is one video the Viewer looks up when it gets there, never a gallery to page.
         assertTrue(session.posts.all { it.mediaCount == 1 && it.media.isEmpty() && requiresLazyMediaResolution(it) })
     }
@@ -222,9 +270,43 @@ class SeriesReaderTest {
         assertEquals(pagesOf("/c1").map { it.url }, resolved.media.map { File(checkNotNull(it.localPath)).readText() })
         // Their addresses name no type, yet the Viewer takes the files as images.
         assertTrue(resolved.media.all { isLikelyImageLocation(it.mime, checkNotNull(it.localPath)) })
-        assertEquals("https://cover.test", resolved.preview.url)
+        assertEquals("https://cover.test#loadable", resolved.preview.url)
         // Anything that stores the chapter stores its source's pages, never the files.
         assertEquals(pagesOf("/c1"), store.withoutOfflineLocations(resolved).media)
+    }
+
+    @Test
+    fun aSessionPicturesDownloadedChaptersByTheirFirstPageWithoutAnExtension() = runTest {
+        val entries = listOf(chapter, StoredSeriesEntry(SeriesEntry("/c2", "Ch. 2", number = 2f), sourceOrder = 1, firstSeenAtEpochMs = 0))
+        download("/c1")
+        val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), entries), { error("No extension may load") }))
+
+        val session = checkNotNull(reader.session(id, "/c2"))
+
+        val firstPage = checkNotNull(session.stripMarks[PostId(source, "/c1")]?.image?.localPath)
+        assertEquals(pagesOf("/c1").first().url, File(firstPage).readText())
+        // The undownloaded chapter keeps only its number; neither chapter's pages are read until the Viewer asks.
+        assertEquals(ViewerStripMark("2", "Title · Ch. 2"), session.stripMarks[PostId(source, "/c2")])
+        assertTrue(session.posts.all { it.media.isEmpty() })
+    }
+
+    @Test
+    fun anOpenReadersStripPicturesAChapterOnceItDownloads() = runTest {
+        val store = store()
+        val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), listOf(chapter)), { error("unused") }, store = store))
+        val session = checkNotNull(reader.session(id, "/c1"))
+        val seen = mutableListOf<Map<PostId, ViewerStripMark>>()
+        // Not backgroundScope: advanceUntilIdle stops once only background work remains.
+        val collector = launch { reader.stripMarks(session).collect { seen += it } }
+        advanceUntilIdle()
+        assertEquals(listOf(emptyMap<PostId, ViewerStripMark>()), seen)
+
+        download("/c1", store)
+        advanceUntilIdle()
+
+        val firstPage = checkNotNull(seen.last()[PostId(source, "/c1")]?.image?.localPath)
+        assertEquals(pagesOf("/c1").first().url, File(firstPage).readText())
+        collector.cancel()
     }
 
     @Test
@@ -281,10 +363,10 @@ class SeriesReaderTest {
     private fun pagesOf(address: String) = List(2) { ImageRef(url = "https://pages.test$address/$it", localPath = null, mime = null) }
 
     /** Puts the two pages of the chapter at [address] on the device, each file holding its page's address. */
-    private suspend fun TestScope.download(address: String) {
+    private suspend fun TestScope.download(address: String, store: OfflineMediaStore = store()) {
         val pages = pagesOf(address)
         val post = chapterPost(Series(id, "Title"), SeriesEntry(address, address), null, pages)
-        store().save(post, pages, seriesOfflineOwner(id)) { page, file ->
+        store.save(post, pages, seriesOfflineOwner(id)) { page, file ->
             file.writeText(checkNotNull(page.url))
             "image/png"
         }

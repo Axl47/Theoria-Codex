@@ -4,6 +4,7 @@ import com.theoriacodex.app.di.SeriesDependencies
 import com.theoriacodex.app.viewer.ViewerSeries
 import com.theoriacodex.app.viewer.ViewerPlaybackProgress
 import com.theoriacodex.app.viewer.ViewerSession
+import com.theoriacodex.app.viewer.ViewerStripMark
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
@@ -14,7 +15,9 @@ import com.theoriacodex.data.repository.episodePost
 import com.theoriacodex.data.repository.inReadingOrder
 import com.theoriacodex.data.repository.resumePageIndex
 import com.theoriacodex.data.repository.resumePositionMs
+import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.model.GalleryReadingMode
+import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -28,6 +31,8 @@ import com.theoriacodex.domain.diagnostics.Diagnostics
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
@@ -59,18 +64,24 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         val start = entries.indexOfFirst { it.entry.address == entryAddress }.takeIf { it >= 0 } ?: return null
         val context = ViewerLaunchContext(seriesQueryHash(id), start, ViewerStreamSource.SERIES, scrollOffsetHint = 0)
         fun postId(entry: StoredSeriesEntry) = PostId(id.source, entry.entry.address)
-        // No extension loads for a session, so the cover is the stored address until an entry's media is asked for.
-        val cover = stored.series.coverUrl
+        // No extension loads for a session. The cover shows while an entry's media loads; one only an extension's own
+        // client can fetch is tagged for it, and that extension loads when the cover is requested.
+        val cover = series.covers.address(stored.series)
         val session = when (id.source.seriesKind) {
             SeriesKind.MANGA -> {
+                val posts = entries.map { chapterPost(stored.series, it.entry, cover) }
                 val resume = entries.associate { postId(it) to it.resumePageIndex() } +
-                    listOfNotNull(pageIndex?.let { postId(entries[start]) to it })
+                    listOfNotNull(pageIndex?.let { posts[start].id to it })
+                val numbered = entries.mapNotNull { entry ->
+                    entry.entry.number?.takeIf { it >= 0f && it.isFinite() }?.let { postId(entry) to seriesChapterMark(stored.series.title, entry.entry.name, it) }
+                }.toMap()
+                val marks = withFirstPages(numbered, posts, series.downloads.firstPages(id).first())
                 ViewerSession(
-                    entries.map { chapterPost(stored.series, it.entry, cover) }, context,
-                    initialMediaIndices = resume, series = ViewerSeries.Reading(stored.readingModeOrGuess()),
+                    posts, context, initialMediaIndices = resume, series = ViewerSeries.Reading(stored.readingModeOrGuess()),
+                    stripMarks = marks,
                 )
             }
-            // Where an episode starts is a time; its one media item is never paged.
+            // Where an episode starts is a time; its one media item is never paged, and the strip carries no marks.
             SeriesKind.ANIME -> ViewerSession(
                 entries.map { episodePost(stored.series, it.entry, cover) }, context,
                 series = ViewerSeries.Watching(entries.associate { postId(it) to it.resumePositionMs() }),
@@ -91,15 +102,18 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         val entry = checkNotNull(series.repository.entries(id).firstOrNull { it.entry.address == postId.sourcePostId }) {
             "This entry is no longer listed"
         }
-        // Nothing is asked of the source for a downloaded chapter; the cover is the stored address, as in a session.
+        // A downloaded chapter's pages are its files. Its cover is tagged as in a session, so only the Viewer's
+        // request for that cover can load the extension; offline, the cover fails and the pages still read.
         val downloaded = series.downloads.chapter(id, entry.entry.address)?.media
         val kind = id.source.seriesKind
         val source = if (downloaded == null) source(id.source) else null
         // Logged, without naming the entry, so a lookup can be timed against playback: the next episode's starts
         // before the current one ends.
         if (source != null) series.log(if (kind == SeriesKind.ANIME) LOOKING_UP_EPISODE else LOOKING_UP_CHAPTER)
-        val media = downloaded?.let(EntryMedia::Pages) ?: checkNotNull(source).media(entry.entry)
-        val cover = source?.coverAddress(stored.series) ?: stored.series.coverUrl
+        val media = downloaded?.let(EntryMedia::Pages) ?: runCatchingPreservingCancellation { checkNotNull(source).media(entry.entry) }
+            .onFailure { Diagnostics.report("series", "${id.source.id} ${kind.mediaName} failed to load: ${failureKinds(it)}") }
+            .getOrThrow()
+        val cover = series.covers.address(stored.series)
         return when (media) {
             is EntryMedia.Pages -> {
                 check(kind == SeriesKind.MANGA) { WRONG_MEDIA }
@@ -171,15 +185,34 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         seriesIdOf(session.context.queryHash)?.let { series.repository.setReadingMode(it, mode) }
     }
 
+    /** [session]'s strip marks from now on, following its chapters as they are downloaded or deleted; none for episodes. */
+    fun stripMarks(session: ViewerSession): Flow<Map<PostId, ViewerStripMark>> {
+        if (session.series !is ViewerSeries.Reading) return emptyFlow()
+        val id = seriesIdOf(session.context.queryHash) ?: return emptyFlow()
+        return series.downloads.firstPages(id).map { withFirstPages(session.stripMarks, session.posts, it) }
+    }
+
     /** The mode [session]'s series is read in from now on; the session itself carries the mode it opens in. */
     fun readingMode(session: ViewerSession): Flow<GalleryReadingMode> {
         val id = seriesIdOf(session.context.queryHash) ?: return emptyFlow()
         return series.repository.observeSeries(id).mapNotNull { it?.readingModeOrGuess() }
     }
 
+    /**
+     * What [error] and its causes are, by kind only: an extension's own messages can hold a chapter's path or title,
+     * which the log must not keep.
+     */
+    private fun failureKinds(error: Throwable): String = generateSequence(error) { it.cause }.take(MAX_CAUSES).joinToString(" < ") { cause ->
+        cause.javaClass.simpleName + ((cause as? SourceAdapterException)?.let { "(${it.reason})" } ?: "")
+    }
+
     private suspend fun source(key: SourceKey) =
-        checkNotNull(series.sources().firstOrNull { it.key == key }) { "The extension for this series is not installed" }
+        checkNotNull(series.source(key)) { "The extension for this series is not installed" }
 }
+
+/** [marks] with each downloaded chapter's first page from [firstPages] (by address), so the strip shows it rather than the shared cover. */
+private fun withFirstPages(marks: Map<PostId, ViewerStripMark>, posts: List<Post>, firstPages: Map<String, ImageRef>) =
+    posts.associate { it.id to (marks[it.id] ?: ViewerStripMark()).copy(image = firstPages[it.id.sourcePostId]) }.filterValues { it != ViewerStripMark() }
 
 /** The session key of a series' Viewer stream; [seriesIdOf] reads it back. A source id never contains `:`. */
 internal fun seriesQueryHash(id: SeriesId): String = "$SERIES_QUERY_PREFIX${id.source.id}:${id.address}"
@@ -198,3 +231,22 @@ private const val WRONG_MEDIA = "This extension served the wrong kind of media"
 private const val NO_STREAM = "No stream found for this episode"
 private const val LOOKING_UP_EPISODE = "Looking up an episode"
 private const val LOOKING_UP_CHAPTER = "Looking up a chapter"
+
+/** What an entry's media is called in the log, by the series' kind. */
+private val SeriesKind.mediaName get() = when (this) {
+    SeriesKind.MANGA -> "chapter pages"
+    SeriesKind.ANIME -> "episode streams"
+}
+
+/**
+ * A chapter's strip mark: its [number] as a reader writes it (12, or 10.5 for a part-chapter) over the series cover,
+ * and a spoken name that says the number when the chapter's own [name] does not.
+ */
+internal fun seriesChapterMark(seriesTitle: String, name: String, number: Float): ViewerStripMark {
+    val shown = if (number % 1f == 0f) number.toLong().toString() else number.toString()
+    val named = Regex("""(?<![\d.])${Regex.escape(shown)}(?!\d|\.\d)""").containsMatchIn(name)
+    return ViewerStripMark(shown, "$seriesTitle · ${if (named) name else "Chapter $shown, $name"}")
+}
+
+/** Enough of a failure's causes to tell a refusal from a parse error, without a runaway chain. */
+private const val MAX_CAUSES = 4

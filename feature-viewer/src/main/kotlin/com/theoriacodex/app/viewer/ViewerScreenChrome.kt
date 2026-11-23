@@ -163,7 +163,7 @@ private fun ViewerBottomStack(
                 onLoadMore = loadMoreFromStrip, onInteraction = { controls.markInteraction() },
                 openPages = ViewerStripPages(selection.post.id, selection.overviewItems, selection.mediaIndex, mirrored) {
                     controls.jumpToMedia(selection.post.id, it)
-                }, chapters = frame.uiState.series is ViewerSeries.Reading)
+                }, chapters = frame.uiState.series is ViewerSeries.Reading, stripMarks = config.stripMarks)
         }
     }
 }

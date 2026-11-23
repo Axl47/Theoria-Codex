@@ -2,6 +2,7 @@ package com.theoriacodex.extensionhost
 
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.MediaStream
 import com.theoriacodex.domain.model.MediaTrack
 import com.theoriacodex.domain.series.EntryMedia
@@ -164,13 +165,16 @@ internal class AniyomiStreams(
         }
     }
 
-    /** [block]'s outcome, with a failure kept and logged; the caller's cancellation passes through (see [extensionFailure]). */
+    /**
+     * [block]'s outcome, with a failure kept and sent to the redacted log, since its message is the extension's and can
+     * hold an address; the caller's cancellation passes through (see [extensionFailure]).
+     */
     @Suppress("TooGenericExceptionCaught")
     private suspend fun <T> attempt(block: suspend () -> T): Result<T> = try {
         Result.success(block())
     } catch (error: Throwable) {
         val failure = extensionFailure(error)
-        host.log("${source.name}: $failure")
+        Diagnostics.report("extensions", "${source.name} stream lookup failed", failure)
         Result.failure(failure)
     }
 

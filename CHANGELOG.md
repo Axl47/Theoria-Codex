@@ -64,6 +64,11 @@
 
 ### Changed
 
+- Downloading chapters, checking followed series for new chapters, a series' images and a chapter reopened from where you left off start only the extension that series comes from, not every extension that is on, so they no longer wait for the others to load.
+- In the reader's chapter strip, downloaded chapters and chapters the reader has loaded show their first page instead of the series cover, so chapters are easier to tell apart.
+- When a series chapter's pages fail to load, the Diagnostics failure log records why, including whether the site refused the request outright.
+- The Diagnostics failure log names the extension source behind a failed image, and records when an extension image was sent without its source's own connection.
+- The Diagnostics failure log records why an extension failed to load, and when one needed something Theoria doesn't provide.
 - A tag trail now narrows the search you were in, adding the tag to it, instead of searching that tag alone.
 - In the Viewer's information sheet, tags the current search already covers show as included or excluded.
 - Animated only now asks each site for animated posts instead of filtering a mixed page on the phone, so animated results fill the feed from the first page, on Pixiv especially. Turning it on or off re-runs the search like changing the sort, and saved and recent searches remember it. If you had it on, tap it once more after updating.
@@ -92,6 +97,11 @@
 - Backup has its own page in Settings. Back up profiles opens the file picker directly, with a switch for including History and statistics.
 - The app says "posts" where it sometimes said "items", and "Codices" where backups said "collections". Empty lists show a short label instead of a sentence.
 - Every site that wants a browser check, built-in, added in Sites or from an extension, now asks the same way: Verify in browser opens the site over the screen you're on instead of sending you to Settings, and closes by itself once Theoria gets through, so the screen you were on loads again. If the site lets the browser in but still refuses Theoria, the page says so. A built-in site you've verified once renews its check out of sight when it expires, as added sites and extensions do.
+- Series cards now show their title inside the bottom of the cover over a scrim, mark already-followed series with a Following badge in browse and search, and the Series search bar matches the Search tab's collapsing pill bar.
+- In global Series search, each source header shows its language underneath and opens that source's dedicated search when tapped; the Following shelf now bubbles series with unread chapters to the front.
+- In Series browse and dedicated source search, Popular, Latest and Filter now float in a pill at the bottom that hides as you scroll down and returns as you scroll back up, alongside the dedicated search header.
+- Series pages now open with a blurred cover backdrop, a Follow button beside Open in browser and Share, tap-to-zoom cover preview, long-press title copy, an expandable About section with genre tags that open that source's genre filter, a full-width Continue reading button, pull-to-refresh, card-styled chapters showing scanlator groups, and a floating top bar that hides as you scroll down and returns as you scroll up.
+- On a series page, the top bar now searches chapters inline, holding a chapter offers per-chapter read/unread, Mark previous as read, and download actions, bulk read/unread changes offer Undo, and the chapter list's filter button remembers sort and filter choices per series with quick-clear pills under the header.
 
 ### Removed
 
@@ -100,6 +110,9 @@
 
 ### Fixed
 
+- Opening a chapter of a series from sites like Asura no longer shows an HTTP 403 error while its pages load: the series cover shown meanwhile is fetched the way the site requires. The cover now also shows for the first chapter you open after starting the app, and for downloaded chapters.
+- Opening an extension series chapter no longer fails some of its pages with "Network request failed unexpectedly" while the app checks for extension updates.
+- In vertical reading, a long page that is still loading no longer looks like a blank black screen until you scroll to its middle: its spinner, or its Retry if it failed, stays in the part of the page you can see.
 - Tapping a tab while the app was still sliding past it to another tab did nothing. It now goes to the tab you tapped.
 - Undoing a save to a Codex you just created with New also removes that Codex, instead of leaving it behind empty.
 - History was blank while it loaded. It now shows that it is loading.

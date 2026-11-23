@@ -582,13 +582,16 @@ internal class DefaultTheoriaAppContainer(
             store = offlineStore,
             queueFile = File(appContext.noBackupFilesDir, "series_download_queue.json"),
             repository = repository,
-            sources = host::sources,
+            source = host::source,
+            covers = host.covers,
             // The client that carries the extension interceptor, as the Viewer's image loader does.
             fetch = { url, file -> downloadChapterPage(url, file, httpClients.downloads) },
             scheduler = SeriesDownloadScheduler(appContext) { settingsRepository.observeSettings().first().cache },
             deleteAfterReading = { settingsRepository.observeSettings().first().seriesDeleteAfterReading },
         )
-        SeriesDependencies(repository, host::sources, host.extensions, downloads, scope = durableStoreScope) { Log.i("SeriesReader", it) }
+        SeriesDependencies(
+            repository, host::sources, host::source, host.extensions, downloads, scope = durableStoreScope, covers = host.covers,
+        ) { Log.i("SeriesReader", it) }
     }
 
     /** Keeps the new-chapter check scheduled; started by [awaitDurableStores], once. */

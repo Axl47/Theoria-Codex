@@ -22,6 +22,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
+import com.theoriacodex.app.ui.components.rememberQuickReturn
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.domain.model.GalleryReadingMode
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState

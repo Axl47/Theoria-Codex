@@ -10,6 +10,7 @@ import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.SeriesStatus
 import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.source.CatalogueSource
+import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.MangasPage
 import eu.kanade.tachiyomi.source.model.Page
@@ -174,6 +175,27 @@ class MihonSeriesSourceTest {
             thrown = runCatching { series.popular(1) }.exceptionOrNull()
         }.join()
         assertTrue("$thrown", thrown is CancellationException)
+    }
+
+    @Test
+    fun `webUrl resolves through HttpSource and falls back to full series addresses`() {
+        val http = object : HttpSource() {
+            override val name = "Web"
+            override val baseUrl = "https://manga.example"
+            override val lang = "en"
+            override val supportsLatest = false
+            override fun headersBuilder() = okhttp3.Headers.Builder()
+            override fun popularMangaParse(response: okhttp3.Response) = MangasPage(emptyList(), false)
+            override fun searchMangaParse(response: okhttp3.Response) = MangasPage(emptyList(), false)
+            override fun mangaDetailsParse(response: okhttp3.Response) = SManga.create()
+            override fun chapterListParse(response: okhttp3.Response) = emptyList<SChapter>()
+            override fun pageListParse(response: okhttp3.Response) = emptyList<Page>()
+            override fun imageUrlParse(response: okhttp3.Response) = ""
+        }
+        val webSource = MihonSeriesSource(http, HostServices(ExtensionImages()))
+        assertEquals("https://manga.example/series/42", webSource.webUrl(Series(SeriesId(webSource.key, "/series/42"), "Title")))
+        assertNull(series.webUrl(Series(SeriesId(series.key, "/relative"), "Title")))
+        assertEquals("https://direct.example/s", series.webUrl(Series(SeriesId(series.key, "https://direct.example/s"), "Title")))
     }
 
     private suspend fun failureOf(error: Throwable): SourceFailureReason {

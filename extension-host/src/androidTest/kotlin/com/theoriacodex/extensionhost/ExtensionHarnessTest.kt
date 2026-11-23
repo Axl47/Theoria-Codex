@@ -45,15 +45,15 @@ class ExtensionHarnessTest {
         assertTrue("The popular listing is empty", listing.series.isNotEmpty())
 
         val extensionClient = OkHttpClient.Builder().addInterceptor(images).build()
-        val coverUrl = checkNotNull(listing.series.firstNotNullOfOrNull { it.coverUrl }) { "No series has a cover" }
-        val cover = timed("cover") { fetch(extensionClient, coverUrl) }
+        val covered = checkNotNull(listing.series.firstOrNull { it.coverUrl != null }) { "No series has a cover" }
+        val cover = timed("cover") { fetch(extensionClient, checkNotNull(images.address(covered))) }
         report("cover", "through extension: $cover")
-        report("cover", "plain request: ${runCatching { fetch(OkHttpClient(), coverUrl) }.getOrElse { "failed: $it" }}")
+        report("cover", "plain request: ${runCatching { fetch(OkHttpClient(), checkNotNull(covered.coverUrl)) }.getOrElse { "failed: $it" }}")
         assertTrue("The cover did not arrive as an image: $cover", cover.startsWith("image "))
         // A feed asks for every cover on screen at once, which some sites answer differently from one request.
         val together = timed("covers together") {
             coroutineScope {
-                listing.series.mapNotNull { it.coverUrl }.map { url ->
+                listing.series.mapNotNull(images::address).map { url ->
                     async(Dispatchers.IO) { runCatching { fetch(extensionClient, url) }.getOrElse { "failed: ${it.javaClass.simpleName}" } }
                 }.awaitAll()
             }

@@ -9,6 +9,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.playable
 import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesCovers
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
@@ -106,7 +107,7 @@ private const val SERIES_OWNER_PREFIX = "series:"
 /**
  * One chapter as the Viewer's post: its id is the chapter's address on the series' source, which is also the id its
  * download is kept under offline. Without [pages] the Viewer asks for them when it gets there. The title is what the
- * Viewer's top bar shows.
+ * Viewer's top bar shows. [cover] is what [SeriesCovers.address] gives for [series].
  */
 fun chapterPost(series: Series, entry: SeriesEntry, cover: String?, pages: List<ImageRef> = emptyList()) =
     entryPost(series, entry, cover, pages, mediaCount = pages.size.takeIf { it > 0 })
@@ -162,7 +163,9 @@ class SeriesDownloads(
     private val store: OfflineMediaStore,
     private val queueFile: File,
     private val repository: SeriesRepository,
-    private val sources: suspend () -> List<SeriesSource>,
+    /** The source a key names when it is on, else null. */
+    private val source: suspend (SourceKey) -> SeriesSource?,
+    private val covers: SeriesCovers,
     /** Writes the image at an address into a file and returns its media type; throws unless a whole image arrived. */
     private val fetch: suspend (url: String, into: File) -> String,
     private val scheduler: DownloadScheduler,
@@ -201,6 +204,15 @@ class SeriesDownloads(
 
     /** The chapter at [entry] with its pages as files, in reading order; null when it is not on the device. */
     suspend fun chapter(id: SeriesId, entry: String): Post? = store.find(PostId(id.source, entry))
+
+    /**
+     * The first page, as a file, of each of [id]'s chapters on the device, by address, read from memory; then again
+     * whenever a chapter is downloaded or deleted.
+     */
+    fun firstPages(id: SeriesId): Flow<Map<String, ImageRef>> = flow {
+        store.load()
+        emitAll(store.snapshot.map { it.firstPages(id) }.distinctUntilChanged())
+    }
 
     /** The addresses of [id]'s chapters on the device. */
     suspend fun downloaded(id: SeriesId): Set<String> {
@@ -412,7 +424,7 @@ class SeriesDownloads(
         val owner = seriesOfflineOwner(chapter.series)
         // A copy already on the device, such as one saved to a Codex, needs only the series as another owner.
         if (store.retain(PostId(chapter.series.source, entry.address), owner) != null) return
-        val source = sources().firstOrNull { it.key == chapter.series.source } ?: throw IOException("The series' source is not on")
+        val source = this.source(chapter.series.source) ?: throw IOException("The series' source is not on")
         // An episode's streams are played, never downloaded; the series page offers no download for them.
         val pages = when (val media = attempts { source.media(entry) }) {
             is EntryMedia.Pages -> media.pages
@@ -422,7 +434,7 @@ class SeriesDownloads(
         fetching.value = chapter to 0f
         onPage(0, pages.size)
         val done = AtomicInteger()
-        val post = chapterPost(series, entry, series.coverUrl, pages)
+        val post = chapterPost(series, entry, covers.address(series), pages)
         // Extension pages name no type, and their addresses often no extension, so the type fetched is the page's.
         store.save(post, pages, owner, parallel = PARALLEL_PAGES) { page, file ->
             val type = attempts { fetch(checkNotNull(page.url), file) }
@@ -481,6 +493,9 @@ class SeriesDownloads(
     /** The addresses of [id]'s chapters on the device. */
     private fun OfflineMediaSnapshot.chapters(id: SeriesId): Set<String> =
         postsByOwner[seriesOfflineOwner(id)].orEmpty().mapTo(HashSet()) { it.sourcePostId }
+
+    private fun OfflineMediaSnapshot.firstPages(id: SeriesId): Map<String, ImageRef> =
+        postsByOwner[seriesOfflineOwner(id)].orEmpty().mapNotNull { post -> firstPages[post]?.let { post.sourcePostId to it } }.toMap()
 
     companion object {
         const val PAGE_ATTEMPTS = 3

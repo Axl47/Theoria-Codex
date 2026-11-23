@@ -30,7 +30,7 @@ internal class MihonImages(private val source: HttpSource, private val key: Sour
 
     /**
      * The tagged address the source would request for [page] of [chapter]; null when the page names neither an image
-     * nor where to find one. A page's own `imageUrl` is not always that address: MangaDex keeps a bare path there and
+     * nor where to find one. A page's own `imageUrl` is not always that address: some sources keep a bare path there and
      * adds the image server per request. Makes no request.
      */
     fun pageAddress(chapter: SChapter, page: Page): String? {
@@ -43,8 +43,6 @@ internal class MihonImages(private val source: HttpSource, private val key: Sour
         pages[address] = page
         return address
     }
-
-    fun coverAddress(address: String): String = images.tag(key, address)
 
     /** [data] is set only for a page whose image is not named yet: its index and its chapter's address. */
     override fun fetch(address: String, url: HttpUrl, data: String?): Response {

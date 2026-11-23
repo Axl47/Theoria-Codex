@@ -22,6 +22,10 @@ import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.testing.testPost
@@ -119,6 +123,64 @@ class ViewerPostStripTest {
         }
         compose.onNodeWithContentDescription("Open post strip-3").assertIsDisplayed()
         compose.onNodeWithContentDescription("Go to page 1 of 4").assertDoesNotExist()
+    }
+
+    @Test fun `chapters show their numbers over the shared cover, and unnumbered ones show none`() {
+        val chapters = (1..3).map { testPost(sourcePostId = "/chapter/$it").copy(title = "Series · Chapter $it") }
+        val marks = mapOf(chapters[0].id to ViewerStripMark("9", "Chapter 9"), chapters[1].id to ViewerStripMark("10.5", "Chapter 10.5"))
+        compose.setContent {
+            MaterialTheme { ViewerPostStrip(chapters, 0, {}, Modifier.width(360.dp), chapters = true, stripMarks = marks) }
+        }
+        compose.onNodeWithText("9", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("10.5", useUnmergedTree = true).assertIsDisplayed()
+        compose.onAllNodesWithText("3", useUnmergedTree = true).assertCountEquals(0)
+        compose.onNodeWithContentDescription("Open Chapter 9").assertExists()
+        compose.onNodeWithContentDescription("Open Series · Chapter 3").assertExists()
+        // The drawn number stays out of TalkBack, which reads the mark's label instead.
+        compose.onNodeWithText("9", useUnmergedTree = true).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility).or(hasAnyAncestor(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility))))
+    }
+
+    @Test fun `chapters with pages or a marked image show it, the rest the shared cover`() {
+        val log = installHangingLoader()
+        try {
+            val cover = ImageRef(null, "/missing/cover.jpg", "image/jpeg")
+            val firstPage = ImageRef(null, "/missing/chapter-1/page-1.jpg", "image/jpeg")
+            val read = testPost(sourcePostId = "/chapter/1").copy(preview = cover, media = listOf(firstPage, ImageRef(null, "/missing/chapter-1/page-2.jpg", "image/jpeg")))
+            val downloaded = testPost(sourcePostId = "/chapter/2").copy(preview = cover)
+            val unread = testPost(sourcePostId = "/chapter/3").copy(preview = cover)
+            val marks = mapOf(downloaded.id to ViewerStripMark(image = ImageRef(null, "/missing/chapter-2/0.jpg", "image/jpeg")))
+            compose.setContent {
+                MaterialTheme { ViewerPostStrip(listOf(read, downloaded, unread), 0, {}, Modifier.width(360.dp), chapters = true, stripMarks = marks) }
+            }
+            compose.waitForIdle()
+            assertEquals(setOf("page-1.jpg", "0.jpg", "cover.jpg"), log.started.map { it.substringAfterLast('/') }.toSet())
+        } finally {
+            coil.Coil.reset()
+        }
+    }
+
+    @Test fun `a chapter whose first page fails to load shows the cover instead`() {
+        val log = installFailingLoader()
+        try {
+            val chapter = testPost(sourcePostId = "/chapter/1").copy(preview = ImageRef(null, "/missing/cover.jpg", "image/jpeg"), media = listOf(ImageRef("https://expired.test/page-1.jpg", null, "image/jpeg")))
+            compose.setContent { MaterialTheme { ViewerPostStrip(listOf(chapter), 0, {}, Modifier.width(360.dp), chapters = true) } }
+            compose.waitForIdle()
+            assertEquals(listOf("page-1.jpg", "cover.jpg"), log.started.map { it.substringAfterLast('/') }.distinct())
+        } finally {
+            coil.Coil.reset()
+        }
+    }
+
+    @Test fun `other posts keep their preview even when their pages are known`() {
+        val log = installHangingLoader()
+        try {
+            val post = testPost(sourcePostId = "gallery").copy(preview = ImageRef(null, "/missing/preview.jpg", "image/jpeg"), media = listOf(ImageRef(null, "/missing/full.jpg", "image/jpeg")))
+            compose.setContent { MaterialTheme { ViewerPostStrip(listOf(post), 0, {}, Modifier.width(360.dp)) } }
+            compose.waitForIdle()
+            assertEquals(setOf("preview.jpg"), log.started.map { it.substringAfterLast('/') }.toSet())
+        } finally {
+            coil.Coil.reset()
+        }
     }
 
     @Test fun `only multi-page posts announce their page count`() {

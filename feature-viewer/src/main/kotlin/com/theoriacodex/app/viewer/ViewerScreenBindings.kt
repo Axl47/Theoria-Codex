@@ -26,7 +26,15 @@ data class ViewerScreenConfig(
     /** Galleries whose reading mode the user chose; the rest follow [invertMultiImageScrollDirection]. */
     val galleryReadingModes: Map<PostId, GalleryReadingMode> = emptyMap(),
     val playbackDiagnosticsEnabled: Boolean = false,
+    /** Marks over strip thumbnails, such as series chapters' numbers on their shared cover. */
+    val stripMarks: Map<PostId, ViewerStripMark> = emptyMap(),
 )
+
+/**
+ * How the strip shows one post: text drawn over its thumbnail ([badge], which TalkBack skips), the name TalkBack reads
+ * for the tile, and an [image] to show in place of the post's preview. Each is optional.
+ */
+data class ViewerStripMark(val badge: String? = null, val label: String? = null, val image: ImageRef? = null)
 
 /** What the Viewer asks of the app: navigation, persistence and platform behavior. The app builds one per shell. */
 data class ViewerScreenCallbacks(

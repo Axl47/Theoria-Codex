@@ -2,6 +2,7 @@ package com.theoriacodex.app.series
 
 import com.theoriacodex.app.di.SeriesDependencies
 import com.theoriacodex.data.repository.DownloadScheduler
+import com.theoriacodex.data.repository.EntryProgressRestore
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.OfflineMediaStore
 import com.theoriacodex.data.repository.SeriesDownloads
@@ -17,6 +18,7 @@ import com.theoriacodex.domain.series.ExtensionSetting
 import com.theoriacodex.domain.series.ExtensionSourceSettings
 import com.theoriacodex.domain.series.InstalledExtension
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesCovers
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesExtensions
 import com.theoriacodex.domain.series.SeriesFilter
@@ -61,6 +63,9 @@ internal class StoredOnly(private var stored: StoredSeries, private var entries:
     override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) = false
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit
+    override suspend fun setAllRead(id: SeriesId, read: Boolean) = EntryProgressRestore()
+    override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean) = EntryProgressRestore()
+    override suspend fun restoreProgress(id: SeriesId, restore: EntryProgressRestore) = Unit
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?) {
         progress += "$entryAddress $position/$length"
         stored = stored.copy(lastOpenedEntry = entryAddress)
@@ -84,7 +89,10 @@ internal object NoExtensions : SeriesExtensions {
     override suspend fun change(id: String, sourceId: String, setting: ExtensionSetting) = settings(id)
 }
 
-/** A series reader's dependencies over [repository], with downloads in [folder] that never fetch. */
+/**
+ * A series reader's dependencies over [repository], with downloads in [folder] that never fetch. A stored cover is
+ * tagged `#loadable`, as an extension's own client would be asked for it.
+ */
 internal fun TestScope.seriesDependencies(
     folder: File,
     repository: SeriesRepository,
@@ -92,11 +100,14 @@ internal fun TestScope.seriesDependencies(
     deleteAfterReading: Boolean = false,
     store: OfflineMediaStore = OfflineMediaStore(folder.resolve("downloads"), StandardTestDispatcher(testScheduler)),
 ): SeriesDependencies {
+    val covers = SeriesCovers { series -> series.coverUrl?.let { "$it#loadable" } }
+    val source: suspend (SourceKey) -> SeriesSource? = { key -> sources().firstOrNull { it.key == key } }
     val downloads = SeriesDownloads(
         store = store,
         queueFile = folder.resolve("queue.json"),
         repository = repository,
-        sources = sources,
+        source = source,
+        covers = covers,
         fetch = { _, _ -> error("Nothing downloads here") },
         scheduler = object : DownloadScheduler {
             override suspend fun schedule(automatic: Boolean) = Unit
@@ -106,5 +117,5 @@ internal fun TestScope.seriesDependencies(
         deleteAfterReading = { deleteAfterReading },
         files = AtomicJsonFileStore(StandardTestDispatcher(testScheduler)),
     )
-    return SeriesDependencies(repository, sources, NoExtensions, downloads, scope = this, log = {})
+    return SeriesDependencies(repository, sources, source, NoExtensions, downloads, scope = this, covers = covers, log = {})
 }

@@ -13,6 +13,11 @@ data class ExtensionChoices(
     val trusted: Map<String, String> = emptyMap(),
     /** Per extension package, the source languages the user chose; a package not named here uses [defaultLanguages]. */
     val languages: Map<String, Set<String>> = emptyMap(),
+    /**
+     * Not a choice but what loading showed: per source (its key's id), the extension that offered it when last loaded,
+     * so a later lookup of that source loads only that extension.
+     */
+    val owners: Map<String, String> = emptyMap(),
 )
 
 interface ExtensionChoiceStore {

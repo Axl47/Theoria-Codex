@@ -33,6 +33,8 @@ data class ViewerSession(
     val focusComment: CommentTarget? = null,
     /** How a series session's entries open; null for every session that is not a series'. */
     val series: ViewerSeries? = null,
+    // What the strip draws over a post's thumbnail and reads for its tile, such as a series chapter's number.
+    val stripMarks: Map<com.theoriacodex.domain.model.PostId, ViewerStripMark> = emptyMap(),
 )
 
 /**

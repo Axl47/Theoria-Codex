@@ -30,6 +30,9 @@ class DiagnosticRedactionTest {
     fun `personal values are removed and stack frames survive`() {
         assertEquals("[redacted]", DiagnosticRedaction.redact("someone@example.com"))
         assertEquals("[redacted]", DiagnosticRedaction.redact("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6"))
+        assertEquals("custom_mihon_1234567890123456789 image failed", DiagnosticRedaction.redact("custom_mihon_1234567890123456789 image failed"))
+        assertEquals("[redacted] failed", DiagnosticRedaction.redact("custom_mihon_1234567890123456789-secret failed"))
+        assertEquals("custom_aniyomi_1234567890123456789 stream failed", DiagnosticRedaction.redact("custom_aniyomi_1234567890123456789 stream failed"))
         assertEquals("[app file]", DiagnosticRedaction.redact("/storage/emulated/0/Download/TheoriaCodex/12345.png"))
         val frame = "at com.theoriacodex.app.viewer.ViewerVideoPlayer.onPlayerError(ViewerVideoPlayer.kt:230)"
         assertEquals(frame, DiagnosticRedaction.redact(frame))

@@ -24,7 +24,7 @@ import eu.kanade.tachiyomi.source.online.HttpSource
  */
 class MihonSeriesSource(private val source: Source, host: HostServices) : SeriesSource {
     override val key: SourceKey = MihonKind.sourceKey(source.id)
-    private val calls = ExtensionCalls(source.name, host.log) { challenged -> host.onChallenged(key, challenged) }
+    private val calls = ExtensionCalls(source.name) { challenged -> host.onChallenged(key, challenged) }
 
     /** Fetches its covers and pages through its own client; only an HTTP source has one. */
     internal val sourceImages: MihonImages? = (source as? HttpSource)?.let { MihonImages(it, key, host.images) }
@@ -77,9 +77,9 @@ class MihonSeriesSource(private val source: Source, host: HostServices) : Series
         source.getPageList(chapter).mapNotNull { page -> pageImage(chapter, page) }
     }
 
-    /** Covers stored by earlier builds carry a tag of their own, which is replaced. */
-    override fun coverAddress(series: Series): String? = series.coverUrl?.substringBefore(ExtensionImages.FRAGMENT)?.let { address ->
-        sourceImages?.coverAddress(address) ?: address
+    override fun webUrl(series: Series): String? {
+        val http = source as? HttpSource
+        return extensionWebUrl(series, super.webUrl(series), http?.baseUrl, http?.let { { it.getMangaUrl(manga(series)) } })
     }
 
     private fun MangasPage.listed() = SeriesPage(

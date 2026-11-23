@@ -2,6 +2,7 @@ package com.theoriacodex.extensionhost
 
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
@@ -20,11 +21,11 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 /**
- * How a source adapter runs its extension's calls, for either interface. [name] is the source's, for the log;
+ * How a source adapter runs its extension's calls, for either interface. [name] is the source's, for the failure log;
  * [onChallenged] hears of each host whose browser check stopped one of its calls, which can be an API, image or video
  * host besides its site's.
  */
-internal class ExtensionCalls(private val name: String, private val log: (String) -> Unit, private val onChallenged: (host: String) -> Unit) {
+internal class ExtensionCalls(private val name: String, private val onChallenged: (host: String) -> Unit) {
     /**
      * Runs an extension call off the caller's thread, which is often the main one: extensions parse there and some
      * block on the network. Its failures are reported the way built-in sources report theirs, with the failure's own
@@ -52,11 +53,12 @@ internal class ExtensionCalls(private val name: String, private val log: (String
             is IOException -> SourceFailureReason.NETWORK
             is LinkageError -> {
                 // The extension called a part of its interface's host API that this module does not provide.
-                log("$name needs host API this module lacks: $error")
+                // Its message is the extension's and can hold an address or a title, which only the redacted log may keep.
+                Diagnostics.report(LOG_AREA, "$name needs host API this module lacks", error)
                 SourceFailureReason.UNKNOWN
             }
             is Error -> {
-                log("$name failed: $error")
+                Diagnostics.report(LOG_AREA, "$name failed", error)
                 SourceFailureReason.UNKNOWN
             }
             else -> SourceFailureReason.PARSE
@@ -66,6 +68,7 @@ internal class ExtensionCalls(private val name: String, private val log: (String
 
     private companion object {
         const val HTTP_TOO_MANY_REQUESTS = 429
+        const val LOG_AREA = "extensions"
     }
 }
 
@@ -118,6 +121,16 @@ internal fun extensionSeries(id: SeriesId, title: String, cover: String?, author
     description = description?.trim()?.takeIf(String::isNotEmpty),
     status = seriesStatus(status),
 )
+
+/**
+ * [series]' page on its site, for Open in browser and Share: what the source builds for it ([sourceUrl], which runs
+ * extension code and is null for a source without a site), else [stored] (the address the app would show without the
+ * extension), else the series' address under the source's [baseUrl]. Makes no request.
+ */
+internal fun extensionWebUrl(series: Series, stored: String?, baseUrl: String?, sourceUrl: (() -> String)?): String? =
+    sourceUrl?.let { runCatching(it).getOrNull()?.takeIf(String::isNotBlank) }
+        ?: stored
+        ?: baseUrl?.takeIf(String::isNotBlank)?.let { "${it.trimEnd('/')}/${series.id.address.trimStart('/')}" }
 
 /**
  * A chapter or episode of [seriesTitle] as the app's entry. Extensions may leave the [number] at -1 for the app to

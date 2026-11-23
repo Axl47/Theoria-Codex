@@ -4,6 +4,7 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.MediaStream
 import com.theoriacodex.domain.model.MediaTrack
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
@@ -52,20 +53,33 @@ class AniyomiSeriesSourceTest {
     }
 
     @Test
-    fun `a cover is handed out tagged, and fetched through the source's own client with its headers`() {
-        val images = ExtensionImages()
+    fun `a stored cover is tagged without loading the extension, and fetched through the source's own client with its headers`() {
         val asked = mutableListOf<Request>()
         val source = object : FakeAnimeSource() {
             override val client: OkHttpClient = OkHttpClient.Builder().addInterceptor(answering { request -> asked += request; cannedResponse(request) }).build()
         }
-        val hosted = AniyomiKind.hosted(source, HostServices(images))
-        images.publish(listOf(hosted))
-        val tagged = checkNotNull(hosted.series.coverAddress(Series(SeriesId(hosted.key, "/a/1"), "Show", coverUrl = "https://img.example/c.jpg")))
+        val loaded = mutableListOf<SourceKey>()
+        lateinit var images: ExtensionImages
+        images = ExtensionImages { key ->
+            loaded += key
+            images.publish(listOf(AniyomiKind.hosted(source, HostServices(images))))
+        }
+        val key = AniyomiKind.sourceKey(source.id)
+        val tagged = checkNotNull(images.address(Series(SeriesId(key, "/a/1"), "Show", coverUrl = "https://img.example/c.jpg")))
+        assertTrue(loaded.isEmpty())
 
         OkHttpClient.Builder().addInterceptor(images).build().newCall(Request.Builder().url(tagged).build()).execute().close()
 
+        assertEquals(listOf(key), loaded)
         assertEquals(listOf("https://img.example/c.jpg"), asked.map { it.url.toString() })
         assertEquals("FakeBrowser/1.0", asked.single().header("User-Agent"))
+    }
+
+    @Test
+    fun `a series' web page is the one the source builds for it`() {
+        val series = AniyomiSeriesSource(object : FakeAnimeSource() {}, HostServices(ExtensionImages()))
+
+        assertEquals("https://anime.example/a/1", series.webUrl(Series(SeriesId(series.key, "/a/1"), "Show")))
     }
 
     @Test

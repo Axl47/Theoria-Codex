@@ -3,6 +3,7 @@ package com.theoriacodex.extensionhost
 import android.content.Context
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.os.FileObserver
 import java.io.File
 import java.security.MessageDigest
 import java.util.HexFormat
@@ -59,12 +60,17 @@ class ExtensionPackages(private val context: Context, private val kinds: List<Ex
     }
 
     /**
-     * Changes whenever [list] would answer differently, and reads no APK to tell: every package's name and last
-     * update, and the folder's file names, lengths and write times. Cheap enough to ask before every use.
+     * Calls [changed], on a thread of its own, whenever an APK file in [folder] is written, moved or deleted; null
+     * without a folder. Watches only while the returned observer is held. Installed packages announce their changes
+     * by broadcast instead.
      */
-    fun stamp(): Any {
-        val installed = context.packageManager.getInstalledPackages(PackageManager.PackageInfoFlags.of(0)).mapTo(HashSet()) { "${it.packageName} ${it.lastUpdateTime}" }
-        return installed to apkFiles().map { "${it.name} ${it.length()} ${it.lastModified()}" }
+    fun watchFolder(changed: () -> Unit): FileObserver? {
+        val folder = folder() ?: return null
+        return object : FileObserver(folder, FOLDER_CHANGES) {
+            override fun onEvent(event: Int, path: String?) {
+                if (path?.endsWith(".apk") == true) changed()
+            }
+        }.apply { startWatching() }
     }
 
     private fun apkFiles(): List<File> = folder()?.listFiles { file -> file.extension == "apk" }.orEmpty().sortedBy(File::getName)
@@ -112,5 +118,6 @@ class ExtensionPackages(private val context: Context, private val kinds: List<Ex
 
     private companion object {
         const val FLAGS = (PackageManager.GET_CONFIGURATIONS or PackageManager.GET_META_DATA or PackageManager.GET_SIGNING_CERTIFICATES).toLong()
+        const val FOLDER_CHANGES = FileObserver.CLOSE_WRITE or FileObserver.MOVED_TO or FileObserver.MOVED_FROM or FileObserver.DELETE
     }
 }

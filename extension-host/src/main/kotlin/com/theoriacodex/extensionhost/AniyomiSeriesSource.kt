@@ -19,18 +19,18 @@ import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 /**
  * One Aniyomi extension source as the app's [SeriesSource]: an anime is a series, an episode an entry, and an
  * episode's media is the streams its servers offer, which [AniyomiStreams] resolves. Covers load through the source's
- * own client, tagged by [HostServices.images]; a host whose browser check stopped one of its calls is reported to
+ * own client ([sourceImages]), once [ExtensionImages.address] tags them; a host whose browser check stopped one of its calls is reported to
  * [HostServices.onChallenged].
  */
 class AniyomiSeriesSource internal constructor(
     private val source: AnimeSource,
-    private val host: HostServices,
+    host: HostServices,
     limits: AniyomiStreams.Limits,
 ) : SeriesSource {
     constructor(source: AnimeSource, host: HostServices) : this(source, host, AniyomiStreams.Limits())
 
     override val key: SourceKey = AniyomiKind.sourceKey(source.id)
-    private val calls = ExtensionCalls(source.name, host.log) { challenged -> host.onChallenged(key, challenged) }
+    private val calls = ExtensionCalls(source.name) { challenged -> host.onChallenged(key, challenged) }
     private val http = source as? AnimeHttpSource
     private val streams = AniyomiStreams(source, host, calls, limits)
 
@@ -88,7 +88,8 @@ class AniyomiSeriesSource internal constructor(
         streams.of(episode)
     }
 
-    override fun coverAddress(series: Series): String? = series.coverUrl?.let { address -> if (sourceImages != null) host.images.tag(key, address) else address }
+    override fun webUrl(series: Series): String? =
+        extensionWebUrl(series, super.webUrl(series), http?.baseUrl, http?.let { { it.getAnimeUrl(anime(series)) } })
 
     /** Kept as listed, except an anime already opened, which keeps what its details said (about seasons, too). */
     private fun AnimesPage.listed() = SeriesPage(

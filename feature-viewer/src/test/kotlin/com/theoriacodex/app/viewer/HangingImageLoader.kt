@@ -12,6 +12,7 @@ import coil.fetch.DrawableResult
 import coil.fetch.FetchResult
 import coil.fetch.Fetcher
 import coil.request.ImageRequest
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 
@@ -30,10 +31,28 @@ internal fun installHangingLoader(loadsImmediately: String? = null): ImageLoadLo
 }
 
 /**
- * Replaces Coil's loader with one whose every request fails at once, on the calling thread, so a test's idling
- * sees each failure land. Call `Coil.reset()` after the test.
+ * Replaces Coil's loader with one whose requests all wait until the returned function is called, then finish as
+ * [width] by [height] images. Call `Coil.reset()` after the test.
  */
-internal fun installFailingLoader() = installTestLoader(EventListener.NONE) { data -> error("No image in tests: $data") }
+internal fun installGatedLoader(width: Int, height: Int): () -> Unit {
+    val gate = CompletableDeferred<Unit>()
+    val image = BitmapDrawable(context().resources, Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888))
+    installTestLoader(EventListener.NONE) {
+        gate.await()
+        DrawableResult(image, false, DataSource.MEMORY)
+    }
+    return { gate.complete(Unit) }
+}
+
+/**
+ * Replaces Coil's loader with one whose every request fails at once, on the calling thread, so a test's idling
+ * sees each failure land, recording which requests started. Call `Coil.reset()` after the test.
+ */
+internal fun installFailingLoader(): ImageLoadLog {
+    val log = ImageLoadLog()
+    installTestLoader(log) { data -> error("No image in tests: $data") }
+    return log
+}
 
 /** Unconfined, so loads finish on the main thread, where Compose's idling tracks them. */
 private fun installTestLoader(listener: EventListener, fetch: suspend (Any) -> FetchResult) {

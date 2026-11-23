@@ -31,11 +31,11 @@ the question was open is asked about again. Loaded code is kept per listed file,
 included, so a file replaced in place loads anew, from a private copy of its own, and never runs under another file's
 signer or name. Trust is never written to or read from a profile backup.
 
-**Changes on the device.** Every source lookup first compares a cheap stamp of the device's packages and the folder's
-files; an extension installed, updated or removed since then is listed again and only what changed is loaded. Every
-extension image request makes the same check, so a source removed or turned off stops fetching images. The app
-also listens for package changes while it runs, in every build, so the Series tab and the open Extensions page follow
-without a restart.
+**Changes on the device.** The app listens for package broadcasts while it runs, in every build, and debug builds also
+watch the APK folder. Both start before the extensions first load. Each change lists the device again and loads only
+what changed, so an extension installed, updated, removed, hidden or unhidden is picked up without a restart, and the
+Series tab and the open Extensions page follow. Source lookups and image requests ask nothing of the device: they
+read the sources last listed, so a source removed or turned off stops fetching images once that listing is done.
 
 **Pages.** A chapter's pages are handed out without further requests. Where a source names each image on a page of
 its own, the address handed out is that page's, tagged with the source, the page's place and its
@@ -43,7 +43,7 @@ chapter, and the image's address is asked for when the image is requested, so on
 page. When that image does not arrive its address is asked for again next time, since such addresses expire; when
 the page is no longer held, after a restart, the chapter's pages are listed again. Extension calls run off the main thread.
 
-**Languages.** An extension can ship one source per language (MangaDex ships 62). The ones on by default are those
+**Languages.** An extension can ship one source per language (one ships 62). The ones on by default are those
 matching a device language, else English, else the first; the Extensions page switches each on and off.
 
 **Settings.** An extension describes its settings by filling an `androidx.preference.PreferenceScreen`. The classes
@@ -103,12 +103,12 @@ once more.
 | `AniyomiKind` | same | Aniyomi's anime interface, versions 14 and 16, presented by `AniyomiSeriesSource` (see "Anime extensions"). Refuses other versions and extensions that stream by torrent, saying why on the Extensions page. |
 | `ExtensionCalls`, `ExtensionFilters.kt` | same | What both adapters share: running an extension call off the caller's thread and reporting its failure the way built-in sources do, the status numbers, and the filter tree as `SeriesFilter`s. |
 | `ExtensionPackages` | same | Lists the extensions on the device without running them: installed packages that declare a kind's feature and, in debug builds only, APK files in the app's `mihon-extensions` folder. |
-| `ExtensionRegistry` | same | The rule for what runs: loads the extensions that are on, on first use, each with 15 s to finish, and offers the sources of the languages that are on; only those sources fetch images. One that hangs or fails is left out and says why on the Extensions page. Settings are read only for the extension whose page is open. |
+| `ExtensionRegistry` | same | The rule for what runs: loads extensions that are on, on first use, each with 15 s to finish: a lookup of one source loads only the extension last seen offering it (`ExtensionChoices.owners`), and the whole list loads all of them. It offers the sources of the languages that are on; only those sources fetch images. One that hangs or fails is left out and says why on the Extensions page. Settings are read only for the extension whose page is open. |
 | `ExtensionLoader` | same | Loads an installed package's code from its own APK; a folder file is first copied to a private read-only file (Android refuses writable code) and the copy's signer checked again. |
 | `SourceSettings`, `androidx/preference` | same | Reads a source's settings out of the holder classes and stores a changed value where the source reads it. |
 | `ExtensionHost` | same | Gives extensions what they ask the service locator for: the application, a `Json`, and an HTTP client. The client shares the system WebView's cookies for every host, as Mihon's does (see "Browser checks"). |
 | `MihonSeriesSource`, `AniyomiSeriesSource` | same | Presents one extension source as the app's `SeriesSource` (`core-domain`): popular, latest and search list series, a series has details and chapters (episodes), and a chapter gives its pages when it is opened (an episode its streams). A source's search filters become the app's `SeriesFilter`s (`MihonFilters.kt`, `AniyomiFilters.kt`); a search sets the values chosen onto a list the source makes afresh, matching each by place, kind and name, and leaves one that no longer lines up at the source's default; later pages of the same search reuse that list, as Mihon does. |
-| `ExtensionImages` | same | Fetches covers and pages through the extension's own HTTP client. Each address handed to the image loader ends in a `#mihon=` tag naming the source by its full key (so sources of two kinds with the same numeric id stay apart), with a code only this install can compute; an interceptor on the app's media client answers those. Stored covers are plain addresses: the series' source tags one each time it is drawn (`SeriesSource.coverAddress`), and without its source a cover loads as an ordinary request. |
+| `ExtensionImages` | same | Fetches covers and pages through the extension's own HTTP client. Each address handed to the image loader ends in a `#mihon=` tag naming the source by its full key (so sources of two kinds with the same numeric id stay apart), with a code only this install can compute; an interceptor on the app's media client answers those. Stored covers are plain addresses, tagged each time one is drawn or saved for a post (`SeriesCovers.address`), for both kinds. A tag needs only the series' source key, so this loads nothing; the source's extension alone loads when the image is first requested, and a cover whose source is not on loads as an ordinary request. |
 | App seam | `app/.../extensions/ExtensionSourceHost.kt`, `app/.../di/ExtensionSources.kt` | The application creates the host. Nothing loads at startup: the extensions that are on load once, off the main thread, the first time the Series tab asks for sources or an image address ending in `#mihon=` is requested. The manifest holds `QUERY_ALL_PACKAGES`, as Mihon does: extension packages share only a declared feature, which a `<queries>` element cannot match. |
 | Series | `feature-series`, `app/.../series/`, `core-data` `SeriesRepository` | The Series tab and series page, the Extensions page (also reached from Settings), the Viewer session over a series' chapters, and the `series` and `series_entries` tables that keep followed series, read state and progress. Pages are never stored. |
 | Backup | `core-data` `SeriesBackupRecords.kt`, `RoomProfileBackupStore` | Profile backups hold the series the user follows, started reading or chose a reading mode for, with every stored chapter's read state and last page (`library.series`, backup version 3; a backup without series is still written as version 2). Series are stored once for the whole app, not per profile, so they are backed up once. A restore adds: a series already stored becomes followed, takes a reading mode and a Continue point if it had none, and each chapter takes the further progress of the two sides. A chapter only the backup has arrives as not listed when the device already holds the series' list, so it is not counted as unread. A series over 20,000 chapters is cut to that many, keeping the Continue point, then chapters with progress, then listed ones, so every backup the app writes is one it restores. A cover is written and read as the plain address the source gave, so a restored series shows its cover at once; the series' own source decides how it is fetched. Trust is never in a backup, so a restored series shows "Extension unavailable" until its extension is installed and turned on. |
@@ -177,7 +177,7 @@ longer keeps one of them. It lists host names only; the survey's scripts and the
 repository.
 
 Proved on an emulator with the minified `releaseAcceptance` build: the tab appears once an extension is installed;
-MangaDex turns on, browses, opens a series and a chapter whose pages download, and keeps a changed setting across a
+a manga extension turns on, browses, opens a series and a chapter whose pages download, and keeps a changed setting across a
 restart; following a series and forcing the update job (`cmd jobscheduler run -f <package> 3101`) ends with the job
 finished; a second extension browses and lists chapters. Logcat shows no missing class or member.
 
@@ -266,7 +266,7 @@ The extension index used listed 1,711 extensions (2,742 sources), every one buil
 - Mihon ships the same OkHttp (5.5.1) and kotlinx.serialization (1.13.0) as Theoria.
 - Mihon's `source-api` changed in 14 commits in the last year, three of them the move to API 1.6.
 
-**Two requirements were not visible in the API.** Both were found by running MangaDex:
+**Two requirements were not visible in the API.** Both were found by running the first manga extension tried:
 
 - Every extension carries a shared library that rebuilds the host's HTTP client and refuses to run unless it finds
   interceptors named `UncaughtExceptionInterceptor`, `UserAgentInterceptor` and `CloudflareInterceptor` in it
@@ -274,11 +274,11 @@ The extension index used listed 1,711 extensions (2,742 sources), every one buil
 - Most extensions decode JSON from the response stream with `kotlinx-serialization-json-okio` (246 of 300), which
   Theoria did not ship.
 
-**Images must go through the extension.** MangaDex answers a cover request from any other HTTP client with a bot
+**Images must go through the extension.** One site answers a cover request from any other HTTP client with a bot
 check, and builds each page's address per request from a short-lived image server. Mihon fetches both through the
 source's client; so does this host.
 
-**Timings on an emulator (MangaDex).** Load the APK: 45 ms. Popular listing: 1 request, about 1 s. Open a series
+**Timings on an emulator (that first extension).** Load the APK: 45 ms. Popular listing: 1 request, about 1 s. Open a series
 (details, chapter list, page list): 4 requests, about 1.5 s alone. In the app, opening a series right after a listing
 took 4 to 12 s: the covers go through the same rate-limited client, and the Viewer also resolves the next post.
 

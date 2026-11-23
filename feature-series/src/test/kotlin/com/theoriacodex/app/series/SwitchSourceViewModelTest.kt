@@ -138,13 +138,13 @@ class SwitchSourceViewModelTest {
 
     @Test
     fun aSeriesWithoutChaptersSaysSoAndSourcesOfOneNameAreToldApartByLanguage() = runTest {
-        val french = Finding("custom_mihon_2", listOf("Hero"), name = "MangaDex", language = "fr")
-        val viewModel = viewModel(french, Finding("custom_mihon_3", name = "MangaDex")) { _, _ -> throw NoChaptersToMoveToException() }
+        val french = Finding("custom_mihon_2", listOf("Hero"), name = "Paper Lantern", language = "fr")
+        val viewModel = viewModel(french, Finding("custom_mihon_3", name = "Paper Lantern")) { _, _ -> throw NoChaptersToMoveToException() }
         advanceUntilIdle()
         viewModel.open("Hero")
         advanceUntilIdle()
         val result = viewModel.state.value.sheet!!.results.first()
-        assertEquals("MangaDex · ${languageName("fr")}", result.name)
+        assertEquals("Paper Lantern · ${languageName("fr")}", result.name)
 
         viewModel.switchTo((result.listing as SwitchListing.Found).matches.single()) {}
         advanceUntilIdle()

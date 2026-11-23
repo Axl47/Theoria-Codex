@@ -12,6 +12,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.performClick
 import org.junit.Assert.assertFalse
@@ -61,7 +62,7 @@ class ViewerVerticalGalleryTest {
 
     // Pages fail at once on the main thread; on Coil's background thread they could land after idling, and a Retry
     // tapped before the Viewer holds page 1's error only reloads that page locally.
-    @Before fun failImageLoads() = installFailingLoader()
+    @Before fun failImageLoads() { installFailingLoader() }
     @After fun resetCoil() = Coil.reset()
 
     private fun show(modes: Map<PostId, GalleryReadingMode> = mapOf(gallery.id to GalleryReadingMode.VERTICAL)) {
@@ -154,6 +155,29 @@ class ViewerVerticalGalleryTest {
         }
     }
 
+    @Test fun `a vertical gallery opened at its first page reports it again once its pages resolve`() {
+        val session = ViewerSessionIdentity("first")
+        val sparse = gallery.copy(media = listOf(page), mediaCount = gallery.media.size)
+        val reported = mutableListOf<Int>()
+        state.value = createViewerUiState(session, listOf(sparse, next), requiresResolution = { it.id == gallery.id })
+        compose.setContent {
+            MaterialTheme {
+                ViewerScreen(
+                    uiState = state.value,
+                    host = ViewerScreenHost(
+                        onAction = { state.value = reduceViewerState(state.value, it).state },
+                        onVisibleMediaChanged = { post, _ -> if (post.id == gallery.id) reported += post.media.size },
+                    ),
+                    config = ViewerScreenConfig(galleryReadingModes = mapOf(gallery.id to GalleryReadingMode.VERTICAL)),
+                )
+            }
+        }
+        compose.runOnIdle { state.value = reduceViewerState(state.value, ViewerAction.ResolutionCompleted(session, gallery)).state }
+        compose.waitForIdle()
+        // Series progress ignores a chapter without pages, so the resolved one has to be reported too.
+        compose.runOnIdle { assertEquals("reported page counts $reported", gallery.media.size, reported.lastOrNull()) }
+    }
+
     @Test fun `opening and closing the overview keeps a vertical gallery's scroll position`() {
         show()
         repeat(2) { compose.onRoot().performTouchInput { swipeUp(startY = centerY, endY = top) } }
@@ -179,6 +203,15 @@ class ViewerVerticalGalleryTest {
         assertTrue(actions.any { it is ViewerAction.RetryMedia })
     }
 
+    @Test fun `a failed page taller than the screen shows its Retry on screen`() {
+        val strips = gallery.copy(width = 690, height = 16_000)
+        state.value = createViewerUiState(ViewerSessionIdentity("tall"), listOf(strips, next))
+        show()
+        val screen = compose.onRoot().getUnclippedBoundsInRoot()
+        val retry = compose.onNode(hasText("Retry") and hasAnyAncestor(hasContentDescription("Page 1"))).getUnclippedBoundsInRoot()
+        assertTrue("Retry at ${retry.top}..${retry.bottom} on a screen to ${screen.bottom}", retry.top >= screen.top && retry.bottom <= screen.bottom)
+    }
+
     @Test fun `picking a page shorter than a third of the screen keeps it selected`() {
         val strips = gallery.copy(width = 3000, height = 400, media = (1..30).map { page.copy(localPath = "/missing/strip-$it.jpg") })
         state.value = createViewerUiState(ViewerSessionIdentity("short"), listOf(strips, next))
@@ -186,6 +219,19 @@ class ViewerVerticalGalleryTest {
         compose.runOnIdle { state.value = reduceViewerState(state.value, ViewerAction.SelectMedia(10)).state }
         compose.waitForIdle()
         assertEquals(10, state.value.currentPage?.selectedMediaIndex)
+    }
+
+    @Test fun `pages resizing as they load leave the selected page alone`() {
+        // Unloaded pages borrow the post's tall shape; once loaded they are wide, which slides another page under the line.
+        val land = installGatedLoader(width = 300, height = 100)
+        show()
+        compose.runOnIdle { state.value = reduceViewerState(state.value, ViewerAction.SelectMedia(3)).state }
+        compose.waitForIdle()
+        actions.clear()
+        compose.runOnIdle { land() }
+        compose.waitForIdle()
+        assertEquals(emptyList<ViewerAction>(), actions.filterIsInstance<ViewerAction.SelectMedia>())
+        assertEquals(3, state.value.currentPage?.selectedMediaIndex)
     }
 
     @Test fun `a narrower screen pulls a zoomed pan back inside the pages`() {
