@@ -140,7 +140,7 @@ class AniyomiSeriesSourceTest {
     }
 
     private suspend fun streamsOf(source: AnimeHttpSource, serverLimitMs: Long = 60_000): List<MediaStream> {
-        val series = AniyomiSeriesSource(source, HostServices(ExtensionImages()), serverLimitMs = serverLimitMs)
+        val series = AniyomiSeriesSource(source, HostServices(ExtensionImages()), AniyomiStreams.Limits(serverMs = serverLimitMs))
         return (series.media(SeriesEntry("/episode/1", "Episode 1")) as EntryMedia.Streams).streams
     }
 
