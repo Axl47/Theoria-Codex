@@ -27,6 +27,7 @@ import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.app.viewer.state.ViewerControlsState
 import com.theoriacodex.app.viewer.state.reduceViewerState
+import com.theoriacodex.data.repository.ANIME_FINISHED_PERCENT
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -98,6 +99,8 @@ class ViewerViewModel(
      * retained pages still report as their players let go. The next [replaceSession] replaces it.
      */
     @Volatile private var reportingSession: ViewerSession? = null
+    /** The watched episode that passed its watched point ([noteWatchedPoint]); its next one may resolve. */
+    @Volatile private var watchedThrough: PostId? = null
     val session: StateFlow<ViewerSession?> = mutableSession.asStateFlow()
 
     /**
@@ -154,11 +157,34 @@ class ViewerViewModel(
     }
 
     /**
-     * While a series is watched only the episode on screen resolves: its lookup scrapes third-party sites for links that
-     * soon expire, so a drag toward a neighbour (which asks for it as the swipe's target) must not start one.
+     * While a series is watched only the episode on screen resolves, and the next one once this one passed its watched
+     * point ([watchedThrough]): an episode's lookup scrapes third-party sites for links that soon expire, so a drag
+     * toward a neighbour (which asks for it as the swipe's target) must not start one.
      */
-    private fun mayResolve(postId: PostId): Boolean =
-        mutableState.value.series !is ViewerSeries.Watching || postId == mutableState.value.currentPage?.post?.id
+    private fun mayResolve(postId: PostId): Boolean {
+        val current = mutableState.value
+        return current.series !is ViewerSeries.Watching || postId == current.currentPage?.post?.id || postId == current.nextEpisodeId()
+    }
+
+    /** The episode after the current one, while the current one is past its watched point; null otherwise. */
+    private fun ViewerUiState.nextEpisodeId(): PostId? {
+        if (watchedThrough == null || currentPage?.post?.id != watchedThrough) return null
+        val navigation = viewerPostNavigation(this)
+        return navigation.pages.getOrNull(navigation.currentIndex + 1)?.post?.id
+    }
+
+    /**
+     * Notes the watched episode [post] at [progress]: once the current one passes [ANIME_FINISHED_PERCENT], the next
+     * one is looked up, so going on to it does not wait on a lookup. Its links age meanwhile; an episode whose links are
+     * old asks for fresh ones when they fail ([ViewerVideoRecovery]).
+     */
+    private fun noteWatchedPoint(post: Post, progress: ViewerPlaybackProgress) {
+        val current = state.value
+        if (current.series !is ViewerSeries.Watching || current.currentPage?.post?.id != post.id || watchedThrough == post.id) return
+        if (progress.durationMs <= 0 || progress.positionMs * 100 < progress.durationMs * ANIME_FINISHED_PERCENT) return
+        watchedThrough = post.id
+        reconcileResolutionLookahead()
+    }
 
     /** The app's playback setting, except while a series is watched: an episode goes on to the next one, never loops. */
     private fun startingPlaybackMode(series: ViewerSeries?): ViewerPlaybackMode =
@@ -177,6 +203,7 @@ class ViewerViewModel(
             recordedVisiblePosts.clear()
             firstMediaShown.value = false
             lastCurrentPostId = null
+            watchedThrough = null
             comments.reset()
         }
         cancelSessionJobs()
@@ -298,6 +325,7 @@ class ViewerViewModel(
         progress: ViewerPlaybackProgress,
         record: suspend (Post, ViewerPlaybackProgress, ViewerSession) -> Unit,
     ) {
+        noteWatchedPoint(post, progress)
         val reporting = reportingSession ?: return
         if (reporting.posts.none { it.id == post.id } && state.value.pages.none { it.post.id == post.id }) return
         workScope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -312,6 +340,7 @@ class ViewerViewModel(
             recordedVisiblePosts.clear()
             firstMediaShown.value = false
             lastCurrentPostId = null
+            watchedThrough = null
             comments.reset()
             mutableSession.value = null
             // The retained pages keep their episode choice: a stream label dropped here would rebind the closing player.
@@ -337,13 +366,17 @@ class ViewerViewModel(
     /**
      * Current-page work wins; only the immediately adjacent posts (next first, then previous) resolve speculatively,
      * except while a series is watched: an episode's lookup scrapes third-party sites for links that soon expire, so
-     * only the episode on screen resolves.
+     * only the episode on screen resolves, and the next one once it passed its watched point ([noteWatchedPoint]).
      */
     private fun reconcileResolutionLookahead() {
         val current = state.value
         val session = current.session ?: return
-        val watching = current.series is ViewerSeries.Watching
-        val neighbours = if (watching) emptyList() else viewerPostNavigation(current).neighbours
+        val navigation = viewerPostNavigation(current)
+        val neighbours = if (current.series is ViewerSeries.Watching) {
+            listOfNotNull(navigation.pages.getOrNull(navigation.currentIndex + 1)?.takeIf { it.post.id == current.nextEpisodeId() })
+        } else {
+            navigation.neighbours
+        }
         val desired = setOfNotNull(current.currentPage?.post?.id) + neighbours.map { it.post.id }
         val obsolete = sessionJobs.keys.filterIsInstance<ViewerWorkKey.Resolution>().filter { it.postId !in desired }
         obsolete.forEach { key ->

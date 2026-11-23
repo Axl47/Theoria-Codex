@@ -117,6 +117,30 @@ class ViewerWatchingTest {
     }
 
     @Test
+    fun `the next episode is looked up once the current one passes its watched point`() = runTest {
+        val started = mutableListOf<PostId>()
+        val owner = testViewerOwner(SavedStateHandle(), postResolver = ViewerPostResolver { _, id ->
+            started += id
+            null
+        }, scopeOverride = this)
+        owner.replaceSession(session("watching", episodes).copy(series = ViewerSeries.Watching()))
+        advanceUntilIdle()
+        val report: suspend (Post, ViewerPlaybackProgress, ViewerSession) -> Unit = { _, _, _ -> }
+        owner.recordPlaybackProgress(episodes[0], ViewerPlaybackProgress(1_200_000, 1_440_000), report)
+        advanceUntilIdle()
+        assertEquals("Before 85% only the episode on screen resolves", listOf(episodes[0].id), started)
+
+        owner.recordPlaybackProgress(episodes[0], ViewerPlaybackProgress(1_224_000, 1_440_000), report)
+        advanceUntilIdle()
+        assertEquals(listOf(episodes[0].id, episodes[1].id), started)
+        // The one after it stays refused, even as a drag's target.
+        owner.onAction(ViewerAction.RequestPageResolution(episodes[2].id))
+        advanceUntilIdle()
+        assertEquals(listOf(episodes[0].id, episodes[1].id), started)
+        owner.clearSession()
+    }
+
+    @Test
     fun `a chapter's lookup keeps a post's limit`() = runTest {
         val owner = testViewerOwner(SavedStateHandle(), postResolver = ViewerPostResolver { _, id ->
             delay(35_000)
