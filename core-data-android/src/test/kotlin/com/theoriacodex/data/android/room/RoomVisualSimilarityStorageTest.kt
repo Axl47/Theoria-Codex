@@ -5,8 +5,10 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.data.repository.ForYouVerdict
 import com.theoriacodex.data.repository.ForYouVerdictKind
+import com.theoriacodex.data.repository.MAX_FRAME_ATTEMPTS
 import com.theoriacodex.data.repository.PictureVision
 import com.theoriacodex.data.repository.ProfileLibraryWriteGuard
+import com.theoriacodex.data.repository.VisionFrames
 import com.theoriacodex.data.repository.VisionProgress
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -103,6 +105,33 @@ class RoomVisualSimilarityStorageTest {
         assertEquals(setOf(id("unreadable"), id("new")), signatures.libraryPostsWithoutSignature(limit = 10).map(Post::id).toSet())
     }
 
+    @Test fun `a still analysis awaiting frames is listed until its frames are read or its reads run out`() = runTest {
+        val library = RoomCodexLikesRepository(database)
+        val signatures = RoomVisualSignatureRepository(database)
+        val codex = library.ensureCodex("saved", "Saved")
+        library.addItems(codex.codexId, listOf(post("picture"), post("clip"), post("flaky"), post("gone")))
+        signatures.putVision(
+            listOf(vision("picture", "m1"), vision("clip", "m1", frames = VisionFrames.WANTED), vision("flaky", "m1", frames = VisionFrames.WANTED),
+                vision("gone", "m1", frames = VisionFrames.WANTED)),
+        )
+        suspend fun awaiting() = signatures.libraryPostsAwaitingFrames("m1", limit = 10).map(Post::id).toSet()
+
+        assertEquals(setOf(id("clip"), id("flaky"), id("gone")), awaiting())
+        assertTrue(signatures.libraryPostsAwaitingFrames("m2", limit = 10).isEmpty())
+        signatures.putVision(listOf(vision("clip", "m1", frames = VisionFrames.READ)))
+        signatures.failFrames(id("gone"), "m1", permanently = true)
+        repeat(MAX_FRAME_ATTEMPTS - 1) { signatures.failFrames(id("flaky"), "m1", permanently = false) }
+        assertEquals(setOf(id("flaky")), awaiting())
+        signatures.failFrames(id("flaky"), "m1", permanently = false)
+        assertTrue(awaiting().isEmpty())
+
+        // The still analyses stand: nothing about a failed read removes tags.
+        assertEquals(4, signatures.observeVisionProgress("m1").first().analysed)
+        // Clearing the model starts every post over.
+        signatures.clearVision()
+        assertTrue(awaiting().isEmpty())
+    }
+
     @Test fun `a newer model replaces what an older one stored and progress counts each library post once`() = runTest {
         val library = RoomCodexLikesRepository(database)
         val signatures = RoomVisualSignatureRepository(database)
@@ -154,8 +183,13 @@ class RoomVisualSimilarityStorageTest {
 
     private fun tag(name: String, score: Float) = PredictedTag(name, score, PredictedTag.Kind.GENERAL)
 
-    private fun vision(post: String, model: String, embedding: ByteArray? = byteArrayOf(1, 2), tags: List<PredictedTag>? = emptyList()) =
-        PictureVision(id(post), model, embedding, tags)
+    private fun vision(
+        post: String,
+        model: String,
+        embedding: ByteArray? = byteArrayOf(1, 2),
+        tags: List<PredictedTag>? = emptyList(),
+        frames: VisionFrames = VisionFrames.NONE,
+    ) = PictureVision(id(post), model, embedding, tags, frames)
 
     private fun verdict(profile: String, post: String, kind: ForYouVerdictKind, at: Long) =
         ForYouVerdict(profile, id(post), kind, at, "https://example.com/$post.jpg")

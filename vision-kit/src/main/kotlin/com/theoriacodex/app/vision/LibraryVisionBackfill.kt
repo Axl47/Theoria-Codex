@@ -1,6 +1,7 @@
 package com.theoriacodex.app.vision
 
 import com.theoriacodex.data.repository.VisualSignatureRepository
+import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import kotlin.time.TimeSource
 import kotlinx.coroutines.delay
@@ -10,7 +11,9 @@ import kotlinx.coroutines.flow.map
 
 /**
  * Tags the pictures of liked and saved posts that the current model has not analysed, and stores what it found beside
- * each post's hash. The app's charging-only background job runs [drain]; [writeThrough] runs while the app does.
+ * each post's hash. The app's charging-only background job runs [drain]; [writeThrough] runs while the app does. A post
+ * that plays is first stored from its still like any other, and [drainFrames], in a job that runs only while the device
+ * is idle, later replaces that with its still and frames together.
  */
 class LibraryVisionBackfill(
     private val tagger: PictureTagger,
@@ -33,13 +36,53 @@ class LibraryVisionBackfill(
             // Only previews that failed to load this run are left: a later run tries them again.
             if (batch.isEmpty()) return unreachable.isNotEmpty()
             val started = TimeSource.Monotonic.markNow()
-            val results = batch.associate { post -> post.id to tagger.analyze(post, remember = false) }
+            val results = batch.associateWith { post -> tagger.analyze(post, remember = false) }
             if (PictureResult.Unavailable in results.values) return tagger.ready.value
-            unreachable += results.filterValues { it == PictureResult.Unreachable }.keys
+            unreachable += results.filterValues { it == PictureResult.Unreachable }.keys.map { it.id }
             if (!tagger.store(results)) return false
             delay(started.elapsedNow())
         }
         return false
+    }
+
+    /**
+     * Replaces the still analyses of playing posts with their still and frames, one post at a time, each stored as it
+     * finishes, resting as long as each took. Stops when done, when the model goes or would not load, or when the
+     * device runs [hot]; the job stops it when the device leaves idle, losing only the post under way. A post whose
+     * frames cannot be read keeps its still analysis, and is tried once a run, on later runs (the job is scheduled at
+     * every app start), only while another try may pass and a few times at most, so a source is not asked every night.
+     * Posts failing to be reached one after another point at the network rather than at them: only the first is counted
+     * against its post, and after [UNREACHABLE_STREAK] the run stops. Returns whether this run was cut short (heat, a
+     * model that would not load, the network) and so should run again soon.
+     */
+    suspend fun drainFrames(): Boolean {
+        val tried = HashSet<PostId>()
+        val run = FrameRun()
+        while (tagger.ready.value) {
+            val awaiting = signatures.libraryPostsAwaitingFrames(tagger.modelId, tried.size + BATCH).filterNot { it.id in tried }
+            if (awaiting.isEmpty()) return false
+            awaiting.mapTo(tried) { it.id }
+            for (post in tagger.playing(awaiting)) run.upgrade(post)?.let { return it }
+        }
+        return false
+    }
+
+    /** One [drainFrames] run's walk through its posts, counting those in a row that could not be reached. */
+    private inner class FrameRun {
+        private var unreachable = 0
+
+        /** Reads and stores one post's frames, then rests as long as that took; returns null to go on, or what the run returns. */
+        suspend fun upgrade(post: Post): Boolean? {
+            if (hot()) return true
+            val started = TimeSource.Monotonic.markNow()
+            val result = tagger.analyzeFrames(post)
+            if (result == PictureResult.Unavailable) return tagger.ready.value
+            unreachable = if (result == PictureResult.Unreachable) unreachable + 1 else 0
+            if (unreachable <= 1 && !tagger.storeFrames(post.id, result)) return false
+            if (unreachable >= UNREACHABLE_STREAK) return true
+            delay(started.elapsedNow())
+            return null
+        }
     }
 
     /**
@@ -51,7 +94,7 @@ class LibraryVisionBackfill(
             .collect { ready ->
                 if (!ready) return@collect
                 val known = signatures.libraryPostsWithoutVision(tagger.modelId, WRITE_THROUGH_LIMIT)
-                    .mapNotNull { post -> tagger.remembered(post.id)?.let { post.id to it } }.toMap()
+                    .mapNotNull { post -> tagger.remembered(post.id)?.let { post to it } }.toMap()
                 if (known.isNotEmpty()) tagger.store(known)
             }
     }
@@ -60,5 +103,8 @@ class LibraryVisionBackfill(
         /** About four seconds of pictures at phase 0's 450 ms each. */
         const val BATCH = 8
         const val WRITE_THROUGH_LIMIT = 64
+
+        /** Posts in a row that could not be reached after which a frame run stops. */
+        const val UNREACHABLE_STREAK = 3
     }
 }

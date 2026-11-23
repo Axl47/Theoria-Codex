@@ -60,7 +60,7 @@ class PixivUgoiraClient constructor(
     private val operationTimeoutMs: Long = 30_000L,
     private val offlineArchiveLookup: suspend (String) -> File? = { null },
     private val metadataCache: PixivUgoiraMetadataCache = PixivUgoiraMetadataCache(),
-    downloadClient: OkHttpClient = OkHttpClient(),
+    private val downloadClient: OkHttpClient = OkHttpClient(),
 ) {
     private val transport = PixivUgoiraTransport(downloadClient)
     private val cacheLock = Any()
@@ -101,6 +101,59 @@ class PixivUgoiraClient constructor(
      */
     suspend fun warmArchive(postId: String): Boolean =
         runCatchingPreservingCancellation { archiveFor(postId) }.isSuccess
+
+    /**
+     * [count] frames spread through [postId]'s animation, each at least [sizePx] on its long edge, for the picture tagger
+     * ([sampleUgoiraFrames]). Reads an archive already held (offline or in the playback store) without marking it used;
+     * otherwise downloads Pixiv's smallest archive (600 px) to a temporary file it deletes afterwards, so sampling a
+     * Library never evicts the archives the user watched. Every download try counts against the one [budget]; an archive
+     * past it is not downloaded further and leaves the post [FrameSample.Unreadable]. Other failures are classed by
+     * [frameSample].
+     */
+    suspend fun sampleFrames(postId: String, count: Int, sizePx: Int, budget: NetworkBudget): FrameSample =
+        withContext(Dispatchers.IO) {
+            try {
+                val held = synchronized(cacheLock) { memoryArchive(postId) } ?: heldArchive(postId, markUsed = false)
+                val frames = held?.let { heldFrames(postId, it, count, sizePx) }
+                    ?: downloadedFrames(postId, count, sizePx, budget)
+                frameSample(frames, failure = null)
+            } catch (error: IOException) {
+                frameSample(emptyList(), error)
+            }
+        }
+
+    /**
+     * [sampleFrames] from a held archive. One that fails to read (damaged data passes the structural check) is
+     * forgotten, as playback does, so the next try downloads the post again; offline copies are never touched.
+     */
+    private suspend fun heldFrames(postId: String, archive: UgoiraArchive, count: Int, sizePx: Int): List<Bitmap> = try {
+        sampleUgoiraFrames(archive.file, archive.metadata.frames, count, sizePx)
+    } catch (error: IOException) {
+        forgetCachedArchive(postId, archive.file)
+        throw error
+    }
+
+    /** [sampleFrames] from a freshly downloaded archive, deleted afterwards. */
+    private suspend fun downloadedFrames(postId: String, count: Int, sizePx: Int, budget: NetworkBudget): List<Bitmap> {
+        val (metadata, tokens) = fetchMetadataWithRetry(postId, tokenCoordinator.activeTokens())
+        val temporary = File.createTempFile("ugoira-sample", ".zip")
+        try {
+            // Retries share the budget, so they cannot multiply what one post downloads.
+            val budgeted = PixivUgoiraTransport(downloadClient.newBuilder().addNetworkInterceptor(budget.interceptor).build())
+            withTimeoutOrNull(operationTimeoutMs) { downloadZipWithRetry(metadata.zipUrl, tokens, temporary, budgeted) }
+                ?: throw IOException("Pixiv animation download timed out")
+            if (temporary.length() > budget.maxBytes) throw UgoiraArchiveTooLarge()
+            if (!isValidArchive(temporary, metadata.frames)) throw InvalidUgoiraArchive()
+            return try {
+                sampleUgoiraFrames(temporary, metadata.frames, count, sizePx)
+            } catch (_: IOException) {
+                // Just downloaded and validated: a read failure means damaged data, which another download repeats.
+                throw InvalidUgoiraArchive()
+            }
+        } finally {
+            temporary.delete()
+        }
+    }
 
     /** Share partial frames and completion; the final departing consumer cancels its work. */
     fun observeLoad(
@@ -259,24 +312,33 @@ class PixivUgoiraClient constructor(
     /** The validated archive held in memory, while its file still exists. Call under [cacheLock]. */
     private fun memoryArchive(postId: String): UgoiraArchive? = archiveCache[postId]?.takeIf { it.file.isFile }
 
-    private suspend fun loadArchiveOrThrow(postId: String): UgoiraArchive {
+    /**
+     * [postId]'s archive already on disk, as an offline copy or in the playback store, without downloading; [markUsed]
+     * refreshes a playback copy's place in the store's eviction order.
+     */
+    private suspend fun heldArchive(postId: String, markUsed: Boolean): UgoiraArchive? {
         offlineArchiveLookup(postId)?.let { offline ->
             val frames = readUgoiraFrameMetadata(offline)
             if (frames != null && isValidArchive(offline, frames)) {
                 return UgoiraArchive(ParsedMetadata(zipUrl = "", frames = frames), offline)
             }
         }
+        val archive = File(archiveDirectory, "${postId.safeCacheComponent()}.zip")
+        // The sidecar is written only after full validation; decoding still enforces per-frame limits.
+        val diskFrames = readUgoiraFrameMetadata(archive)?.takeIf { isStructurallyValidArchive(archive, it) } ?: return null
+        if (markUsed) {
+            archive.setLastModified(System.currentTimeMillis())
+            writeUgoiraFrameMetadata(archive, diskFrames)
+        }
+        return UgoiraArchive(ParsedMetadata(zipUrl = "", frames = diskFrames), archive)
+    }
+
+    private suspend fun loadArchiveOrThrow(postId: String): UgoiraArchive {
+        heldArchive(postId, markUsed = true)?.let { return it }
         if (!archiveDirectory.isDirectory && !archiveDirectory.mkdirs() && !archiveDirectory.isDirectory) {
             throw IOException("Could not create Pixiv ugoira cache directory")
         }
         val archive = File(archiveDirectory, "${postId.safeCacheComponent()}.zip")
-        val diskFrames = readUgoiraFrameMetadata(archive)
-        // The sidecar is written only after full validation; decoding still enforces per-frame limits.
-        if (diskFrames != null && isStructurallyValidArchive(archive, diskFrames)) {
-            archive.setLastModified(System.currentTimeMillis())
-            writeUgoiraFrameMetadata(archive, diskFrames)
-            return UgoiraArchive(ParsedMetadata(zipUrl = "", frames = diskFrames), archive)
-        }
         val currentTokens = tokenCoordinator.activeTokens()
         val (metadata, tokensAfterMetadata) = fetchMetadataWithRetry(postId, currentTokens)
         if (archive.isFile) {
@@ -336,11 +398,12 @@ class PixivUgoiraClient constructor(
         url: String,
         initialTokens: PixivAuthTokens,
         destination: File,
+        through: PixivUgoiraTransport = transport,
     ) {
         withUgoiraAuthRetry("zip", initialTokens, BinaryResponse::statusCode) { accessToken ->
             zipDownloader?.let { download ->
                 runInterruptible(Dispatchers.IO) { download(url, accessToken, destination) }
-            } ?: transport.downloadZip(url, accessToken, destination)
+            } ?: through.downloadZip(url, accessToken, destination)
         }
     }
 
@@ -361,6 +424,8 @@ class PixivUgoiraClient constructor(
         repeat(UGOIRA_NETWORK_MAX_ATTEMPTS) { attempt ->
             val response = try {
                 request(tokens.accessToken)
+            } catch (error: UnreadableMedia) {
+                throw error
             } catch (error: IOException) {
                 if (attempt >= UGOIRA_NETWORK_MAX_ATTEMPTS - 1) throw error
                 delay(ugoiraRetryDelayMs(attempt))
@@ -371,6 +436,7 @@ class PixivUgoiraClient constructor(
                 status in 200..299 -> return response to tokens
 
                 status == 401 || status == 403 -> {
+                    // Signed out, a rate limit, or an account mid-change: a later try may pass.
                     if (didRefreshAfterAuthFailure) throw IOException("Pixiv ugoira $label request failed ($status)")
                     tokens = tokenCoordinator.refreshAfterAuthFailure(tokens)
                     didRefreshAfterAuthFailure = true
@@ -379,6 +445,8 @@ class PixivUgoiraClient constructor(
                 isRetryableUgoiraStatus(status) && attempt < UGOIRA_NETWORK_MAX_ATTEMPTS - 1 -> {
                     delay(ugoiraRetryDelayMs(attempt))
                 }
+
+                refusesMedia(status) -> throw MediaRefused("Pixiv ugoira $label request failed ($status)")
 
                 else -> throw IOException("Pixiv ugoira $label request failed ($status)")
             }
@@ -555,3 +623,6 @@ private const val UGOIRA_RETRY_BASE_DELAY_MS = 350L
 internal const val UGOIRA_DECODED_CACHE_MAX_BYTES = 96L * 1024L * 1024L
 internal const val UGOIRA_ARCHIVE_CACHE_MAX_BYTES = 512L * 1024L * 1024L
 private const val UGOIRA_ARCHIVE_MEMORY_ENTRY_LIMIT = 32
+
+/** A downloaded archive that does not hold the frames its metadata lists, or whose frames will not read. */
+private class InvalidUgoiraArchive : UnreadableMedia("Pixiv ugoira archive is invalid")

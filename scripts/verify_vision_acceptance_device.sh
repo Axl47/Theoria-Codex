@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Picture tagger acceptance on an emulator, through the minified acceptance APK's own container:
-# download and verify the model, index the Library in the charging-only job (and not on battery), a predicted
-# tag reaching For You, a hidden tag catching an untagged post, and delete. See VisionAcceptanceActivity.
+# download and verify the model, index the Library from stills in the charging-only job (and not on battery), video
+# frames read only by the idle-only job (refused while the device is in use), a predicted tag reaching For You, a hidden
+# tag catching an untagged post, and delete. See VisionAcceptanceActivity. Fixture videos are made from the fixture drawings with ffmpeg (libx264 and
+# libvpx-vp9) and served with byte ranges; the bytes each sampled video cost are printed.
 #
 # Usage: scripts/verify_vision_acceptance_device.sh <model-dir> [apk]
 #   <model-dir> holds wd-vit-tagger-v3.int8.tflite and wd-vit-tagger-v3.selected_tags.csv (the pinned files).
@@ -14,6 +16,7 @@ readonly apk_path="${2:-app/build/outputs/apk/releaseAcceptance/app-releaseAccep
 readonly package_name="com.theoriacodex.acceptance"
 readonly activity="com.theoriacodex.app.acceptance.VisionAcceptanceActivity"
 readonly job_id=3102
+readonly frames_job_id=3103
 readonly port=8765
 readonly script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -37,7 +40,15 @@ cleanup() {
 trap cleanup EXIT
 ln -s "$(realpath "$model_dir")"/wd-vit-tagger-v3.* "$serve/"
 python3 "$script_directory/vision_fixtures.py" "$serve/fixtures" >/dev/null
-python3 -m http.server "$port" --bind 127.0.0.1 --directory "$serve" >/dev/null 2>&1 &
+# Six line drawings, one per second, keyframes once a second: a fast-start MP4, one with its index at the end, and WebM.
+video_args=(-y -loglevel error -framerate 1 -i "$serve/fixtures/fixture-%02d.png" -t 6 -r 25 -g 25
+  -vf "scale=360:360:force_original_aspect_ratio=decrease,pad=360:360:(ow-iw)/2:(oh-ih)/2:white,format=yuv420p")
+ffmpeg "${video_args[@]}" -c:v libx264 -movflags +faststart "$serve/fixtures/video-start.mp4"
+ffmpeg "${video_args[@]}" -c:v libx264 "$serve/fixtures/video-tail.mp4"
+ffmpeg "${video_args[@]}" -c:v libvpx-vp9 -b:v 0 -crf 40 "$serve/fixtures/video.webm"
+printf 'Fixture sizes: %s\n' "$(cd "$serve/fixtures" && stat -c '%n=%s' video* | tr '\n' ' ')"
+served="$serve/served.log"
+python3 "$script_directory/range_http_server.py" "$serve" "$port" "$served" &
 server_pid=$!
 adb_run reverse "tcp:$port" "tcp:$port" >/dev/null
 
@@ -65,7 +76,18 @@ phase() {
   return 1
 }
 
-job_state() { adb_run shell dumpsys jobscheduler "$package_name" | grep -m1 -A3 "#u0a[0-9]*/$job_id" | tr -s ' ' | tr '\n' ' '; }
+job_state() { adb_run shell dumpsys jobscheduler "$package_name" | grep -m1 -A3 "#u0a[0-9]*/${1:-$job_id}" | tr -s ' ' | tr '\n' ' '; }
+# Waits until a job is no longer running or due; a finished run that left nothing to do drops the job, which
+# get-job-state reports as an error.
+wait_job() {
+  local state attempt
+  for attempt in $(seq 1 300); do
+    state="$(adb_run shell cmd jobscheduler get-job-state "$package_name" "$1" 2>&1 | tr -d '\r' || true)"
+    [[ "$state" == *active* || "$state" == *ready* || "$state" == *pending* ]] || break
+    sleep 1
+  done
+  printf '%s' "$state"
+}
 
 phase download
 phase seed
@@ -78,9 +100,45 @@ on_battery="$(adb_run shell cmd jobscheduler run -s "$package_name" "$job_id" 2>
 printf 'Run on battery: %s\n' "$on_battery"
 [[ "$on_battery" == *"functional constraints"* ]] || { echo "The indexing job ran on battery." >&2; exit 1; }
 phase idle same
+# Charging with the app on screen: the job indexes every post from its still, videos from their posters.
 adb_run shell dumpsys battery set ac 1
 adb_run shell dumpsys battery set status 2
 adb_run shell cmd jobscheduler run -s "$package_name" "$job_id" >/dev/null
+phase stills same
+printf 'Pictures job after its run: %s\n' "$(wait_job "$job_id")"
+# The frames job waits for the device to be idle: asked to run while the app is on screen, it must be refused.
+in_use="$(adb_run shell cmd jobscheduler run -s "$package_name" "$frames_job_id" 2>&1 | tr -d '\r' || true)"
+printf 'Frames job while in use: %s | %s\n' "$in_use" "$(job_state "$frames_job_id")"
+[[ "$in_use" == *"functional constraints"* ]] || { echo "The frames job ran while the device was in use." >&2; exit 1; }
+# Screen off and idle maintenance make the device idle for jobs; when the emulator will not, the run is forced.
+: >"$served"
+adb_run logcat -c
+adb_run shell input keyevent KEYCODE_SLEEP
+sleep 2
+adb_run shell cmd activity idle-maintenance >/dev/null 2>&1 || true
+idle_run="forced"
+for attempt in $(seq 1 12); do
+  started="$(adb_run shell cmd jobscheduler run -s "$package_name" "$frames_job_id" 2>&1 | tr -d '\r' || true)"
+  if [[ "$started" != *constraints* ]]; then idle_run="idle"; break; fi
+  sleep 5
+done
+[[ "$idle_run" == idle ]] || adb_run shell cmd jobscheduler run -f "$package_name" "$frames_job_id" >/dev/null
+printf 'Frames job ran as: %s, then: %s\n' "$idle_run" "$(wait_job "$frames_job_id")"
+adb_run shell input keyevent KEYCODE_WAKEUP
+adb_run shell wm dismiss-keyguard >/dev/null 2>&1 || true
+printf 'Decoders: %s\n' "$(adb_run logcat -d | grep -Eo 'c2\.[a-z0-9]+\.[a-z0-9]+\.decoder' | sort | uniq -c | tr -s ' ' | tr '\n' ';')"
+video_bytes() { awk '/video/ { bytes[$1] += $3; requests[$1]++ } END { for (path in bytes) printf "%s=%d/%dreq\n", path, bytes[path], requests[path] }' "$served" | sort | tr '\n' ' '; }
+first_bytes="$(video_bytes)"
+printf 'Bytes served per video: %s\n' "$first_bytes"
 phase check same
+: >"$served"
+phase sample
+# Sampling writes nothing to the cache, so sampling again fetches what the job's run did.
+again_bytes="$(video_bytes)"
+printf 'Bytes served per video, sampled again: %s\n' "$again_bytes"
+if [[ "$again_bytes" != "$first_bytes" ]]; then
+  printf 'FAIL:cache:sampling again fetched other bytes than the job run\n'
+  exit 1
+fi
 phase delete
 printf 'Vision acceptance passed.\n'

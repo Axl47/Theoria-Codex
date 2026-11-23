@@ -18,11 +18,42 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class PixivUgoiraFramesTest {
     @get:Rule val temporaryFolder = TemporaryFolder()
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `the tagger's sample spreads frames through the animation and decodes them no smaller than asked`() = runTest {
+        val archive = temporaryFolder.newFile("sample.zip")
+        // Frame i is 64 + i px wide, so the decoded widths name the frames picked.
+        val specs = List(12) { UgoiraFrameSpec("$it.png", 50) }
+        ZipOutputStream(FileOutputStream(archive)).use { zip ->
+            specs.forEachIndexed { index, spec ->
+                val bitmap = Bitmap.createBitmap(64 + index, 64, Bitmap.Config.ARGB_8888)
+                zip.putNextEntry(ZipEntry(spec.fileName))
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, zip)
+                zip.closeEntry()
+            }
+        }
+
+        assertEquals(listOf(65, 67, 69, 71, 73, 75), sampleUgoiraFrames(archive, specs, count = 6, sizePx = 64).map { it.width })
+        // Halved twice, a 64 px frame is still 16 px.
+        assertEquals(listOf(16, 16), sampleUgoiraFrames(archive, specs, count = 2, sizePx = 16).map { it.height })
+    }
+
+    @Test
+    fun `a frame held longer is sampled once per stretch of time it fills`() {
+        val held = listOf(UgoiraFrameSpec("0.png", 3_000)) + List(3) { UgoiraFrameSpec("${it + 1}.png", 1_000) }
+        assertEquals(listOf(0, 0, 0, 1, 2, 3), ugoiraSampleIndices(held, count = 6))
+
+        // One frame on screen for a minute among quick transitions is all six samples, not none of them.
+        val pause = listOf(UgoiraFrameSpec("0.png", 60_000)) + List(11) { UgoiraFrameSpec("${it + 1}.png", 16) }
+        assertEquals(List(6) { 0 }, ugoiraSampleIndices(pause, count = 6))
+    }
 
     @Test
     fun `decoder publishes the first frame immediately and reuses it for complete playback`() = runTest {

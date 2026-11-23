@@ -32,6 +32,21 @@ interface VisualSignatureRepository {
     /** Up to [limit] liked or saved posts that [modelId] has not analysed (including those another model did), most recently stored first. */
     suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post>
 
+    /**
+     * Up to [limit] liked or saved posts whose [modelId] analysis awaits their frames ([VisionFrames.WANTED]) and has
+     * failed fewer than [MAX_FRAME_ATTEMPTS] reads, most recently stored first.
+     */
+    suspend fun libraryPostsAwaitingFrames(modelId: String, limit: Int): List<Post>
+
+    /**
+     * Records a failed read of [postId]'s frames against its [modelId] analysis, which keeps standing. A failure that
+     * will repeat ([permanently]) sets the frames aside for good; others are tried again until [MAX_FRAME_ATTEMPTS].
+     */
+    suspend fun failFrames(postId: PostId, modelId: String, permanently: Boolean)
+
+    /** Marks [postIds]' [modelId] analyses as reading all their posts offer ([VisionFrames.NONE]), in one transaction: they do not play. */
+    suspend fun unwantFrames(postIds: List<PostId>, modelId: String)
+
     /** The predicted tags of every stored post [modelId] analysed with tags, again whenever one changes. */
     fun observePredictedTags(modelId: String): Flow<Map<PostId, List<PredictedTag>>>
 
@@ -43,16 +58,31 @@ interface VisualSignatureRepository {
 }
 
 /**
- * What one tagger model saw in a stored post's picture. A null [embedding] and null [tags] mean it could not be
- * analysed, so it is not tried again. The embedding is opaque bytes here; nothing reads it yet. It is stored now so
- * the swipe-trained taste scorer and "Similar in your library" can use the Library without tagging it again.
+ * What one tagger model saw in a stored post's picture, and from what ([frames]). A null [embedding] and null [tags]
+ * mean it could not be analysed, so it is not tried again. The embedding is opaque bytes here; nothing reads it yet. It
+ * is stored now so the swipe-trained taste scorer and "Similar in your library" can use the Library without tagging it
+ * again.
  */
-data class PictureVision(val postId: PostId, val modelId: String, val embedding: ByteArray?, val tags: List<PredictedTag>?) {
+data class PictureVision(
+    val postId: PostId,
+    val modelId: String,
+    val embedding: ByteArray?,
+    val tags: List<PredictedTag>?,
+    val frames: VisionFrames = VisionFrames.NONE,
+) {
     override fun equals(other: Any?): Boolean = other is PictureVision && postId == other.postId && modelId == other.modelId &&
-        tags == other.tags && (embedding contentEquals other.embedding)
+        tags == other.tags && frames == other.frames && (embedding contentEquals other.embedding)
 
-    override fun hashCode(): Int = 31 * (31 * (31 * postId.hashCode() + modelId.hashCode()) + (embedding?.contentHashCode() ?: 0)) + (tags?.hashCode() ?: 0)
+    override fun hashCode(): Int =
+        31 * (31 * (31 * (31 * postId.hashCode() + modelId.hashCode()) + (embedding?.contentHashCode() ?: 0)) + (tags?.hashCode() ?: 0)) +
+            frames.hashCode()
 }
+
+/** What a [PictureVision] read of a post: its still alone, its still while its frames wait, or its still and frames. Stored by position: keep the order. */
+enum class VisionFrames { NONE, WANTED, READ }
+
+/** Failed frame reads after which a post's still analysis stands for good. */
+const val MAX_FRAME_ATTEMPTS = 3
 
 /** [analysed] of the [total] liked or saved posts have been through the model. */
 data class VisionProgress(val analysed: Int, val total: Int)

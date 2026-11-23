@@ -40,6 +40,9 @@ class PictureTaggerTest {
         override suspend fun libraryPostsWithoutSignature(limit: Int): List<Post> = emptyList()
         override suspend fun putVision(entries: List<PictureVision>) = Unit
         override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post> = emptyList()
+        override suspend fun libraryPostsAwaitingFrames(modelId: String, limit: Int): List<Post> = emptyList()
+        override suspend fun failFrames(postId: PostId, modelId: String, permanently: Boolean) = Unit
+        override suspend fun unwantFrames(postIds: List<PostId>, modelId: String) = Unit
         override fun observePredictedTags(modelId: String): Flow<Map<PostId, List<PredictedTag>>> =
             flowOf(mapOf(PostId(SourceKey.DANBOORU, "stored") to listOf(PredictedTag("solo", 0.9f, PredictedTag.Kind.GENERAL))))
         override fun observeVisionProgress(modelId: String): Flow<VisionProgress> = flowOf(VisionProgress(0, 0))
@@ -53,8 +56,12 @@ class PictureTaggerTest {
         val tagger = PictureTagger(
             store = store,
             signatures = EmptySignatures,
-            hasStill = { error("the model is not ready, so no picture is inspected") },
-            loadStill = { error("the model is not ready, so no picture is loaded") },
+            pictures = object : PictureSource {
+                override fun hasStill(post: Post): Boolean = error("the model is not ready, so no picture is inspected")
+                override suspend fun still(post: Post) = error("the model is not ready, so no picture is loaded")
+                override fun plays(post: Post): Boolean = false
+                override suspend fun frames(post: Post): PostFrames = error("no frames are read for a still post")
+            },
             scope = scope,
         )
         val post = Post(

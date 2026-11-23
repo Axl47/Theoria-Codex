@@ -30,6 +30,8 @@ extensions.configure<LibraryExtension> {
 dependencies {
     implementation(project(":core-domain"))
     implementation(project(":core-data"))
+    // Perceptual hashes, to analyse a video's repeated frames once.
+    implementation(project(":app-logic"))
     // The app's OkHttp, for the model download.
     implementation(project(":core-sources"))
 

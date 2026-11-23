@@ -66,7 +66,7 @@ private fun decodeUgoiraFrame(bytes: ByteArray, sampleSize: Int, sizeBucket: Ugo
     return decode(Bitmap.Config.HARDWARE) ?: decode(Bitmap.Config.ARGB_8888)
 }
 
-private suspend fun readUgoiraFrame(zip: ZipFile, entry: ZipEntry): ByteArray {
+internal suspend fun readUgoiraFrame(zip: ZipFile, entry: ZipEntry): ByteArray {
     return zip.getInputStream(entry).use { input ->
         val output = ByteArrayOutputStream()
         val buffer = ByteArray(32 * 1024)
@@ -81,6 +81,36 @@ private suspend fun readUgoiraFrame(zip: ZipFile, entry: ZipEntry): ByteArray {
         }
         output.toByteArray()
     }
+}
+
+/**
+ * [specs]' frames at [count] points spread evenly through the animation's playing time, each decoded once from [archive]
+ * with power-of-two sampling to no less than [sizePx] on its long edge. A frame held across several points is returned
+ * once per point, so it keeps its share of the animation. For the picture tagger, which reads a few frames, not playback.
+ */
+internal suspend fun sampleUgoiraFrames(archive: File, specs: List<UgoiraFrameSpec>, count: Int, sizePx: Int): List<Bitmap> {
+    if (specs.isEmpty() || count <= 0) return emptyList()
+    val picked = ugoiraSampleIndices(specs, count)
+    return ZipFile(archive).use { zip ->
+        // A frame that is missing or will not decode is skipped; the archive will not change on a later try.
+        val decoded = picked.distinct().associateWith { index ->
+            val entry = zip.getEntry(specs[index].fileName) ?: return@associateWith null
+            val bytes = readUgoiraFrame(zip, entry)
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            var sample = 1
+            while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= sizePx) sample *= 2
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+        }
+        picked.mapNotNull { decoded[it] }
+    }
+}
+
+/** The frame showing at the middle of each of [count] equal stretches of [specs]' playing time; a frame without a delay counts 1 ms. */
+internal fun ugoiraSampleIndices(specs: List<UgoiraFrameSpec>, count: Int): List<Int> {
+    val ends = specs.map { maxOf(it.delayMs, 1).toLong() }.runningReduce(Long::plus)
+    val total = ends.last()
+    return List(count) { point -> ends.indexOfFirst { it > (point + 0.5) * total / count } }
 }
 
 private const val UGOIRA_INITIAL_FRAME_BATCH = 1
