@@ -11,7 +11,9 @@ import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.SeriesSource
+import com.theoriacodex.domain.series.seriesKind
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
@@ -289,8 +291,12 @@ class SeriesDownloads(
         download(id, chaptersToDownload(choice, series, repository.entries(id), present))
     }
 
-    /** Queues [update]'s new chapters, oldest first, when its series is followed and set to download them. */
+    /**
+     * Queues [update]'s new chapters, oldest first, when its series is followed and set to download them. Episodes never
+     * download, whatever an anime series' stored setting says.
+     */
     suspend fun downloadNew(update: SeriesUpdate) {
+        if (update.series.id.source.seriesKind != SeriesKind.MANGA) return
         val series = repository.series(update.series.id) ?: return
         if (!series.followed || !series.downloadNewChapters) return
         download(update.series.id, update.newEntries.asReversed().map { it.address }, automatic = true)
