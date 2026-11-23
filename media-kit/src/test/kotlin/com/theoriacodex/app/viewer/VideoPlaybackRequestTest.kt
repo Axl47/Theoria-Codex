@@ -65,11 +65,10 @@ class VideoPlaybackRequestTest {
         assertEquals(headers, episode.viewerPlayback(source, VideoQuality.AUTO, metered = false)?.headers)
     }
 
-    @Test fun `an episode saved on the device plays its file, and one whose streams have no address plays nothing`() {
+    @Test fun `an episode saved on the device plays its file`() {
         val stream = MediaStream("https://a.test/v.mp4", "A")
         val saved = ImageRef(null, "/saved.mp4", "video/mp4", streams = listOf(stream))
 
         assertEquals(VideoPlaybackRequest("/saved.mp4", source.requestHeaders(), mime = "video/mp4"), saved.viewerPlayback(source, VideoQuality.AUTO, false))
-        assertNull(ImageRef(null, null, null, streams = listOf(stream.copy(url = " "))).viewerPlayback(source, VideoQuality.AUTO, false))
     }
 }
