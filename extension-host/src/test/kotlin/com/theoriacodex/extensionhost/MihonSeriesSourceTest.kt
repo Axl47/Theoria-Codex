@@ -18,6 +18,8 @@ import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.model.SMangaUpdate
 import java.io.IOException
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -162,10 +164,16 @@ class MihonSeriesSourceTest {
     }
 
     @Test
-    fun `cancellation passes through untouched`() = runTest {
-        source.failure = CancellationException("cancelled")
+    fun `an extension's own cancellation is its failure, and the caller's passes through`() = runTest {
+        source.failure = CancellationException("Timed out inside the extension")
+        assertEquals(SourceFailureReason.PARSE, assertFailsWith<SourceAdapterException> { series.popular(1) }.reason)
 
-        assertFailsWith<CancellationException> { series.popular(1) }
+        var thrown: Throwable? = null
+        launch {
+            cancel()
+            thrown = runCatching { series.popular(1) }.exceptionOrNull()
+        }.join()
+        assertTrue("$thrown", thrown is CancellationException)
     }
 
     private suspend fun failureOf(error: Throwable): SourceFailureReason {

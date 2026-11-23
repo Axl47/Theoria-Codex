@@ -28,6 +28,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import okhttp3.Headers
 import okhttp3.Headers.Companion.headersOf
 import okhttp3.OkHttpClient
@@ -102,7 +103,7 @@ class AniyomiSeriesSourceTest {
 
     @Test
     fun `a server that ignores cancellation delays neither the answer nor a caller that stops waiting`() = runBlocking {
-        val stuck = { Thread.sleep(STUCK_MS); emptyList<Video>() }
+        val stuck: suspend () -> List<Video> = { Thread.sleep(STUCK_MS); emptyList() }
         val fastAndStuck = ServerSource(
             servers = listOf(Hoster(hosterName = "Fast"), Hoster(hosterName = "Stuck")),
             videos = mapOf("Fast" to { listOf(Video("https://fast.example/v.mp4", "720p")) }, "Stuck" to stuck),
@@ -120,6 +121,25 @@ class AniyomiSeriesSourceTest {
             delay(100)
             within(1.seconds) { lookup.cancelAndJoin() }
         }
+    }
+
+    @Test
+    fun `a stub the extension left unwritten and its own timeout fail only their own call`() = runBlocking {
+        val source = ServerSource(
+            servers = listOf(Hoster(hosterName = "Unwritten"), Hoster(hosterName = "Impatient"), Hoster(hosterName = "Fine")),
+            videos = mapOf(
+                "Unwritten" to { TODO() },
+                "Impatient" to { withTimeout(1) { delay(1_000) }; emptyList() },
+                "Fine" to { listOf(Video("https://fine.example/v.mp4", "720p")) },
+            ),
+        )
+        assertEquals(listOf("720p · Fine"), streamsOf(source).map { it.label })
+
+        val unwritten = object : FakeAnimeSource() {
+            override suspend fun getPopularAnime(page: Int): AnimesPage = TODO()
+        }
+        val failure = assertFailsWith<SourceAdapterException> { AniyomiSeriesSource(unwritten, HostServices(ExtensionImages())).popular(1) }
+        assertEquals(SourceFailureReason.UNKNOWN, failure.reason)
     }
 
     @Test
@@ -168,7 +188,7 @@ class AniyomiSeriesSourceTest {
     /** A source built against the server list: [videos] answers each of [servers] that came without its videos. */
     private inner class ServerSource(
         private val servers: List<Hoster> = emptyList(),
-        private val videos: Map<String, () -> List<Video>> = emptyMap(),
+        private val videos: Map<String, suspend () -> List<Video>> = emptyMap(),
         private val listing: List<SAnime> = emptyList(),
     ) : FakeAnimeSource() {
         override val id = 7L
@@ -187,7 +207,7 @@ class AniyomiSeriesSourceTest {
      * are on. It makes no request of its own, so its client fails every one, as a site that keeps something other
      * than a page's address in an episode would answer the host's default server list.
      */
-    private inner class SingleCallSource(private val videos: () -> List<Video>) : FakeAnimeSource() {
+    private inner class SingleCallSource(private val videos: suspend () -> List<Video>) : FakeAnimeSource() {
         override val client: OkHttpClient = OkHttpClient.Builder().addInterceptor { throw IOException("The older call makes no request") }.build()
 
         @Deprecated("Use the hoster version instead")

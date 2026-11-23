@@ -13,7 +13,6 @@ import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import java.util.IdentityHashMap
-import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -131,18 +130,14 @@ internal class AniyomiStreams(private val source: AnimeSource, private val host:
         }
     }
 
-    /** [block]'s outcome, with a failure kept and logged; cancellation of the caller passes through. */
+    /** [block]'s outcome, with a failure kept and logged; the caller's cancellation passes through (see [extensionFailure]). */
     @Suppress("TooGenericExceptionCaught")
     private suspend fun <T> attempt(block: suspend () -> T): Result<T> = try {
         Result.success(block())
-    } catch (error: CancellationException) {
-        throw error
-    } catch (error: Exception) {
-        host.log("${source.name}: $error")
-        Result.failure(error)
-    } catch (error: LinkageError) {
-        host.log("${source.name}: $error")
-        Result.failure(error)
+    } catch (error: Throwable) {
+        val failure = extensionFailure(error)
+        host.log("${source.name}: $failure")
+        Result.failure(failure)
     }
 
     private fun noServerAnswered() = SourceAdapterException(SourceFailureReason.NETWORK, "No server answered in time")

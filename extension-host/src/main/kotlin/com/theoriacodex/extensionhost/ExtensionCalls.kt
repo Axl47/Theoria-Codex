@@ -11,6 +11,8 @@ import java.io.IOException
 import java.util.Collections
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 /**
@@ -28,21 +30,17 @@ internal class ExtensionCalls(private val name: String, private val log: (String
     @Suppress("TooGenericExceptionCaught")
     suspend fun <T> calling(block: suspend () -> T): T = try {
         withContext(Dispatchers.IO) { block() }
-    } catch (error: CancellationException) {
-        throw error
-    } catch (error: SourceAdapterException) {
-        throw error
-    } catch (error: Exception) {
-        throw failure(error)
-    } catch (error: LinkageError) {
-        throw failure(error)
+    } catch (error: Throwable) {
+        throw failure(extensionFailure(error))
     }
 
-    /** [error], thrown by extension code, as the app's failure; a browser check that caused it is reported. */
+    /**
+     * [error], thrown by extension code, as the app's failure; a browser check that caused it is reported. One the
+     * adapter already made passes as it is.
+     */
     fun failure(error: Throwable): SourceAdapterException {
-        generateSequence(error) { it.cause }.firstNotNullOfOrNull { it as? HostUnavailableException }
-            ?.takeIf { it.kind == HostOutageKind.CHALLENGE }
-            ?.let { onChallenged(it.host) }
+        if (error is SourceAdapterException) return error
+        if (error.isBrowserCheck()) generateSequence(error) { it.cause }.firstNotNullOf { it as? HostUnavailableException }.let { onChallenged(it.host) }
         val reason = when (error) {
             // A refusal (401, 403) is not reported as a missing key: the app holds no key for an extension source, and
             // would point the user at a Settings field that does not exist.
@@ -51,6 +49,10 @@ internal class ExtensionCalls(private val name: String, private val log: (String
             is LinkageError -> {
                 // The extension called a part of its interface's host API that this module does not provide.
                 log("$name needs host API this module lacks: $error")
+                SourceFailureReason.UNKNOWN
+            }
+            is Error -> {
+                log("$name failed: $error")
                 SourceFailureReason.UNKNOWN
             }
             else -> SourceFailureReason.PARSE
@@ -62,6 +64,29 @@ internal class ExtensionCalls(private val name: String, private val log: (String
         const val HTTP_TOO_MANY_REQUESTS = 429
     }
 }
+
+/**
+ * What of extension code's throwables reaches the caller as it is: the virtual machine failing (out of memory, a stack
+ * overflow), which nothing here can handle. Everything else, errors included, is the extension failing: a `TODO()` stub
+ * throws `NotImplementedError`, and a part of the host API this module lacks surfaces as a `LinkageError`. Uncaught on
+ * a client's or the main thread, any of those would end the app's process.
+ */
+internal fun Throwable.endsTheProcess(): Boolean = this is VirtualMachineError
+
+/**
+ * [error], thrown by extension code this coroutine waited for, as the extension's own failure; rethrown when it
+ * [endsTheProcess] or is this coroutine being cancelled. Extensions also throw a [CancellationException] themselves,
+ * from their own timeout or a cancelled future, which is a failure like any other while the caller is still waiting.
+ */
+internal suspend fun extensionFailure(error: Throwable): Throwable {
+    if (error.endsTheProcess()) throw error
+    if (error is CancellationException) currentCoroutineContext().ensureActive()
+    return error
+}
+
+/** Whether a browser check that could not be passed caused [this]: the source then needs browser verification. */
+internal fun Throwable.isBrowserCheck(): Boolean =
+    generateSequence(this) { it.cause }.any { it is HostUnavailableException && it.kind == HostOutageKind.CHALLENGE }
 
 /**
  * The most recent values by address, which an adapter keeps of what its source listed: sources may keep data on them
