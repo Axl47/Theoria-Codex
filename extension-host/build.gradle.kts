@@ -35,12 +35,13 @@ dependencies {
     api(libs.okhttp)
     api(libs.kotlinx.coroutines.core)
     api(libs.kotlinx.serialization.json)
+    // Most extensions parse pages with Jsoup; Aniyomi's ParsedAnimeHttpSource and asJsoup name it in their signatures.
+    api(libs.jsoup)
     // Not called from this module: every extension's HTTP client names the first two, and most extensions decode
-    // JSON straight from the response stream and parse pages with Jsoup.
+    // JSON straight from the response stream.
     runtimeOnly(libs.okhttp.brotli)
     runtimeOnly(libs.okhttp.zstd)
     runtimeOnly(libs.kotlinx.serialization.json.okio)
-    runtimeOnly(libs.jsoup)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

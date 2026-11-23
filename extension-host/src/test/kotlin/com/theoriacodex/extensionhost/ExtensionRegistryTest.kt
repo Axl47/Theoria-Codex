@@ -5,6 +5,7 @@ import com.theoriacodex.domain.series.ExtensionChoiceStore
 import com.theoriacodex.domain.series.ExtensionChoices
 import com.theoriacodex.domain.series.ExtensionLanguage
 import com.theoriacodex.domain.series.ExtensionSetting
+import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.HostUnavailableException
 import eu.kanade.tachiyomi.source.ConfigurableSource
@@ -298,6 +299,13 @@ class ExtensionRegistryTest {
         assertEquals(listOf(true, "Streams by torrent"), listOf(listed.on, listed.problem))
         assertTrue(registry.sources().isEmpty())
         assertTrue(loads.isEmpty())
+    }
+
+    @Test
+    fun `each extension is listed with the kind of series its interface serves`() = runBlocking {
+        onDevice = listOf(extension("a", signer = "key-1"), extension("b", signer = "key-1").copy(kind = AnimeKind))
+
+        assertEquals(listOf(SeriesKind.MANGA, SeriesKind.ANIME), registry.installed().map { it.kind })
     }
 
     @Test

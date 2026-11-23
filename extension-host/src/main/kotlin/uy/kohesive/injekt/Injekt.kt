@@ -1,4 +1,4 @@
-// Binary-compatible stand-in for the four Injekt classes extension binaries call (uy.kohesive.injekt 1.16).
+// Binary-compatible stand-in for the Injekt classes extension binaries call (uy.kohesive.injekt 1.16).
 package uy.kohesive.injekt
 
 import uy.kohesive.injekt.api.InjektScope
