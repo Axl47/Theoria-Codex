@@ -201,7 +201,12 @@ class ViewerProviderWorkTest {
             val fromViewer = async { workflow.resolvePost(post.id, ViewerStreamSource.RELATED) }
             // The Viewer first looks in the offline store on a real IO thread; wait until it is back and asking the
             // provider, or it would miss the feed's request and send its own.
-            while (!viewerAsked.isCompleted) { runCurrent(); Thread.yield() }
+            val deadline = System.nanoTime() + 10_000_000_000L
+            while (!viewerAsked.isCompleted) {
+                assertTrue("Timed out waiting for Viewer to request the post from the provider", System.nanoTime() < deadline)
+                runCurrent()
+                Thread.yield()
+            }
             runCurrent()
             assertEquals(1, requests)
             // A media recovery needs fresh URLs, so it never joins the request already in flight.

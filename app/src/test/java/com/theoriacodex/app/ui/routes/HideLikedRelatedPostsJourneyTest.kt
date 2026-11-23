@@ -36,6 +36,7 @@ import com.theoriacodex.app.codex.likesCodexIdForProfile
 import com.theoriacodex.app.fixtures.JourneyAppContainer
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.app.ui.TheoriaAppContent
 import com.theoriacodex.app.ui.components.SEARCH_FEED_FAB_CONTEXT
 import com.theoriacodex.data.repository.FeedFabRestoreState
@@ -147,8 +148,7 @@ class HideLikedRelatedPostsJourneyTest {
                 .performClick()
         }
         // A real like also adds this post to the system Likes Codex, activating Hide saved.
-        compose.waitUntil(10_000) {
-            compose.waitForIdle()
+        compose.waitUntilSettled(10_000) {
             runBlocking(Dispatchers.IO) {
                 post.id in graph.content.observeSavedPostIds(setOf(likesCodexIdForProfile("profile-main"))).first()
             }

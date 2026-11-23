@@ -16,6 +16,7 @@ import com.theoriacodex.app.appshell.AppShellViewModel
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.fixtures.JourneyAppContainer
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.app.ui.TheoriaAppContent
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.domain.model.ImageRef
@@ -66,13 +67,8 @@ class ForYouDealsWhenShownTest {
         awaitDeal(graph)
     }
 
-    /**
-     * Waits for For You to ask the sources. It plans its lanes off the main thread and hands the result back to it,
-     * and waitUntil alone does not run work handed to the main thread once the screen is idle: a result that arrives
-     * after that would sit there until the wait timed out.
-     */
-    private fun awaitDeal(graph: JourneyAppContainer) = compose.waitUntil(10_000) {
-        compose.waitForIdle()
+    /** Waits for For You to finish planning its lanes off the main thread and ask the sources. */
+    private fun awaitDeal(graph: JourneyAppContainer) = compose.waitUntilSettled(10_000) {
         graph.registry.requests.isNotEmpty()
     }
 

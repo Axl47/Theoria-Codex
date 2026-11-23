@@ -260,7 +260,7 @@ class OfflineStorageViewModelTest {
             owner.removeAll()
             owner.commitRemovals()
             cancelled.await()
-            owner.state.first { !it.working && it.hiddenOwners.isEmpty() }
+            owner.state.first { !it.working && it.hiddenOwners.isEmpty() && it.preparingOwners.isEmpty() }
             release.complete(Unit)
             assertTrue(coordinator.jobs.value.isEmpty())
             assertTrue(owner.state.value.preparingOwners.isEmpty())
