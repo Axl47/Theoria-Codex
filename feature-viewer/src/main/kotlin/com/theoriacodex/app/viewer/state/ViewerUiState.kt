@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer.state
 
+import com.theoriacodex.app.viewer.ViewerSeries
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -141,6 +142,14 @@ data class ViewerRelatedBranch(
 
 data class ViewerUiState(
     val session: ViewerSessionIdentity? = null,
+    /**
+     * The session's [com.theoriacodex.app.viewer.ViewerSession.series], set with its pages and kept by the presentation
+     * a closing Viewer retains, so every rule for a series' entries reads one source, even after the session ended.
+     * A series' entries are never collected: the top bar names the entry in place of the source, Like and Save are
+     * hidden, and the info sheet holds only Start over. [ViewerSeries.Reading] adds the chapter rules (the series'
+     * reading mode, the chapter strip, reading on into the next chapter); [ViewerSeries.Watching] the episode rules.
+     */
+    val series: ViewerSeries? = null,
     val pages: List<ViewerPageState> = emptyList(),
     val currentPageIndex: Int = 0,
     val controls: ViewerControlsState = ViewerControlsState(),

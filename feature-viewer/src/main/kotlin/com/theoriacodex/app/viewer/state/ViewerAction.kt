@@ -2,6 +2,7 @@ package com.theoriacodex.app.viewer.state
 
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.app.viewer.ViewerSeries
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 
@@ -12,6 +13,7 @@ sealed interface ViewerAction {
         val initialPageIndex: Int = 0,
         val resolutionRequiredPostIds: Set<PostId> = emptySet(),
         val initialMediaIndices: Map<PostId, Int> = emptyMap(),
+        val series: ViewerSeries? = null,
     ) : ViewerAction
 
     /** Adds [posts] after the live [session]'s pages, leaving the pages, selection and controls it has untouched. */

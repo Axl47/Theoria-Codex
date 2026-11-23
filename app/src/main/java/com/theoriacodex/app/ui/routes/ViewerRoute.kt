@@ -217,12 +217,10 @@ internal fun ViewerRoute(
     ViewerDurationSync(activeSession, viewerState, durationOwner, dependencies.canonicalizePost)
     val sourceState = liveSourceState.matching(activeSession)
     val related = rememberViewerRelatedPosts(activeSession, liveSourceState)
-    // The session says what kind it is, so the Viewer's controls and video positions read it from the session they show.
-    val sessionConfig = remember(config, activeSession?.series) { config.copy(series = activeSession?.series) }
     ViewerScreen(
         uiState = viewerState,
         host = rememberViewerScreenHost(viewerOwner, durationOwner, screenCallbacks, latestDependencies, latestEffectCallbacks),
-        config = sessionConfig,
+        config = config,
         saveToCodexQuery = activeSession?.saveQuery,
         saveFromForYou = activeSession?.context?.streamSource == ViewerStreamSource.FOR_YOU,
         canLoadMoreFromSource = activeSession?.liveSearchBinding == true && sourceState?.canLoadMore == true,

@@ -4,6 +4,7 @@ import com.theoriacodex.app.di.SeriesDependencies
 import com.theoriacodex.app.viewer.ViewerSeries
 import com.theoriacodex.app.viewer.ViewerPlaybackProgress
 import com.theoriacodex.app.viewer.ViewerSession
+import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.data.repository.ViewerLaunchContext
@@ -28,7 +29,10 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Reads or watches a series in the Viewer. A session's posts are the series' entries in reading order, each arriving
@@ -42,6 +46,7 @@ import kotlinx.coroutines.launch
 internal class SeriesReader(private val series: SeriesDependencies) {
     /** How many Viewers are reading a series now. */
     private val open = AtomicInteger()
+    private val progressWrites = Mutex()
 
     /**
      * A session over [id]'s stored entries opening at [entryAddress]. A chapter opens on [pageIndex] or, without one,
@@ -105,20 +110,40 @@ internal class SeriesReader(private val series: SeriesDependencies) {
     }
 
     /**
-     * The user is on [page] of the chapter [post]. A chapter whose pages have not arrived shows only its cover, which
-     * is not a page read; the Viewer reports the chapter again once they have. An episode's one media item is not a
-     * page, so nothing is recorded for an anime: its progress is [recordPlaybackProgress].
+     * The user is on [page] of [post], an entry of [session]'s series, whose kind the session says. A chapter whose
+     * pages have not arrived shows only its cover, which is not a page read; the Viewer reports the chapter again once
+     * they have. An episode's one media item is not a page: it showing makes the episode the series' last opened one
+     * (Continue), with no length, so where it was left stays; its progress is [recordPlaybackProgress].
      */
-    suspend fun recordPageProgress(session: ViewerSession, post: Post, page: Int) {
-        val id = seriesIdOf(session.context.queryHash)?.takeIf { it.source.seriesKind == SeriesKind.MANGA } ?: return
-        if (post.media.isEmpty()) return
-        series.repository.recordProgress(id, post.id.sourcePostId, page.toLong(), post.media.size.toLong())
+    fun recordPageProgress(session: ViewerSession, post: Post, page: Int) {
+        val id = seriesIdOf(session.context.queryHash) ?: return
+        when (session.series) {
+            is ViewerSeries.Reading -> if (post.media.isNotEmpty()) {
+                record { recordProgress(id, post.id.sourcePostId, page.toLong(), post.media.size.toLong()) }
+            }
+            is ViewerSeries.Watching -> record { recordProgress(id, post.id.sourcePostId, 0, null) }
+            null -> Unit
+        }
     }
 
-    /** The user is at [progress] in the episode [post]; a chapter has no playback, so nothing is recorded for a manga. */
-    suspend fun recordPlaybackProgress(session: ViewerSession, post: Post, progress: ViewerPlaybackProgress) {
-        val id = seriesIdOf(session.context.queryHash)?.takeIf { it.source.seriesKind == SeriesKind.ANIME } ?: return
-        series.repository.recordProgress(id, post.id.sourcePostId, progress.positionMs, progress.durationMs.takeIf { it > 0 })
+    /** The user is at [progress] in the episode [post]; only a watched session's entries have playback to record. */
+    fun recordPlaybackProgress(session: ViewerSession, post: Post, progress: ViewerPlaybackProgress) {
+        if (session.series !is ViewerSeries.Watching) return
+        val id = seriesIdOf(session.context.queryHash) ?: return
+        record { recordProgress(id, post.id.sourcePostId, progress.positionMs, progress.durationMs.takeIf { it > 0 }) }
+    }
+
+    /**
+     * Writes progress in the app's scope, so a report the closing Viewer sends still lands after its navigation entry
+     * is gone, and one at a time, in the order reported: a later position never loses to an earlier one.
+     */
+    private fun record(write: suspend SeriesRepository.() -> Unit) {
+        series.scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            progressWrites.withLock {
+                runCatchingPreservingCancellation { series.repository.write() }
+                    .onFailure { Diagnostics.report("series", "Progress could not be saved", it) }
+            }
+        }
     }
 
     /** A Viewer started reading a series; [closed] says when it stops. */

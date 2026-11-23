@@ -1,6 +1,7 @@
 package com.theoriacodex.app.viewer.state
 
 import com.theoriacodex.app.media.PostMediaKind
+import com.theoriacodex.app.viewer.ViewerSeries
 import com.theoriacodex.app.media.isAnimatedImageMediaRef
 import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isPixivUgoiraMedia
@@ -16,12 +17,14 @@ fun createViewerUiState(
     initialPageIndex: Int = 0,
     requiresResolution: (Post) -> Boolean = { false },
     initialMediaIndices: Map<PostId, Int> = emptyMap(),
+    series: ViewerSeries? = null,
 ): ViewerUiState {
     val pages = posts.map { post -> post.toNewViewerPageState(requiresResolution, initialMediaIndices) }
     val currentPageIndex = initialPageIndex.coerceInPages(pages)
     val currentPage = pages.getOrNull(currentPageIndex)
     return ViewerUiState(
         session = session,
+        series = series,
         pages = pages,
         currentPageIndex = currentPageIndex,
         controls = ViewerControlsState(
@@ -185,6 +188,7 @@ private fun ViewerUiState.replaceSession(action: ViewerAction.ReplaceSession): V
             posts = action.posts,
             initialPageIndex = action.initialPageIndex,
             requiresResolution = { post -> post.id in action.resolutionRequiredPostIds },
+            series = action.series,
             initialMediaIndices = action.initialMediaIndices + if (session == action.session) {
                 pages.associate { it.post.id to it.targetMediaIndex }
             } else {

@@ -142,13 +142,12 @@ class ViewerEpisodeControlsTest {
     /** Two unresolved episodes of a watched series, on the full screen. */
     private fun watchingScreen(): androidx.compose.runtime.MutableState<ViewerUiState> {
         val episodes = (1..2).map { post("episode-$it", SourceKey.HITOMI, emptyList(), title = "Episode $it") }
-        val state = mutableStateOf(createViewerUiState(identity, episodes, requiresResolution = { true }))
+        val state = mutableStateOf(createViewerUiState(identity, episodes, requiresResolution = { true }, series = ViewerSeries.Watching()))
         compose.setContent {
             MaterialTheme {
                 ViewerScreen(
                     uiState = state.value,
                     host = ViewerScreenHost(onAction = { state.value = reduceViewerState(state.value, it).state }),
-                    config = ViewerScreenConfig(series = ViewerSeries.Watching()),
                 )
             }
         }

@@ -35,7 +35,7 @@ suspend fun ViewerViewModel.recoverMedia(
     fun stillApplies() = session.value?.sessionId == active.sessionId && state.value.pages.any { page -> page.post == post }
     if (!stillApplies()) return ViewerMediaRecovery.NOTHING_NEW
     val recovered = try {
-        withTimeoutOrNull(viewerResolutionTimeoutMs(active.series)) { recover(active, ::stillApplies) }
+        withTimeoutOrNull(viewerResolutionTimeoutMs(state.value.series)) { recover(active, ::stillApplies) }
     } catch (error: CancellationException) {
         throw error
     } catch (_: Exception) {

@@ -136,13 +136,31 @@ class ViewerWatchingTest {
             recorded += session.sessionId to progress.positionMs
         }
         val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this)
+        // The screen's host, wired as the route wires it; each page's player reports through episodeProgress.
+        val host = ViewerScreenHost(onAction = owner::onAction, onPlaybackProgress = { post, progress -> owner.recordPlaybackProgress(post, progress, record) })
         owner.replaceSession(session("watching", listOf(episode)).copy(series = ViewerSeries.Watching()))
-        owner.recordPlaybackProgress(episode, ViewerPlaybackProgress(4_000, 1_440_000), record)
-        // Closing retains the paused pages; their players report as they pause and let go.
+        requireNotNull(host.episodeProgress(owner.state.value.series, episode))(ViewerPlaybackProgress(4_000, 1_440_000))
+        // Closing retains the paused pages, and the series with them; their players report as they pause and let go.
         owner.clearSession(retainPresentation = true)
-        owner.recordPlaybackProgress(episode, ViewerPlaybackProgress(6_000, 1_440_000), record)
+        requireNotNull(host.episodeProgress(owner.state.value.series, episode))(ViewerPlaybackProgress(6_000, 1_440_000))
         advanceUntilIdle()
         assertEquals(listOf("watching" to 4_000L, "watching" to 6_000L), recorded)
+    }
+
+    @Test
+    fun `a watched session's seeds arrive with its first state, before anything can save`() = runTest {
+        val seeds = ViewerSeries.Watching(mapOf(episodes[0].id to 90_000L))
+        val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this)
+        val states = mutableListOf<com.theoriacodex.app.viewer.state.ViewerUiState>()
+        val collecting = launch(kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)) { owner.state.collect { states += it } }
+        owner.replaceSession(session("watching", episodes).copy(series = seeds))
+        collecting.cancel()
+        assertTrue(states.filter { it.session != null }.all { it.series == seeds })
+        // So the screen's positions, made for the session's first state, start from its seeds.
+        val positions = ViewerVideoPositionStore().forSession(states.last().session, states.last().series as? ViewerSeries.Watching)
+        positions.retainAround(episodes.map(Post::id), 0)
+        assertEquals(90_000L, positions.position(com.theoriacodex.app.viewer.state.ViewerMediaKey(episodes[0].id, 0)))
+        owner.clearSession()
     }
 
     @Test

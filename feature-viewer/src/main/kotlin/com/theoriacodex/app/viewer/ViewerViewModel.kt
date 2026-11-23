@@ -135,7 +135,7 @@ class ViewerViewModel(
             var result = reduceViewerState(mutableState.value, action)
             if (action is ViewerAction.ReplaceSession &&
                 (action.session != mutableState.value.session || mutableState.value.pages.isEmpty())) {
-                result = reduceViewerState(result.state, ViewerAction.SetPlaybackMode(startingPlaybackMode()))
+                result = reduceViewerState(result.state, ViewerAction.SetPlaybackMode(startingPlaybackMode(result.state.series)))
             }
             result.also {
                 mutableState.value = result.state
@@ -158,11 +158,11 @@ class ViewerViewModel(
      * soon expire, so a drag toward a neighbour (which asks for it as the swipe's target) must not start one.
      */
     private fun mayResolve(postId: PostId): Boolean =
-        mutableSession.value?.series !is ViewerSeries.Watching || postId == mutableState.value.currentPage?.post?.id
+        mutableState.value.series !is ViewerSeries.Watching || postId == mutableState.value.currentPage?.post?.id
 
     /** The app's playback setting, except while a series is watched: an episode goes on to the next one, never loops. */
-    private fun startingPlaybackMode(): ViewerPlaybackMode =
-        if (mutableSession.value?.series is ViewerSeries.Watching) ViewerPlaybackMode.NEXT else playbackModeProvider()
+    private fun startingPlaybackMode(series: ViewerSeries?): ViewerPlaybackMode =
+        if (series is ViewerSeries.Watching) ViewerPlaybackMode.NEXT else playbackModeProvider()
 
     /** The current post's first comment page, then its neighbours', so a swipe lands on a known count. */
     private fun showComments() {
@@ -316,6 +316,8 @@ class ViewerViewModel(
             mutableSession.value = null
             // The retained pages keep their episode choice: a stream label dropped here would rebind the closing player.
             mutableState.value = if (retainPresentation) ViewerUiState(
+                // The closing player still reports where the episode stopped, which needs the series' kind.
+                series = mutableState.value.series,
                 pages = mutableState.value.pages,
                 currentPageIndex = mutableState.value.currentPageIndex,
                 controls = ViewerControlsState(chromeVisible = false, episode = mutableState.value.controls.episode),
@@ -340,7 +342,7 @@ class ViewerViewModel(
     private fun reconcileResolutionLookahead() {
         val current = state.value
         val session = current.session ?: return
-        val watching = mutableSession.value?.series is ViewerSeries.Watching
+        val watching = current.series is ViewerSeries.Watching
         val neighbours = if (watching) emptyList() else viewerPostNavigation(current).neighbours
         val desired = setOfNotNull(current.currentPage?.post?.id) + neighbours.map { it.post.id }
         val obsolete = sessionJobs.keys.filterIsInstance<ViewerWorkKey.Resolution>().filter { it.postId !in desired }
@@ -373,7 +375,7 @@ class ViewerViewModel(
         launchSessionJob(ViewerWorkKey.Resolution(effect.postId)) {
             onAction(ViewerAction.ResolutionStarted(effect.session, effect.postId))
             try {
-                val outcome = withTimeoutOrNull(viewerResolutionTimeoutMs(mutableSession.value?.series)) { Result.success(postResolver.resolve(effect.session, effect.postId)) }
+                val outcome = withTimeoutOrNull(viewerResolutionTimeoutMs(state.value.series)) { Result.success(postResolver.resolve(effect.session, effect.postId)) }
                     ?: throw java.io.IOException("Post resolution timed out")
                 val resolved = outcome.getOrThrow()
                 coroutineContext.ensureActive()
@@ -646,6 +648,7 @@ internal fun ViewerSession.toReplaceViewerSessionAction(
         initialPageIndex = context.startIndex,
         initialMediaIndices = initialMediaIndices,
         resolutionRequiredPostIds = resolutionRequiredPostIds(posts, requiresResolution),
+        series = series,
     )
 }
 
