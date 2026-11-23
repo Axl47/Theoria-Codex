@@ -72,6 +72,20 @@ class RelatedFeedProjectionTest {
         assertEquals(null, projection.greatestVisibleCanonicalIndex(listOf(0)))
     }
 
+    @Test
+    fun `each post entry carries its index in the filtered list, past posts the feed no longer has`() {
+        val posts = listOf(post("0"), post("2"))
+        // The filtered list lags the feed: "1" was just removed from it.
+        val visible = listOf(post("0"), post("1"), post("2"))
+
+        val projection = buildRelatedFeedProjection(posts, visible, RelatedPostsUiState.Idle)
+
+        assertEquals(
+            listOf("0" to 0, "2" to 2),
+            projection.entries.map { (it as RelatedFeedEntry.PostEntry).let { entry -> entry.post.id.sourcePostId to entry.visibleIndex } },
+        )
+    }
+
     private fun RelatedFeedProjection.labels(): List<String> = entries.map { entry ->
         when (entry) {
             is RelatedFeedEntry.PostEntry -> entry.post.id.sourcePostId
