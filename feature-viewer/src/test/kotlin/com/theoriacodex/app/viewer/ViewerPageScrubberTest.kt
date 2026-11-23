@@ -60,6 +60,13 @@ class ViewerPageScrubberTest {
         assertEquals(3, viewerPageAt(85f, 120f, 12, mirrored = true, held = 4, holdPx = 4f))
     }
 
+    @Test fun `pages slimmer than the hold still step one at a time, through to the last`() {
+        // 100 pages own 3.2 px each; a 6 px hold shrinks to half a page.
+        assertEquals(51, viewerPageAt(165.5f, 320f, 100, mirrored = false, held = 50, holdPx = 6f))
+        assertEquals(99, viewerPageAt(319f, 320f, 100, mirrored = false, held = 98, holdPx = 6f))
+        assertEquals(0, viewerPageAt(319f, 320f, 100, mirrored = true, held = 1, holdPx = 6f))
+    }
+
     @Test fun `a finger rolling across a boundary as it lifts lands on the page it rested on`() {
         setScrubber(pageIndex = 0)
         // Page 6 of 12 spans 50% to 58.3% of the track; the finger rests near its end, then rolls a few pixels over.

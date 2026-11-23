@@ -247,7 +247,7 @@ private fun VerticalGalleryPendingJump(post: Post, list: LazyListState, pageCoun
     val pendingJump = screen.pendingMediaJumpByPost[post.id]
     LaunchedEffect(pendingJump, pageCount, resuming) {
         if (pendingJump == null || resuming || pageCount == 0) return@LaunchedEffect
-        list.scrollToItem(pendingJump.coerceIn(0, pageCount - 1))
+        list.scrollToSelection(pendingJump.coerceIn(0, pageCount - 1))
         screen.pendingMediaJumpByPost.remove(post.id)
     }
 }
