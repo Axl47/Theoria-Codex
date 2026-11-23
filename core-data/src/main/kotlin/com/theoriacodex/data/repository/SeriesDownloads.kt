@@ -1,8 +1,12 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.AtomicJsonFileStore
-import com.theoriacodex.data.storage.mediaFileExtension
+import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesSource
 import java.io.File
@@ -11,10 +15,9 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -24,11 +27,10 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -82,25 +84,64 @@ interface DownloadScheduler {
 }
 
 /**
- * The chapter download queue and its one worker. The queue is the only download state besides the files, kept in
- * [queueFile] (under `noBackupFilesDir`, like the files, so a restored database never brings back a queue without its
- * downloads or the other way round). [store] is the truth for what is on the device.
+ * The offline owner under which [id]'s downloaded chapters are kept; [seriesIdOfOfflineOwner] reads it back. A source id
+ * never contains a line break.
+ */
+fun seriesOfflineOwner(id: SeriesId): String = "$SERIES_OWNER_PREFIX${id.source.id}\n${id.address}"
+
+/** The series an offline owner keeps chapters for, or null for other owners. */
+fun seriesIdOfOfflineOwner(owner: String): SeriesId? {
+    val pieces = owner.takeIf { it.startsWith(SERIES_OWNER_PREFIX) }?.removePrefix(SERIES_OWNER_PREFIX)?.split('\n', limit = 2)
+    if (pieces == null || pieces.size != 2 || pieces[1].isEmpty()) return null
+    return SourceKey.parse(pieces[0])?.let { SeriesId(it, pieces[1]) }
+}
+
+private const val SERIES_OWNER_PREFIX = "series:"
+
+/**
+ * One chapter as the Viewer's post: its id is the chapter's address on the series' source, which is also the id its
+ * download is kept under offline. Without [pages] the Viewer asks for them when it gets there. The title is what the
+ * Viewer's top bar shows.
+ */
+fun chapterPost(series: Series, entry: SeriesEntry, cover: String?, pages: List<ImageRef> = emptyList()) = Post(
+    id = PostId(series.id.source, entry.address),
+    preview = ImageRef(url = cover, localPath = null, mime = null),
+    full = pages.firstOrNull(),
+    pageUrl = null,
+    width = null,
+    height = null,
+    canonicalTags = emptyList(),
+    rawTags = emptyList(),
+    authorName = null,
+    createdAtEpochMs = entry.uploadedAtEpochMs,
+    title = "${series.title} · ${entry.name}",
+    media = pages,
+    mediaCount = pages.size.takeIf { it > 0 },
+    galleryLengthUnknown = pages.isEmpty(),
+)
+
+/**
+ * The chapter download queue and its one worker. A downloaded chapter is the offline copy of its [chapterPost] in
+ * [store], kept by [seriesOfflineOwner], and [store] is the truth for what is on the device. The queue is the only
+ * other download state, kept in [queueFile] (under `noBackupFilesDir`, and the offline copies are left out of backups
+ * too, so a restored device never brings back a queue without its downloads or the other way round).
  *
  * The queue has two lanes: chapters the user queued, and [automatic][QueuedChapter.automatic] ones the check for new
  * chapters queued, each drained by its own job ([drain]). Drains fetch in queue order, one chapter at a time across
  * both lanes, which also keeps each source to one chapter at a time. A chapter's pages are asked for right before it
  * is fetched, since their addresses expire, and fetched a few at a time through [fetch], each tried [PAGE_ATTEMPTS]
  * times. A chapter that is [unavailable][ChapterUnavailable] then leaves the queue, not downloaded; any other failure
- * keeps it queued and stops its lane until the system runs the job again. [scheduler] runs drains: queuing a chapter
- * while its lane has none running schedules one, and [resume] does after the process restarts.
+ * keeps it queued and stops its lane until the system runs the job again. Removing every offline copy while a chapter
+ * is fetched is such a failure: [store] refuses to commit it, so call [cancelAll] first. [scheduler] runs drains:
+ * queuing a chapter while its lane has none running schedules one, and [resume] does after the process restarts.
  */
 class SeriesDownloads(
-    private val store: SeriesDownloadStore,
+    private val store: OfflineMediaStore,
     private val queueFile: File,
     private val repository: SeriesRepository,
     private val sources: suspend () -> List<SeriesSource>,
     /** Writes the image at an address into a file and returns its media type; throws unless a whole image arrived. */
-    private val fetch: suspend (url: String, into: File) -> String?,
+    private val fetch: suspend (url: String, into: File) -> String,
     private val scheduler: DownloadScheduler,
     /** The Delete after reading setting, as it is now. */
     private val deleteAfterReading: suspend () -> Boolean,
@@ -123,8 +164,10 @@ class SeriesDownloads(
     /** Each chapter of [id] that is queued or on the device, by address. */
     fun states(id: SeriesId): Flow<Map<String, ChapterDownload>> = flow {
         lock.withLock { load() }
+        store.load()
+        val downloaded = store.snapshot.map { it.chapters(id) }.distinctUntilChanged()
         emitAll(
-            combine(store.observe(id), queue, fetching) { downloaded, queued, current ->
+            combine(downloaded, queue, fetching) { downloaded, queued, current ->
                 downloaded.associateWith<String, ChapterDownload> { ChapterDownload.OnDevice } +
                     queued.filter { it.series == id }.associate { chapter ->
                         chapter.entry to ChapterDownload.Queued(current?.takeIf { it.first == chapter }?.second)
@@ -133,20 +176,22 @@ class SeriesDownloads(
         )
     }
 
-    /** The pages of the chapter at [entry] as files, in reading order; null when it is not on the device. */
-    suspend fun pages(id: SeriesId, entry: String) = store.pages(id, entry)
+    /** The chapter at [entry] with its pages as files, in reading order; null when it is not on the device. */
+    suspend fun chapter(id: SeriesId, entry: String): Post? = store.find(PostId(id.source, entry))
 
     /** The addresses of [id]'s chapters on the device. */
-    suspend fun downloaded(id: SeriesId): Set<String> = store.downloaded(id)
+    suspend fun downloaded(id: SeriesId): Set<String> {
+        store.load()
+        return store.snapshot.value.chapters(id)
+    }
 
     /**
-     * Loads the saved queue, clears what stopped downloads left, deletes what [deleteRead] would, since the process may
-     * have ended with chapters read, and has the queue drained. Call once per process.
+     * Loads the saved queue, deletes what [deleteRead] would, since the process may have ended with chapters read, and
+     * has the queue drained. Call once per process.
      */
     suspend fun resume() {
         val queued = lock.withLock {
             load()
-            if (draining.isEmpty()) store.removeUnfinished()
             queue.value
         }
         deleteRead()
@@ -182,14 +227,21 @@ class SeriesDownloads(
 
     /**
      * With Delete after reading on, deletes each downloaded chapter that is read, except the one its series was last
-     * opened at. Called once no reader is open, and at start.
+     * opened at. Called once no reader is open, and at start; it stops once [noReaderOpen] turns false, so a chapter a
+     * reader opened meanwhile keeps its files.
      */
-    suspend fun deleteRead() {
+    suspend fun deleteRead(noReaderOpen: () -> Boolean = { true }) {
         if (!deleteAfterReading()) return
-        store.downloaded().forEach { (id, chapters) ->
+        store.load()
+        store.snapshot.value.postsByOwner.forEach { (owner, posts) ->
+            val id = seriesIdOfOfflineOwner(owner) ?: return@forEach
+            val chapters = posts.mapTo(HashSet()) { it.sourcePostId }
             val series = repository.series(id) ?: return@forEach
             val read = repository.entries(id).filter { it.read }.mapTo(HashSet()) { it.entry.address }
-            (chapters intersect read).minus(setOfNotNull(series.lastOpenedEntry)).forEach { delete(id, it) }
+            (chapters intersect read).minus(setOfNotNull(series.lastOpenedEntry)).forEach {
+                if (!noReaderOpen()) return
+                delete(id, it)
+            }
         }
     }
 
@@ -198,7 +250,7 @@ class SeriesDownloads(
      * below, it finishes once started, even when its caller is cancelled, so the queue and its file stay in step.
      */
     suspend fun download(id: SeriesId, entries: List<String>, automatic: Boolean = false): Unit = withContext(NonCancellable) {
-        val onDevice = store.downloaded(id)
+        val onDevice = downloaded(id)
         val schedule = lock.withLock {
             load()
             val queued = queue.value.mapTo(HashSet()) { it.series to it.entry }
@@ -213,7 +265,7 @@ class SeriesDownloads(
     /** Queues the chapters of [id] that [choice] picks. */
     suspend fun download(id: SeriesId, choice: DownloadChoice) {
         val series = repository.series(id) ?: return
-        val present = store.downloaded(id) + lock.withLock { load(); queue.value.filter { it.series == id }.map { it.entry } }
+        val present = downloaded(id) + lock.withLock { load(); queue.value.filter { it.series == id }.map { it.entry } }
         download(id, chaptersToDownload(choice, series, repository.entries(id), present))
     }
 
@@ -230,7 +282,7 @@ class SeriesDownloads(
      */
     suspend fun delete(id: SeriesId, entry: String) = withContext(NonCancellable) {
         remove { it.series == id && it.entry == entry }
-        store.delete(id, entry)
+        store.removeOwner(seriesOfflineOwner(id), PostId(id.source, entry))
     }
 
     /**
@@ -239,16 +291,11 @@ class SeriesDownloads(
      */
     suspend fun deleteSeries(id: SeriesId) = withContext(NonCancellable) {
         remove { it.series == id }
-        store.deleteSeries(id)
+        store.removeOwner(seriesOfflineOwner(id))
     }
 
-    /** Deletes every download and empties the queue. */
-    suspend fun deleteAll() = withContext(NonCancellable) {
-        remove { true }
-        store.deleteAll()
-    }
-
-    suspend fun sizeBytes(): Long = store.sizeBytes()
+    /** Empties the queue, stopping the chapter being fetched; clearing [store] then deletes every chapter on the device. */
+    suspend fun cancelAll() = withContext(NonCancellable) { remove { true } }
 
     /**
      * Downloads one lane of the queue, chapters the user queued or [automatic] ones, in order until it is empty or a
@@ -301,8 +348,10 @@ class SeriesDownloads(
      */
     private suspend fun fetchQueued(chapter: QueuedChapter, onPage: (pages: Int, of: Int) -> Unit): Outcome = coroutineScope {
         var outcome = Outcome.REMOVED
-        val job = launch { outcome = fetched(chapter, onPage) }
+        // Registered before it can run, so a removal that does not find it as active knows it will never start.
+        val job = launch(start = CoroutineStart.LAZY) { outcome = fetched(chapter, onPage) }
         lock.withLock { if (chapter in queue.value) active = chapter to job else job.cancel() }
+        job.start()
         try {
             job.join()
         } finally {
@@ -330,39 +379,27 @@ class SeriesDownloads(
     }
 
     private suspend fun fetchChapter(chapter: QueuedChapter, onPage: (pages: Int, of: Int) -> Unit) {
+        val series = repository.series(chapter.series)?.series ?: throw ChapterUnavailable("The series is not stored")
         val entry = repository.entries(chapter.series).firstOrNull { it.entry.address == chapter.entry && it.sourceOrder >= 0 }?.entry
             ?: throw ChapterUnavailable("The source no longer lists this chapter")
+        val owner = seriesOfflineOwner(chapter.series)
+        // A copy already on the device, such as one saved to a Codex, needs only the series as another owner.
+        if (store.retain(PostId(chapter.series.source, entry.address), owner) != null) return
         val source = sources().firstOrNull { it.key == chapter.series.source } ?: throw IOException("The series' source is not on")
         val pages = attempts { source.pages(entry) }.ifEmpty { throw ChapterUnavailable("The chapter has no pages") }
+        if (pages.any { it.url == null }) throw ChapterUnavailable("A page has no address")
         fetching.value = chapter to 0f
         onPage(0, pages.size)
         val done = AtomicInteger()
-        val gate = Semaphore(PARALLEL_PAGES)
-        store.write(chapter.series, chapter.entry) { staging ->
-            coroutineScope {
-                pages.mapIndexed { index, page ->
-                    async {
-                        val file = gate.withPermit {
-                            val url = page.url ?: throw ChapterUnavailable("A page has no address")
-                            attempts { fetchPage(url, staging, index) }
-                        }
-                        val count = done.incrementAndGet()
-                        fetching.value = chapter to count.toFloat() / pages.size
-                        onPage(count, pages.size)
-                        file
-                    }
-                }.awaitAll()
-            }
+        val post = chapterPost(series, entry, series.coverUrl, pages)
+        // Extension pages name no type, and their addresses often no extension, so the type fetched is the page's.
+        store.save(post, pages, owner, parallel = PARALLEL_PAGES) { page, file ->
+            val type = attempts { fetch(checkNotNull(page.url), file) }
+            val count = done.incrementAndGet()
+            fetching.value = chapter to count.toFloat() / pages.size
+            onPage(count, pages.size)
+            type
         }
-    }
-
-    /** Page [index] at [url], saved in [staging] under its name in the chapter. */
-    private suspend fun fetchPage(url: String, staging: File, index: Int): File {
-        val partial = File(staging, "$index.part")
-        val type = fetch(url, partial)
-        val page = File(staging, SeriesDownloadStore.pageFileName(index, mediaFileExtension(type, url)))
-        if (!partial.renameTo(page)) throw IOException("Could not save a page")
-        return page
     }
 
     /** [block], tried up to [PAGE_ATTEMPTS] times, waiting longer before each retry. */
@@ -409,6 +446,10 @@ class SeriesDownloads(
         files.write(queueFile, chapters.map(QueuedChapterRecord::fromDomain), QUEUE_SERIALIZER)
         queue.value = chapters
     }
+
+    /** The addresses of [id]'s chapters on the device. */
+    private fun OfflineMediaSnapshot.chapters(id: SeriesId): Set<String> =
+        postsByOwner[seriesOfflineOwner(id)].orEmpty().mapTo(HashSet()) { it.sourcePostId }
 
     companion object {
         const val PAGE_ATTEMPTS = 3

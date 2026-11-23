@@ -9,7 +9,7 @@ internal class OfflineMediaCatalog {
     private val entries = mutableMapOf<File, Entry>()
     private val ids = mutableMapOf<PostId, Int>()
     private val ownerFolders = mutableMapOf<String, Int>()
-    private val ownerPosts = mutableMapOf<String, Int>()
+    private val ownerPosts = mutableMapOf<String, MutableSet<PostId>>()
     private var mediaCount = 0
     private var bytes = 0L
 
@@ -29,7 +29,7 @@ internal class OfflineMediaCatalog {
     fun foldersOwnedBy(owner: String): List<File> = entries.filterValues { owner in it.owners }.keys.toList()
 
     fun snapshot() = OfflineMediaSnapshot(
-        ids.size, mediaCount, bytes, ownerFolders.keys.associateWith { ownerPosts[it] ?: 0 }, ids.keys.toSet(),
+        ids.size, mediaCount, bytes, ownerFolders.keys.associateWith { ownerPosts[it]?.toSet().orEmpty() }, ids.keys.toSet(),
     )
 
     fun clear() {
@@ -45,7 +45,12 @@ internal class OfflineMediaCatalog {
         entry.id?.let { ids.adjustCount(it, direction) }
         entry.owners.forEach { owner ->
             ownerFolders.adjustCount(owner, direction)
-            if (entry.id != null) ownerPosts.adjustCount(owner, direction)
+            // A folder's name is its post id's digest, so one id never sits in two folders.
+            if (entry.id != null) {
+                val posts = ownerPosts.getOrPut(owner, ::mutableSetOf)
+                if (direction > 0) posts += entry.id else posts -= entry.id
+                if (posts.isEmpty()) ownerPosts.remove(owner)
+            }
         }
         mediaCount += entry.media * direction
         bytes += entry.bytes * direction

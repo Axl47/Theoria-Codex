@@ -370,7 +370,7 @@ private fun verifyVideoPost(json: String) {
 /** The manifest's kotlinx serializer must survive R8: written in one process, read with stable keys in the next. */
 private suspend fun saveOfflineCopy(offline: File) {
     val post = videoPostFixture()
-    OfflineMediaStore(offline).save(post, post.media, "acceptance") { _, file -> file.writeText("offline bytes") }
+    OfflineMediaStore(offline).save(post, post.media, "acceptance") { _, file -> file.writeText("offline bytes"); null }
 }
 
 private suspend fun verifyOfflineCopy(offline: File) {
@@ -382,7 +382,7 @@ private suspend fun verifyOfflineCopy(offline: File) {
     val found = requireNotNull(store.find(post.id))
     check(found.media.single().localPath?.let(::File)?.readText() == "offline bytes")
     check(store.withoutOfflineLocations(found) == post)
-    check(store.snapshot.value.postsByOwner == mapOf("acceptance" to 1))
+    check(store.snapshot.value.postsByOwner == mapOf("acceptance" to setOf(post.id)))
 }
 
 private fun offlineFolderName(id: PostId) = MessageDigest.getInstance("SHA-256")

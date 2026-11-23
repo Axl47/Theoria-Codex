@@ -136,7 +136,6 @@ import kotlinx.coroutines.launch
 import com.theoriacodex.app.series.keepSeriesUpdatesScheduled
 import com.theoriacodex.app.series.SeriesDownloadScheduler
 import com.theoriacodex.app.series.downloadChapterPage
-import com.theoriacodex.data.repository.SeriesDownloadStore
 import com.theoriacodex.data.repository.SeriesDownloads
 
 data class DataDependencies(
@@ -559,9 +558,9 @@ internal class DefaultTheoriaAppContainer(
         val choices = DeviceExtensionChoices.on(appContext)
         host.bind(choices)
         val repository = RoomSeriesRepository(contentDatabase)
-        // Under noBackupFilesDir, files and queue alike: Android's backup and device transfer carry neither.
+        // Neither Android's backup nor device transfer carries the queue (noBackupFilesDir) or the offline copies.
         val downloads = SeriesDownloads(
-            store = SeriesDownloadStore(File(appContext.noBackupFilesDir, "series_downloads")),
+            store = offlineStore,
             queueFile = File(appContext.noBackupFilesDir, "series_download_queue.json"),
             repository = repository,
             sources = host::sources,
@@ -633,6 +632,9 @@ internal class DefaultTheoriaAppContainer(
         sourceReadiness.open()
         if (series != null) {
             durableStoreScope.launch {
+                // Chapters downloaded before they moved into the offline store; no release had them.
+                // Remove once v1.10.0 has shipped.
+                File(appContext.noBackupFilesDir, "series_downloads").deleteRecursively()
                 runCatchingPreservingCancellation { forgetLegacyExtensionData(appContext, settingsRepository) }
                     .onFailure { Diagnostics.report("extensions", "Old extension data could not be removed", it) }
             }

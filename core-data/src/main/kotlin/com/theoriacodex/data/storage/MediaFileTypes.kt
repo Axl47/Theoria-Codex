@@ -23,7 +23,3 @@ fun mediaFileExtension(mime: String?, url: String?): String =
         ?: url?.substringBefore('#')?.substringBefore('?')?.substringAfterLast('/')?.substringAfterLast('.', "")
             ?.takeIf { it.matches(ADDRESS_EXTENSION) }
         ?: "bin"
-
-/** The media type a saved copy's [extension] stands for; null for one [mediaFileExtension] never picks from a type. */
-fun mediaTypeOfExtension(extension: String): String? =
-    EXTENSIONS.entries.firstOrNull { it.value == extension.lowercase() && it.key != "image/ugoira" }?.key
