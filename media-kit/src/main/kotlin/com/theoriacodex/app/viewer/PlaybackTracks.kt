@@ -6,12 +6,20 @@ import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
+import com.theoriacodex.domain.model.uniqueLabels
 
 /**
  * One subtitle or audio track the playing video offers. [id] names it for [selectSubtitle] and [selectAudio] while
  * this video plays; it is built from the track's group id, so it stays valid as more of the stream's tracks arrive.
+ * [label] is unique among the video's tracks of its kind and never blank ([uniqueLabels]).
  */
-data class PlaybackTrack(val id: String, val label: String, val selected: Boolean)
+data class PlaybackTrack(
+    val id: String,
+    val label: String,
+    val selected: Boolean,
+    /** A subtitle file its [VideoPlaybackRequest] added, which Media3 never shows by itself; false inside the stream. */
+    val sideLoaded: Boolean = false,
+)
 
 /** The tracks a video offers beyond its picture; both lists are empty until the player has read the stream. */
 data class PlaybackTracks(val subtitles: List<PlaybackTrack> = emptyList(), val audio: List<PlaybackTrack> = emptyList())
@@ -49,16 +57,21 @@ internal fun Player.clearTrackChoices() {
 /** Separates a track group's id from the track's index in [PlaybackTrack.id]. */
 private const val TRACK_ID_SEPARATOR = '/'
 
-private fun Player.tracksOf(type: Int): List<PlaybackTrack> = currentTracks.groups.filter { it.type == type }.flatMap { group ->
-    val separateLabel = separateAudioIndex(group)?.let { index -> separateAudioLabels()?.labels?.get(index) }
-    (0 until group.length).filter(group::isTrackSupported).map { track ->
-        val format = group.getTrackFormat(track)
-        PlaybackTrack(
-            id = "${group.mediaTrackGroup.id}$TRACK_ID_SEPARATOR$track",
-            label = separateLabel ?: format.label ?: format.language ?: "",
-            selected = group.isTrackSelected(track),
-        )
+/** The supported tracks of [type], each labelled by its request label, its own label or its language, else `Track N`. */
+private fun Player.tracksOf(type: Int): List<PlaybackTrack> {
+    val tracks = currentTracks.groups.filter { it.type == type }.flatMap { group ->
+        val separateLabel = separateAudioIndex(group)?.let { index -> separateAudioLabels()?.labels?.get(index) }
+        (0 until group.length).filter(group::isTrackSupported).map { track ->
+            val format = group.getTrackFormat(track)
+            PlaybackTrack(
+                id = "${group.mediaTrackGroup.id}$TRACK_ID_SEPARATOR$track",
+                label = separateLabel ?: format.label ?: format.language ?: "",
+                selected = group.isTrackSelected(track),
+                sideLoaded = isSideLoadedSubtitle(group),
+            )
+        }
     }
+    return tracks.zip(uniqueLabels(tracks.map { it.label }) { "Track $it" }) { track, label -> track.copy(label = label) }
 }
 
 private fun Player.overrideFor(type: Int, id: String): TrackSelectionOverride? {
@@ -67,6 +80,18 @@ private fun Player.overrideFor(type: Int, id: String): TrackSelectionOverride? {
     val track = id.substringAfterLast(TRACK_ID_SEPARATOR).toIntOrNull() ?: return null
     val group = currentTracks.groups.firstOrNull { it.type == type && it.mediaTrackGroup.id == groupId } ?: return null
     return if (track in 0 until group.length) TrackSelectionOverride(group.mediaTrackGroup, track) else null
+}
+
+/**
+ * Whether [group] is one of the request's side-loaded subtitles. The merged source ([StreamMediaSourceFactory]) puts
+ * them after the video and its separate audio, each read by a single-sample child whose own group id is empty, so its
+ * id is only its child's index and Media3's colon.
+ */
+private fun Player.isSideLoadedSubtitle(group: Tracks.Group): Boolean {
+    val id = group.mediaTrackGroup.id
+    if (group.type != C.TRACK_TYPE_TEXT || !id.endsWith(':')) return false
+    val child = id.dropLast(1).toIntOrNull() ?: return false
+    return child > (separateAudioLabels()?.labels?.size ?: 0)
 }
 
 private fun Player.separateAudioLabels(): SeparateAudioLabels? = currentMediaItem?.localConfiguration?.tag as? SeparateAudioLabels

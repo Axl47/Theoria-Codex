@@ -26,13 +26,6 @@ data class ViewerScreenConfig(
     /** Galleries whose reading mode the user chose; the rest follow [invertMultiImageScrollDirection]. */
     val galleryReadingModes: Map<PostId, GalleryReadingMode> = emptyMap(),
     val playbackDiagnosticsEnabled: Boolean = false,
-    /**
-     * The session's [ViewerSession.series], null for any session that is not a series'. A series' entries are never
-     * collected: the top bar names the series and entry in place of the source, Like and Save are hidden, and the info
-     * sheet holds only Start over. [ViewerSeries.Reading] adds the chapter rules (the series' reading mode, the
-     * chapter strip, reading on into the next chapter); [ViewerSeries.Watching] the episode rules.
-     */
-    val series: ViewerSeries? = null,
 )
 
 /** What the Viewer asks of the app: navigation, persistence and platform behavior. The app builds one per shell. */

@@ -38,9 +38,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
@@ -50,6 +53,7 @@ import com.theoriacodex.app.viewer.state.ViewerEpisodeChoice
 import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.app.viewer.state.ViewerSubtitleChoice
 import com.theoriacodex.domain.model.MediaStream
+import java.util.Locale
 
 /**
  * The subtitle and audio tracks of the episode on screen. Its player publishes them ([FollowViewerActiveTracks]) for the
@@ -110,11 +114,12 @@ internal sealed interface ViewerTrackChange {
 
 /**
  * What a player offering [tracks] must change to play this choice: nothing it already plays, and nothing for a label
- * this episode does not offer, which keeps the episode's own choice.
+ * this episode does not offer, which keeps the episode's own choice. With no subtitle chosen and none showing, a
+ * side-loaded one shows ([defaultSubtitle]); subtitles inside the stream stay Media3's choice.
  */
-internal fun ViewerEpisodeChoice.trackChanges(tracks: PlaybackTracks): List<ViewerTrackChange> = buildList {
+internal fun ViewerEpisodeChoice.trackChanges(tracks: PlaybackTracks, locale: Locale = Locale.getDefault()): List<ViewerTrackChange> = buildList {
     when (val wanted = subtitle) {
-        null -> Unit
+        null -> if (tracks.subtitles.none { it.selected }) tracks.subtitles.defaultSubtitle(locale)?.let { add(ViewerTrackChange.Subtitle(it.id)) }
         ViewerSubtitleChoice.Off -> if (tracks.subtitles.any { it.selected }) add(ViewerTrackChange.Subtitle(null))
         is ViewerSubtitleChoice.Track -> tracks.subtitles.labelled(wanted.label)?.takeUnless { it.selected }
             ?.let { add(ViewerTrackChange.Subtitle(it.id)) }
@@ -147,7 +152,8 @@ internal fun ViewerEpisodeBar(
     val media = frame.selection.media
     ViewerEpisodeControls(
         streams = media?.streams.orEmpty(),
-        currentStream = media?.viewerStream(frame.uiState.controls.episode.streamLabel),
+        // The stream actually playing: a fallback shows here though the session's choice stays.
+        currentStream = media?.viewerStream(frame.uiState.controls.episode.streamLabelFor(frame.uiState.currentMedia?.key)),
         tracks = activeTracks.tracks,
         openPanel = frame.uiState.controls.panel,
         onPanelOpenChange = { panel, open ->
@@ -204,31 +210,26 @@ private fun ViewerStreamMenu(streams: List<MediaStream>, current: MediaStream, m
 @Composable
 private fun ViewerSubtitlesMenu(subtitles: List<PlaybackTrack>, menus: ViewerEpisodeMenus) {
     val panel = ViewerPanel.EPISODE_SUBTITLES
-    val selected = subtitles.withIndex().firstOrNull { it.value.selected }
+    val selected = subtitles.firstOrNull { it.selected }
     val off = menus.item("Off", selected == null, panel) { ViewerAction.ChooseSubtitle(ViewerSubtitleChoice.Off) }
     ViewerEpisodeMenu(
         panel, menus, VIEWER_EPISODE_SUBTITLES_TAG,
-        listOf(off) + subtitles.mapIndexed { index, track ->
-            val label = track.choiceLabel(index)
-            menus.item(label, track.selected, panel) { ViewerAction.ChooseSubtitle(ViewerSubtitleChoice.Track(label)) }
+        listOf(off) + subtitles.map { track ->
+            menus.item(track.label, track.selected, panel) { ViewerAction.ChooseSubtitle(ViewerSubtitleChoice.Track(track.label)) }
         },
     ) { open ->
         val icon = if (selected == null) Icons.Default.ClosedCaptionDisabled else Icons.Default.ClosedCaption
-        ViewerTrackButton(icon, "Subtitles", selected?.let { (index, track) -> track.choiceLabel(index) } ?: "Off", VIEWER_EPISODE_SUBTITLES_TAG, open)
+        ViewerTrackButton(icon, "Subtitles", selected?.label ?: "Off", VIEWER_EPISODE_SUBTITLES_TAG, open)
     }
 }
 
 @Composable
 private fun ViewerAudioMenu(audio: List<PlaybackTrack>, menus: ViewerEpisodeMenus) {
     val panel = ViewerPanel.EPISODE_AUDIO
-    val selected = audio.withIndex().firstOrNull { it.value.selected }
     ViewerEpisodeMenu(
         panel, menus, VIEWER_EPISODE_AUDIO_TAG,
-        audio.mapIndexed { index, track ->
-            val label = track.choiceLabel(index)
-            menus.item(label, track.selected, panel) { ViewerAction.ChooseAudio(label) }
-        },
-    ) { open -> ViewerTrackButton(Icons.Default.Audiotrack, "Audio", selected?.let { (index, track) -> track.choiceLabel(index) }.orEmpty(), VIEWER_EPISODE_AUDIO_TAG, open) }
+        audio.map { track -> menus.item(track.label, track.selected, panel) { ViewerAction.ChooseAudio(track.label) } },
+    ) { open -> ViewerTrackButton(Icons.Default.Audiotrack, "Audio", audio.firstOrNull { it.selected }?.label.orEmpty(), VIEWER_EPISODE_AUDIO_TAG, open) }
 }
 
 /** How the episode lists open, close and choose: as chrome panels, with choices sent through [onAction]. */
@@ -272,14 +273,19 @@ private fun ViewerEpisodeMenu(
     }
 }
 
-/** The pill naming the stream playing; the whole 48 dp row height is its touch target. */
+/**
+ * The pill naming the stream playing; the whole 48 dp row height is its touch target. It is one accessibility node, a
+ * button described `Stream` whose text is [label]; the label is its state too, which TalkBack reads after the
+ * description where it skips the text.
+ */
 @Composable
 private fun ViewerStreamPill(label: String, open: () -> Unit) {
     Box(
+        // The tag comes first: clearing semantics drops every semantics modifier after it, the tag included.
         Modifier.heightIn(min = 48.dp)
+            .testTag(VIEWER_EPISODE_STREAM_TAG)
             .clickable(role = Role.Button, onClickLabel = "Choose stream", onClick = open)
-            .semantics(mergeDescendants = true) { contentDescription = "Stream"; stateDescription = label }
-            .testTag(VIEWER_EPISODE_STREAM_TAG),
+            .clearAndSetSemantics { contentDescription = "Stream"; text = AnnotatedString(label); stateDescription = label },
         contentAlignment = Alignment.Center,
     ) {
         Row(
@@ -300,12 +306,19 @@ private fun ViewerTrackButton(icon: ImageVector, description: String, selectedLa
     }
 }
 
-/** A track's name, or its place in the list when the stream names it neither by label nor by language. */
-private fun PlaybackTrack.choiceLabel(index: Int): String = label.ifBlank { "Track ${index + 1}" }
+/**
+ * The side-loaded subtitle shown before the user chooses: the first whose label names [locale]'s language, in English,
+ * in itself or by its code, as a whole word and ignoring case (`English [CC]`, `español`, `en`); else the first.
+ */
+internal fun List<PlaybackTrack>.defaultSubtitle(locale: Locale): PlaybackTrack? {
+    val sideLoaded = filter { it.sideLoaded }
+    val names = listOf(locale.getDisplayLanguage(Locale.ENGLISH), locale.getDisplayLanguage(locale), locale.language).filter(String::isNotBlank)
+    val language = Regex(names.joinToString("|", "(?<!\\p{L})(?:", ")(?!\\p{L})") { Regex.escape(it) }, RegexOption.IGNORE_CASE)
+    return sideLoaded.firstOrNull { language.containsMatchIn(it.label) } ?: sideLoaded.firstOrNull()
+}
 
-/** The track a choice names: by the label the controls show for it. */
-private fun List<PlaybackTrack>.labelled(label: String): PlaybackTrack? =
-    withIndex().firstOrNull { (index, track) -> track.choiceLabel(index) == label }?.value
+/** The track a choice names, by its label. */
+private fun List<PlaybackTrack>.labelled(label: String): PlaybackTrack? = firstOrNull { it.label == label }
 
 internal val VIEWER_EPISODE_CONTROLS_HEIGHT = 48.dp
 internal const val VIEWER_EPISODE_CONTROLS_TAG = "viewer-episode-controls"

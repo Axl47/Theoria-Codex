@@ -48,14 +48,15 @@ class SeriesViewerWorkflowTest {
     )
 
     @Test
-    fun `an episode on screen records no page and stays out of History, and its playback goes to its series`() = runTest {
+    fun `an episode on screen becomes Continue without a page or History, and its playback goes to its series`() = runTest {
         withWorkflow { graph, workflow, session, episode ->
+            // Showing is opening it: Continue moves to it at once, with no length, so where it was left stays.
             workflow.recordVisiblePost(episode, 1, session)
             workflow.recordVisibleMediaProgress(episode, 1, session)
-            assertEquals(emptyList<String>(), repository.progress)
+            assertEquals(listOf("/e1 0/null", "/e1 0/null"), repository.progress)
 
             workflow.recordPlaybackProgress(episode, ViewerPlaybackProgress(positionMs = 61_000, durationMs = 1_440_000), session)
-            assertEquals(listOf("/e1 61000/1440000"), repository.progress)
+            assertEquals("/e1 61000/1440000", repository.progress.last())
             assertTrue(graph.data.recentsRepository.observeWatchedPosts().first().isEmpty())
         }
     }

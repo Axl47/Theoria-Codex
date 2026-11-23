@@ -73,11 +73,20 @@ data class ImageRef(
  * its own. A stream the source left unnamed is `Stream 2` by its place; a repeated label gains its count, `1080p (2)`.
  */
 fun List<MediaStream>.playable(): List<MediaStream> {
+    val streams = filter { it.url.isNotBlank() }
+    return streams.zip(uniqueLabels(streams.map { it.label }) { "Stream $it" }) { stream, label -> stream.copy(label = label) }
+}
+
+/**
+ * [labels] fit to choose between by name: trimmed, a blank one named [unnamed] of its 1-based place, and a repeated
+ * one with its count, `English (2)`. Episode streams ([playable]) and the player's tracks follow this one rule.
+ */
+fun uniqueLabels(labels: List<String>, unnamed: (place: Int) -> String): List<String> {
     val seen = HashMap<String, Int>()
-    return filter { it.url.isNotBlank() }.mapIndexed { index, stream ->
-        val label = stream.label.trim().ifEmpty { "Stream ${index + 1}" }
+    return labels.mapIndexed { index, raw ->
+        val label = raw.trim().ifEmpty { unnamed(index + 1) }
         val count = seen.merge(label, 1, Int::plus) ?: 1
-        stream.copy(label = if (count == 1) label else "$label ($count)")
+        if (count == 1) label else "$label ($count)"
     }
 }
 

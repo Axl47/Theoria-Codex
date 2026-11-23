@@ -171,8 +171,6 @@ class AppUsageTrackerTest {
         assertEquals(StatisticsUsageCategory.READING, statisticsUsageCategory("viewer", "series", codices, reading))
         val watching = session(ViewerStreamSource.SERIES, ViewerSeries.Watching())
         assertEquals(StatisticsUsageCategory.ANIME, statisticsUsageCategory("viewer", "series", codices, watching))
-        // A series session whose kind is not known is never counted as watching posts.
-        assertNull(statisticsUsageCategory("viewer", "series", codices, session(ViewerStreamSource.SERIES)))
         // The session only matters while the Viewer is the current screen.
         assertNull(statisticsUsageCategory("settings-screen", "search", codices, watching))
         assertEquals(StatisticsUsageCategory.BROWSING, statisticsUsageCategory("creator-profile", "library", codices))

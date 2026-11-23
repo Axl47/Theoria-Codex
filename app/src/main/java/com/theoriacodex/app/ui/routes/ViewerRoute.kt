@@ -56,6 +56,7 @@ import com.theoriacodex.app.viewer.ViewerTrail
 import com.theoriacodex.app.ui.trails.ViewerLevel
 import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.newViewerPosts
+import com.theoriacodex.app.viewer.ViewerMediaRecoveryRequest
 import com.theoriacodex.app.viewer.recoverMedia
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.related.requestOrNull
@@ -214,15 +215,15 @@ internal fun ViewerRoute(
         )
         return
     }
-    ViewerDurationSync(activeSession, viewerState, durationOwner, dependencies.canonicalizePost)
+    // A series' entry is not a post: its duration is the player's, never probed at its stream nor cached as a post's.
+    val seriesSession = viewerState.series != null
+    if (!seriesSession) ViewerDurationSync(activeSession, viewerState, durationOwner, dependencies.canonicalizePost)
     val sourceState = liveSourceState.matching(activeSession)
     val related = rememberViewerRelatedPosts(activeSession, liveSourceState)
-    // The session says what kind it is, so the Viewer's controls and video positions read it from the session they show.
-    val sessionConfig = remember(config, activeSession?.series) { config.copy(series = activeSession?.series) }
     ViewerScreen(
         uiState = viewerState,
-        host = rememberViewerScreenHost(viewerOwner, durationOwner, screenCallbacks, latestDependencies, latestEffectCallbacks),
-        config = sessionConfig,
+        host = rememberViewerScreenHost(viewerOwner, durationOwner.takeUnless { seriesSession }, screenCallbacks, latestDependencies, latestEffectCallbacks, routeScope),
+        config = config,
         saveToCodexQuery = activeSession?.saveQuery,
         saveFromForYou = activeSession?.context?.streamSource == ViewerStreamSource.FOR_YOU,
         canLoadMoreFromSource = activeSession?.liveSearchBinding == true && sourceState?.canLoadMore == true,
@@ -294,15 +295,17 @@ private fun ViewerDurationSync(
 
 /**
  * The screen's callbacks, bound to [viewerOwner]. One per owner and shell, so the screen's controls stay put while
- * Search, For You or settings change; the callbacks read the owner's current session when they run.
+ * Search, For You or settings change; the callbacks read the owner's current session when they run. A series session
+ * passes no [durationOwner], so its entries get no post durations.
  */
 @Composable
 private fun rememberViewerScreenHost(
     viewerOwner: ViewerViewModel,
-    durationOwner: MediaDurationRouteViewModel,
+    durationOwner: MediaDurationRouteViewModel?,
     callbacks: ViewerScreenCallbacks,
     latestDependencies: State<ViewerRouteDependencies>,
     latestEffectCallbacks: State<ViewerRouteEffectCallbacks>,
+    routeScope: CoroutineScope,
 ) = remember(viewerOwner, durationOwner, callbacks) {
     ViewerScreenHost(
         onAction = { action ->
@@ -317,7 +320,14 @@ private fun rememberViewerScreenHost(
         },
         onOpenCreatorFallback = callbacks.onOpenCreatorFallback,
         onGalleryReadingModeSelected = callbacks.onGalleryReadingModeSelected,
-        onRequestMediaRecovery = { post, failedMedia -> recoverAndApplyMedia(viewerOwner, post, failedMedia, latestEffectCallbacks.value) },
+        onRequestMediaRecovery = object : ViewerMediaRecoveryRequest {
+            override fun ask(post: Post, failedMedia: ImageRef) {
+                routeScope.launch { recoverAndApplyMedia(viewerOwner, post, failedMedia, latestEffectCallbacks.value) }
+            }
+
+            override suspend fun recoverStreams(post: Post, failedMedia: ImageRef) =
+                recoverAndApplyMedia(viewerOwner, post, failedMedia, latestEffectCallbacks.value)
+        },
         onVisiblePostChanged = { post, viewedMediaNumber ->
             viewerOwner.state.value.session?.let { identity ->
                 viewerOwner.recordVisiblePost(identity, post, viewedMediaNumber, callbacks.onVisiblePostChanged)
@@ -329,16 +339,18 @@ private fun rememberViewerScreenHost(
         onPlaybackProgress = { post, progress ->
             viewerOwner.recordPlaybackProgress(post, progress, callbacks.onPlaybackProgress)
         },
-        // The Viewer's window onto the duration owner, keyed by each post's canonical identity.
-        durations = ViewerPostDurations(
-            observe = { post ->
-                durationOwner.observeState(latestDependencies.value.canonicalizePost(post))
-                    .map { state -> (state as? MediaDurationState.Known)?.durationMs }
-            },
-            onPlayerDuration = { post, durationMs ->
-                durationOwner.publishPlayerDuration(latestDependencies.value.canonicalizePost(post), durationMs)
-            },
-        ),
+        // The Viewer's window onto the duration owner, keyed by each post's canonical identity; none for a series.
+        durations = durationOwner?.let { owner ->
+            ViewerPostDurations(
+                observe = { post ->
+                    owner.observeState(latestDependencies.value.canonicalizePost(post))
+                        .map { state -> (state as? MediaDurationState.Known)?.durationMs }
+                },
+                onPlayerDuration = { post, durationMs ->
+                    owner.publishPlayerDuration(latestDependencies.value.canonicalizePost(post), durationMs)
+                },
+            )
+        } ?: ViewerPostDurations.None,
     )
 }
 
@@ -552,9 +564,6 @@ private suspend fun retryViewerMedia(
 ) {
     val page = state.pages.firstOrNull { candidate -> candidate.post.id == effect.mediaKey.postId } ?: return
     val failedMedia = page.media.firstOrNull { candidate -> candidate.key == effect.mediaKey }?.ref ?: return
-    // A retried episode's new player asks for fresh links itself if its links fail again; asking here too would look
-    // the episode up twice at once.
-    if (failedMedia.streams.isNotEmpty()) return
     recoverAndApplyMedia(viewerOwner, page.post, failedMedia, callbacks)
 }
 

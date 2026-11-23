@@ -25,6 +25,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
 import com.theoriacodex.app.viewer.state.ViewerAction
+import com.theoriacodex.app.viewer.state.ViewerEpisodeChoice
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.domain.model.GalleryReadingMode
@@ -56,7 +57,7 @@ internal fun ViewerPostPagerSurface(
     val selection = frame.selection
     // Pinches write the transform every pointer event; only crossing the zoomed boundary changes the pager.
     val zoomed by remember(viewerTransform) { derivedStateOf { viewerTransform.value.isZoomed } }
-    val vertical = config.readingModeOf(frame.uiState.currentPage) == GalleryReadingMode.VERTICAL
+    val vertical = config.readingModeOf(frame.uiState.currentPage, frame.uiState.series) == GalleryReadingMode.VERTICAL
     val verticalGallery = screen.verticalGalleries[selection.post.id]?.takeIf { vertical }
     // Only the shown layout's zoom holds the gestures: a horizontal zoom left over from before a switch to Vertical must not.
     val layoutZoomed = if (vertical) verticalGallery?.zoomed == true else zoomed
@@ -77,7 +78,7 @@ internal fun ViewerPostPagerSurface(
                 ),
                 viewerGestureHandler(
                     swipe, dismissDrag, screen, controls, haptics, flingVelocity, scope, frame.uiState.controls.slideshow,
-                    openNextChapter = nextPostOpener(frame.navigation.currentIndex, frame, swipe, config).takeIf { vertical && config.series is ViewerSeries.Reading },
+                    openNextChapter = nextPostOpener(frame.navigation.currentIndex, frame, swipe, config).takeIf { vertical && frame.uiState.series is ViewerSeries.Reading },
                 ),
             )
             .graphicsLayer { translationX = swipe.edgeOffset },
@@ -87,7 +88,7 @@ internal fun ViewerPostPagerSurface(
                 state = postPagerState,
                 key = { index -> encodeViewerPostId(frame.posts[index].id) },
                 userScrollEnabled = false,
-                reverseLayout = config.readingModeOf(frame.uiState.currentPage).reversed,
+                reverseLayout = config.readingModeOf(frame.uiState.currentPage, frame.uiState.series).reversed,
                 modifier = Modifier.fillMaxSize(),
             ) { postPage ->
                 ViewerPostPage(
@@ -143,7 +144,7 @@ private fun viewerGestureHandler(
 /** Opens the post after [index] at its [entryMediaIndex]; null on the last post. */
 internal fun nextPostOpener(index: Int, frame: ViewerFrame, swipe: ViewerSwipeController, config: ViewerScreenConfig): (() -> Unit)? {
     val next = frame.navigation.pages.getOrNull(index + 1) ?: return null
-    return { swipe.navigateTo(ViewerHorizontalSwipeTarget(index + 1, config.entryMediaIndex(next))) }
+    return { swipe.navigateTo(ViewerHorizontalSwipeTarget(index + 1, config.entryMediaIndex(next, frame.uiState.series))) }
 }
 
 /** A gallery read as one vertical strip; its end card opens the next post. */
@@ -189,7 +190,7 @@ private fun ViewerPostPage(
 ) {
     val post = frame.posts[postPage]
     val pageState = frame.navigation.pages[postPage]
-    if (config.readingModeOf(pageState) == GalleryReadingMode.VERTICAL) {
+    if (config.readingModeOf(pageState, frame.uiState.series) == GalleryReadingMode.VERTICAL) {
         return ViewerVerticalPostPage(postPage, pageState, frame, screen, controls, swipe, dismissDrag, readReturnProgress, host, config)
     }
     val postMedia = pageState.media
@@ -204,7 +205,7 @@ private fun ViewerPostPage(
     HorizontalPager(
         state = mediaPagerState,
         userScrollEnabled = false,
-        reverseLayout = config.readingModeOf(pageState).reversed,
+        reverseLayout = config.readingModeOf(pageState, frame.uiState.series).reversed,
         modifier = Modifier.fillMaxSize(),
         contentPadding = if (frame.mediaEdgeToEdge) PaddingValues(0.dp) else PaddingValues(top = 40.dp),
         pageSpacing = if (frame.mediaEdgeToEdge) 0.dp else 8.dp,
@@ -225,14 +226,14 @@ private fun ViewerPostPage(
             ),
             events = viewerRendererEvents(
                 session = frame.uiState.session, key = key, generation = loadGeneration,
-                onAction = host.onAction, onPlaybackProgress = host.episodeProgress(config, post),
+                onAction = host.onAction, onPlaybackProgress = host.episodeProgress(frame.uiState.series, post),
                 onTimelineInteractionActiveChanged = { controls.onTimelineInteractionChanged(it) },
                 onDurationKnown = { duration -> if (carriesPostDuration(post, media)) host.durations.onPlayerDuration(post, duration) },
             ),
             transform = viewerTransform,
             onTransformChanged = { viewerTransform.value = it },
             layout = ViewerMediaLayout(frame.isLandscape, frame.inPictureInPicture, frame.touchExplorationEnabled),
-            videoOptions = ViewerVideoOptions(quality, qualityHeight, frame.uiState.controls.episode.streamLabel, pageState.terminalResolutionMessage(), config.playbackDiagnosticsEnabled, screen.freshLinks),
+            videoOptions = host.videoOptions(key, pageState, frame.uiState.controls.episode, screen, quality, qualityHeight, config),
             videoPositions = videoPositions,
             levelControls = levelControls,
             mediaError = frame.uiState.mediaError.takeIf { active }?.takeIf { it.mediaKey == key },
@@ -247,9 +248,28 @@ private fun ViewerPostPage(
     }
 }
 
-/** Where [post]'s playback goes while a series is watched: its series records it. Null for every other video. */
-private fun ViewerScreenHost.episodeProgress(config: ViewerScreenConfig, post: Post): ((ViewerPlaybackProgress) -> Unit)? =
-    onPlaybackProgress?.takeIf { config.series is ViewerSeries.Watching }?.let { report -> { progress -> report(post, progress) } }
+/** How the video [key] on [pageState] plays: its quality and, for an episode, the stream it plays and falls back from. */
+private fun ViewerScreenHost.videoOptions(
+    key: ViewerMediaKey,
+    pageState: ViewerPageState,
+    episode: ViewerEpisodeChoice,
+    screen: ViewerScreenState,
+    quality: com.theoriacodex.domain.model.VideoQuality,
+    qualityHeight: Int?,
+    config: ViewerScreenConfig,
+) = ViewerVideoOptions(
+    quality, qualityHeight, episode.streamLabelFor(key), pageState.terminalResolutionMessage(), config.playbackDiagnosticsEnabled,
+    ViewerEpisodeOptions(screen.streamAttempts, episode.pickedByHand(key), pageState.resolution.resolvedAtMs) { label ->
+        onAction(ViewerAction.FallBackToStream(key, label))
+    },
+)
+
+/**
+ * Where [post]'s playback goes while a series is watched: its series records it. Null for every other video. [series]
+ * outlives a closing session, so the closing player's last report still goes out.
+ */
+internal fun ViewerScreenHost.episodeProgress(series: ViewerSeries?, post: Post): ((ViewerPlaybackProgress) -> Unit)? =
+    onPlaybackProgress?.takeIf { series is ViewerSeries.Watching }?.let { report -> { progress -> report(post, progress) } }
 
 private fun ViewerPageState.terminalResolutionMessage(): String? = resolution
     .takeIf { it.status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.FAILED && !it.recoverable }

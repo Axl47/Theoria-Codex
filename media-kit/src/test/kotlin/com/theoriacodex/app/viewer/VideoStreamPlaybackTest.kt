@@ -70,6 +70,12 @@ class VideoStreamPlaybackTest {
         assertEquals(videoCacheKey(post.location, post.headers), cacheKey(post.copy(subtitles = listOf(MediaTrack("https://cdn.test/a.vtt", "A")))))
         assertNull(cacheKey(request("https://cdn.test/master.m3u8")))
         assertNull(cacheKey(request("https://cdn.test/clip.mp4", cache = false)))
+        // What the cache keeps, or a file on the device, may be read ahead; any other web stream may not.
+        assertEquals(
+            listOf(true, true, false, false),
+            listOf(post, request("/data/clip.mp4"), request("https://cdn.test/master.m3u8"), request("https://cdn.test/clip.mp4", cache = false))
+                .map { it.readsAheadFreely() },
+        )
     }
 
     @Test fun `an HLS episode sends its headers with every request it causes, across a redirect and relative addresses`() {
@@ -124,7 +130,8 @@ class VideoStreamPlaybackTest {
         until { player.playbackTracks().audio.any { it.label == "Japanese" && it.selected } }
         val tracks = player.playbackTracks().audio
 
-        assertEquals(listOf("", "Japanese", "English"), tracks.map { it.label })
+        // The video's own audio is unnamed, so it is named by its place.
+        assertEquals(listOf("Track 1", "Japanese", "English"), tracks.map { it.label })
         player.selectAudio(tracks.single { it.label == "English" }.id)
         until { player.playbackTracks().audio.single { it.selected }.label == "English" }
         assertEquals(tracks.map { it.id }, player.playbackTracks().audio.map { it.id })
@@ -154,6 +161,7 @@ class VideoStreamPlaybackTest {
         until { player.playbackTracks().subtitles.size == 2 && player.playbackState == Player.STATE_READY }
 
         assertEquals(listOf("English" to false, "Signs" to false), player.playbackTracks().subtitles.map { it.label to it.selected })
+        assertTrue(player.playbackTracks().subtitles.all { it.sideLoaded })
         assertTrue(server.paths().none { it.startsWith("/subtitles/") })
         player.selectSubtitle(player.playbackTracks().subtitles.single { it.label == "Signs" }.id)
         until { player.playbackTracks().subtitles.single { it.label == "Signs" }.selected }
