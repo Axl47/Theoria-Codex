@@ -212,6 +212,7 @@ private fun ViewerPostPage(
         val media = postMedia[mediaPage].ref
         val loadGeneration = pageState.media.getOrNull(mediaPage)?.loadGeneration ?: 0L
         val key = ViewerMediaKey(post.id, mediaPage)
+        val episode = frame.uiState.controls.episode
         val active = postPage == frame.navigation.currentIndex && mediaPage == frame.selection.mediaIndex
         ViewerMediaPage(
             post = post,
@@ -232,7 +233,12 @@ private fun ViewerPostPage(
             transform = viewerTransform,
             onTransformChanged = { viewerTransform.value = it },
             layout = ViewerMediaLayout(frame.isLandscape, frame.inPictureInPicture, frame.touchExplorationEnabled),
-            videoOptions = ViewerVideoOptions(quality, qualityHeight, frame.uiState.controls.episode.streamLabel, pageState.terminalResolutionMessage(), config.playbackDiagnosticsEnabled, screen.freshLinks),
+            videoOptions = ViewerVideoOptions(
+                quality, qualityHeight, episode.streamLabelFor(key), pageState.terminalResolutionMessage(), config.playbackDiagnosticsEnabled,
+                ViewerEpisodeOptions(screen.streamAttempts, episode.pickedByHand(key), pageState.resolution.resolvedAtMs) { label ->
+                    host.onAction(ViewerAction.FallBackToStream(key, label))
+                },
+            ),
             videoPositions = videoPositions,
             levelControls = levelControls,
             mediaError = frame.uiState.mediaError.takeIf { active }?.takeIf { it.mediaKey == key },

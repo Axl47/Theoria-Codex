@@ -1,69 +1,131 @@
 package com.theoriacodex.app.viewer
 
 import androidx.media3.common.PlaybackException
-import com.theoriacodex.app.viewer.ViewerRecoveryDecision.ASK_FOR_FRESH_LINKS
-import com.theoriacodex.app.viewer.ViewerRecoveryDecision.FAIL
-import com.theoriacodex.app.viewer.ViewerRecoveryDecision.RETRY_IN_PLACE
+import com.theoriacodex.app.viewer.ViewerRecoveryDecision.AskForFreshLinks
+import com.theoriacodex.app.viewer.ViewerRecoveryDecision.Fail
+import com.theoriacodex.app.viewer.ViewerRecoveryDecision.FallBack
+import com.theoriacodex.app.viewer.ViewerRecoveryDecision.RetryInPlace
+import com.theoriacodex.app.viewer.ViewerRecoveryEvent.NothingNew
+import com.theoriacodex.app.viewer.ViewerRecoveryEvent.PlayerError
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/** [ViewerVideoRecovery.decide] as a table: each row is the situation, the event, and what the player does next. */
 class ViewerVideoRecoveryTest {
     private val episode = ViewerMediaKey(PostId(SourceKey.HITOMI, "episode"), 0)
-    private val expired = PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
+    private val labels = listOf("A", "B", "C", "D", "E")
+    private val badStatus = PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
+    private val errorPage = PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED
+    private val decoder = PlaybackException.ERROR_CODE_DECODER_INIT_FAILED
+    private val unknown = PlaybackException.ERROR_CODE_UNSPECIFIED
+
+    /** One load's situation: how it got here, then the event. */
+    private data class Row(
+        val name: String,
+        val played: Boolean = false,
+        val linksAgeMs: Long = 0,
+        val pickedByHand: Boolean = false,
+        val event: ViewerRecoveryEvent,
+        val expected: ViewerRecoveryDecision,
+    )
 
     @Test
-    fun `a decoder failure retries in place once per load`() {
-        val decoderErrors = listOf(
-            PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
-            PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
-            PlaybackException.ERROR_CODE_DECODING_FAILED,
-            PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED,
-            PlaybackException.ERROR_CODE_VIDEO_FRAME_PROCESSOR_INIT_FAILED,
-            PlaybackException.ERROR_CODE_VIDEO_FRAME_PROCESSING_FAILED,
+    fun `a failed episode stream asks, falls back or fails by what it had done`() {
+        val rows = listOf(
+            Row("dead server: never played, fresh links", event = PlayerError(badStatus), expected = FallBack("B")),
+            Row("dead server, any error", event = PlayerError(unknown), expected = FallBack("B")),
+            Row("played, then an error status", played = true, event = PlayerError(badStatus), expected = AskForFreshLinks),
+            Row("played, then an error page", played = true, event = PlayerError(errorPage), expected = AskForFreshLinks),
+            Row("played, then not I/O", played = true, event = PlayerError(unknown), expected = FallBack("B")),
+            Row("old links, never played", linksAgeMs = 3 * 60_000, event = PlayerError(badStatus), expected = AskForFreshLinks),
+            Row("links two minutes old are not old yet", linksAgeMs = VIEWER_LINKS_OLD_AFTER_MS, event = PlayerError(badStatus), expected = FallBack("B")),
+            Row("fresh links brought nothing new", played = true, event = NothingNew, expected = FallBack("B")),
+            Row("decoder", event = PlayerError(decoder), expected = RetryInPlace),
+            Row("picked by hand, dead server", pickedByHand = true, event = PlayerError(badStatus), expected = Fail),
+            Row("picked by hand, played", pickedByHand = true, played = true, event = PlayerError(badStatus), expected = AskForFreshLinks),
+            Row("picked by hand, nothing new", pickedByHand = true, event = NothingNew, expected = Fail),
         )
-        decoderErrors.forEach { error ->
-            val recovery = ViewerVideoRecovery(ViewerMediaLoad(episode, 0))
-            assertEquals("First failure for $error", RETRY_IN_PLACE, recovery.decide(error))
-            assertEquals("Repeated failure for $error", FAIL, recovery.decide(PlaybackException.ERROR_CODE_DECODER_INIT_FAILED))
+        rows.forEach { row ->
+            val recovery = recovery(ViewerStreamAttempts(), pickedByHand = row.pickedByHand, linksAgeMs = row.linksAgeMs)
+            if (row.played) recovery.onPlayed()
+            assertEquals(row.name, row.expected, recovery.decide(row.event))
         }
     }
 
     @Test
-    fun `an expired link asks once for fresh links, only on media that has them`() {
-        val budget = ViewerFreshLinksBudget()
-        val load = ViewerMediaLoad(episode, 0)
-        assertEquals(FAIL, ViewerVideoRecovery(load).decide(expired))
-
-        assertEquals(ASK_FOR_FRESH_LINKS, ViewerVideoRecovery(load, budget).decide(expired))
-        // The player the recovered media brings fails too: the ask is spent until the media plays.
-        val recovered = ViewerVideoRecovery(load, budget)
-        assertEquals(FAIL, recovered.decide(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED))
-        recovered.onPlayed()
-        assertEquals(ASK_FOR_FRESH_LINKS, ViewerVideoRecovery(load, budget).decide(PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND))
+    fun `fresh links are asked for once a load, and given back by a rendered frame`() {
+        val attempts = ViewerStreamAttempts()
+        val first = recovery(attempts).apply { onPlayed() }
+        assertEquals(AskForFreshLinks, first.decide(PlayerError(badStatus)))
+        // The recovered links fail before a frame: the ask is spent, so the next stream plays.
+        assertEquals(FallBack("B"), recovery(attempts).decide(PlayerError(badStatus)))
+        val recovered = recovery(attempts, playing = "B").apply { onPlayed() }
+        assertEquals(AskForFreshLinks, recovered.decide(PlayerError(errorPage)))
     }
 
     @Test
-    fun `an explicit retry earns one more ask`() {
-        val budget = ViewerFreshLinksBudget()
-        assertEquals(ASK_FOR_FRESH_LINKS, ViewerVideoRecovery(ViewerMediaLoad(episode, 0), budget).decide(expired))
-        assertEquals(FAIL, ViewerVideoRecovery(ViewerMediaLoad(episode, 0), budget).decide(expired))
-        assertEquals(ASK_FOR_FRESH_LINKS, ViewerVideoRecovery(ViewerMediaLoad(episode, 1), budget).decide(expired))
+    fun `a load falls back at most three times, never to a stream that failed`() {
+        val attempts = ViewerStreamAttempts()
+        assertEquals(FallBack("B"), recovery(attempts, playing = "A").decide(PlayerError(badStatus)))
+        assertEquals(FallBack("C"), recovery(attempts, playing = "B").decide(PlayerError(badStatus)))
+        assertEquals(FallBack("D"), recovery(attempts, playing = "C").decide(PlayerError(badStatus)))
+        assertEquals(Fail, recovery(attempts, playing = "D").decide(PlayerError(badStatus)))
+
+        val two = ViewerStreamAttempts()
+        assertEquals(FallBack("B"), recovery(two, labels = listOf("A", "B"), playing = "A").decide(PlayerError(badStatus)))
+        assertEquals(Fail, recovery(two, labels = listOf("A", "B"), playing = "B").decide(PlayerError(badStatus)))
     }
 
     @Test
-    fun `anything but an expired link fails at once`() {
-        val errors = listOf(
-            PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
-            PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
-            PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
-            PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
-            PlaybackException.ERROR_CODE_UNSPECIFIED,
-        )
-        errors.forEach { error ->
-            assertEquals("Error $error", FAIL, ViewerVideoRecovery(ViewerMediaLoad(episode, 0), ViewerFreshLinksBudget()).decide(error))
-        }
+    fun `a decoder failure retries in place once, then the stream counts as failed`() {
+        val attempts = ViewerStreamAttempts()
+        val recovery = recovery(attempts)
+        assertEquals(RetryInPlace, recovery.decide(PlayerError(decoder)))
+        assertEquals(FallBack("B"), recovery.decide(PlayerError(decoder)))
+    }
+
+    @Test
+    fun `Retry asks for fresh links before it plays, and replays in place once when nothing new comes`() {
+        val attempts = ViewerStreamAttempts()
+        assertFalse("A first load plays at once", recovery(attempts).opensWithAsk())
+        val retried = recovery(attempts, loadGeneration = 1)
+        assertTrue(retried.opensWithAsk())
+        assertEquals(RetryInPlace, retried.decide(NothingNew))
+        // The replayed player of the same load opens normally, and with its ask spent the next stream plays.
+        val replayed = recovery(attempts, loadGeneration = 1)
+        assertFalse(replayed.opensWithAsk())
+        assertEquals(FallBack("B"), replayed.decide(PlayerError(badStatus)))
+    }
+
+    @Test
+    fun `media without streams retries a decoder once and fails on anything else`() {
+        val recovery = ViewerVideoRecovery(ViewerMediaLoad(episode, 1))
+        assertFalse(recovery.opensWithAsk())
+        assertEquals(Fail, recovery.decide(PlayerError(badStatus)))
+        assertEquals(RetryInPlace, recovery.decide(PlayerError(decoder)))
+        assertEquals(Fail, recovery.decide(PlayerError(decoder)))
+    }
+
+    private fun recovery(
+        attempts: ViewerStreamAttempts,
+        labels: List<String> = this.labels,
+        playing: String = labels.first(),
+        pickedByHand: Boolean = false,
+        linksAgeMs: Long = 0,
+        loadGeneration: Long = 0,
+    ) = ViewerVideoRecovery(
+        ViewerMediaLoad(episode, loadGeneration),
+        ViewerEpisodeStreams(attempts, labels, pickedByHand, linksResolvedAtMs = NOW - linksAgeMs, ask = { ViewerMediaRecovery.NOTHING_NEW }, fallBack = {}),
+        playing,
+        loadStartedAtMs = NOW,
+    )
+
+    private companion object {
+        const val NOW = 1_000_000_000L
     }
 }

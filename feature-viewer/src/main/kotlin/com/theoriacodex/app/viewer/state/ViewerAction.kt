@@ -63,6 +63,8 @@ sealed interface ViewerAction {
      * failure shown on the media and plays again, so a stream picked after another failed starts at once.
      */
     data class ChooseStream(val label: String) : ViewerAction
+    /** The episode [media] plays its stream [label] after the one before failed, without changing the session's choice. */
+    data class FallBackToStream(val media: ViewerMediaKey, val label: String) : ViewerAction
     /** Applies [choice] to this episode and every later one; it closes the episode menus. */
     data class ChooseSubtitle(val choice: ViewerSubtitleChoice) : ViewerAction
     /** Plays the audio labelled [label] in this episode and every later one that has it; it closes the episode menus. */
@@ -78,6 +80,8 @@ sealed interface ViewerAction {
     data class ResolutionCompleted(
         val session: ViewerSessionIdentity,
         val post: Post,
+        /** When the lookup answered, in wall-clock milliseconds; see [ViewerResolutionState.resolvedAtMs]. */
+        val resolvedAtMs: Long? = null,
     ) : ViewerAction
 
     data class ResolutionFailed(

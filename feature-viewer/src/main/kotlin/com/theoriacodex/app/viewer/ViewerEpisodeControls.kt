@@ -147,7 +147,8 @@ internal fun ViewerEpisodeBar(
     val media = frame.selection.media
     ViewerEpisodeControls(
         streams = media?.streams.orEmpty(),
-        currentStream = media?.viewerStream(frame.uiState.controls.episode.streamLabel),
+        // The stream actually playing: a fallback shows here though the session's choice stays.
+        currentStream = media?.viewerStream(frame.uiState.controls.episode.streamLabelFor(frame.uiState.currentMedia?.key)),
         tracks = activeTracks.tracks,
         openPanel = frame.uiState.controls.panel,
         onPanelOpenChange = { panel, open ->

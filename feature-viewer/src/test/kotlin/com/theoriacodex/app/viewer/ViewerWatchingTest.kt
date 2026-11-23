@@ -179,7 +179,7 @@ class ViewerWatchingTest {
         assertNull(state.controls.panel)
         assertEquals("720p · B", state.controls.episode.streamLabel)
         state = reduceViewerState(state, ViewerAction.ChooseSubtitle(ViewerSubtitleChoice.Track("English"))).state
-        assertEquals(ViewerEpisodeChoice("720p · B", ViewerSubtitleChoice.Track("English")), state.controls.episode)
+        assertEquals(ViewerEpisodeChoice("720p · B", ViewerSubtitleChoice.Track("English"), episodeStream = state.controls.episode.episodeStream), state.controls.episode)
     }
 
     @Test
@@ -256,5 +256,30 @@ class ViewerWatchingTest {
         advanceTimeBy(60_000)
         assertEquals(listOf(10_000L, 20_000L, 25_000L), reports)
         job.cancel()
+    }
+
+    @Test
+    fun `a fallback stream plays for its episode only, a hand-picked one is remembered, and Retry leaves the episode's ask to its player`() {
+        val identity = ViewerSessionIdentity("watching")
+        val streams = listOf("A", "B").map { com.theoriacodex.domain.model.MediaStream("https://video.test/$it.m3u8", it) }
+        val episodes = (1..2).map { post("episode-$it", media = listOf(com.theoriacodex.domain.model.ImageRef(null, null, "video/mp4", streams = streams))) }
+        var state = createViewerUiState(identity, episodes, series = ViewerSeries.Watching())
+        val first = requireNotNull(state.currentMedia).key
+        val second = com.theoriacodex.app.viewer.state.ViewerMediaKey(episodes[1].id, 0)
+
+        state = reduceViewerState(state, ViewerAction.FallBackToStream(first, "B")).state
+        assertEquals("B", state.controls.episode.streamLabelFor(first))
+        assertNull(state.controls.episode.streamLabelFor(second))
+        assertFalse(state.controls.episode.pickedByHand(first))
+
+        state = reduceViewerState(state, ViewerAction.ChooseStream("A")).state
+        assertEquals("A", state.controls.episode.streamLabelFor(first))
+        assertTrue(state.controls.episode.pickedByHand(first))
+        assertEquals("A", state.controls.episode.streamLabelFor(second))
+
+        state = reduceViewerState(state, ViewerAction.MediaFailed(identity, ViewerMediaError.Recoverable(first, "Could not play video"))).state
+        val retried = reduceViewerState(state, ViewerAction.RetryMedia)
+        assertEquals(1L, retried.state.currentMedia?.loadGeneration)
+        assertEquals(emptyList<Any>(), retried.effects)
     }
 }

@@ -252,7 +252,7 @@ class ViewerViewModel(
             prefetchLedger.forget(post.id)
         }
         state.value.session?.let { identity ->
-            onAction(ViewerAction.ResolutionCompleted(identity, post))
+            onAction(ViewerAction.ResolutionCompleted(identity, post, System.currentTimeMillis()))
         }
     }
 

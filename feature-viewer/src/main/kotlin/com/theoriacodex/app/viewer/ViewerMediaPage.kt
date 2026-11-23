@@ -63,12 +63,23 @@ internal data class ViewerMediaLayout(
 internal data class ViewerVideoOptions(
     val quality: com.theoriacodex.domain.model.VideoQuality,
     val height: Int?,
-    /** The session's chosen stream, for media with streams; see [com.theoriacodex.app.viewer.viewerPlayback]. */
+    /** The stream this media plays, for media with streams; see [com.theoriacodex.app.viewer.viewerPlayback]. */
     val streamLabel: String?,
     val terminalMessage: String?,
     val diagnosticsEnabled: Boolean,
-    /** The screen's asks for fresh stream links, spent by media with streams whose player fails. */
-    val freshLinks: ViewerFreshLinksBudget? = null,
+    /** What an episode's stream recovery needs from the screen; used only by media with streams. */
+    val episode: ViewerEpisodeOptions? = null,
+)
+
+/**
+ * The screen's side of an episode's stream recovery ([ViewerEpisodeStreams]): its [attempts], whether the stream
+ * playing was [pickedByHand], when the page's links were looked up, and how to [fallBack] to another stream.
+ */
+internal class ViewerEpisodeOptions(
+    val attempts: ViewerStreamAttempts,
+    val pickedByHand: Boolean,
+    val linksResolvedAtMs: Long?,
+    val fallBack: (label: String) -> Unit,
 )
 
 /** Owns taps and pinches and selects a renderer; swipes and route state stay in ViewerScreen. */

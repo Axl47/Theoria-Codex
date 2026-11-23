@@ -555,9 +555,6 @@ private suspend fun retryViewerMedia(
 ) {
     val page = state.pages.firstOrNull { candidate -> candidate.post.id == effect.mediaKey.postId } ?: return
     val failedMedia = page.media.firstOrNull { candidate -> candidate.key == effect.mediaKey }?.ref ?: return
-    // A retried episode's new player asks for fresh links itself if its links fail again; asking here too would look
-    // the episode up twice at once.
-    if (failedMedia.streams.isNotEmpty()) return
     recoverAndApplyMedia(viewerOwner, page.post, failedMedia, callbacks)
 }
 

@@ -132,6 +132,9 @@ fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReducti
         ViewerAction.RestartPlayback -> ViewerReduction(state.restartPlayback())
         is ViewerAction.SetPlaybackRate -> ViewerReduction(state.setPlaybackRate(action.rate))
         is ViewerAction.ChooseStream -> ViewerReduction(state.chooseStream(action.label))
+        is ViewerAction.FallBackToStream -> ViewerReduction(state.copy(controls = state.controls.copy(
+            episode = state.controls.episode.copy(episodeStream = ViewerEpisodeStream(action.media, action.label, pickedByHand = false)),
+        )))
         is ViewerAction.ChooseSubtitle -> ViewerReduction(state.chooseEpisodeTracks { copy(subtitle = action.choice) })
         is ViewerAction.ChooseAudio -> ViewerReduction(state.chooseEpisodeTracks { copy(audioLabel = action.label) })
         is ViewerAction.RequestPageResolution -> state.requestResolution(session, action.postId)
@@ -173,7 +176,8 @@ private fun ViewerUiState.chooseEpisodeTracks(change: ViewerEpisodeChoice.() -> 
 
 /** A new stream replaces the player, and with it any failure the last one showed. */
 private fun ViewerUiState.chooseStream(label: String): ViewerUiState {
-    val chosen = chooseEpisodeTracks { copy(streamLabel = label) }
+    val picked = currentMedia?.key?.let { ViewerEpisodeStream(it, label, pickedByHand = true) }
+    val chosen = chooseEpisodeTracks { copy(streamLabel = label, episodeStream = picked) }
     val failedHere = mediaError != null && mediaError.mediaKey.let { it == null || it == currentMedia?.key }
     return chosen.copy(
         mediaError = mediaError.takeUnless { failedHere },
@@ -272,7 +276,7 @@ private fun ViewerUiState.reduceResolution(action: ViewerAction): ViewerReductio
     }
     is ViewerAction.ResolutionStarted -> this.reduceResolutionStarted(action)
     is ViewerAction.ResolutionCompleted -> this.ifCurrentSession(action.session) {
-        replaceResolvedPost(action.post)
+        replaceResolvedPost(action.post, action.resolvedAtMs)
     }
     is ViewerAction.ResolutionFailed -> this.ifCurrentSession(action.session) {
         resolutionFailed(action)
@@ -479,7 +483,7 @@ private fun ViewerUiState.requestResolution(session: ViewerSessionIdentity, post
     )
 }
 
-private fun ViewerUiState.replaceResolvedPost(post: Post): ViewerUiState {
+private fun ViewerUiState.replaceResolvedPost(post: Post, resolvedAtMs: Long?): ViewerUiState {
     val pageIndex = pages.indexOfFirst { page -> page.post.id == post.id }
     if (pageIndex < 0) return this
     val previous = pages[pageIndex]
@@ -489,6 +493,7 @@ private fun ViewerUiState.replaceResolvedPost(post: Post): ViewerUiState {
             status = ViewerResolutionStatus.RESOLVED,
             message = null,
             recoverable = true,
+            resolvedAtMs = resolvedAtMs,
         ),
     )
     val updatedPages = pages.toMutableList().also { values -> values[pageIndex] = replacement }
@@ -584,6 +589,9 @@ private fun ViewerUiState.retryMedia(session: ViewerSessionIdentity): ViewerRedu
     if (page.resolution.status == ViewerResolutionStatus.FAILED && page.resolution.recoverable) {
         return retried.requestResolution(session, page.post.id)
     }
+    // An episode's next load asks for fresh links itself, and replays in place when none come
+    // (ViewerVideoRecovery.opensWithAsk); a route recovery beside it would look the episode up twice.
+    if (retriedMedia.ref.streams.isNotEmpty()) return ViewerReduction(retried)
     return ViewerReduction(retried, listOf(ViewerEffect.RetryMedia(session, recoverable.mediaKey)))
 }
 

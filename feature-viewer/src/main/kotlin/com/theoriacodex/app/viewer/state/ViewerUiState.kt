@@ -47,6 +47,8 @@ data class ViewerResolutionState(
     val attempt: Int = 0,
     val message: String? = null,
     val recoverable: Boolean = true,
+    /** When the post's media was last looked up, in wall-clock milliseconds: an episode's links expire with age. */
+    val resolvedAtMs: Long? = null,
 ) {
     init {
         require(attempt >= 0) { "Viewer resolution attempt must not be negative" }
