@@ -23,9 +23,13 @@ internal class MixLane(val lane: ForYouLane, label: String = lane.label) {
     var unvetted: List<Post> = emptyList()
         private set
 
-    /** Where the lane's next page starts; null once its feed has ended. */
-    var cursor: FeedCursor? = lane.cursor
-        private set
+    private var next: FeedCursor? = lane.cursor
+
+    /**
+     * Where the lane's next page starts; null once its feed has ended, or while its last [EMPTY_PAGE_LIMIT] pages gave the
+     * deck nothing, so a feed that keeps answering with nothing the deck can show is not paged forever.
+     */
+    val cursor: FeedCursor? get() = next.takeIf { emptyPages < EMPTY_PAGE_LIMIT }
     var loading = false
 
     /** Whether the lane's first request has answered, whatever the answer. */
@@ -35,7 +39,12 @@ internal class MixLane(val lane: ForYouLane, label: String = lane.label) {
     /** The lane's last request as its source reported it; a failed one keeps its page for a retry. */
     var status: SourceRunStatus? = null
         private set
+    /** Pages in a row that gave the deck nothing; a page whose posts all wait for vetting counts until one passes. */
     private var emptyPages = 0
+
+    /** Posts vetted from this lane, so lanes take turns at vetting while their buffers are level. */
+    var vets = 0
+        private set
 
     val failed: Boolean get() = status?.state == SourceRunState.FAILED
     val canPage: Boolean get() = cursor != null && !failed && !loading
@@ -52,9 +61,8 @@ internal class MixLane(val lane: ForYouLane, label: String = lane.label) {
         val (unchecked, clean) = fresh.partition(needLook)
         unvetted = unvetted + unchecked
         buffer = buffer + clean
-        emptyPages = if (fresh.isEmpty()) emptyPages + 1 else 0
-        // A feed that keeps answering with nothing the deck can show is treated as ended, so it is not paged forever.
-        cursor = asked.accept(page, setOf(source)).takeIf { source in it.pageTokens && emptyPages < EMPTY_PAGE_LIMIT }
+        emptyPages = if (clean.isEmpty()) emptyPages + 1 else 0
+        next = asked.accept(page, setOf(source)).takeIf { source in it.pageTokens }
     }
 
     /** The request threw before any source answered. */
@@ -88,7 +96,11 @@ internal class MixLane(val lane: ForYouLane, label: String = lane.label) {
     fun vetted(post: Post, shows: Boolean) {
         if (unvetted.none { it.id == post.id }) return
         unvetted = unvetted.filterNot { it.id == post.id }
-        if (shows) buffer = buffer + post
+        vets++
+        if (shows) {
+            buffer = buffer + post
+            emptyPages = 0
+        }
     }
 
     /** Sends what in the buffer [needLook]s back to be vetted, as when the first hidden tag arrives. */
@@ -216,11 +228,12 @@ internal class ForYouMix(lanes: List<ForYouLane>, private val copiesOf: (Post) -
 
     /**
      * The next post to vet: from the running lane with the fewest vetted posts, while it has fewer than [lookAhead], or
-     * whatever its count once a deal came up short. Null when nothing needs vetting yet.
+     * whatever its count once a deal came up short. Lanes with as many take turns, since a short deal takes each card as
+     * it is vetted and leaves every buffer empty. Null when nothing needs vetting yet.
      */
     fun nextToVet(lookAhead: Int): Pair<MixLane, Post>? =
         running.filter { it.unvetted.isNotEmpty() && (wanted || it.buffer.size < lookAhead) }
-            .minByOrNull { it.buffer.size }?.let { it to it.unvetted.first() }
+            .minWithOrNull(compareBy({ it.buffer.size }, { it.vets }))?.let { it to it.unvetted.first() }
 
     /** Sends what every lane's buffer [needLook]s back to be vetted. */
     fun revet(needLook: (Post) -> Boolean) = all.forEach { it.revet(needLook) }

@@ -21,8 +21,9 @@ class LibraryVisionBackfill(
     /**
      * Analyses a batch at a time and rests as long as the batch took, so the CPU works half the time at most. Stops when
      * done, when the model goes or would not load, or when the device runs [hot]; losing the network stops the job
-     * itself. Returns whether pictures are left that a later run can read; previews that failed to load are skipped for
-     * this run and tried again by the next.
+     * itself. Returns whether pictures are left that a later run can read, which includes a model that would not load
+     * but is still installed (memory pressure, say); previews that failed to load are skipped for this run and tried
+     * again by the next.
      */
     suspend fun drain(): Boolean {
         val unreachable = HashSet<PostId>()
@@ -32,7 +33,7 @@ class LibraryVisionBackfill(
             if (batch.isEmpty()) return false
             val started = TimeSource.Monotonic.markNow()
             val results = batch.associate { post -> post.id to tagger.analyze(post, remember = false) }
-            if (PictureResult.Unavailable in results.values) return false
+            if (PictureResult.Unavailable in results.values) return tagger.ready.value
             unreachable += results.filterValues { it == PictureResult.Unreachable }.keys
             if (!tagger.store(results)) return false
             delay(started.elapsedNow())

@@ -50,6 +50,23 @@ class ForYouDeckVettingTest {
         assertTrue(pictures.asked.containsAll(owner.ids))
     }
 
+    @Test fun `the first deal mixes lanes though every card waits for its picture`() {
+        val owner = owner(FakePictureTags())
+        assertEquals(4, owner.posts.size)
+        assertTrue(owner.posts.lanes().toString(), owner.posts.lanes().distinct().size > 1)
+    }
+
+    @Test fun `a lane whose pictures a hidden tag catches stops paging after three pages that give nothing`() {
+        val deep = FakeForYouEngine(listOf("a"), pages = 10)
+        val caught = (0 until 10).flatMap { page -> List(FakeForYouEngine.PAGE) { lanePost("a", page, it).id.sourcePostId } }
+        val owner = ForYouDeckViewModel(deep, deckWiring(writeScope, pictures = FakePictureTags(predicted = caught.associateWith { seen("x") })))
+            .also { it.synchronize(deckEnvironment(hiding("x"))) }
+
+        assertEquals(listOf("a:0", "a:1", "a:2"), deep.requests.filter { it.startsWith("a:") })
+        assertEquals(emptyList<Post>(), owner.posts)
+        assertFalse(owner.levels.value.last().feed.value.loadingMore)
+    }
+
     @Test fun `nothing is dealt while its picture is being tagged`() {
         val pictures = FakePictureTags().apply { held = CompletableDeferred() }
         val owner = owner(pictures)

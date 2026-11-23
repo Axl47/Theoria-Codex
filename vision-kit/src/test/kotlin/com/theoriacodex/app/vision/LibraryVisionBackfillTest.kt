@@ -1,5 +1,6 @@
 package com.theoriacodex.app.vision
 
+import android.graphics.Bitmap
 import com.theoriacodex.data.repository.PictureVision
 import com.theoriacodex.data.repository.VisionProgress
 import com.theoriacodex.data.repository.VisualSignatureRepository
@@ -20,10 +21,14 @@ import okhttp3.OkHttpClient
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
+@RunWith(RobolectricTestRunner::class)
 class LibraryVisionBackfillTest {
     @get:Rule
     val folder = TemporaryFolder()
@@ -49,14 +54,16 @@ class LibraryVisionBackfillTest {
         override suspend fun clearVision() = stored.clear()
     }
 
+    private val model = ByteArray(1_000) { it.toByte() }
+    private val words = "tag_id,name,category,count\n1,solo,0,10\n".toByteArray()
+    private val spec = VisualModelSpec(
+        "test-model-1", "https://models.test/", ModelFile("model.tflite", model.size.toLong(), sha(model)),
+        ModelFile("tags.csv", words.size.toLong(), sha(words)),
+    )
+
+    private fun sha(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
     private fun readyStore(): VisualModelStore {
-        val model = ByteArray(1_000) { it.toByte() }
-        val words = "tag_id,name,category,count\n1,solo,0,10\n".toByteArray()
-        fun sha(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
-        val spec = VisualModelSpec(
-            "test-model-1", "https://models.test/", ModelFile("model.tflite", model.size.toLong(), sha(model)),
-            ModelFile("tags.csv", words.size.toLong(), sha(words)),
-        )
         val folders = VisualModelStore(spec, folder.root, OkHttpClient(), scope) { }
         folders.modelFile.parentFile!!.mkdirs()
         folders.modelFile.writeBytes(model)
@@ -83,5 +90,20 @@ class LibraryVisionBackfillTest {
         assertFalse(LibraryVisionBackfill(tagger, library, hot = { false }).drain())
 
         assertEquals(older.map(Post::id), library.stored.map(PictureVision::postId))
+    }
+
+    @Test
+    fun `a model that will not load asks for another run while it is installed, and none once it is gone`() = runBlocking {
+        val library = Library(listOf(post("a")))
+        // The stored file is no model, so loading it fails as it might under memory pressure.
+        val installed = readyStore()
+        val picture = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888)
+        val tagger = PictureTagger(installed, library, hasStill = { true }, loadStill = { picture }, scope = scope)
+        assertTrue(LibraryVisionBackfill(tagger, library, hot = { false }).drain())
+        assertEquals(emptyList<PictureVision>(), library.stored)
+
+        installed.modelFile.delete()
+        val gone = VisualModelStore(spec, folder.root, OkHttpClient(), scope) { }
+        assertFalse(LibraryVisionBackfill(PictureTagger(gone, library, { true }, { picture }, scope), library, hot = { false }).drain())
     }
 }
