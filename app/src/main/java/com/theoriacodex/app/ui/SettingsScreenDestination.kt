@@ -27,7 +27,7 @@ internal fun SettingsScreenDestination(shell: TheoriaShell) {
     LaunchedEffect(owner) { owner.onAction(SettingsAction.SettingsEntered) }
     SettingsDestinationStateBoundary(
         owner, libraryStorageSummary(shell.transfers),
-        sites = rememberCustomSitesEntry(shell.container),
+        sites = rememberCustomSitesEntry(shell.container, shell.owners.siteChecks),
         backup = rememberSettingsBackupEntry(shell.transfers),
         statsActions = remember(shell) {
             StatsActions(shell::openStatisticsPost, shell::shareStats, shell::readStatsFile, shell::previewStatisticsPost, shell::downloadStats)

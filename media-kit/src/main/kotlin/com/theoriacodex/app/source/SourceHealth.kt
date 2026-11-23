@@ -15,9 +15,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Which sources are down, for the source dropdowns, and what tapping one does. [recheck] forgets the
- * source's outage so the search it was picked for tries the network again; [verify] opens the
- * source's browser verification; [addKey] opens an added site's API key field. [dismissedNotices] are the
+ * Which sources are down, for the source dropdowns and the Series screens, and what tapping one does. [recheck]
+ * forgets the source's outage so the search it was picked for tries the network again; [verify] opens the
+ * source's browser check over the current screen; [addKey] opens an added site's API key field. [dismissedNotices] are the
  * sources whose outage notice was set aside.
  */
 class SourceHealth(
@@ -42,22 +42,30 @@ class SourceHealth(
 
 val LocalSourceHealth = compositionLocalOf { SourceHealth() }
 
+/** The action that opens a source's browser check ([SourceHealth.verify]), wherever it is offered. */
+const val VERIFY_IN_BROWSER_LABEL = "Verify in browser"
+
 /** The host outages that belong to [source]: its site host, or a subdomain of it such as an API host. */
 fun SourceKey.ownsHost(host: String): Boolean {
     val site = siteHost() ?: return false
     return HostOutageTracker.hostBelongsToSite(host, site)
 }
 
-/** Active outages by source, matched through each source's presentation (its site address). */
+/**
+ * Active outages by source, matched to the site host of each source (its presentation's address) or of each extension
+ * source in [extensionSites], or to a subdomain of it such as an API host.
+ */
 fun sourceIssues(
     outages: Map<String, HostOutage>,
     sources: Iterable<SourceKey>,
     now: Long,
+    extensionSites: Map<SourceKey, String> = emptyMap(),
 ): Map<SourceKey, HostOutageKind> {
     val active = outages.filterValues { it.untilEpochMs > now }
     if (active.isEmpty()) return emptyMap()
-    return sources.mapNotNull { source ->
-        active.entries.firstOrNull { (host, _) -> source.ownsHost(host) }?.let { source to it.value.kind }
+    val sites = sources.mapNotNull { source -> source.siteHost()?.let { source to it } } + extensionSites.toList()
+    return sites.mapNotNull { (source, site) ->
+        active.entries.firstOrNull { (host, _) -> HostOutageTracker.hostBelongsToSite(host, site) }?.let { source to it.value.kind }
     }.toMap()
 }
 

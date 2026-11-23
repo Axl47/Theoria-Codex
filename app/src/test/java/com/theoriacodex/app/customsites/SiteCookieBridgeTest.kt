@@ -6,6 +6,7 @@ import com.theoriacodex.sources.http.BrowserCookieStore
 import okhttp3.Cookie
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -47,6 +48,20 @@ class SiteCookieBridgeTest {
         cookies["other.example"] = "cf=5"
     }
     private val bridge = SiteCookieBridge(store)
+
+    @Test
+    fun `a hidden browser check is for saved sites and built-ins verified by hand, never one being set up or never verified`() {
+        bridge.updateSiteHosts(setOf("booru.example"))
+        bridge.updateBuiltInAgents(mapOf("www.iwara.tv" to "browser/1"))
+        bridge.setSetupHost("new.example")
+
+        assertTrue(bridge.keepsCookies("booru.example"))
+        assertTrue(bridge.keepsCookies("api.iwara.tv"))
+        assertFalse(bridge.keepsCookies("new.example"))
+        assertFalse(bridge.keepsCookies("danbooru.donmai.us"))
+        // The site being set up still gets its cookies; only the hidden check leaves it out.
+        assertTrue(bridge.isAllowed("new.example"))
+    }
 
     @Test
     fun `installs sharing a host keep their keys apart`() {

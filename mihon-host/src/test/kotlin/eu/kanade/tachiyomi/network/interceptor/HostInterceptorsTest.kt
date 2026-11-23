@@ -1,10 +1,15 @@
 package eu.kanade.tachiyomi.network.interceptor
 
-import com.theoriacodex.mihonhost.ChallengeBrowser
 import com.theoriacodex.mihonhost.MihonHost
 import com.theoriacodex.mihonhost.answering
 import com.theoriacodex.mihonhost.cannedResponse
 import com.theoriacodex.sources.http.BrowserCookieStore
+import com.theoriacodex.sources.http.ChallengeBrowser
+import com.theoriacodex.sources.http.ChallengePass
+import com.theoriacodex.sources.http.HostOutageKind
+import com.theoriacodex.sources.http.HostOutageTracker
+import com.theoriacodex.sources.http.HostUnavailableException
+import com.theoriacodex.sources.http.RefusedRequest
 import java.io.IOException
 import com.theoriacodex.mihonhost.assertFailsWith
 import okhttp3.Interceptor
@@ -32,8 +37,31 @@ class HostInterceptorsTest {
     fun `the client extensions rebuild carries the interceptor names they require, in Mihon's order`() {
         assertEquals(
             listOf("UncaughtExceptionInterceptor", "UserAgentInterceptor", "CloudflareInterceptor"),
-            MihonHost.extensionClient(NoCookies, NoBrowser).interceptors.map { it.javaClass.simpleName },
+            MihonHost.extensionClient(NoCookies, NoBrowser, HostOutageTracker()).interceptors.map { it.javaClass.simpleName },
         )
+    }
+
+    @Test
+    fun `a challenge no hidden pass clears is recorded with the agent it refused, and never reaches the extension`() {
+        var now = 0L
+        val outages = HostOutageTracker(clock = { now })
+        val client = clientOf(
+            CloudflareInterceptor(ChallengePass(NoCookies, NoBrowser, outages::isChallenged), outages),
+            answering { sent ->
+                cannedResponse(sent, code = 403).newBuilder().header("Server", "cloudflare").header("cf-mitigated", "challenge").build()
+            },
+        )
+        val call = { url: String -> client.newCall(Request.Builder().url(url).header("User-Agent", "agent/1").build()).execute() }
+
+        val failure = assertFailsWith<HostUnavailableException> { call("https://www.site.test/list") }
+        now += 1_000L
+        assertFailsWith<HostUnavailableException> { call("https://site.test/other") }
+
+        assertEquals(HostOutageKind.CHALLENGE, failure.kind)
+        val outage = outages.outages.value.getValue("site.test")
+        assertEquals(RefusedRequest("https://www.site.test/list", "agent/1"), outage.refused)
+        // The second challenge did not renew the record, so it still expires when the first one's does.
+        assertEquals(HostOutageTracker.DEFAULT_OUTAGE_MS, outage.untilEpochMs)
     }
 
     @Test

@@ -16,13 +16,20 @@ enum class HostOutageKind(val userMessage: String) {
     MAINTENANCE("Down for maintenance. Try again later."),
 
     /** A browser challenge answered instead of the API. */
-    CHALLENGE("Needs browser verification. Open Settings → Sites."),
+    CHALLENGE("Needs browser verification."),
 
     /** The domain doesn't resolve while the device is online. */
     UNRESOLVED("Couldn't find this site. If it moved, remove it and add its new address."),
 }
 
-data class HostOutage(val kind: HostOutageKind, val untilEpochMs: Long)
+/** [refused] is the challenged request, where the client that recorded the outage knows it. */
+data class HostOutage(val kind: HostOutageKind, val untilEpochMs: Long, val refused: RefusedRequest? = null)
+
+/**
+ * A request a browser check refused: [url] and the [userAgent] that asked for it. A clearance cookie is bound to the
+ * agent that earned it, so a browser that passes the check for this request must send the same one.
+ */
+data class RefusedRequest(val url: String, val userAgent: String)
 
 /** A request refused without touching the network because its host is known to be down. */
 class HostUnavailableException(val host: String, val kind: HostOutageKind) : IOException(kind.userMessage)
@@ -86,10 +93,16 @@ class HostOutageTracker(
         return true
     }
 
-    fun record(url: String, kind: HostOutageKind) {
+    fun record(url: String, kind: HostOutageKind, refused: RefusedRequest? = null) {
         val host = hostKey(url) ?: return
         workingHosts.update { it - host }
-        state.update { it + (host to HostOutage(kind, clock() + outageMs)) }
+        state.update { it + (host to HostOutage(kind, clock() + outageMs, refused)) }
+    }
+
+    /** Whether [url]'s host is in an active challenge outage: its browser check is the user's to pass now. */
+    fun isChallenged(url: String): Boolean {
+        val outage = hostKey(url)?.let(state.value::get) ?: return false
+        return outage.kind == HostOutageKind.CHALLENGE && outage.untilEpochMs > clock()
     }
 
     /** A real answer from [url]'s host: success proves it works this session, a refusal of its keys takes that back. */

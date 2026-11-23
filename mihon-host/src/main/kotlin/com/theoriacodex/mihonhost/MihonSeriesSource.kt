@@ -177,9 +177,6 @@ class MihonSeriesSource(
     }
 
     private fun failure(error: Exception): SourceAdapterException {
-        // Extensions sometimes wrap what the client threw, so the check is looked for among the causes.
-        val check = generateSequence<Throwable>(error) { it.cause }.firstNotNullOfOrNull { it as? BrowserCheckException }
-        if (check != null) return SourceAdapterException(SourceFailureReason.BROWSER_CHECK, check.message, check, check.check)
         val reason = when (error) {
             // A refusal (401, 403) is not reported as a missing key: the app holds no key for an extension source, and
             // would point the user at a Settings field that does not exist.

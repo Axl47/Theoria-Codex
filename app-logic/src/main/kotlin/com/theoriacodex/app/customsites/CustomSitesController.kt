@@ -28,16 +28,18 @@ interface CustomSitesController {
     suspend fun testBuiltIn(source: SourceKey): BuiltInTestResult
 
     /**
-     * Whether [source]'s home page and any of its hosts now in an outage answer with [userAgent], the
-     * in-app browser's, and without a challenge. Changes nothing.
+     * Whether the app's own requests to [source], a built-in or stored site, now get through with [userAgent], the
+     * in-app browser's, which its clearance cookies are bound to. A built-in site's home page and any of its hosts in
+     * an outage must answer without a challenge; a stored site is probed with its keys and other headers. Changes nothing.
      */
-    suspend fun checkBuiltInVerification(source: SourceKey, userAgent: String): Boolean
+    suspend fun checkVerification(source: SourceKey, userAgent: String): Boolean
 
     /**
-     * Records a passed [checkBuiltInVerification]: [source]'s requests send the browser's cookies and
-     * [userAgent] from now on, and its outage lifts so it works at once. Makes no request.
+     * Records a passed [checkVerification]: [source]'s requests send the browser's cookies and [userAgent] from now on
+     * (a stored site also stamps its verified time), its outage lifts so it works at once, and the browser's cookies
+     * are flushed. Makes no request.
      */
-    suspend fun completeBuiltInVerification(source: SourceKey, userAgent: String)
+    suspend fun completeVerification(source: SourceKey, userAgent: String)
 
     /** Add, step 1: validate the address and probe known families. Persists nothing. */
     suspend fun probe(
@@ -56,23 +58,8 @@ interface CustomSitesController {
     suspend fun retest(sourceId: String): SiteProbeResult
 
     /**
-     * Whether the app's own request gets through to a stored site with [userAgent], the in-app browser's,
-     * which its clearance cookies are usually bound to. Probes with the stored keys and the site's other
-     * headers and changes nothing. [sourceId] must be stored.
-     */
-    suspend fun checkVerification(sourceId: String, userAgent: String): SiteProbeResult
-
-    /**
-     * Records a passed [checkVerification]: saves [userAgent] (keeping the site's other headers), stamps
-     * the verified time, lifts the site's challenge outage and flushes the browser's cookies, so the
-     * source works at once. [working] is whether the check also found the expected booru rather than
-     * merely getting past the challenge. Makes no request. [sourceId] must be stored.
-     */
-    suspend fun completeVerification(sourceId: String, userAgent: String, working: Boolean)
-
-    /**
-     * Lets the browser's cookies reach requests to [host] while it is verified before being saved, or
-     * stops that when null. Saved sites always get their cookies.
+     * Lets the browser's cookies reach requests to [host] while its browser check is open or it is being
+     * added, or stops that when null. Saved sites and verified built-in ones always get their cookies.
      */
     fun setSetupHost(host: String?)
 
@@ -82,16 +69,13 @@ interface CustomSitesController {
     suspend fun remove(sourceId: String): CustomSiteMutation
 
     /**
-     * What another flow asked Settings → Sites to do: add an address (a Codex import, a shared link),
-     * verify a stored site in the browser (a challenged source) or open its API key field (a refused
-     * account). Sites acts on it and calls [clearSetupRequest].
+     * What another flow asked Settings → Sites to do: add an address (a Codex import, a shared link) or
+     * open a stored site's API key field (a refused account). Sites acts on it and calls [clearSetupRequest].
      */
     val setupRequest: StateFlow<SitesRequest?>
 
     /** [linkAfterSetup] is opened once the site is saved; abandoning the form discards it. */
     fun requestSetup(address: String, linkAfterSetup: String? = null)
-
-    fun requestVerification(sourceId: String)
 
     fun requestKeyEntry(sourceId: String)
 
@@ -105,7 +89,6 @@ interface CustomSitesController {
 
 sealed interface SitesRequest {
     data class Add(val address: String, val linkAfterSetup: String? = null) : SitesRequest
-    data class Verify(val sourceId: String) : SitesRequest
     data class EnterKey(val sourceId: String) : SitesRequest
 }
 

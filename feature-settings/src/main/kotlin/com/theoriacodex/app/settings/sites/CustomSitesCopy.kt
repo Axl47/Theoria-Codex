@@ -32,17 +32,6 @@ internal fun probeMessage(result: SiteProbeResult): String? = when (result) {
     is SiteProbeResult.InvalidAddress -> invalidAddressMessage(result.error)
 }
 
-/** What Done says when the app's own request is still refused after the person's check. */
-internal fun verificationRefusedMessage(host: String): String =
-    "$host is still refusing Theoria. Finish its check, or try again in a moment."
-
-/** Shown when the first check passes, so a page opened voluntarily stays open. */
-internal fun verificationAlreadyOpenMessage(host: String): String =
-    "$host already lets Theoria through. Tap Done to save this browser for it."
-
-internal const val VERIFICATION_INSTRUCTION =
-    "Complete the site's check above. This closes by itself when Theoria gets through."
-
 /** Names the shipped source when the id parses, e.g. "Danbooru is already built into Theoria." */
 internal fun alreadyBuiltInMessage(builtInSourceId: String): String =
     SourceKey.parse(builtInSourceId)?.takeUnless { it.isCustom }?.let { "${it.displayName()} is already built into Theoria." }

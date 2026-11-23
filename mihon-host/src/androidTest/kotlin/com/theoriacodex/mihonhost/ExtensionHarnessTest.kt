@@ -8,6 +8,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.sources.http.BrowserCookieStore
+import com.theoriacodex.sources.http.ChallengeBrowser
+import com.theoriacodex.sources.http.HostOutageTracker
 import java.io.File
 import kotlin.time.TimeSource
 import kotlinx.coroutines.Dispatchers
@@ -39,7 +41,7 @@ class ExtensionHarnessTest {
         val apkName = InstrumentationRegistry.getArguments().getString("extensionApk")
         assumeNotNull(apkName)
         val context = instrumentation.targetContext
-        MihonHost.install(context.applicationContext as Application, versionName = "harness", versionCode = 1, cookies = NoCookies)
+        MihonHost.install(context.applicationContext as Application, versionName = "harness", versionCode = 1, cookies = NoCookies, browser = NoBrowser, outages = HostOutageTracker())
 
         val packages = ExtensionPackages(context)
         val extension = checkNotNull(packages.read(File(context.getExternalFilesDir(null), apkName!!))) { "$apkName is not an extension" }
@@ -126,6 +128,13 @@ class ExtensionHarnessTest {
         override fun flush() = Unit
 
         override fun expire(url: String, name: String?) = Unit
+    }
+
+    /** The harness measures extensions without the app's WebView, so a challenge fails its source. */
+    private object NoBrowser : ChallengeBrowser {
+        override fun mayWait() = false
+
+        override fun pass(request: Request, passed: () -> Boolean, cancelled: () -> Boolean) = false
     }
 
     private companion object {

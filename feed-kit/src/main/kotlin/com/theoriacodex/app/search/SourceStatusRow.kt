@@ -13,7 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalUriHandler
 import com.theoriacodex.app.settings.sites.ADD_API_KEY_LABEL
-import com.theoriacodex.app.settings.sites.VERIFY_IN_BROWSER_LABEL
+import com.theoriacodex.app.source.VERIFY_IN_BROWSER_LABEL
 import com.theoriacodex.app.source.LocalSourceHealth
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.referer

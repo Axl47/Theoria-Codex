@@ -11,6 +11,11 @@ import eu.kanade.tachiyomi.network.interceptor.UserAgentInterceptor
 import com.theoriacodex.sources.http.BrowserAddressDns
 import com.theoriacodex.sources.http.BrowserCookieJar
 import com.theoriacodex.sources.http.BrowserCookieStore
+import com.theoriacodex.sources.http.ChallengeBrowser
+import com.theoriacodex.sources.http.ChallengePass
+import com.theoriacodex.sources.http.HostOutageTracker
+import com.theoriacodex.sources.http.HostUnavailableException
+import com.theoriacodex.sources.http.isCloudflareChallenge
 import java.io.File
 import java.net.URLEncoder
 import java.nio.file.Files
@@ -18,8 +23,11 @@ import java.nio.file.StandardCopyOption
 import java.security.SecureRandom
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import uy.kohesive.injekt.Injekt
 
 /**
@@ -33,15 +41,44 @@ object MihonHost {
     /** HTTP requests extensions have started, so a caller can report what one step cost. */
     val requestCount = AtomicLong()
 
-    /** [cookies] is the system browser's cookie store, which the extensions' client and its browser checks share. */
-    fun install(application: Application, versionName: String, versionCode: Int, cookies: BrowserCookieStore) {
+    /** The extensions' client, once [install] has made it. */
+    @Volatile
+    private var client: OkHttpClient? = null
+
+    /**
+     * [cookies] is the system browser's cookie store, which the extensions' client and its browser checks share;
+     * [browser] passes checks out of sight, and [outages] records the ones it cannot, as for every other source.
+     */
+    fun install(
+        application: Application,
+        versionName: String,
+        versionCode: Int,
+        cookies: BrowserCookieStore,
+        browser: ChallengeBrowser,
+        outages: HostOutageTracker,
+    ) {
         AppInfo.hostVersionName = versionName
         AppInfo.hostVersionCode = versionCode
         val extensionApplication = ExtensionApplication(application)
         Injekt.bind(Application::class.java, extensionApplication)
         Injekt.bind(Context::class.java, extensionApplication)
         Injekt.bind(Json::class.java, Json { ignoreUnknownKeys = true; explicitNulls = false })
-        Injekt.bind(NetworkHelper::class.java, NetworkHelper(extensionClient(cookies, WebViewChallengeBrowser(application))) { DEFAULT_USER_AGENT })
+        val client = extensionClient(cookies, browser, outages).also { MihonHost.client = it }
+        Injekt.bind(NetworkHelper::class.java, NetworkHelper(client) { DEFAULT_USER_AGENT })
+    }
+
+    /**
+     * Whether the extensions' own client now gets [url] without a challenge, sending [userAgent]: the app's browser
+     * check is passed for an extension source once this is true. False before any extension has loaded. Throws
+     * [java.io.IOException] when the site cannot be reached at all.
+     */
+    suspend fun clearsChallenge(url: String, userAgent: String): Boolean = withContext(Dispatchers.IO) {
+        val client = MihonHost.client ?: return@withContext false
+        try {
+            client.newCall(Request.Builder().url(url).header("User-Agent", userAgent).build()).execute().use { !it.isCloudflareChallenge() }
+        } catch (_: HostUnavailableException) {
+            false
+        }
     }
 
     /**
@@ -52,7 +89,7 @@ object MihonHost {
      * It resolves hosts as the WebView would connect to them ([BrowserAddressDns]), since a clearance cookie a browser
      * check earns is only accepted from the address it was earned from.
      */
-    internal fun extensionClient(cookies: BrowserCookieStore, browser: ChallengeBrowser): OkHttpClient = OkHttpClient.Builder()
+    internal fun extensionClient(cookies: BrowserCookieStore, browser: ChallengeBrowser, outages: HostOutageTracker): OkHttpClient = OkHttpClient.Builder()
         .dns(BrowserAddressDns())
         .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -60,7 +97,7 @@ object MihonHost {
         .cookieJar(BrowserCookieJar(cookies) { true })
         .addInterceptor(UncaughtExceptionInterceptor())
         .addInterceptor(UserAgentInterceptor { DEFAULT_USER_AGENT })
-        .addInterceptor(CloudflareInterceptor(cookies, browser))
+        .addInterceptor(CloudflareInterceptor(ChallengePass(cookies, browser, outages::isChallenged), outages))
         .addNetworkInterceptor { chain ->
             requestCount.incrementAndGet()
             chain.proceed(chain.request())

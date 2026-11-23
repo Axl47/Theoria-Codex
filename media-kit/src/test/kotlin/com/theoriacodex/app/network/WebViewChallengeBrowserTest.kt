@@ -1,10 +1,10 @@
-package com.theoriacodex.mihonhost
+package com.theoriacodex.app.network
 
 import okhttp3.Request
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-class ChallengeBrowserTest {
+class WebViewChallengeBrowserTest {
     @Test
     fun `the hidden browser gets only the headers a browser would send itself`() {
         val request = Request.Builder().url("https://site.test/")

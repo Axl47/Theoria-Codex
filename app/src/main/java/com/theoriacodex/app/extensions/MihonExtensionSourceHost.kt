@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.util.Log
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.network.AndroidBrowserCookieStore
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.ExtensionChoiceStore
 import com.theoriacodex.domain.series.ExtensionChoices
 import com.theoriacodex.domain.series.SeriesExtensions
@@ -16,8 +17,11 @@ import com.theoriacodex.mihonhost.ExtensionImages
 import com.theoriacodex.mihonhost.ExtensionLoader
 import com.theoriacodex.mihonhost.ExtensionPackages
 import com.theoriacodex.mihonhost.ExtensionRegistry
+import com.theoriacodex.mihonhost.ExtensionSite
 import com.theoriacodex.mihonhost.MihonHost
 import com.theoriacodex.mihonhost.SourceSettings
+import com.theoriacodex.sources.http.ChallengeBrowser
+import com.theoriacodex.sources.http.HostOutageTracker
 import eu.kanade.tachiyomi.source.sourcePreferences
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -26,6 +30,15 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
+
+/** What the app's browser check needs from extension sources. */
+interface ExtensionSites {
+    /** The sources that are on, with their names and site hosts; loads nothing. */
+    fun sites(): Map<SourceKey, ExtensionSite>
+
+    /** Whether the extensions' own client now gets [url] without a challenge, sending [userAgent]. */
+    suspend fun clearsChallenge(url: String, userAgent: String): Boolean
+}
 
 /**
  * Turns Mihon extensions into series sources: third-party code, loaded into the app. It finds the extensions Mihon
@@ -36,7 +49,7 @@ import okhttp3.Interceptor
  * [ExtensionRegistry] holds that rule. Those load once, the first time [sources] is called or [mediaInterceptor] is
  * asked for an image only an extension can fetch.
  */
-internal class MihonExtensionSourceHost {
+internal class MihonExtensionSourceHost : ExtensionSites {
     private lateinit var registry: ExtensionRegistry
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var watching: Lazy<Unit>
@@ -53,14 +66,19 @@ internal class MihonExtensionSourceHost {
     /** The extensions on the device and the user's choices about them, for the Extensions page. */
     val extensions: SeriesExtensions get() = registry.also { watching.value }
 
-    /** Names the application extensions load into. Called once, before anything else; loads nothing. */
-    fun attach(application: Application) {
+    /**
+     * Names the application extensions load into, the browser that passes their checks out of sight and the record of
+     * the checks it cannot pass. Called once, before anything else; loads nothing.
+     */
+    fun attach(application: Application, browser: ChallengeBrowser, outages: () -> HostOutageTracker) {
         // Release builds run installed packages only; the folder is how tests hand a debug build an APK.
         images = ExtensionImages(lazy { MihonHost.imageKey(application) }) { runBlocking { registry.sources() } }
         val packages = ExtensionPackages(application) { if (BuildConfig.DEBUG) application.getExternalFilesDir(DIRECTORY) else null }
         val loader = ExtensionLoader(application, packages)
         // What extensions ask their host for is set up when the first one loads, not at startup.
-        val hostInstalled = lazy { MihonHost.install(application, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, AndroidBrowserCookieStore) }
+        val hostInstalled = lazy {
+            MihonHost.install(application, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, AndroidBrowserCookieStore, browser, outages())
+        }
         registry = ExtensionRegistry(
             packages = packages::list,
             stamp = packages::stamp,
@@ -105,6 +123,10 @@ internal class MihonExtensionSourceHost {
     fun bind(choices: ExtensionChoiceStore) {
         this.choices.complete(choices)
     }
+
+    override fun sites(): Map<SourceKey, ExtensionSite> = registry.sites()
+
+    override suspend fun clearsChallenge(url: String, userAgent: String): Boolean = MihonHost.clearsChallenge(url, userAgent)
 
     /**
      * The sources of the extensions and languages that are on. The first call loads them, which can take seconds;

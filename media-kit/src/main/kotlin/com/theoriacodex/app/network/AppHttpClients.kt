@@ -34,6 +34,8 @@ class AppHttpClients(
     private val siteAuthorization: (url: String) -> String? = { null },
     /** Answers media requests only loaded extension code can fetch and passes the rest on; null where no extension host exists. */
     private val extensionMedia: Interceptor? = null,
+    /** Passes a site's browser check out of sight before a source request fails on it (`ChallengePass`). */
+    private val challengePass: Interceptor? = null,
 ) {
     private val warmed = AtomicBoolean(false)
 
@@ -71,7 +73,10 @@ class AppHttpClients(
 
     /** Provider APIs and indexes. */
     val sources: OkHttpClient by lazy {
-        shared.newBuilder().dispatcher(unqueuedSourceDispatcher()).countedAs(NetworkUsage.Stack.SOURCE).build()
+        shared.newBuilder().dispatcher(unqueuedSourceDispatcher())
+            .apply { challengePass?.let(::addInterceptor) }
+            .countedAs(NetworkUsage.Stack.SOURCE)
+            .build()
     }
 
     /** Coil. OkHttp's default of five per host lets a few large GIFs stall every thumbnail behind them. */

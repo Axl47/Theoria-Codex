@@ -36,6 +36,7 @@ import com.theoriacodex.app.source.startupCheckSources
 import com.theoriacodex.app.source.sourceIssues
 import com.theoriacodex.app.source.clearSource
 import com.theoriacodex.app.source.SourceHealth
+import kotlinx.coroutines.flow.flowOn
 import com.theoriacodex.app.ui.routes.activeRecommendationProfile
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -432,7 +433,7 @@ private fun SaveToCodexOverlay(shell: TheoriaShell) {
 }
 
 /**
- * Down sources for the dropdowns, refreshed when outages change and each minute so expired ones
+ * Down sources, extension ones included, refreshed when outages change and each minute so expired ones
  * clear. Starts the background startup check once the app is showing (it never blocks startup).
  */
 @Composable
@@ -450,9 +451,12 @@ internal fun rememberSourceHealth(shell: TheoriaShell): SourceHealth {
         }
     }
     val issues by produceState(emptyMap<SourceKey, HostOutageKind>(), outages) {
+        val extensions = shell.container.extensionSites
         combine(outages.outages, shell.sources.availableSources, minuteTicks()) { recorded, sources, _ ->
-            sourceIssues(recorded, sources, System.currentTimeMillis())
-        }.collect { value = it }
+            // Read when outages change: a source whose host was just challenged has loaded by then.
+            val extensionSites = extensions?.sites()?.mapValues { it.value.host }.orEmpty()
+            sourceIssues(recorded, sources, System.currentTimeMillis(), extensionSites)
+        }.flowOn(kotlinx.coroutines.Dispatchers.Default).collect { value = it }
     }
     var dismissedNotices by remember { mutableStateOf(emptySet<SourceKey>()) }
     // Forgotten when the outage ends, so the next one is announced.
@@ -461,10 +465,7 @@ internal fun rememberSourceHealth(shell: TheoriaShell): SourceHealth {
         SourceHealth(
             issues = issues,
             recheck = outages::clearSource,
-            verify = { source ->
-                shell.container.customSites.requestVerification(source.id)
-                shell.owners.settings.onAction(SettingsAction.OpenCustomSites)
-            },
+            verify = { source -> shell.owners.siteChecks.open(source) },
             addKey = { source ->
                 shell.container.customSites.requestKeyEntry(source.id)
                 shell.owners.settings.onAction(SettingsAction.OpenCustomSites)

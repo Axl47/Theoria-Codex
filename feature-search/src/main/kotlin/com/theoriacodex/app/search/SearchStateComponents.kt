@@ -2,7 +2,7 @@ package com.theoriacodex.app.search
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import com.theoriacodex.app.settings.sites.ADD_API_KEY_LABEL
-import com.theoriacodex.app.settings.sites.VERIFY_IN_BROWSER_LABEL
+import com.theoriacodex.app.source.VERIFY_IN_BROWSER_LABEL
 import com.theoriacodex.app.source.LocalSourceHealth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp

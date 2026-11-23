@@ -41,6 +41,18 @@ class HostOutageTrackerTest {
         assertTrue(tracker.outages.value.isEmpty())
     }
 
+    @Test fun `a challenge keeps the request it refused and counts as challenged until it expires`() {
+        val refused = RefusedRequest("https://api.site.test/list", "agent/1")
+        tracker.record(refused.url, HostOutageKind.CHALLENGE, refused)
+        tracker.record("https://down.test/", HostOutageKind.MAINTENANCE)
+
+        assertEquals(refused, tracker.outages.value["api.site.test"]?.refused)
+        assertTrue(tracker.isChallenged("https://api.site.test/other"))
+        assertFalse(tracker.isChallenged("https://down.test/"))
+        now += 60_001L
+        assertFalse(tracker.isChallenged("https://api.site.test/other"))
+    }
+
     @Test fun `an unresolved domain counts only while online`() {
         var online = false
         val gated = HostOutageTracker(clock = { now }, isOnline = { online })

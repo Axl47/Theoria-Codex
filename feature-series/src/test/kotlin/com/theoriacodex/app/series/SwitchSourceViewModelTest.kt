@@ -1,7 +1,6 @@
 package com.theoriacodex.app.series
 
 import com.theoriacodex.data.repository.NoChaptersToMoveToException
-import com.theoriacodex.domain.adapter.BrowserCheck
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.ImageRef
@@ -75,24 +74,6 @@ class SwitchSourceViewModelTest {
 
         val found = viewModel.state.value.sheet!!.results.single().listing as SwitchListing.Found
         assertEquals(listOf("Hero"), found.matches.map { it.series.title })
-    }
-
-    @Test
-    fun aSourceBehindABrowserCheckSaysSoAndCanBeRetried() = runTest {
-        val checked = Finding("custom_mihon_2", listOf("Hero")).apply {
-            failure = SourceAdapterException(SourceFailureReason.BROWSER_CHECK, browserCheck = BrowserCheck("https://site.test/", "agent/1"))
-        }
-        val viewModel = viewModel(checked)
-        advanceUntilIdle()
-        viewModel.open("Hero")
-        advanceUntilIdle()
-        assertEquals(SwitchListing.Failed("Needs a browser check."), viewModel.state.value.sheet!!.results.single().listing)
-
-        checked.failure = null
-        viewModel.retry(checked.key)
-        advanceUntilIdle()
-
-        assertTrue(viewModel.state.value.sheet!!.results.single().listing is SwitchListing.Found)
     }
 
     @Test

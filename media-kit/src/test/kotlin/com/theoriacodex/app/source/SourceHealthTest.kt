@@ -25,6 +25,17 @@ class SourceHealthTest {
         )
     }
 
+    @Test fun `an extension source's issue comes from the host of its site or a subdomain`() {
+        val extension = requireNotNull(SourceKey.parse("custom_mihon_42"))
+        val outages = mapOf("api.site.test" to HostOutage(HostOutageKind.CHALLENGE, untilEpochMs = 2_000))
+
+        assertEquals(
+            mapOf(extension to HostOutageKind.CHALLENGE),
+            sourceIssues(outages, sources, now = 1_000, extensionSites = mapOf(extension to "site.test")),
+        )
+        assertEquals(emptyMap<SourceKey, HostOutageKind>(), sourceIssues(outages, sources, now = 1_000, extensionSites = mapOf(extension to "other.test")))
+    }
+
     @Test fun `picking a down source clears its outages so the search tries again`() {
         val tracker = HostOutageTracker()
         tracker.record("https://danbooru.donmai.us/posts.json", HostOutageKind.MAINTENANCE)

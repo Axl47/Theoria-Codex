@@ -26,6 +26,10 @@ import com.theoriacodex.app.media.AnimatedWebPDecoder
 import com.theoriacodex.app.media.UndecodableImageEviction
 import com.theoriacodex.app.network.AppHttpClients
 import com.theoriacodex.app.network.AppHttpClientsOwner
+import com.theoriacodex.app.network.WebViewChallengeBrowser
+import com.theoriacodex.app.media.NetworkMonitor
+import com.theoriacodex.sources.http.ChallengePass
+import com.theoriacodex.sources.http.HostOutageTracker
 import com.theoriacodex.app.viewer.VideoPlaybackInfrastructure
 import com.theoriacodex.app.viewer.VideoPlaybackInfrastructureOwner
 import com.theoriacodex.data.storage.ApplicationDataReadiness
@@ -49,8 +53,20 @@ class TheoriaApplication :
     /** The one place browser cookies reach the app's own requests: every client in [httpClients] carries its jar. */
     override val siteCookieBridge = SiteCookieBridge(AndroidBrowserCookieStore)
 
+    /** Whether the device is online, watched from the first time anything asks. */
+    private val networkOnline by lazy { NetworkMonitor(this).online }
+
+    /**
+     * Hosts known to be down or behind a browser check this session: the one record every source's client keeps,
+     * extensions' included, and that the app shows and clears the same way whichever source hit it.
+     */
+    private val hostOutages by lazy { HostOutageTracker(isOnline = { networkOnline.value }) }
+
+    /** Passes browser checks out of sight for the app's own clients and the extensions' alike. */
+    private val challengeBrowser = WebViewChallengeBrowser(this)
+
     /** Series sources that run loaded extension code. It loads nothing until first used. */
-    private val extensionHost = MihonExtensionSourceHost().also { it.attach(this) }
+    private val extensionHost = MihonExtensionSourceHost().also { it.attach(this, challengeBrowser) { hostOutages } }
 
     /** Every HTTP client in the app, so they share one connection pool and these cookies. */
     override val httpClients = AppHttpClients(
@@ -63,6 +79,8 @@ class TheoriaApplication :
         siteCookieBridge::isAllowed,
         siteCookieBridge::mediaAuthorizationFor,
         extensionHost.mediaInterceptor,
+        // Only hosts that keep the browser's cookies: a never-verified built-in site asks the user first.
+        ChallengePass(AndroidBrowserCookieStore, challengeBrowser, { hostOutages.isChallenged(it) }, siteCookieBridge::keepsCookies),
     )
 
     override val videoPlaybackInfrastructure: VideoPlaybackInfrastructure by lazy {
@@ -84,7 +102,7 @@ class TheoriaApplication :
             initializationDispatcher = Dispatchers.IO,
         ) {
             val container = initializingContainer
-                ?: DefaultTheoriaAppContainer(this@TheoriaApplication, siteCookieBridge, httpClients, extensionHost).also { created ->
+                ?: DefaultTheoriaAppContainer(this@TheoriaApplication, siteCookieBridge, httpClients, hostOutages, networkOnline, extensionHost).also { created ->
                     initializingContainer = created
                 }
             container.awaitDurableStores()

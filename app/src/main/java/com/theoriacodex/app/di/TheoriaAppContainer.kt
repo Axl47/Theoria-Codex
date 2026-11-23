@@ -1,6 +1,5 @@
 package com.theoriacodex.app.di
 
-import com.theoriacodex.app.media.NetworkMonitor
 import com.theoriacodex.app.network.AppHttpClients
 import android.content.Context
 import androidx.core.net.toUri
@@ -10,6 +9,7 @@ import com.theoriacodex.app.backup.SharedPreferencesAutoBackupStore
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
 import com.theoriacodex.app.customsites.CustomSitesController
+import com.theoriacodex.app.extensions.ExtensionSites
 import com.theoriacodex.app.extensions.MihonExtensionSourceHost
 import com.theoriacodex.app.customsites.SharedPreferencesBuiltInAgentStore
 import com.theoriacodex.app.customsites.SiteCookieBridge
@@ -226,6 +226,9 @@ interface TheoriaAppContainer {
     /** The Series area; null in a container with no extension host. */
     val series: SeriesDependencies? get() = null
 
+    /** The extension sources' sites and client, for their browser checks; null with no extension host. */
+    val extensionSites: ExtensionSites? get() = null
+
     /** Lives as long as the process: work that must finish after the screen or Activity that started it. */
     val applicationScope: CoroutineScope
 }
@@ -244,6 +247,8 @@ internal class DefaultTheoriaAppContainer(
     context: Context,
     private val cookieBridge: SiteCookieBridge,
     private val httpClients: AppHttpClients,
+    private val hostOutages: HostOutageTracker,
+    private val networkOnline: StateFlow<Boolean>,
     private val extensionHost: MihonExtensionSourceHost? = null,
 ) : TheoriaAppContainer {
     private val appContext = context.applicationContext
@@ -262,8 +267,6 @@ internal class DefaultTheoriaAppContainer(
         seedData = loadSeedTagSuggestions(appContext),
         recoveryRegistry = fileStoreRecoveryRegistry,
     )
-    private val networkOnline = NetworkMonitor(appContext).online
-    private val hostOutages = HostOutageTracker(isOnline = { networkOnline.value })
     private val siteHealthCheck = SiteHealthCheck(hostOutages, httpClients.sources)
     private val builtInAgents = SharedPreferencesBuiltInAgentStore(appContext)
     private val sourceHttpClient = DefaultSourceHttpClient(
@@ -549,6 +552,8 @@ internal class DefaultTheoriaAppContainer(
         autoBackup = autoBackup,
         profileDeletion = profileDeletion,
     )
+
+    override val extensionSites: ExtensionSites? get() = extensionHost
 
     override val series: SeriesDependencies? = extensionHost?.let { host ->
         val choices = DeviceExtensionChoices.on(appContext)

@@ -10,8 +10,10 @@ import com.theoriacodex.domain.series.SeriesExtensions
 import com.theoriacodex.domain.series.SeriesSource
 import com.theoriacodex.domain.series.defaultLanguages
 import com.theoriacodex.domain.series.trusts
+import com.theoriacodex.sources.http.HostOutageTracker
 import eu.kanade.tachiyomi.source.ConfigurableSource
 import eu.kanade.tachiyomi.source.Source
+import eu.kanade.tachiyomi.source.online.HttpSource
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -23,6 +25,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+
+/** An extension source's [name] and the [host] of its site. */
+data class ExtensionSite(val name: String, val host: String)
 
 /**
  * Decides which extension code runs and which of its sources the app offers.
@@ -68,8 +73,20 @@ class ExtensionRegistry(
      */
     private val loaded = HashMap<ExtensionPackage, Loaded>()
 
-    /** Per extension id, its sources that are on, as of the last listing. Guarded by [mutex]. */
+    /** Per extension id, its sources that are on, as of the last listing. Written under [mutex]; [sites] reads it without. */
+    @Volatile
     private var active: Map<String, List<LoadedSource>> = emptyMap()
+
+    /**
+     * The sources that are on, with their names and the hosts of their sites (an HTTP source's base address), so a
+     * challenged host can be traced to the sources it stops. Loads nothing: a source that never loaded made no request.
+     */
+    fun sites(): Map<SourceKey, ExtensionSite> = active.values.flatten().mapNotNull { loaded ->
+        // An extension's address can depend on its settings, and its code can fail.
+        val base = (loaded.source as? HttpSource)?.let { runCatching { it.baseUrl }.getOrNull() }
+        val host = base?.let(HostOutageTracker::hostKey) ?: return@mapNotNull null
+        loaded.series.key to ExtensionSite(loaded.name, host)
+    }.toMap()
 
     /** The sources on offer, with the [packages] they were listed from and [stamp] as it was read before that listing. */
     private class Offer(val sources: List<SeriesSource>, val stamp: Any, val packages: List<ExtensionPackage>)

@@ -7,7 +7,7 @@ import okhttp3.OkHttpClient
 /**
  * The HTTP client every extension starts from; an extension adds its own interceptors with `client.newBuilder()`.
  * As in Mihon, [client] shares the system browser's cookies and tries to pass a Cloudflare check out of sight; a check
- * that needs a tap fails with `BrowserCheckException`, which the Series screens offer to open.
+ * that needs a tap fails the request and marks the source as needing browser verification.
  */
 class NetworkHelper(val client: OkHttpClient, private val userAgent: () -> String) {
     @Deprecated("The regular client is the only client")

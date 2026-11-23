@@ -97,10 +97,17 @@ class SiteCookieBridge(private val store: BrowserCookieStore) {
     /** Whether [host] shares the browser's identity. On every image and API request: no allocation, and no parsing beyond the host's normalization. */
     fun isAllowed(host: String?): Boolean {
         if (host == null) return false
-        return siteHosts.any { HostOutageTracker.hostBelongsToSite(host, it) } ||
-            builtInAgents.keys.any { HostOutageTracker.hostBelongsToSite(host, it) } ||
-            setupHost?.let { HostOutageTracker.hostBelongsToSite(host, it) } == true
+        return keepsCookies(host) || setupHost?.let { HostOutageTracker.hostBelongsToSite(host, it) } == true
     }
+
+    /**
+     * Whether [host] keeps the browser's cookies for good: a saved custom site, or a built-in one verified by hand. The
+     * app's own requests try a hidden browser check only for these, so an expired clearance renews out of sight while a
+     * never-verified built-in site still asks the user, and a hidden check never widens which hosts get cookies.
+     */
+    fun keepsCookies(host: String): Boolean =
+        siteHosts.any { HostOutageTracker.hostBelongsToSite(host, it) } ||
+            builtInAgents.keys.any { HostOutageTracker.hostBelongsToSite(host, it) }
 
     val cookieJar: CookieJar = BrowserCookieJar(store, ::isAllowed)
 }

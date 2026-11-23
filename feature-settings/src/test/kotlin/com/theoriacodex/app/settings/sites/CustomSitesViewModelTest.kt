@@ -8,6 +8,7 @@ import com.theoriacodex.app.customsites.CustomSiteAvailability
 import com.theoriacodex.app.customsites.CustomSiteEdit
 import com.theoriacodex.app.customsites.CustomSiteMutation
 import com.theoriacodex.app.customsites.HeaderEdit
+import com.theoriacodex.app.source.SiteChecks
 import com.theoriacodex.app.ui.undo.DEFAULT_UNDO_DURATION
 import com.theoriacodex.app.ui.undo.PendingRemoval
 import com.theoriacodex.domain.model.SourceKey
@@ -35,7 +36,9 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class CustomSitesViewModelTest {
     private val controller = FakeCustomSitesController()
-    private fun TestScope.owner() = CustomSitesViewModel(controller, backgroundScope).also { runCurrent() }
+    private lateinit var checks: SiteChecks
+    private fun TestScope.owner() =
+        CustomSitesViewModel(controller, siteChecks(controller, backgroundScope).also { checks = it }, backgroundScope).also { runCurrent() }
 
     private fun TestScope.probeAddress(owner: CustomSitesViewModel, input: String = "safebooru.org") {
         owner.onAction(CustomSitesAction.StartAdd)
@@ -334,7 +337,7 @@ class CustomSitesViewModelTest {
         controller.sites.value = listOf(site())
         val ownerScope = CoroutineScope(backgroundScope.coroutineContext + Job())
         val store = ViewModelStore()
-        val owner = CustomSitesViewModel(controller, ownerScope, backgroundScope)
+        val owner = CustomSitesViewModel(controller, siteChecks(controller), ownerScope, backgroundScope)
         store.put("sites", owner)
         runCurrent()
         owner.onAction(CustomSitesAction.StartEdit("custom_safebooru_org"))
@@ -423,17 +426,6 @@ class CustomSitesViewModelTest {
         assertNull(controller.setupRequest.value)
     }
 
-    @Test fun `a verification request opens that site's browser check without opening its form`() = runTest {
-        controller.sites.value = listOf(site())
-        val owner = owner()
-        controller.requestVerification("custom_safebooru_org")
-        runCurrent()
-        assertNull(owner.state.value.form)
-        assertEquals("safebooru.org", owner.state.value.verification?.host)
-        assertEquals("safebooru.org", controller.setupHosts.last())
-        assertNull(controller.setupRequest.value)
-    }
-
     @Test fun `a link that led to setup travels with the saved site, unless the address changes`() = runTest {
         controller.onProbe = { supported() }
         val owner = owner()
@@ -473,63 +465,6 @@ class CustomSitesViewModelTest {
         assertEquals(AddStage.Address(), owner.add.stage)
     }
 
-    @Test fun `passing a browser check while adding offers the key fields`() = runTest {
-        controller.onProbe = { call -> if (call.headers.userAgent == "WebView/1") supported() else blocked }
-        val owner = owner()
-        probeAddress(owner)
-        owner.onAction(CustomSitesAction.StartVerification("safebooru.org", afterRefusal = true))
-        owner.onAction(CustomSitesAction.ConfirmVerification("WebView/1"))
-        runCurrent()
-
-        assertTrue(owner.add.stage is AddStage.Confirm)
-        assertTrue(owner.add.showCredentials)
-    }
-
-    private val blocked = SiteProbeResult.Unreachable(address("safebooru.org"), ProbeFailure.BLOCKED)
-
-    private fun TestScope.startVerification(owner: CustomSitesViewModel, afterRefusal: Boolean = false) {
-        owner.onAction(CustomSitesAction.StartVerification("safebooru.org", afterRefusal))
-        runCurrent()
-    }
-
-    private fun TestScope.pageLoaded(owner: CustomSitesViewModel, cookies: String?, userAgent: String = "WebView/1") {
-        owner.onAction(CustomSitesAction.VerificationPageLoaded(userAgent, cookies))
-        runCurrent()
-    }
-
-    @Test fun `a page load checks again only when the cookies changed`() = runTest {
-        controller.sites.value = listOf(site())
-        controller.onCheckVerification = { _, _ -> blocked }
-        val owner = owner()
-        startVerification(owner)
-
-        pageLoaded(owner, cookies = null)
-        pageLoaded(owner, cookies = null)
-        assertEquals(1, controller.checks.size)
-        pageLoaded(owner, cookies = "cf=1")
-        pageLoaded(owner, cookies = "cf=1")
-        assertEquals(2, controller.checks.size)
-        assertFalse(owner.state.value.verification!!.checking)
-    }
-
-    @Test fun `a pass after a refusal closes the page and shows on the row`() = runTest {
-        controller.sites.value = listOf(site())
-        val answers = ArrayDeque(listOf(blocked, supported()))
-        controller.onCheckVerification = { _, _ -> answers.removeFirst() }
-        val owner = owner()
-        startVerification(owner)
-
-        pageLoaded(owner, cookies = null)
-        val open = owner.state.value.verification!!
-        assertTrue(open.sawRefusal)
-        assertNull(open.message)
-
-        pageLoaded(owner, cookies = "cf=1", userAgent = "WebView/2")
-        assertNull(owner.state.value.verification)
-        assertEquals(RetestStatus.Done("Working", ok = true), owner.state.value.retests["custom_safebooru_org"])
-        assertEquals(listOf("custom_safebooru_org" to "WebView/2"), controller.completions)
-    }
-
     @Test fun `Test all names each site in turn, built-in then added, and sums up how it went`() = runTest {
         val iwara = BuiltInSiteSummary(SourceKey.IWARA, "Iwara", "www.iwara.tv", working = false, needsVerification = false)
         controller.builtInSites.value = listOf(iwara)
@@ -556,110 +491,46 @@ class CustomSitesViewModelTest {
         assertEquals("1 of 2 working", owner.state.value.testSummary)
     }
 
-    @Test fun `a built-in source's browser check follows the same rules and needs no saved site`() = runTest {
-        val iwara = BuiltInSiteSummary(SourceKey.IWARA, "Iwara", "www.iwara.tv", working = false, needsVerification = true)
-        controller.builtInSites.value = listOf(iwara)
-        val answers = ArrayDeque(listOf(false, true))
-        controller.onCheckBuiltIn = { _, _ -> answers.removeFirst() }
-        val owner = owner()
-
-        controller.requestVerification(SourceKey.IWARA.id)
+    /** Opens the check for [host] and lets the browser through a page with [userAgent]. */
+    private fun TestScope.passCheck(owner: CustomSitesViewModel, host: String, userAgent: String = "WebView/1") {
+        owner.onAction(CustomSitesAction.StartVerification(host))
+        checks.pageLoaded(requireNotNull(checks.opened), userAgent, letThrough = true)
         runCurrent()
-        assertEquals("www.iwara.tv", owner.state.value.verification?.host)
-
-        pageLoaded(owner, cookies = null)
-        assertEquals(emptyList<Pair<SourceKey, String>>(), controller.builtInCompletions)
-        assertTrue(owner.state.value.verification != null)
-
-        pageLoaded(owner, cookies = "cf=1", userAgent = "WebView/2")
-        assertNull(owner.state.value.verification)
-        assertEquals(listOf(SourceKey.IWARA to "WebView/2"), controller.builtInCompletions)
-        assertNull(controller.setupHosts.last())
     }
 
-    @Test fun `a first check that passes on a voluntary visit leaves the page open and writes nothing`() = runTest {
-        controller.sites.value = listOf(site())
-        controller.onCheckVerification = { _, _ -> supported() }
-        val owner = owner()
-        startVerification(owner)
-
-        pageLoaded(owner, cookies = null)
-
-        val open = owner.state.value.verification!!
-        assertEquals(verificationAlreadyOpenMessage("safebooru.org"), open.message)
-        assertFalse(open.checking)
-        assertEquals(1, controller.checks.size)
-        assertTrue(controller.completions.isEmpty())
-        assertTrue(owner.state.value.retests.isEmpty())
-    }
-
-    @Test fun `a first check that passes after a known refusal closes the page and completes`() = runTest {
-        controller.sites.value = listOf(site())
-        controller.onCheckVerification = { _, _ -> supported() }
-        val owner = owner()
-        startVerification(owner, afterRefusal = true)
-
-        pageLoaded(owner, cookies = "cf=1")
-
-        assertNull(owner.state.value.verification)
-        assertEquals(listOf("custom_safebooru_org" to "WebView/1"), controller.completions)
-        assertEquals(RetestStatus.Done("Working", ok = true), owner.state.value.retests["custom_safebooru_org"])
-    }
-
-    @Test fun `Done that is refused stays open with a message and a pass closes it`() = runTest {
-        controller.sites.value = listOf(site())
-        val answers = ArrayDeque(listOf(blocked, supported()))
-        controller.onCheckVerification = { _, _ -> answers.removeFirst() }
-        val owner = owner()
-        startVerification(owner)
-
-        owner.onAction(CustomSitesAction.ConfirmVerification("WebView/1"))
-        runCurrent()
-        assertEquals(verificationRefusedMessage("safebooru.org"), owner.state.value.verification?.message)
-        assertTrue(controller.completions.isEmpty())
-
-        owner.onAction(CustomSitesAction.ConfirmVerification("WebView/1"))
-        runCurrent()
-        assertNull(owner.state.value.verification)
-        assertEquals(1, controller.completions.size)
-    }
-
-    @Test fun `a verified agent also fills the open Edit form so Save keeps it`() = runTest {
+    @Test fun `a stored or built-in site's check runs on the shared page and a pass reaches its row and Edit form`() = runTest {
         controller.sites.value = listOf(site(headers = SiteHeaders(userAgent = "Old/1")))
-        controller.onCheckVerification = { _, _ -> supported() }
+        controller.builtInSites.value = listOf(BuiltInSiteSummary(SourceKey.IWARA, "Iwara", "www.iwara.tv", working = false, needsVerification = true))
+        controller.onCheckVerification = { _, _ -> true }
         val owner = owner()
         owner.onAction(CustomSitesAction.StartEdit("custom_safebooru_org"))
-        startVerification(owner)
 
-        owner.onAction(CustomSitesAction.ConfirmVerification("WebView/2"))
-        runCurrent()
+        passCheck(owner, "safebooru.org", userAgent = "WebView/2")
+        passCheck(owner, "www.iwara.tv")
 
+        assertNull(checks.opened)
+        assertEquals(listOf(SourceKey.parseOrThrow("custom_safebooru_org") to "WebView/2", SourceKey.IWARA to "WebView/1"), controller.completions)
         assertEquals("WebView/2", (owner.state.value.form as SiteForm.Edit).fields.userAgent)
     }
 
-    @Test fun `the setup host is set while verifying and released on cancel and after the add form saves`() = runTest {
+    @Test fun `passing a browser check while adding offers the key fields, and the site keeps its cookies until it is saved`() = runTest {
         controller.onProbe = { call -> if (call.headers.userAgent == null) blocked else supported() }
         val owner = owner()
         probeAddress(owner)
         assertEquals(blocked.address.host, (owner.add.stage as AddStage.Address).blockedHost)
 
-        startVerification(owner, afterRefusal = true)
-        assertEquals("safebooru.org", controller.setupHosts.last())
-        owner.onAction(CustomSitesAction.CancelVerification)
-        assertNull(controller.setupHosts.last())
-        assertNull(owner.state.value.verification)
+        passCheck(owner, "safebooru.org")
 
-        startVerification(owner, afterRefusal = true)
-        owner.onAction(CustomSitesAction.ConfirmVerification("WebView/1"))
-        runCurrent()
-        // The page closed on a pass, but the unsaved site still needs its cookies.
-        assertNull(owner.state.value.verification)
+        assertNull(checks.opened)
         assertEquals("safebooru.org", controller.setupHosts.last())
         assertEquals("WebView/1", owner.add.fields.userAgent)
+        assertTrue(owner.add.showCredentials)
         assertEquals(AddStage.Confirm(supported()), owner.add.stage)
 
         owner.onAction(CustomSitesAction.SaveNew)
         runCurrent()
         assertNull(controller.setupHosts.last())
     }
+
+    private val blocked = SiteProbeResult.Unreachable(address("safebooru.org"), ProbeFailure.BLOCKED)
 }

@@ -74,6 +74,8 @@ import com.theoriacodex.app.statistics.encodeStatsShare
 import com.theoriacodex.app.statistics.parseStatsShare
 import com.theoriacodex.app.statistics.statisticsPostKey
 import com.theoriacodex.app.source.SharedPostFix
+import com.theoriacodex.app.source.SiteChecks
+import com.theoriacodex.app.network.AndroidBrowserCookieStore
 import com.theoriacodex.app.source.parseCustomSitePostDeepLink
 import com.theoriacodex.app.source.sharedPostFix
 import com.theoriacodex.app.source.parseExternalPostDeepLink
@@ -275,6 +277,8 @@ internal class ShellOwners(
     val settings: SettingsViewModel,
     val follows: CreatorFollowsViewModel,
     val codexImports: CodexImportViewModel,
+    /** The one browser check page, shown over every screen. */
+    val siteChecks: SiteChecks,
 )
 
 @Composable
@@ -282,6 +286,9 @@ private fun rememberShellOwners(container: TheoriaAppContainer, appContext: Cont
     val data = container.data
     val workflows = container.workflows
     val savedSearches = viewModel(key = "saved-searches") { SavedSearchViewModel(data.savedSearches) }
+    val siteChecks = viewModel(key = "site-checks") {
+        SiteChecks(AndroidBrowserCookieStore, container.customSites::setSetupHost, targetFor = { siteCheckTarget(container, it) })
+    }
     val codexCommands = viewModel(key = "codex-command-owner") {
         CodexCommandViewModel(
             data.codexRepository, workflows.likesCodexSync::clearProfile, workflows.likesCodexSync::restoreClearedLikes,
@@ -308,8 +315,8 @@ private fun rememberShellOwners(container: TheoriaAppContainer, appContext: Cont
             newTargetCodexId = { profileScopedCodexId(data.currentActiveRecommendationProfile().profileId) },
         )
     }
-    return remember(savedSearches, codexCommands, postMutations, codexSaves, settings, follows, codexImports) {
-        ShellOwners(savedSearches, codexCommands, postMutations, codexSaves, settings, follows, codexImports)
+    return remember(savedSearches, codexCommands, postMutations, codexSaves, settings, follows, codexImports, siteChecks) {
+        ShellOwners(savedSearches, codexCommands, postMutations, codexSaves, settings, follows, codexImports, siteChecks)
     }
 }
 
@@ -652,11 +659,13 @@ internal class TheoriaShell(
         } catch (error: Throwable) {
             toast(error.message ?: "Could not open ${deepLink.sourceLabel} URL")
             when (sharedPostFix(deepLink.source, error)) {
-                SharedPostFix.ADD_KEY -> container.customSites.requestKeyEntry(deepLink.source.id)
-                SharedPostFix.VERIFY -> container.customSites.requestVerification(deepLink.source.id)
-                null -> return
+                SharedPostFix.ADD_KEY -> {
+                    container.customSites.requestKeyEntry(deepLink.source.id)
+                    owners.settings.onAction(SettingsAction.OpenCustomSites)
+                }
+                SharedPostFix.VERIFY -> owners.siteChecks.open(deepLink.source)
+                null -> Unit
             }
-            owners.settings.onAction(SettingsAction.OpenCustomSites)
             return
         }
         if (resolved == null) {

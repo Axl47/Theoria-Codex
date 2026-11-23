@@ -26,8 +26,6 @@ data class CustomSitesUiState(
     val removals: Map<String, PendingRemoval> = emptyMap(),
     /** A short failure message shown above the list until the next action. */
     val notice: String? = null,
-    /** The in-app browser check that is open, if any. */
-    val verification: SiteVerification? = null,
 ) {
     /** The added sites as the list shows them, without those waiting to be removed. */
     val shownSites: List<CustomSiteSummary> get() = sites.filterNot { it.sourceId in removals }
@@ -35,20 +33,6 @@ data class CustomSitesUiState(
 
 /** Test all is on the [position]th of [total] sites, named [label]. */
 data class SitesTestProgress(val label: String, val position: Int, val total: Int)
-
-/**
- * A browser check in progress for [host], a built-in source, a saved site or the one in the Add form. [checking] while the
- * app tests whether its own requests get through; [message] explains the last refusal or a check that
- * found the site already open; [sawRefusal] once the app is known to have been refused (before the page
- * opened, or by a check since), so the page closes itself on the next pass.
- */
-data class SiteVerification(
-    val host: String,
-    val checking: Boolean = false,
-    val message: String? = null,
-    val messageIsError: Boolean = false,
-    val sawRefusal: Boolean = false,
-)
 
 /** Text fields shared by the add and edit forms. Blank header fields mean "use the default". */
 data class SiteFields(
@@ -150,16 +134,6 @@ sealed interface CustomSitesAction {
     data object CommitRemovals : CustomSitesAction
     data object DismissNotice : CustomSitesAction
 
-    /**
-     * Opens the browser check for [host]. [afterRefusal] when the app was just refused by it (a blocked
-     * add, re-test or source), so the first pass closes the page; false for a voluntary visit.
-     */
-    data class StartVerification(val host: String, val afterRefusal: Boolean) : CustomSitesAction
-    data object CancelVerification : CustomSitesAction
-
-    /** Done: the user says the check is passed. [userAgent] is the WebView's, which its clearance is bound to. */
-    data class ConfirmVerification(val userAgent: String) : CustomSitesAction
-
-    /** The page finished loading; [cookies] are the browser's for the site, to tell whether they changed. */
-    data class VerificationPageLoaded(val userAgent: String, val cookies: String?) : CustomSitesAction
+    /** Opens the app's browser check for [host]: a built-in, stored or Add form site. */
+    data class StartVerification(val host: String) : CustomSitesAction
 }

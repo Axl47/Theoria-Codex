@@ -265,10 +265,10 @@ class CustomSitesControllerImplTest {
         outages.record("https://booru.example/posts.json", HostOutageKind.CHALLENGE)
         now = 5_000L
 
-        assertTrue(graph.controller.checkVerification(SITE.id, "WebView/2") is SiteProbeResult.Supported)
+        assertTrue(graph.controller.checkVerification(SITE, "WebView/2"))
         assertEquals(SiteHeaders(userAgent = "WebView/2", referer = "https://ref.example/"), family.probedWith)
         family.answer = FamilyProbe.Failed(ProbeFailure.BLOCKED)
-        assertEquals(SiteProbeResult.Unreachable(ADDRESS, ProbeFailure.BLOCKED), graph.controller.checkVerification(SITE.id, "WebView/2"))
+        assertFalse(graph.controller.checkVerification(SITE, "WebView/2"))
 
         val site = graph.controller.sites.value.single()
         assertEquals(stored, site.headers)
@@ -283,8 +283,10 @@ class CustomSitesControllerImplTest {
         graph.controller.add(draft().copy(headers = SiteHeaders(userAgent = "Old/1", referer = "https://ref.example/")))
         outages.record("https://booru.example/posts.json", HostOutageKind.CHALLENGE)
         now = 5_000L
+        assertTrue(graph.controller.checkVerification(SITE, "WebView/2"))
+        family.probedWith = null
 
-        graph.controller.completeVerification(SITE.id, "WebView/2", working = true)
+        graph.controller.completeVerification(SITE, "WebView/2")
 
         assertEquals(setOf("booru.example"), outages.working.value)
         val site = graph.controller.sites.value.single()
@@ -299,7 +301,7 @@ class CustomSitesControllerImplTest {
     fun `an edit to one header keeps the other as stored`() = runTest {
         val graph = graph()
         graph.controller.add(draft().copy(headers = SiteHeaders(userAgent = "Old/1", referer = "https://ref.example/")))
-        graph.controller.completeVerification(SITE.id, "WebView/2", working = true)
+        graph.controller.completeVerification(SITE, "WebView/2")
 
         graph.controller.update(SITE.id, CustomSiteEdit(referer = HeaderEdit.Replace(null)))
 
@@ -344,10 +346,10 @@ class CustomSitesControllerImplTest {
         outages.record("https://api.iwara.tv/videos", HostOutageKind.CHALLENGE)
 
         challengeCleared = false
-        assertFalse(graph.controller.checkBuiltInVerification(SourceKey.IWARA, "WebView/2"))
+        assertFalse(graph.controller.checkVerification(SourceKey.IWARA, "WebView/2"))
         challengeCleared = true
         clearanceChecks.clear()
-        assertTrue(graph.controller.checkBuiltInVerification(SourceKey.IWARA, "WebView/2"))
+        assertTrue(graph.controller.checkVerification(SourceKey.IWARA, "WebView/2"))
 
         assertEquals(
             listOf("https://www.iwara.tv/" to "WebView/2", "https://api.iwara.tv/" to "WebView/2"),
@@ -366,7 +368,7 @@ class CustomSitesControllerImplTest {
         assertNull(bridge.userAgentFor("https://api.iwara.tv/videos"))
         assertNull(bridge.cookiesFor("https://api.iwara.tv/videos"))
 
-        graph.controller.completeBuiltInVerification(SourceKey.IWARA, "WebView/2")
+        graph.controller.completeVerification(SourceKey.IWARA, "WebView/2")
 
         assertEquals("WebView/2", bridge.userAgentFor("https://api.iwara.tv/videos"))
         assertNull("other sources are untouched", bridge.userAgentFor("https://gelbooru.com/"))
