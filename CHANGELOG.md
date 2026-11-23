@@ -90,6 +90,7 @@
 
 ### Fixed
 
+- Tapping a tab while the app was still sliding past it to another tab did nothing. It now goes to the tab you tapped.
 - Undoing a save to a Codex you just created with New also removes that Codex, instead of leaving it behind empty.
 - History was blank while it loaded. It now shows that it is loading.
 - The offline storage error told you to reopen storage. It now has a Retry button.

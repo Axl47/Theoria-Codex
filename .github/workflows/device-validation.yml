@@ -76,6 +76,9 @@ jobs:
       - name: Build isolated test APKs before starting the emulator
         run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest :core-data-android:assembleDebugAndroidTest --console=plain
 
+      - name: Stop Gradle daemons before starting the emulator
+        run: ./gradlew --stop
+
       # The wrapper records a verdict only when the emulator outlives the tests. An attempt without one lost
       # its emulator (a corrupt SDK download, a failed boot, or a crash) and runs once more on a fresh one.
       - name: Run connected device tests
@@ -175,6 +178,9 @@ jobs:
 
       - name: Build minified release acceptance
         run: ./gradlew :app:assembleReleaseAcceptance --stacktrace
+
+      - name: Stop Gradle daemons before starting the emulator
+        run: ./gradlew --stop
 
       - name: Free disk space for the emulator
         run: bash scripts/free_ci_disk.sh

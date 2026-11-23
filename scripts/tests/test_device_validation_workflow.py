@@ -53,6 +53,31 @@ class DeviceValidationWorkflowTest(unittest.TestCase):
         self.assertLess(acceptance.index('mkdir -p "$android_user_home"'),
                         acceptance.index("run: ./gradlew :app:assembleReleaseAcceptance"))
 
+    def test_gradle_daemons_are_stopped_between_apk_build_and_emulator_boot(self) -> None:
+        connected = self.workflow.split("  connected-tests:", 1)[1].split("  release-acceptance:", 1)[0]
+        acceptance = self.workflow.split("  release-acceptance:", 1)[1].split("  record:", 1)[0]
+        for name, job, build_cmd, boot_step in (
+            (
+                "connected-tests",
+                connected,
+                "run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest :core-data-android:assembleDebugAndroidTest",
+                "uses: reactivecircus/android-emulator-runner@v2",
+            ),
+            (
+                "release-acceptance",
+                acceptance,
+                "run: ./gradlew :app:assembleReleaseAcceptance",
+                "uses: reactivecircus/android-emulator-runner@v2",
+            ),
+        ):
+            with self.subTest(job=name):
+                self.assertIn("run: ./gradlew --stop", job)
+                build_pos = job.index(build_cmd)
+                stop_pos = job.index("run: ./gradlew --stop")
+                boot_pos = job.index(boot_step)
+                self.assertLess(build_pos, stop_pos)
+                self.assertLess(stop_pos, boot_pos)
+
     def test_release_runs_only_the_results_that_are_missing(self) -> None:
         release = RELEASE_WORKFLOW.read_text(encoding="utf-8")
         verify = release.split("  verify:", 1)[1].split("\n  device-validation:", 1)[0]
