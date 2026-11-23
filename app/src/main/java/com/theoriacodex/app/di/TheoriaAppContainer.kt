@@ -24,6 +24,7 @@ import com.theoriacodex.app.media.codexOfflineOwner
 import com.theoriacodex.app.codex.LikesCodexSyncService
 import com.theoriacodex.app.codex.transfer.CodexTransferService
 import com.theoriacodex.app.recommend.ForYouCoordinator
+import com.theoriacodex.app.recommend.PictureEvidence
 import com.theoriacodex.app.recommend.SharedTagAffinity
 import com.theoriacodex.app.recommend.shareTagAffinityInputs
 import com.theoriacodex.app.comments.CommentsLoader
@@ -90,7 +91,11 @@ import com.theoriacodex.data.android.room.RoomVisualSignatureRepository
 import com.theoriacodex.data.repository.ForYouVerdictRepository
 import com.theoriacodex.data.repository.VisualSignatureRepository
 import com.theoriacodex.app.media.LibraryPictureBackfill
-import com.theoriacodex.app.media.chargingState
+import com.theoriacodex.app.vision.AppPictures
+import com.theoriacodex.app.vision.ModelState
+import com.theoriacodex.app.vision.appPictures
+import com.theoriacodex.app.vision.scheduleLibraryPictures
+import com.theoriacodex.domain.vision.PictureTags
 import com.theoriacodex.data.android.room.RoomMediaDurationRepository
 import com.theoriacodex.data.android.room.RoomRecentsRepository
 import com.theoriacodex.data.android.room.RoomSeriesRepository
@@ -128,6 +133,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -201,6 +208,8 @@ data class FeatureDependencies(
     val offlineMedia: OfflineMediaCoordinator,
     /** The one download queue every Activity instance uses (see [appPostDownloads]). */
     val postDownloads: PostDownloads,
+    /** What the opt-in picture tagger predicts; [PictureTags.None] while there is no model or no tagger. */
+    val pictureTags: PictureTags = PictureTags.None,
 )
 
 data class WorkflowDependencies(
@@ -227,6 +236,9 @@ interface TheoriaAppContainer {
 
     /** The extension sources' sites and client, for their browser checks; null with no extension host. */
     val extensionSites: ExtensionSites? get() = null
+
+    /** The Library's picture indexing and the opt-in picture tagger; null in a container without them. */
+    val pictures: AppPictures? get() = null
 
     /** Lives as long as the process: work that must finish after the screen or Activity that started it. */
     val applicationScope: CoroutineScope
@@ -352,6 +364,10 @@ internal class DefaultTheoriaAppContainer(
     private val profileWriteGuard = ProfileLibraryWriteGuard()
     private val contentRepository = RoomCodexLikesRepository(contentDatabase, writeGuard = profileWriteGuard)
     private val visualSignatures = RoomVisualSignatureRepository(contentDatabase)
+    override val pictures = appPictures(
+        appContext, httpClients.shared, visualSignatures, LibraryPictureBackfill(visualSignatures, listingPictures.hasher::hash),
+        durableStoreScope,
+    )
     private val codexRepository: CodexRepository = contentRepository
     private val likesRepository: LikesRepository = contentRepository
     private val codexLikesTransactions: CodexLikesTransactions = contentRepository
@@ -493,6 +509,7 @@ internal class DefaultTheoriaAppContainer(
 
     private val tagAffinity = shareTagAffinityInputs(
         durableStoreScope, settingsRepository, likesRepository, codexRepository, savedSearches, statisticsRepository,
+        predicted = pictures.tagger.library,
     )
 
     override val features = FeatureDependencies(
@@ -512,7 +529,10 @@ internal class DefaultTheoriaAppContainer(
             registry = sourceRegistry,
             likesRepository = likesRepository,
             statisticsRepository = statisticsRepository,
-            tagAffinity = tagAffinity::forProfile,
+            // Deleting the model plans lanes again at once, before the shared inputs drop its evidence.
+            tagAffinity = { profile ->
+                tagAffinity.forProfile(profile).let { if (pictures.tagger.ready.value) it else it.copy(pictures = PictureEvidence()) }
+            },
             tagSuggestionStore = tagSuggestionStore,
             postResolutions = postResolutions,
             fileMirrors = data.fileMirrors,
@@ -528,6 +548,7 @@ internal class DefaultTheoriaAppContainer(
         offlineMedia = offlineMedia,
         postDownloads = appPostDownloads(appContext, File(storageDirectory, "download_jobs.json"), durableStoreScope,
             settingsRepository, sources, sourceReadiness::await),
+        pictureTags = pictures.tagger,
     )
 
     override val workflows = WorkflowDependencies(
@@ -656,11 +677,18 @@ internal class DefaultTheoriaAppContainer(
                 }
             }
         }
-        // Optional upkeep: if it fails (say the battery broadcast cannot be read), saves still store their hashes.
+        // Optional upkeep, run by JobScheduler while charging: at every start, whenever the model comes or goes, and
+        // whenever the Library gains or loses a post.
         durableStoreScope.launch {
             runCatchingPreservingCancellation {
-                LibraryPictureBackfill(visualSignatures, listingPictures.hasher::hash, appContext.chargingState()).run()
-            }.onFailure { Diagnostics.report("similarity", "The Library's pictures could not be hashed", it) }
+                val model = pictures.model.states.filter { it == ModelState.Absent || it == ModelState.Ready }.distinctUntilChanged()
+                combine(model, pictures.progress.map { it.total }.distinctUntilChanged()) { _, _ -> }
+                    .collect { scheduleLibraryPictures(appContext) }
+            }.onFailure { Diagnostics.report("similarity", "The Library's picture indexing could not be scheduled", it) }
+        }
+        durableStoreScope.launch {
+            runCatchingPreservingCancellation { pictures.tags.writeThrough() }
+                .onFailure { Diagnostics.report("vision", "This session's picture tags could not be stored", it) }
         }
         // Off the startup path: searched-tag suggestions start from what Recents remembers.
         durableStoreScope.launch {

@@ -154,9 +154,10 @@ class TriageDeckTest {
         assertEquals(tagged[1], deck.state.value.next)
     }
 
-    @Test fun `a hide passes over the tag only on the source it was hidden on`() = runTest {
-        val elsewhere = testPost(SourceKey.GELBOORU, "g", canonicalTags = listOf("cat"))
-        val tagged = listOf(testPost(sourcePostId = "a", canonicalTags = listOf("cat")), testPost(sourcePostId = "b", canonicalTags = listOf("cat")), elsewhere)
+    @Test fun `a hide passes over the tag on every source sharing its vocabulary, and only there`() = runTest {
+        val booru = testPost(SourceKey.GELBOORU, "g", canonicalTags = listOf("cat"))
+        val elsewhere = testPost(SourceKey.HITOMI, "h", canonicalTags = listOf("cat"))
+        val tagged = listOf(testPost(sourcePostId = "a", canonicalTags = listOf("cat")), booru, elsewhere)
         val deck = deck(FakeFeed(tagged, canLoadMore = false))
         deck.decideCurrent(TriageChoice.Hide("cat"))
         assertEquals(elsewhere, deck.state.value.current)
@@ -166,9 +167,9 @@ class TriageDeckTest {
         val tagged = listOf(testPost(sourcePostId = "a", canonicalTags = listOf("Big_Cat")), testPost(sourcePostId = "b", canonicalTags = listOf("big cat")), posts[2])
         val deck = deck(FakeFeed(tagged, canLoadMore = false))
         assertEquals(tagged[0], deck.state.value.current)
-        ownerHidden.value = mapOf(SourceKey.GELBOORU to setOf("big cat"))
+        ownerHidden.value = mapOf(SourceKey.HITOMI to setOf("big cat"))
         assertEquals(tagged[0], deck.state.value.current)
-        ownerHidden.value = mapOf(SourceKey.PIXIV to setOf("big cat"))
+        ownerHidden.value = mapOf(SourceKey.GELBOORU to setOf("big cat"))
         assertEquals(posts[2], deck.state.value.current)
     }
 

@@ -126,6 +126,8 @@
             android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
         <service android:name=".series.SeriesDownloadJobService"
             android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
+        <service android:name=".vision.LibraryPictureJobService"
+            android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
     </application>
 
 </manifest>

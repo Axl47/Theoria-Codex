@@ -169,6 +169,7 @@ test_tasks=(
   :mihon-host:compileDebugAndroidTestKotlin
   :ui-kit:testDebugUnitTest
   :media-kit:testDebugUnitTest
+  :vision-kit:testDebugUnitTest
   :feed-kit:testDebugUnitTest
   :feature-viewer:testDebugUnitTest
   :feature-search:testDebugUnitTest
@@ -189,6 +190,7 @@ detekt_tasks=(
   :mihon-host:detektDebug
   :ui-kit:detektDebug
   :media-kit:detektDebug
+  :vision-kit:detektDebug
   :feed-kit:detektDebug
   :feature-viewer:detektDebug
   :feature-search:detektDebug
@@ -201,7 +203,7 @@ detekt_tasks=(
   :core-sources:detektMain
   :core-stubs:detektMain
 )
-lint_tasks=(:app:lint :core-data-android:lintDebug :mihon-host:lintDebug :ui-kit:lintDebug :media-kit:lintDebug :feed-kit:lintDebug :feature-viewer:lintDebug :feature-search:lintDebug :feature-library:lintDebug :feature-discover:lintDebug :feature-series:lintDebug :feature-settings:lintDebug)
+lint_tasks=(:app:lint :core-data-android:lintDebug :mihon-host:lintDebug :ui-kit:lintDebug :media-kit:lintDebug :vision-kit:lintDebug :feed-kit:lintDebug :feature-viewer:lintDebug :feature-search:lintDebug :feature-library:lintDebug :feature-discover:lintDebug :feature-series:lintDebug :feature-settings:lintDebug)
 # Everything lint shares with the tests and Detekt: all compilation and code generation. Once these
 # are built, a lint build and a tests-and-Detekt build have no task left in common, so the two can
 # run at the same time without writing the same output or reading sources mid-generation.
@@ -225,6 +227,9 @@ shared_tasks=(
   :media-kit:compileDebugUnitTestKotlin
   :media-kit:compileDebugUnitTestJavaWithJavac
   :media-kit:bundleLibRuntimeToJarDebug
+  :vision-kit:compileDebugUnitTestKotlin
+  :vision-kit:compileDebugUnitTestJavaWithJavac
+  :vision-kit:bundleLibRuntimeToJarDebug
   :feed-kit:compileDebugUnitTestKotlin
   :feed-kit:compileDebugUnitTestJavaWithJavac
   :feed-kit:bundleLibRuntimeToJarDebug
@@ -316,6 +321,7 @@ run_lint() {
     :core-data-android:compileDebugKotlin \
     :ui-kit:compileDebugKotlin \
     :media-kit:compileDebugKotlin \
+    :vision-kit:compileDebugKotlin \
     :feed-kit:compileDebugKotlin \
     :feature-viewer:compileDebugKotlin \
     :feature-search:compileDebugKotlin \

@@ -73,9 +73,15 @@ internal class ForYouLanesLoader(
         val documents = training.documentsFor(source)
         val translate = { tag: String, into: SourceKey -> training.translate(tag, source, into) }
         val affinity = affinity.respellChosen { training.spellSaved(it, source) }
+        // Predicted tags are Danbooru's words, spelled for the source when it shares that vocabulary.
+        val pictured = affinity.pictures.candidates.mapNotNull { token ->
+            training.translate(token.replace(' ', '_'), SourceKey.DANBOORU, source)?.let { it to token }
+        }.toMap()
         var unavailable = emptySet<String>()
         for (round in 1..AVAILABILITY_ROUNDS) {
-            val interests = ForYouInterests.generate(source, documents, affinity, translate, unavailable, random())
+            val interests = ForYouInterests.generate(
+                source, documents, affinity, translate, unavailable, random(), pictureCandidates = pictured,
+            )
             val providerCounts = counts.fetch(source, interests.flatMap { it.tags })
             val missing = interests.flatMap { it.tags }.filterTo(mutableSetOf()) { providerCounts[it] == 0 }
             if (missing.isEmpty() || round == AVAILABILITY_ROUNDS) return interests.filter { it.tags.none(missing::contains) }

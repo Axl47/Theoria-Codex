@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application>
+    <application android:networkSecurityConfig="@xml/acceptance_network_security_config">
         <activity
             android:name="com.theoriacodex.app.acceptance.ReleaseDataAcceptanceActivity"
+            android:exported="true" />
+        <activity
+            android:name="com.theoriacodex.app.acceptance.VisionAcceptanceActivity"
             android:exported="true" />
     </application>
 </manifest>

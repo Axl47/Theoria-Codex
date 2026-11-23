@@ -15,7 +15,9 @@ data class ForYouInterest(val tags: List<String>)
  * the tags of what the profile liked ([documents], which may be other sources' Likes translated), kept on the source, or
  * chose. Once the source has the history, a candidate leads a lane only when [TagAffinity.proven] there, or, spelled
  * by [translate], on another source sharing its vocabulary, so a character followed on Pixiv seeds the boorus too.
- * Before that history every informative candidate may lead. Tags that keep appearing together on Likes stay together
+ * Before that history every informative candidate may lead. [pictureCandidates] adds tags the picture tagger predicted
+ * on kept posts (in the source's spelling, mapped to their Danbooru spelling); one leads only when
+ * [pictureAffinity] proves it, and backs a provider candidate that nothing else proves. Tags that keep appearing together on Likes stay together
  * as one interest.
  */
 object ForYouInterests {
@@ -32,6 +34,7 @@ object ForYouInterests {
         unavailable: Set<String> = emptySet(),
         random: Random? = null,
         maxInterests: Int = 4,
+        pictureCandidates: Map<String, String> = emptyMap(),
     ): List<ForYouInterest> {
         val normalized = documents.map { RecommendationTagNormalization.normalizeDistinct(source, it, 40) }
         val stats = TagAffinityBuilder.build(normalized, maxTagsPerDocument = 40)
@@ -43,19 +46,24 @@ object ForYouInterests {
         }
         val leads = mutableMapOf<String, Double>()
         val guesses = mutableMapOf<String, Double>()
+        val provided = (counts.keys + ownTags).mapTo(mutableSetOf(), ::normalizeMatchToken)
+        val pictured = pictureCandidates.mapKeys { normalizeMatchToken(it.key) }
         // One candidate per matching key, in the spelling a Like gave it when one did.
-        for (tag in (counts.keys + ownTags).distinctBy(::normalizeMatchToken) - unavailable) {
+        for (tag in (counts.keys + ownTags + pictureCandidates.keys).distinctBy(::normalizeMatchToken) - unavailable) {
+            val token = normalizeMatchToken(tag)
             val here = affinity.affinity(source, tag)
             if (here.universal) continue
+            val picture = pictured[token]?.let { affinity.pictureAffinity(source, it, tag) }?.takeIf(TagAffinity::proven)
             val evidence = when {
-                !judged -> here.takeIf(TagAffinity::informative)
+                token !in provided -> picture
+                !judged -> here.takeIf(TagAffinity::informative) ?: picture
                 here.proven -> here
                 else -> kin.mapNotNull { other -> translate(tag, other)?.let { affinity.affinity(other, it) } }
-                    .filter(TagAffinity::proven).maxByOrNull(TagAffinity::score)
+                    .filter(TagAffinity::proven).maxByOrNull(TagAffinity::score) ?: picture
             }
             when {
                 evidence != null -> leads[tag] = evidence.score + abs(evidence.score) * (random?.nextDouble(-JITTER, JITTER) ?: 0.0)
-                here.informative -> guesses[tag] = here.score
+                here.informative && token in provided -> guesses[tag] = here.score
             }
         }
         // Ties, such as every tag before any history, go to the tag liked most often.

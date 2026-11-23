@@ -1,0 +1,207 @@
+package com.theoriacodex.app.vision
+
+import java.io.ByteArrayInputStream
+import java.io.File
+import java.io.InputStream
+import java.security.MessageDigest
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import okhttp3.Interceptor
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.asResponseBody
+import okhttp3.ResponseBody.Companion.toResponseBody
+import okio.buffer
+import okio.source
+import org.junit.After
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.TemporaryFolder
+
+class VisualModelStoreTest {
+    @get:Rule
+    val folder = TemporaryFolder()
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val deleted = AtomicInteger()
+
+    private val modelBytes = ByteArray(300_000) { (it * 31).toByte() }
+    private val vocabularyBytes = "tag_id,name,category,count\n1,solo,0,10\n".toByteArray()
+    private val spec = VisualModelSpec(
+        id = "test-model-1",
+        baseUrl = "https://models.test/",
+        model = ModelFile("model.tflite", modelBytes.size.toLong(), sha256(modelBytes)),
+        vocabulary = ModelFile("tags.csv", vocabularyBytes.size.toLong(), sha256(vocabularyBytes)),
+    )
+
+    @After
+    fun tearDown() = scope.cancel()
+
+    private fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
+    /** A client whose every request is answered by [serve] from the file name asked for, never touching the network. */
+    private fun client(serve: (name: String) -> Response.Builder): OkHttpClient = OkHttpClient.Builder()
+        .addInterceptor(
+            Interceptor { chain ->
+                serve(chain.request().url.pathSegments.last())
+                    .request(chain.request()).protocol(Protocol.HTTP_1_1).build()
+            },
+        )
+        .build()
+
+    private fun ok(bytes: ByteArray) = Response.Builder().code(200).message("OK").body(bytes.toResponseBody())
+
+    private fun storeOver(client: OkHttpClient) = VisualModelStore(spec, folder.root, client, scope) { deleted.incrementAndGet() }
+
+    private fun serving(model: ByteArray = modelBytes) = client { name -> ok(if (name == spec.model.name) model else vocabularyBytes) }
+
+    private fun File.leftovers() = listFiles().orEmpty().map(File::getName).sorted()
+
+    private fun VisualModelStore.awaitSettled(): ModelState = runBlocking {
+        withTimeout(10_000) { states.first { it is ModelState.Ready || it is ModelState.Failed } }
+    }
+
+    @Test
+    fun `download verifies both files, moves them into place and ends Ready`() {
+        val store = storeOver(serving())
+        assertEquals(ModelState.Absent, store.states.value)
+
+        store.download()
+
+        assertEquals(ModelState.Ready, store.awaitSettled())
+        assertArrayEquals(modelBytes, store.modelFile.readBytes())
+        assertArrayEquals(vocabularyBytes, store.vocabularyFile.readBytes())
+        assertEquals(listOf("model.tflite", "tags.csv"), store.modelFile.parentFile!!.leftovers())
+    }
+
+    @Test
+    fun `bytes that are not the pinned ones fail as a mismatch and leave no file behind`() {
+        val tampered = modelBytes.copyOf().also { it[100] = (it[100] + 1).toByte() }
+        val store = storeOver(serving(model = tampered))
+
+        store.download()
+
+        assertEquals(ModelState.Failed(mismatch = true), store.awaitSettled())
+        assertFalse(store.modelFile.exists())
+        assertTrue(store.modelFile.parentFile!!.leftovers().none { it.endsWith(".part") || it == "model.tflite" })
+    }
+
+    @Test
+    fun `a file longer than pinned fails as a mismatch`() {
+        val store = storeOver(serving(model = modelBytes + 1))
+
+        store.download()
+
+        assertEquals(ModelState.Failed(mismatch = true), store.awaitSettled())
+        assertFalse(store.modelFile.exists())
+    }
+
+    @Test
+    fun `an HTTP error fails without calling the bytes a mismatch`() {
+        val store = storeOver(client { Response.Builder().code(500).message("Server Error").body(ByteArray(0).toResponseBody()) })
+
+        store.download()
+
+        assertEquals(ModelState.Failed(mismatch = false), store.awaitSettled())
+        assertFalse(store.modelFile.exists())
+    }
+
+    @Test
+    fun `a failed download can be started again`() {
+        var healthy = false
+        val store = storeOver(
+            client { name ->
+                if (healthy) ok(if (name == spec.model.name) modelBytes else vocabularyBytes)
+                else Response.Builder().code(503).message("Unavailable").body(ByteArray(0).toResponseBody())
+            },
+        )
+        store.download()
+        assertEquals(ModelState.Failed(mismatch = false), store.awaitSettled())
+
+        healthy = true
+        store.download()
+
+        assertEquals(ModelState.Ready, runBlocking { withTimeout(10_000) { store.states.first { it == ModelState.Ready } } })
+    }
+
+    @Test
+    fun `a store over a folder holding both verified-size files starts Ready`() {
+        val first = storeOver(serving())
+        first.modelFile.parentFile!!.mkdirs()
+        first.modelFile.writeBytes(modelBytes)
+        first.vocabularyFile.writeBytes(vocabularyBytes)
+
+        assertEquals(ModelState.Ready, storeOver(serving()).states.value)
+    }
+
+    @Test
+    fun `a folder holding only one file starts Absent`() {
+        val first = storeOver(serving())
+        first.modelFile.parentFile!!.mkdirs()
+        first.modelFile.writeBytes(modelBytes)
+
+        assertEquals(ModelState.Absent, storeOver(serving()).states.value)
+    }
+
+    @Test
+    fun `delete after a download removes the folder and reports it`() = runBlocking {
+        val store = storeOver(serving())
+        store.download()
+        store.awaitSettled()
+
+        store.delete()
+
+        assertEquals(ModelState.Absent, store.states.value)
+        assertFalse(store.modelFile.parentFile!!.exists())
+        assertEquals(1, deleted.get())
+    }
+
+    @Test
+    fun `delete during a download stops it and nothing is left or restored`() = runBlocking {
+        val reading = CountDownLatch(1)
+        // A body that trickles 1 KB at a time, so the download is mid-file until it is cancelled.
+        val slowModel = object : InputStream() {
+            private val chunk = ByteArray(1024)
+            override fun read(): Int = error("unused")
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                reading.countDown()
+                Thread.sleep(5)
+                val n = minOf(len, chunk.size)
+                System.arraycopy(chunk, 0, b, off, n)
+                return n
+            }
+        }
+        val slowSpec = spec.copy(model = spec.model.copy(bytes = 50_000_000L))
+        val client = client { name ->
+            val body = if (name == slowSpec.model.name) slowModel.source().buffer().asResponseBody("application/octet-stream".toMediaType())
+            else ByteArrayInputStream(vocabularyBytes).source().buffer().asResponseBody()
+            Response.Builder().code(200).message("OK").body(body)
+        }
+        val store = VisualModelStore(slowSpec, folder.root, client, scope) { deleted.incrementAndGet() }
+        store.download()
+        withTimeout(10_000) { store.states.first { it is ModelState.Downloading } }
+        assertTrue(reading.await(10, TimeUnit.SECONDS))
+
+        store.delete()
+        delay(200)
+
+        assertEquals(ModelState.Absent, store.states.value)
+        assertFalse(store.modelFile.parentFile!!.exists())
+        assertEquals(1, deleted.get())
+    }
+}

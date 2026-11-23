@@ -17,7 +17,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 
 /** Pages inside Settings; held by the owner so other screens can open Settings at a page. */
-enum class SettingsPage { HOME, SITES, STORAGE, BACKUP, STATS, STATS_SHARE, STATS_COMPARE, DIAGNOSTICS }
+enum class SettingsPage { HOME, SITES, STORAGE, BACKUP, STATS, STATS_SHARE, STATS_COMPARE, DIAGNOSTICS, PICTURE_TAGS }
 
 /** Sheets over Settings' home; held by the owner, like [SettingsPage], so the search box can open one. */
 enum class SettingsSheet { DOWNLOADS, CONTROLS, SERIES_UPDATES }
@@ -50,6 +50,9 @@ class SettingsDiagnosticsEntry(
 )
 
 class SettingsSitesEntry(val summary: String, val page: @Composable (onBack: () -> Unit, accounts: BuiltInAccounts) -> Unit)
+
+/** Settings → Picture tags, supplied by the app shell, which owns the tagger: the home row's value and the page. */
+class SettingsPicturesEntry(val summary: String, val page: @Composable (onBack: () -> Unit) -> Unit)
 
 /** The Settings home row and page for backups; [summary] is null when this build has no daily backup. */
 class SettingsBackupEntry(val summary: AutoBackupSummary?, val controls: @Composable () -> Unit)

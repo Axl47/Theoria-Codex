@@ -10,18 +10,24 @@ import com.theoriacodex.data.repository.SavedSearchRepository
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.normalizeMatchToken
+import com.theoriacodex.domain.vision.PredictedTagIndex
+import com.theoriacodex.domain.vision.PredictedTagUse
+import com.theoriacodex.domain.vision.tokens
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -37,7 +43,8 @@ import kotlin.math.ln
  *   as a tag, searches it in a saved search, or searched it at least twice;
  * - [explicit]: the tags with that explicit weight;
  * - [watchedByTag] and [watchedBySource]: how many watched posts of each source carried each tag, out of how many;
- * - [keptByTag] and [keptBySource]: the same for the posts the profile kept (Liked or put in a Codex, each once).
+ * - [keptByTag] and [keptBySource]: the same for the posts the profile kept (Liked or put in a Codex, each once);
+ * - [pictures]: what the picture tagger predicted on those kept posts.
  */
 data class TagAffinityInputs(
     val likedCounts: Map<String, Int> = emptyMap(),
@@ -48,6 +55,7 @@ data class TagAffinityInputs(
     val watchedBySource: Map<SourceKey, Long> = emptyMap(),
     val keptByTag: Map<SourceKey, Map<String, Int>> = emptyMap(),
     val keptBySource: Map<SourceKey, Int> = emptyMap(),
+    val pictures: PictureEvidence = PictureEvidence(),
 ) {
     /** The share of [source]'s watched posts that carried [token], or null before there are enough to say. */
     fun watchedShare(source: SourceKey, token: String): Double? {
@@ -78,6 +86,46 @@ data class TagAffinityInputs(
 }
 
 /**
+ * What the picture tagger saw on the posts the profile kept, whatever their source: [keptByTag] sums each predicted tag's
+ * score over the kept posts it was predicted on with [PredictedTagUse.EVIDENCE] confidence ([evidence]), [postsByTag]
+ * counts those posts, out of [kept] analysed kept posts, and [baseRates] holds each tag's share of Danbooru posts. Keys
+ * are Danbooru tags as [normalizeMatchToken] spells them.
+ */
+data class PictureEvidence(
+    val keptByTag: Map<String, Double> = emptyMap(),
+    val postsByTag: Map<String, Int> = emptyMap(),
+    val kept: Int = 0,
+    val baseRates: Map<String, Double> = emptyMap(),
+) {
+    /** The predicted tags on enough kept posts ([MIN_KEPT_FOR_TAG]) to be proven by [pictureAffinity]. */
+    val candidates: Set<String> get() = postsByTag.filterValues { it >= MIN_KEPT_FOR_TAG }.keys
+
+    companion object {
+        /** [index]'s predictions on the posts in [kept]. */
+        fun of(kept: Set<PostId>, index: PredictedTagIndex): PictureEvidence {
+            val seen = kept.filter { index[it] != null }
+            if (seen.isEmpty()) return PictureEvidence()
+            val scores = HashMap<String, Double>()
+            val posts = HashMap<String, Int>()
+            for (id in seen) {
+                index.evidence(id).forEach { (token, score) ->
+                    scores.merge(token, score, Double::plus)
+                    posts.merge(token, 1, Int::plus)
+                }
+            }
+            return PictureEvidence(scores, posts, seen.size, index.baseRates)
+        }
+    }
+}
+
+/**
+ * The tags predicted for [id] that may stand as evidence of what its picture shows, by score: confident enough for
+ * [PredictedTagUse.EVIDENCE], never text on the image ([isImageTextTag]), and not on half of Danbooru's posts.
+ */
+fun PredictedTagIndex.evidence(id: PostId): Map<String, Double> =
+    get(id)?.tokens(PredictedTagUse.EVIDENCE).orEmpty().filterKeys { !isImageTextTag(it) && (baseRates[it] ?: 0.0) < UNIVERSAL_WATCHED_SHARE }
+
+/**
  * One of a post's tags in the post's own spelling. [score] ranks how characteristic it is of the profile: by its
  * [TagAffinityInputs.lift] once the source has the history, else by [interest] shrinking as the tag gets common in what
  * the profile watches. A [universal] tag (on most watched posts of its source, or on nearly every post of the feed at
@@ -103,7 +151,8 @@ fun tagAffinityInputs(
     savedTags: Collection<String>,
     savedSearches: List<SavedSearchEntry>,
     statistics: LifetimeStatistics,
-): TagAffinityInputs = keptTagEvidence(likes, codexPosts, savedTags, savedSearches).withStatistics(statistics)
+    predicted: PredictedTagIndex = PredictedTagIndex.Empty,
+): TagAffinityInputs = keptTagEvidence(likes, codexPosts, savedTags, savedSearches).withStatistics(statistics, predicted)
 
 /**
  * What [TagAffinityInputs] takes from the profile's library, apart from its statistics: building it reads every kept
@@ -116,6 +165,7 @@ private data class KeptTagEvidence(
     val saved: Set<String>,
     val keptByTag: Map<SourceKey, Map<String, Int>>,
     val keptBySource: Map<SourceKey, Int>,
+    val keptIds: Set<PostId>,
 )
 
 private fun keptTagEvidence(
@@ -125,8 +175,9 @@ private fun keptTagEvidence(
     savedSearches: List<SavedSearchEntry>,
 ): KeptTagEvidence {
     // A post both Liked and in a Codex is one kept post.
-    val kept = (likes.map { it.postId to it.tags } + codexPosts.map { it.id to it.canonicalTags.ifEmpty { it.rawTags } })
-        .distinctBy { it.first }.groupBy({ it.first.source }, { it.second })
+    val keptPosts = (likes.map { it.postId to it.tags } + codexPosts.map { it.id to it.canonicalTags.ifEmpty { it.rawTags } })
+        .distinctBy { it.first }
+    val kept = keptPosts.groupBy({ it.first.source }, { it.second })
     return KeptTagEvidence(
         likedCounts = likes.map { it.tags }.tokenCounts(),
         likes = likes.size,
@@ -134,10 +185,11 @@ private fun keptTagEvidence(
         saved = (savedTags + savedSearches.flatMap { it.search.query.includeTags }).map(::normalizeMatchToken).toSet(),
         keptByTag = kept.mapValues { (_, tags) -> tags.tokenCounts() },
         keptBySource = kept.mapValues { (_, tags) -> tags.size },
+        keptIds = keptPosts.mapTo(mutableSetOf()) { it.first },
     )
 }
 
-private fun KeptTagEvidence.withStatistics(statistics: LifetimeStatistics): TagAffinityInputs {
+private fun KeptTagEvidence.withStatistics(statistics: LifetimeStatistics, predicted: PredictedTagIndex): TagAffinityInputs {
     // One search counts once under every source it ran on, so a tag's busiest source is its search count.
     val searchedTwice = statistics.searchesByTag.entries
         .groupBy({ normalizeMatchToken(it.key.term.value) }, { it.value })
@@ -150,7 +202,10 @@ private fun KeptTagEvidence.withStatistics(statistics: LifetimeStatistics): TagA
         .mapValues { (_, entries) ->
             entries.groupingBy { normalizeMatchToken(it.key.tag) }.fold(0L) { total, entry -> total + entry.value }
         }
-    return TagAffinityInputs(likedCounts, likes, interest, explicit, watchedByTag, statistics.watchedBySource, keptByTag, keptBySource)
+    return TagAffinityInputs(
+        likedCounts, likes, interest, explicit, watchedByTag, statistics.watchedBySource, keptByTag, keptBySource,
+        PictureEvidence.of(keptIds, predicted),
+    )
 }
 
 /**
@@ -183,7 +238,8 @@ class SharedTagAffinity internal constructor(private val byProfile: SharedFlow<P
 
 /**
  * Builds [SharedTagAffinity] in [scope], from its first reader on, following profile switches. A failed read gives the
- * profile empty inputs and is retried with backoff.
+ * profile empty inputs and is retried with backoff. [predicted] is the picture tagger's index; only its predictions on
+ * kept posts count, so analysing a For You candidate changes nothing here.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 fun shareTagAffinityInputs(
@@ -193,6 +249,7 @@ fun shareTagAffinityInputs(
     codex: CodexRepository,
     savedSearches: SavedSearchRepository,
     statistics: StatisticsRepository,
+    predicted: Flow<PredictedTagIndex> = flowOf(PredictedTagIndex.Empty),
 ): SharedTagAffinity {
     // Only the counters affinity reads, so a write of usage time or any other counter rebuilds nothing.
     val watched = statistics.observeStatistics()
@@ -212,7 +269,7 @@ fun shareTagAffinityInputs(
                 tags, liked, posts, searches ->
             keptTagEvidence(liked, posts, tags, searches)
         }.distinctUntilChanged()
-        combine(kept, watched) { evidence, statistics -> profileId to evidence.withStatistics(statistics) }
+        combine(kept, watched, predicted) { evidence, statistics, index -> profileId to evidence.withStatistics(statistics, index) }
             .retryWhen { _, attempt ->
                 emit(profileId to TagAffinityInputs.Empty)
                 delay(retryDelayMs(attempt))
@@ -265,6 +322,30 @@ fun TagAffinityInputs.affinity(source: SourceKey, tag: String, feedShare: Map<St
     val proven = chosen || (kept >= MIN_KEPT_FOR_TAG && lift >= MIN_INFORMATIVE_LIFT)
     val (score, worthOffering) = historyScore(source, kept, lift, chosen, proven, watched ?: 0.0)
     return TagAffinity(tag, interest, score, universal, informative = offerable && worthOffering, proven = offerable && proven)
+}
+
+/**
+ * How characteristic a predicted tag is of the profile on [source], for For You's lanes: [booruToken] is the tag in
+ * Danbooru's words, [sourceToken] in [source]'s. Its kept share (see [PictureEvidence]) is compared with its share of what
+ * the profile watched on [source], never below its share of Danbooru posts, so a tag the source's providers rarely write
+ * cannot look sought after. Before [source] has enough watched posts the Danbooru share stands alone and must be beaten
+ * [COLD_PICTURE_LIFT] times. Proven like a provider tag: on [MIN_KEPT_FOR_TAG] kept posts at the lift, out of at least
+ * [MIN_KEPT_FOR_LIFT] analysed kept posts, never universal (on more than [UNIVERSAL_LIKED_SHARE] of them, too), never
+ * text on the image and never about the file ([isFileTag]); a profile that chose such a tag gets it through [affinity].
+ * The kept share weighs each post by its score.
+ */
+fun TagAffinityInputs.pictureAffinity(source: SourceKey, booruToken: String, sourceToken: String): TagAffinity {
+    val kept = pictures.keptByTag[booruToken] ?: 0.0
+    val posts = pictures.postsByTag[booruToken] ?: 0
+    val watched = watchedShare(source, normalizeMatchToken(sourceToken))
+    val baseRate = pictures.baseRates[booruToken] ?: 0.0
+    // Universal like a provider tag: common where the profile watches, or on nearly every post it kept.
+    val universal = maxOf(watched ?: 0.0, baseRate) >= UNIVERSAL_WATCHED_SHARE || posts > UNIVERSAL_LIKED_SHARE * pictures.kept
+    val floor = LIFT_PSEUDO_COUNT / maxOf(watchedBySource[source] ?: 0L, MIN_WATCHED_FOR_SHARE)
+    val lift = (kept + LIFT_PSEUDO_COUNT) / (pictures.kept + 1.0) / maxOf(watched ?: 0.0, baseRate, floor)
+    val proven = !universal && !isImageTextTag(booruToken) && !isFileTag(booruToken) && pictures.kept >= MIN_KEPT_FOR_LIFT && posts >= MIN_KEPT_FOR_TAG &&
+        lift >= if (watched != null) MIN_INFORMATIVE_LIFT else COLD_PICTURE_LIFT
+    return TagAffinity(sourceToken, interest = kept, score = ln(lift) * ln(1.0 + kept), universal, informative = proven, proven = proven)
 }
 
 /**
@@ -350,6 +431,9 @@ private val FILE_TAG_ENDINGS = listOf(" (medium)", " (software)", " (artwork)", 
 private const val MIN_KEPT_FOR_LIFT = 20
 private const val MIN_KEPT_FOR_TAG = 2
 private const val MIN_INFORMATIVE_LIFT = 2.0
+
+/** A predicted tag compared only with Danbooru as a whole needs a wider margin: the profile's sources are not Danbooru. */
+private const val COLD_PICTURE_LIFT = 4.0
 
 /** Half a post, so a tag never kept or never watched still has a finite lift. */
 private const val LIFT_PSEUDO_COUNT = 0.5

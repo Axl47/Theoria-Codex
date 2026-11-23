@@ -7,7 +7,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.vision.PredictedTag
+import com.theoriacodex.domain.vision.PredictedTagIndex
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +22,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.filterNotNull
@@ -39,19 +43,23 @@ val LocalCodexSaveRelevanceLoader = staticCompositionLocalOf<CodexSaveRelevanceL
  * different posts at once. The saved library and its tag rarity are observed once and shared: each request only
  * rescores the retained snapshot when the library changes. A request stays warm for 5 s after its last collector leaves,
  * which carries the scores from the hold menu into the picker; the library stops 5 s after the last request.
+ * [predicted] is the picture tagger's index for the saved library, whose tags count beside the provider's; [incoming]
+ * answers what it knows about the posts being saved, read once when a request starts.
  */
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class CodexSaveRelevanceLoader(
     repository: CodexRepository,
     private val scope: CoroutineScope,
     private val scoringDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    predicted: Flow<PredictedTagIndex> = flowOf(PredictedTagIndex.Empty),
+    private val incoming: (PostId) -> List<PredictedTag>? = { null },
     observeLibrary: (Set<String>) -> Flow<Map<String, List<Post>>>,
 ) {
     private val library: SharedFlow<SavedLibrary> = repository.observeCodices()
         .map { codices -> codices.mapTo(linkedSetOf(), Codex::codexId) }
         .distinctUntilChanged()
         .flatMapLatest(observeLibrary)
-        .map(::SavedLibrary)
+        .combine(predicted, ::SavedLibrary)
         .flowOn(scoringDispatcher)
         .shareIn(scope, SharingStarted.WhileSubscribed(stopTimeoutMillis = RETAIN_MS), replay = 1)
     private val requests = HashMap<Request, Lookup>()
@@ -97,12 +105,11 @@ class CodexSaveRelevanceLoader(
 
     private fun start(request: Request): Lookup {
         val lookupScope = CoroutineScope(scope.coroutineContext + Job(scope.coroutineContext[Job]))
-        val relevance = CodexSaveRelevance(request.posts, request.query)
-        val scored = if (relevance.hasSignals) {
-            library.map(relevance::scoreEach).flowOn(scoringDispatcher)
-        } else {
-            flowOf(emptyMap())
-        }
+        val own = request.posts.mapNotNull { post -> incoming(post.id)?.let { post.id to it } }.toMap()
+        val scored = library.map { saved ->
+            val predicted = saved.predicted.copy(byPost = saved.predicted.byPost + own)
+            CodexSaveRelevance(request.posts, request.query, predicted).takeIf { it.hasSignals }?.scoreEach(saved).orEmpty()
+        }.flowOn(scoringDispatcher)
         return Lookup(lookupScope, scored.stateIn(lookupScope, SharingStarted.Eagerly, null))
     }
 

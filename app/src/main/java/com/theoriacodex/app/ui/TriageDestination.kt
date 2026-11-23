@@ -133,6 +133,7 @@ internal fun TriageDestination(shell: TheoriaShell, request: TriageRequest) {
     val owner = viewModel<TriageDeckViewModel> {
         TriageDeckViewModel(
             feed, ShellTriageActions(shell), quickSave, query, handOff.viewModelScope, shell.triageRemoval(request),
+            pictures = shell.features.pictureTags,
         )
     }
     val deck by owner.deck.state.collectAsStateWithLifecycle()

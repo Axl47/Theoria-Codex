@@ -27,6 +27,10 @@ class RoomUpgradeJourneyTest {
         }
     }
 
+    @Test fun `a version 14 picture hash keeps its meaning when the tagger columns arrive`() = runTest {
+        RoomUpgradeScenario.verifyPictureVisionUpgrade(ApplicationProvider.getApplicationContext<Context>(), helper)
+    }
+
     @Test fun `a series stored before chapter downloads keeps everything and does not download new chapters`() {
         val name = "series-downloads.db"
         helper.createDatabase(name, 14).use {

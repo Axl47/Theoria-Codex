@@ -68,6 +68,7 @@ internal fun rememberSearchOmniboxEntries(shell: TheoriaShell, state: BrowsingDe
                 SettingDestinations.Diagnostics.id.takeIf { shell.diagnosticsEntry == null },
                 SettingChoices.SeriesUpdates.id.takeIf { shell.container.series == null },
                 SettingToggles.SeriesDeleteAfterReading.id.takeIf { shell.container.series == null },
+                SettingDestinations.PictureTags.id.takeIf { shell.container.pictures == null },
             )
             addAll(searchSettingEntries(state.settings, hidden, shell.owners.settings::onAction) { binding ->
                 shell.openSettingBinding(binding, hiddenTags::openHiddenTags)

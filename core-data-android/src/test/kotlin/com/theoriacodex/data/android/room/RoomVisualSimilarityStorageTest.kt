@@ -5,15 +5,20 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.data.repository.ForYouVerdict
 import com.theoriacodex.data.repository.ForYouVerdictKind
+import com.theoriacodex.data.repository.PictureVision
 import com.theoriacodex.data.repository.ProfileLibraryWriteGuard
+import com.theoriacodex.data.repository.VisionProgress
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.vision.PredictedTag
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -63,6 +68,94 @@ class RoomVisualSimilarityStorageTest {
         library.removeItems(codex.codexId, setOf(id("hashed")))
         assertTrue(signatures.observePictureHashes().first().isEmpty())
     }
+
+    @Test fun `a hash written after the tagger keeps its vision, and vision written after a hash keeps the hash`() = runTest {
+        val library = RoomCodexLikesRepository(database)
+        val signatures = RoomVisualSignatureRepository(database)
+        val codex = library.ensureCodex("saved", "Saved")
+        library.addItems(codex.codexId, listOf(post("a"), post("b")))
+
+        signatures.putVision(listOf(vision("a", "m1", tags = listOf(tag("sky", 0.9f)))))
+        signatures.put(id("a"), 5L)
+        signatures.put(id("b"), 6L)
+        signatures.putVision(listOf(vision("b", "m1", tags = listOf(tag("sea", 0.5f)))))
+
+        assertEquals(mapOf(id("a") to 5L, id("b") to 6L), signatures.observePictureHashes().first())
+        assertEquals(mapOf(id("a") to listOf(tag("sky", 0.9f)), id("b") to listOf(tag("sea", 0.5f))), signatures.observePredictedTags("m1").first())
+        assertTrue(signatures.libraryPostsWithoutSignature(limit = 10).isEmpty())
+    }
+
+    @Test fun `a post only the tagger saw still waits for its hash, and a post the tagger cannot read is not retried`() = runTest {
+        val library = RoomCodexLikesRepository(database)
+        val signatures = RoomVisualSignatureRepository(database)
+        val codex = library.ensureCodex("saved", "Saved")
+        library.addItems(codex.codexId, listOf(post("seen"), post("unreadable"), post("new")))
+
+        signatures.putVision(listOf(vision("seen", "m1", tags = emptyList()), vision("unreadable", "m1", embedding = null, tags = null), vision("never-stored", "m1")))
+
+        assertEquals(setOf(id("seen"), id("unreadable"), id("new")), signatures.libraryPostsWithoutSignature(limit = 10).map(Post::id).toSet())
+        assertTrue(signatures.observePictureHashes().first().isEmpty())
+        assertEquals(mapOf(id("seen") to emptyList<PredictedTag>()), signatures.observePredictedTags("m1").first())
+        assertEquals(listOf(id("new")), signatures.libraryPostsWithoutVision("m1", limit = 10).map(Post::id))
+        assertEquals(setOf(id("seen"), id("unreadable"), id("new")), signatures.libraryPostsWithoutVision("m2", limit = 10).map(Post::id).toSet())
+        assertEquals(1, signatures.libraryPostsWithoutVision("m2", limit = 1).size)
+        signatures.put(id("seen"), 1L)
+        assertEquals(setOf(id("unreadable"), id("new")), signatures.libraryPostsWithoutSignature(limit = 10).map(Post::id).toSet())
+    }
+
+    @Test fun `a newer model replaces what an older one stored and progress counts each library post once`() = runTest {
+        val library = RoomCodexLikesRepository(database)
+        val signatures = RoomVisualSignatureRepository(database)
+        val codex = library.ensureCodex("saved", "Saved")
+        library.addItems(codex.codexId, listOf(post("a"), post("b")))
+        library.toggleLikeAndSyncSystemCodex("p", "likes-p", "Likes", post("a"), emptyList())
+        library.toggleLikeAndSyncSystemCodex("p", "likes-p", "Likes", post("c"), emptyList())
+        signatures.putVision(listOf(vision("a", "m1", tags = listOf(tag("x", 0.4f))), vision("c", "m1", embedding = null, tags = null)))
+
+        assertEquals(VisionProgress(analysed = 2, total = 3), signatures.observeVisionProgress("m1").first())
+        assertEquals(VisionProgress(analysed = 0, total = 3), signatures.observeVisionProgress("m2").first())
+        signatures.putVision(listOf(vision("a", "m2", embedding = byteArrayOf(9), tags = listOf(tag("y", 0.6f)))))
+
+        assertEquals(VisionProgress(analysed = 1, total = 3), signatures.observeVisionProgress("m2").first())
+        assertTrue(signatures.observePredictedTags("m1").first().keys == setOf<PostId>())
+        assertEquals(mapOf(id("a") to listOf(tag("y", 0.6f))), signatures.observePredictedTags("m2").first())
+        assertArrayEquals(byteArrayOf(9), database.openHelper.readableDatabase.query("SELECT embedding FROM post_visual_signatures WHERE source_post_id = 'a'").use { it.moveToFirst(); it.getBlob(0) })
+    }
+
+    @Test fun `clearing vision keeps hashes and drops rows that held only vision`() = runTest {
+        val library = RoomCodexLikesRepository(database)
+        val signatures = RoomVisualSignatureRepository(database)
+        val codex = library.ensureCodex("saved", "Saved")
+        library.addItems(codex.codexId, listOf(post("hashed"), post("visionOnly")))
+        signatures.put(id("hashed"), 3L)
+        signatures.putVision(listOf(vision("hashed", "m1", tags = listOf(tag("x", 0.5f))), vision("visionOnly", "m1", tags = listOf(tag("x", 0.5f)))))
+
+        signatures.clearVision()
+
+        assertEquals(mapOf(id("hashed") to 3L), signatures.observePictureHashes().first())
+        assertTrue(signatures.observePredictedTags("m1").first().isEmpty())
+        assertEquals(VisionProgress(analysed = 0, total = 2), signatures.observeVisionProgress("m1").first())
+        assertEquals(listOf(id("visionOnly")), signatures.libraryPostsWithoutSignature(limit = 10).map(Post::id))
+        database.openHelper.readableDatabase.query("SELECT COUNT(*) FROM post_visual_signatures").use { it.moveToFirst(); assertEquals(1, it.getInt(0)) }
+    }
+
+    @Test fun `vision rows follow their post when it is deleted`() = runTest {
+        val library = RoomCodexLikesRepository(database)
+        val signatures = RoomVisualSignatureRepository(database)
+        val codex = library.ensureCodex("saved", "Saved")
+        library.addItems(codex.codexId, listOf(post("gone")))
+        signatures.putVision(listOf(vision("gone", "m1", tags = listOf(tag("x", 0.5f)))))
+
+        library.removeItems(codex.codexId, setOf(id("gone")))
+
+        assertTrue(signatures.observePredictedTags("m1").first().isEmpty())
+        assertNull(database.openHelper.readableDatabase.query("SELECT 1 FROM post_visual_signatures").use { if (it.moveToFirst()) 1 else null })
+    }
+
+    private fun tag(name: String, score: Float) = PredictedTag(name, score, PredictedTag.Kind.GENERAL)
+
+    private fun vision(post: String, model: String, embedding: ByteArray? = byteArrayOf(1, 2), tags: List<PredictedTag>? = emptyList()) =
+        PictureVision(id(post), model, embedding, tags)
 
     private fun verdict(profile: String, post: String, kind: ForYouVerdictKind, at: Long) =
         ForYouVerdict(profile, id(post), kind, at, "https://example.com/$post.jpg")

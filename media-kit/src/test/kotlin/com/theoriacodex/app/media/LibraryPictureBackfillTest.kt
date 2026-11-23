@@ -1,38 +1,32 @@
 package com.theoriacodex.app.media
 
+import com.theoriacodex.data.repository.PictureVision
+import com.theoriacodex.data.repository.VisionProgress
 import com.theoriacodex.data.repository.VisualSignatureRepository
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.vision.PredictedTag
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class LibraryPictureBackfillTest {
-    @Test fun `the Library is hashed only while charging, and a preview that fails is skipped`() = runTest {
+    @Test fun `the Library is hashed until done, and a preview that fails is skipped`() = runTest {
         val library = FakeSignatures(listOf(post("hashed"), post("flat"), post("offline")))
-        val charging = MutableStateFlow(false)
         val hashed = mutableListOf<String>()
-        val backfill = LibraryPictureBackfill(library, { post ->
+        val backfill = LibraryPictureBackfill(library) { post ->
             hashed += post.id.sourcePostId
             when (post.id.sourcePostId) {
                 "hashed" -> PictureHashResult.Hashed(94)
                 "flat" -> PictureHashResult.Unhashable
                 else -> PictureHashResult.Unavailable
             }
-        }, charging)
-        backgroundScope.launch { backfill.run() }
-        runCurrent()
-        assertEquals(emptyList<String>(), hashed)
-
-        charging.value = true
-        runCurrent()
+        }
+        backfill.drain()
 
         assertEquals(mapOf(id("hashed") to 94L, id("flat") to null), library.records)
         assertEquals(listOf("hashed", "flat", "offline"), hashed)
@@ -45,6 +39,11 @@ class LibraryPictureBackfillTest {
             records[postId] = hash
         }
         override suspend fun libraryPostsWithoutSignature(limit: Int): List<Post> = library.filterNot { it.id in records }.take(limit)
+        override suspend fun putVision(entries: List<PictureVision>) = Unit
+        override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post> = emptyList()
+        override fun observePredictedTags(modelId: String): Flow<Map<PostId, List<PredictedTag>>> = emptyFlow()
+        override fun observeVisionProgress(modelId: String): Flow<VisionProgress> = emptyFlow()
+        override suspend fun clearVision() = Unit
     }
 
     private fun id(value: String) = PostId(SourceKey.DANBOORU, value)
