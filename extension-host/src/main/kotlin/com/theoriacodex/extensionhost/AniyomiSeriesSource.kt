@@ -72,14 +72,7 @@ class AniyomiSeriesSource internal constructor(
         return calls.calling {
             source.getEpisodeList(anime).map { episode ->
                 listedEpisodes[episode.url] = episode
-                SeriesEntry(
-                    address = episode.url,
-                    name = episode.name,
-                    // Extensions may leave the number at -1 for the app to read from the name, as Aniyomi does.
-                    number = episode.episode_number.takeIf { it >= 0f } ?: ChapterRecognition.parseChapterNumber(series.title, episode.name),
-                    translatorGroup = episode.scanlator?.takeIf(String::isNotBlank),
-                    uploadedAtEpochMs = episode.date_upload.takeIf { it > 0L },
-                )
+                extensionEntry(series.title, episode.url, episode.name, episode.episode_number, episode.scanlator, episode.date_upload)
             }
         }
     }
@@ -135,16 +128,7 @@ class AniyomiSeriesSource internal constructor(
         if (details.fetch_type == FetchType.Seasons) anime.fetch_type = FetchType.Seasons
     }
 
-    private fun SAnime.toSeries() = Series(
-        id = SeriesId(key, url),
-        title = title,
-        coverUrl = thumbnail_url?.takeIf(String::isNotBlank),
-        author = author?.takeIf(String::isNotBlank),
-        genres = genre.orEmpty().split(',').map(String::trim).filter(String::isNotEmpty),
-        language = source.lang,
-        description = description?.trim()?.takeIf(String::isNotEmpty),
-        status = seriesStatus(status),
-    )
+    private fun SAnime.toSeries() = extensionSeries(SeriesId(key, url), title, thumbnail_url, author, genre, source.lang, description, status)
 
     internal companion object {
         const val SEASONS_UNSUPPORTED = "Seasons aren't supported yet"
