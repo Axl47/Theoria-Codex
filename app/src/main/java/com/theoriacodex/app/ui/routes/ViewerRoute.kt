@@ -56,6 +56,7 @@ import com.theoriacodex.app.viewer.ViewerTrail
 import com.theoriacodex.app.ui.trails.ViewerLevel
 import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.newViewerPosts
+import com.theoriacodex.app.viewer.ViewerMediaRecoveryRequest
 import com.theoriacodex.app.viewer.recoverMedia
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.related.requestOrNull
@@ -221,7 +222,7 @@ internal fun ViewerRoute(
     val related = rememberViewerRelatedPosts(activeSession, liveSourceState)
     ViewerScreen(
         uiState = viewerState,
-        host = rememberViewerScreenHost(viewerOwner, durationOwner.takeUnless { seriesSession }, screenCallbacks, latestDependencies, latestEffectCallbacks),
+        host = rememberViewerScreenHost(viewerOwner, durationOwner.takeUnless { seriesSession }, screenCallbacks, latestDependencies, latestEffectCallbacks, routeScope),
         config = config,
         saveToCodexQuery = activeSession?.saveQuery,
         saveFromForYou = activeSession?.context?.streamSource == ViewerStreamSource.FOR_YOU,
@@ -304,6 +305,7 @@ private fun rememberViewerScreenHost(
     callbacks: ViewerScreenCallbacks,
     latestDependencies: State<ViewerRouteDependencies>,
     latestEffectCallbacks: State<ViewerRouteEffectCallbacks>,
+    routeScope: CoroutineScope,
 ) = remember(viewerOwner, durationOwner, callbacks) {
     ViewerScreenHost(
         onAction = { action ->
@@ -318,7 +320,14 @@ private fun rememberViewerScreenHost(
         },
         onOpenCreatorFallback = callbacks.onOpenCreatorFallback,
         onGalleryReadingModeSelected = callbacks.onGalleryReadingModeSelected,
-        onRequestMediaRecovery = { post, failedMedia -> recoverAndApplyMedia(viewerOwner, post, failedMedia, latestEffectCallbacks.value) },
+        onRequestMediaRecovery = object : ViewerMediaRecoveryRequest {
+            override fun ask(post: Post, failedMedia: ImageRef) {
+                routeScope.launch { recoverAndApplyMedia(viewerOwner, post, failedMedia, latestEffectCallbacks.value) }
+            }
+
+            override suspend fun recoverStreams(post: Post, failedMedia: ImageRef) =
+                recoverAndApplyMedia(viewerOwner, post, failedMedia, latestEffectCallbacks.value)
+        },
         onVisiblePostChanged = { post, viewedMediaNumber ->
             viewerOwner.state.value.session?.let { identity ->
                 viewerOwner.recordVisiblePost(identity, post, viewedMediaNumber, callbacks.onVisiblePostChanged)

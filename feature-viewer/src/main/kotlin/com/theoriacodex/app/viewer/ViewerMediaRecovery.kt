@@ -14,11 +14,17 @@ enum class ViewerMediaRecovery {
     NOTHING_NEW,
 }
 
-/**
- * Asks the source again for a post's failed media, in the Viewer's route ([ViewerScreenHost.onRequestMediaRecovery]),
- * and says what that came to. A renderer calls it from its own coroutine, so leaving the page cancels the lookup.
- */
-typealias ViewerMediaRecoveryRequest = suspend (Post, ImageRef) -> ViewerMediaRecovery
+/** How a page's failed media asks the source again, through the Viewer's route ([ViewerScreenHost.onRequestMediaRecovery]). */
+interface ViewerMediaRecoveryRequest {
+    /** An image's ask: the route looks the post up in its own scope, and a recovered post replaces the image. */
+    fun ask(post: Post, failedMedia: ImageRef)
+
+    /**
+     * An episode's ask for fresh links ([ImageRef.streams]), awaited by its player, which decides what to do next from
+     * what it came to. It runs in the player's coroutine, so leaving the page cancels the lookup.
+     */
+    suspend fun recoverStreams(post: Post, failedMedia: ImageRef): ViewerMediaRecovery
+}
 
 /**
  * Asks [recover] for working media for [post], whose [failedMedia] failed, within the session's lookup limit
