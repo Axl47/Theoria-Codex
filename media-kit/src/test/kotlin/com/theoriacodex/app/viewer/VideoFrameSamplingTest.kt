@@ -73,6 +73,7 @@ class VideoFrameSamplingTest {
         assertEquals(FrameSample.Unreadable, frameSample(emptyList(), UnreadableMedia("damaged")))
         val signedOut = SourceAdapterException(SourceFailureReason.AUTH_REQUIRED, "Pixiv credentials not configured")
         assertEquals(FrameSample.Unreachable, frameSample(emptyList(), signedOut))
+        assertEquals(FrameSample.Unreadable, frameSample(emptyList(), SourceAdapterException(SourceFailureReason.PARSE, "unreadable listing")))
     }
 
     @Test

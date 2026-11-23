@@ -10,6 +10,8 @@ import androidx.media3.common.C
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.HttpDataSource
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.roundToLong
@@ -40,7 +42,7 @@ sealed interface FrameSample {
  * error bodies and skipped prefixes included) and shared by every request for that post, a refreshed address's too.
  * Past [maxBytes], reads fail with [NetworkBudgetSpent].
  */
-class NetworkBudget(val maxBytes: Long) {
+class NetworkBudget(internal val maxBytes: Long) {
     private val spent = AtomicLong()
 
     /** An OkHttp network interceptor that counts each response body against this budget. */
@@ -59,7 +61,8 @@ class NetworkBudget(val maxBytes: Long) {
     }
 }
 
-internal class NetworkBudgetSpent : IOException("The frame sampler's network budget is spent")
+/** A post too large to read within its budget: trying again spends the same bytes. */
+internal class NetworkBudgetSpent : UnreadableMedia("The frame sampler's network budget is spent")
 
 /**
  * Up to [count] sync frames of the video [source] reads, spread evenly from 5% to 95% of its length, each scaled to fit
@@ -93,7 +96,8 @@ internal fun sampleVideoFrames(source: DataSource, uri: Uri, key: String?, count
 /**
  * What [frames] read before [failure] (null when every read succeeded) amount to, for videos and animations alike: the
  * one place that decides whether a failed read is worth trying again.
- * - A spent budget, or media whose bytes give no frames ([UnreadableMedia]), keeps what was read: another try repeats it.
+ * - A spent budget, media whose bytes give no frames ([UnreadableMedia]), or a source that cannot read its own answer
+ *   about the post (a parse failure, or one it cannot name), keeps what was read: another try repeats it.
  * - A refusal ([MediaRefused], or a 4xx other than "try later") asks for a fresh address.
  * - Anything else (the network, a "try later", a sign-in or browser check a source wants) may pass on a later run, so
  *   even frames already read wait for it.
@@ -102,12 +106,18 @@ fun frameSample(frames: List<Bitmap>, failure: Throwable?): FrameSample {
     val causes = generateSequence(failure, Throwable::cause)
     val status = causes.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode
     return when {
-        failure == null || causes.any { it is NetworkBudgetSpent || it is UnreadableMedia } ->
+        failure == null || causes.any { it is UnreadableMedia || it.isFinalSourceFailure } ->
             if (frames.isEmpty()) FrameSample.Unreadable else FrameSample.Frames(frames)
         causes.any { it is MediaRefused } || status != null && refusesMedia(status) -> FrameSample.Refused
         else -> FrameSample.Unreachable
     }
 }
+
+private val Throwable.isFinalSourceFailure: Boolean
+    get() = this is SourceAdapterException && reason in FINAL_SOURCE_FAILURES
+
+/** Source failures another try repeats: an answer it cannot read, or a failure it cannot name. */
+private val FINAL_SOURCE_FAILURES = setOf(SourceFailureReason.PARSE, SourceFailureReason.UNKNOWN)
 
 /** Whether an HTTP [status] refuses the media at this address for good: a 4xx other than "try later". */
 internal fun refusesMedia(status: Int): Boolean = status in CLIENT_ERRORS && status !in TRY_LATER

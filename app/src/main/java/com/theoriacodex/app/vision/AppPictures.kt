@@ -82,7 +82,7 @@ fun appPictures(
  * frames through the shared video cache ([VideoPlaybackInfrastructure.sampleFrames]), or from a downloaded copy on disk;
  * Pixiv animation frames from their archive. A post whose listing gave no stream yet, or whose server refuses its saved
  * address (addresses expire), is looked up again once; failures are classed by [frameSample]. One post's downloads,
- * video or animation, share one [NetworkBudget].
+ * video or animation, retries and a refreshed address included, share one [NetworkBudget].
  */
 private class AppPictureSource(
     private val context: Context,

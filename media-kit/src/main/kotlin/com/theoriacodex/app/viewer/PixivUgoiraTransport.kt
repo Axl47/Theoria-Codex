@@ -21,13 +21,12 @@ internal class PixivUgoiraTransport(private val client: OkHttpClient) {
         url: String,
         accessToken: String,
         destination: File,
-        maxBytes: Long = UGOIRA_MAX_COMPRESSED_BYTES,
     ): BinaryResponse {
         val temporary = File(destination.parentFile, ".${destination.name}.${System.nanoTime()}.tmp")
         return client.newCall(request(url, accessToken)).await { response ->
             try {
                 if (response.isSuccessful) {
-                    copyArchiveResponse(response.body.byteStream(), temporary, maxBytes)
+                    copyArchiveResponse(response.body.byteStream(), temporary)
                     publishArchive(temporary, destination)
                 }
                 BinaryResponse(statusCode = response.code)
@@ -37,7 +36,7 @@ internal class PixivUgoiraTransport(private val client: OkHttpClient) {
         }
     }
 
-    private fun copyArchiveResponse(body: InputStream, temporary: File, maxBytes: Long) {
+    private fun copyArchiveResponse(body: InputStream, temporary: File) {
         body.use { input ->
             FileOutputStream(temporary).use { output ->
                 val buffer = ByteArray(UGOIRA_DOWNLOAD_BUFFER_BYTES)
@@ -46,7 +45,7 @@ internal class PixivUgoiraTransport(private val client: OkHttpClient) {
                     val read = input.read(buffer)
                     if (read < 0) break
                     written += read
-                    if (written > maxBytes) {
+                    if (written > UGOIRA_MAX_COMPRESSED_BYTES) {
                         throw UgoiraArchiveTooLarge()
                     }
                     output.write(buffer, 0, read)
@@ -73,5 +72,5 @@ internal class PixivUgoiraTransport(private val client: OkHttpClient) {
 private const val PIXIV_API_BASE = "https://app-api.pixiv.net"
 private const val UGOIRA_DOWNLOAD_BUFFER_BYTES = 64 * 1024
 
-/** An archive past its byte cap ([UGOIRA_MAX_COMPRESSED_BYTES], or a sample's budget): downloading it again gives the same answer. */
+/** An archive past [UGOIRA_MAX_COMPRESSED_BYTES] or a sample's budget: downloading it again gives the same answer. */
 internal class UgoiraArchiveTooLarge : UnreadableMedia("Pixiv ugoira archive exceeds compressed-byte limit")

@@ -60,7 +60,7 @@ class PixivUgoiraClient constructor(
     private val operationTimeoutMs: Long = 30_000L,
     private val offlineArchiveLookup: suspend (String) -> File? = { null },
     private val metadataCache: PixivUgoiraMetadataCache = PixivUgoiraMetadataCache(),
-    downloadClient: OkHttpClient = OkHttpClient(),
+    private val downloadClient: OkHttpClient = OkHttpClient(),
 ) {
     private val transport = PixivUgoiraTransport(downloadClient)
     private val cacheLock = Any()
@@ -106,15 +106,16 @@ class PixivUgoiraClient constructor(
      * [count] frames spread through [postId]'s animation, each at least [sizePx] on its long edge, for the picture tagger
      * ([sampleUgoiraFrames]). Reads an archive already held (offline or in the playback store) without marking it used;
      * otherwise downloads Pixiv's smallest archive (600 px) to a temporary file it deletes afterwards, so sampling a
-     * Library never evicts the archives the user watched. An archive past [budget] is not downloaded further and leaves
-     * the post [FrameSample.Unreadable]; other failures are classed by [frameSample].
+     * Library never evicts the archives the user watched. Every download try counts against the one [budget]; an archive
+     * past it is not downloaded further and leaves the post [FrameSample.Unreadable]. Other failures are classed by
+     * [frameSample].
      */
     suspend fun sampleFrames(postId: String, count: Int, sizePx: Int, budget: NetworkBudget): FrameSample =
         withContext(Dispatchers.IO) {
             try {
                 val held = synchronized(cacheLock) { memoryArchive(postId) } ?: heldArchive(postId, markUsed = false)
                 val frames = held?.let { heldFrames(postId, it, count, sizePx) }
-                    ?: downloadedFrames(postId, count, sizePx, budget.maxBytes)
+                    ?: downloadedFrames(postId, count, sizePx, budget)
                 frameSample(frames, failure = null)
             } catch (error: IOException) {
                 frameSample(emptyList(), error)
@@ -133,13 +134,15 @@ class PixivUgoiraClient constructor(
     }
 
     /** [sampleFrames] from a freshly downloaded archive, deleted afterwards. */
-    private suspend fun downloadedFrames(postId: String, count: Int, sizePx: Int, maxBytes: Long): List<Bitmap> {
+    private suspend fun downloadedFrames(postId: String, count: Int, sizePx: Int, budget: NetworkBudget): List<Bitmap> {
         val (metadata, tokens) = fetchMetadataWithRetry(postId, tokenCoordinator.activeTokens())
         val temporary = File.createTempFile("ugoira-sample", ".zip")
         try {
-            withTimeoutOrNull(operationTimeoutMs) { downloadZipWithRetry(metadata.zipUrl, tokens, temporary, maxBytes) }
+            // Retries share the budget, so they cannot multiply what one post downloads.
+            val budgeted = PixivUgoiraTransport(downloadClient.newBuilder().addNetworkInterceptor(budget.interceptor).build())
+            withTimeoutOrNull(operationTimeoutMs) { downloadZipWithRetry(metadata.zipUrl, tokens, temporary, budgeted) }
                 ?: throw IOException("Pixiv animation download timed out")
-            if (temporary.length() > maxBytes) throw UgoiraArchiveTooLarge()
+            if (temporary.length() > budget.maxBytes) throw UgoiraArchiveTooLarge()
             if (!isValidArchive(temporary, metadata.frames)) throw InvalidUgoiraArchive()
             return try {
                 sampleUgoiraFrames(temporary, metadata.frames, count, sizePx)
@@ -395,12 +398,12 @@ class PixivUgoiraClient constructor(
         url: String,
         initialTokens: PixivAuthTokens,
         destination: File,
-        maxBytes: Long = UGOIRA_MAX_COMPRESSED_BYTES,
+        through: PixivUgoiraTransport = transport,
     ) {
         withUgoiraAuthRetry("zip", initialTokens, BinaryResponse::statusCode) { accessToken ->
             zipDownloader?.let { download ->
                 runInterruptible(Dispatchers.IO) { download(url, accessToken, destination) }
-            } ?: transport.downloadZip(url, accessToken, destination, maxBytes)
+            } ?: through.downloadZip(url, accessToken, destination)
         }
     }
 

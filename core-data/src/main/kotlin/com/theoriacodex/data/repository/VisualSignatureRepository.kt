@@ -44,6 +44,9 @@ interface VisualSignatureRepository {
      */
     suspend fun failFrames(postId: PostId, modelId: String, permanently: Boolean)
 
+    /** Marks [postIds]' [modelId] analyses as reading all their posts offer ([VisionFrames.NONE]), in one transaction: they do not play. */
+    suspend fun unwantFrames(postIds: List<PostId>, modelId: String)
+
     /** The predicted tags of every stored post [modelId] analysed with tags, again whenever one changes. */
     fun observePredictedTags(modelId: String): Flow<Map<PostId, List<PredictedTag>>>
 

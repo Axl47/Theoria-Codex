@@ -188,6 +188,17 @@ class PictureTagger(
     }
 
     /**
+     * [posts] that play, in order; the others' still analyses are marked as all those posts offer, in one write, so
+     * [analyzeFrames] is not asked of them again. Analyses marked before anything knew whether their post plays (the
+     * migration marks them all) are settled here.
+     */
+    suspend fun playing(posts: List<Post>): List<Post> {
+        val (playing, still) = posts.partition(pictures::plays)
+        if (still.isNotEmpty()) commits.withLock { if (current) signatures.unwantFrames(still.map(Post::id), store.id) }
+        return playing
+    }
+
+    /**
      * Stores what [analyzeFrames] gave for [postId] in place of its still analysis; a failure leaves the still analysis
      * standing and counts against the post's frame reads, for good when another try would repeat it. Returns false,
      * storing nothing, once the model was deleted.

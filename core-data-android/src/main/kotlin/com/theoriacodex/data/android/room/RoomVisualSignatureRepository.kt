@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import com.theoriacodex.data.repository.PictureVision
 import com.theoriacodex.data.repository.PredictedTagCodec
 import com.theoriacodex.data.repository.MAX_FRAME_ATTEMPTS
+import com.theoriacodex.data.repository.VisionFrames
 import com.theoriacodex.data.repository.VisionProgress
 import com.theoriacodex.data.repository.VisualSignatureRepository
 import com.theoriacodex.domain.model.Post
@@ -62,6 +63,15 @@ class RoomVisualSignatureRepository(
     override suspend fun failFrames(postId: PostId, modelId: String, permanently: Boolean) {
         withContext(Dispatchers.IO) {
             dao.addFrameAttempts(postId.source.id, postId.sourcePostId, modelId, if (permanently) MAX_FRAME_ATTEMPTS else 1)
+        }
+    }
+
+    override suspend fun unwantFrames(postIds: List<PostId>, modelId: String) {
+        if (postIds.isEmpty()) return
+        withContext(Dispatchers.IO) {
+            database.withTransaction {
+                for (id in postIds) dao.setFrameState(id.source.id, id.sourcePostId, modelId, VisionFrames.NONE.ordinal)
+            }
         }
     }
 

@@ -1,6 +1,7 @@
 package com.theoriacodex.app.vision
 
 import com.theoriacodex.data.repository.VisualSignatureRepository
+import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import kotlin.time.TimeSource
 import kotlinx.coroutines.delay
@@ -50,24 +51,38 @@ class LibraryVisionBackfill(
      * device runs [hot]; the job stops it when the device leaves idle, losing only the post under way. A post whose
      * frames cannot be read keeps its still analysis, and is tried once a run, on later runs (the job is scheduled at
      * every app start), only while another try may pass and a few times at most, so a source is not asked every night.
-     * Returns whether this run was cut short by heat or a model that would not load, so it should run again soon.
+     * Posts failing to be reached one after another point at the network rather than at them: only the first is counted
+     * against its post, and after [UNREACHABLE_STREAK] the run stops. Returns whether this run was cut short (heat, a
+     * model that would not load, the network) and so should run again soon.
      */
     suspend fun drainFrames(): Boolean {
         val tried = HashSet<PostId>()
+        val run = FrameRun()
         while (tagger.ready.value) {
-            val batch = signatures.libraryPostsAwaitingFrames(tagger.modelId, tried.size + BATCH).filterNot { it.id in tried }
-            if (batch.isEmpty()) return false
-            for (post in batch) {
-                if (hot()) return true
-                val started = TimeSource.Monotonic.markNow()
-                val result = tagger.analyzeFrames(post)
-                if (result == PictureResult.Unavailable) return tagger.ready.value
-                if (!tagger.storeFrames(post.id, result)) return false
-                tried += post.id
-                delay(started.elapsedNow())
-            }
+            val awaiting = signatures.libraryPostsAwaitingFrames(tagger.modelId, tried.size + BATCH).filterNot { it.id in tried }
+            if (awaiting.isEmpty()) return false
+            awaiting.mapTo(tried) { it.id }
+            for (post in tagger.playing(awaiting)) run.upgrade(post)?.let { return it }
         }
         return false
+    }
+
+    /** One [drainFrames] run's walk through its posts, counting those in a row that could not be reached. */
+    private inner class FrameRun {
+        private var unreachable = 0
+
+        /** Reads and stores one post's frames, then rests as long as that took; returns null to go on, or what the run returns. */
+        suspend fun upgrade(post: Post): Boolean? {
+            if (hot()) return true
+            val started = TimeSource.Monotonic.markNow()
+            val result = tagger.analyzeFrames(post)
+            if (result == PictureResult.Unavailable) return tagger.ready.value
+            unreachable = if (result == PictureResult.Unreachable) unreachable + 1 else 0
+            if (unreachable <= 1 && !tagger.storeFrames(post.id, result)) return false
+            if (unreachable >= UNREACHABLE_STREAK) return true
+            delay(started.elapsedNow())
+            return null
+        }
     }
 
     /**
@@ -88,5 +103,8 @@ class LibraryVisionBackfill(
         /** About four seconds of pictures at phase 0's 450 ms each. */
         const val BATCH = 8
         const val WRITE_THROUGH_LIMIT = 64
+
+        /** Posts in a row that could not be reached after which a frame run stops. */
+        const val UNREACHABLE_STREAK = 3
     }
 }

@@ -34,6 +34,11 @@ public interface VisualSignatureDao {
     void putVision(String source, String sourcePostId, long indexedAtEpochMs, String modelId,
             @Nullable byte[] embedding, @Nullable String predictedTags, int frameState);
 
+    /** Sets [modelId]'s analysis of a post to [frameState]. */
+    @Query("UPDATE post_visual_signatures SET frame_state = :frameState "
+            + "WHERE source = :source AND source_post_id = :sourcePostId AND model_id = :modelId")
+    void setFrameState(String source, String sourcePostId, String modelId, int frameState);
+
     /** Counts [attempts] more failed frame reads against [modelId]'s analysis of a post. */
     @Query("UPDATE post_visual_signatures SET frame_attempts = frame_attempts + :attempts "
             + "WHERE source = :source AND source_post_id = :sourcePostId AND model_id = :modelId")

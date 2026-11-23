@@ -68,6 +68,9 @@ class LibraryVisionBackfillTest {
         override suspend fun failFrames(postId: PostId, modelId: String, permanently: Boolean) {
             attempts[postId] = (attempts[postId] ?: 0) + if (permanently) MAX_FRAME_ATTEMPTS else 1
         }
+        override suspend fun unwantFrames(postIds: List<PostId>, modelId: String) {
+            stored.replaceAll { if (it.postId in postIds) it.copy(frames = VisionFrames.NONE) else it }
+        }
         override fun observePredictedTags(modelId: String): Flow<Map<PostId, List<PredictedTag>>> = tags
         override fun observeVisionProgress(modelId: String): Flow<VisionProgress> = flowOf(VisionProgress(0, 0))
         override suspend fun clearVision() = stored.clear()
@@ -185,6 +188,32 @@ class LibraryVisionBackfillTest {
         assertEquals(1 + MAX_FRAME_ATTEMPTS, framesRead)
         assertTrue(library.signaturesAwaitingFrames().isEmpty())
         assertEquals(stills, library.stored)
+    }
+
+    @Test
+    fun `posts failing to be reached one after another stop the run and count once, and posts that stopped playing are set aside`() = runBlocking {
+        val library = Library(listOf("a", "b", "c", "d", "gif").map(::post))
+        var read = 0
+        var gifPlays = true
+        val pictures = Pictures(
+            still = { Pattern.TOP.bitmap() },
+            plays = { it.id.sourcePostId != "gif" || gifPlays },
+            frames = { read++; PostFrames.Unreachable },
+        )
+        val tagger = PictureTagger(readyStore(), library, pictures, scope, openModel = { _, _ -> PatternModel(mutableListOf()) })
+        val backfill = backfill(tagger, library)
+        backfill.drain()
+        gifPlays = false
+
+        // The network is down rather than these posts: stop early and ask for another run.
+        assertTrue(backfill.drainFrames())
+        assertEquals(3, read)
+        assertEquals(VisionFrames.NONE, library.vision("gif").frames)
+        assertEquals(listOf("a", "b", "c", "d").map { post(it).id }, library.signaturesAwaitingFrames())
+
+        // Each run charges only the streak's first post, so the others keep their tries.
+        repeat(MAX_FRAME_ATTEMPTS - 1) { backfill.drainFrames() }
+        assertEquals(listOf("b", "c", "d").map { post(it).id }, library.signaturesAwaitingFrames())
     }
 
     @Test
