@@ -38,6 +38,7 @@ import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -187,6 +188,40 @@ class SeriesReaderTest {
     }
 
     @Test
+    fun aSessionPicturesDownloadedChaptersByTheirFirstPageWithoutAnExtension() = runTest {
+        val entries = listOf(chapter, StoredSeriesEntry(SeriesEntry("/c2", "Ch. 2", number = 2f), sourceOrder = 1, firstSeenAtEpochMs = 0))
+        download("/c1")
+        val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), entries), { error("No extension may load") }))
+
+        val session = checkNotNull(reader.session(id, "/c2"))
+
+        val firstPage = checkNotNull(session.stripMarks[PostId(source, "/c1")]?.image?.localPath)
+        assertEquals(pagesOf("/c1").first().url, File(firstPage).readText())
+        // The undownloaded chapter keeps only its number; neither chapter's pages are read until the Viewer asks.
+        assertEquals(ViewerStripMark("2", "Title · Ch. 2"), session.stripMarks[PostId(source, "/c2")])
+        assertTrue(session.posts.all { it.media.isEmpty() })
+    }
+
+    @Test
+    fun anOpenReadersStripPicturesAChapterOnceItDownloads() = runTest {
+        val store = store()
+        val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), listOf(chapter)), { error("unused") }, store = store))
+        val session = checkNotNull(reader.session(id, "/c1"))
+        val seen = mutableListOf<Map<PostId, ViewerStripMark>>()
+        // Not backgroundScope: advanceUntilIdle stops once only background work remains.
+        val collector = launch { reader.stripMarks(session).collect { seen += it } }
+        advanceUntilIdle()
+        assertEquals(listOf(emptyMap<PostId, ViewerStripMark>()), seen)
+
+        download("/c1", store)
+        advanceUntilIdle()
+
+        val firstPage = checkNotNull(seen.last()[PostId(source, "/c1")]?.image?.localPath)
+        assertEquals(pagesOf("/c1").first().url, File(firstPage).readText())
+        collector.cancel()
+    }
+
+    @Test
     fun deleteAfterReadingWaitsForTheLastReaderToClose() = runTest {
         val reader = readerOverDownloadedChapters(deleteAfterReading = true)
         reader.opened()
@@ -240,10 +275,10 @@ class SeriesReaderTest {
     private fun pagesOf(address: String) = List(2) { ImageRef(url = "https://pages.test$address/$it", localPath = null, mime = null) }
 
     /** Puts the two pages of the chapter at [address] on the device, each file holding its page's address. */
-    private suspend fun TestScope.download(address: String) {
+    private suspend fun TestScope.download(address: String, store: OfflineMediaStore = store()) {
         val pages = pagesOf(address)
         val post = chapterPost(Series(id, "Title"), SeriesEntry(address, address), null, pages)
-        store().save(post, pages, seriesOfflineOwner(id)) { page, file ->
+        store.save(post, pages, seriesOfflineOwner(id)) { page, file ->
             file.writeText(checkNotNull(page.url))
             "image/png"
         }

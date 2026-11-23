@@ -62,7 +62,7 @@ class ViewerVerticalGalleryTest {
 
     // Pages fail at once on the main thread; on Coil's background thread they could land after idling, and a Retry
     // tapped before the Viewer holds page 1's error only reloads that page locally.
-    @Before fun failImageLoads() = installFailingLoader()
+    @Before fun failImageLoads() { installFailingLoader() }
     @After fun resetCoil() = Coil.reset()
 
     private fun show(modes: Map<PostId, GalleryReadingMode> = mapOf(gallery.id to GalleryReadingMode.VERTICAL)) {

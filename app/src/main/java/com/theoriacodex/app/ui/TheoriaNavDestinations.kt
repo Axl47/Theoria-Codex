@@ -382,7 +382,9 @@ private fun rememberSeriesViewerConfig(shell: TheoriaShell): (ViewerScreenConfig
     val mode by remember(session.context.queryHash) { shell.seriesReader?.readingMode(session) ?: emptyFlow() }
         .collectAsStateWithLifecycle(initialValue = session.seriesReadingMode)
     val modes = mode?.let { chosen -> session.posts.associate { it.id to chosen } }.orEmpty()
-    return { it.copy(seriesChapters = true, galleryReadingModes = modes, stripMarks = session.stripMarks) }
+    val marks by remember(session.sessionId) { shell.seriesReader?.stripMarks(session) ?: emptyFlow() }
+        .collectAsStateWithLifecycle(initialValue = session.stripMarks)
+    return { it.copy(seriesChapters = true, galleryReadingModes = modes, stripMarks = marks) }
 }
 
 private const val SERIES_READER_KEY = "series-reader"

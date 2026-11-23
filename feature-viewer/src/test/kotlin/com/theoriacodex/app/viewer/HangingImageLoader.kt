@@ -46,9 +46,13 @@ internal fun installGatedLoader(width: Int, height: Int): () -> Unit {
 
 /**
  * Replaces Coil's loader with one whose every request fails at once, on the calling thread, so a test's idling
- * sees each failure land. Call `Coil.reset()` after the test.
+ * sees each failure land, recording which requests started. Call `Coil.reset()` after the test.
  */
-internal fun installFailingLoader() = installTestLoader(EventListener.NONE) { data -> error("No image in tests: $data") }
+internal fun installFailingLoader(): ImageLoadLog {
+    val log = ImageLoadLog()
+    installTestLoader(log) { data -> error("No image in tests: $data") }
+    return log
+}
 
 /** Unconfined, so loads finish on the main thread, where Compose's idling tracks them. */
 private fun installTestLoader(listener: EventListener, fetch: suspend (Any) -> FetchResult) {

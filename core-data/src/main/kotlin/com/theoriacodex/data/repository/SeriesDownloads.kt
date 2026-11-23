@@ -179,6 +179,15 @@ class SeriesDownloads(
     /** The chapter at [entry] with its pages as files, in reading order; null when it is not on the device. */
     suspend fun chapter(id: SeriesId, entry: String): Post? = store.find(PostId(id.source, entry))
 
+    /**
+     * The first page, as a file, of each of [id]'s chapters on the device, by address, read from memory; then again
+     * whenever a chapter is downloaded or deleted.
+     */
+    fun firstPages(id: SeriesId): Flow<Map<String, ImageRef>> = flow {
+        store.load()
+        emitAll(store.snapshot.map { it.firstPages(id) }.distinctUntilChanged())
+    }
+
     /** The addresses of [id]'s chapters on the device. */
     suspend fun downloaded(id: SeriesId): Set<String> {
         store.load()
@@ -450,6 +459,9 @@ class SeriesDownloads(
     /** The addresses of [id]'s chapters on the device. */
     private fun OfflineMediaSnapshot.chapters(id: SeriesId): Set<String> =
         postsByOwner[seriesOfflineOwner(id)].orEmpty().mapTo(HashSet()) { it.sourcePostId }
+
+    private fun OfflineMediaSnapshot.firstPages(id: SeriesId): Map<String, ImageRef> =
+        postsByOwner[seriesOfflineOwner(id)].orEmpty().mapNotNull { post -> firstPages[post]?.let { post.sourcePostId to it } }.toMap()
 
     companion object {
         const val PAGE_ATTEMPTS = 3

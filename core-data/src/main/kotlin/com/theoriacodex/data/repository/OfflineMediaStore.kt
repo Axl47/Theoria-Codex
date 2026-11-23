@@ -395,7 +395,9 @@ class OfflineMediaStore internal constructor(
     private fun indexFolder(folder: File, record: OfflineRecord?) {
         val bytes = record?.let { it.mediaBytes + File(folder, MANIFEST_NAME).length() }
             ?: folder.walkTopDown().filter(File::isFile).sumOf(File::length)
-        catalog.update(folder, record?.post?.id, record?.owners ?: salvageOwners(folder), record?.post?.media?.size ?: 0, bytes)
+        // A detached copy: the record's own refs are weak keys of [sourceMediaByOfflineRef], which the catalog must not pin.
+        val firstPage = record?.post?.media?.firstOrNull()?.let { ImageRef(url = null, localPath = it.localPath, mime = it.mime) }
+        catalog.update(folder, record?.post?.id, record?.owners ?: salvageOwners(folder), record?.post?.media?.size ?: 0, bytes, firstPage)
     }
 
     private fun postDirectory(id: PostId) = File(directory, digest("${id.source.id}:${id.sourcePostId}"))
@@ -450,6 +452,8 @@ data class OfflineMediaSnapshot(
     /** Every owner with a folder on disk, and the ids of its posts that are available; empty when none of its copies open. */
     val postsByOwner: Map<String, Set<PostId>> = emptyMap(),
     val availablePostIds: Set<PostId> = emptySet(),
+    /** Each available copy's first page, as a file. */
+    val firstPages: Map<PostId, ImageRef> = emptyMap(),
 )
 
 class OfflineMediaAdmission internal constructor(
