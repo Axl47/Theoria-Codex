@@ -167,6 +167,9 @@ internal class AnimeViewerHand(val live: SeriesLiveDriver = SeriesLiveDriver()) 
         error("\"$entry\" is not listed")
     }
 
+    /** The entry rows the series page shows, top to bottom, by name and what each says under it ([rowDetail]). */
+    fun shownRows(): List<Pair<String, String>> = entryRows().map { (row, name) -> name to rowDetail(row) }
+
     /** What a series page row says under its name: its date, then how far it is watched, such as "Watched". */
     fun rowDetail(row: UiObject2): String = fresh { row.findObjects(By.text(ANY_TEXT)).map { it.text }.drop(1).joinToString(" | ") }
 

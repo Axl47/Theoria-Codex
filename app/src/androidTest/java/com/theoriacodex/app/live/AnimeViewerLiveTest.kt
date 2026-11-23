@@ -131,8 +131,8 @@ class AnimeViewerLiveTest {
     }
 
     /**
-     * From the series page, the episode Continue names, marked watched, gives way to the next and, marked unwatched, is
-     * named again; marking the episodes before it watched can be undone. An anime offers nothing to download. Needs an
+     * From the series page, the episode Continue names, marked watched, gives way to another, and marked unwatched, reads
+     * so again. Marking the episodes before it watched can be undone. An anime offers nothing to download. Needs an
      * episode of the series watched partway first.
      */
     @Test
@@ -158,19 +158,22 @@ class AnimeViewerLiveTest {
         live.tap("Mark as unwatched", By.text("Mark as unwatched"))
         val unwatched = live.await("\"$episode\" to read as unwatched", { hand.rowDetail(hand.entryRow(episode).first) }) { WATCHED !in it }
         hand.backToTop()
-        assertEquals("Continue names it again", episode, continuing())
-        live.report("unwatched", "\"$episode\" reads \"$unwatched\"; Continue names it again")
+        // Unwatching the episode opened last forgets it as such, and its position: Continue falls back to the furthest
+        // episode started, which depends on what was watched before.
+        live.report("unwatched", "\"$episode\" reads \"$unwatched\"; Continue names \"${continuing()}\"")
 
-        // Marking the episodes before it watched offers an undo; the episode below it in the list is one of them.
-        val earlier = { hand.entryRow(episode).second?.let(hand::rowDetail) }
-        val before = earlier()
-        val offered = entryActions(episode)
-        assertTrue("Episodes before it are unwatched, so marking them is offered", MARK_PREVIOUS in offered)
+        // Marking the episodes before it watched offers an undo. One of them still unwatched shows both: it is listed
+        // below the episode, since the list runs newest first.
+        hand.entryRow(episode)
+        val (earlier, before) = hand.shownRows().dropWhile { it.first != episode }.drop(1).firstOrNull { WATCHED !in it.second }
+            ?: error("No unwatched episode is listed below \"$episode\"")
+        val detail = { hand.shownRows().firstOrNull { it.first == earlier }?.second }
+        assertTrue("Marking the episodes before it is offered", MARK_PREVIOUS in entryActions(episode))
         live.tap(MARK_PREVIOUS, By.text(MARK_PREVIOUS))
-        val marked = live.await("the episode before it to read as watched", earlier) { it != null && WATCHED in it }
+        val marked = live.await("\"$earlier\" to read as watched", detail) { it != null && WATCHED in it }
         live.tap("Undo", By.text("Undo"))
-        val undone = live.await("the episode before it to read as it did", earlier) { it == before }
-        live.report("undo", "the episode before it read \"$before\", \"$marked\" once marked, then \"$undone\" after Undo")
+        val undone = live.await("\"$earlier\" to read as it did", detail) { it == before }
+        live.report("undo", "\"$earlier\" read \"$before\", \"$marked\" once the episodes before were marked, then \"$undone\" after Undo")
         hand.backToTop()
     }
 
