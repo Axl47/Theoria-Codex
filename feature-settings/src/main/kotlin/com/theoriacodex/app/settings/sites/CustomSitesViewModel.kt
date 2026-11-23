@@ -142,7 +142,8 @@ class CustomSitesViewModel(
 
     /**
      * Opens the app's browser check for [host]: a stored or built-in site's, or else the Add form's, whose site keeps
-     * the browser's cookies until the form closes or saves. A pass fills the Add form, or updates the site's row.
+     * the browser's cookies until the check is dismissed, the address changes or the form closes or saves. A pass fills
+     * the Add form, or updates the site's row.
      */
     private fun startVerification(host: String) {
         val source = state.value.sites.firstOrNull { it.host == host }?.let { SourceKey.parse(it.sourceId) }
@@ -160,6 +161,7 @@ class CustomSitesViewModel(
                 url = "https://$host/",
                 passes = { userAgent -> probeAddTarget(userAgent).also { probe = it }?.clearedChallenge == true },
                 complete = { userAgent -> updateAdd { verified(userAgent, probe) } },
+                dismissed = { controller.setSetupHost(null) },
             ),
         )
     }
@@ -189,6 +191,7 @@ class CustomSitesViewModel(
     override fun onCleared() {
         liveEdits.close()
         removals.commitAll()
+        controller.setSetupHost(null)
     }
 
     private fun openForm(form: SiteForm) {
@@ -224,9 +227,12 @@ class CustomSitesViewModel(
         mutableState.update { it.copy(form = null) }
     }
 
-    private fun setAddress(value: String) = updateAdd {
-        // A different address is a different site, which the waiting link doesn't belong to.
-        if (stage.busy) this else copy(address = value, stage = AddStage.Address(), linkAfterSetup = null)
+    private fun setAddress(value: String) {
+        val form = state.value.form as? SiteForm.Add ?: return
+        if (form.stage.busy) return
+        // A different address is a different site, which neither the waiting link nor the old one's cookies belong to.
+        controller.setSetupHost(null)
+        updateAdd { copy(address = value, stage = AddStage.Address(), linkAfterSetup = null) }
     }
 
     /** Which field edits invalidate a finished probe, so a draft always matches what was checked. */

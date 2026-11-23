@@ -94,6 +94,29 @@ class HostOutageTrackerTest {
         assertTrue(tracker.working.value.isEmpty())
     }
 
+    @Test fun `a Cloudflare challenge served as a 503 is a challenge, not maintenance, and is not retried`() = runBlocking {
+        val hits = AtomicInteger()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            createContext("/") { exchange ->
+                hits.incrementAndGet()
+                exchange.responseHeaders.add("cf-mitigated", "challenge")
+                exchange.sendResponseHeaders(503, -1)
+                exchange.close()
+            }
+            start()
+        }
+        val outages = HostOutageTracker()
+        val url = "http://127.0.0.1:${server.address.port}/posts.json"
+        try {
+            val refused = runCatching { DefaultSourceHttpClient(maxRetries = 2, outages = outages).get(url) }.exceptionOrNull()
+            assertEquals(HostOutageKind.CHALLENGE, (refused as HostUnavailableException).kind)
+            assertEquals(1, hits.get())
+            assertTrue(outages.isChallenged(url))
+        } finally {
+            server.stop(0)
+        }
+    }
+
     @Test fun `a maintenance page fails at once and the next request never reaches the host`() = runBlocking {
         val hits = AtomicInteger()
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {

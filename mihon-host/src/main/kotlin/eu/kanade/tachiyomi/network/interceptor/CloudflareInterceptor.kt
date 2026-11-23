@@ -18,7 +18,7 @@ import okhttp3.Response
  * request as [HostUnavailableException]. Extensions parse whatever answer they get, so a challenge page must never
  * reach them. The source then shows as needing browser verification, like any challenged source, and the app's check
  * page passes it with that agent. While the record lasts, [pass] tries no hidden browser for the host, and the record
- * is not renewed, so it still expires on time.
+ * is not renewed, so it still expires on time; a successful answer from the host ends it at once.
  */
 class CloudflareInterceptor internal constructor(
     private val pass: ChallengePass,
@@ -26,7 +26,7 @@ class CloudflareInterceptor internal constructor(
 ) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val response = pass.intercept(chain)
-        if (!response.isCloudflareChallenge()) return response
+        if (!response.isCloudflareChallenge()) return response.also(::clearRecovered)
         response.close()
         val challenged = response.challengedRequest
         val url = challenged.url.toString()
@@ -34,5 +34,13 @@ class CloudflareInterceptor internal constructor(
             outages.record(url, HostOutageKind.CHALLENGE, RefusedRequest(url, challenged.header("User-Agent").orEmpty()))
         }
         throw HostUnavailableException(HostOutageTracker.normalizeHost(challenged.url.host), HostOutageKind.CHALLENGE)
+    }
+
+    /** Ends the challenge record of a host that answered [response] successfully; looks only while records exist. */
+    private fun clearRecovered(response: Response) {
+        val recorded = outages.outages.value
+        if (recorded.isEmpty() || !response.isSuccessful) return
+        val host = HostOutageTracker.normalizeHost(response.request.url.host)
+        if (recorded[host]?.kind == HostOutageKind.CHALLENGE) outages.clear(host)
     }
 }

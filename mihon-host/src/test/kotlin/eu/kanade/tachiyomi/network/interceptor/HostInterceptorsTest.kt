@@ -5,6 +5,7 @@ import com.theoriacodex.mihonhost.answering
 import com.theoriacodex.mihonhost.cannedResponse
 import com.theoriacodex.sources.http.BrowserCookieStore
 import com.theoriacodex.sources.http.ChallengeBrowser
+import com.theoriacodex.sources.http.ChallengeBrowsers
 import com.theoriacodex.sources.http.ChallengePass
 import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.HostOutageTracker
@@ -37,7 +38,7 @@ class HostInterceptorsTest {
     fun `the client extensions rebuild carries the interceptor names they require, in Mihon's order`() {
         assertEquals(
             listOf("UncaughtExceptionInterceptor", "UserAgentInterceptor", "CloudflareInterceptor"),
-            MihonHost.extensionClient(NoCookies, NoBrowser, HostOutageTracker()).interceptors.map { it.javaClass.simpleName },
+            MihonHost.extensionClient(NoCookies, ChallengeBrowsers(NoCookies, NoBrowser), HostOutageTracker()).interceptors.map { it.javaClass.simpleName },
         )
     }
 
@@ -46,7 +47,7 @@ class HostInterceptorsTest {
         var now = 0L
         val outages = HostOutageTracker(clock = { now })
         val client = clientOf(
-            CloudflareInterceptor(ChallengePass(NoCookies, NoBrowser, outages::isChallenged), outages),
+            CloudflareInterceptor(ChallengePass(ChallengeBrowsers(NoCookies, NoBrowser), outages::isChallenged), outages),
             answering { sent ->
                 cannedResponse(sent, code = 403).newBuilder().header("Server", "cloudflare").header("cf-mitigated", "challenge").build()
             },
@@ -62,6 +63,24 @@ class HostInterceptorsTest {
         assertEquals(RefusedRequest("https://www.site.test/list", "agent/1"), outage.refused)
         // The second challenge did not renew the record, so it still expires when the first one's does.
         assertEquals(HostOutageTracker.DEFAULT_OUTAGE_MS, outage.untilEpochMs)
+    }
+
+    @Test
+    fun `a challenged host that answers successfully again stops needing verification, and only that host`() {
+        val outages = HostOutageTracker()
+        outages.record("https://api.site.test/list", HostOutageKind.CHALLENGE)
+        outages.record("https://other.test/", HostOutageKind.CHALLENGE)
+        outages.record("https://down.test/", HostOutageKind.MAINTENANCE)
+        val client = clientOf(
+            CloudflareInterceptor(ChallengePass(ChallengeBrowsers(NoCookies, NoBrowser), outages::isChallenged), outages),
+            answering { sent -> cannedResponse(sent, code = if (sent.url.host == "other.test") 404 else 200) },
+        )
+
+        listOf("https://api.site.test/list", "https://other.test/", "https://down.test/").forEach { url ->
+            client.newCall(Request.Builder().url(url).build()).execute().close()
+        }
+
+        assertEquals(setOf("other.test", "down.test"), outages.outages.value.keys)
     }
 
     @Test

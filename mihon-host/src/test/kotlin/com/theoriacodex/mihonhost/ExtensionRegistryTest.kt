@@ -5,6 +5,8 @@ import com.theoriacodex.domain.series.ExtensionChoiceStore
 import com.theoriacodex.domain.series.ExtensionChoices
 import com.theoriacodex.domain.series.ExtensionLanguage
 import com.theoriacodex.domain.series.ExtensionSetting
+import com.theoriacodex.sources.http.HostOutageKind
+import com.theoriacodex.sources.http.HostUnavailableException
 import eu.kanade.tachiyomi.source.ConfigurableSource
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.FilterList
@@ -87,6 +89,26 @@ class ExtensionRegistryTest {
 
         assertTrue(registry.sources().isEmpty())
         assertFalse(registry.installed().single().on)
+    }
+
+    @Test
+    fun `a host whose challenge stopped a source's call is traced to that source from then on`() = runBlocking {
+        sourcesOf = {
+            listOf(
+                object : StubSource(1, "en") {
+                    override suspend fun getPopularManga(page: Int): MangasPage =
+                        throw HostUnavailableException("api.elsewhere.test", HostOutageKind.CHALLENGE)
+                },
+            )
+        }
+        registry.setOn("/a.apk", "key-1", true)
+        val source = registry.sources().single()
+        assertTrue(registry.sites().isEmpty())
+
+        runCatching { source.popular(1) }
+
+        assertEquals(mapOf(source.key to ExtensionSite("Stub", setOf("api.elsewhere.test"))), registry.sites())
+        assertEquals(mapOf(source.key to setOf("api.elsewhere.test")), registry.siteChanges.value)
     }
 
     @Test

@@ -28,7 +28,10 @@ import com.theoriacodex.app.network.AppHttpClients
 import com.theoriacodex.app.network.AppHttpClientsOwner
 import com.theoriacodex.app.network.WebViewChallengeBrowser
 import com.theoriacodex.app.media.NetworkMonitor
+import com.theoriacodex.sources.http.ChallengeBrowsers
 import com.theoriacodex.sources.http.ChallengePass
+import com.theoriacodex.sources.http.siteRoot
+import okhttp3.Request
 import com.theoriacodex.sources.http.HostOutageTracker
 import com.theoriacodex.app.viewer.VideoPlaybackInfrastructure
 import com.theoriacodex.app.viewer.VideoPlaybackInfrastructureOwner
@@ -62,11 +65,11 @@ class TheoriaApplication :
      */
     private val hostOutages by lazy { HostOutageTracker(isOnline = { networkOnline.value }) }
 
-    /** Passes browser checks out of sight for the app's own clients and the extensions' alike. */
-    private val challengeBrowser = WebViewChallengeBrowser(this)
+    /** The hidden browsers that pass checks out of sight, one set shared by the app's own clients and the extensions'. */
+    private val challengeBrowsers = ChallengeBrowsers(AndroidBrowserCookieStore, WebViewChallengeBrowser(this))
 
     /** Series sources that run loaded extension code. It loads nothing until first used. */
-    private val extensionHost = MihonExtensionSourceHost().also { it.attach(this, challengeBrowser) { hostOutages } }
+    private val extensionHost = MihonExtensionSourceHost().also { it.attach(this, challengeBrowsers) { hostOutages } }
 
     /** Every HTTP client in the app, so they share one connection pool and these cookies. */
     override val httpClients = AppHttpClients(
@@ -79,8 +82,9 @@ class TheoriaApplication :
         siteCookieBridge::isAllowed,
         siteCookieBridge::mediaAuthorizationFor,
         extensionHost.mediaInterceptor,
-        // Only hosts that keep the browser's cookies: a never-verified built-in site asks the user first.
-        ChallengePass(AndroidBrowserCookieStore, challengeBrowser, { hostOutages.isChallenged(it) }, siteCookieBridge::keepsCookies),
+        // Only hosts that keep the browser's cookies: a never-verified built-in site asks the user first. The hidden
+        // browser sees only the site's root, since these requests can carry API keys.
+        ChallengePass(challengeBrowsers, { hostOutages.isChallenged(it) }, siteCookieBridge::keepsCookies, Request::siteRoot),
     )
 
     override val videoPlaybackInfrastructure: VideoPlaybackInfrastructure by lazy {

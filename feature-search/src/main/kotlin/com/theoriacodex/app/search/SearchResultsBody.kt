@@ -40,6 +40,8 @@ import com.theoriacodex.app.ui.components.FeedPageDemandControl
 import com.theoriacodex.app.ui.components.FeedPostCard
 import com.theoriacodex.app.ui.components.FeedRelatedPostsShelf
 import com.theoriacodex.app.ui.components.TwoColumnProjectedPostStaggeredGrid
+import com.theoriacodex.app.source.retryWhenVerified
+import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -72,6 +74,11 @@ internal fun ColumnScope.SearchResultsBody(
         if (scope is SearchSourceScope.Single) emptyList() else sourceOutageNotices(state.content.statuses, issues)
     }
     SourceOutageNotices(outageNotices)
+    val failedSources = state.content.statuses.filter { it.state == SourceRunState.FAILED }.map { it.source }
+    // A source whose browser check passes, here or anywhere else, loads again by itself.
+    retryWhenVerified(failedSources) { source ->
+        if (state.content.results.isEmpty()) retrySearch() else onAction(SearchAction.RetrySource(source))
+    }
     state.pageFailure?.let { failure ->
         DismissibleFailure(failure) { dismiss ->
             SearchFailureSurface(failure, state.content.statuses, retrySearch, onDismiss = dismiss)

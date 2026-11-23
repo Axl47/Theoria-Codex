@@ -31,9 +31,9 @@ class SourceHealthTest {
 
         assertEquals(
             mapOf(extension to HostOutageKind.CHALLENGE),
-            sourceIssues(outages, sources, now = 1_000, extensionSites = mapOf(extension to "site.test")),
+            sourceIssues(outages, sources, now = 1_000, extensionSites = mapOf(extension to setOf("site.test"))),
         )
-        assertEquals(emptyMap<SourceKey, HostOutageKind>(), sourceIssues(outages, sources, now = 1_000, extensionSites = mapOf(extension to "other.test")))
+        assertEquals(emptyMap<SourceKey, HostOutageKind>(), sourceIssues(outages, sources, now = 1_000, extensionSites = mapOf(extension to setOf("other.test"))))
     }
 
     @Test fun `picking a down source clears its outages so the search tries again`() {

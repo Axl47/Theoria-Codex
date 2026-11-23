@@ -663,7 +663,8 @@ internal class TheoriaShell(
                     container.customSites.requestKeyEntry(deepLink.source.id)
                     owners.settings.onAction(SettingsAction.OpenCustomSites)
                 }
-                SharedPostFix.VERIFY -> owners.siteChecks.open(deepLink.source)
+                // A passed check opens the post after all.
+                SharedPostFix.VERIFY -> owners.siteChecks.open(deepLink.source) { scope.launch { openExternalPost(deepLink) } }
                 null -> Unit
             }
             return

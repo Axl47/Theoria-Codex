@@ -1,6 +1,11 @@
 package com.theoriacodex.app.source
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.sources.http.HostOutage
@@ -45,6 +50,27 @@ val LocalSourceHealth = compositionLocalOf { SourceHealth() }
 /** The action that opens a source's browser check ([SourceHealth.verify]), wherever it is offered. */
 const val VERIFY_IN_BROWSER_LABEL = "Verify in browser"
 
+/**
+ * Runs [retry] for each of [sources] whose need for browser verification clears while this is on screen, by a check
+ * passed here or anywhere else, so the screen that asked loads again by itself. Returns those that need it now.
+ */
+@Composable
+fun retryWhenVerified(sources: Collection<SourceKey>, retry: (SourceKey) -> Unit): Set<SourceKey> {
+    val issues = LocalSourceHealth.current.issues
+    val shown = sources.toSet()
+    val challenged = shown.filterTo(HashSet()) { issues[it] == HostOutageKind.CHALLENGE }
+    val seen = remember { HashSet<SourceKey>() }
+    val onRetry by rememberUpdatedState(retry)
+    LaunchedEffect(challenged, shown) {
+        val cleared = seen.filter { it in shown && it !in challenged }
+        seen.retainAll(shown)
+        seen += challenged
+        seen -= cleared.toSet()
+        cleared.forEach(onRetry)
+    }
+    return challenged
+}
+
 /** The host outages that belong to [source]: its site host, or a subdomain of it such as an API host. */
 fun SourceKey.ownsHost(host: String): Boolean {
     val site = siteHost() ?: return false
@@ -52,18 +78,19 @@ fun SourceKey.ownsHost(host: String): Boolean {
 }
 
 /**
- * Active outages by source, matched to the site host of each source (its presentation's address) or of each extension
- * source in [extensionSites], or to a subdomain of it such as an API host.
+ * Active outages by source, matched to the site host of each source (its presentation's address) or to the hosts each
+ * extension source in [extensionSites] calls, or to a subdomain of one such as an API host.
  */
 fun sourceIssues(
     outages: Map<String, HostOutage>,
     sources: Iterable<SourceKey>,
     now: Long,
-    extensionSites: Map<SourceKey, String> = emptyMap(),
+    extensionSites: Map<SourceKey, Set<String>> = emptyMap(),
 ): Map<SourceKey, HostOutageKind> {
     val active = outages.filterValues { it.untilEpochMs > now }
     if (active.isEmpty()) return emptyMap()
-    val sites = sources.mapNotNull { source -> source.siteHost()?.let { source to it } } + extensionSites.toList()
+    val sites = sources.mapNotNull { source -> source.siteHost()?.let { source to it } } +
+        extensionSites.flatMap { (source, hosts) -> hosts.map { source to it } }
     return sites.mapNotNull { (source, site) ->
         active.entries.firstOrNull { (host, _) -> HostOutageTracker.hostBelongsToSite(host, site) }?.let { source to it.value.kind }
     }.toMap()

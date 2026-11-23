@@ -74,9 +74,13 @@ private suspend fun retrying(
     }
 }
 
-/** How long to wait before retrying [response] to failed attempt [attempt] (from 0); null when it is final. */
+/**
+ * How long to wait before retrying [response] to failed attempt [attempt] (from 0); null when it is final. A browser
+ * check is final whatever its status: asking again only meets it again.
+ */
 private fun SourceRetryPolicy.delayBeforeRetry(requestUrl: String, response: SourceByteResponse, attempt: Int): Long? {
-    if (attempt == maxRetries || !defaultShouldRetryStatus(requestUrl, response.statusCode)) return null
+    if (attempt == maxRetries || isCloudflareChallenge(response.statusCode, response.headers::header)) return null
+    if (!defaultShouldRetryStatus(requestUrl, response.statusCode)) return null
     return retryDelayMs(response.headers, attempt + 1, baseDelayMs)
 }
 

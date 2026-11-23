@@ -45,7 +45,7 @@ import kotlinx.coroutines.withContext
  * null. [passes] says whether the site's own client now gets through with the browser's agent, and [complete] records
  * a pass; either may throw, which counts as a failed check. [cookieHost] is a host whose browser cookies the app's own
  * requests may carry while the page is open, so [passes] can test them before the site keeps them; null leaves that
- * to whoever opened the check.
+ * to whoever opened the check. [dismissed] runs when the page is closed without a pass.
  */
 data class SiteCheckTarget(
     val title: String,
@@ -54,6 +54,7 @@ data class SiteCheckTarget(
     val cookieHost: String? = null,
     val passes: suspend (userAgent: String) -> Boolean,
     val complete: suspend (userAgent: String) -> Unit = {},
+    val dismissed: () -> Unit = {},
 )
 
 /** The check on screen; [stillRefused] once the browser got through a page and the site's client still did not. */
@@ -118,6 +119,7 @@ class SiteChecks(
         val check = opened ?: return
         check.job?.cancel()
         end(check)
+        check.target.dismissed()
     }
 
     /** A page of [check]'s finished loading; [letThrough] when the site answered it without an HTTP error. */

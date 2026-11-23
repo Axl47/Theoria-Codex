@@ -9,6 +9,7 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.sources.http.BrowserCookieStore
 import com.theoriacodex.sources.http.ChallengeBrowser
+import com.theoriacodex.sources.http.ChallengeBrowsers
 import com.theoriacodex.sources.http.HostOutageTracker
 import java.io.File
 import kotlin.time.TimeSource
@@ -41,7 +42,7 @@ class ExtensionHarnessTest {
         val apkName = InstrumentationRegistry.getArguments().getString("extensionApk")
         assumeNotNull(apkName)
         val context = instrumentation.targetContext
-        MihonHost.install(context.applicationContext as Application, versionName = "harness", versionCode = 1, cookies = NoCookies, browser = NoBrowser, outages = HostOutageTracker())
+        MihonHost.install(context.applicationContext as Application, versionName = "harness", versionCode = 1, cookies = NoCookies, browsers = ChallengeBrowsers(NoCookies, NoBrowser), outages = HostOutageTracker())
 
         val packages = ExtensionPackages(context)
         val extension = checkNotNull(packages.read(File(context.getExternalFilesDir(null), apkName!!))) { "$apkName is not an extension" }

@@ -532,5 +532,20 @@ class CustomSitesViewModelTest {
         assertNull(controller.setupHosts.last())
     }
 
+    @Test fun `a site being added loses the browser's cookies when its check is dismissed or its address changes`() = runTest {
+        controller.onProbe = { blocked }
+        val owner = owner()
+        probeAddress(owner)
+
+        owner.onAction(CustomSitesAction.StartVerification("safebooru.org"))
+        assertEquals("safebooru.org", controller.setupHosts.last())
+        checks.close()
+        assertNull(controller.setupHosts.last())
+
+        owner.onAction(CustomSitesAction.StartVerification("safebooru.org"))
+        owner.onAction(CustomSitesAction.SetAddress("gelbooru.com"))
+        assertNull(controller.setupHosts.last())
+    }
+
     private val blocked = SiteProbeResult.Unreachable(address("safebooru.org"), ProbeFailure.BLOCKED)
 }

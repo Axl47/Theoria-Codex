@@ -147,11 +147,10 @@ class HostOutageTracker(
 
         fun hostKey(url: String): String? = runCatching { URI(url).host }.getOrNull()?.let(::normalizeHost)
 
-        /** What an answer's status and headers say about the host; null when it isn't down. */
+        /** What an answer's status and headers say about the host; null when it isn't down. A challenge comes first. */
         fun outageKindOf(statusCode: Int, headers: Map<String, List<String>>): HostOutageKind? = when {
+            isCloudflareChallenge(statusCode, headers::header) -> HostOutageKind.CHALLENGE
             statusCode in OUTAGE_STATUSES -> HostOutageKind.MAINTENANCE
-            statusCode == HTTP_FORBIDDEN && headers.header("cf-mitigated").equals("challenge", ignoreCase = true) ->
-                HostOutageKind.CHALLENGE
             else -> null
         }
 

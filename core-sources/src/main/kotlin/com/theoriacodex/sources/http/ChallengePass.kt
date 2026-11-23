@@ -10,7 +10,7 @@ import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response
 
-/** Where [ChallengePass] passes a check out of sight; a port so its decisions are tested without a WebView. */
+/** Where [ChallengeBrowsers] pass a check out of sight; a port so its decisions are tested without a WebView. */
 interface ChallengeBrowser {
     /** Whether the calling thread may wait for a pass: not the main thread, which the browser itself runs on. */
     fun mayWait(): Boolean
@@ -22,69 +22,64 @@ interface ChallengeBrowser {
     fun pass(request: Request, passed: () -> Boolean, cancelled: () -> Boolean): Boolean
 }
 
-/** Cloudflare's own challenge: its server, a refusal, and the header it marks challenges with, which blocks lack. */
-fun Response.isCloudflareChallenge(): Boolean =
-    code in CHALLENGE_CODES && header("Server") in CLOUDFLARE_SERVERS && header("cf-mitigated").equals("challenge", ignoreCase = true)
+/**
+ * Cloudflare's own challenge: a refusal with the header only Cloudflare marks challenges with, which its blocks lack.
+ * A 503 challenge is a challenge, never maintenance. [header] reads one of the answer's headers by name.
+ */
+fun isCloudflareChallenge(statusCode: Int, header: (String) -> String?): Boolean =
+    statusCode in CHALLENGE_CODES && header("cf-mitigated").equals("challenge", ignoreCase = true)
+
+fun Response.isCloudflareChallenge(): Boolean = isCloudflareChallenge(code) { header(it) }
 
 /** The request a challenge answered: after a redirect it can be another host's, and only it shows the cookies sent. */
 val Response.challengedRequest: Request get() = networkResponse?.request ?: request
 
 /**
- * Passes a Cloudflare browser check out of sight, as Mihon does: when Cloudflare answers with a challenge, [browser]
- * loads the challenged address in a browser no one sees, with the request's own agent, and once a clearance cookie
- * other than the refused one appears the request is sent once more, carrying it. Every other answer, a hard block or
- * a maintenance page included, passes through untouched, and so does a challenge no pass could clear; the client that
- * carries this decides how that fails.
- *
- * No pass is tried for a host [mayPass] refuses, while [isChallenged] says the host's check is already the user's to
- * pass (so neither a screen of covers nor the user's own check waits on a hidden browser again), or from the main
- * thread, which the browser itself needs. One pass runs per host at a time, and at most [MAX_BROWSERS] across hosts; a
- * request challenged meanwhile waits for it and then uses the cookie it earned. Every wait gives up as soon as the
- * call is cancelled.
+ * What a hidden browser may load for [this] request when it can carry secrets, such as an API key in its query: its
+ * site's root, sending only its agent. The clearance cookie that page earns covers the whole host.
  */
-class ChallengePass(
-    private val cookies: BrowserCookieStore,
-    private val browser: ChallengeBrowser,
-    private val isChallenged: (url: String) -> Boolean,
-    private val mayPass: (host: String) -> Boolean = { true },
-) : Interceptor {
+fun Request.siteRoot(): Request = Request.Builder()
+    .url(url.newBuilder().username("").password("").encodedPath("/").query(null).fragment(null).build())
+    .apply { header("User-Agent")?.let { header("User-Agent", it) } }
+    .build()
+
+/**
+ * The hidden browsers every client shares: one pass per host at a time and at most [MAX_BROWSERS] across hosts,
+ * whichever client asked, since all of them write the same [cookies]. A request challenged while its host's pass runs
+ * waits for it and then uses the cookie it earned. Every wait gives up as soon as the call is cancelled.
+ */
+class ChallengeBrowsers(private val cookies: BrowserCookieStore, private val browser: ChallengeBrowser) {
     private val passing = ConcurrentHashMap<String, ReentrantLock>()
     private val browsers = Semaphore(MAX_BROWSERS)
 
-    override fun intercept(chain: Interceptor.Chain): Response {
-        val request = chain.request()
-        val response = chain.proceed(request)
-        if (!response.isCloudflareChallenge()) return response
-        val challenged = response.challengedRequest
+    /** Whether the calling thread may wait for a pass: not the main thread, which the browser itself needs. */
+    fun mayWait(): Boolean = browser.mayWait()
+
+    /**
+     * Whether a clearance cookie other than the one [challenged] carried is in the store now: one earned meanwhile, or
+     * one a hidden browser earns by loading [page] when [stillNeeded], asked once this holds the host's turn.
+     */
+    fun earn(challenged: Request, page: Request, call: Call, stillNeeded: () -> Boolean): Boolean {
         val url = challenged.url.toString()
-        val host = HostOutageTracker.normalizeHost(challenged.url.host)
-        if (!mayPass(host) || isChallenged(url) || !browser.mayWait()) return response
-        // Kept in memory: the connection would otherwise sit open through the pass, and a failed one answers with it.
-        val refusal = response.newBuilder().body(response.peekBody(CHALLENGE_BODY_LIMIT)).build()
-        response.close()
-        // The clearance this request carried. A pass that finished while its answer was on the way has stored another,
-        // which must count as new rather than be taken for the refused one and deleted.
+        // A pass that finished while this request's answer was on the way has stored another clearance, which must
+        // count as new rather than be taken for the refused one and deleted.
         val refused = cookieValue(challenged.header("Cookie"), CLEARANCE_COOKIE)
-        val call = chain.call()
-        val lock = passing.computeIfAbsent(host) { ReentrantLock() }
+        val lock = passing.computeIfAbsent(HostOutageTracker.normalizeHost(challenged.url.host)) { ReentrantLock() }
         while (!lock.tryLock(POLL_MS, TimeUnit.MILLISECONDS)) call.throwIfCanceled()
-        val earned = try {
-            // A pass that failed while this request waited has left the check to the user.
-            cookies.hasNewClearance(url, refused) || !isChallenged(url) && passSilently(challenged, url, refused, call)
+        return try {
+            cookies.hasNewClearance(url, refused) || stillNeeded() && passSilently(page, url, refused, call)
         } finally {
             lock.unlock()
         }
-        return if (earned) chain.proceed(request) else refusal
     }
 
-    /** Whether the hidden browser earned a clearance cookie other than [refused]. */
-    private fun passSilently(challenged: Request, url: String, refused: String?, call: Call): Boolean {
+    private fun passSilently(page: Request, url: String, refused: String?, call: Call): Boolean {
         while (!browsers.tryAcquire(POLL_MS, TimeUnit.MILLISECONDS)) call.throwIfCanceled()
         try {
             call.throwIfCanceled()
             // As in Mihon, the refused cookie goes first, so only one the browser earns now can count.
             runCatching { cookies.expire(url, CLEARANCE_COOKIE) }
-            val passed = browser.pass(challenged, passed = { cookies.hasNewClearance(url, refused) }, cancelled = call::isCanceled)
+            val passed = browser.pass(page, passed = { cookies.hasNewClearance(url, refused) }, cancelled = call::isCanceled)
             // A pass cut short by cancellation says nothing about the site, so it must not be recorded as a failure.
             if (!passed) call.throwIfCanceled()
             // The WebView writes cookies to disk lazily; a clearance lost to the app being closed would mean another check.
@@ -100,12 +95,47 @@ class ChallengePass(
     }
 
     companion object {
-        /** Hidden browsers running at once, however many hosts challenge together. */
+        /** Hidden browsers running at once, however many hosts and clients challenge together. */
         const val MAX_BROWSERS = 2
         private const val POLL_MS = 250L
-        private const val CHALLENGE_BODY_LIMIT = 64 * 1024L
+    }
+}
+
+/**
+ * Passes a Cloudflare browser check out of sight, as Mihon does: when Cloudflare answers with a challenge, one of the
+ * shared [browsers] loads [page] (the challenged request itself unless it may carry secrets) with the request's own
+ * agent, and once a clearance cookie other than the refused one appears the request is sent once more, carrying it.
+ * Every other answer, a hard block or a maintenance page included, passes through untouched, and so does a challenge
+ * no pass could clear; the client that carries this decides how that fails.
+ *
+ * No pass is tried for a host [mayPass] refuses, while [isChallenged] says the host's check is already the user's to
+ * pass (so neither a screen of covers nor the user's own check waits on a hidden browser again), or from the main
+ * thread.
+ */
+class ChallengePass(
+    private val browsers: ChallengeBrowsers,
+    private val isChallenged: (url: String) -> Boolean,
+    private val mayPass: (host: String) -> Boolean = { true },
+    private val page: (challenged: Request) -> Request = { it },
+) : Interceptor {
+    override fun intercept(chain: Interceptor.Chain): Response {
+        val request = chain.request()
+        val response = chain.proceed(request)
+        if (!response.isCloudflareChallenge()) return response
+        val challenged = response.challengedRequest
+        val url = challenged.url.toString()
+        if (!mayPass(HostOutageTracker.normalizeHost(challenged.url.host)) || isChallenged(url) || !browsers.mayWait()) return response
+        // Kept in memory: the connection would otherwise sit open through the pass, and a failed one answers with it.
+        val refusal = response.newBuilder().body(response.peekBody(CHALLENGE_BODY_LIMIT)).build()
+        response.close()
+        // A pass that failed while this request waited has left the check to the user.
+        val earned = browsers.earn(challenged, page(challenged), chain.call()) { !isChallenged(url) }
+        return if (earned) chain.proceed(request) else refusal
+    }
+
+    private companion object {
+        const val CHALLENGE_BODY_LIMIT = 64 * 1024L
     }
 }
 
 private val CHALLENGE_CODES = setOf(403, 503)
-private val CLOUDFLARE_SERVERS = setOf("cloudflare-nginx", "cloudflare")

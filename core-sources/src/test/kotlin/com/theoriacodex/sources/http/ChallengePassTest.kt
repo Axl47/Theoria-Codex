@@ -38,17 +38,21 @@ class ChallengePassTest {
 
     /** The site's answers to what was sent, cookies included, in order; once only one is left it is repeated. */
     private val answers = ArrayDeque<(Interceptor.Chain, Request) -> Response>()
-    private val client by lazy {
-        OkHttpClient.Builder()
-            .addInterceptor(ChallengePass(cookies, browser, isChallenged = { HostOutageTracker.hostKey(it) in challengedHosts }, mayPass = passableHosts::contains))
-            .addInterceptor { chain ->
-                // Stands in for the cookie jar, which adds the store's cookies after application interceptors.
-                val request = chain.request().newBuilder().apply { cookies.cookieHeader("")?.let { header("Cookie", it) } }.build()
-                sent += request.url.toString()
-                (if (answers.size > 1) answers.removeFirst() else answers.first())(chain, request)
-            }
-            .build()
-    }
+    private val browsers by lazy { ChallengeBrowsers(cookies, browser) }
+    private val client by lazy { client() }
+
+    /** A client of its own, sharing [browsers] with every other, that loads [page] for a challenge. */
+    private fun client(page: (Request) -> Request = { it }) = OkHttpClient.Builder()
+        .addInterceptor(
+            ChallengePass(browsers, isChallenged = { HostOutageTracker.hostKey(it) in challengedHosts }, mayPass = passableHosts::contains, page = page),
+        )
+        .addInterceptor { chain ->
+            // Stands in for the cookie jar, which adds the store's cookies after application interceptors.
+            val request = chain.request().newBuilder().apply { cookies.cookieHeader("")?.let { header("Cookie", it) } }.build()
+            sent += request.url.toString()
+            synchronized(answers) { if (answers.size > 1) answers.removeFirst() else answers.first() }(chain, request)
+        }
+        .build()
 
     @Test
     fun `a refusal that is not Cloudflare's challenge passes through untouched`() {
@@ -72,6 +76,22 @@ class ChallengePassTest {
         assertEquals(listOf("agent/1"), passes.map { it.header("User-Agent") })
         assertEquals("new", cookies.values["cf_clearance"])
         assertEquals(1, cookies.flushes)
+    }
+
+    @Test
+    fun `a request that can carry keys shows the hidden browser only its site's root and agent, then is sent whole`() {
+        answers += { _, request -> challenge(request) }
+        answers += { _, request -> canned(request) }
+
+        client(Request::siteRoot).newCall(
+            Request.Builder().url("https://user:pw@site.test/index.php?api_key=secret#top").header("User-Agent", "agent/1")
+                .header("Authorization", "key").header("Referer", "https://site.test/?login=me").build(),
+        ).execute().close()
+
+        val page = passes.single()
+        assertEquals("https://site.test/", page.url.toString())
+        assertEquals(listOf("User-Agent" to "agent/1"), page.headers.toList())
+        assertEquals(listOf("api_key=secret", "api_key=secret"), sent.map { it.substringAfter('?').substringBefore('#') })
     }
 
     @Test
@@ -144,11 +164,11 @@ class ChallengePassTest {
     }
 
     @Test
-    fun `no more than two hidden browsers run at once, however many hosts challenge`() {
+    fun `no more than two hidden browsers run at once, however many hosts and clients challenge`() {
         val running = AtomicInteger()
         val most = AtomicInteger()
         val release = CountDownLatch(1)
-        val started = CountDownLatch(ChallengePass.MAX_BROWSERS)
+        val started = CountDownLatch(ChallengeBrowsers.MAX_BROWSERS)
         browser = object : ChallengeBrowser {
             override fun mayWait() = true
 
@@ -164,17 +184,19 @@ class ChallengePassTest {
         passableHosts += hosts
         answers += { _, request -> challenge(request) }
 
-        val calls = hosts.map { host -> thread { call("https://$host/").close() } }
+        // The app's client and the extensions' share one set of browsers.
+        val clients = listOf(client, client(), client())
+        val calls = hosts.zip(clients) { host, client -> thread { call("https://$host/", client).close() } }
         assertTrue(started.await(5, TimeUnit.SECONDS))
         // Long enough for a third browser to start, were it allowed to.
         Thread.sleep(300)
         release.countDown()
         calls.forEach(Thread::join)
 
-        assertEquals(ChallengePass.MAX_BROWSERS, most.get())
+        assertEquals(ChallengeBrowsers.MAX_BROWSERS, most.get())
     }
 
-    private fun call(url: String): Response =
+    private fun call(url: String, client: OkHttpClient = this.client): Response =
         client.newCall(Request.Builder().url(url).header("User-Agent", "agent/1").header("Authorization", "key").build()).execute()
 
     private fun challenge(request: Request, body: String = ""): Response = refusal(request, 403, challenge = true, body = body)

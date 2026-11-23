@@ -36,6 +36,7 @@ import com.theoriacodex.app.source.startupCheckSources
 import com.theoriacodex.app.source.sourceIssues
 import com.theoriacodex.app.source.clearSource
 import com.theoriacodex.app.source.SourceHealth
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import com.theoriacodex.app.ui.routes.activeRecommendationProfile
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -452,9 +453,10 @@ internal fun rememberSourceHealth(shell: TheoriaShell): SourceHealth {
     }
     val issues by produceState(emptyMap<SourceKey, HostOutageKind>(), outages) {
         val extensions = shell.container.extensionSites
-        combine(outages.outages, shell.sources.availableSources, minuteTicks()) { recorded, sources, _ ->
+        val extensionChanges = extensions?.siteChanges ?: flowOf(Unit)
+        combine(outages.outages, shell.sources.availableSources, minuteTicks(), extensionChanges) { recorded, sources, _, _ ->
             // Read when outages change: a source whose host was just challenged has loaded by then.
-            val extensionSites = extensions?.sites()?.mapValues { it.value.host }.orEmpty()
+            val extensionSites = extensions?.sites()?.mapValues { it.value.hosts }.orEmpty()
             sourceIssues(recorded, sources, System.currentTimeMillis(), extensionSites)
         }.flowOn(kotlinx.coroutines.Dispatchers.Default).collect { value = it }
     }
