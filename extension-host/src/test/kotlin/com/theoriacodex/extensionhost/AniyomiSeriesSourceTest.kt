@@ -33,6 +33,7 @@ import kotlinx.coroutines.withTimeout
 import okhttp3.Headers
 import okhttp3.Headers.Companion.headersOf
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -48,6 +49,23 @@ class AniyomiSeriesSourceTest {
         assertEquals("custom_aniyomi_7", anime.key.id)
         assertEquals(SeriesKind.ANIME, anime.kind)
         assertNotEquals(MihonKind.sourceKey(7), anime.key)
+    }
+
+    @Test
+    fun `a cover is handed out tagged, and fetched through the source's own client with its headers`() {
+        val images = ExtensionImages()
+        val asked = mutableListOf<Request>()
+        val source = object : FakeAnimeSource() {
+            override val client: OkHttpClient = OkHttpClient.Builder().addInterceptor(answering { request -> asked += request; cannedResponse(request) }).build()
+        }
+        val hosted = AniyomiKind.hosted(source, HostServices(images))
+        images.publish(listOf(hosted))
+        val tagged = checkNotNull(hosted.series.coverAddress(Series(SeriesId(hosted.key, "/a/1"), "Show", coverUrl = "https://img.example/c.jpg")))
+
+        OkHttpClient.Builder().addInterceptor(images).build().newCall(Request.Builder().url(tagged).build()).execute().close()
+
+        assertEquals(listOf("https://img.example/c.jpg"), asked.map { it.url.toString() })
+        assertEquals("FakeBrowser/1.0", asked.single().header("User-Agent"))
     }
 
     @Test
