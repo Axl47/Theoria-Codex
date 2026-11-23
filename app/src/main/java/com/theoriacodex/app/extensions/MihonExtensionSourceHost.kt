@@ -9,6 +9,7 @@ import android.os.FileObserver
 import android.util.Log
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.network.AndroidBrowserCookieStore
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.ExtensionChoiceStore
 import com.theoriacodex.domain.series.ExtensionChoices
@@ -131,7 +132,12 @@ internal class MihonExtensionSourceHost : ExtensionSites {
         }
         // A burst of changes, such as a wave of app updates, lists the device once more after the listing under way.
         val rechecks = Channel<Unit>(Channel.CONFLATED)
-        scope.launch { for (change in rechecks) registry.recheck() }
+        scope.launch {
+            for (change in rechecks) {
+                // One failed listing, such as a binder error, must not stop later changes being noticed.
+                runCatchingPreservingCancellation { registry.recheck() }.onFailure { Log.w(TAG, "Recheck failed: ${it.javaClass.simpleName}") }
+            }
+        }
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 // An update also sends REMOVED and ADDED marked as replacing; its REPLACED is enough.
