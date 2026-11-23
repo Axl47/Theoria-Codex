@@ -136,8 +136,11 @@ private fun ForYouDestination(shell: TheoriaShell) {
     val writes = rememberTriageHandOff()
     val pager = shell.navigation.pagerState
     val shown by remember(pager) { derivedStateOf { tabShown(TopLevelDestination.ForYou, pager.targetPage, pager.settledPage) } }
+    androidx.compose.runtime.LaunchedEffect(pager) { androidx.compose.runtime.snapshotFlow { listOf(pager.targetPage, pager.settledPage, pager.currentPage, if (pager.isScrollInProgress) 1 else 0) }.collect { System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "pager target,settled,current,scrolling=" + it) } }
+    androidx.compose.runtime.SideEffect { System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "destination shown=" + shown + " target=" + pager.targetPage + " settled=" + pager.settledPage + " current=" + pager.currentPage) }
     BrowsingDestinationStateBoundary(shell.data, shell.sources) { state ->
-        val fabRestoreState = shell.feedFabRestoreRegistry.state(FOR_YOU_FEED_FAB_CONTEXT) ?: return@BrowsingDestinationStateBoundary
+        val fabRestoreState = shell.feedFabRestoreRegistry.state(FOR_YOU_FEED_FAB_CONTEXT) ?: return@BrowsingDestinationStateBoundary.also { System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "no fab state") }
+        androidx.compose.runtime.SideEffect { System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "boundary composed") }
         ForYouRoute(
             services = ForYouRouteServices(
                 coordinator = shell.features.forYou,

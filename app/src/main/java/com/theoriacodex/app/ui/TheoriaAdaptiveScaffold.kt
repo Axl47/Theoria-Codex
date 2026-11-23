@@ -89,6 +89,7 @@ internal suspend fun navigateTopLevelDestination(
     destination: TopLevelDestination,
 ) {
     val target = TopLevelDestination.entries.indexOf(destination)
+    System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "navigate " + destination + " route=" + navController.currentBackStackEntry?.destination?.route + " tap=" + tabTap(destination, pager.targetPage, pager.settledPage, pager.isScrollInProgress) + " target=" + pager.targetPage + " settled=" + pager.settledPage + " current=" + pager.currentPage + " offset=" + pager.currentPageOffsetFraction + " scrolling=" + pager.isScrollInProgress)
     if (navController.currentBackStackEntry?.destination?.route != AppRoute.Home) {
         navController.navigate(AppRoute.Home) {
             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
@@ -101,5 +102,6 @@ internal suspend fun navigateTopLevelDestination(
         // which then carries on past it; scrollToPage stops it there.
         if (pager.currentPage == target && pager.currentPageOffsetFraction == 0f) pager.scrollToPage(target)
         else pager.animateScrollToPage(target, animationSpec = tween(TheoriaMotion.SCREEN_MS))
+        System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "navigate done " + destination + " target=" + pager.targetPage + " settled=" + pager.settledPage + " current=" + pager.currentPage)
     }
 }

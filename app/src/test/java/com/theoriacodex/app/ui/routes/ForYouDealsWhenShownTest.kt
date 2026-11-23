@@ -7,7 +7,9 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.printToString
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -45,9 +47,10 @@ class ForYouDealsWhenShownTest {
         compose.waitForIdle()
         assertTrue("For You dealt while passed over: ${graph.registry.requests}", graph.registry.requests.isEmpty())
 
+        System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "test tap For You")
         compose.onNodeWithContentDescription("For You").performClick()
         compose.waitForIdle()
-        compose.waitUntil(10_000) { graph.registry.requests.isNotEmpty() }
+        awaitDeal(graph)
     }
 
     @Test fun `a tap on For You while the slide to Library is passing it goes to For You`() =
@@ -62,10 +65,24 @@ class ForYouDealsWhenShownTest {
         compose.mainClock.autoAdvance = false
         compose.onNodeWithContentDescription("Library").performClick()
         compose.mainClock.advanceTimeBy(afterMs)
+        System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "test tap For You")
         compose.onNodeWithContentDescription("For You").assertIsSelected().performClick()
         compose.mainClock.autoAdvance = true
         compose.waitForIdle()
-        compose.waitUntil(10_000) { graph.registry.requests.isNotEmpty() }
+        awaitDeal(graph)
+    }
+
+    private fun awaitDeal(graph: JourneyAppContainer) {
+        try {
+            compose.waitUntil(10_000) { graph.registry.requests.isNotEmpty() }
+        } catch (timeout: androidx.compose.ui.test.ComposeTimeoutException) {
+            val threads = Thread.getAllStackTraces().entries.joinToString("\n\n") { (thread, stack) ->
+                "${thread.name} ${thread.state}\n" + stack.take(25).joinToString("\n") { "  at $it" }
+            }
+            val screen = runCatching { compose.onRoot(useUnmergedTree = true).printToString(maxDepth = Int.MAX_VALUE) }.getOrElse { it.toString() }
+            System.err.println("FYDBG timeout; screen:\n$screen\nthreads:\n$threads")
+            throw AssertionError("For You never dealt", timeout)
+        }
     }
 
     /** The app on its first tab, Search, over sources that record what they are asked. */
@@ -88,7 +105,9 @@ class ForYouDealsWhenShownTest {
                 if (show.value) TheoriaAppContent(graph, viewModel<ViewerSessionRetentionViewModel>(), viewModel<AppShellViewModel>())
             }
             compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Library").fetchSemanticsNodes().isNotEmpty() }
+            System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "test start")
             test(graph)
+            System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "test passed")
         } finally {
             compose.mainClock.autoAdvance = true
             compose.runOnIdle { show.value = false; owners?.viewModelStore?.clear() }

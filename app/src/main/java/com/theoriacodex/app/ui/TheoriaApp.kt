@@ -281,6 +281,7 @@ private fun TheoriaNavigationSurface(shell: TheoriaShell, currentRoute: String?)
         onDestinationSelected = { destination ->
             val alreadyShowing = navigation.currentRoute == AppRoute.Home &&
                 tabTap(destination, pagerState.targetPage, pagerState.settledPage, pagerState.isScrollInProgress) == TabTap.Reselect
+            System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] tap " + destination + " alreadyShowing=" + alreadyShowing + " route=" + navigation.currentRoute + " target=" + pagerState.targetPage + " settled=" + pagerState.settledPage + " current=" + pagerState.currentPage + " scrolling=" + pagerState.isScrollInProgress)
             navigation.homeTabRoute = destination.route
             // New posts wait in Saved, so a lit Library tab opens there; without the dot the remembered section stays.
             if (destination == TopLevelDestination.Library && !alreadyShowing && libraryHasNew) {

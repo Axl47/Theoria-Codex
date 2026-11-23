@@ -146,6 +146,7 @@ private fun FollowForYouEnvironment(owner: ForYouDeckViewModel, config: ForYouRo
     val selectedSource = remember(restore.source, config.availableSources) { config.availableSources.firstOrNull { it.id == restore.source } }
     val kept = remember(config.marks) { config.marks.liked + config.marks.saved + config.marks.pendingLikes }
     LaunchedEffect(owner, config.shown, config.settings, config.availableSources, selectedSource, sortMode, restore.animatedOnly, restore.grid, kept) {
+        System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "follow shown=" + config.shown + " available=" + config.availableSources)
         if (!config.shown) return@LaunchedEffect
         owner.synchronize(
             ForYouEnvironment(config.settings, selectedSource, sortMode, restore.animatedOnly, restore.grid, kept, config.creatorBrowsingSources),

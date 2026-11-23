@@ -193,6 +193,7 @@ class ForYouDeckViewModel(
      * longer do.
      */
     fun synchronize(environment: ForYouEnvironment) {
+        System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "synchronize sources=" + environment.settings.runtime.enabledSources)
         val settings = environment.settings
         val available = engine.availableSources(settings)
         val next = MixInputs(
@@ -222,6 +223,7 @@ class ForYouDeckViewModel(
             // The first hidden tag turns vetting on: what the lanes hold is vetted before it is dealt.
             if (!vetted && vetsPictures) mix?.revet(::needsLook)
         }
+        System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "inputs changed=" + (previous != next) + " next=" + next)
         when {
             previous != next -> {
                 if (previous?.profileId != next.profileId) seen.clear()
@@ -236,7 +238,8 @@ class ForYouDeckViewModel(
 
     /** Starts a fresh Mix for the current inputs: every level closes, and steering starts over. */
     fun rebuild() {
-        val request = request() ?: return
+        val request = request() ?: return.also { System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "rebuild: no request") }
+        System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "rebuild sources=" + request.availableSources)
         work.cancelChildren()
         asking.clear()
         vetting = null
@@ -249,10 +252,12 @@ class ForYouDeckViewModel(
         // The model loads while the lanes are planned and their first pages fetched, so the first check need not wait.
         if (vetsPictures) workScope.launch { wiring.pictures.prepare() }
         workScope.launch {
+            System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "lanes start")
             val lanes = runCatchingPreservingCancellation { engine.lanes(request) }.getOrElse { error ->
                 Diagnostics.report("for-you", "For You could not build its lanes", error)
                 return@launch settle(ForYouMixState.Failed, error.message)
             }
+            System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "lanes done " + lanes.size)
             if (lanes.isEmpty()) return@launch settle(ForYouMixState.NoLanes)
             val built = ForYouMix(lanes, wiring.copiesOf)
             mix = built
@@ -356,6 +361,7 @@ class ForYouDeckViewModel(
 
     /** Ends the Mix without lanes: nothing to deal, or, when [state] is a failure, something to retry. */
     private fun settle(state: ForYouMixState, failure: String? = null) {
+        System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "settle " + state + " " + failure)
         ui.update { it.copy(mix = state, failure = failure) }
         mixFeed.value = TriageFeedSnapshot(emptyList(), canLoadMore = false, pageFailed = state == ForYouMixState.Failed)
     }
@@ -368,6 +374,7 @@ class ForYouDeckViewModel(
         val cursor = lane.cursor ?: return
         lane.loading = true
         workScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "loadPage")
             val page = runCatchingPreservingCancellation { engine.loadPage(cursor, setOf(lane.lane.source)) }
             lane.loading = false
             page.onSuccess { lane.accept(cursor, it, it.items.filter { post -> shows(post) }, ::needsLook) }.onFailure { error ->

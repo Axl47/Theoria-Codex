@@ -45,8 +45,13 @@ internal class ForYouLanesLoader(
             .inPresentationOrder()
         val profile = request.settings.activeProfileId
         val blocked = request.settings.forYouBlacklistByProfile[profile].orEmpty()
-        val interests = interestSeeds(sources, profile, likes.observeLikes(profile).first(), blocked)
+        System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "load start")
+        val liked = likes.observeLikes(profile).first()
+        System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "likes read")
+        val interests = interestSeeds(sources, profile, liked, blocked)
+        System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "interests " + interests.size)
         val seeds = interests.ifEmpty { trendingSeeds(sources, blocked) }
+        System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "seeds " + seeds.size)
         seeds.inTurnBySource().take(LANE_LIMIT).map { (source, tags) -> lane(source, tags, request) }
     }
 
@@ -58,6 +63,7 @@ internal class ForYouLanesLoader(
         blocked: List<ForYouBlacklistEntry>,
     ): List<LaneSeed> {
         val affinity = tagAffinity(profile)
+        System.err.println("FYDBG " + (System.nanoTime() / 1_000_000) + " [" + Thread.currentThread().name + "] " + "affinity read")
         if (liked.isEmpty() && affinity.keptBySource.isEmpty() && affinity.explicit.isEmpty()) return emptyList()
         val training = crossSourceTraining(liked, store)
         return sources.mapConcurrent { source ->
