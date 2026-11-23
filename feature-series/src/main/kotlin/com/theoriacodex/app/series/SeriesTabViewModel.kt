@@ -203,11 +203,15 @@ class SeriesTabViewModel(
             )
         }
         val browsedKey = state.value.browse?.key
-        if (browsedKey != null && fresh.any { it.key == browsedKey }) browse(browsedKey)
-        else if (browsedKey == null) {
-            val browsed = saved.get<String>(SAVED_BROWSE)
-            val kind = state.value.kind
-            (sources.firstOrNull { it.key.id == browsed } ?: sources.firstOrNull { kind.admits(it.key) } ?: sources.firstOrNull())?.let { browse(it.key) }
+        val kind = state.value.kind
+        when {
+            browsedKey != null && fresh.any { it.key == browsedKey } -> browse(browsedKey)
+            browsedKey == null -> {
+                val browsed = saved.get<String>(SAVED_BROWSE)
+                (sources.firstOrNull { it.key.id == browsed } ?: sources.firstOrNull { kind.admits(it.key) } ?: sources.firstOrNull())?.let { browse(it.key) }
+            }
+            // The first source of the kind the tab is narrowed to came on while one of the other kind stayed browsed.
+            !kind.admits(browsedKey) -> sources.firstOrNull { kind.admits(it.key) }?.let { browse(it.key) }
         }
         if (query != null) fresh.forEach { searchIn(it, query) }
     }
