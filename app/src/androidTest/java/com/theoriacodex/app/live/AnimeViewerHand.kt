@@ -265,7 +265,7 @@ internal class AnimeViewerHand(val live: SeriesLiveDriver = SeriesLiveDriver()) 
         const val EDIT_TEXT = "android.widget.EditText"
         const val EXPAND_SEARCH = "Expand Search"
         private val NOT_EDIT_TEXT: Pattern = Pattern.compile("^(?!${Pattern.quote(EDIT_TEXT)}$).*")
-        /** The series page's episode count: "293 episodes", or "3 of 293 episodes" while narrowed. */
+        /** The series page's episode count: "24 episodes", or "3 of 24 episodes" while narrowed. */
         val EPISODE_COUNT: Pattern = Pattern.compile("(\\d+ of )?\\d+ episodes?")
         val WATCH_BUTTON: Pattern = Pattern.compile("Start watching|Continue watching .+")
         private val ANY_TEXT: Pattern = Pattern.compile(".+")
