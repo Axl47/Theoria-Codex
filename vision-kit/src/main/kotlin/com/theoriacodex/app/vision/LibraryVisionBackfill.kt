@@ -46,6 +46,8 @@ class LibraryVisionBackfill(
      */
     suspend fun drain(): Boolean {
         val pass = Pass()
+        // This run will say what it leaves; an earlier run's waiting frames must not restart it on leaving the screen.
+        framesWaiting.value = false
         try {
             while (tagger.ready.value) {
                 if (hot()) return true

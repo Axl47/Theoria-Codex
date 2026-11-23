@@ -16,7 +16,6 @@ import com.theoriacodex.sources.pixiv.PixivTokenCoordinator
 import com.theoriacodex.sources.pixiv.PixivUgoiraMetadataCache
 import java.io.File
 import java.io.IOException
-import java.util.zip.ZipException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.currentCoroutineContext
@@ -128,12 +127,12 @@ class PixivUgoiraClient constructor(
     }
 
     /**
-     * [sampleFrames] from a held archive. One whose data turns out damaged is forgotten, as playback does, so the next
-     * try downloads the post again.
+     * [sampleFrames] from a held archive. One that fails to read (damaged data passes the structural check) is
+     * forgotten, as playback does, so the next try downloads the post again; offline copies are never touched.
      */
     private suspend fun heldFrames(postId: String, archive: UgoiraArchive, count: Int, sizePx: Int): List<Bitmap> = try {
         sampleUgoiraFrames(archive.file, archive.metadata.frames, count, sizePx)
-    } catch (error: ZipException) {
+    } catch (error: IOException) {
         forgetCachedArchive(postId, archive.file)
         throw error
     }
@@ -148,7 +147,8 @@ class PixivUgoiraClient constructor(
             if (!isValidArchive(temporary, metadata.frames)) throw InvalidUgoiraArchive()
             return try {
                 sampleUgoiraFrames(temporary, metadata.frames, count, sizePx)
-            } catch (_: ZipException) {
+            } catch (_: IOException) {
+                // Just downloaded and validated: a read failure means damaged data, which another download repeats.
                 throw InvalidUgoiraArchive()
             }
         } finally {
