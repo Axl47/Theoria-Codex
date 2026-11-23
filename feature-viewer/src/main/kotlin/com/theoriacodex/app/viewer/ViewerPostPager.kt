@@ -25,6 +25,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
 import com.theoriacodex.app.viewer.state.ViewerAction
+import com.theoriacodex.app.viewer.state.ViewerEpisodeChoice
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.domain.model.GalleryReadingMode
@@ -212,7 +213,6 @@ private fun ViewerPostPage(
         val media = postMedia[mediaPage].ref
         val loadGeneration = pageState.media.getOrNull(mediaPage)?.loadGeneration ?: 0L
         val key = ViewerMediaKey(post.id, mediaPage)
-        val episode = frame.uiState.controls.episode
         val active = postPage == frame.navigation.currentIndex && mediaPage == frame.selection.mediaIndex
         ViewerMediaPage(
             post = post,
@@ -233,12 +233,7 @@ private fun ViewerPostPage(
             transform = viewerTransform,
             onTransformChanged = { viewerTransform.value = it },
             layout = ViewerMediaLayout(frame.isLandscape, frame.inPictureInPicture, frame.touchExplorationEnabled),
-            videoOptions = ViewerVideoOptions(
-                quality, qualityHeight, episode.streamLabelFor(key), pageState.terminalResolutionMessage(), config.playbackDiagnosticsEnabled,
-                ViewerEpisodeOptions(screen.streamAttempts, episode.pickedByHand(key), pageState.resolution.resolvedAtMs) { label ->
-                    host.onAction(ViewerAction.FallBackToStream(key, label))
-                },
-            ),
+            videoOptions = host.videoOptions(key, pageState, frame.uiState.controls.episode, screen, quality, qualityHeight, config),
             videoPositions = videoPositions,
             levelControls = levelControls,
             mediaError = frame.uiState.mediaError.takeIf { active }?.takeIf { it.mediaKey == key },
@@ -252,6 +247,22 @@ private fun ViewerPostPage(
         )
     }
 }
+
+/** How the video [key] on [pageState] plays: its quality and, for an episode, the stream it plays and falls back from. */
+private fun ViewerScreenHost.videoOptions(
+    key: ViewerMediaKey,
+    pageState: ViewerPageState,
+    episode: ViewerEpisodeChoice,
+    screen: ViewerScreenState,
+    quality: com.theoriacodex.domain.model.VideoQuality,
+    qualityHeight: Int?,
+    config: ViewerScreenConfig,
+) = ViewerVideoOptions(
+    quality, qualityHeight, episode.streamLabelFor(key), pageState.terminalResolutionMessage(), config.playbackDiagnosticsEnabled,
+    ViewerEpisodeOptions(screen.streamAttempts, episode.pickedByHand(key), pageState.resolution.resolvedAtMs) { label ->
+        onAction(ViewerAction.FallBackToStream(key, label))
+    },
+)
 
 /**
  * Where [post]'s playback goes while a series is watched: its series records it. Null for every other video. [series]
