@@ -64,6 +64,18 @@ class SiteCookieBridgeTest {
     }
 
     @Test
+    fun `a browser check ending never takes away the cookies of the site being added`() {
+        bridge.setSetupHost("new.example")
+        bridge.setCheckHost("www.iwara.tv")
+        assertTrue(bridge.isAllowed("api.iwara.tv"))
+
+        bridge.setCheckHost(null)
+
+        assertTrue(bridge.isAllowed("new.example"))
+        assertFalse(bridge.isAllowed("api.iwara.tv"))
+    }
+
+    @Test
     fun `installs sharing a host keep their keys apart`() {
         bridge.updateMediaKeys(
             listOf(

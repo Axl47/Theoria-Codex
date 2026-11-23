@@ -14,6 +14,7 @@ import com.theoriacodex.app.customsites.SiteCookieBridge
 import com.theoriacodex.app.customsites.SitesRequest
 import com.theoriacodex.app.sourceauth.CredentialStoreUnavailableException
 import com.theoriacodex.app.source.clearSource
+import com.theoriacodex.app.source.passSource
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.app.source.ownsHost
@@ -184,7 +185,7 @@ internal class CustomSitesControllerImpl(
         // A different family is reported to the user, never adopted (remove and re-add to switch).
         val working = result is SiteProbeResult.Supported && result.family == profile.family
         if (working) {
-            outages.clear(profile.address.host)
+            outages.pass(profile.address.host)
             // Re-testing also picks up an icon the site declared since, or one missed before.
             profiles.update(sourceId) { it.copy(verifiedAtEpochMs = clock(), iconUrl = result.iconUrl ?: it.iconUrl) }
         }
@@ -246,7 +247,7 @@ internal class CustomSitesControllerImpl(
             cookieBridge.updateBuiltInAgents(builtInAgents.read())
             outages.setWorking(home, true)
         }
-        outages.clearSource(source)
+        outages.passSource(source)
         cookieBridge.flush()
     }
 

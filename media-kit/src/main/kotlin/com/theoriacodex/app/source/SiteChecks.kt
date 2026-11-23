@@ -43,9 +43,10 @@ import kotlinx.coroutines.withContext
 /**
  * A site whose browser check the check page runs. [url] opens with [userAgent], or with the browser's own agent when
  * null. [passes] says whether the site's own client now gets through with the browser's agent, and [complete] records
- * a pass; either may throw, which counts as a failed check. [cookieHost] is a host whose browser cookies the app's own
- * requests may carry while the page is open, so [passes] can test them before the site keeps them; null leaves that
- * to whoever opened the check. [dismissed] runs when the page is closed without a pass.
+ * a pass; either may throw, which counts as a failed check that the next page tests again. [cookieHost] is a host whose
+ * browser cookies the app's own requests may carry while the page is open, so [passes] can test them before the site
+ * keeps them; null where the site already keeps them or whoever opened the check grants them. [dismissed] runs when the
+ * page is closed without a pass.
  */
 data class SiteCheckTarget(
     val title: String,
@@ -65,7 +66,7 @@ class OpenSiteCheck internal constructor(val target: SiteCheckTarget) {
     internal var job: Job? = null
     internal var pending: PageLoad? = null
 
-    /** The browser's cookies at the last failed test: a page that brings no new ones has nothing new to test. */
+    /** The browser's cookies at the last refused test: a page that brings no new ones has nothing new to test. */
     internal var refusedCookies: Cookies? = null
 }
 
@@ -84,8 +85,11 @@ internal data class Cookies(val header: String?)
 @Stable
 class SiteChecks(
     private val cookies: BrowserCookieStore,
-    /** Lets the browser's cookies reach the app's requests to a host while its check is open; null ends that. */
-    private val allowCookies: (host: String?) -> Unit,
+    /**
+     * The check now on screen, or null once none is: while one is, its site gets no hidden browser check, which would
+     * expire the clearance the visible one just earned, and its [SiteCheckTarget.cookieHost] gets the browser's cookies.
+     */
+    private val shown: (SiteCheckTarget?) -> Unit,
     private val targetFor: (SourceKey) -> SiteCheckTarget?,
     coroutineScope: CoroutineScope? = null,
     private val io: CoroutineDispatcher = Dispatchers.IO,
@@ -110,7 +114,7 @@ class SiteChecks(
 
     fun open(target: SiteCheckTarget) {
         close()
-        target.cookieHost?.let(allowCookies)
+        shown(target)
         opened = OpenSiteCheck(target)
     }
 
@@ -143,11 +147,17 @@ class SiteChecks(
     private suspend fun passes(check: OpenSiteCheck, load: PageLoad): Boolean {
         val target = check.target
         val seen = Cookies(withContext(io) { runCatching { cookies.cookieHeader(target.url) }.getOrNull() })
-        val passed = seen != check.refusedCookies && runCatchingPreservingCancellation {
-            withContext(io) { target.passes(load.userAgent) && run { target.complete(load.userAgent); true } }
-        }.getOrDefault(false)
+        val outcome = if (seen == check.refusedCookies) {
+            Result.success(false)
+        } else {
+            runCatchingPreservingCancellation {
+                withContext(io) { target.passes(load.userAgent) && run { target.complete(load.userAgent); true } }
+            }
+        }
+        val passed = outcome.getOrDefault(false)
         if (!passed) {
-            check.refusedCookies = seen
+            // Only a refusal is remembered: a test that failed on an error says nothing about these cookies.
+            if (outcome.isSuccess) check.refusedCookies = seen
             check.stillRefused = load.letThrough
         }
         return passed
@@ -156,8 +166,9 @@ class SiteChecks(
     override fun onCleared() = close()
 
     private fun end(check: OpenSiteCheck) {
+        if (opened !== check) return
         opened = null
-        if (check.target.cookieHost != null) allowCookies(null)
+        shown(null)
     }
 }
 

@@ -58,8 +58,8 @@ interface CustomSitesController {
     suspend fun retest(sourceId: String): SiteProbeResult
 
     /**
-     * Lets the browser's cookies reach requests to [host] while its browser check is open or it is being
-     * added, or stops that when null. Saved sites and verified built-in ones always get their cookies.
+     * Lets the browser's cookies reach requests to [host] while the Add form sets it up, or stops that when null.
+     * Saved sites and verified built-in ones always get their cookies.
      */
     fun setSetupHost(host: String?)
 

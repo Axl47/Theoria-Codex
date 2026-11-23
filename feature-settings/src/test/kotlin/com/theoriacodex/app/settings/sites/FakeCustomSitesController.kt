@@ -118,7 +118,7 @@ internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = empt
 internal fun siteChecks(controller: CustomSitesController, scope: CoroutineScope? = null, io: CoroutineDispatcher = Dispatchers.Unconfined) =
     SiteChecks(
         NoCookies,
-        controller::setSetupHost,
+        shown = {},
         targetFor = { source ->
             SiteCheckTarget(
                 title = source.id,

@@ -547,5 +547,21 @@ class CustomSitesViewModelTest {
         assertNull(controller.setupHosts.last())
     }
 
+    @Test fun `clearing the screen closes the check it opened, and only that one`() = runTest {
+        controller.onProbe = { blocked }
+        val store = ViewModelStore()
+        val owner = owner().also { store.put("sites", it) }
+        probeAddress(owner)
+        owner.onAction(CustomSitesAction.StartVerification("safebooru.org"))
+
+        store.clear()
+        assertNull(checks.opened)
+
+        val elsewhere = owner()
+        checks.open(SourceKey.IWARA)
+        ViewModelStore().apply { put("other", elsewhere) }.clear()
+        assertEquals(SourceKey.IWARA.id, checks.opened?.target?.title)
+    }
+
     private val blocked = SiteProbeResult.Unreachable(address("safebooru.org"), ProbeFailure.BLOCKED)
 }

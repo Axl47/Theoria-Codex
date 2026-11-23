@@ -66,6 +66,28 @@ class HostInterceptorsTest {
     }
 
     @Test
+    fun `a challenge another client recorded without the refused request gains the extension's, keeping its expiry`() {
+        var now = 0L
+        val outages = HostOutageTracker(clock = { now })
+        outages.record("https://site.test/", HostOutageKind.CHALLENGE)
+        now += 1_000L
+        val client = clientOf(
+            CloudflareInterceptor(ChallengePass(ChallengeBrowsers(NoCookies, NoBrowser), outages::isChallenged), outages),
+            answering { sent ->
+                cannedResponse(sent, code = 403).newBuilder().header("cf-mitigated", "challenge").build()
+            },
+        )
+
+        assertFailsWith<HostUnavailableException> {
+            client.newCall(Request.Builder().url("https://site.test/manga").header("User-Agent", "agent/1").build()).execute()
+        }
+
+        val outage = outages.outages.value.getValue("site.test")
+        assertEquals(RefusedRequest("https://site.test/manga", "agent/1"), outage.refused)
+        assertEquals(HostOutageTracker.DEFAULT_OUTAGE_MS, outage.untilEpochMs)
+    }
+
+    @Test
     fun `a challenged host that answers successfully again stops needing verification, and only that host`() {
         val outages = HostOutageTracker()
         outages.record("https://api.site.test/list", HostOutageKind.CHALLENGE)

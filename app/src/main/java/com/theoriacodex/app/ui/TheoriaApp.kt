@@ -35,12 +35,14 @@ import com.theoriacodex.app.source.startSourceHealthCheck
 import com.theoriacodex.app.source.startupCheckSources
 import com.theoriacodex.app.source.sourceIssues
 import com.theoriacodex.app.source.clearSource
+import com.theoriacodex.app.source.sourcesOwning
 import com.theoriacodex.app.source.SourceHealth
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import com.theoriacodex.app.ui.routes.activeRecommendationProfile
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.transform
 import com.theoriacodex.app.tags.PostTagSavedTags
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -460,12 +462,19 @@ internal fun rememberSourceHealth(shell: TheoriaShell): SourceHealth {
             sourceIssues(recorded, sources, System.currentTimeMillis(), extensionSites)
         }.flowOn(kotlinx.coroutines.Dispatchers.Default).collect { value = it }
     }
+    val passes = remember(outages) {
+        outages.passes.transform { host ->
+            val extensionSites = shell.container.extensionSites?.sites()?.mapValues { it.value.hosts }.orEmpty()
+            sourcesOwning(host, shell.sources.availableSources.value, extensionSites).forEach { emit(it) }
+        }
+    }
     var dismissedNotices by remember { mutableStateOf(emptySet<SourceKey>()) }
     // Forgotten when the outage ends, so the next one is announced.
     LaunchedEffect(issues) { dismissedNotices = dismissedNotices intersect issues.keys }
     return remember(issues, shell, dismissedNotices) {
         SourceHealth(
             issues = issues,
+            passes = passes,
             recheck = outages::clearSource,
             verify = { source -> shell.owners.siteChecks.open(source) },
             addKey = { source ->

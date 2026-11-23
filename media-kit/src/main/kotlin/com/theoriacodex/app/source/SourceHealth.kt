@@ -2,6 +2,7 @@ package com.theoriacodex.app.source
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -17,16 +18,20 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 
 /**
  * Which sources are down, for the source dropdowns and the Series screens, and what tapping one does. [recheck]
  * forgets the source's outage so the search it was picked for tries the network again; [verify] opens the
  * source's browser check over the current screen; [addKey] opens an added site's API key field. [dismissedNotices] are the
- * sources whose outage notice was set aside.
+ * sources whose outage notice was set aside. [passes] names each source as one of its hosts gets through its browser
+ * check ([HostOutageTracker.passes]).
  */
 class SourceHealth(
     val issues: Map<SourceKey, HostOutageKind> = emptyMap(),
+    val passes: Flow<SourceKey> = emptyFlow(),
     val recheck: (SourceKey) -> Unit = {},
     val verify: (SourceKey) -> Unit = {},
     val addKey: (SourceKey) -> Unit = {},
@@ -51,22 +56,23 @@ val LocalSourceHealth = compositionLocalOf { SourceHealth() }
 const val VERIFY_IN_BROWSER_LABEL = "Verify in browser"
 
 /**
- * Runs [retry] for each of [sources] whose need for browser verification clears while this is on screen, by a check
- * passed here or anywhere else, so the screen that asked loads again by itself. Returns those that need it now.
+ * Runs [retry] for each of [sources] that needed browser verification while on screen once its check is passed, here
+ * or anywhere else, so the screen that asked loads again by itself. A need that merely expired retries nothing: the
+ * site would only challenge again. Returns the sources that need verification now.
  */
 @Composable
 fun retryWhenVerified(sources: Collection<SourceKey>, retry: (SourceKey) -> Unit): Set<SourceKey> {
-    val issues = LocalSourceHealth.current.issues
+    val health = LocalSourceHealth.current
     val shown = sources.toSet()
-    val challenged = shown.filterTo(HashSet()) { issues[it] == HostOutageKind.CHALLENGE }
-    val seen = remember { HashSet<SourceKey>() }
+    val challenged = shown.filterTo(HashSet()) { health.issues[it] == HostOutageKind.CHALLENGE }
+    val waiting = remember { HashSet<SourceKey>() }
+    SideEffect {
+        waiting.retainAll(shown)
+        waiting += challenged
+    }
     val onRetry by rememberUpdatedState(retry)
-    LaunchedEffect(challenged, shown) {
-        val cleared = seen.filter { it in shown && it !in challenged }
-        seen.retainAll(shown)
-        seen += challenged
-        seen -= cleared.toSet()
-        cleared.forEach(onRetry)
+    LaunchedEffect(health.passes) {
+        health.passes.collect { source -> if (waiting.remove(source)) onRetry(source) }
     }
     return challenged
 }
@@ -89,16 +95,30 @@ fun sourceIssues(
 ): Map<SourceKey, HostOutageKind> {
     val active = outages.filterValues { it.untilEpochMs > now }
     if (active.isEmpty()) return emptyMap()
-    val sites = sources.mapNotNull { source -> source.siteHost()?.let { source to it } } +
-        extensionSites.flatMap { (source, hosts) -> hosts.map { source to it } }
-    return sites.mapNotNull { (source, site) ->
+    return sourceSites(sources, extensionSites).mapNotNull { (source, site) ->
         active.entries.firstOrNull { (host, _) -> HostOutageTracker.hostBelongsToSite(host, site) }?.let { source to it.value.kind }
     }.toMap()
 }
 
+/** The sources [host] belongs to, matched as [sourceIssues] matches outages. */
+fun sourcesOwning(host: String, sources: Iterable<SourceKey>, extensionSites: Map<SourceKey, Set<String>> = emptyMap()): Set<SourceKey> =
+    sourceSites(sources, extensionSites).filter { (_, site) -> HostOutageTracker.hostBelongsToSite(host, site) }.mapTo(LinkedHashSet()) { it.first }
+
+private fun sourceSites(sources: Iterable<SourceKey>, extensionSites: Map<SourceKey, Set<String>>): List<Pair<SourceKey, String>> =
+    sources.mapNotNull { source -> source.siteHost()?.let { source to it } } +
+        extensionSites.flatMap { (source, hosts) -> hosts.map { source to it } }
+
 /** Forgets every outage that belongs to [source]. */
 fun HostOutageTracker.clearSource(source: SourceKey) {
     outages.value.keys.filter(source::ownsHost).forEach(::clear)
+}
+
+/**
+ * [source] got through its browser check: passes its site host and every host of its with an outage
+ * ([HostOutageTracker.pass]), the site host even when its record has already lapsed, so a screen still waits on none.
+ */
+fun HostOutageTracker.passSource(source: SourceKey) {
+    (outages.value.keys.filter(source::ownsHost) + listOfNotNull(source.siteHost())).toSet().forEach(::pass)
 }
 
 /**

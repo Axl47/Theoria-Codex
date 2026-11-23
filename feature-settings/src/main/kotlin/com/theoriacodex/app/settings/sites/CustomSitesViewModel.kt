@@ -9,6 +9,7 @@ import com.theoriacodex.app.customsites.CustomSiteEdit
 import com.theoriacodex.app.customsites.CustomSiteMutation
 import com.theoriacodex.app.customsites.CustomSitesController
 import com.theoriacodex.app.customsites.SitesRequest
+import com.theoriacodex.app.source.OpenSiteCheck
 import com.theoriacodex.app.source.SiteCheckTarget
 import com.theoriacodex.app.source.SiteChecks
 import com.theoriacodex.app.sourceauth.parseCredentialSnippet
@@ -140,6 +141,9 @@ class CustomSitesViewModel(
         }
     }
 
+    /** The check page this screen opened, whose callbacks write here. */
+    private var ownCheck: OpenSiteCheck? = null
+
     /**
      * Opens the app's browser check for [host]: a stored or built-in site's, or else the Add form's, whose site keeps
      * the browser's cookies until the check is dismissed, the address changes or the form closes or saves. A pass fills
@@ -150,6 +154,7 @@ class CustomSitesViewModel(
             ?: state.value.builtInSites.firstOrNull { it.host == host }?.source
         if (source != null) {
             checks.open(source) { userAgent -> verified(source.id, userAgent) }
+            ownCheck = checks.opened
             return
         }
         if (state.value.form !is SiteForm.Add) return
@@ -164,6 +169,7 @@ class CustomSitesViewModel(
                 dismissed = { controller.setSetupHost(null) },
             ),
         )
+        ownCheck = checks.opened
     }
 
     /** A stored or built-in site passed its check: its row shows its live status, and an open Edit form takes the agent. */
@@ -189,6 +195,8 @@ class CustomSitesViewModel(
     }
 
     override fun onCleared() {
+        // The check page outlives this screen, but its callbacks write to this one, so it closes with it.
+        if (ownCheck != null && checks.opened === ownCheck) checks.close()
         liveEdits.close()
         removals.commitAll()
         controller.setSetupHost(null)

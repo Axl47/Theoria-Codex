@@ -6,6 +6,7 @@ import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 import okhttp3.Call
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response
@@ -46,11 +47,26 @@ fun Request.siteRoot(): Request = Request.Builder()
 /**
  * The hidden browsers every client shares: one pass per host at a time and at most [MAX_BROWSERS] across hosts,
  * whichever client asked, since all of them write the same [cookies]. A request challenged while its host's pass runs
- * waits for it and then uses the cookie it earned. Every wait gives up as soon as the call is cancelled.
+ * waits for it and then uses the cookie it earned. Every wait gives up as soon as the call is cancelled. No hidden
+ * browser runs for the site whose check the user has on screen ([showCheck]).
  */
 class ChallengeBrowsers(private val cookies: BrowserCookieStore, private val browser: ChallengeBrowser) {
     private val passing = ConcurrentHashMap<String, ReentrantLock>()
     private val browsers = Semaphore(MAX_BROWSERS)
+
+    @Volatile
+    private var shownSite: String? = null
+
+    /**
+     * The address of the browser check now on screen, or null once none is. A hidden pass for its site would first
+     * expire the clearance cookie the visible browser just earned, then race it with a second browser.
+     */
+    fun showCheck(url: String?) {
+        shownSite = url?.let { it.toHttpUrlOrNull()?.host }?.let(HostOutageTracker::normalizeHost)
+    }
+
+    /** Whether [host] belongs to the site whose browser check is on screen. */
+    fun isShown(host: String): Boolean = shownSite?.let { HostOutageTracker.hostBelongsToSite(host, it) } == true
 
     /** Whether the calling thread may wait for a pass: not the main thread, which the browser itself needs. */
     fun mayWait(): Boolean = browser.mayWait()
@@ -67,7 +83,7 @@ class ChallengeBrowsers(private val cookies: BrowserCookieStore, private val bro
         val lock = passing.computeIfAbsent(HostOutageTracker.normalizeHost(challenged.url.host)) { ReentrantLock() }
         while (!lock.tryLock(POLL_MS, TimeUnit.MILLISECONDS)) call.throwIfCanceled()
         return try {
-            cookies.hasNewClearance(url, refused) || stillNeeded() && passSilently(page, url, refused, call)
+            cookies.hasNewClearance(url, refused) || stillNeeded() && !isShown(challenged.url.host) && passSilently(page, url, refused, call)
         } finally {
             lock.unlock()
         }
@@ -109,8 +125,8 @@ class ChallengeBrowsers(private val cookies: BrowserCookieStore, private val bro
  * no pass could clear; the client that carries this decides how that fails.
  *
  * No pass is tried for a host [mayPass] refuses, while [isChallenged] says the host's check is already the user's to
- * pass (so neither a screen of covers nor the user's own check waits on a hidden browser again), or from the main
- * thread.
+ * pass (so a screen of covers does not wait on a hidden browser again), while the user has that site's check on screen
+ * ([ChallengeBrowsers.showCheck]), or from the main thread.
  */
 class ChallengePass(
     private val browsers: ChallengeBrowsers,
@@ -124,7 +140,8 @@ class ChallengePass(
         if (!response.isCloudflareChallenge()) return response
         val challenged = response.challengedRequest
         val url = challenged.url.toString()
-        if (!mayPass(HostOutageTracker.normalizeHost(challenged.url.host)) || isChallenged(url) || !browsers.mayWait()) return response
+        val host = HostOutageTracker.normalizeHost(challenged.url.host)
+        if (!mayPass(host) || browsers.isShown(host) || isChallenged(url) || !browsers.mayWait()) return response
         // Kept in memory: the connection would otherwise sit open through the pass, and a failed one answers with it.
         val refusal = response.newBuilder().body(response.peekBody(CHALLENGE_BODY_LIMIT)).build()
         response.close()

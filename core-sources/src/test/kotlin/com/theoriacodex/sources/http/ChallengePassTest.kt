@@ -150,6 +150,21 @@ class ChallengePassTest {
     }
 
     @Test
+    fun `no pass for a site whose check is on screen, keeping the clearance the visible browser earned`() {
+        cookies.values["cf_clearance"] = "visible"
+        answers += { _, request -> challenge(request) }
+        browsers.showCheck("https://www.site.test/")
+
+        assertEquals(403, call("https://site.test/a").use { it.code })
+        assertEquals(emptyList<Request>(), passes)
+        assertEquals("visible", cookies.values["cf_clearance"])
+
+        browsers.showCheck(null)
+        call("https://site.test/b").close()
+        assertEquals(1, passes.size)
+    }
+
+    @Test
     fun `a cancelled call never waits for a pass`() {
         cookies.values["cf_clearance"] = "old"
         answers += { chain, request ->

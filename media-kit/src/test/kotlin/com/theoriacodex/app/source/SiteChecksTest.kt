@@ -19,7 +19,8 @@ class SiteChecksTest {
     private var gatesOpen = false
     private val tested = mutableListOf<String>()
     private val completed = mutableListOf<String>()
-    private val cookieHosts = mutableListOf<String?>()
+    private val shown = mutableListOf<String?>()
+    private var failure: Exception? = null
     private val cookies = object : BrowserCookieStore {
         override fun cookieHeader(url: String) = cookieHeader
 
@@ -33,13 +34,13 @@ class SiteChecksTest {
         title = "Site",
         url = "https://site.test/",
         cookieHost = "site.test",
-        passes = { agent -> tested.add(agent).let { gatesOpen } },
+        passes = { agent -> tested.add(agent).let { failure?.let { throw it } ?: gatesOpen } },
         complete = { agent -> completed += agent },
     )
-    private val checks = SiteChecks(cookies, cookieHosts::add, targetFor = { target }, coroutineScope = scope, io = dispatcher)
+    private val checks = SiteChecks(cookies, { shown += it?.url }, targetFor = { target }, coroutineScope = scope, io = dispatcher)
 
     @Test
-    fun `a page the site's own client gets through completes the check, closes it and stops sharing cookies`() = scope.runTest {
+    fun `a page the site's own client gets through completes the check and closes it`() = scope.runTest {
         val after = mutableListOf<String>()
         checks.open(SourceKey.IWARA) { after += it }
         val check = requireNotNull(checks.opened)
@@ -51,7 +52,7 @@ class SiteChecksTest {
         assertNull(checks.opened)
         assertEquals(listOf("browser/1"), completed)
         assertEquals(listOf("browser/1"), after)
-        assertEquals(listOf("site.test", null), cookieHosts)
+        assertEquals(listOf("https://site.test/", null), shown)
     }
 
     @Test
@@ -77,8 +78,27 @@ class SiteChecksTest {
     }
 
     @Test
-    fun `closing by hand completes nothing, and a target without a cookie host leaves cookie sharing alone`() = scope.runTest {
-        checks.open(target.copy(cookieHost = null))
+    fun `a test that failed on an error tests the same cookies again on the next page`() = scope.runTest {
+        cookieHeader = "cf_clearance=valid"
+        checks.open(target)
+        val check = requireNotNull(checks.opened)
+        failure = java.io.IOException("timeout")
+
+        checks.pageLoaded(check, "browser/1", letThrough = true)
+        advanceUntilIdle()
+        assertEquals(1, tested.size)
+
+        failure = null
+        gatesOpen = true
+        checks.pageLoaded(check, "browser/1", letThrough = true)
+        advanceUntilIdle()
+        assertEquals(2, tested.size)
+        assertNull(checks.opened)
+    }
+
+    @Test
+    fun `closing by hand completes nothing and takes the check off screen`() = scope.runTest {
+        checks.open(target)
         val check = requireNotNull(checks.opened)
 
         checks.close()
@@ -88,6 +108,6 @@ class SiteChecksTest {
 
         assertNull(checks.opened)
         assertEquals(emptyList<String>(), tested)
-        assertEquals(emptyList<String?>(), cookieHosts)
+        assertEquals(listOf("https://site.test/", null), shown)
     }
 }

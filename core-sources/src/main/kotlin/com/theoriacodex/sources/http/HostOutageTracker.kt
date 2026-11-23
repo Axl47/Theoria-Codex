@@ -5,7 +5,10 @@ import java.net.URI
 import java.net.UnknownHostException
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -55,6 +58,14 @@ class HostOutageTracker(
     /** Hosts proven to work since the app started, in the same form as [outages]; an outage removes one. */
     val working: StateFlow<Set<String>> = workingHosts.asStateFlow()
 
+    private val passed = MutableSharedFlow<String>(extraBufferCapacity = PASS_BUFFER)
+
+    /**
+     * Hosts that just got through their browser check ([pass]), in the same form as [outages]. Unlike a challenge that
+     * simply expired, which would fail again, a reason for a screen that was waiting on the check to load again.
+     */
+    val passes: SharedFlow<String> = passed.asSharedFlow()
+
     private val firstDnsMiss = ConcurrentHashMap<String, Long>()
 
     /** Throws if [url]'s host is in an active outage; drops an expired one. */
@@ -99,6 +110,19 @@ class HostOutageTracker(
         state.update { it + (host to HostOutage(kind, clock() + outageMs, refused)) }
     }
 
+    /**
+     * A challenge that refused [refused]: recorded when [url]'s host has no active one, and otherwise not renewed, so it
+     * still expires on time. An active one recorded without the refused request (by a client that doesn't know it) gains
+     * it, since that is what the check page opens.
+     */
+    fun recordChallenge(url: String, refused: RefusedRequest) {
+        val host = hostKey(url) ?: return
+        val now = clock()
+        val active = state.value[host]?.takeIf { it.kind == HostOutageKind.CHALLENGE && it.untilEpochMs > now }
+        if (active == null) return record(url, HostOutageKind.CHALLENGE, refused)
+        if (active.refused == null) state.update { recorded -> recorded + (host to active.copy(refused = refused)) }
+    }
+
     /** Whether [url]'s host is in an active challenge outage: its browser check is the user's to pass now. */
     fun isChallenged(url: String): Boolean {
         val outage = hostKey(url)?.let(state.value::get) ?: return false
@@ -119,6 +143,13 @@ class HostOutageTracker(
         workingHosts.update { if (isWorking) it + host else it - host }
     }
 
+    /** [host] got through its browser check: forgets its outage and announces it on [passes]. */
+    fun pass(host: String) {
+        val key = normalizeHost(host)
+        clear(key)
+        passed.tryEmit(key)
+    }
+
     /** Forgets [host]'s outage so the next request tries the network again. */
     fun clear(host: String) {
         val key = normalizeHost(host)
@@ -129,6 +160,7 @@ class HostOutageTracker(
         const val DEFAULT_OUTAGE_MS = 10 * 60 * 1000L
         private const val DNS_MISS_MIN_GAP_MS = 5_000L
         private const val DNS_MISS_WINDOW_MS = 2 * 60 * 1000L
+        private const val PASS_BUFFER = 16
 
         /** The form outages are keyed by: lowercase, without `www.`. */
         fun normalizeHost(host: String): String = host.lowercase(Locale.ROOT).removePrefix("www.")

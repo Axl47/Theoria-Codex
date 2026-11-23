@@ -287,7 +287,15 @@ private fun rememberShellOwners(container: TheoriaAppContainer, appContext: Cont
     val workflows = container.workflows
     val savedSearches = viewModel(key = "saved-searches") { SavedSearchViewModel(data.savedSearches) }
     val siteChecks = viewModel(key = "site-checks") {
-        SiteChecks(AndroidBrowserCookieStore, container.customSites::setSetupHost, targetFor = { siteCheckTarget(container, it) })
+        val app = appContext as? TheoriaApplication
+        SiteChecks(
+            AndroidBrowserCookieStore,
+            shown = { target ->
+                app?.challengeBrowsers?.showCheck(target?.url)
+                app?.siteCookieBridge?.setCheckHost(target?.cookieHost)
+            },
+            targetFor = { siteCheckTarget(container, it) },
+        )
     }
     val codexCommands = viewModel(key = "codex-command-owner") {
         CodexCommandViewModel(

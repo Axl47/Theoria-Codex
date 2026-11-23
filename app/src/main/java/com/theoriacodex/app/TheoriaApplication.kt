@@ -66,7 +66,7 @@ class TheoriaApplication :
     private val hostOutages by lazy { HostOutageTracker(isOnline = { networkOnline.value }) }
 
     /** The hidden browsers that pass checks out of sight, one set shared by the app's own clients and the extensions'. */
-    private val challengeBrowsers = ChallengeBrowsers(AndroidBrowserCookieStore, WebViewChallengeBrowser(this))
+    val challengeBrowsers = ChallengeBrowsers(AndroidBrowserCookieStore, WebViewChallengeBrowser(this))
 
     /** Series sources that run loaded extension code. It loads nothing until first used. */
     private val extensionHost = MihonExtensionSourceHost().also { it.attach(this, challengeBrowsers) { hostOutages } }

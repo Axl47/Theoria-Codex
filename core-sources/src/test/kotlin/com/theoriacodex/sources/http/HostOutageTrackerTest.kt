@@ -6,7 +6,11 @@ import java.net.InetSocketAddress
 import java.net.UnknownHostException
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.system.measureTimeMillis
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -16,6 +20,20 @@ import org.junit.Test
 class HostOutageTrackerTest {
     private var now = 1_000L
     private val tracker = HostOutageTracker(clock = { now }, outageMs = 60_000L)
+
+    @Test fun `a passed check clears the challenge and is announced, an expired one is not`() = runTest {
+        val passed = mutableListOf<String>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { tracker.passes.toList(passed) }
+        tracker.record("https://www.site.test/", HostOutageKind.CHALLENGE)
+        tracker.record("https://old.test/", HostOutageKind.CHALLENGE)
+        now += 60_000L
+
+        assertFalse(tracker.isChallenged("https://old.test/"))
+        tracker.pass("WWW.site.test")
+
+        assertEquals(listOf("site.test"), passed)
+        assertEquals(setOf("old.test"), tracker.outages.value.keys)
+    }
 
     @Test fun `down statuses and challenges are outages, ordinary failures are not`() {
         assertEquals(HostOutageKind.MAINTENANCE, tracker.recordResponse("https://www.danbooru.donmai.us/x", 503, emptyMap()))
