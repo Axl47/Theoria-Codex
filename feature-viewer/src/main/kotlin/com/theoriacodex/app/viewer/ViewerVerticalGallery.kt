@@ -203,16 +203,14 @@ private fun VerticalGalleryEffects(
 ) {
     val list = gallery.list
     val pageCount = pageState.media.size
-    val focusedPage by remember(list, pageCount) { derivedStateOf { list.focusedPage(pageCount) } }
     val selected = pageState.selectedMediaIndex
     val resuming = pageState.pendingMediaIndex != null
     // The list's position counts as the reader's choice only once it shows the selection; until then (a resume
     // still resolving, or a restored page not yet scrolled to) publishing it would overwrite the saved page.
     var aligned by remember(list) { mutableStateOf(false) }
-    LaunchedEffect(focusedPage, isCurrentPost, aligned, pageCount) {
-        if (!isCurrentPost || !aligned || pageCount == 0) return@LaunchedEffect
-        if (focusedPage != selected) host.onAction(ViewerAction.SelectMedia(focusedPage))
-        host.onVisibleMediaChanged?.invoke(post, focusedPage + 1)
+    VerticalGalleryScrollSelection(list, pageCount, selected, enabled = isCurrentPost && aligned, host)
+    LaunchedEffect(selected, isCurrentPost, aligned) {
+        if (isCurrentPost && aligned) host.onVisibleMediaChanged?.invoke(post, selected + 1)
     }
     // A page bar, overview or strip pick, or a resumed page, moves the list to the selection.
     LaunchedEffect(selected, pageCount, resuming) {
@@ -224,6 +222,24 @@ private fun VerticalGalleryEffects(
         aligned = true
     }
     VerticalGalleryPendingJump(post, list, pageCount, resuming, screen)
+}
+
+/**
+ * Selects the page under the line as the reader scrolls, including the one a fling comes to rest on. Pages also slide
+ * under the line when loading pages resize or the Viewer moves the list itself; selecting those would answer the jump
+ * that moved them, and the two would trade pages back and forth.
+ */
+@Composable
+private fun VerticalGalleryScrollSelection(list: LazyListState, pageCount: Int, selected: Int, enabled: Boolean, host: ViewerScreenHost) {
+    val focusedPage by remember(list, pageCount) { derivedStateOf { list.focusedPage(pageCount) } }
+    val scrolling = list.isScrollInProgress
+    var readerScrolled by remember(list) { mutableStateOf(false) }
+    LaunchedEffect(focusedPage, scrolling, enabled, pageCount) {
+        if (scrolling) readerScrolled = true
+        if (!readerScrolled || !enabled || pageCount == 0) return@LaunchedEffect
+        if (!scrolling) readerScrolled = false
+        if (focusedPage != selected) host.onAction(ViewerAction.SelectMedia(focusedPage))
+    }
 }
 
 /** A swipe that lands on this gallery at a chosen page (going back lands on its last page) scrolls there once. */

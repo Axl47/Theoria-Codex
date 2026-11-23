@@ -12,6 +12,7 @@ import coil.fetch.DrawableResult
 import coil.fetch.FetchResult
 import coil.fetch.Fetcher
 import coil.request.ImageRequest
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 
@@ -27,6 +28,20 @@ internal fun installHangingLoader(loadsImmediately: String? = null): ImageLoadLo
         else awaitCancellation()
     }
     return log
+}
+
+/**
+ * Replaces Coil's loader with one whose requests all wait until the returned function is called, then finish as
+ * [width] by [height] images. Call `Coil.reset()` after the test.
+ */
+internal fun installGatedLoader(width: Int, height: Int): () -> Unit {
+    val gate = CompletableDeferred<Unit>()
+    val image = BitmapDrawable(context().resources, Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888))
+    installTestLoader(EventListener.NONE) {
+        gate.await()
+        DrawableResult(image, false, DataSource.MEMORY)
+    }
+    return { gate.complete(Unit) }
 }
 
 /**
