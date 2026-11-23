@@ -210,6 +210,12 @@ internal class AnimeViewerHand(val live: SeriesLiveDriver = SeriesLiveDriver()) 
         return Playback(state, position.toLong() + moved.toLong())
     }
 
+    /** Whether the target holds an active media session, as `dumpsys media_session` lists it. */
+    fun sessionActive(): Boolean {
+        val session = device.executeShellCommand("dumpsys media_session").substringAfter("package=${live.targetPackage}\n", "")
+        return SESSION_ACTIVE.find(session)?.groupValues?.get(1) == "true"
+    }
+
     /** When, in wall-clock milliseconds, the app logged starting each episode lookup since [sinceMs]. */
     fun lookupsSince(sinceMs: Long): List<Long> = device.executeShellCommand("logcat -d -v epoch -s SeriesReader:I")
         .lines()
@@ -234,6 +240,7 @@ internal class AnimeViewerHand(val live: SeriesLiveDriver = SeriesLiveDriver()) 
         const val PRESS_TRIES = 3
 
         /** A session's line in `dumpsys media_session`: "state=PlaybackState {state=PLAYING(3), position=…, …, speed=1.0, updated=…". */
+        val SESSION_ACTIVE = Regex("""active=(true|false)""")
         val SESSION_STATE = Regex("""state=PlaybackState \{state=(\w+)\(\d+\), position=(-?\d+), .*?speed=(-?[\d.]+), updated=(\d+)""")
 
         /** How far a reopened episode may resume from where it was left: progress is saved as it is left. */

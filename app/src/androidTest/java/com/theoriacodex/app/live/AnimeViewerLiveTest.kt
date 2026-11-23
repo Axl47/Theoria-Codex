@@ -33,13 +33,17 @@ class AnimeViewerLiveTest {
     @Before
     fun requireExplicitOptIn() = live.requireOptIn()
 
-    /** An episode of the series `-e seriesQuery` finds plays; the logs then show what the extension needed to get there. */
+    /** An episode of the series `-e seriesQuery` finds plays, and its media session ends with the Viewer. */
     @Test
     fun anEpisodePlays() {
         val (_, episode) = watch()
         val playing = hand.awaitPosition("playback past ${PLAYED_MS / 1000} s") { it >= PLAYED_MS }
         live.report("play", "\"$episode\" plays at ${playing.seconds()} s on \"${hand.streamOnScreen()}\"")
         hand.leaveViewer()
+        // The system's media controls go with the Viewer.
+        val goneAfter = System.currentTimeMillis()
+        live.await("the media session to end", hand::sessionActive) { !it }
+        live.report("session", "no active media session ${System.currentTimeMillis() - goneAfter} ms after leaving the Viewer")
     }
 
     /**
@@ -82,10 +86,13 @@ class AnimeViewerLiveTest {
         hand.leaveViewer()
     }
 
-    /** A stream switched in an episode's last seconds, while paused, takes over where the last one stopped. */
+    /**
+     * A stream switched in an episode's last seconds takes over where the last one stopped: choosing a stream plays, so
+     * the episode plays out its end and the Viewer moves on, instead of starting the episode again.
+     */
     @Test
     fun aStreamSwitchedInTheLastSecondsTakesOverThere() {
-        val (_, episode) = watch()
+        val (title, episode) = watch()
         hand.awaitPlayback("\"$episode\" to play") { it.state == PLAYING }
         hand.press("Pause", By.desc("Pause"))
         hand.awaitPlayback("the player to pause") { it.state == PAUSED }
@@ -94,12 +101,9 @@ class AnimeViewerLiveTest {
         val before = hand.awaitPlayback("the seek into the last seconds") { it.state == PAUSED && it.positionMs >= durationMs - END_MARGIN_MS }.positionMs
         val (from, to) = hand.switchStream()
         live.tap("the stream \"$to\"", By.text(to))
-        live.await("the stream pill to name \"$to\"", hand::streamOnScreen) { it == to }
-        // The new player reports once it has opened; give it the time a switch takes before reading where it is.
-        Thread.sleep(SETTLE_MS)
-        val after = hand.awaitPlayback("\"$to\" to open") { it.state == PAUSED }.positionMs
-        live.report("switch", "\"$from\" at ${before.tenths()} s of ${durationMs.seconds()} s became \"$to\" at ${after.tenths()} s")
-        assertTrue("The switch keeps the position", after >= durationMs - END_MARGIN_MS)
+        val after = live.await("the Viewer to move on", { hand.episodeOnScreen(title) }) { it != episode }
+        val start = hand.awaitPlayback("\"$after\" to play") { it.state == PLAYING }.positionMs
+        live.report("switch", "\"$from\" at ${before.tenths()} s of ${durationMs.seconds()} s became \"$to\", which played out the end; then \"$after\" from ${start.seconds()} s")
         hand.leaveViewer()
     }
 
@@ -182,6 +186,8 @@ class AnimeViewerLiveTest {
 
         /** How far a seek may land from where the timeline was let go: a stream seeks to its nearest key frame. */
         const val SEEK_NEAR_MS = 10_000L
+
+        /** How long a seek's report takes to be written before the app is stopped. */
         const val SETTLE_MS = 3_000L
         const val STATS_PUSHES = 6
         const val SWIPE_STEPS = 20
