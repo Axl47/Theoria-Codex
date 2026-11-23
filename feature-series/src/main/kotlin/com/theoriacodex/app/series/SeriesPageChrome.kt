@@ -8,7 +8,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,11 +18,13 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -48,6 +52,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -57,8 +62,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -69,12 +78,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.theoriacodex.app.ui.components.ExpandedBottomSheet
 import com.theoriacodex.app.ui.components.SheetHeader
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.data.repository.DownloadChoice
 import com.theoriacodex.data.repository.SeriesDownloads
+import com.theoriacodex.domain.series.Series
 
 /**
  * Floating top bar for a series page: transparent over the hero cover at the top, surface-backed when scrolled or
@@ -430,6 +443,109 @@ private fun ChapterSortRow(label: String, active: Boolean, descending: Boolean, 
     }
 }
 
+/** Removable pills below the chapter header showing active filters, non-default sorts, or search text. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun ActiveChapterOptionPills(
+    state: SeriesPageState,
+    onClearFilter: () -> Unit,
+    onClearSort: () -> Unit,
+    onClearQuery: () -> Unit,
+) {
+    val filterLabel = when (state.chapterFilter) {
+        ChapterFilter.ALL -> null
+        ChapterFilter.UNREAD -> "Unread"
+        ChapterFilter.DOWNLOADED -> "Downloaded"
+    }
+    val sortLabel = if (state.chapterSort != ChapterSort.SOURCE_ORDER || !state.sortDescending) {
+        val name = CHAPTER_SORT_OPTIONS.first { it.first == state.chapterSort }.second
+        "$name ${if (state.sortDescending) "↓" else "↑"}"
+    } else null
+    val queryLabel = state.chapterQuery.trim().takeIf(String::isNotEmpty)?.let { "\"$it\"" }
+    if (filterLabel == null && sortLabel == null && queryLabel == null) return
+    FlowRow(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        filterLabel?.let { ActiveOptionChip(it, "Clear $it filter", onClearFilter) }
+        sortLabel?.let { ActiveOptionChip(it, "Reset chapter sort", onClearSort) }
+        queryLabel?.let { ActiveOptionChip(it, "Clear chapter search", onClearQuery) }
+    }
+}
+
+@Composable
+private fun ActiveOptionChip(label: String, clearDescription: String, onClear: () -> Unit) {
+    Surface(
+        onClick = onClear,
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 10.dp, end = 6.dp, top = 5.dp, bottom = 5.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Icon(Icons.Default.Close, contentDescription = clearDescription, modifier = Modifier.size(14.dp))
+        }
+    }
+}
+
+/** Full-screen pinch-to-zoom cover viewer opened by tapping a series' cover. */
+@Composable
+internal fun CoverLightboxDialog(series: Series, onDismiss: () -> Unit) {
+    val request = rememberSeriesCoverRequest(series, targetWidthPx = FULL_COVER_WIDTH_PX)
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.92f))
+                .clickable(onClick = onDismiss)
+                .pointerInput(Unit) {
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        val nextScale = (scale * zoom).coerceIn(1f, 4f)
+                        scale = nextScale
+                        offset = if (nextScale > 1f) offset + pan else Offset.Zero
+                    }
+                }
+                .testTag(COVER_LIGHTBOX_TAG),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (request != null) {
+                AsyncImage(
+                    model = request,
+                    contentDescription = series.title,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp)
+                        .graphicsLayer(
+                            scaleX = scale,
+                            scaleY = scale,
+                            translationX = offset.x,
+                            translationY = offset.y,
+                        ),
+                )
+            }
+            Surface(
+                onClick = onDismiss,
+                shape = CircleShape,
+                color = Color.Black.copy(alpha = 0.6f),
+                contentColor = Color.White,
+                modifier = Modifier.align(Alignment.TopEnd).padding(16.dp).size(40.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Close, contentDescription = "Close cover", modifier = Modifier.size(22.dp))
+                }
+            }
+        }
+    }
+}
+
 private val DOWNLOAD_CHOICES = listOf(
     DownloadChoice.NEXT_UNREAD to "Next ${SeriesDownloads.NEXT_UNREAD_COUNT} unread",
     DownloadChoice.ALL_UNREAD to "All unread",
@@ -445,3 +561,4 @@ private val CHAPTER_SORT_OPTIONS = listOf(
 internal val SERIES_TOP_BAR_HEIGHT = 56.dp
 internal const val SERIES_TOP_BAR_TAG = "Series page top bar"
 internal const val CHAPTER_SEARCH_INPUT_TAG = "Chapter search input"
+internal const val COVER_LIGHTBOX_TAG = "Series cover lightbox"

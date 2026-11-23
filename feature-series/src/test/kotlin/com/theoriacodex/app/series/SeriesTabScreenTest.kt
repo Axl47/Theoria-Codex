@@ -101,16 +101,17 @@ class SeriesTabScreenTest {
     }
 
     @Test
-    fun seriesCardKeepsTitleInsideCoverBounds() {
+    fun seriesCardKeepsTitleInsideCoverBoundsAndShowsFollowingBadge() {
         val series = Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_1"), "/one"), "Twin Reincarnation")
         compose.setContent {
             MaterialTheme {
-                SeriesCard(series, onClick = {})
+                SeriesCard(series, onClick = {}, followed = true)
             }
         }
         compose.waitForIdle()
         val cardBounds = compose.onNodeWithText("Twin Reincarnation").fetchSemanticsNode().boundsInRoot
         assertTrue(cardBounds.width > 0f && cardBounds.height > 0f)
+        compose.onNodeWithText("Following").assertIsDisplayed()
     }
 }
 
@@ -150,6 +151,8 @@ private object EmptySeriesRepository : SeriesRepository {
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit
     override suspend fun setAllRead(id: SeriesId, read: Boolean) = Unit
+    override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean) = Unit
+    override suspend fun restoreProgress(id: SeriesId, entries: List<StoredSeriesEntry>, lastOpenedEntry: String?) = Unit
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) = Unit
     override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) = false
 }

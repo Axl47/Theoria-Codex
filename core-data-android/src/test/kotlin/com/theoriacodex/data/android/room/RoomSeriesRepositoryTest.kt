@@ -204,4 +204,38 @@ class RoomSeriesRepositoryTest {
         assertNull(repository.series(id)!!.lastOpenedEntry)
         assertEquals(2, repository.observeFollowed().first().single().unreadCount)
     }
+
+    @Test
+    fun `setEntriesRead and restoreProgress update targeted chapters and undo cleanly`() = runTest {
+        repository.store(series, listOf(SeriesEntry("/c/3", "Chapter 3"), SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))
+        repository.recordProgress(id, "/c/1", page = 4, pageCount = 10)
+        val beforeEntries = repository.entries(id)
+        val beforeLast = repository.series(id)!!.lastOpenedEntry
+
+        repository.setEntriesRead(id, listOf("/c/2", "/c/1"), read = true)
+        assertEquals(listOf(false, true, true), repository.entries(id).map { it.read })
+
+        repository.restoreProgress(id, beforeEntries, beforeLast)
+        val restored = repository.entries(id)
+        assertEquals(listOf(false, false, false), restored.map { it.read })
+        assertEquals(4, restored.last().lastPage)
+        assertEquals("/c/1", repository.series(id)!!.lastOpenedEntry)
+
+        repository.setEntriesRead(id, listOf("/c/1"), read = false)
+        assertEquals(0, repository.entries(id).last().lastPage)
+        assertNull(repository.series(id)!!.lastOpenedEntry)
+    }
+
+    @Test
+    fun `observeFollowed puts series with unread chapters before caught-up ones`() = runTest {
+        val caughtUpId = SeriesId(id.source, "/series/alpha")
+        val unreadId = SeriesId(id.source, "/series/zeta")
+        repository.store(series.copy(id = caughtUpId, title = "Alpha"), listOf(SeriesEntry("/a/1", "Ch 1")))
+        repository.store(series.copy(id = unreadId, title = "Zeta"), listOf(SeriesEntry("/z/2", "Ch 2"), SeriesEntry("/z/1", "Ch 1")))
+        repository.setFollowed(caughtUpId, true)
+        repository.setFollowed(unreadId, true)
+        repository.setAllRead(caughtUpId, read = true)
+
+        assertEquals(listOf("Zeta", "Alpha"), repository.observeFollowed().first().map { it.series.title })
+    }
 }

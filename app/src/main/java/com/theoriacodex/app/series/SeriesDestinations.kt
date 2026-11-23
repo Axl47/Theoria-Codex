@@ -3,6 +3,7 @@ package com.theoriacodex.app.series
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.createSavedStateHandle
@@ -13,8 +14,8 @@ import androidx.navigation.navArgument
 import com.theoriacodex.app.ui.AppRoute
 import com.theoriacodex.app.ui.TheoriaShell
 import com.theoriacodex.app.ui.TopLevelDestination
-import com.theoriacodex.app.ui.tabShown
 import com.theoriacodex.app.ui.launchViewer
+import com.theoriacodex.app.ui.tabShown
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.SeriesId
 import kotlinx.coroutines.launch
@@ -24,6 +25,8 @@ internal val seriesArguments = listOf(
     navArgument("source") { type = NavType.StringType },
     navArgument("address") { type = NavType.StringType },
 )
+
+private const val PENDING_SERIES_SEARCH = "pending_series_search"
 
 /** The Series tab. */
 @Composable
@@ -35,6 +38,16 @@ internal fun SeriesTabDestination(shell: TheoriaShell) {
     val pager = shell.navigation.pagerState
     LaunchedEffect(viewModel, pager) {
         viewModel.followShown(snapshotFlow { tabShown(TopLevelDestination.Series, pager.targetPage, pager.settledPage) })
+    }
+    val homeHandle = remember(shell.navController) {
+        runCatching { shell.navController.getBackStackEntry(AppRoute.Home).savedStateHandle }.getOrNull()
+    }
+    val pendingSearch = homeHandle?.getStateFlow<String?>(PENDING_SERIES_SEARCH, null)?.collectAsStateWithLifecycle()?.value
+    LaunchedEffect(pendingSearch) {
+        if (!pendingSearch.isNullOrBlank()) {
+            homeHandle.remove<String>(PENDING_SERIES_SEARCH)
+            viewModel.search(pendingSearch)
+        }
     }
     val settings by shell.data.settingsRepository.observeSettings().collectAsStateWithLifecycle(initialValue = null)
     SeriesTabScreen(
@@ -63,8 +76,16 @@ internal fun SeriesPageDestination(shell: TheoriaShell, entry: NavBackStackEntry
     val series = shell.container.series ?: return
     val source = entry.arguments?.getString("source")?.let(SourceKey::parse) ?: return
     val id = SeriesId(source, entry.arguments?.getString("address") ?: return)
+    val chapterPreferences = remember(shell.appContext) { SharedPreferencesSeriesChapterPreferences(shell.appContext) }
     val viewModel = viewModel {
-        SeriesPageViewModel(id, series.repository, series.sources, series.extensions.revision, series.downloads)
+        SeriesPageViewModel(
+            id = id,
+            repository = series.repository,
+            loadSources = series.sources,
+            sourcesChanged = series.extensions.revision,
+            downloads = series.downloads,
+            chapterPreferences = chapterPreferences,
+        )
     }
     val switchSource = viewModel {
         SwitchSourceViewModel(id, series.sources, series.extensions.revision, store = { series.repository.store(it) }) { source, to ->
@@ -87,6 +108,10 @@ internal fun SeriesPageDestination(shell: TheoriaShell, entry: NavBackStackEntry
             shell.scope.launch {
                 shell.seriesReader?.session(id, address)?.let { session -> shell.launchViewer(session, saveContext = false, singleTop = true) }
             }
+        },
+        onSearchGenre = { genre ->
+            runCatching { shell.navController.getBackStackEntry(AppRoute.Home).savedStateHandle[PENDING_SERIES_SEARCH] = genre }
+            shell.navigation.goToTab(TopLevelDestination.Series)
         },
     )
 }

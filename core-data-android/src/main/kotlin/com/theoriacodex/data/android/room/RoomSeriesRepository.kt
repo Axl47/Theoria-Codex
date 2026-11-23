@@ -115,6 +115,38 @@ class RoomSeriesRepository(
         }
     }
 
+    override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean) {
+        if (entryAddresses.isEmpty()) return
+        val targets = entryAddresses.toHashSet()
+        database.withTransaction {
+            val updated = dao.entries(id.source.id, id.address)
+                .map(SeriesEntryEntity::toStored)
+                .mapNotNull { it.withReadState(targets, read)?.toEntity(id) }
+            if (updated.isNotEmpty()) dao.upsertEntries(updated)
+            if (!read && dao.series(id.source.id, id.address)?.toStored()?.lastOpenedEntry in targets) {
+                dao.clearLastOpenedEntry(id.source.id, id.address)
+            }
+        }
+    }
+
+    override suspend fun restoreProgress(id: SeriesId, entries: List<StoredSeriesEntry>, lastOpenedEntry: String?) {
+        val byAddress = entries.associateBy { it.entry.address }
+        database.withTransaction {
+            val restored = dao.entries(id.source.id, id.address)
+                .map(SeriesEntryEntity::toStored)
+                .mapNotNull { current ->
+                    val target = byAddress[current.entry.address] ?: return@mapNotNull null
+                    val next = current.copy(read = target.read, lastPage = target.lastPage, pageCount = target.pageCount)
+                    next.takeIf { it != current }?.toEntity(id)
+                }
+            if (restored.isNotEmpty()) dao.upsertEntries(restored)
+            val series = dao.series(id.source.id, id.address)?.toStored()
+            if (series != null && series.lastOpenedEntry != lastOpenedEntry) {
+                dao.upsertSeries(series.copy(lastOpenedEntry = lastOpenedEntry).toEntity())
+            }
+        }
+    }
+
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) {
         // A series moved to another source while its chapter was open is gone with its entries, so this writes nothing.
         database.withTransaction {
@@ -155,6 +187,12 @@ class RoomSeriesRepository(
 
 /** A chapter number and who released it: several groups release the same number, each a chapter of its own. */
 private val SeriesEntry.release: Pair<Float, String?>? get() = number?.let { it to translatorGroup }
+
+private fun StoredSeriesEntry.withReadState(targets: Set<String>, read: Boolean): StoredSeriesEntry? {
+    if (entry.address !in targets) return null
+    val next = if (read) copy(read = true) else copy(read = false, lastPage = 0)
+    return next.takeIf { it != this }
+}
 
 /**
  * The stored entry each added address continues, by that address. [listed] is the source's list now, split into the

@@ -40,6 +40,13 @@ private data class ChapterViewOptions(
     val query: String = "",
 )
 
+/** Snapshot taken before a bulk read/unread action so an Undo pill can restore exact prior progress. */
+data class BulkReadUndo(
+    val label: String,
+    val previousEntries: List<StoredSeriesEntry>,
+    val previousLastOpened: String?,
+)
+
 /**
  * One series' page: what is stored of it, its entries in the source's order (newest first), the filtered and sorted
  * [visibleEntries] for display, and how the refresh from its source is going. A failed refresh leaves the stored
@@ -93,7 +100,7 @@ data class SeriesPageState(
 
 /**
  * [sourcesChanged] emits once at the start and again whenever [loadSources] may answer differently; each is a refresh.
- * Without [downloads] the page offers none.
+ * Without [downloads] the page offers none. [chapterPreferences] persists per-series chapter sort and filter choices.
  */
 class SeriesPageViewModel(
     private val id: SeriesId,
@@ -102,9 +109,18 @@ class SeriesPageViewModel(
     sourcesChanged: Flow<*> = flowOf(Unit),
     private val downloads: SeriesDownloads? = null,
     downloadStates: Flow<Map<String, ChapterDownload>> = downloads?.states(id) ?: flowOf(emptyMap()),
+    private val chapterPreferences: SeriesChapterPreferences = NoOpSeriesChapterPreferences,
 ) : ViewModel() {
     private val refresh = MutableStateFlow(SeriesPageState())
-    private val chapterOptions = MutableStateFlow(ChapterViewOptions())
+    private val chapterOptions = MutableStateFlow(
+        chapterPreferences.read(id).let { saved ->
+            ChapterViewOptions(
+                sort = saved.sort,
+                descending = saved.descending,
+                filter = if (downloads == null && saved.filter == ChapterFilter.DOWNLOADED) ChapterFilter.ALL else saved.filter,
+            )
+        },
+    )
 
     /** Whether this page offers downloads. */
     val canDownload: Boolean = downloads != null
@@ -186,26 +202,63 @@ class SeriesPageViewModel(
 
     /** Selects [sort]; selecting the active sort flips ascending vs descending order. */
     fun setChapterSort(sort: ChapterSort) {
-        chapterOptions.update { current ->
+        updateDisplayOptions { current ->
             if (current.sort == sort) current.copy(descending = !current.descending)
             else current.copy(sort = sort, descending = true)
         }
     }
 
+    fun resetChapterSort() {
+        updateDisplayOptions { it.copy(sort = ChapterSort.SOURCE_ORDER, descending = true) }
+    }
+
     fun setChapterFilter(filter: ChapterFilter) {
-        chapterOptions.update { it.copy(filter = filter) }
+        updateDisplayOptions { it.copy(filter = filter) }
     }
 
     fun resetChapterOptions() {
-        chapterOptions.update { it.copy(sort = ChapterSort.SOURCE_ORDER, descending = true, filter = ChapterFilter.ALL) }
+        updateDisplayOptions { it.copy(sort = ChapterSort.SOURCE_ORDER, descending = true, filter = ChapterFilter.ALL) }
+    }
+
+    private fun updateDisplayOptions(transform: (ChapterViewOptions) -> ChapterViewOptions) {
+        val next = chapterOptions.updateAndGet(transform)
+        chapterPreferences.write(id, ChapterDisplayPreferences(next.sort, next.descending, next.filter))
     }
 
     fun setChapterQuery(query: String) {
         chapterOptions.update { it.copy(query = query) }
     }
 
-    fun markAllRead(read: Boolean) {
+    /** Marks a single chapter read or unread. */
+    fun setEntryRead(entryAddress: String, read: Boolean) {
+        viewModelScope.launch { repository.setEntriesRead(id, listOf(entryAddress), read) }
+    }
+
+    /** Marks all unread chapters earlier in reading order than [entryAddress] as read; returns an undo token. */
+    fun markPreviousRead(entryAddress: String): BulkReadUndo? {
+        val current = state.value
+        val target = current.entries.firstOrNull { it.entry.address == entryAddress } ?: return null
+        val previousUnread = current.entries.filter { it.sourceOrder > target.sourceOrder && !it.read }
+        if (previousUnread.isEmpty()) return null
+        val undo = BulkReadUndo("Marked ${chapterCount(previousUnread.size)} as read", current.entries, current.stored?.lastOpenedEntry)
+        viewModelScope.launch { repository.setEntriesRead(id, previousUnread.map { it.entry.address }, read = true) }
+        return undo
+    }
+
+    /** Marks all chapters read or unread; returns an undo token when at least one chapter changes. */
+    fun markAllRead(read: Boolean): BulkReadUndo? {
+        val current = state.value
+        val hasChange = if (read) current.entries.any { !it.read } else current.entries.any { it.read || it.lastPage > 0 }
+        if (!hasChange) return null
+        val label = if (read) "Marked all as read" else "Marked all as unread"
+        val undo = BulkReadUndo(label, current.entries, current.stored?.lastOpenedEntry)
         viewModelScope.launch { repository.setAllRead(id, read) }
+        return undo
+    }
+
+    /** Reverses a [BulkReadUndo] snapshot, restoring exact prior chapter progress and last-opened entry. */
+    fun undoBulkRead(undo: BulkReadUndo) {
+        viewModelScope.launch { repository.restoreProgress(id, undo.previousEntries, undo.previousLastOpened) }
     }
 
     /** The chapter row's download mark: downloads the chapter, or stops its download or deletes it from the device. */
@@ -240,6 +293,14 @@ class SeriesPageViewModel(
             repository.setFollowed(id, !followed)
             if (!followed) onFollowed()
         }
+    }
+}
+
+private inline fun <T> MutableStateFlow<T>.updateAndGet(transform: (T) -> T): T {
+    while (true) {
+        val prev = value
+        val next = transform(prev)
+        if (compareAndSet(prev, next)) return next
     }
 }
 

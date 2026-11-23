@@ -5,6 +5,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -15,6 +16,8 @@ import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.swipeUp
 import com.theoriacodex.app.ui.components.LocalPostMenuActions
 import com.theoriacodex.app.ui.components.PostMenuActions
+import com.theoriacodex.app.ui.undo.ProvideUndoSlot
+import com.theoriacodex.app.ui.undo.UndoSlot
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
@@ -33,6 +36,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -45,9 +50,10 @@ class SeriesPageScreenTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
-    fun heroActionsOpenBrowserShareAndExpandGenres() {
+    fun heroActionsOpenBrowserShareCoverLightboxAndGenreSearch() {
         val openedUrls = mutableListOf<String>()
         val sharedUrls = mutableListOf<String>()
+        val searchedGenres = mutableListOf<String>()
         val harness = pageHarness(chapterCount = 3)
         compose.setContent {
             CompositionLocalProvider(
@@ -65,6 +71,7 @@ class SeriesPageScreenTest {
                         switchSource = harness.switchSource,
                         onOpenSeries = {},
                         onSwitched = {},
+                        onSearchGenre = { searchedGenres += it },
                     )
                 }
             }
@@ -78,30 +85,39 @@ class SeriesPageScreenTest {
         assertEquals(listOf("https://asura.example/series/1"), openedUrls)
         assertEquals(listOf("https://asura.example/series/1"), sharedUrls)
 
-        // Genres reveal when expanding the About section.
+        // Tapping cover opens the full-screen lightbox and Close dismisses it.
+        compose.onNodeWithText("Suicidal Battle God").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Close cover").assertDoesNotExist()
+
+        // Genres reveal when expanding About, and tapping a genre invokes onSearchGenre.
         compose.onNodeWithText("Fantasy").assertDoesNotExist()
         compose.onNodeWithText("More").performClick()
         compose.waitForIdle()
         compose.onNodeWithText("Fantasy").assertIsDisplayed()
+        compose.onNodeWithText("Fantasy").performClick()
+        assertEquals(listOf("Fantasy"), searchedGenres)
         compose.onNodeWithText("Less").performClick()
         compose.waitForIdle()
         compose.onNodeWithText("Fantasy").assertDoesNotExist()
     }
 
     @Test
-    fun topBarSearchSortFilterAndOverflowActionsWork() {
+    fun topBarSearchSortFilterPillsChapterHoldMenuAndUndoWork() {
         val harness = pageHarness(chapterCount = 4, readIndices = setOf(0))
+        val undoSlot = UndoSlot()
         compose.setContent {
-            MaterialTheme {
-                SeriesPageScreen(
-                    viewModel = harness.page,
-                    onBack = {},
-                    onOpenEntry = {},
-                    onOpenExtensions = {},
-                    switchSource = harness.switchSource,
-                    onOpenSeries = {},
-                    onSwitched = {},
-                )
+            ProvideUndoSlot(undoSlot) {
+                MaterialTheme {
+                    SeriesPageScreen(
+                        viewModel = harness.page,
+                        onBack = {},
+                        onOpenEntry = {},
+                        onOpenExtensions = {},
+                        switchSource = harness.switchSource,
+                        onOpenSeries = {},
+                        onSwitched = {},
+                    )
+                }
             }
         }
         compose.waitForIdle()
@@ -116,7 +132,7 @@ class SeriesPageScreenTest {
         compose.onNodeWithContentDescription("Close chapter search").performClick()
         compose.waitForIdle()
 
-        // Filter sheet switches to Unread.
+        // Filter sheet switches to Unread and Chapter number; active pills appear below the header and clear cleanly.
         compose.onNodeWithContentDescription("Sort and filter chapters").performClick()
         compose.waitForIdle()
         compose.onNodeWithText("Unread").performClick()
@@ -124,6 +140,21 @@ class SeriesPageScreenTest {
         compose.onNodeWithContentDescription("Close").performClick()
         compose.waitForIdle()
         compose.onNodeWithText("3 of 4 chapters").assertIsDisplayed()
+        compose.onNodeWithText("Unread").assertIsDisplayed()
+        compose.onNodeWithText("Chapter number ↓").assertIsDisplayed()
+        compose.onNodeWithText("Unread").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("4 chapters").assertIsDisplayed()
+
+        // Long-pressing Chapter 3 offers "Mark previous as read" with Undo pill.
+        compose.onNodeWithText("Chapter 3").performTouchInput { longClick() }
+        compose.waitForIdle()
+        compose.onNodeWithText("Mark previous as read").performClick()
+        compose.waitForIdle()
+        assertTrue(harness.page.state.value.entries.last().read)
+        compose.onNodeWithText("Undo").performClick()
+        compose.waitForIdle()
+        assertFalse(harness.page.state.value.entries.last().read)
 
         // Overflow menu lists Mark all as read, Mark all as unread, Refresh, and Switch source.
         compose.onNodeWithContentDescription("More options").performClick()
@@ -134,7 +165,10 @@ class SeriesPageScreenTest {
         compose.onNodeWithText(SWITCH_SOURCE).assertIsDisplayed()
         compose.onNodeWithText("Mark all as read").performClick()
         compose.waitForIdle()
-        assertEquals(listOf(true), harness.repository.markedAll)
+        assertTrue(harness.page.state.value.entries.all { it.read })
+        compose.onNodeWithText("Undo").performClick()
+        compose.waitForIdle()
+        assertFalse(harness.page.state.value.entries.last().read)
     }
 
     @Test
@@ -164,6 +198,20 @@ class SeriesPageScreenTest {
         compose.waitForIdle()
         compose.onNodeWithTag(SERIES_TOP_BAR_TAG).assertIsDisplayed()
     }
+
+    @Test
+    fun entryDetailIncludesTranslatorGroupAlongsideDateAndProgress() {
+        val entry = StoredSeriesEntry(
+            entry = SeriesEntry("/c/1", "Chapter 1", translatorGroup = "Asura", uploadedAtEpochMs = 1_700_000_000_000L),
+            sourceOrder = 0,
+            firstSeenAtEpochMs = 1L,
+            lastPage = 3,
+            pageCount = 12,
+        )
+        val detail = entryDetail(entry).orEmpty()
+        assertTrue(detail.contains("Asura"))
+        assertTrue(detail.contains("Page 3 of 12"))
+    }
 }
 
 private class PageHarness(
@@ -186,7 +234,7 @@ private fun pageHarness(chapterCount: Int, readIndices: Set<Int> = emptySet()): 
     )
     val entries = (chapterCount downTo 1).mapIndexed { order, number ->
         StoredSeriesEntry(
-            entry = SeriesEntry("/c/$number", "Chapter $number", number = number.toFloat(), uploadedAtEpochMs = number * 1000L),
+            entry = SeriesEntry("/c/$number", "Chapter $number", number = number.toFloat(), translatorGroup = "ScanGroup", uploadedAtEpochMs = number * 1000L),
             sourceOrder = order,
             firstSeenAtEpochMs = 1L,
             read = order in readIndices,
@@ -213,7 +261,6 @@ private class PageFakeSource(id: String, override val name: String, private val 
 private class PageMemoryRepository(stored: StoredSeries, entries: List<StoredSeriesEntry>) : SeriesRepository {
     private val storedFlow = MutableStateFlow<StoredSeries?>(stored)
     private val entriesFlow = MutableStateFlow(entries)
-    val markedAll = mutableListOf<Boolean>()
 
     override fun observeFollowed(): Flow<List<FollowedSeries>> = emptyFlow()
     override fun observeSeries(id: SeriesId): Flow<StoredSeries?> = storedFlow
@@ -229,8 +276,28 @@ private class PageMemoryRepository(stored: StoredSeries, entries: List<StoredSer
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit
     override suspend fun setAllRead(id: SeriesId, read: Boolean) {
-        markedAll += read
         entriesFlow.value = entriesFlow.value.map { it.copy(read = read, lastPage = if (read) it.lastPage else 0) }
+        if (!read) storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = null)
+    }
+
+    override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean) {
+        val targets = entryAddresses.toHashSet()
+        entriesFlow.value = entriesFlow.value.map { entry ->
+            if (entry.entry.address !in targets) entry
+            else entry.copy(read = read, lastPage = if (read) entry.lastPage else 0)
+        }
+        if (!read && storedFlow.value?.lastOpenedEntry in targets) {
+            storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = null)
+        }
+    }
+
+    override suspend fun restoreProgress(id: SeriesId, entries: List<StoredSeriesEntry>, lastOpenedEntry: String?) {
+        val byAddress = entries.associateBy { it.entry.address }
+        entriesFlow.value = entriesFlow.value.map { current ->
+            val target = byAddress[current.entry.address] ?: return@map current
+            current.copy(read = target.read, lastPage = target.lastPage, pageCount = target.pageCount)
+        }
+        storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = lastOpenedEntry)
     }
 
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) = Unit

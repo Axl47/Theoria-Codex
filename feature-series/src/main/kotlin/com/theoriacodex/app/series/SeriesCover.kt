@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Badge
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -64,9 +65,18 @@ internal fun SeriesCover(series: Series, modifier: Modifier = Modifier) {
     }
 }
 
-/** A cover card with the title overlaid at the bottom over a scrim; [unread] above zero shows as a badge at top right. */
+/**
+ * A cover card with the title overlaid at the bottom over a scrim; [unread] above zero shows as a badge at top right,
+ * and [followed] marks series already in the user's Following list with a subtle pill at top left.
+ */
 @Composable
-internal fun SeriesCard(series: Series, onClick: () -> Unit, modifier: Modifier = Modifier, unread: Int = 0) {
+internal fun SeriesCard(
+    series: Series,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    unread: Int = 0,
+    followed: Boolean = false,
+) {
     Box(
         modifier
             .aspectRatio(COVER_ASPECT)
@@ -74,7 +84,11 @@ internal fun SeriesCard(series: Series, onClick: () -> Unit, modifier: Modifier 
             .clickable(onClick = onClick),
     ) {
         SeriesCover(series, Modifier.fillMaxSize())
+        if (followed) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.22f)))
         Box(Modifier.fillMaxSize().background(TITLE_SCRIM))
+        if (followed) {
+            FollowingCardBadge(Modifier.align(Alignment.TopStart).padding(6.dp))
+        }
         if (unread > 0) {
             Badge(Modifier.align(Alignment.TopEnd).padding(6.dp).semantics { contentDescription = "$unread unread" }) {
                 Text("$unread")
@@ -96,8 +110,25 @@ internal fun SeriesCard(series: Series, onClick: () -> Unit, modifier: Modifier 
     }
 }
 
+@Composable
+private fun FollowingCardBadge(modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = FOLLOWING_BADGE_SHAPE,
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.92f),
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    ) {
+        Text(
+            text = "Following",
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+        )
+    }
+}
+
 private const val COVER_ASPECT = 2f / 3f
 private val COVER_SHAPE = RoundedCornerShape(8.dp)
+private val FOLLOWING_BADGE_SHAPE = RoundedCornerShape(6.dp)
 private val TITLE_SCRIM = Brush.verticalGradient(
     0.45f to Color.Transparent,
     0.78f to Color.Black.copy(alpha = 0.55f),
@@ -106,3 +137,6 @@ private val TITLE_SCRIM = Brush.verticalGradient(
 
 /** Wide enough for the series page's cover on a dense phone; grid tiles scale it down. */
 private const val COVER_WIDTH_PX = 480
+
+/** High resolution target for the full-screen cover viewer. */
+internal const val FULL_COVER_WIDTH_PX = 1600

@@ -107,6 +107,7 @@ data class SeriesTabState(
     val browseRun: Int = 0,
     val filterSheet: FilterSheetState? = null,
     val search: List<SeriesSourceListing>? = null,
+    val searchQuery: String = "",
     val dedicated: DedicatedSourceState? = null,
     val refreshing: Boolean = false,
 )
@@ -138,7 +139,7 @@ class SeriesTabViewModel(
 
     /** Follows whether the tab shows; see [followShown]. */
     private var shownWatch: Job? = null
-    private val mutableState = MutableStateFlow(SeriesTabState(search = searchText?.let { emptyList() }))
+    private val mutableState = MutableStateFlow(SeriesTabState(search = searchText?.let { emptyList() }, searchQuery = searchText.orEmpty()))
     val state: StateFlow<SeriesTabState> = mutableState
 
     val followed: StateFlow<List<FollowedSeries>> =
@@ -400,6 +401,7 @@ class SeriesTabViewModel(
         mutableState.update {
             it.copy(
                 search = sources.map { source -> source.toListing(sources, SeriesListing.Loading) },
+                searchQuery = query,
                 dedicated = null,
             )
         }
@@ -418,7 +420,7 @@ class SeriesTabViewModel(
         searchRun++
         saved.remove<String>(SAVED_SEARCH)
         if (state.value.dedicated != null) closeFilters()
-        mutableState.update { it.copy(search = null, dedicated = null) }
+        mutableState.update { it.copy(search = null, searchQuery = "", dedicated = null) }
     }
 
     /** Stores [series], so its page has something to show at once, then reports it stored. */

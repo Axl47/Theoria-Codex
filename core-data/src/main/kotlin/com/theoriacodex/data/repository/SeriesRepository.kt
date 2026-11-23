@@ -40,7 +40,7 @@ data class FollowedSeries(val series: Series, val unreadCount: Int)
  * flags it. Page addresses are never stored, since they expire; downloaded pages are [SeriesDownloads]' files.
  */
 interface SeriesRepository {
-    /** By title. */
+    /** Series with unread chapters first (most unread first), then by title. */
     fun observeFollowed(): Flow<List<FollowedSeries>>
 
     fun observeSeries(id: SeriesId): Flow<StoredSeries?>
@@ -81,6 +81,12 @@ interface SeriesRepository {
 
     /** Marks every listed entry of [id] as read or unread. Marking unread also resets partial page progress. */
     suspend fun setAllRead(id: SeriesId, read: Boolean)
+
+    /** Marks the listed entries at [entryAddresses] as read or unread. Marking unread resets their partial page progress. */
+    suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean)
+
+    /** Restores snapshotted progress on listed entries and [lastOpenedEntry] (used to undo bulk read changes). */
+    suspend fun restoreProgress(id: SeriesId, entries: List<StoredSeriesEntry>, lastOpenedEntry: String?)
 
     /**
      * The user is on [page] (from 1) of the entry at [entryAddress]. [pageCount] is null while the entry's pages are

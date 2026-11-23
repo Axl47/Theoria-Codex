@@ -1,6 +1,12 @@
 package com.theoriacodex.app.series
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,21 +29,25 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
 import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.app.ui.components.CollapsingSearchChrome
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.app.ui.components.rememberQuickReturn
+import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesId
 
 /**
- * One source's dedicated search, opened by tapping a source header in global search. Keeps the same collapsing pill
- * search bar and quick-return floating browse controls as the main Series tab.
+ * One source's dedicated search, opened by tapping a source header in global search. Both the source header and the
+ * floating browse controls hide on downward scroll and return on upward scroll, alongside the collapsing search bar.
  */
 @Composable
 internal fun DedicatedSourceSearchView(
     dedicated: DedicatedSourceState,
+    followedIds: Set<SeriesId>,
     supportsLatest: Boolean,
     oldSearchBar: Boolean,
     onBack: () -> Unit,
@@ -53,29 +63,26 @@ internal fun DedicatedSourceSearchView(
     var query by rememberSaveable(dedicated.source.key.id) { mutableStateOf((dedicated.kind as? BrowseKind.Filtered)?.text.orEmpty()) }
     var searchBarDismissed by rememberSaveable(dedicated.source.key.id) { mutableStateOf(false) }
     var focusRequest by remember { mutableIntStateOf(0) }
-    var controlsVisible by remember(dedicated.source.key.id) { mutableStateOf(true) }
+    var chromeVisible by remember(dedicated.source.key.id) { mutableStateOf(true) }
 
     LaunchedEffect(dedicated.kind) {
         query = (dedicated.kind as? BrowseKind.Filtered)?.text.orEmpty()
-        controlsVisible = true
+        chromeVisible = true
     }
-    SeriesScrollChromeEffect(grid, onScrollStarted = { searchBarDismissed = true }, onAtTop = { controlsVisible = true })
+    SeriesScrollChromeEffect(grid, onScrollStarted = { searchBarDismissed = true }, onAtTop = { chromeVisible = true })
     ScrollToTopOnTabReselect(TopLevelDestination.Series) {
         searchBarDismissed = false
-        controlsVisible = true
+        chromeVisible = true
         grid.animateScrollToItem(0)
     }
     BackHandler(onBack = onBack)
 
     Column(modifier.fillMaxSize()) {
-        SecondaryScreenAppBar(dedicated.source.sourceName, onBack = onBack, subtitle = dedicated.source.languageSubtitle)
+        DedicatedSourceHeader(dedicated.source, visible = chromeVisible || !searchBarDismissed, onBack = onBack)
         CollapsingSearchChrome(
             expanded = !searchBarDismissed,
             legacy = oldSearchBar,
-            onExpand = {
-                searchBarDismissed = false
-                focusRequest++
-            },
+            onExpand = { searchBarDismissed = false; chromeVisible = true; focusRequest++ },
             trailingControl = {},
             horizontalPadding = 16.dp,
             contentHorizontalPadding = 0.dp,
@@ -88,32 +95,37 @@ internal fun DedicatedSourceSearchView(
                     focusRequest = focusRequest,
                     onQueryChange = { query = it },
                     onSearch = onSearch,
-                    onClear = {
-                        query = ""
-                        onSearch("")
-                    },
+                    onClear = { query = ""; onSearch("") },
                 )
             },
         ) {
             DedicatedSourceGridBody(
-                dedicated = dedicated,
-                grid = grid,
-                supportsLatest = supportsLatest,
-                controlsVisible = controlsVisible,
-                onRevealControls = { controlsVisible = it },
-                onChoose = onChoose,
-                onFilter = onFilter,
-                onRetry = onRetry,
-                onMore = onMore,
-                onOpenSeries = onOpenSeries,
+                dedicated, followedIds, grid, supportsLatest, chromeVisible, { chromeVisible = it }, onChoose, onFilter, onRetry, onMore, onOpenSeries,
             )
         }
     }
 }
 
 @Composable
+private fun DedicatedSourceHeader(source: SeriesSourceListing, visible: Boolean, onBack: () -> Unit) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = expandVertically(tween(TheoriaMotion.MEDIUM_MS)) + fadeIn(tween(TheoriaMotion.SHORT_MS)),
+        exit = shrinkVertically(tween(TheoriaMotion.MEDIUM_MS)) + fadeOut(tween(TheoriaMotion.SHORT_MS)),
+    ) {
+        SecondaryScreenAppBar(
+            title = source.sourceName,
+            onBack = onBack,
+            subtitle = source.languageSubtitle,
+            modifier = Modifier.testTag(DEDICATED_HEADER_TAG),
+        )
+    }
+}
+
+@Composable
 private fun DedicatedSourceGridBody(
     dedicated: DedicatedSourceState,
+    followedIds: Set<SeriesId>,
     grid: LazyGridState,
     supportsLatest: Boolean,
     controlsVisible: Boolean,
@@ -134,7 +146,7 @@ private fun DedicatedSourceGridBody(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            browseListing(dedicated.source, dedicated.run, onRetry, onMore, onOpenSeries)
+            browseListing(dedicated.source, dedicated.run, followedIds, onRetry, onMore, onOpenSeries)
         }
         BrowseControlsBar(
             kind = dedicated.kind,
@@ -147,3 +159,5 @@ private fun DedicatedSourceGridBody(
         )
     }
 }
+
+internal const val DEDICATED_HEADER_TAG = "Dedicated source header"

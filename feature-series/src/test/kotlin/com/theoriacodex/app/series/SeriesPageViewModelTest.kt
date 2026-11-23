@@ -29,6 +29,8 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -107,7 +109,7 @@ class SeriesPageViewModelTest {
         advanceUntilIdle()
         assertEquals(listOf("/c/2", "/c/10", "/c/extra"), viewModel.state.value.visibleEntries.map { it.entry.address })
 
-        // Upload date descending then ascending.
+        // Upload date descending.
         viewModel.setChapterSort(ChapterSort.UPLOAD_DATE)
         advanceUntilIdle()
         assertEquals(listOf("/c/extra", "/c/2", "/c/10"), viewModel.state.value.visibleEntries.map { it.entry.address })
@@ -130,11 +132,15 @@ class SeriesPageViewModelTest {
     }
 
     @Test
-    fun markAllReadAndWebUrlUseRepositoryAndActiveSource() = runTest {
+    fun perChapterReadMarkPreviousReadUndoAndWebUrlWork() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
-        val stored = StoredSeries(Series(id, "Title"))
-        val entries = listOf(StoredSeriesEntry(SeriesEntry("/c/1", "Chapter 1"), sourceOrder = 0, firstSeenAtEpochMs = 1L))
+        val stored = StoredSeries(Series(id, "Title"), lastOpenedEntry = "/c/1")
+        val entries = listOf(
+            StoredSeriesEntry(SeriesEntry("/c/3", "Chapter 3"), sourceOrder = 0, firstSeenAtEpochMs = 1L),
+            StoredSeriesEntry(SeriesEntry("/c/2", "Chapter 2"), sourceOrder = 1, firstSeenAtEpochMs = 1L),
+            StoredSeriesEntry(SeriesEntry("/c/1", "Chapter 1"), sourceOrder = 2, firstSeenAtEpochMs = 1L, lastPage = 4, pageCount = 10),
+        )
         val repository = Restored(stored, entries)
         val source = WebSeriesSource(id.source, "https://site.example")
         val viewModel = SeriesPageViewModel(id, repository, loadSources = { listOf(source) })
@@ -143,26 +149,79 @@ class SeriesPageViewModelTest {
         advanceUntilIdle()
         assertEquals("https://site.example/title/1", viewModel.state.value.webUrl)
 
-        viewModel.markAllRead(true)
+        // Single chapter mark read.
+        viewModel.setEntryRead("/c/2", true)
         advanceUntilIdle()
-        assertEquals(listOf(true), repository.markedAll)
+        assertEquals(listOf(false, true, false), viewModel.state.value.entries.map { it.read })
 
-        viewModel.markAllRead(false)
+        // Mark previous chapters from Chapter 3 marks only unread chapters earlier in reading order (/c/1).
+        val prevUndo = viewModel.markPreviousRead("/c/3")
         advanceUntilIdle()
-        assertEquals(listOf(true, false), repository.markedAll)
+        assertNotNull(prevUndo)
+        assertEquals(listOf(false, true, true), viewModel.state.value.entries.map { it.read })
+
+        // Undo restores exact prior progress.
+        viewModel.undoBulkRead(prevUndo!!)
+        advanceUntilIdle()
+        assertEquals(listOf(false, true, false), viewModel.state.value.entries.map { it.read })
+        assertEquals(4, viewModel.state.value.entries.last().lastPage)
+
+        // Mark all read + undo.
+        val allUndo = viewModel.markAllRead(true)
+        advanceUntilIdle()
+        assertNotNull(allUndo)
+        assertTrue(viewModel.state.value.entries.all { it.read })
+        assertNull(viewModel.markAllRead(true))
+
+        viewModel.undoBulkRead(allUndo!!)
+        advanceUntilIdle()
+        assertEquals(listOf(false, true, false), viewModel.state.value.entries.map { it.read })
+        collecting.cancel()
+    }
+
+    @Test
+    fun chapterDisplayPreferencesPersistAcrossViewModelsWithoutPersistingQuery() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
+        val stored = StoredSeries(Series(id, "Title"))
+        val entries = listOf(StoredSeriesEntry(SeriesEntry("/c/1", "Chapter 1"), sourceOrder = 0, firstSeenAtEpochMs = 1L))
+        val prefs = MemoryChapterPreferences()
+
+        val first = SeriesPageViewModel(id, Restored(stored, entries), loadSources = { emptyList() }, chapterPreferences = prefs)
+        first.setChapterSort(ChapterSort.CHAPTER_NUMBER)
+        first.setChapterSort(ChapterSort.CHAPTER_NUMBER) // ascending
+        first.setChapterFilter(ChapterFilter.UNREAD)
+        first.setChapterQuery("boss")
+
+        val reopened = SeriesPageViewModel(id, Restored(stored, entries), loadSources = { emptyList() }, chapterPreferences = prefs)
+        val collecting = launch { reopened.state.collect {} }
+        advanceUntilIdle()
+
+        assertEquals(ChapterSort.CHAPTER_NUMBER, reopened.state.value.chapterSort)
+        assertFalse(reopened.state.value.sortDescending)
+        assertEquals(ChapterFilter.UNREAD, reopened.state.value.chapterFilter)
+        assertEquals("", reopened.state.value.chapterQuery)
         collecting.cancel()
     }
 }
 
-/** Holds what a restore stored and records mark-all calls. */
-private class Restored(private val stored: StoredSeries, entries: List<StoredSeriesEntry>) : SeriesRepository {
+private class MemoryChapterPreferences : SeriesChapterPreferences {
+    private val map = mutableMapOf<SeriesId, ChapterDisplayPreferences>()
+    override fun read(id: SeriesId): ChapterDisplayPreferences = map[id] ?: ChapterDisplayPreferences()
+    override fun write(id: SeriesId, preferences: ChapterDisplayPreferences) {
+        if (preferences.isDefault) map.remove(id) else map[id] = preferences
+    }
+}
+
+/** Holds what a restore stored and tracks progress mutations. */
+private class Restored(stored: StoredSeries, entries: List<StoredSeriesEntry>) : SeriesRepository {
+    private val storedFlow = MutableStateFlow<StoredSeries?>(stored)
     private val entryFlow = MutableStateFlow(entries)
-    val markedAll = mutableListOf<Boolean>()
 
     override fun observeFollowed(): Flow<List<FollowedSeries>> = emptyFlow()
-    override fun observeSeries(id: SeriesId): Flow<StoredSeries?> = flowOf(stored)
+    override fun observeSeries(id: SeriesId): Flow<StoredSeries?> = storedFlow
     override fun observeEntries(id: SeriesId): Flow<List<StoredSeriesEntry>> = entryFlow
-    override suspend fun series(id: SeriesId): StoredSeries? = stored
+    override suspend fun series(id: SeriesId): StoredSeries? = storedFlow.value
     override suspend fun entries(id: SeriesId): List<StoredSeriesEntry> = entryFlow.value
     override suspend fun store(series: Series, entries: List<SeriesEntry>?) = emptyList<SeriesEntry>()
     override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>) = emptyList<SeriesEntry>()
@@ -170,8 +229,28 @@ private class Restored(private val stored: StoredSeries, entries: List<StoredSer
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit
     override suspend fun setAllRead(id: SeriesId, read: Boolean) {
-        markedAll += read
         entryFlow.value = entryFlow.value.map { it.copy(read = read, lastPage = if (read) it.lastPage else 0) }
+        if (!read) storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = null)
+    }
+
+    override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean) {
+        val targets = entryAddresses.toHashSet()
+        entryFlow.value = entryFlow.value.map { entry ->
+            if (entry.entry.address !in targets) entry
+            else entry.copy(read = read, lastPage = if (read) entry.lastPage else 0)
+        }
+        if (!read && storedFlow.value?.lastOpenedEntry in targets) {
+            storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = null)
+        }
+    }
+
+    override suspend fun restoreProgress(id: SeriesId, entries: List<StoredSeriesEntry>, lastOpenedEntry: String?) {
+        val byAddress = entries.associateBy { it.entry.address }
+        entryFlow.value = entryFlow.value.map { current ->
+            val target = byAddress[current.entry.address] ?: return@map current
+            current.copy(read = target.read, lastPage = target.lastPage, pageCount = target.pageCount)
+        }
+        storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = lastOpenedEntry)
     }
 
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, page: Int, pageCount: Int?) = Unit

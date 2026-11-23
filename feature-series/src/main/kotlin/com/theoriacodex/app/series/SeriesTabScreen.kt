@@ -82,9 +82,11 @@ fun SeriesTabScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val followed by viewModel.followed.collectAsStateWithLifecycle()
+    val followedIds = remember(followed) { followed.mapTo(HashSet()) { it.series.id } }
     val open: (Series) -> Unit = { viewModel.open(it, onOpenSeries) }
     // Hoisted above the dedicated-source switch so returning from a source's search keeps the query and scroll positions.
-    var query by rememberSaveable { mutableStateOf("") }
+    var query by rememberSaveable { mutableStateOf(state.searchQuery) }
+    LaunchedEffect(state.searchQuery) { query = state.searchQuery }
     val grid = rememberLazyGridState()
     val searchList = rememberLazyListState()
     val dedicated = state.dedicated
@@ -93,6 +95,7 @@ fun SeriesTabScreen(
         if (dedicated != null) {
             DedicatedSourceSearchView(
                 dedicated = dedicated,
+                followedIds = followedIds,
                 supportsLatest = state.sources?.firstOrNull { it.key == dedicated.source.key }?.supportsLatest == true,
                 oldSearchBar = oldSearchBar,
                 onBack = viewModel::closeDedicatedSearch,
@@ -108,6 +111,7 @@ fun SeriesTabScreen(
             SeriesTabHomeContent(
                 state = state,
                 followed = followed,
+                followedIds = followedIds,
                 query = query,
                 onQueryChange = { query = it },
                 grid = grid,
@@ -132,6 +136,7 @@ fun SeriesTabScreen(
 private fun SeriesTabHomeContent(
     state: SeriesTabState,
     followed: List<FollowedSeries>,
+    followedIds: Set<SeriesId>,
     query: String,
     onQueryChange: (String) -> Unit,
     grid: LazyGridState,
@@ -191,7 +196,7 @@ private fun SeriesTabHomeContent(
             )
         },
     ) {
-        SeriesTabBody(state, followed, grid, searchList, browseControlsVisible, { browseControlsVisible = it }, viewModel, onOpenSeries, onOpenExtensions)
+        SeriesTabBody(state, followed, followedIds, grid, searchList, browseControlsVisible, { browseControlsVisible = it }, viewModel, onOpenSeries, onOpenExtensions)
     }
 }
 
@@ -199,6 +204,7 @@ private fun SeriesTabHomeContent(
 private fun SeriesTabBody(
     state: SeriesTabState,
     followed: List<FollowedSeries>,
+    followedIds: Set<SeriesId>,
     grid: LazyGridState,
     searchList: LazyListState,
     controlsVisible: Boolean,
@@ -212,6 +218,7 @@ private fun SeriesTabBody(
         GlobalSearchBody(
             sourcesLoaded = state.sources != null,
             results = search,
+            followedIds = followedIds,
             listState = searchList,
             onOpenSeries = onOpenSeries,
             onOpenSource = viewModel::openDedicatedSearch,
@@ -219,7 +226,7 @@ private fun SeriesTabBody(
             onMore = viewModel::searchMore,
         )
     } else {
-        BrowseTabBody(state, followed, grid, controlsVisible, rememberQuickReturn(onRevealControls), viewModel, onOpenSeries, onOpenExtensions)
+        BrowseTabBody(state, followed, followedIds, grid, controlsVisible, rememberQuickReturn(onRevealControls), viewModel, onOpenSeries, onOpenExtensions)
     }
 }
 
@@ -227,6 +234,7 @@ private fun SeriesTabBody(
 private fun BrowseTabBody(
     state: SeriesTabState,
     followed: List<FollowedSeries>,
+    followedIds: Set<SeriesId>,
     grid: LazyGridState,
     controlsVisible: Boolean,
     quickReturn: NestedScrollConnection,
@@ -252,7 +260,7 @@ private fun BrowseTabBody(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 followingShelf(followed, onOpenSeries)
-                browse(state, viewModel, onOpenSeries, onOpenExtensions)
+                browse(state, followedIds, viewModel, onOpenSeries, onOpenExtensions)
             }
             if (browsed != null) {
                 BrowseControlsBar(
@@ -272,6 +280,7 @@ private fun BrowseTabBody(
 private fun GlobalSearchBody(
     sourcesLoaded: Boolean,
     results: List<SeriesSourceListing>,
+    followedIds: Set<SeriesId>,
     listState: LazyListState,
     onOpenSeries: (Series) -> Unit,
     onOpenSource: (SourceKey) -> Unit,
@@ -287,7 +296,7 @@ private fun GlobalSearchBody(
         if (!sourcesLoaded) {
             item(key = "search-waiting") { LoadingState() }
         } else {
-            searchResults(results, onOpenSeries, onOpenSource, onRetry, onMore)
+            searchResults(results, followedIds, onOpenSeries, onOpenSource, onRetry, onMore)
         }
     }
 }
@@ -309,6 +318,7 @@ private fun LazyGridScope.followingShelf(followed: List<FollowedSeries>, open: (
 
 private fun LazyGridScope.browse(
     state: SeriesTabState,
+    followedIds: Set<SeriesId>,
     viewModel: SeriesTabViewModel,
     open: (Series) -> Unit,
     onOpenExtensions: () -> Unit,
@@ -331,7 +341,7 @@ private fun LazyGridScope.browse(
                 }
             }
             state.browse?.let { browse ->
-                browseListing(browse, state.browseRun, viewModel::retryBrowse, viewModel::browseMore, open)
+                browseListing(browse, state.browseRun, followedIds, viewModel::retryBrowse, viewModel::browseMore, open)
             }
         }
     }
@@ -341,6 +351,7 @@ private fun LazyGridScope.browse(
 internal fun LazyGridScope.browseListing(
     browse: SeriesSourceListing,
     run: Int,
+    followedIds: Set<SeriesId>,
     onRetry: () -> Unit,
     onMore: () -> Unit,
     open: (Series) -> Unit,
@@ -352,7 +363,9 @@ internal fun LazyGridScope.browseListing(
         }
         is SeriesListing.Loaded -> {
             if (listing.series.isEmpty()) fullWidth("browse-empty") { EmptyState("No series") }
-            items(listing.series, key = { it.id.toString() }) { series -> SeriesCard(series, { open(series) }) }
+            items(listing.series, key = { it.id.toString() }) { series ->
+                SeriesCard(series, { open(series) }, followed = series.id in followedIds)
+            }
             when {
                 listing.moreFailed -> fullWidth("browse-more-failed") {
                     SourceLoadFailure(LOAD_FAILED, browse.key, browse.name, onMore, compact = true)
@@ -368,6 +381,7 @@ internal fun LazyGridScope.browseListing(
 
 private fun LazyListScope.searchResults(
     results: List<SeriesSourceListing>,
+    followedIds: Set<SeriesId>,
     open: (Series) -> Unit,
     openSource: (SourceKey) -> Unit,
     retry: (SourceKey) -> Unit,
@@ -409,7 +423,7 @@ private fun LazyListScope.searchResults(
                                 contentPadding = PaddingValues(horizontal = 16.dp),
                                 after = moreResults(listing, result) { more(result.key) },
                             ) { series ->
-                                SeriesCard(series, { open(series) }, Modifier.width(CARD_WIDTH))
+                                SeriesCard(series, { open(series) }, Modifier.width(CARD_WIDTH), followed = series.id in followedIds)
                             }
                         }
                 }

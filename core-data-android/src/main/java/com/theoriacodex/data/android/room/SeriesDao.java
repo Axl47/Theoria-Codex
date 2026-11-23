@@ -13,7 +13,9 @@ public interface SeriesDao {
     @Query("SELECT series.*, (SELECT COUNT(*) FROM series_entries WHERE series_entries.source = series.source "
             + "AND series_entries.series_address = series.address AND series_entries.read = 0 "
             + "AND series_entries.source_order >= 0) AS unread_count "
-            + "FROM series WHERE followed = 1 ORDER BY title COLLATE NOCASE ASC, source ASC, address ASC")
+            + "FROM series WHERE followed = 1 "
+            + "ORDER BY CASE WHEN unread_count > 0 THEN 0 ELSE 1 END ASC, unread_count DESC, "
+            + "title COLLATE NOCASE ASC, source ASC, address ASC")
     Flow<List<FollowedSeriesRow>> observeFollowed();
 
     @Query("SELECT * FROM series WHERE source = :source AND address = :address LIMIT 1")
