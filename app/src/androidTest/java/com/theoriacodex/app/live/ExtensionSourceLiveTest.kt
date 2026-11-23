@@ -70,7 +70,7 @@ class ExtensionSourceLiveTest {
         readAbout(listed)
 
         val (chapter, next) = continueChapters(listed)
-        live.tap("the button that starts reading", By.text(Pattern.compile("Start|Continue · .*")))
+        live.tap("the button that starts reading", By.text(Pattern.compile("Start reading|Continue reading .+")))
         viewerControl("the chapter's name as the Viewer's title", By.textStartsWith("${listed.title} · ${chapter.entry.name}"))
         val pages = pageTile(chapter.position.toInt().coerceAtLeast(1)).contentDescription.substringAfterLast(' ').toInt()
         // The controls are showing here; a chapter is not a post to like or save to a Codex.
@@ -86,7 +86,7 @@ class ExtensionSourceLiveTest {
         awaitProgress(listed, chapter.entry.address) { it.position == target.toLong() }
         device.pressBack()
 
-        live.tap("Continue naming the chapter left unfinished", By.text("Continue · ${chapter.entry.name}"))
+        live.tap("Continue naming the chapter left unfinished", By.text("Continue reading ${chapter.entry.name}"))
         // The top bar counts the page on screen; the chapter opens on its first page until its pages arrive.
         viewerControl("page $target as the page Continue resumes on", By.textEndsWith("$target / $pages"))
         live.report("resume", "Continue reopened \"${chapter.entry.name}\" on page $target of $pages")
@@ -113,7 +113,7 @@ class ExtensionSourceLiveTest {
         device.pressBack()
 
         live.waitFor("the finished chapter marked Read on the series page", By.text("Read"))
-        live.tap("Continue naming the next chapter", By.text("Continue · ${next.entry.name}"))
+        live.tap("Continue naming the next chapter", By.text("Continue reading ${next.entry.name}"))
         viewerControl("the next chapter's name as the title", By.textStartsWith("${listed.title} · ${next.entry.name}"))
         assertTrue("The series reopens in the chosen mode", readingModeChecked(mode))
         live.report("reopen", "\"${chapter.entry.name}\" shows Read; the series reopened in \"$mode\"")
@@ -131,7 +131,7 @@ class ExtensionSourceLiveTest {
         live.tap("the listed series", scrolledTo(By.text(listed.title)))
         live.waitFor("the chapter count", By.text(CHAPTER_COUNT), SeriesLiveDriver.RESULTS_TIMEOUT_MS)
         val (chapter, next) = continueChapters(listed)
-        live.tap("the button that starts reading", By.text(Pattern.compile("Start|Continue · .*")))
+        live.tap("the button that starts reading", By.text(Pattern.compile("Start reading|Continue reading .+")))
         viewerControl("the chapter's name as the Viewer's title", By.textStartsWith("${listed.title} · ${chapter.entry.name}"))
         val pages = pageTile(chapter.position.toInt().coerceAtLeast(1)).contentDescription.substringAfterLast(' ').toInt()
         viewerControl("the overview button", By.desc("Open media overview")).click()
@@ -200,7 +200,7 @@ class ExtensionSourceLiveTest {
             live.waitFor("the button to the Extensions page", By.text("Extensions"))
             live.waitFor("the stored chapter list", By.text(CHAPTER_COUNT))
             live.waitFor("Unfollow still on offer", By.text("Following"))
-            val start = live.waitFor("the button that starts reading", By.text(Pattern.compile("Start|Continue · .*")))
+            val start = live.waitFor("the button that starts reading", By.text(Pattern.compile("Start reading|Continue reading .+")))
             // The label sits inside the button, which is what is disabled.
             val enabled = generateSequence(start) { it.parent }.take(3).all { it.isEnabled }
             val titled = device.findObjects(By.text(followed.series.title)).size
@@ -209,7 +209,7 @@ class ExtensionSourceLiveTest {
         } finally {
             runBlocking { series.extensions.setOn(extension.id, signer, true) }
         }
-        live.waitFor("Continue working again once the extension is on", By.text(Pattern.compile("Start|Continue · .*")).enabled(true))
+        live.waitFor("Continue working again once the extension is on", By.text(Pattern.compile("Start reading|Continue reading .+")).enabled(true))
         live.report("off", "turning the extension on again made the page readable")
     }
 

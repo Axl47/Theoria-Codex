@@ -7,6 +7,7 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.StaleObjectException
+import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import java.util.regex.Pattern
 import org.junit.Assert.assertTrue
@@ -40,6 +41,8 @@ internal class AnimeViewerHand(val live: SeriesLiveDriver = SeriesLiveDriver()) 
 
     /** Searches the Series tab for [query] and opens the first series whose title holds it; returns that title. */
     fun openSeries(query: String): String {
+        // The search bar collapses to a button once the tab scrolls, as when a listing loads its next page.
+        if (device.wait(Until.hasObject(By.clazz(EDIT_TEXT)), SeriesLiveDriver.SHORT_WAIT_MS) != true) live.tap("Expand Search", By.desc(EXPAND_SEARCH))
         val field = live.waitFor("the search field", By.clazz(EDIT_TEXT))
         field.text = query
         field.click()
@@ -112,7 +115,7 @@ internal class AnimeViewerHand(val live: SeriesLiveDriver = SeriesLiveDriver()) 
     fun leavePlaying(episode: String): Long {
         val at = awaitPlayback("\"$episode\" playing") { it.state == PLAYING }.positionMs
         leaveViewer()
-        live.waitFor("Continue naming \"$episode\"", By.text("Continue · $episode"))
+        live.waitFor("Continue naming \"$episode\"", By.text(continueLabel(episode)))
         return at
     }
 
@@ -134,33 +137,59 @@ internal class AnimeViewerHand(val live: SeriesLiveDriver = SeriesLiveDriver()) 
     }
 
     /**
-     * The row of the entry watched after [entry]: the one above it in the series page's list, which runs newest first.
-     * A row reads as the entry's name, then any detail line ([rowNames]). Scrolls the list to find it, then back to the top.
+     * The name of the entry watched after [entry]: the row above it in the series page's list, which runs newest first.
+     * Scrolls the list to find it, then back to the top.
      */
     fun entryAfter(entry: String): String {
-        val list = live.waitFor("the series page's list", By.scrollable(true))
-        fun rows() = list.children.mapNotNull { row -> runCatching { row.text ?: row.children.firstNotNullOfOrNull { it.text } }.getOrNull() }
         var above: String? = null
         for (attempt in 0 until ENTRY_SCROLLS) {
-            val shown = rows()
-            val at = shown.indexOfFirst { rowNames(it, entry) }
+            val shown = entryRows().map { it.second }
+            val at = shown.indexOf(entry)
             if (at > 0) {
                 above = shown[at - 1]
                 break
             }
             // Not shown yet, or at the top edge with the row above it hidden.
-            list.scroll(if (at == 0) Direction.UP else Direction.DOWN, if (at == 0) 0.3f else 0.8f)
+            seriesList().scroll(if (at == 0) Direction.UP else Direction.DOWN, if (at == 0) 0.3f else 0.8f)
         }
-        // A single scrollUntil gives up after a few screens of a long list.
-        for (attempt in 0 until ENTRY_SCROLLS) {
-            if (device.hasObject(By.text(WATCH_BUTTON))) break
-            list.fling(Direction.UP)
-        }
+        backToTop()
         return checkNotNull(above) { "\"$entry\" is not listed with a row above it" }
     }
 
-    /** Whether a series page [row] is the entry named [name]: a row whose texts merge reads as its name, then its detail. */
-    fun rowNames(row: String, name: String) = row == name || row.startsWith("$name, ")
+    /** Scrolls the series page to [entry]'s row and returns it with the row listed below it, the entry before it. */
+    fun entryRow(entry: String): Pair<UiObject2, UiObject2?> {
+        repeat(ENTRY_SCROLLS) {
+            val rows = entryRows()
+            val at = rows.indexOfFirst { it.second == entry }
+            if (at >= 0 && at < rows.lastIndex) return rows[at].first to rows[at + 1].first
+            seriesList().scroll(Direction.DOWN, if (at >= 0) 0.3f else 0.8f)
+        }
+        error("\"$entry\" is not listed")
+    }
+
+    /** What a series page row says under its name: its date, then how far it is watched, such as "Watched". */
+    fun rowDetail(row: UiObject2): String = fresh { row.findObjects(By.text(ANY_TEXT)).map { it.text }.drop(1).joinToString(" | ") }
+
+    /** Scrolls the series page back to its top, where the button that starts watching sits. */
+    fun backToTop() {
+        // A single scrollUntil gives up after a few screens of a long list.
+        for (attempt in 0 until ENTRY_SCROLLS) {
+            if (device.hasObject(By.text(WATCH_BUTTON))) break
+            seriesList().fling(Direction.UP)
+        }
+    }
+
+    private fun seriesList() = live.waitFor("the series page's list", By.scrollable(true))
+
+    /** The entry rows the series page shows, top to bottom, each with its name: a row takes a long press for its actions. */
+    private fun entryRows(): List<Pair<UiObject2, String>> = fresh {
+        seriesList().findObjects(By.longClickable(true))
+            .sortedBy { it.visibleBounds.top }
+            .mapNotNull { row -> row.findObject(By.text(ANY_TEXT))?.text?.let { row to it } }
+    }
+
+    /** Whether a series page row named [row] is the entry named [name]. */
+    fun rowNames(row: String, name: String) = row == name
 
     /** Every text the target shows. */
     fun labels(): List<String> = device.findObjects(By.pkg(live.targetPackage))
@@ -231,9 +260,18 @@ internal class AnimeViewerHand(val live: SeriesLiveDriver = SeriesLiveDriver()) 
         const val STREAM = "Stream"
         const val PLAYING = "PLAYING"
         const val EDIT_TEXT = "android.widget.EditText"
+        const val EXPAND_SEARCH = "Expand Search"
         private val NOT_EDIT_TEXT: Pattern = Pattern.compile("^(?!${Pattern.quote(EDIT_TEXT)}$).*")
-        val EPISODE_COUNT: Pattern = Pattern.compile("(.+ · )?\\d+ episodes?")
-        val WATCH_BUTTON: Pattern = Pattern.compile("Start|Continue · .*")
+        /** The series page's episode count: "293 episodes", or "3 of 293 episodes" while narrowed. */
+        val EPISODE_COUNT: Pattern = Pattern.compile("(\\d+ of )?\\d+ episodes?")
+        val WATCH_BUTTON: Pattern = Pattern.compile("Start watching|Continue watching .+")
+        private val ANY_TEXT: Pattern = Pattern.compile(".+")
+
+        /** What the series page's button says when it continues [episode]. */
+        fun continueLabel(episode: String) = "Continue watching $episode"
+
+        /** The number of episodes an [EPISODE_COUNT] text gives, all of them when narrowed. */
+        fun episodeCount(text: String): Int = checkNotNull(Regex("""(\d+) episodes?$""").find(text)).groupValues[1].toInt()
 
         /** An episode's lookup can take about 35 s for some extensions, and its stream must then buffer. */
         const val PLAYBACK_TIMEOUT_MS = 90_000L
