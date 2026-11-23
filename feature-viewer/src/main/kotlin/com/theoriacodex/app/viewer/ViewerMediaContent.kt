@@ -48,9 +48,8 @@ internal fun ViewerMediaContent(
             controls = controls, events = events,
             mediaKey = key, positions = videoPositions,
             loadingPreview = { ViewerLoadingPreview(post, media, modifier) },
-            onProgress = videoOptions.onPlaybackProgress,
-            streamRecovery = onRequestMediaRecovery?.takeIf { media.streams.isNotEmpty() }?.let { recover ->
-                ViewerStreamRecovery(imageSession.recoveryRequests, "stream:${encodeViewerPostId(post.id)}:${key.mediaIndex}") { recover(post, media) }
+            freshLinks = videoOptions.freshLinks?.takeIf { media.streams.isNotEmpty() && onRequestMediaRecovery != null }?.let { budget ->
+                ViewerFreshLinks(budget) { onRequestMediaRecovery?.invoke(post, media) }
             },
         )
         ViewerMediaKind.GIF -> {

@@ -128,6 +128,9 @@ fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReducti
         ViewerAction.TogglePlayback -> ViewerReduction(state.setPlaying(!state.controls.playback.playing))
         ViewerAction.RestartPlayback -> ViewerReduction(state.restartPlayback())
         is ViewerAction.SetPlaybackRate -> ViewerReduction(state.setPlaybackRate(action.rate))
+        is ViewerAction.ChooseStream -> ViewerReduction(state.chooseStream(action.label))
+        is ViewerAction.ChooseSubtitle -> ViewerReduction(state.chooseEpisodeTracks { copy(subtitle = action.choice) })
+        is ViewerAction.ChooseAudio -> ViewerReduction(state.chooseEpisodeTracks { copy(audioLabel = action.label) })
         is ViewerAction.RequestPageResolution -> state.requestResolution(session, action.postId)
         is ViewerAction.ResolutionCancelled,
         is ViewerAction.ResolutionStarted,
@@ -161,6 +164,19 @@ fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReducti
 
 private fun ViewerUiState.withControls(controls: ViewerControlsState): ViewerReduction =
     ViewerReduction(copy(controls = controls))
+
+private fun ViewerUiState.chooseEpisodeTracks(change: ViewerEpisodeChoice.() -> ViewerEpisodeChoice): ViewerUiState =
+    copy(controls = controls.copy(episode = controls.episode.change(), panel = controls.panel?.takeUnless(ViewerPanel::inChrome)))
+
+/** A new stream replaces the player, and with it any failure the last one showed. */
+private fun ViewerUiState.chooseStream(label: String): ViewerUiState {
+    val chosen = chooseEpisodeTracks { copy(streamLabel = label) }
+    val failedHere = mediaError != null && mediaError.mediaKey.let { it == null || it == currentMedia?.key }
+    return chosen.copy(
+        mediaError = mediaError.takeUnless { failedHere },
+        controls = chosen.controls.copy(playback = chosen.controls.playback.copy(playing = chosen.controls.playback.available)),
+    )
+}
 
 private fun ViewerUiState.replaceSession(action: ViewerAction.ReplaceSession): ViewerReduction {
     return ViewerReduction(

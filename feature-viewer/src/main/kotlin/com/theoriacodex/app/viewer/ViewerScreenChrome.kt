@@ -54,7 +54,6 @@ internal fun BoxScope.ViewerChromeOverlays(
     activity: ViewerHostActivity?,
     quality: MutableState<com.theoriacodex.domain.model.VideoQuality>,
     qualityHeight: MutableState<Int?>,
-    streamLabel: MutableState<String?>,
     pendingPostId: MutableState<PostId?>,
     host: ViewerScreenHost,
     config: ViewerScreenConfig,
@@ -76,18 +75,17 @@ internal fun BoxScope.ViewerChromeOverlays(
     val fadesWhileScrubbing = Modifier.graphicsLayer { alpha = scrubFade }
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_STRIPS && !frame.mediaOverviewVisible, Modifier.align(Alignment.BottomCenter)) {
         ViewerBottomStack(frame, postPagerState, controls, pendingPostId, config, loadMoreFromStrip, fadesWhileScrubbing) {
-            val onNext = nextPostOpener(navigation.currentIndex, frame, swipe, config)
-            ViewerEpisodeBar(frame, screen.activeTracks, streamLabel, onNext, controls::markInteraction)
+            ViewerEpisodeBar(frame, screen.activeTracks, controls, nextPostOpener(navigation.currentIndex, frame, swipe, config), host.onAction)
         }
     }
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_TOP_BAR, Modifier.align(Alignment.BottomCenter).then(fadesWhileScrubbing)) {
         val dock = viewerDockActions(
             frame, controls, activity, quality, qualityHeight, selection.post.id in config.likedPostIds, comments.countOf(selection.post), host.onAction,
-            collectable = config.series == null,
+            series = config.series,
         )
         ViewerDock(dock) { ViewerDockSave(config, selection.post, saveContext, screen, controls, host) }
     }
-    ViewerFooterButtons(frame, screen, activity, host.onAction)
+    ViewerFooterButtons(frame, screen, activity, config, host.onAction)
     ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_TOP_BAR, Modifier.align(Alignment.TopCenter).then(fadesWhileScrubbing)) {
         ViewerChrome(
             source = config.topBarTitle(selection.post),
@@ -156,7 +154,7 @@ private fun ViewerBottomStack(
             }
         },
     ) {
-        if (frame.watching) {
+        if (config.series is ViewerSeries.Watching) {
             episodeControls()
         } else {
             ViewerPostStrip(navigation.originalPosts, stripIndex, { index ->
@@ -165,17 +163,24 @@ private fun ViewerBottomStack(
                 onLoadMore = loadMoreFromStrip, onInteraction = { controls.markInteraction() },
                 openPages = ViewerStripPages(selection.post.id, selection.overviewItems, selection.mediaIndex, mirrored) {
                     controls.jumpToMedia(selection.post.id, it)
-                }, chapters = config.series != null)
+                }, chapters = config.series is ViewerSeries.Reading)
         }
     }
 }
 
-/** The rotate button on the left and the slideshow button on the right, hidden while another surface owns the bottom. */
+/**
+ * The rotate button on the left and the slideshow button on the right, hidden while another surface owns the bottom.
+ * A watched series offers no slideshow: it would move through episodes while one is still loading.
+ */
 @Composable
-private fun BoxScope.ViewerFooterButtons(frame: ViewerFrame, screen: ViewerScreenState, activity: ViewerHostActivity?, onAction: (ViewerAction) -> Unit) {
+private fun BoxScope.ViewerFooterButtons(
+    frame: ViewerFrame, screen: ViewerScreenState, activity: ViewerHostActivity?, config: ViewerScreenConfig, onAction: (ViewerAction) -> Unit,
+) {
     val bottomOwned = frame.mediaOverviewVisible || screen.timelineInteractionActive
+    val watching = config.series is ViewerSeries.Watching
     // A running slideshow keeps the image clear, including of the rotate hint.
     val rotationSuppressed = bottomOwned || frame.uiState.controls.slideshow
-    ViewerRotationControl(frame.selection, activity?.viewerRotation, frame.inPictureInPicture, frame.chromeVisible, rotationSuppressed)
-    ViewerSlideshowControl(frame, suppressed = bottomOwned || frame.inPictureInPicture, onAction)
+    val bottomRow = if (watching) VIEWER_EPISODE_CONTROLS_HEIGHT else VIEWER_POST_STRIP_HEIGHT
+    ViewerRotationControl(frame.selection, activity?.viewerRotation, frame.inPictureInPicture, frame.chromeVisible, rotationSuppressed, bottomRow)
+    ViewerSlideshowControl(frame, suppressed = bottomOwned || frame.inPictureInPicture || watching, onAction)
 }

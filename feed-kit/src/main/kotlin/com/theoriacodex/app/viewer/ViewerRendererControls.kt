@@ -28,6 +28,12 @@ data class ViewerRendererControls(
     }
 }
 
+/**
+ * Where an episode's playback is, at [positionMs] of an episode [durationMs] long, as the Viewer reports it for its
+ * series' progress ([ViewerRendererEvents.onPlaybackProgress]).
+ */
+data class ViewerPlaybackProgress(val positionMs: Long, val durationMs: Long)
+
 data class ViewerRendererEvents(
     val onPlaybackCompleted: () -> Unit,
     val onError: (String) -> Unit,
@@ -37,6 +43,11 @@ data class ViewerRendererEvents(
     val onRestartPlayback: () -> Unit,
     val onPlaybackIntentChanged: (Boolean) -> Unit,
     val onTimelineInteractionActiveChanged: (Boolean) -> Unit,
+    /**
+     * Hears where an episode's playback is: periodically while it plays, when it pauses, after a seek, and as its
+     * player lets go; never while the duration is unknown. Null for every other video, which reports nothing.
+     */
+    val onPlaybackProgress: ((ViewerPlaybackProgress) -> Unit)? = null,
 ) {
     companion object {
         /** A feed card's events: it reports only the duration it learns. */

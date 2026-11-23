@@ -32,7 +32,17 @@ internal class ViewerVideoPositions(watching: ViewerSeries.Watching? = null) {
         episodes?.set(key, position)
         if (key.postId in retainedPosts) positions[key] = position
     }
+
+    /**
+     * Whether a start at [positionMs] of a video [durationMs] long begins again instead: in a watched session, within
+     * [VIEWER_EPISODE_END_MARGIN_MS] of the end, the episode was watched to its end. Any other video resumes anywhere.
+     */
+    fun startsOver(positionMs: Long, durationMs: Long): Boolean =
+        episodes != null && positionMs >= durationMs - VIEWER_EPISODE_END_MARGIN_MS
 }
+
+/** How close to an episode's end a saved position counts as watched to the end. */
+internal const val VIEWER_EPISODE_END_MARGIN_MS = 5_000L
 
 /**
  * Holds the current session's [ViewerVideoPositions] in the screen's ViewModel store (the Viewer's navigation entry), so

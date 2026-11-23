@@ -23,6 +23,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.withFrameNanos
@@ -70,8 +71,6 @@ fun ViewerScreen(
     val activity = LocalContext.current.viewerActivity()
     val quality = rememberViewerVideoQuality(config.videoQuality, host.onVideoQualitySelected)
     val qualityHeight = remember(uiState.currentMedia?.key) { mutableStateOf<Int?>(null) }
-    // A stream is chosen for the session, not one media item, so the next episode plays the same one when it has it.
-    val streamLabel = remember(uiState.session) { mutableStateOf<String?>(null) }
     val pendingPostId = remember(uiState.session) { mutableStateOf<PostId?>(null) }
     val navigation = remember(uiState.pages, uiState.currentPageIndex, uiState.related.navigation, uiState.related.extraPostIds, pendingPostId.value) {
         viewerPostNavigation(uiState, pendingPostId.value)
@@ -87,7 +86,7 @@ fun ViewerScreen(
         LocalViewerAutoRotateVideos provides config.autoRotateVideos,
     ) {
         ViewerLoadedScreen(
-            uiState, navigation, posts, returnProgress, returning, opening, dismissDrag, activity, quality, qualityHeight, streamLabel, pendingPostId,
+            uiState, navigation, posts, returnProgress, returning, opening, dismissDrag, activity, quality, qualityHeight, pendingPostId,
             videoPositions, host, config, ViewerSaveContext(saveToCodexQuery, saveFromForYou), canLoadMoreFromSource, loadingMoreFromSource, contextActions,
             relatedShelf, comments, trail,
         )
@@ -107,7 +106,6 @@ private fun ViewerLoadedScreen(
     activity: ViewerHostActivity?,
     quality: MutableState<com.theoriacodex.domain.model.VideoQuality>,
     qualityHeight: MutableState<Int?>,
-    streamLabel: MutableState<String?>,
     pendingPostId: MutableState<PostId?>,
     videoPositions: ViewerVideoPositions,
     host: ViewerScreenHost,
@@ -143,9 +141,8 @@ private fun ViewerLoadedScreen(
     val chromeVisible = viewerChromeVisible(uiState, touchExplorationEnabled, inPictureInPicture, returning, opening, dismissDrag)
     val chromeStage = rememberViewerChromeStage(chromeVisible)
     val controls = rememberViewerControls(onAction, screen, uiState.overview.visible, chromeVisible, opening, returning)
-    val frame = remember(uiState, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape, config.series) {
-        val watching = config.series is ViewerSeries.Watching
-        ViewerFrame(uiState, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape, watching)
+    val frame = remember(uiState, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape) {
+        ViewerFrame(uiState, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape)
     }
     val flingVelocity = with(LocalDensity.current) { VIEWER_FLING_VELOCITY.toPx() }
     val swipe = rememberViewerSwipe(frame, postPagerState, config, screen, controls, flingVelocity, scope, onAction)
@@ -154,12 +151,14 @@ private fun ViewerLoadedScreen(
         frame, screen, controls, swipe, dismissDrag, postPagerState, pendingPostId, canLoadMoreFromSource,
         loadingMoreFromSource, loadMoreFromStrip, onAction, host.onVisiblePostChanged, config,
     )
+    SideEffect { screen.activeTracks.choice = uiState.controls.episode }
     val viewerAccent = rememberViewerAccent(selection.post, enabled = !opening && !returning)
     CompositionLocalProvider(
         LocalViewerTimelineInset provides if (chromeVisible) viewerDockInset() else 0.dp,
         LocalViewerAccent provides viewerAccent,
         LocalViewerHoldScrub provides holdScrub,
-        LocalViewerActiveTracks provides screen.activeTracks,
+        // Only episodes offer their tracks; no other video's player is followed for them.
+        LocalViewerActiveTracks provides screen.activeTracks.takeIf { config.series is ViewerSeries.Watching },
     ) {
         ViewerBackdrop(returnProgress, dismissDrag) {
             if (frame.mediaOverviewVisible && selection.overviewAvailable) {
@@ -167,11 +166,11 @@ private fun ViewerLoadedScreen(
             } else {
                 ViewerPostPagerSurface(
                     frame, postPagerState, viewerTransform, screen, controls, swipe, dismissDrag, levelControls, readReturnProgress, flingVelocity,
-                    quality.value, qualityHeight.value, streamLabel.value, videoPositions, host, config, scope,
+                    quality.value, qualityHeight.value, videoPositions, host, config, scope,
                 )
             }
             ViewerChromeOverlays(
-                frame, postPagerState, screen, controls, swipe, activity, quality, qualityHeight, streamLabel, pendingPostId, host, config,
+                frame, postPagerState, screen, controls, swipe, activity, quality, qualityHeight, pendingPostId, host, config,
                 loadMoreFromStrip, relatedShelf, comments, saveContext, trail,
             )
         }

@@ -47,7 +47,6 @@ internal fun ViewerPostPagerSurface(
     flingVelocity: Float,
     quality: com.theoriacodex.domain.model.VideoQuality,
     qualityHeight: Int?,
-    streamLabel: String?,
     videoPositions: ViewerVideoPositions,
     host: ViewerScreenHost,
     config: ViewerScreenConfig,
@@ -93,7 +92,7 @@ internal fun ViewerPostPagerSurface(
             ) { postPage ->
                 ViewerPostPage(
                     postPage, frame, postPagerState, viewerTransform, screen, controls, swipe, dismissDrag, levelControls, readReturnProgress, quality,
-                    qualityHeight, streamLabel, videoPositions, host, config,
+                    qualityHeight, videoPositions, host, config,
                 )
             }
         }
@@ -184,7 +183,6 @@ private fun ViewerPostPage(
     readReturnProgress: () -> Float,
     quality: com.theoriacodex.domain.model.VideoQuality,
     qualityHeight: Int?,
-    streamLabel: String?,
     videoPositions: ViewerVideoPositions,
     host: ViewerScreenHost,
     config: ViewerScreenConfig,
@@ -227,14 +225,14 @@ private fun ViewerPostPage(
             ),
             events = viewerRendererEvents(
                 session = frame.uiState.session, key = key, generation = loadGeneration,
-                onAction = host.onAction,
+                onAction = host.onAction, onPlaybackProgress = host.episodeProgress(config, post),
                 onTimelineInteractionActiveChanged = { controls.onTimelineInteractionChanged(it) },
                 onDurationKnown = { duration -> if (carriesPostDuration(post, media)) host.durations.onPlayerDuration(post, duration) },
             ),
             transform = viewerTransform,
             onTransformChanged = { viewerTransform.value = it },
             layout = ViewerMediaLayout(frame.isLandscape, frame.inPictureInPicture, frame.touchExplorationEnabled),
-            videoOptions = ViewerVideoOptions(quality, qualityHeight, streamLabel, pageState.terminalResolutionMessage(), config.playbackDiagnosticsEnabled, host.episodeProgress(frame, post)),
+            videoOptions = ViewerVideoOptions(quality, qualityHeight, frame.uiState.controls.episode.streamLabel, pageState.terminalResolutionMessage(), config.playbackDiagnosticsEnabled, screen.freshLinks),
             videoPositions = videoPositions,
             levelControls = levelControls,
             mediaError = frame.uiState.mediaError.takeIf { active }?.takeIf { it.mediaKey == key },
@@ -250,8 +248,8 @@ private fun ViewerPostPage(
 }
 
 /** Where [post]'s playback goes while a series is watched: its series records it. Null for every other video. */
-private fun ViewerScreenHost.episodeProgress(frame: ViewerFrame, post: Post): ((ViewerPlaybackProgress) -> Unit)? =
-    onPlaybackProgress?.takeIf { frame.watching }?.let { report -> { progress -> report(post, progress) } }
+private fun ViewerScreenHost.episodeProgress(config: ViewerScreenConfig, post: Post): ((ViewerPlaybackProgress) -> Unit)? =
+    onPlaybackProgress?.takeIf { config.series is ViewerSeries.Watching }?.let { report -> { progress -> report(post, progress) } }
 
 private fun ViewerPageState.terminalResolutionMessage(): String? = resolution
     .takeIf { it.status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.FAILED && !it.recoverable }

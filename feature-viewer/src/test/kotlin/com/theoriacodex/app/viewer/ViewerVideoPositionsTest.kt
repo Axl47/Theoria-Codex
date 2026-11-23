@@ -5,6 +5,8 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertSame
 import org.junit.Test
 
@@ -93,5 +95,13 @@ class ViewerVideoPositionsTest {
         assertEquals(12_000L, positions.position(key(0)))
         assertEquals(24_000L, positions.position(key(0, 1)))
         assertEquals(0L, ViewerVideoPositions().position(key(0)))
+    }
+
+    @Test
+    fun `an episode left at its end starts over, any other video resumes anywhere`() {
+        val watching = ViewerVideoPositions(ViewerSeries.Watching())
+        assertTrue(watching.startsOver(1_436_000L, 1_440_000L))
+        assertFalse(watching.startsOver(1_400_000L, 1_440_000L))
+        assertFalse(ViewerVideoPositions().startsOver(5_900L, 6_000L))
     }
 }

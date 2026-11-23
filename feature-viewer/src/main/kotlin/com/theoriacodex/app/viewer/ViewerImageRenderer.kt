@@ -41,7 +41,7 @@ import com.theoriacodex.domain.model.SourceKey
 /** Process-local hints scoped to one open Viewer, shared by its image pages. */
 internal class ViewerImageSession {
     val loadedLocations = mutableSetOf<String>()
-    /** Media recovery asked for while the screen lives, so each failure asks once: images, and episode streams. */
+    /** Image recovery asked for while the screen lives, so each failure asks once. */
     val recoveryRequests = mutableSetOf<String>()
 }
 
