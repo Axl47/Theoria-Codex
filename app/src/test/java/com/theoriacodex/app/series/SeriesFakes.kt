@@ -106,5 +106,5 @@ internal fun TestScope.seriesDependencies(
         deleteAfterReading = { deleteAfterReading },
         files = AtomicJsonFileStore(StandardTestDispatcher(testScheduler)),
     )
-    return SeriesDependencies(repository, sources, NoExtensions, downloads, scope = this)
+    return SeriesDependencies(repository, sources, NoExtensions, downloads, scope = this, log = {})
 }

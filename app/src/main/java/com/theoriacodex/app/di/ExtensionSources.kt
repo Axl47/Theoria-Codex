@@ -24,6 +24,8 @@ class SeriesDependencies(
     val downloads: SeriesDownloads,
     /** Lives as long as the app, for work that must finish after the screen that started it closes. */
     val scope: CoroutineScope,
+    /** Writes a line to the app's log, such as when an entry's lookup starts. */
+    val log: (String) -> Unit,
 ) {
     private val checking = Mutex()
 
