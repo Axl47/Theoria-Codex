@@ -25,6 +25,12 @@ extensions.configure<LibraryExtension> {
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
+
+    // Only this module's test APK is packaged here. Its native libraries are extracted so the process map names them,
+    // which is how the anime harness sees that an extension started QuickJS.
+    packaging {
+        jniLibs.useLegacyPackaging = true
+    }
 }
 
 dependencies {
@@ -51,4 +57,5 @@ dependencies {
 
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.quickjs.android)
 }
