@@ -5,9 +5,11 @@ import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
+import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.Until
 import java.util.regex.Pattern
+import org.junit.Assert.assertTrue
 
 /**
  * The hand the anime live tests share, on top of [SeriesLiveDriver]: it turns an extension on, opens a series, and
@@ -106,6 +108,83 @@ internal class AnimeViewerHand(val live: SeriesLiveDriver = SeriesLiveDriver()) 
         if (device.wait(Until.hasObject(By.text(EPISODE_COUNT)), SeriesLiveDriver.SHORT_WAIT_MS) != true) device.pressBack()
     }
 
+    /** Leaves the Viewer while [episode] plays; returns where it was, which the series page's Continue then names. */
+    fun leavePlaying(episode: String): Long {
+        val at = awaitPlayback("\"$episode\" playing") { it.state == PLAYING }.positionMs
+        leaveViewer()
+        live.waitFor("Continue naming \"$episode\"", By.text("Continue · $episode"))
+        return at
+    }
+
+    /** Checks [episode], just reopened, plays from within [RESUME_NEAR_MS] of [leftAt]. */
+    fun assertResumesAt(step: String, episode: String, leftAt: Long, how: String) {
+        val resumed = awaitPlayback("\"$episode\" to play again") { it.state == PLAYING }.positionMs
+        live.report(step, "\"$episode\" left at ${leftAt.tenths()} s resumed at ${resumed.tenths()} s $how")
+        assertTrue("It resumes where it was left", resumed - leftAt in -RESUME_NEAR_MS..RESUME_NEAR_MS)
+    }
+
+    /** Opens the stream list; returns the stream playing and another one to switch to. */
+    fun switchStream(): Pair<String, String> {
+        val current = streamOnScreen()
+        val before = labels()
+        press("the stream pill", By.desc(STREAM))
+        val listed = live.await("the stream list", { labels() - before.toSet() - current }) { it.isNotEmpty() }
+        live.report("streams", "playing \"$current\"; listed $listed")
+        return current to (listed.firstOrNull { it != current } ?: error("The episode offers one stream: $listed"))
+    }
+
+    /**
+     * The row of the entry watched after [entry]: the one above it in the series page's list, which runs newest first.
+     * A row reads as the entry's name, then any detail line ([rowNames]). Scrolls the list to find it, then back to the top.
+     */
+    fun entryAfter(entry: String): String {
+        val list = live.waitFor("the series page's list", By.scrollable(true))
+        fun rows() = list.children.mapNotNull { row -> runCatching { row.text ?: row.children.firstNotNullOfOrNull { it.text } }.getOrNull() }
+        var above: String? = null
+        for (attempt in 0 until ENTRY_SCROLLS) {
+            val shown = rows()
+            val at = shown.indexOfFirst { rowNames(it, entry) }
+            if (at > 0) {
+                above = shown[at - 1]
+                break
+            }
+            // Not shown yet, or at the top edge with the row above it hidden.
+            list.scroll(if (at == 0) Direction.UP else Direction.DOWN, if (at == 0) 0.3f else 0.8f)
+        }
+        // A single scrollUntil gives up after a few screens of a long list.
+        for (attempt in 0 until ENTRY_SCROLLS) {
+            if (device.hasObject(By.text(WATCH_BUTTON))) break
+            list.fling(Direction.UP)
+        }
+        return checkNotNull(above) { "\"$entry\" is not listed with a row above it" }
+    }
+
+    /** Whether a series page [row] is the entry named [name]: a row whose texts merge reads as its name, then its detail. */
+    fun rowNames(row: String, name: String) = row == name || row.startsWith("$name, ")
+
+    /** Every text the target shows. */
+    fun labels(): List<String> = device.findObjects(By.pkg(live.targetPackage))
+        .mapNotNull { runCatching { it.text }.getOrNull() }
+        .filter(String::isNotBlank)
+
+    /** The episode's length, the longest time the Viewer's timeline shows. */
+    fun durationOnScreen(): Long {
+        repeat(PRESS_TRIES) {
+            live.viewerControl("the timeline", TIMELINE)
+            // The controls may hide between finding the timeline and reading its times; then they are shown again.
+            labels().mapNotNull(::timeMs).maxOrNull()?.let { return it }
+        }
+        error("The timeline shows no times; on screen: ${live.screenText()}")
+    }
+
+    /** Seeks to [positionMs] through the timeline, which seeks to where a drag along it is let go. */
+    fun seekTo(positionMs: Long) {
+        val durationMs = durationOnScreen()
+        val track = fresh { live.viewerControl("the timeline", TIMELINE).visibleBounds }
+        val x = track.left + (track.width() * positionMs.toDouble() / durationMs).toInt().coerceIn(1, track.width() - 1)
+        device.drag(x - 1, track.centerY(), x, track.centerY(), SEEK_DRAG_STEPS)
+    }
+
     /** The playback position once it satisfies [done]. */
     fun awaitPosition(what: String, done: (Long) -> Boolean): Long = awaitPlayback(what) { done(it.positionMs) }.positionMs
 
@@ -129,6 +208,12 @@ internal class AnimeViewerHand(val live: SeriesLiveDriver = SeriesLiveDriver()) 
         val (state, position, speed, updated) = SESSION_STATE.find(sessions)?.destructured ?: return null
         val moved = if (state == PLAYING) (SystemClock.elapsedRealtime() - updated.toLong()) * speed.toFloat() else 0f
         return Playback(state, position.toLong() + moved.toLong())
+    }
+
+    /** Whether the target holds an active media session, as `dumpsys media_session` lists it. */
+    fun sessionActive(): Boolean {
+        val session = device.executeShellCommand("dumpsys media_session").substringAfter("package=${live.targetPackage}\n", "")
+        return SESSION_ACTIVE.find(session)?.groupValues?.get(1) == "true"
     }
 
     /** When, in wall-clock milliseconds, the app logged starting each episode lookup since [sinceMs]. */
@@ -155,8 +240,25 @@ internal class AnimeViewerHand(val live: SeriesLiveDriver = SeriesLiveDriver()) 
         const val PRESS_TRIES = 3
 
         /** A session's line in `dumpsys media_session`: "state=PlaybackState {state=PLAYING(3), position=…, …, speed=1.0, updated=…". */
+        val SESSION_ACTIVE = Regex("""active=(true|false)""")
         val SESSION_STATE = Regex("""state=PlaybackState \{state=(\w+)\(\d+\), position=(-?\d+), .*?speed=(-?[\d.]+), updated=(\d+)""")
 
+        /** How far a reopened episode may resume from where it was left: progress is saved as it is left. */
+        const val RESUME_NEAR_MS = 2_500L
+        private const val SEEK_DRAG_STEPS = 5
+
+        /** Enough screens of a long series' list to reach an entry near its oldest end. */
+        private const val ENTRY_SCROLLS = 120
+        private val TIMELINE = By.clazz("android.widget.ProgressBar")
+
+        /** A timeline time, "m:ss" or "h:mm:ss", in milliseconds; null for any other text. */
+        private val TIME = Regex("""(?:(\d+):)?(\d{1,2}):(\d{2})""")
+
+        private fun timeMs(text: String): Long? = TIME.matchEntire(text)?.destructured?.let { (h, m, s) ->
+            ((h.toLongOrNull() ?: 0) * 3600 + m.toLong() * 60 + s.toLong()) * 1000
+        }
+
         fun Long.seconds() = this / 1000
+        fun Long.tenths() = this / 100 / 10.0
     }
 }
