@@ -21,14 +21,17 @@ import okhttp3.OkHttpClient
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class LibraryVisionBackfillTest {
     @get:Rule
     val folder = TemporaryFolder()
@@ -85,9 +88,9 @@ class LibraryVisionBackfillTest {
         val store = readyStore()
         assertEquals(ModelState.Ready, store.states.value)
         // Posts without a still are settled without the model; the dead previews never load.
-        val tagger = PictureTagger(store, library, hasStill = { it.id.sourcePostId.startsWith("dead") }, loadStill = { null }, scope = scope)
+        val tagger = PictureTagger(store, library, Pictures(hasStill = { it.id.sourcePostId.startsWith("dead") }), scope)
 
-        assertTrue(LibraryVisionBackfill(tagger, library, hot = { false }).drain())
+        assertTrue(backfill(tagger, library).drain())
 
         assertEquals(older.map(Post::id), library.stored.map(PictureVision::postId))
     }
@@ -98,12 +101,106 @@ class LibraryVisionBackfillTest {
         // The stored file is no model, so loading it fails as it might under memory pressure.
         val installed = readyStore()
         val picture = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888)
-        val tagger = PictureTagger(installed, library, hasStill = { true }, loadStill = { picture }, scope = scope)
-        assertTrue(LibraryVisionBackfill(tagger, library, hot = { false }).drain())
+        val tagger = PictureTagger(installed, library, Pictures(still = { picture }), scope)
+        assertTrue(backfill(tagger, library).drain())
         assertEquals(emptyList<PictureVision>(), library.stored)
 
         installed.modelFile.delete()
         val gone = VisualModelStore(spec, folder.root, OkHttpClient(), scope) { }
-        assertFalse(LibraryVisionBackfill(PictureTagger(gone, library, { true }, { picture }, scope), library, hot = { false }).drain())
+        assertFalse(backfill(PictureTagger(gone, library, Pictures(still = { picture }), scope), library).drain())
+    }
+
+    @Test
+    fun `a playing post is analysed from its still and frames together, each repeated scene once`() = runBlocking {
+        val library = Library(listOf(post("video")))
+        val analysed = mutableListOf<Pattern>()
+        val pictures = Pictures(
+            still = { Pattern.TOP.bitmap() },
+            plays = { true },
+            frames = { PostFrames.Read(listOf(Pattern.LEFT.bitmap(), Pattern.LEFT.bitmap(), Pattern.QUARTERS.bitmap())) },
+        )
+        val tagger = PictureTagger(readyStore(), library, pictures, scope, openModel = { _, _ -> PatternModel(analysed) })
+
+        assertFalse(backfill(tagger, library).drain())
+
+        // Four pictures, so each tag scores the mean of its top two: the still's 0.9 and the quarters' 0.6.
+        val stored = library.stored.single()
+        assertEquals(listOf(PredictedTag("solo", 0.75f, PredictedTag.Kind.GENERAL)), stored.tags)
+        assertEquals(listOf(Pattern.TOP, Pattern.LEFT, Pattern.QUARTERS), analysed)
+    }
+
+    @Test
+    fun `while the app is in use playing posts wait for a later run and stills carry on`() = runBlocking {
+        val library = Library(listOf(post("video-1"), post("plain"), post("video-2")))
+        var framesRead = 0
+        val pictures = Pictures(
+            hasStill = { false },
+            plays = { it.id.sourcePostId.startsWith("video") },
+            frames = { framesRead++; PostFrames.Unreadable },
+        )
+        val tagger = PictureTagger(readyStore(), library, pictures, scope)
+
+        assertTrue(backfill(tagger, library, quiet = { false }).drain())
+        assertEquals(listOf("plain"), library.stored.map { it.postId.sourcePostId })
+        assertEquals(0, framesRead)
+
+        // Quiet for the first playing post only: the next one waits again.
+        var quietChecks = 0
+        assertTrue(backfill(tagger, library, quiet = { quietChecks++ == 0 }).drain())
+        assertEquals(listOf("plain", "video-1"), library.stored.map { it.postId.sourcePostId })
+        assertEquals(1, framesRead)
+
+        assertFalse(backfill(tagger, library).drain())
+        assertEquals(listOf("plain", "video-1", "video-2"), library.stored.map { it.postId.sourcePostId })
+    }
+
+    @Test
+    fun `frames that cannot be read now wait for a later run, and an unreadable file leaves the still alone`() = runBlocking {
+        val library = Library(listOf(post("offline"), post("broken")))
+        val analysed = mutableListOf<Pattern>()
+        val pictures = Pictures(
+            still = { Pattern.TOP.bitmap() },
+            plays = { true },
+            frames = { if (it.id.sourcePostId == "offline") PostFrames.Unreachable else PostFrames.Unreadable },
+        )
+        val tagger = PictureTagger(readyStore(), library, pictures, scope, openModel = { _, _ -> PatternModel(analysed) })
+
+        assertTrue(backfill(tagger, library).drain())
+
+        val stored = library.stored.single()
+        assertEquals("broken", stored.postId.sourcePostId)
+        assertEquals(listOf(PredictedTag("solo", 0.9f, PredictedTag.Kind.GENERAL)), stored.tags)
+        assertNull(library.stored.firstOrNull { it.postId.sourcePostId == "offline" })
+    }
+
+    private fun backfill(tagger: PictureTagger, library: Library, quiet: () -> Boolean = { true }) =
+        LibraryVisionBackfill(tagger, library, hot = { false }, quiet = { quiet() })
+
+    /** Stills and frames as a test sets them; by default every post has a still that fails to load and none plays. */
+    private class Pictures(
+        private val hasStill: (Post) -> Boolean = { true },
+        private val still: (Post) -> Bitmap? = { null },
+        private val plays: (Post) -> Boolean = { false },
+        private val frames: (Post) -> PostFrames = { error("only playing posts read frames") },
+    ) : PictureSource {
+        override fun hasStill(post: Post): Boolean = hasStill.invoke(post)
+        override suspend fun still(post: Post): Bitmap? = still.invoke(post)
+        override fun plays(post: Post): Boolean = plays.invoke(post)
+        override suspend fun frames(post: Post): PostFrames = frames.invoke(post)
+    }
+
+    /** Scores the one-tag vocabulary by [Pattern]: 0.9 for the top half dark, 0.1 for the left, 0.6 for quarters. */
+    private class PatternModel(private val analysed: MutableList<Pattern>) : PictureModel {
+        override fun analyze(picture: Bitmap): PictureAnalysis {
+            val pattern = Pattern.of(picture).also(analysed::add)
+            val score = when (pattern) {
+                Pattern.TOP -> 0.9f
+                Pattern.LEFT -> 0.1f
+                Pattern.QUARTERS -> 0.6f
+            }
+            return PictureAnalysis(embedding = floatArrayOf(1f, 0f), scores = floatArrayOf(score))
+        }
+
+        override fun close() = Unit
     }
 }

@@ -97,6 +97,28 @@ fun postPlaybackMediaCandidate(post: Post): PostMediaCandidate? {
     }
 }
 
+/** What a post plays that the picture tagger can read frames from, beside its still preview ([postMotion]). */
+sealed interface PostMotion {
+    /** A video at [location] (web or local), fetched with [headers]. */
+    data class Video(val location: String, val headers: Map<String, String>) : PostMotion
+
+    /** A Pixiv animation, whose frames come from its archive. */
+    data class Ugoira(val postId: PostId) : PostMotion
+}
+
+/**
+ * The moving media [post] offers the picture tagger, whatever the source: its video at the lightest rendition it lists
+ * (the model reads 448 px squares, as metered feeds pick: [feedPreviewLocation]), or its Pixiv animation. Animated GIF,
+ * WebP, APNG and AVIF images give null and keep their still: they are short loops whose first frame the still preview
+ * already shows, and the platform cannot step through WebP, APNG or AVIF frames.
+ */
+fun postMotion(post: Post): PostMotion? {
+    if (isPixivUgoiraPost(post)) return PostMotion.Ugoira(post.id)
+    val video = postPlaybackMediaCandidate(post) ?: return null
+    val location = video.ref.feedPreviewLocation(metered = true)?.takeIf(String::isNotBlank) ?: return null
+    return PostMotion.Video(normalizeMediaUrl(post.id.source, location) ?: location, video.requestHeaders)
+}
+
 fun postDownloadMediaCandidate(post: Post): PostMediaCandidate? {
     return post.orderedPlayableRefs().firstNotNullOfOrNull { (ref, reason) ->
         ref.url?.takeIf(String::isNotBlank)?.let { url -> post.candidate(ref, url, reason) }

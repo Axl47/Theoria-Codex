@@ -1,5 +1,6 @@
 package com.theoriacodex.app.acceptance
 
+import android.content.Context
 import android.os.Bundle
 import android.os.SystemClock
 import android.util.Log
@@ -11,7 +12,10 @@ import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
 import com.theoriacodex.app.recommend.ForYouInterests
 import com.theoriacodex.app.recommend.pictureAffinity
+import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.triage.hiddenBy
+import com.theoriacodex.app.viewer.VideoFrameSample
+import com.theoriacodex.app.viewer.videoPlaybackInfrastructure
 import com.theoriacodex.app.vision.AppPictures
 import com.theoriacodex.app.vision.ModelState
 import com.theoriacodex.data.repository.ProfileLibraryIds
@@ -45,7 +49,7 @@ class VisionAcceptanceActivity : ComponentActivity() {
         lifecycleScope.launch {
             val outcome = runCatchingPreservingCancellation {
                 val container = (application as TheoriaAppContainerOwner).awaitAppContainer()
-                withTimeout(PHASE_TIMEOUT_MS) { VisionPhases(container, checkNotNull(container.pictures)).run(phase) }
+                withTimeout(PHASE_TIMEOUT_MS) { VisionPhases(applicationContext, container, checkNotNull(container.pictures)).run(phase) }
             }
             outcome.onSuccess { Log.i(TAG, "PASS:$phase:$it") }
                 .onFailure { Log.e(TAG, "FAIL:$phase:${it.javaClass.simpleName}:${it.message}") }
@@ -54,7 +58,11 @@ class VisionAcceptanceActivity : ComponentActivity() {
     }
 }
 
-private class VisionPhases(private val container: TheoriaAppContainer, private val pictures: AppPictures) {
+private class VisionPhases(
+    private val context: Context,
+    private val container: TheoriaAppContainer,
+    private val pictures: AppPictures,
+) {
     private val library = List(FIXTURES) { fixturePost("vision-$it", it) }
 
     // Not in the Library and without provider tags, like a For You candidate a source left untagged.
@@ -63,11 +71,16 @@ private class VisionPhases(private val container: TheoriaAppContainer, private v
     // The same picture, tagged as richly as a booru post (none of the tags is hidden).
     private val wellTagged = fixturePost("vision-well-tagged", FIXTURES).copy(canonicalTags = WELL_TAGGED_TAGS)
 
+    // Videos of line drawings behind a colour poster: only their frames read as monochrome.
+    private val videos = VIDEOS.map(::videoPost)
+
     suspend fun run(phase: String): String = when (phase) {
         "download" -> download()
         "seed" -> seed()
         "idle" -> idle()
+        "deferred" -> deferred()
         "check" -> check()
+        "sample" -> sample()
         "delete" -> delete()
         else -> error("unknown phase")
     }
@@ -87,7 +100,7 @@ private class VisionPhases(private val container: TheoriaAppContainer, private v
         check(pictures.model.states.value == ModelState.Ready)
         val codex = codexId()
         container.data.codexRepository.ensureCodex(codex, "Vision acceptance")
-        val added = container.data.codexRepository.addItems(codex, library)
+        val added = container.data.codexRepository.addItems(codex, library + videos)
         return "added=$added"
     }
 
@@ -99,8 +112,23 @@ private class VisionPhases(private val container: TheoriaAppContainer, private v
         return "analysed=${progress.analysed} total=${progress.total}"
     }
 
-    private suspend fun check(): String {
+    /** Charging with the app on screen: the stills are indexed, and the videos wait for the app to leave the screen. */
+    private suspend fun deferred(): String {
         val progress = pictures.progress.first { it.analysed >= FIXTURES }
+        delay(IDLE_WAIT_MS)
+        val index = pictures.tagger.library.value
+        check(videos.none { index[it.id] != null } && pictures.progress.first().analysed == FIXTURES) {
+            "videos indexed on screen: ${videos.count { index[it.id] != null }}"
+        }
+        return "analysed=${progress.analysed}/${progress.total} videosWaiting=${videos.size}"
+    }
+
+    private suspend fun check(): String {
+        val progress = pictures.progress.first { it.analysed >= FIXTURES + videos.size }
+        val stored = pictures.tagger.library.first { index -> videos.all { index[it.id] != null } }
+        val monochrome = normalizeMatchToken("monochrome")
+        val framed = videos.count { monochrome in stored[it.id].orEmpty().tokens(PredictedTagUse.EVIDENCE) }
+        check(framed == videos.size) { "monochrome on $framed of ${videos.size} videos" }
         val index = pictures.tagger.library.first { index -> library.all { index[it.id] != null } }
         // The line drawings read as monochrome and greyscale; the colour pictures do not.
         val expected = listOf("monochrome", "greyscale").map(::normalizeMatchToken)
@@ -109,8 +137,19 @@ private class VisionPhases(private val container: TheoriaAppContainer, private v
             "monochrome on ${drawings.size} of $FIXTURES"
         }
         val tagged = drawings.size
-        return "analysed=${progress.analysed}/${progress.total} tagged=$tagged ${forYou()} ${hidden()}"
+        return "analysed=${progress.analysed}/${progress.total} tagged=$tagged videosFromFrames=$framed ${forYou()} ${hidden()}"
     }
+
+    /** Each fixture video sampled as the job does it, timed; the host counts the bytes each fetched. */
+    private suspend fun sample(): String = buildList {
+        for (file in VIDEOS) {
+            val started = SystemClock.elapsedRealtime()
+            val sample = context.videoPlaybackInfrastructure()
+                .sampleFrames(videoUrl(file), SourceKey.DANBOORU.requestHeaders(), 6, 448, 6L shl 20)
+            check(sample is VideoFrameSample.Frames) { "$file sampled $sample" }
+            add("$file=${sample.frames.size}frames/${SystemClock.elapsedRealtime() - started}ms")
+        }
+    }.joinToString(" ")
 
     /** The Library's predicted tags reach the For You profile, and lead a Danbooru lane with no provider tags at all. */
     private suspend fun forYou(): String {
@@ -157,6 +196,14 @@ private class VisionPhases(private val container: TheoriaAppContainer, private v
         ProfileLibraryIds.codex(container.data.settingsRepository.observeSettings().first().activeProfileId, "vision-acceptance")
 }
 
+private fun videoUrl(file: String) = "${BuildConfig.VISION_MODEL_BASE_URL}fixtures/$file"
+
+/** A Danbooru-like video post: the colour fixture [COLOUR_FROM] as its poster, the video as its full media. */
+private fun videoPost(file: String): Post {
+    val video = ImageRef(videoUrl(file), null, if (file.endsWith(".webm")) "video/webm" else "video/mp4")
+    return fixturePost("vision-$file", COLOUR_FROM).copy(full = video, media = listOf(video))
+}
+
 private fun fixturePost(id: String, picture: Int): Post {
     val image = ImageRef("${BuildConfig.VISION_MODEL_BASE_URL}fixtures/fixture-%02d.png".format(java.util.Locale.ROOT, picture), null, "image/png")
     return Post(
@@ -184,6 +231,7 @@ private val WELL_TAGGED_TAGS = listOf(
     "simple_background", "sketch",
 )
 private const val COLOUR_FROM = 18
+private val VIDEOS = listOf("video-start.mp4", "video-tail.mp4", "video.webm")
 private const val TAG = "TheoriaVision"
 private const val PHASE_TIMEOUT_MS = 300_000L
 private const val IDLE_WAIT_MS = 10_000L

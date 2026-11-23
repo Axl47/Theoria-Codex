@@ -66,7 +66,7 @@ private fun decodeUgoiraFrame(bytes: ByteArray, sampleSize: Int, sizeBucket: Ugo
     return decode(Bitmap.Config.HARDWARE) ?: decode(Bitmap.Config.ARGB_8888)
 }
 
-private suspend fun readUgoiraFrame(zip: ZipFile, entry: ZipEntry): ByteArray {
+internal suspend fun readUgoiraFrame(zip: ZipFile, entry: ZipEntry): ByteArray {
     return zip.getInputStream(entry).use { input ->
         val output = ByteArrayOutputStream()
         val buffer = ByteArray(32 * 1024)
@@ -80,6 +80,27 @@ private suspend fun readUgoiraFrame(zip: ZipFile, entry: ZipEntry): ByteArray {
             output.write(buffer, 0, count)
         }
         output.toByteArray()
+    }
+}
+
+/**
+ * Up to [count] of [specs]' frames, spread evenly through the animation, each decoded from [archive] with power-of-two
+ * sampling to no less than [sizePx] on its long edge. For the picture tagger, which reads a few frames, not playback.
+ */
+internal suspend fun sampleUgoiraFrames(archive: File, specs: List<UgoiraFrameSpec>, count: Int, sizePx: Int): List<Bitmap> {
+    if (specs.isEmpty() || count <= 0) return emptyList()
+    val picked = List(minOf(count, specs.size)) { index -> specs[((index + 0.5) * specs.size / minOf(count, specs.size)).toInt()] }
+    return ZipFile(archive).use { zip ->
+        picked.map { spec ->
+            val entry = zip.getEntry(spec.fileName) ?: throw IOException("Pixiv ugoira frame is missing")
+            val bytes = readUgoiraFrame(zip, entry)
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            var sample = 1
+            while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= sizePx) sample *= 2
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+                ?: throw IOException("Pixiv ugoira frame could not be decoded")
+        }
     }
 }
 

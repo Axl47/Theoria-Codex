@@ -53,8 +53,12 @@ class PictureTaggerTest {
         val tagger = PictureTagger(
             store = store,
             signatures = EmptySignatures,
-            hasStill = { error("the model is not ready, so no picture is inspected") },
-            loadStill = { error("the model is not ready, so no picture is loaded") },
+            pictures = object : PictureSource {
+                override fun hasStill(post: Post): Boolean = error("the model is not ready, so no picture is inspected")
+                override suspend fun still(post: Post) = error("the model is not ready, so no picture is loaded")
+                override fun plays(post: Post): Boolean = false
+                override suspend fun frames(post: Post): PostFrames = error("no frames are read for a still post")
+            },
             scope = scope,
         )
         val post = Post(

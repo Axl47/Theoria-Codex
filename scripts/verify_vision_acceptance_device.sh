@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Picture tagger acceptance on an emulator, through the minified acceptance APK's own container:
-# download and verify the model, index the Library in the charging-only job (and not on battery), a predicted
-# tag reaching For You, a hidden tag catching an untagged post, and delete. See VisionAcceptanceActivity.
+# download and verify the model, index the Library in the charging-only job (and not on battery), video frames read
+# only once the app leaves the screen, a predicted tag reaching For You, a hidden tag catching an untagged post, and
+# delete. See VisionAcceptanceActivity. Fixture videos are made from the fixture drawings with ffmpeg (libx264 and
+# libvpx-vp9) and served with byte ranges; the bytes each sampled video cost are printed.
 #
 # Usage: scripts/verify_vision_acceptance_device.sh <model-dir> [apk]
 #   <model-dir> holds wd-vit-tagger-v3.int8.tflite and wd-vit-tagger-v3.selected_tags.csv (the pinned files).
@@ -37,7 +39,14 @@ cleanup() {
 trap cleanup EXIT
 ln -s "$(realpath "$model_dir")"/wd-vit-tagger-v3.* "$serve/"
 python3 "$script_directory/vision_fixtures.py" "$serve/fixtures" >/dev/null
-python3 -m http.server "$port" --bind 127.0.0.1 --directory "$serve" >/dev/null 2>&1 &
+# Six line drawings, one per second, keyframes once a second: a fast-start MP4, one with its index at the end, and WebM.
+video_args=(-y -loglevel error -framerate 1 -i "$serve/fixtures/fixture-%02d.png" -frames:v 6 -r 25 -g 25
+  -vf "scale=360:360:force_original_aspect_ratio=decrease,pad=360:360:(ow-iw)/2:(oh-ih)/2:white,format=yuv420p")
+ffmpeg "${video_args[@]}" -c:v libx264 -movflags +faststart "$serve/fixtures/video-start.mp4"
+ffmpeg "${video_args[@]}" -c:v libx264 "$serve/fixtures/video-tail.mp4"
+ffmpeg "${video_args[@]}" -c:v libvpx-vp9 -b:v 0 -crf 40 "$serve/fixtures/video.webm"
+served="$serve/served.log"
+python3 "$script_directory/range_http_server.py" "$serve" "$port" "$served" &
 server_pid=$!
 adb_run reverse "tcp:$port" "tcp:$port" >/dev/null
 
@@ -78,9 +87,34 @@ on_battery="$(adb_run shell cmd jobscheduler run -s "$package_name" "$job_id" 2>
 printf 'Run on battery: %s\n' "$on_battery"
 [[ "$on_battery" == *"functional constraints"* ]] || { echo "The indexing job ran on battery." >&2; exit 1; }
 phase idle same
+# Charging with the app on screen: the job indexes the stills and leaves the videos for a later run.
 adb_run shell dumpsys battery set ac 1
 adb_run shell dumpsys battery set status 2
 adb_run shell cmd jobscheduler run -s "$package_name" "$job_id" >/dev/null
+phase deferred same
+# Off screen, the next run reads the videos' frames.
+adb_run shell input keyevent KEYCODE_HOME
+sleep 2
+: >"$served"
+adb_run logcat -c
+# The deferring run asked to run again, so the job first waits out its backoff (about 30 s).
+for attempt in $(seq 1 30); do
+  started="$(adb_run shell cmd jobscheduler run -s "$package_name" "$job_id" 2>&1 | tr -d '\r' || true)"
+  [[ "$started" == *constraints* ]] || break
+  sleep 5
+done
+for attempt in $(seq 1 300); do
+  # A finished run that left nothing to do drops the job, which get-job-state reports as an error.
+  state="$(adb_run shell cmd jobscheduler get-job-state "$package_name" "$job_id" 2>&1 | tr -d '\r' || true)"
+  [[ "$state" == *active* || "$state" == *ready* || "$state" == *pending* ]] || break
+  sleep 1
+done
+printf 'Job after the off-screen run: %s\n' "$state"
+printf 'Decoders: %s\n' "$(adb_run logcat -d | grep -Eo 'c2\.[a-z0-9]+\.[a-z0-9]+\.decoder' | sort | uniq -c | tr -s ' ' | tr '\n' ';')"
+printf 'Bytes served per video: %s\n' "$(awk '/video/ { bytes[$1] += $3; requests[$1]++ } END { for (path in bytes) printf "%s=%d/%dreq ", path, bytes[path], requests[path] }' "$served")"
 phase check same
+: >"$served"
+phase sample
+printf 'Bytes served per video, sampled again: %s\n' "$(awk '/video/ { bytes[$1] += $3; requests[$1]++ } END { for (path in bytes) printf "%s=%d/%dreq ", path, bytes[path], requests[path] }' "$served")"
 phase delete
 printf 'Vision acceptance passed.\n'

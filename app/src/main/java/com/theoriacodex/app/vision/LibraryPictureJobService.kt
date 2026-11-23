@@ -68,8 +68,9 @@ private val requested = AtomicBoolean(false)
 
 /**
  * Asks for [LibraryPictureJobService] to run while the device charges on an unmetered network and its battery is not
- * low, since a run may fetch previews the cache lost. A job already waiting is left alone and a running one is asked to
- * run again, so calling this whenever the Library or the model changes costs nothing.
+ * low, since a run may fetch previews the cache lost and video frames. The job survives a reboot. A job already waiting
+ * is left alone and a running one is asked to run again, so calling this whenever the Library or the model changes
+ * costs nothing.
  */
 internal fun scheduleLibraryPictures(context: Context) {
     requested.set(true)
@@ -81,6 +82,7 @@ internal fun scheduleLibraryPictures(context: Context) {
             .setRequiresCharging(true)
             .setRequiresBatteryNotLow(true)
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED)
+            .setPersisted(true)
             .build(),
     )
 }

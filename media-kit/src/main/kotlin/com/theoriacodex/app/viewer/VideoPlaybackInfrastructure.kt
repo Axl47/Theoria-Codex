@@ -35,6 +35,7 @@ import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.job
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -151,6 +152,10 @@ class VideoPlaybackInfrastructure(
         get() = viewerPlayers.value
     internal val hasActiveViewerPlayer: Boolean
         get() = viewerPlayers.isInitialized() && viewerPlayers.value.activePlayerCount() > 0
+
+    /** Whether any feed or Viewer player is leased now, and so may hold a decoder. Read it on the main thread. */
+    val hasActivePlayer: Boolean
+        get() = hasActiveViewerPlayer || feedPlayers.isInitialized() && feedPlayers.value.activePlayerCount() > 0
     private val sharedFactories = SharedVideoFactories(
         http = AbandoningHttpDataSourceFactory(videoHttpClient(httpClient)),
         local = DefaultDataSource.Factory(appContext),
@@ -259,6 +264,40 @@ class VideoPlaybackInfrastructure(
         return withContext(Dispatchers.IO) {
             copyFullyCachedVideo(sharedFactories.cache, videoPlaybackIdentity(location, headers).cacheKey, destination)
         }
+    }
+
+    /**
+     * Up to [count] keyframes from across [location]'s video, each scaled to fit [sizePx] ([sampleVideoFrames]), for the
+     * picture tagger. A web video reads what the shared cache holds for free and fetches the rest in bounded ranges, at
+     * most [maxNetworkBytes], without writing it to the cache, so sampling never evicts what the user is watching. A
+     * local copy reads from disk.
+     */
+    suspend fun sampleFrames(
+        location: String,
+        headers: Map<String, String>,
+        count: Int,
+        sizePx: Int,
+        maxNetworkBytes: Long,
+    ): VideoFrameSample = withContext(Dispatchers.IO) {
+        val job = currentCoroutineContext().job
+        val uri = videoLocationToUri(location)
+        if (!isHttpVideoLocation(location)) {
+            return@withContext sampleVideoFrames(sharedFactories.local.createDataSource(), uri, key = null, count, sizePx, job)
+        }
+        val immutableHeaders = headers.toMap()
+        val upstream = DataSource.Factory {
+            BudgetedDataSource(
+                ResolvingDataSource.Factory(sharedFactories.http) { it.withAdditionalHeaders(immutableHeaders) }.createDataSource(),
+                maxNetworkBytes,
+            )
+        }
+        val source = CacheDataSource.Factory()
+            .setCache(sharedFactories.cache)
+            .setUpstreamDataSourceFactory(upstream)
+            .setCacheWriteDataSinkFactory(null)
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+            .createDataSource()
+        sampleVideoFrames(source, uri, videoPlaybackIdentity(location, headers).cacheKey, count, sizePx, job)
     }
 
     /** Remove entries through Media3's owner; never delete its open database or cache directory. */

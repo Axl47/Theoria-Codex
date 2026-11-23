@@ -363,7 +363,7 @@ internal class DefaultTheoriaAppContainer(
     private val visualSignatures = RoomVisualSignatureRepository(contentDatabase)
     override val pictures = appPictures(
         appContext, httpClients.shared, visualSignatures, LibraryPictureBackfill(visualSignatures, listingPictures.hasher::hash),
-        durableStoreScope,
+        pixivUgoiraClient, { id -> sourceRegistry.adapterFor(id.source)?.resolvePost(id) }, durableStoreScope,
     )
     private val codexRepository: CodexRepository = contentRepository
     private val likesRepository: LikesRepository = contentRepository

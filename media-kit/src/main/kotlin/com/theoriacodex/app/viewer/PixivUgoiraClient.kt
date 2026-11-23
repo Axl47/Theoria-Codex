@@ -102,6 +102,16 @@ class PixivUgoiraClient constructor(
     suspend fun warmArchive(postId: String): Boolean =
         runCatchingPreservingCancellation { archiveFor(postId) }.isSuccess
 
+    /**
+     * Up to [count] frames spread evenly through [postId]'s animation, each at least [sizePx] on its long edge, for the
+     * picture tagger ([sampleUgoiraFrames]). Reads the archive playback uses, downloading it the same way when the disk
+     * store lacks it; throws when it cannot be had.
+     */
+    suspend fun sampleFrames(postId: String, count: Int, sizePx: Int): List<Bitmap> {
+        val archive = archiveFor(postId)
+        return withContext(Dispatchers.IO) { sampleUgoiraFrames(archive.file, archive.metadata.frames, count, sizePx) }
+    }
+
     /** Share partial frames and completion; the final departing consumer cancels its work. */
     fun observeLoad(
         postId: String,

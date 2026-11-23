@@ -18,11 +18,32 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class PixivUgoiraFramesTest {
     @get:Rule val temporaryFolder = TemporaryFolder()
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `the tagger's sample spreads frames through the animation and decodes them no smaller than asked`() = runTest {
+        val archive = temporaryFolder.newFile("sample.zip")
+        // Frame i is 64 + i px wide, so the decoded widths name the frames picked.
+        val specs = List(12) { UgoiraFrameSpec("$it.png", 50) }
+        ZipOutputStream(FileOutputStream(archive)).use { zip ->
+            specs.forEachIndexed { index, spec ->
+                val bitmap = Bitmap.createBitmap(64 + index, 64, Bitmap.Config.ARGB_8888)
+                zip.putNextEntry(ZipEntry(spec.fileName))
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, zip)
+                zip.closeEntry()
+            }
+        }
+
+        assertEquals(listOf(65, 67, 69, 71, 73, 75), sampleUgoiraFrames(archive, specs, count = 6, sizePx = 64).map { it.width })
+        // Halved twice, a 64 px frame is still 16 px.
+        assertEquals(listOf(16, 16), sampleUgoiraFrames(archive, specs, count = 2, sizePx = 16).map { it.height })
+    }
 
     @Test
     fun `decoder publishes the first frame immediately and reuses it for complete playback`() = runTest {
