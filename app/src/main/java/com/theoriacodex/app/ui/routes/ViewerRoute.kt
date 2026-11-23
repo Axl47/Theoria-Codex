@@ -214,12 +214,14 @@ internal fun ViewerRoute(
         )
         return
     }
-    ViewerDurationSync(activeSession, viewerState, durationOwner, dependencies.canonicalizePost)
+    // A series' entry is not a post: its duration is the player's, never probed at its stream nor cached as a post's.
+    val seriesSession = viewerState.series != null
+    if (!seriesSession) ViewerDurationSync(activeSession, viewerState, durationOwner, dependencies.canonicalizePost)
     val sourceState = liveSourceState.matching(activeSession)
     val related = rememberViewerRelatedPosts(activeSession, liveSourceState)
     ViewerScreen(
         uiState = viewerState,
-        host = rememberViewerScreenHost(viewerOwner, durationOwner, screenCallbacks, latestDependencies, latestEffectCallbacks),
+        host = rememberViewerScreenHost(viewerOwner, durationOwner.takeUnless { seriesSession }, screenCallbacks, latestDependencies, latestEffectCallbacks),
         config = config,
         saveToCodexQuery = activeSession?.saveQuery,
         saveFromForYou = activeSession?.context?.streamSource == ViewerStreamSource.FOR_YOU,
@@ -292,12 +294,13 @@ private fun ViewerDurationSync(
 
 /**
  * The screen's callbacks, bound to [viewerOwner]. One per owner and shell, so the screen's controls stay put while
- * Search, For You or settings change; the callbacks read the owner's current session when they run.
+ * Search, For You or settings change; the callbacks read the owner's current session when they run. A series session
+ * passes no [durationOwner], so its entries get no post durations.
  */
 @Composable
 private fun rememberViewerScreenHost(
     viewerOwner: ViewerViewModel,
-    durationOwner: MediaDurationRouteViewModel,
+    durationOwner: MediaDurationRouteViewModel?,
     callbacks: ViewerScreenCallbacks,
     latestDependencies: State<ViewerRouteDependencies>,
     latestEffectCallbacks: State<ViewerRouteEffectCallbacks>,
@@ -327,16 +330,18 @@ private fun rememberViewerScreenHost(
         onPlaybackProgress = { post, progress ->
             viewerOwner.recordPlaybackProgress(post, progress, callbacks.onPlaybackProgress)
         },
-        // The Viewer's window onto the duration owner, keyed by each post's canonical identity.
-        durations = ViewerPostDurations(
-            observe = { post ->
-                durationOwner.observeState(latestDependencies.value.canonicalizePost(post))
-                    .map { state -> (state as? MediaDurationState.Known)?.durationMs }
-            },
-            onPlayerDuration = { post, durationMs ->
-                durationOwner.publishPlayerDuration(latestDependencies.value.canonicalizePost(post), durationMs)
-            },
-        ),
+        // The Viewer's window onto the duration owner, keyed by each post's canonical identity; none for a series.
+        durations = durationOwner?.let { owner ->
+            ViewerPostDurations(
+                observe = { post ->
+                    owner.observeState(latestDependencies.value.canonicalizePost(post))
+                        .map { state -> (state as? MediaDurationState.Known)?.durationMs }
+                },
+                onPlayerDuration = { post, durationMs ->
+                    owner.publishPlayerDuration(latestDependencies.value.canonicalizePost(post), durationMs)
+                },
+            )
+        } ?: ViewerPostDurations.None,
     )
 }
 
