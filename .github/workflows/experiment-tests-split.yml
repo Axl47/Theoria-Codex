@@ -1,0 +1,48 @@
+name: Experiment tests split
+# Throwaway A/B: one tests runner vs the same work split across two runners. Never merged.
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  measure:
+    name: ${{ matrix.config }} rep ${{ matrix.rep }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [single, shard-a, shard-b]
+        rep: [1, 2, 3]
+    env:
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB_INSTANCE: tests
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-java@v6.1.0
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+      - uses: gradle/actions/setup-gradle@v6.4.0
+        with:
+          cache-read-only: true
+      - name: Tests with coverage, build cache off so every task executes
+        env:
+          CONFIG: ${{ matrix.config }}
+        run: |
+          case "$CONFIG" in
+            single) tasks=":core-domain:test :core-data:test :core-sources:test :core-stubs:test :app-logic:test :core-data-android:testDebugUnitTest :core-data-android:compileDebugAndroidTestKotlin :mihon-host:testDebugUnitTest :mihon-host:compileDebugAndroidTestKotlin :ui-kit:testDebugUnitTest :media-kit:testDebugUnitTest :vision-kit:testDebugUnitTest :feed-kit:testDebugUnitTest :feature-viewer:testDebugUnitTest :feature-search:testDebugUnitTest :feature-library:testDebugUnitTest :feature-discover:testDebugUnitTest :feature-series:testDebugUnitTest :feature-settings:testDebugUnitTest :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:assembleDebug :koverXmlReportQuality :koverVerifyQuality " ;;
+            shard-a) tasks=":core-data-android:testDebugUnitTest :core-data-android:koverXmlReportQuality :feature-search:testDebugUnitTest :feature-search:koverXmlReportQuality :feature-series:testDebugUnitTest :feature-series:koverXmlReportQuality :feature-viewer:testDebugUnitTest :feature-viewer:koverXmlReportQuality :feed-kit:testDebugUnitTest :feed-kit:koverXmlReportQuality :mihon-host:testDebugUnitTest :mihon-host:koverXmlReportQuality :vision-kit:testDebugUnitTest :vision-kit:koverXmlReportQuality :app:assembleDebug :app:compileDebugAndroidTestKotlin :core-data-android:compileDebugAndroidTestKotlin :mihon-host:compileDebugAndroidTestKotlin" ;;
+            shard-b) tasks=":app-logic:test :app-logic:koverXmlReportQuality :app:testDebugUnitTest :app:koverXmlReportQuality :core-data:test :core-data:koverXmlReportQuality :core-domain:test :core-domain:koverXmlReportQuality :core-sources:test :core-sources:koverXmlReportQuality :core-stubs:test :core-stubs:koverXmlReportQuality :feature-discover:testDebugUnitTest :feature-discover:koverXmlReportQuality :feature-library:testDebugUnitTest :feature-library:koverXmlReportQuality :feature-settings:testDebugUnitTest :feature-settings:koverXmlReportQuality :media-kit:testDebugUnitTest :media-kit:koverXmlReportQuality :ui-kit:testDebugUnitTest :ui-kit:koverXmlReportQuality " ;;
+          esac
+          start=$(date +%s)
+          ./gradlew $tasks --no-build-cache --init-script gradle/task-timings.init.gradle.kts --console=plain
+          echo "### $CONFIG: $(( $(date +%s) - start ))s" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: tasks-${{ matrix.config }}-${{ matrix.rep }}
+          path: build/reports/timings/gradle-tasks.jsonl
+          retention-days: 3
