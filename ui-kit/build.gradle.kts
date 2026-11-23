@@ -54,6 +54,7 @@ dependencies {
 
     testFixturesImplementation(project(":core-domain"))
     testFixturesImplementation(libs.kotlinx.coroutines.core)
+    testFixturesApi(libs.androidx.compose.ui.test.junit4)
     // The Compose compiler plugin also runs on test fixtures and refuses a classpath without the runtime.
     testFixturesImplementation(platform(libs.androidx.compose.bom))
     testFixturesImplementation(libs.androidx.compose.ui)
