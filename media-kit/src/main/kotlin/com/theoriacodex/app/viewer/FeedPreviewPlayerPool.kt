@@ -86,6 +86,9 @@ class FeedPreviewPlayerPool(
     ): VideoPlayerLease {
         checkMainThread()
         // A card keeps loading until the Viewer stops it, so it must not lock the rest of a clip the Viewer reads.
+        // No mime: a card gets only its rendition's address (app-logic's feedPreviewLocation, through feed-kit), so the
+        // address decides the stream type. A manifest whose address lacks .m3u8 or .mpd plays as a file and fails as an
+        // ordinary player error; carrying the mime means widening that chain to the rendition.
         val request = infrastructure.bind(VideoPlaybackRequest(location, headers), boundedLocks = true)
         val slotLease = slots.acquire(request.request)
         if (slotLease.requiresBinding || slotLease.resource.playerError != null) {
