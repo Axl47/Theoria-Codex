@@ -9,6 +9,7 @@ import java.io.IOException
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.runBlocking
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -66,6 +67,8 @@ class ExtensionImages(
 ) : Interceptor {
     @Volatile
     private var sources: Map<Long, HttpSource> = emptyMap()
+
+    private val reported = ConcurrentHashMap.newKeySet<String>()
 
     /** Pages whose request only the source can build, by the address handed out for them. */
     private val pages = Collections.synchronizedMap(
@@ -131,13 +134,19 @@ class ExtensionImages(
         val kind = if (fragment.startsWith(UNRESOLVED_TAG)) UNRESOLVED_TAG else TAG
         val issued = marker(kind, sourceId, url, tag.drop(1).joinToString("/"))
         if (!MessageDigest.isEqual(issued.toByteArray(), fragment.toByteArray())) {
-            Diagnostics.report(LOG_AREA, "${url.host} image of source $sourceId sent without its source: tag not issued here")
+            // The source a forged or stale tag names is unverified, so only the host is told.
+            reportOnce("${url.host} image sent without its source: tag not issued here")
             return null
         }
         refresh()
         val source = sources[sourceId]
-        if (source == null) Diagnostics.report(LOG_AREA, "${url.host} image of source $sourceId sent without its source: source not on")
+        if (source == null) reportOnce("${url.host} image of source $sourceId sent without its source: source not on")
         return source
+    }
+
+    /** Logs [message] the first time only: a screen of stale covers would otherwise fill the log. */
+    private fun reportOnce(message: String) {
+        if (reported.add(message)) Diagnostics.report(LOG_AREA, message)
     }
 
     /**

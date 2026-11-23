@@ -9,6 +9,7 @@ import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.repository.chapterPost
 import com.theoriacodex.data.repository.inReadingOrder
 import com.theoriacodex.data.repository.resumePageIndex
+import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -69,7 +70,7 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         val downloaded = series.downloads.chapter(id, entry.entry.address)?.media
         val source = if (downloaded == null) source(id.source) else null
         val pages = downloaded ?: runCatchingPreservingCancellation { checkNotNull(source).pages(entry.entry) }
-            .onFailure { Diagnostics.report("series", "${id.source.id} chapter pages failed to load", it) }
+            .onFailure { Diagnostics.report("series", "${id.source.id} chapter pages failed to load: ${failureKinds(it)}") }
             .getOrThrow()
         if (pages.isEmpty()) return null
         return chapterPost(stored.series, entry.entry, source?.coverAddress(stored.series) ?: loadedCover(stored.series), pages)
@@ -113,6 +114,14 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         return series.repository.observeSeries(id).mapNotNull { it?.readingModeOrGuess() }
     }
 
+    /**
+     * What [error] and its causes are, by kind only: an extension's own messages can hold a chapter's path or title,
+     * which the log must not keep.
+     */
+    private fun failureKinds(error: Throwable): String = generateSequence(error) { it.cause }.take(MAX_CAUSES).joinToString(" < ") { cause ->
+        cause.javaClass.simpleName + ((cause as? SourceAdapterException)?.let { "(${it.reason})" } ?: "")
+    }
+
     /** [series]' cover as its source gives it, if that source has loaded already; null otherwise. */
     private fun loadedCover(series: Series): String? = this.series.loadedSources().firstOrNull { it.key == series.id.source }?.coverAddress(series)
 
@@ -143,3 +152,6 @@ internal fun seriesChapterMark(seriesTitle: String, name: String, number: Float)
     val named = Regex("""(?<![\d.])${Regex.escape(shown)}(?!\d|\.\d)""").containsMatchIn(name)
     return ViewerStripMark(shown, "$seriesTitle · ${if (named) name else "Chapter $shown, $name"}")
 }
+
+/** Enough of a failure's causes to tell a refusal from a parse error, without a runaway chain. */
+private const val MAX_CAUSES = 4

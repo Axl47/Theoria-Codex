@@ -107,20 +107,30 @@ class HostInterceptorsTest {
     }
 
     @Test
-    fun `a refusal without a challenge reaches the extension and is logged with whether it carried a clearance`() {
+    fun `a refusal without a challenge reaches the extension and is logged once per host, without the server's text`() {
         val logged = mutableListOf<String>()
         Diagnostics.install { _, message, _ -> logged += message }
         val outages = HostOutageTracker()
         val client = clientOf(
             CloudflareInterceptor(ChallengePass(ChallengeBrowsers(NoCookies, NoBrowser), outages::isChallenged), outages),
-            answering { sent -> cannedResponse(sent, code = 403).newBuilder().header("Server", "cloudflare").build() },
+            answering { sent ->
+                val server = if (sent.url.host == "site.test") "cloudflare" else "edge /chapter/private-title?sig=x"
+                cannedResponse(sent, code = 403).newBuilder().header("Server", server).build()
+            },
         )
+        fun fetch(url: String, cookie: String? = null) =
+            client.newCall(Request.Builder().url(url).apply { cookie?.let { header("Cookie", it) } }.build()).execute().use { it.code }
 
-        val refused = client.newCall(Request.Builder().url("https://site.test/chapter/1").header("Cookie", "cf_clearance=old").build()).execute()
-
-        assertEquals(403, refused.code)
-        refused.close()
-        assertEquals(listOf("site.test refused 403 with a clearance, no challenge (server cloudflare)"), logged)
+        assertEquals(403, fetch("https://site.test/chapter/1", cookie = "cf_clearance=old"))
+        fetch("https://site.test/chapter/2")
+        fetch("https://other.test/page")
+        assertEquals(
+            listOf(
+                "site.test refused 403 with a clearance, no challenge, from Cloudflare",
+                "other.test refused 403 without a clearance, no challenge, from another server",
+            ),
+            logged,
+        )
     }
 
     @Test
