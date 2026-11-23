@@ -9,6 +9,8 @@ import android.os.Trace
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.ScrubbingModeParameters
 import androidx.media3.exoplayer.SeekParameters
@@ -27,6 +29,7 @@ class ViewerVideoPlayerPool(
         clock = clock,
         createResource = ::createPlayer,
     )
+    private val separateAudio = HashMap<VideoPlayerLease, FirstSeparateAudio>()
     private val cleanup = object : Runnable {
         override fun run() {
             if (infrastructure.feedPreviewPlayerPool.activePlayerCount() == 0) {
@@ -43,7 +46,7 @@ class ViewerVideoPlayerPool(
      * A player prepared with [playback]; give it back with [recycle]. [loop] is its repeat mode until the caller
      * changes it, so callers pass their own playback mode here: a player handed back and leased again for the next
      * stream is the same object, and an effect keyed on the player would not run again to set it. Separate audio
-     * starts on the request's first track ([FirstSeparateAudio]).
+     * starts on the request's first track.
      */
     fun acquire(playback: VideoPlaybackRequest, loop: Boolean = true): VideoPlayerLease {
         checkMainThread()
@@ -57,11 +60,13 @@ class ViewerVideoPlayerPool(
             player.repeatMode = if (loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
             player.prepare()
         }
-        val separateAudio = (request.mediaItem.localConfiguration?.tag as? SeparateAudioLabels)
-            ?.let { FirstSeparateAudio(player).also(player::addListener) }
+        val playerLease = VideoPlayerLease(lease)
+        if (request.mediaItem.localConfiguration?.tag is SeparateAudioLabels) {
+            separateAudio[playerLease] = FirstSeparateAudio(player).also(player::addListener)
+        }
         publishCounters()
         scheduleCleanup()
-        return VideoPlayerLease(lease, separateAudio)
+        return playerLease
     }
 
     fun recycle(lease: VideoPlayerLease) {
@@ -73,7 +78,7 @@ class ViewerVideoPlayerPool(
             lease.player.pause()
             lease.player.stop()
             lease.player.clearMediaItems()
-            lease.trackListener?.let(lease.player::removeListener)
+            separateAudio.remove(lease)?.let(lease.player::removeListener)
             lease.player.clearTrackChoices()
         }
         slots.recycle(lease.slotLease, retainBinding = false)
@@ -137,3 +142,22 @@ private val VIEWER_SCRUBBING = ScrubbingModeParameters.DEFAULT.buildUpon()
     .setFractionalSeekTolerance(1.0, 0.0)
     .setDisabledTrackTypes(ScrubbingModeParameters.DEFAULT.disabledTrackTypes + C.TRACK_TYPE_TEXT)
     .build()
+
+/**
+ * Plays the first of a request's separate audio tracks once the player has read them, over whichever Media3 would rank
+ * higher (more channels, a higher bitrate, the video's own audio), unless an audio track was already chosen. It stops
+ * listening once those tracks are known.
+ *
+ * An override rather than Media3's preferred audio label: separate audio carries no label of its own, and giving its
+ * formats one means wrapping each merged child's media period and mapping track selections back to its own groups.
+ */
+private class FirstSeparateAudio(private val player: Player) : Player.Listener {
+    override fun onTracksChanged(tracks: Tracks) {
+        val group = tracks.groups.firstOrNull { player.separateAudioIndex(it) == 0 } ?: return
+        player.removeListener(this)
+        val parameters = player.trackSelectionParameters
+        if (parameters.overrides.values.any { it.type == C.TRACK_TYPE_AUDIO }) return
+        val track = (0 until group.length).firstOrNull(group::isTrackSupported) ?: return
+        player.trackSelectionParameters = parameters.buildUpon().setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, track)).build()
+    }
+}

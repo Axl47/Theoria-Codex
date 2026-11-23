@@ -46,22 +46,6 @@ internal fun Player.clearTrackChoices() {
     trackSelectionParameters = trackSelectionParameters.buildUpon().clearOverrides().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false).build()
 }
 
-/**
- * Plays the first of the request's separate audio tracks once the player has read them, over whichever Media3 would
- * rank higher (more channels, a higher bitrate, the video's own audio). Added by the pool for a request with separate
- * audio; it stops listening once those tracks are known.
- */
-internal class FirstSeparateAudio(private val player: Player) : Player.Listener {
-    override fun onTracksChanged(tracks: Tracks) {
-        val group = tracks.groups.firstOrNull { player.separateAudioIndex(it) == 0 } ?: return
-        player.removeListener(this)
-        val track = (0 until group.length).firstOrNull(group::isTrackSupported) ?: return
-        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
-            .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, track))
-            .build()
-    }
-}
-
 /** Separates a track group's id from the track's index in [PlaybackTrack.id]. */
 private const val TRACK_ID_SEPARATOR = '/'
 
@@ -90,7 +74,7 @@ private fun Player.separateAudioLabels(): SeparateAudioLabels? = currentMediaIte
  * Which of the request's separate audio tracks [group] comes from, or null for any other group. The merged source
  * ([StreamMediaSourceFactory]) puts them after the video, and Media3 prefixes each group's id with its child's index.
  */
-private fun Player.separateAudioIndex(group: Tracks.Group): Int? {
+internal fun Player.separateAudioIndex(group: Tracks.Group): Int? {
     if (group.type != C.TRACK_TYPE_AUDIO) return null
     val count = separateAudioLabels()?.labels?.size ?: return null
     val child = group.mediaTrackGroup.id.substringBefore(':', "").toIntOrNull() ?: return null
