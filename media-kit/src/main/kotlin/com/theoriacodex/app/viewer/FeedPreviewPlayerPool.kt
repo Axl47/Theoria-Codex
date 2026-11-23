@@ -34,7 +34,7 @@ class FeedPreviewPlayerPool(
     private val handler: Handler = Handler(Looper.getMainLooper()),
     clock: () -> Long = SystemClock::elapsedRealtime,
 ) {
-    private val slots = ReusableVideoSlotPool<ExoPlayer, VideoPlaybackIdentity>(
+    private val slots = ReusableVideoSlotPool<ExoPlayer, VideoPlaybackRequest>(
         maxIdleResources = FEED_PREVIEW_MAX_IDLE_PLAYERS,
         idleTimeoutMs = FEED_PREVIEW_IDLE_TIMEOUT_MS,
         clock = clock,
@@ -87,7 +87,7 @@ class FeedPreviewPlayerPool(
         checkMainThread()
         // A card keeps loading until the Viewer stops it, so it must not lock the rest of a clip the Viewer reads.
         val request = infrastructure.bind(VideoPlaybackRequest(location, headers), boundedLocks = true)
-        val slotLease = slots.acquire(request.identity)
+        val slotLease = slots.acquire(request.request)
         if (slotLease.requiresBinding || slotLease.resource.playerError != null) {
             if (slotLease.resource.mediaItemCount > 0 || slotLease.resource.playerError != null) {
                 traceMediaSection(MediaTraceSections.PREVIEW_PLAYER_REBIND) {

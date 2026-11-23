@@ -18,7 +18,6 @@ import java.time.Duration
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -64,20 +63,13 @@ class VideoStreamPlaybackTest {
         // An extension's own proxy on the device is an ordinary web address.
         val loopback = request("http://127.0.0.1:8341/clip.mp4", mime = "video/mp4")
         assertEquals("http://127.0.0.1:8341/clip.mp4", infrastructure.bind(loopback).mediaItem.localConfiguration?.uri.toString())
-        assertEquals(infrastructure.bind(loopback).identity.cacheKey, cacheKey(loopback))
+        assertEquals(videoCacheKey(loopback.location, loopback.headers), cacheKey(loopback))
         val post = request("https://cdn.test/clip", mime = "video/webm")
         assertTrue(source(post) is ProgressiveMediaSource)
-        assertEquals(infrastructure.bind(post).identity.cacheKey, cacheKey(post))
+        // The key names the bytes alone, whatever else the request adds.
+        assertEquals(videoCacheKey(post.location, post.headers), cacheKey(post.copy(subtitles = listOf(MediaTrack("https://cdn.test/a.vtt", "A")))))
         assertNull(cacheKey(request("https://cdn.test/master.m3u8")))
         assertNull(cacheKey(request("https://cdn.test/clip.mp4", cache = false)))
-    }
-
-    @Test fun `a slot is reused only for the same request, while the cache key names the bytes alone`() {
-        val plain = infrastructure.bind(request("https://cdn.test/clip.mp4")).identity
-        val subtitled = infrastructure.bind(request("https://cdn.test/clip.mp4", subtitles = listOf(MediaTrack("https://cdn.test/a.vtt", "A")))).identity
-
-        assertNotEquals(plain, subtitled)
-        assertEquals(plain.cacheKey, subtitled.cacheKey)
     }
 
     @Test fun `an HLS episode sends its headers with every request it causes, across a redirect and relative addresses`() {

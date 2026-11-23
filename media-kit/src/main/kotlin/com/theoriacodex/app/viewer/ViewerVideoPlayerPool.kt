@@ -21,7 +21,7 @@ class ViewerVideoPlayerPool(
     private val handler: Handler = Handler(Looper.getMainLooper()),
     clock: () -> Long = SystemClock::elapsedRealtime,
 ) {
-    private val slots = ReusableVideoSlotPool<ExoPlayer, VideoPlaybackIdentity>(
+    private val slots = ReusableVideoSlotPool<ExoPlayer, VideoPlaybackRequest>(
         maxIdleResources = 1,
         idleTimeoutMs = VIEWER_PLAYER_IDLE_TIMEOUT_MS,
         clock = clock,
@@ -49,7 +49,7 @@ class ViewerVideoPlayerPool(
         checkMainThread()
         infrastructure.onViewerStreamAcquired()
         val request = infrastructure.bind(playback)
-        val lease = slots.acquire(request.identity)
+        val lease = slots.acquire(request.request)
         val player = lease.resource
         traceMediaSection(MediaTraceSections.VIEWER_PREPARE) {
             // Returned players have no media binding; every lease starts at the requested item.
