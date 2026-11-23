@@ -116,13 +116,16 @@ class ExtensionRegistry(
         offer?.sources.orEmpty()
     }
 
+    /** Whether a listing was ever started, even one that failed. Written under [mutex]. */
+    private var listed = false
+
     /**
-     * Lists the device again once the extensions have loaded, so an extension installed, updated, removed, hidden or
-     * unhidden since is picked up; only the extensions that changed load. Moves [revision] when something changed.
-     * Before the first load, does nothing: that load lists the device itself.
+     * Lists the device again once a listing has been tried, so an extension installed, updated, removed, hidden or
+     * unhidden since is picked up, and a first load that failed is tried again; only the extensions that changed load.
+     * Moves [revision] when something changed. Before any listing, does nothing: nothing loads until first asked for.
      */
     suspend fun recheck() {
-        locked { if (offer != null) refresh() }
+        locked { if (listed) refresh() }
     }
 
     override suspend fun installed(): List<InstalledExtension> = locked { refresh() }
@@ -186,7 +189,9 @@ class ExtensionRegistry(
      * are read here: this runs for the first source lookup and image request, which must not wait on every source's
      * settings screen.
      */
-    private suspend fun refresh(onDevice: List<ExtensionPackage> = packages()): List<InstalledExtension> {
+    private suspend fun refresh(found: List<ExtensionPackage>? = null): List<InstalledExtension> {
+        listed = true
+        val onDevice = found ?: packages()
         val choices = choices.choices()
         val device = deviceLanguages()
         val taken = HashSet<SourceKey>()

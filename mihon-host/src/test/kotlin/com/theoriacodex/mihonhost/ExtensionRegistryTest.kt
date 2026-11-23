@@ -182,6 +182,19 @@ class ExtensionRegistryTest {
     }
 
     @Test
+    fun `a recheck tries again a first load that failed`() = runBlocking {
+        store.choices = ExtensionChoices(trusted = mapOf("a" to "key-1"))
+        store.interruption = IllegalStateException("the choices could not be read")
+        assertFailsWith<IllegalStateException> { registry.sources() }
+
+        registry.recheck()
+
+        assertEquals(2, listings)
+        assertEquals(1, registry.sources().size)
+        assertEquals(2, listings)
+    }
+
+    @Test
     fun `another app updating leaves the revision where it was`() = runBlocking {
         registry.installed()
         val listed = registry.revision.value
