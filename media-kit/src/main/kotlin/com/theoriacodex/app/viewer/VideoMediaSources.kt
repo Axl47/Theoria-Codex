@@ -54,6 +54,13 @@ internal fun streamType(uri: Uri, mime: String?): StreamType = when (Util.inferC
 fun VideoPlaybackRequest.usesSharedCache(): Boolean =
     cache && isHttpVideoLocation(location) && streamType(videoLocationToUri(location), streamMimeType(mime)) == StreamType.PROGRESSIVE
 
+/**
+ * The [StreamType] of separate audio at [uri] beside a [main] stream: the one its address shows, or the main stream's
+ * when its path has no extension at all, as an extension's HLS episode often names its audio playlist.
+ */
+private fun separateAudioType(uri: Uri, main: StreamType): StreamType =
+    if ('.' in uri.lastPathSegment.orEmpty()) streamType(uri, null) else main
+
 /** The labels of a request's separate audio, in merge order, carried as its media item's tag for [playbackTracks]. */
 internal data class SeparateAudioLabels(val labels: List<String>)
 
@@ -99,7 +106,7 @@ internal class StreamMediaSourceFactory(
             main,
             *audio.map { track ->
                 val uri = videoLocationToUri(track.url)
-                sourceFor(streamType(uri, null), MediaItem.fromUri(uri))
+                sourceFor(separateAudioType(uri, type), MediaItem.fromUri(uri))
             }.toTypedArray(),
             *subtitles.map { track ->
                 val configuration = MediaItem.SubtitleConfiguration.Builder(videoLocationToUri(track.url))

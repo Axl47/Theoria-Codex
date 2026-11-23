@@ -19,8 +19,8 @@ sealed interface FixtureRoute {
 
 /**
  * The tiny episode in `stream-fixture/` as routes: `/episode` redirects to an HLS master whose video-only variant has
- * AES-128 segments and relative addresses, beside a separate audio playlist, a WebVTT file and an ASS file served
- * at a `.vtt` address.
+ * AES-128 segments and relative addresses, beside a separate audio playlist (also at `/hls/audio`, without an
+ * extension), a WebVTT file and an ASS file served at a `.vtt` address.
  */
 fun streamFixtureRoutes(assets: AssetManager): Map<String, FixtureRoute> {
     val files = requireNotNull(assets.list("stream-fixture")).associate { name ->
@@ -28,6 +28,7 @@ fun streamFixtureRoutes(assets: AssetManager): Map<String, FixtureRoute> {
     }
     return files + mapOf(
         "/episode" to FixtureRoute.Redirect("/hls/master.m3u8"),
+        "/hls/audio" to files.getValue("/hls/audio.m3u8"),
         "/subtitles/en.vtt" to files.getValue("/hls/subtitles.vtt"),
         "/subtitles/signs.vtt" to files.getValue("/hls/subtitles-ass"),
     )

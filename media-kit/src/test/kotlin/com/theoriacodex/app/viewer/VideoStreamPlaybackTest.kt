@@ -87,7 +87,8 @@ class VideoStreamPlaybackTest {
                 headers = STREAM_FIXTURE_HEADERS,
                 mime = "application/vnd.apple.mpegurl",
                 subtitles = listOf(MediaTrack("${server.base}/subtitles/en.vtt", "English")),
-                audioTracks = listOf(MediaTrack("${server.base}/hls/audio.m3u8", "Japanese")),
+                // Without an extension, the audio is read as the same kind of stream as the episode.
+                audioTracks = listOf(MediaTrack("${server.base}/hls/audio", "Japanese")),
                 cache = false,
             ),
         )
@@ -100,7 +101,7 @@ class VideoStreamPlaybackTest {
         assertNull(player.playerError)
         val expected = listOf(
             "/episode", "/hls/master.m3u8", "/hls/video.m3u8", "/hls/key.bin", "/hls/video0.ts",
-            "/hls/audio.m3u8", "/hls/audio0.ts", "/subtitles/en.vtt",
+            "/hls/audio", "/hls/audio0.ts", "/subtitles/en.vtt",
         )
         assertTrue(server.paths().toString(), server.paths().containsAll(expected))
         assertTrue(server.requests.toString(), server.requests.all { it.authorised })
