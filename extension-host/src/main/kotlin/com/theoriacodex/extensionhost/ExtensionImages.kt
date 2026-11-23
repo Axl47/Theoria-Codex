@@ -13,17 +13,13 @@ import okhttp3.Response
 
 /**
  * Runs extension code on an HTTP client's thread. OkHttp reports only an [IOException] to the caller and lets anything
- * else end the process, and an extension can fail in other ways: its own bugs, or a part of the host API this module
- * lacks, which surfaces as a [LinkageError].
+ * else end the process, and an extension can fail in many other ways (see [endsTheProcess]), all of which become one.
  */
 @Suppress("TooGenericExceptionCaught")
 internal inline fun <T> failingAsIo(block: () -> T): T = try {
     block()
-} catch (failure: IOException) {
-    throw failure
-} catch (failure: Exception) {
-    throw IOException(failure)
-} catch (failure: LinkageError) {
+} catch (failure: Throwable) {
+    if (failure is IOException || failure.endsTheProcess()) throw failure
     throw IOException(failure)
 }
 

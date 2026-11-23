@@ -153,6 +153,7 @@ object ExtensionHost {
         return key
     }
 
+    // Named when Mihon's were the only extensions; renaming it would lose every source's stored settings.
     private const val PREFERENCES_DIRECTORY = "mihon_preferences"
     private const val LEGACY_PREFERENCES_PREFIX = "mihon_"
 

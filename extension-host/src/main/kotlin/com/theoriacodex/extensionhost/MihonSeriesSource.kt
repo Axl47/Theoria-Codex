@@ -18,20 +18,16 @@ import eu.kanade.tachiyomi.source.online.HttpSource
 
 /**
  * One Mihon extension source as the app's [SeriesSource]: a Mihon manga is a series, a chapter an entry, and a
- * chapter's pages are image addresses [images] can fetch through the source's own client. [onChallenged] hears of
- * each host whose browser check stopped one of its calls, which can be an API or image host besides its site's.
+ * chapter's pages are image addresses [HostServices.images] can fetch through the source's own client. A host whose
+ * browser check stopped one of its calls, which can be an API or image host besides its site's, is reported to
+ * [HostServices.onChallenged].
  */
-class MihonSeriesSource(
-    private val source: Source,
-    images: ExtensionImages,
-    log: (String) -> Unit = {},
-    onChallenged: (host: String) -> Unit = {},
-) : SeriesSource {
+class MihonSeriesSource(private val source: Source, host: HostServices) : SeriesSource {
     override val key: SourceKey = MihonKind.sourceKey(source.id)
-    private val calls = ExtensionCalls(source.name, log, onChallenged)
+    private val calls = ExtensionCalls(source.name, host.log) { challenged -> host.onChallenged(key, challenged) }
 
     /** Fetches its covers and pages through its own client; only an HTTP source has one. */
-    internal val sourceImages: MihonImages? = (source as? HttpSource)?.let { MihonImages(it, key, images) }
+    internal val sourceImages: MihonImages? = (source as? HttpSource)?.let { MihonImages(it, key, host.images) }
     override val name: String get() = source.name
     override val language: String get() = source.lang
 

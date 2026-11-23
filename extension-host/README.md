@@ -10,31 +10,26 @@ here. That verdict and its measurements are kept below; the Series feature is bu
 
 ## Verdict (the spike)
 
-Hosting the ecosystem is feasible, and the host is small: about 1,000 lines, of which 450 are Theoria's own and the
-rest is Mihon's API trimmed to what extensions call. An unmodified MangaDex extension lists series, opens one and
-shows its pages in the real Viewer. Of 10 other extensions tried, 7 listed, opened and fetched a page unchanged.
+Hosting the ecosystem is feasible, and the host is small: about 1,000 lines at the time, of which 450 were Theoria's
+own and the rest Mihon's API trimmed to what extensions call. Three costs decided whether to build it, and all three
+have since been settled: settings (30% of extensions build a settings screen on `androidx.preference`, which Theoria
+did not ship; see "Settings"), release size (see "Release builds") and trust (see "Trust"). The measurements behind
+the verdict are under "What was measured".
 
-Three costs decided whether to build it. The spike solved none; settings and trust have since been built (see "How it
-works"), and the release size was measured again and accepted (see "Release builds"):
+## How it works
 
-- **Settings.** 30% of extensions have a settings screen built on `androidx.preference`, which Theoria does not
-  ship. They cannot load until the host provides it, and some need their settings to work at all (a site address, a
-  login).
-- **Release size.** Extensions call OkHttp, Okio, kotlinx and Jsoup by name, so R8 must keep those libraries whole.
-  Measured on the release build: 10.3 MB grows to 15.0 MB (+46%), or 17.8 MB (+73%) if the Kotlin standard library
-  is kept whole too. About 3 MB of that is the zstd decoder Mihon's HTTP client includes.
-- **Trust.** Extension code runs with the app's permissions and can read its data, so none runs until the user turns
+**Trust.** Extension code runs with the app's permissions and can read its data, so none runs until the user turns
 that extension on in the Extensions page. What is stored is the extension's package name with the SHA-256 of the
-signing certificate it had then (`ExtensionChoices.trusted`, in a file under `noBackupFilesDir`): an update signed with the same
-key stays on, a copy signed with another key is off, and so is every other extension, whoever signed it, since
-nearly all Mihon extensions share one key. A file in the debug folder is its own extension, named by its file name and the package inside it, so another
-extension put there under the same name is off and cannot be turned on by an answer given for the first.
-An APK with no readable signing certificate, or with several signers, can never be turned on. Until an extension is
-on, its name, version and fingerprint come from the package manager alone. The question asked before turning one on
-shows the fingerprint, and only that fingerprint is trusted: a file replaced while the question was open is asked
-about again. Loaded code is kept per listed file, signer, version, length and write time included, so a file replaced
-in place loads anew, from a private copy of its own, and never runs under another file's signer or name. Trust is
-never written to or read from a profile backup.
+signing certificate it had then (`ExtensionChoices.trusted`, in a file under `noBackupFilesDir`): an update signed with
+the same key stays on, a copy signed with another key is off, and so is every other extension, whoever signed it, since
+nearly all extensions of each kind share one key. A file in the debug folder is its own extension, named by its file
+name and the package inside it, so another extension put there under the same name is off and cannot be turned on by
+an answer given for the first. An APK with no readable signing certificate, or with several signers, can never be
+turned on. Until an extension is on, its name, version and fingerprint come from the package manager alone. The
+question asked before turning one on shows the fingerprint, and only that fingerprint is trusted: a file replaced while
+the question was open is asked about again. Loaded code is kept per listed file, signer, version, length and write time
+included, so a file replaced in place loads anew, from a private copy of its own, and never runs under another file's
+signer or name. Trust is never written to or read from a profile backup.
 
 **Changes on the device.** Every source lookup first compares a cheap stamp of the device's packages and the folder's
 files; an extension installed, updated or removed since then is listed again and only what changed is loaded. Every
@@ -105,7 +100,7 @@ once more.
 | Host API | `src/main/kotlin/eu/kanade/tachiyomi`, `uy/kohesive/injekt` | The classes extensions link against, trimmed from Mihon (Apache 2.0, see `LICENSE-APACHE-2.0.txt`). Only the coroutine API; no RxJava. |
 | `ExtensionKind`, `HostedSource` | `com.theoriacodex.extensionhost` | The seam between an extension interface and the rest of the host. A kind says how its packages are recognized (manifest feature, source-class metadata, label prefix), which of them it refuses and why (interface version), and turns a created source class into `HostedSource`s: the `SeriesSource`, name, language, site address, settings and image fetching the host works with. Everything below works the same for every kind. |
 | `MihonKind` | same | Mihon's manga interface, API 1.6, presented by `MihonSeriesSource`, with its covers and pages fetched by `MihonImages`. |
-| `AnimeKind` | same | Aniyomi's anime interface, versions 14 and 16, presented by `AniyomiSeriesSource` (see "Anime extensions"). Refuses other versions and extensions that stream by torrent, saying why on the Extensions page. |
+| `AniyomiKind` | same | Aniyomi's anime interface, versions 14 and 16, presented by `AniyomiSeriesSource` (see "Anime extensions"). Refuses other versions and extensions that stream by torrent, saying why on the Extensions page. |
 | `ExtensionCalls`, `ExtensionFilters.kt` | same | What both adapters share: running an extension call off the caller's thread and reporting its failure the way built-in sources do, the status numbers, and the filter tree as `SeriesFilter`s. |
 | `ExtensionPackages` | same | Lists the extensions on the device without running them: installed packages that declare a kind's feature and, in debug builds only, APK files in the app's `mihon-extensions` folder. |
 | `ExtensionRegistry` | same | The rule for what runs: loads the extensions that are on, on first use, each with 15 s to finish, and offers the sources of the languages that are on; only those sources fetch images. One that hangs or fails is left out and says why on the Extensions page. Settings are read only for the extension whose page is open. |
@@ -125,22 +120,26 @@ version name. Versions 14 and 16 load; nearly every extension that declares 14 i
 Its sources' ids carry their own prefix (`custom_aniyomi_<id>`), so an anime and a manga source with the same number are
 different sources everywhere the app keeps an id.
 
-**Streams.** An episode's media is a list of `MediaStream`s. The host asks for the episode's servers, then for each
-server's videos at once, giving each server about 6 s; an extension that has only the older single call is asked that
-instead, with about 50 s. Both are abandoned in the host's scope when their time runs out or the caller stops waiting,
-never joined, since extension code often ignores cancellation: a server that hangs costs the episode nothing, and a
-Viewer that closes stops waiting at once. Streams keep the order the source's own settings sort them in. Each is
-labelled with the quality and server names the extension gives, typed as HLS or DASH when its address or name says so,
-and carries its subtitles and separate audio as tracks; one without headers of its own gets the source's, its browser
-agent included.
+**Streams.** An episode's media is a list of `MediaStream`s (`AniyomiStreams`). Whether a source has the server list
+is read once from the methods its own classes declare, as Aniyomi does, never by trying a request. The host asks for
+the episode's servers, then for each server's videos at once, giving each server about 6 s; a source with only the
+older single call is asked that instead, with about 50 s. Work runs in the host's detached scope, on threads of its
+own, and is left there when its time runs out or the caller stops waiting, never joined, since extension code often
+ignores cancellation: a server that hangs costs the episode nothing, and a Viewer that closes stops waiting at once.
+When no server has a video, the lookup reports the most useful failure (a browser check first, and every server's
+browser check is reported even when another server answers), else that it ran out of time; servers that answered with
+nothing give no streams. Streams keep the order the source's own settings sort them in. Each is labelled with the
+quality and server names the extension gives, typed as HLS or DASH by its address, or by its name when the address
+says nothing, and carries its subtitles and separate audio as tracks; one without headers of its own gets the
+source's, its browser agent included. Some extensions serve their streams from inside the app's process, so the app
+allows cleartext to `127.0.0.1` and `localhost`.
 
-**Not yet.** An anime grouped into seasons is refused with "Seasons aren't supported yet". Extensions built for version
-17, and the local web server some use to serve their streams, are not provided. Streams that an extension serves from
-`127.0.0.1` need cleartext to that address, which the app does not allow yet.
+**Seasons.** An anime grouped into seasons is refused with "Seasons aren't supported yet". Only its details tell, so
+an anime not listed in this process, as the background new-episode check asks about, has them asked for first.
 
 **QuickJS.** About a third of anime extensions (and some manga ones) evaluate scripts with QuickJS
-(`app.cash.quickjs`), which the host ships as Mihon and Aniyomi do. Its last release is from 2021; its native library is
-aligned for 4 KB pages, so on a device with 16 KB pages an extension that starts it may fail to.
+(`app.cash.quickjs`), so the host has a JavaScript engine, as Mihon and Aniyomi do. Its last release is from 2021; its
+native library is aligned for 4 KB pages, so on a device with 16 KB pages an extension that starts it may fail to.
 
 ## Release builds
 
@@ -156,7 +155,7 @@ at `d2490c40` to 15,252,345 bytes, +4.34 MB (+40%), before anime extensions. Qui
 for `arm64-v8a` (370 KB compressed); the release build was not measured again.
 
 Why whole packages. Three rule sets were built and measured before the feature merged (at `f17caecf`), and each APK was
-checked symbol by symbol against the 300 extensions:
+checked symbol by symbol against the 300 manga extensions (anime extensions came later):
 
 | Rules | APK | Growth | Sampled extensions that link |
 | --- | --- | --- | --- |
@@ -165,15 +164,17 @@ checked symbol by symbol against the 300 extensions:
 | **The packages they are in (chosen)** | 15,170,425 bytes | +4.30 MB (+40%) | 294 of 300 |
 | Every class of those libraries | 17,204,943 bytes | +6.34 MB (+58%) | 294 of 300 |
 
-The six that do not link need what the host lacks in any build (protobuf, a JavaScript engine, an image decoder). The
-smallest set was not chosen because the sample is 300 of 1,711 extensions: rules made from 250 of them left out
-something that about 30% of the other 50 call, rules that keep each sampled class whole about 7%, and rules by
-package 0 to 8% (five random splits each). About 1.5 MB of the growth is the zstd decoder, a native library that every
-extension's HTTP client names; the app packages it for `arm64-v8a` and `x86_64` only.
+The six that do not link needed what the host lacked then (protobuf, a JavaScript engine, an image decoder); it has
+had a JavaScript engine since anime extensions came. The smallest set was not chosen because the sample is 300 of
+1,711 extensions: rules made from 250 of them left out something that about 30% of the other 50 call, rules that keep
+each sampled class whole about 7%, and rules by package 0 to 8% (five random splits each). About 1.5 MB of the growth is the zstd decoder, a native library that every
+extension's HTTP client names. QuickJS is the second native library. The app packages both for `arm64-v8a` and
+`x86_64` only, and its phone builds for `arm64-v8a` alone.
 
-`extension-symbols.txt` lists what the samples referenced (300 manga and 168 anime extensions), in the form R8 reports what it kept. The release part of the
-checks (`scripts/check.sh --part release`) fails when a release build no longer keeps one of them. It lists host names
-only; the survey's scripts and the extension index are not in the repository.
+`extension-symbols.txt` lists what the samples of 300 manga and 168 anime extensions referenced, in the form R8
+reports what it kept. The release part of the checks (`scripts/check.sh --part release`) fails when a release build no
+longer keeps one of them. It lists host names only; the survey's scripts and the extension indexes are not in the
+repository.
 
 Proved on an emulator with the minified `releaseAcceptance` build: the tab appears once an extension is installed;
 MangaDex turns on, browses, opens a series and a chapter whose pages download, and keeps a changed setting across a
@@ -253,15 +254,15 @@ run ExtensionSourceLiveTest#unfollowingTheLastSeriesCancelsTheCheck
 
 The extension index used listed 1,711 extensions (2,742 sources), every one built against extension API 1.6.
 
-**The host surface is small.** MangaDex 1.6.4 is a 103 KB APK. Across a random sample of 300 extensions:
+**The host surface is small.** Across a random sample of 300 manga extensions:
 
 - None references RxJava. The whole sample uses the coroutine API, so the host needs no Rx.
 - They use about 29 host classes plus 4 service-locator classes. The locator is asked for only four types: `Json`
   (257 extensions), `Application` (207), `ProtoBuf` (3) and `NetworkHelper` (1).
 - None ships native code. The median APK is 78 KB.
 - Checked symbol by symbol against the built debug app: 205 (68%) link completely, 89 (30%) lack only
-  `androidx.preference` (their settings screen, which the host now provides), and 6 (2%) need something this host lacks (protobuf, a JavaScript
-  engine, an image decoder).
+  `androidx.preference` (their settings screen, which the host now provides), and 6 (2%) needed something the host
+  lacked (protobuf, a JavaScript engine, an image decoder).
 - Mihon ships the same OkHttp (5.5.1) and kotlinx.serialization (1.13.0) as Theoria.
 - Mihon's `source-api` changed in 14 commits in the last year, three of them the move to API 1.6.
 
@@ -281,7 +282,7 @@ source's client; so does this host.
 (details, chapter list, page list): 4 requests, about 1.5 s alone. In the app, opening a series right after a listing
 took 4 to 12 s: the covers go through the same rate-limited client, and the Viewer also resolves the next post.
 
-**Ten more extensions through the harness.** Seven listed, opened a series and fetched a page image. One more
+**Ten more manga extensions through the harness.** Seven listed, opened a series and fetched a page image. One more
 opened a series after a host fix (its details page returns no title, which Mihon tolerates) but could not fetch a
 page: the site's own image link was dead. One sat behind a browser challenge, which the host then could not pass (see "Browser checks"). One gets HTTP 403 for page
 images through its own client while a plain request succeeds; whether Mihon gets the same was not checked.
@@ -296,10 +297,10 @@ What the feature still lacks.
 
 - **Unloading.** Loaded code cannot be unloaded. Turning an extension off stops its sources and images at once; its
   code stays idle in memory until the app's process ends.
-- **Extensions outside the sample.** The keep rules cover the packages 300 extensions used. One that calls a class in
+- **Extensions outside the sample.** The keep rules cover the packages 300 manga and 168 anime extensions used. One that calls a class in
   another package of those libraries fails with a missing class or method in release builds only.
 - **Failures in native code.** A source that throws is left out and says why. One that fails inside a library's native
-  code (the zstd decoder is the app's only such library) ends the app's process instead, and the Series tab loads its
+  code (the zstd decoder and QuickJS are the only such libraries) ends the app's process instead, and the Series tab loads its
   first source when it opens.
 - **A hand-modified backup.** A restored series', chapters' and cover's addresses go to their extension as stored, and an
   extension builds its requests from addresses as it likes and may talk to several hosts, so the app has no origin to
@@ -325,7 +326,8 @@ What the feature still lacks.
 Delete `extension-host/`, `app/src/main/java/com/theoriacodex/app/extensions/` and its use in `TheoriaApplication`, and
 `ExtensionSourceLiveTest`. Then remove the module's lines from
 `settings.gradle.kts`, `app/build.gradle.kts` (the `abiFilters` line too), the root `build.gradle.kts`, `scripts/check.sh`,
-`scripts/verify_device_apk.py`, `config/quality/hotspot-budgets.json` and its Detekt baseline, and the four library
-aliases in `gradle/libs.versions.toml`, and the permissions, service and activity it added to the manifest. The seam
+`scripts/verify_device_apk.py`, `scripts/detekt_changed.sh`, `config/quality/hotspot-budgets.json` and its Detekt
+baseline, the four library aliases and the `quickjs` version in `gradle/libs.versions.toml`, the cleartext rule for
+`127.0.0.1` and `localhost` in `app/src/main/res/xml/network_security_config.xml`, and the permissions, service and activity it added to the manifest. The seam
 in `:app` and `:media-kit` (`SeriesDependencies`, `AppHttpClients`' `extensionMedia`) does nothing without a host, but the Series tab then has nothing to show, so it goes too (`TopLevelDestination.Series`); `feature-series` and the
 series tables depend only on `SeriesSource`, not on this module.

@@ -1,10 +1,11 @@
-# Extensions are compiled against Mihon and call the app's classes by name once loaded, so the shrinker must leave
-# those names and members alone. It cannot see extension code, so nothing here is inferred: the list is the packages
-# that a sample of 300 extensions referenced (README, "Release builds"). Whole packages, because rules for exactly the
-# sampled members left out what 3 in 10 other extensions call, and rules per sampled class 1 in 15.
-# extension-symbols.txt holds what the sample referenced; scripts/check.sh fails when a release build stops keeping one.
+# Extensions are compiled against Mihon's or Aniyomi's API and call the app's classes by name once loaded, so the
+# shrinker must leave those names and members alone. It cannot see extension code, so nothing here is inferred: the
+# list is the packages that samples of 300 manga and 168 anime extensions referenced (README, "Release builds").
+# Whole packages, because rules for exactly the sampled members left out what 3 in 10 other extensions call, and rules
+# per sampled class 1 in 15. extension-symbols.txt holds what the samples referenced; scripts/check.sh fails when a
+# release build stops keeping one. QuickJS, the JavaScript engine, is the second native library here beside zstd.
 
-# Mihon's API, its service locator, and the settings classes extensions fill: this module's own code.
+# Mihon's and Aniyomi's API, the service locator, and the settings classes extensions fill: this module's own code.
 -keep class eu.kanade.tachiyomi.** { *; }
 -keep class uy.kohesive.injekt.** { *; }
 -keep class androidx.preference.** { *; }

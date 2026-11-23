@@ -49,57 +49,57 @@ abstract class AnimeHttpSource : AnimeCatalogueSource {
 
     override fun toString(): String = "$name (${lang.uppercase()})"
 
-    override suspend fun getPopularAnime(page: Int): AnimesPage = popularAnimeParse(fetch(popularAnimeRequest(page)))
+    override suspend fun getPopularAnime(page: Int): AnimesPage = fetch(popularAnimeRequest(page)).use { popularAnimeParse(it) }
 
     protected open fun popularAnimeRequest(page: Int): Request = unsupported()
 
     protected open fun popularAnimeParse(response: Response): AnimesPage = unsupported()
 
     override suspend fun getSearchAnime(page: Int, query: String, filters: AnimeFilterList): AnimesPage =
-        searchAnimeParse(fetch(searchAnimeRequest(page, query, filters)))
+        fetch(searchAnimeRequest(page, query, filters)).use { searchAnimeParse(it) }
 
     protected open fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request = unsupported()
 
     protected open fun searchAnimeParse(response: Response): AnimesPage = unsupported()
 
-    override suspend fun getLatestUpdates(page: Int): AnimesPage = latestUpdatesParse(fetch(latestUpdatesRequest(page)))
+    override suspend fun getLatestUpdates(page: Int): AnimesPage = fetch(latestUpdatesRequest(page)).use { latestUpdatesParse(it) }
 
     protected open fun latestUpdatesRequest(page: Int): Request = unsupported()
 
     protected open fun latestUpdatesParse(response: Response): AnimesPage = unsupported()
 
-    override suspend fun getAnimeDetails(anime: SAnime): SAnime = animeDetailsParse(fetch(animeDetailsRequest(anime))).apply { initialized = true }
+    override suspend fun getAnimeDetails(anime: SAnime): SAnime = fetch(animeDetailsRequest(anime)).use { animeDetailsParse(it) }.apply { initialized = true }
 
     open fun animeDetailsRequest(anime: SAnime): Request = GET(baseUrl + anime.url, headers)
 
     protected open fun animeDetailsParse(response: Response): SAnime = unsupported()
 
-    override suspend fun getEpisodeList(anime: SAnime): List<SEpisode> = episodeListParse(fetch(episodeListRequest(anime)))
+    override suspend fun getEpisodeList(anime: SAnime): List<SEpisode> = fetch(episodeListRequest(anime)).use { episodeListParse(it) }
 
     protected open fun episodeListRequest(anime: SAnime): Request = GET(baseUrl + anime.url, headers)
 
     protected open fun episodeListParse(response: Response): List<SEpisode> = unsupported()
 
-    override suspend fun getSeasonList(anime: SAnime): List<SAnime> = seasonListParse(fetch(seasonListRequest(anime)))
+    override suspend fun getSeasonList(anime: SAnime): List<SAnime> = fetch(seasonListRequest(anime)).use { seasonListParse(it) }
 
     protected open fun seasonListRequest(anime: SAnime): Request = GET(baseUrl + anime.url, headers)
 
     protected open fun seasonListParse(response: Response): List<SAnime> = unsupported()
 
-    override suspend fun getHosterList(episode: SEpisode): List<Hoster> = hosterListParse(fetch(hosterListRequest(episode)))
+    override suspend fun getHosterList(episode: SEpisode): List<Hoster> = fetch(hosterListRequest(episode)).use { hosterListParse(it) }
 
     protected open fun hosterListRequest(episode: SEpisode): Request = GET(baseUrl + episode.url, headers)
 
     protected open fun hosterListParse(response: Response): List<Hoster> = unsupported()
 
-    override suspend fun getVideoList(hoster: Hoster): List<Video> = videoListParse(fetch(videoListRequest(hoster)), hoster)
+    override suspend fun getVideoList(hoster: Hoster): List<Video> = fetch(videoListRequest(hoster)).use { videoListParse(it, hoster) }
 
     protected open fun videoListRequest(hoster: Hoster): Request = GET(hoster.hosterUrl, headers)
 
     protected open fun videoListParse(response: Response, hoster: Hoster): List<Video> = unsupported()
 
     @Deprecated("Use the hoster version instead")
-    override suspend fun getVideoList(episode: SEpisode): List<Video> = videoListParse(fetch(videoListRequest(episode)))
+    override suspend fun getVideoList(episode: SEpisode): List<Video> = fetch(videoListRequest(episode)).use { videoListParse(it) }
 
     protected open fun videoListRequest(episode: SEpisode): Request = GET(baseUrl + episode.url, headers)
 
@@ -115,7 +115,7 @@ abstract class AnimeHttpSource : AnimeCatalogueSource {
     open fun List<Video>.sortVideos(): List<Video> = this
 
     /** The stream address of a video found only by the page it is on ([Video.url]), as interface-14 sources name some. */
-    open suspend fun getVideoUrl(video: Video): String = videoUrlParse(fetch(videoUrlRequest(video)))
+    open suspend fun getVideoUrl(video: Video): String = fetch(videoUrlRequest(video)).use { videoUrlParse(it) }
 
     protected open fun videoUrlRequest(video: Video): Request = GET(video.url, headers)
 

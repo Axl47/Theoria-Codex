@@ -125,14 +125,14 @@ internal class FilePreferences(
         private fun put(key: String, value: Any?) = apply { synchronized(lock) { changes[key] = value } }
     }
 
-    /** Calls each listener for each key; one that throws, or fails to link against the host, is reported and the rest go on. */
+    /** Calls each listener for each key; one that fails (see [endsTheProcess]) is reported and the rest go on. */
+    @Suppress("TooGenericExceptionCaught")
     private fun announce(notified: List<SharedPreferences.OnSharedPreferenceChangeListener>, changed: List<String>) {
         notified.forEach { listener ->
             try {
                 changed.forEach { listener.onSharedPreferenceChanged(this, it) }
-            } catch (failure: Exception) {
-                report(failure)
-            } catch (failure: LinkageError) {
+            } catch (failure: Throwable) {
+                if (failure.endsTheProcess()) throw failure
                 report(failure)
             }
         }

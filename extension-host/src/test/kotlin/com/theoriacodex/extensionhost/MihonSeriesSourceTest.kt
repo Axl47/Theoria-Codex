@@ -18,6 +18,8 @@ import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.model.SMangaUpdate
 import java.io.IOException
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -28,7 +30,7 @@ import org.junit.Test
 
 class MihonSeriesSourceTest {
     private val source = FakeSource()
-    private val series = MihonSeriesSource(source, ExtensionImages())
+    private val series = MihonSeriesSource(source, HostServices(ExtensionImages()))
 
     @Test
     fun `the source is named by its id, name and language`() {
@@ -84,12 +86,12 @@ class MihonSeriesSourceTest {
     }
 
     @Test
-    fun `each of Mihon's status numbers has its status, and any other is unknown`() {
+    fun `each status number Mihon and Aniyomi use has its status, and any other is unknown`() {
         val expected = listOf(
             SeriesStatus.UNKNOWN, SeriesStatus.ONGOING, SeriesStatus.COMPLETED, SeriesStatus.LICENSED,
-            SeriesStatus.PUBLISHING_FINISHED, SeriesStatus.CANCELLED, SeriesStatus.ON_HIATUS, SeriesStatus.UNKNOWN,
+            SeriesStatus.PUBLISHING_FINISHED, SeriesStatus.CANCELLED, SeriesStatus.ON_HIATUS, SeriesStatus.UPCOMING, SeriesStatus.UNKNOWN,
         )
-        assertEquals(expected, (0..7).map(::seriesStatus))
+        assertEquals(expected, (0..8).map(::seriesStatus))
     }
 
     @Test
@@ -162,10 +164,16 @@ class MihonSeriesSourceTest {
     }
 
     @Test
-    fun `cancellation passes through untouched`() = runTest {
-        source.failure = CancellationException("cancelled")
+    fun `an extension's own cancellation is its failure, and the caller's passes through`() = runTest {
+        source.failure = CancellationException("Timed out inside the extension")
+        assertEquals(SourceFailureReason.PARSE, assertFailsWith<SourceAdapterException> { series.popular(1) }.reason)
 
-        assertFailsWith<CancellationException> { series.popular(1) }
+        var thrown: Throwable? = null
+        launch {
+            cancel()
+            thrown = runCatching { series.popular(1) }.exceptionOrNull()
+        }.join()
+        assertTrue("$thrown", thrown is CancellationException)
     }
 
     private suspend fun failureOf(error: Throwable): SourceFailureReason {
