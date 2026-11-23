@@ -61,14 +61,26 @@ class ViewerVideoRecoveryTest {
     }
 
     @Test
-    fun `fresh links are asked for once a load, and given back by a rendered frame`() {
+    fun `links that expire again later in a long episode recover each time`() {
         val attempts = ViewerStreamAttempts()
         val first = recovery(attempts).apply { onPlayed() }
-        assertEquals(AskForFreshLinks, first.decide(PlayerError(badStatus)))
-        // The recovered links fail before a frame: the ask is spent, so the next stream plays.
-        assertEquals(FallBack("B"), recovery(attempts).decide(PlayerError(badStatus)))
-        val recovered = recovery(attempts, playing = "B").apply { onPlayed() }
-        assertEquals(AskForFreshLinks, recovered.decide(PlayerError(errorPage)))
+        assertEquals(AskForFreshLinks, first.decide(PlayerError(badStatus, positionMs = 600_000)))
+        // The fresh links play on well past where the old ones died, then expire in their turn.
+        val recovered = recovery(attempts).apply { onPlayed(); onProgress(600_000 + VIEWER_RECOVERED_PROGRESS_MS) }
+        assertEquals(AskForFreshLinks, recovered.decide(PlayerError(errorPage, positionMs = 1_200_000)))
+    }
+
+    @Test
+    fun `a stream that dies at one point asks once, then falls back, then fails with the picker`() {
+        val attempts = ViewerStreamAttempts()
+        val labels = listOf("A", "B")
+        val first = recovery(attempts, labels).apply { onPlayed() }
+        assertEquals(AskForFreshLinks, first.decide(PlayerError(badStatus, positionMs = 600_000)))
+        // The fresh links resume just before the bad point and render a frame there: that is not progress.
+        val recovered = recovery(attempts, labels).apply { onPlayed(); onProgress(598_000); onProgress(601_000) }
+        assertEquals(FallBack("B"), recovered.decide(PlayerError(badStatus, positionMs = 601_000)))
+        val fallback = recovery(attempts, labels, playing = "B").apply { onPlayed(); onProgress(601_000) }
+        assertEquals(Fail, fallback.decide(PlayerError(badStatus, positionMs = 601_000)))
     }
 
     @Test

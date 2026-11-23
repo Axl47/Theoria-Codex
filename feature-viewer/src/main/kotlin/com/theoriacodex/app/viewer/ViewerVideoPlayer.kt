@@ -329,6 +329,7 @@ private fun ViewerVideoState.handlePlayingChanged(isPlaying: Boolean, events: ()
 @Composable
 private fun ViewerVideoStreamRecovery(state: ViewerVideoState, recovery: ViewerVideoRecovery, episode: ViewerEpisodeStreams?, events: ViewerRendererEvents) {
     LaunchedEffect(state.hasRenderedFirstFrame) { if (state.hasRenderedFirstFrame) recovery.onPlayed() }
+    LaunchedEffect(state) { snapshotFlow { state.position }.collect(recovery::onProgress) }
     val latestEpisode by rememberUpdatedState(episode)
     val latestEvents by rememberUpdatedState(events)
     LaunchedEffect(state, state.pending) {

@@ -97,8 +97,9 @@ internal class ViewerEpisodeStreams(
  * - A decoder failure retries in place, once.
  * - An episode stream that had played in this load, or whose links are old (looked up more than
  *   [VIEWER_LINKS_OLD_AFTER_MS] before the load began), asks for fresh links once on an I/O or parsing error: an
- *   expired link answers with an error status, or with an error page that reads as a malformed manifest. A rendered
- *   frame gives the ask back ([onPlayed]), and so does a lookup cancelled before it ended ([onAskCancelled]).
+ *   expired link answers with an error status, or with an error page that reads as a malformed manifest. The ask comes
+ *   back once playback gets [VIEWER_RECOVERED_PROGRESS_MS] past the failure that spent it ([onProgress]), or when its
+ *   lookup is cancelled ([onAskCancelled]).
  * - Otherwise (a stream that never played on fresh links: a dead server), or when fresh links brought nothing new, the
  *   episode falls back to its next stream not tried yet, at most [VIEWER_MAX_STREAM_FALLBACKS] times a load, unless
  *   the user picked the stream playing by hand; then it fails, with the picker.
@@ -139,11 +140,16 @@ internal class ViewerVideoRecovery(
         }
     }
 
-    /** A frame of this load rendered, which gives the ask back. */
+    /** A frame of this load rendered. */
     fun onPlayed() {
+        attempts?.played = true
+    }
+
+    /** Playback is at [positionMs]: far enough past the failure that spent the ask, the ask comes back. */
+    fun onProgress(positionMs: Long) {
         val attempts = attempts ?: return
-        attempts.played = true
-        attempts.askSpentAtMs = null
+        val spentAt = attempts.askSpentAtMs ?: return
+        if (positionMs >= spentAt + VIEWER_RECOVERED_PROGRESS_MS) attempts.askSpentAtMs = null
     }
 
     /** The lookup ended without an outcome (the page left, or another stream was picked): the ask was not used. */
@@ -190,6 +196,14 @@ internal const val VIEWER_VIDEO_FAILED = "Could not play video"
 
 /** How long after its lookup an episode's links count as old enough to have expired. */
 internal const val VIEWER_LINKS_OLD_AFTER_MS = 120_000L
+
+/**
+ * How far past the failure that spent it playback must get before the ask for fresh links comes back. A rendered frame
+ * is not enough: every lookup returns newly signed links, so a stream that dies at a fixed point (a missing segment, a
+ * host that cuts the file at an offset) would resume just before it, render, fail and ask again forever. Thirty
+ * seconds is past any one segment, and far shorter than links that expire every few minutes.
+ */
+internal const val VIEWER_RECOVERED_PROGRESS_MS = 30_000L
 
 /** How many other streams one episode load falls back to before it shows the failure. */
 internal const val VIEWER_MAX_STREAM_FALLBACKS = 3
