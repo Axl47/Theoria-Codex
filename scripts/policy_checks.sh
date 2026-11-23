@@ -19,10 +19,10 @@ project_dependencies() {
 }
 
 # Module layering that Gradle cannot see: a feature never depends on another feature, a kit never on a
-# feature, a kit only on kits to its left in ui-kit, media-kit, feed-kit, and nothing below the kits
+# feature, a kit only on kits to its left in ui-kit, media-kit, vision-kit, feed-kit, and nothing below the kits
 # (app-logic, core-*) on a kit or a feature.
 module_layering() {
-  local kits=(ui-kit media-kit feed-kit) build module name index failed=0
+  local kits=(ui-kit media-kit vision-kit feed-kit) build module name index failed=0
   for build in feature-*/build.gradle.kts *-kit/build.gradle.kts app-logic/build.gradle.kts core-*/build.gradle.kts; do
     [[ -f "$build" ]] || continue
     module="${build%%/*}"

@@ -19,6 +19,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunStatus
+import com.theoriacodex.domain.vision.PictureTags
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -47,6 +48,8 @@ class ForYouDeckWiring(
     /** The posts known to hold the same file or picture as a post, itself included ([com.theoriacodex.app.post.FileMirrorIndex.copiesOf]). */
     val copiesOf: (Post) -> Set<PostId> = { setOf(it.id) },
     val clock: () -> Long = System::currentTimeMillis,
+    /** The opt-in picture tagger: while ready, the Mix deals a post only once its picture's tags are known. */
+    val pictures: PictureTags = PictureTags.None,
 )
 
 /** What the For You route knows that its deck is built from. The route calls the owner again whenever it changes. */

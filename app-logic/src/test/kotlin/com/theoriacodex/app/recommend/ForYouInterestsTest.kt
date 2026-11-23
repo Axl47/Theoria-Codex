@@ -1,11 +1,15 @@
 package com.theoriacodex.app.recommend
 
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.recommendation.CrossSourceTraining
 import com.theoriacodex.domain.recommendation.LikedTagDocument
 import com.theoriacodex.domain.recommendation.PixivTagDictionary
 import com.theoriacodex.domain.tags.normalizeMatchToken
+import com.theoriacodex.domain.vision.PredictedTag
+import com.theoriacodex.domain.vision.PredictedTagIndex
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.random.Random
@@ -72,6 +76,76 @@ class ForYouInterestsTest {
 }
 
 /** [source]'s history: 100 watched posts and 30 kept, carrying [kept] and [watched] of each tag. */
+class ForYouPictureInterestsTest {
+    private val source = SourceKey.GELBOORU
+
+    @Test fun `a tag predicted on many kept pictures leads a lane, compared with what the profile watches`() {
+        val affinity = history(source, mapOf("tree" to 3), watched = mapOf("tree" to 30L, "cat ears" to 2L))
+            .copy(pictures = PictureEvidence(mapOf("cat ears" to 12.0, "solo" to 25.0), mapOf("cat ears" to 12, "solo" to 25), kept = 30, baseRates = mapOf("solo" to 0.6)))
+        val interests = ForYouInterests.generate(
+            source, listOf(listOf("tree")), affinity, pictureCandidates = mapOf("cat_ears" to "cat ears", "solo" to "solo"),
+        )
+        // Solo is on most Danbooru posts, so it narrows nothing however often it was predicted.
+        assertEquals(listOf(listOf("cat_ears")), interests.map { it.tags })
+    }
+
+    @Test fun `before the source has watched enough, a predicted tag must beat its Danbooru share four times`() {
+        val evidence = PictureEvidence(mapOf("cat ears" to 6.0), mapOf("cat ears" to 6), kept = 30, baseRates = mapOf("cat ears" to 0.06))
+        val cold = TagAffinityInputs(pictures = evidence)
+        // A kept share of about 0.21 is 3.5 times the base rate: not enough without watched posts to compare with.
+        assertFalse(cold.pictureAffinity(source, "cat ears", "cat_ears").proven)
+        assertTrue(cold.copy(pictures = evidence.copy(baseRates = mapOf("cat ears" to 0.04))).pictureAffinity(source, "cat ears", "cat_ears").proven)
+    }
+
+    @Test fun `too few analysed kept posts, or text on the image, prove nothing`() {
+        val few = TagAffinityInputs(pictures = PictureEvidence(mapOf("cat ears" to 9.0), mapOf("cat ears" to 9), kept = 10, baseRates = mapOf("cat ears" to 0.01)))
+        assertFalse(few.pictureAffinity(source, "cat ears", "cat_ears").proven)
+        val text = TagAffinityInputs(pictures = PictureEvidence(mapOf("signature" to 20.0), mapOf("signature" to 20), kept = 30, baseRates = mapOf("signature" to 0.01)))
+        assertFalse(text.pictureAffinity(source, "signature", "signature").proven)
+    }
+
+    @Test fun `a tag about the file proves nothing by its picture, though a profile that chose it still gets it`() {
+        val evidence = PictureEvidence(
+            mapOf("3d" to 12.0, "cat ears" to 12.0), mapOf("3d" to 12, "cat ears" to 12), kept = 30, baseRates = mapOf("3d" to 0.01, "cat ears" to 0.01),
+        )
+        // The same evidence proves a tag about what the picture shows.
+        assertTrue(TagAffinityInputs(pictures = evidence).pictureAffinity(source, "cat ears", "cat_ears").proven)
+        assertFalse(TagAffinityInputs(pictures = evidence).pictureAffinity(source, "3d", "3d").proven)
+        val chosen = TagAffinityInputs(interest = mapOf("3d" to EXPLICIT_WEIGHT), explicit = setOf("3d"), pictures = evidence)
+        assertTrue(chosen.affinity(source, "3d").proven)
+    }
+
+    @Test fun `picture evidence counts kept posts' confident predictions, weighted by score`() {
+        val kept = PostId(SourceKey.NHENTAI, "kept")
+        val index = PredictedTagIndex(
+            byPost = mapOf(
+                kept to listOf(PredictedTag("cat_ears", 0.8f, PredictedTag.Kind.GENERAL), PredictedTag("blush", 0.4f, PredictedTag.Kind.GENERAL)),
+                PostId(SourceKey.DANBOORU, "candidate") to listOf(PredictedTag("cat_ears", 0.9f, PredictedTag.Kind.GENERAL)),
+            ),
+            baseRates = mapOf("cat ears" to 0.05),
+        )
+        val evidence = PictureEvidence.of(setOf(kept, PostId(SourceKey.DANBOORU, "unanalysed")), index)
+        assertEquals(1, evidence.kept)
+        assertEquals(mapOf("cat ears" to 0.8f.toDouble()), evidence.keptByTag)
+        assertEquals(mapOf("cat ears" to 1), evidence.postsByTag)
+        assertEquals(mapOf("cat ears" to 0.05), evidence.baseRates)
+    }
+
+    @Test fun `text on the image and tags on half of Danbooru are never evidence`() {
+        val post = PostId(SourceKey.PIXIV, "post")
+        val tags = listOf("cat_ears", "signature", "solo").map { PredictedTag(it, 0.9f, PredictedTag.Kind.GENERAL) }
+        val index = PredictedTagIndex(mapOf(post to tags), baseRates = mapOf("solo" to 0.6))
+        assertEquals(setOf("cat ears"), index.evidence(post).keys)
+    }
+
+    @Test fun `a predicted tag on nearly every kept post is universal, however rare on Danbooru`() {
+        val pictures = PictureEvidence(mapOf("looking at viewer" to 15.0), mapOf("looking at viewer" to 27), kept = 30, baseRates = mapOf("looking at viewer" to 0.3))
+        val affinity = TagAffinityInputs(pictures = pictures).pictureAffinity(source, "looking at viewer", "looking_at_viewer")
+        assertTrue(affinity.universal)
+        assertFalse(affinity.proven)
+    }
+}
+
 private fun history(source: SourceKey, kept: Map<String, Int>, watched: Map<String, Long>) = TagAffinityInputs(
     interest = kept.mapValues { it.value.toDouble() },
     watchedByTag = mapOf(source to watched), watchedBySource = mapOf(source to 100L),

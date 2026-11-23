@@ -7,6 +7,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.vision.PictureTags
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
@@ -43,7 +44,9 @@ sealed interface TriageDecisionEvent {
  * The deck asks [feed] for a page once [pageAhead] or fewer cards remain. [onDecision] hears every
  * [TriageDecisionEvent], on the thread that caused it (a failed write's on [writeScope]'s), outside state updates.
  * [ownerHidden] is what the deck's owner hides besides the deck's own swipes: tags by source, as
- * [normalizeMatchToken] spells them. Cards carrying one are passed over for as long as it is there.
+ * [normalizeMatchToken] spells them. Cards carrying one are passed over for as long as it is there. [pictures] is the
+ * picture tagger: a sparsely tagged card whose predicted tags carry a hidden tag is passed over too (see [hiddenBy]), and
+ * the cards are checked again when the Library's stored predictions change.
  */
 class TriageDeck(
     scope: CoroutineScope,
@@ -57,6 +60,7 @@ class TriageDeck(
     private val pageAhead: Int = 5,
     private val onDecision: (TriageDecisionEvent) -> Unit = {},
     ownerHidden: Flow<Map<SourceKey, Set<String>>> = emptyFlow(),
+    pictures: PictureTags = PictureTags.None,
 ) {
     private val mutableState = MutableStateFlow(TriageDeckState())
     val state: StateFlow<TriageDeckState> = mutableState.asStateFlow()
@@ -109,6 +113,15 @@ class TriageDeck(
             ownerHidden.collect { hidden ->
                 mutableState.update { deck ->
                     val told = deck.copy(ownerHiddenTags = hidden)
+                    told.copy(index = told.shownFrom(told.index))
+                }
+                pageIfNearEnd()
+            }
+        }
+        scope.launch {
+            pictures.library.collect {
+                mutableState.update { deck ->
+                    val told = deck.copy(pictures = pictures)
                     told.copy(index = told.shownFrom(told.index))
                 }
                 pageIfNearEnd()

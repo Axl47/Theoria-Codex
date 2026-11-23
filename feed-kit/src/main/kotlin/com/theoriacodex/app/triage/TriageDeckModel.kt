@@ -8,6 +8,7 @@ import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.vision.PictureTags
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -127,7 +128,7 @@ data class TriageNotice(val decision: TriageDecision, val failed: Boolean)
 
 /**
  * The deck's position over the posts it has been given, its last decision, and the tags hidden in it. Cards that
- * carry a tag of [passedOverTags] or [ownerHiddenTags] for their source are passed over, so [current] and [next] are
+ * carry a tag of [passedOverTags] or [ownerHiddenTags] (see [hiddenBy], which also reads [pictures]) are passed over, so [current] and [next] are
  * never one of them. The card Undo or a failed write brought back ([restored]) is the exception: it stays until it is
  * decided again, even while the hide it reverses is still stored.
  */
@@ -145,6 +146,8 @@ data class TriageDeckState(
     val passedOverTags: Map<SourceKey, Set<String>> = emptyMap(),
     /** Tags the deck's owner hides, by source and spelled the same way; empty for a deck whose owner hides none. */
     val ownerHiddenTags: Map<SourceKey, Set<String>> = emptyMap(),
+    /** The picture tagger, whose predictions catch a sparsely tagged card a hidden tag names. */
+    val pictures: PictureTags = PictureTags.None,
     val restored: PostId? = null,
     /** Posts a left swipe took out of the deck's Codex, until Undo or a failed write puts them back. */
     val removed: Set<PostId> = emptySet(),
@@ -176,8 +179,7 @@ data class TriageDeckState(
 
     private fun passesOver(post: Post): Boolean {
         if (post.id == restored) return false
-        val source = post.id.source
-        return post.carriesAnyTag(passedOverTags[source].orEmpty()) || post.carriesAnyTag(ownerHiddenTags[source].orEmpty())
+        return post.hiddenBy(passedOverTags, pictures) || post.hiddenBy(ownerHiddenTags, pictures)
     }
 }
 

@@ -51,6 +51,7 @@ internal val SETTING_BINDINGS: Map<String, SettingBinding> = buildMap {
     put(SettingDestinations.Sites.id, SettingBinding.Settings(SettingsPage.SITES))
     put(SettingDestinations.Downloads.id, SettingBinding.Settings(SettingsPage.HOME, SettingsSheet.DOWNLOADS))
     put(SettingDestinations.Controls.id, SettingBinding.Settings(SettingsPage.HOME, SettingsSheet.CONTROLS))
+    put(SettingDestinations.PictureTags.id, SettingBinding.Settings(SettingsPage.PICTURE_TAGS))
     put(SettingDestinations.Storage.id, SettingBinding.Settings(SettingsPage.STORAGE))
     put(SettingDestinations.Backup.id, SettingBinding.Settings(SettingsPage.BACKUP))
     put(SettingDestinations.WhatsNew.id, SettingBinding.WhatsNew)

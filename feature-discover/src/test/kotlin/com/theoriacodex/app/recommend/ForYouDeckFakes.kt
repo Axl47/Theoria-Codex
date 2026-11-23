@@ -26,6 +26,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.domain.orchestration.UnifiedSearchResult
+import com.theoriacodex.domain.vision.PictureLook
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CompletableDeferred
@@ -34,14 +35,26 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
+import com.theoriacodex.domain.vision.PictureTags
+import com.theoriacodex.domain.vision.PredictedTag
+import com.theoriacodex.domain.vision.PredictedTagIndex
 
 internal val DECK_SOURCE = SourceKey.GELBOORU
 
-/** The post lane [tag] gives at [index] of [page]: `sea-0-3`, tagged with the lane's tag and drawn by "artist". */
+/** A lane whose posts are tagged richly in the fake tagger's [VOCABULARY]. */
+internal const val RICH = "rich"
+
+/** The words [FakePictureTags] knows, as many as a richly tagged post needs. */
+internal val VOCABULARY = List(10) { "word $it" }
+
+/**
+ * The post lane [tag] gives at [index] of [page]: `sea-0-3`, tagged with the lane's tag and drawn by "artist". The
+ * [RICH] lane's posts also carry every [VOCABULARY] tag, so a picture check leaves them to their own tags.
+ */
 internal fun lanePost(tag: String, page: Int, index: Int): Post = testPost(
     source = DECK_SOURCE,
     sourcePostId = "$tag-$page-$index",
-    canonicalTags = listOf(tag),
+    canonicalTags = if (tag == RICH) listOf(tag) + VOCABULARY else listOf(tag),
     creatorProfile = CreatorProfile(DECK_SOURCE, "artist", uploadsQuery = "user:artist"),
 )
 
@@ -55,10 +68,10 @@ internal fun hiding(vararg tags: String): AppSettings = AppSettings().let { sett
 }
 
 /**
- * One single-tag lane per entry of [tags] the profile does not hide, each [pages] pages of [PAGE] posts, answered at
+ * One single-tag lane per entry of [tags] the profile does not hide, each [pages] pages of [pageSize] posts, answered at
  * once unless the lane is on [hold].
  */
-internal class FakeForYouEngine(var tags: List<String>, private val pages: Int = 4) : ForYouRouteEngine {
+internal class FakeForYouEngine(var tags: List<String>, private val pages: Int = 4, private val pageSize: Int = PAGE) : ForYouRouteEngine {
     var sources = listOf(DECK_SOURCE)
     val failing = mutableSetOf<String>()
     var failLanes = false
@@ -100,7 +113,7 @@ internal class FakeForYouEngine(var tags: List<String>, private val pages: Int =
             return UnifiedSearchResult(emptyList(), emptyMap(), listOf(SourceRunStatus(DECK_SOURCE, SourceRunState.FAILED, errorMessage = "down")))
         }
         return UnifiedSearchResult(
-            items = List(PAGE) { lanePost(tag, page, it) },
+            items = List(pageSize) { lanePost(tag, page, it) },
             nextPageTokens = mapOf(DECK_SOURCE to (page + 1).takeIf { it < pages }?.toString()),
             statuses = listOf(SourceRunStatus(DECK_SOURCE, SourceRunState.SUCCESS)),
         )
@@ -192,10 +205,43 @@ internal fun deckWiring(
     quickSave: FakeDeckQuickSave = FakeDeckQuickSave(),
     verdicts: ForYouVerdictRepository = InMemoryForYouVerdictRepository(),
     copiesOf: (Post) -> Set<PostId> = { setOf(it.id) },
+    pictures: PictureTags = PictureTags.None,
 ) = ForYouDeckWiring(
     actions, quickSave, trails::open, NoRelatedPosts, scope, fetchContext = EmptyCoroutineContext, verdicts = verdicts,
-    copiesOf = copiesOf, clock = AtomicLong()::incrementAndGet,
+    copiesOf = copiesOf, clock = AtomicLong()::incrementAndGet, pictures = pictures,
 )
+
+/**
+ * A picture tagger that predicts [predicted] for a post (nothing for the rest) and answers at once, or once [release]d
+ * while [held]. Posts in [unseen] fail to load and, while [blind], the model will not load. [asked] lists every post it
+ * tagged, in order. Its vocabulary is [VOCABULARY].
+ */
+internal class FakePictureTags(ready: Boolean = true, private val predicted: Map<String, List<PredictedTag>> = emptyMap()) : PictureTags {
+    override val ready = MutableStateFlow(ready)
+    override val library = MutableStateFlow(PredictedTagIndex(baseRates = VOCABULARY.associateWith { 0.01 }))
+    private val seen = HashMap<PostId, List<PredictedTag>>()
+    val asked = mutableListOf<String>()
+    var held: CompletableDeferred<Unit>? = null
+    var unseen: Set<String> = emptySet()
+    var blind = false
+
+    fun release() = held?.complete(Unit)
+
+    override suspend fun look(post: Post): PictureLook {
+        if (!ready.value || blind) return PictureLook.Blind
+        held?.await()
+        if (post.id.sourcePostId in unseen) return PictureLook.Unseen
+        asked += post.id.sourcePostId
+        val tags = predicted[post.id.sourcePostId].orEmpty()
+        seen[post.id] = tags
+        return PictureLook.Seen(tags)
+    }
+
+    override fun known(id: PostId): List<PredictedTag>? = seen[id]
+}
+
+/** A confident general prediction of [tag]. */
+internal fun seen(tag: String) = listOf(PredictedTag(tag, 0.9f, PredictedTag.Kind.GENERAL))
 
 internal fun deckEnvironment(
     settings: AppSettings = AppSettings(),

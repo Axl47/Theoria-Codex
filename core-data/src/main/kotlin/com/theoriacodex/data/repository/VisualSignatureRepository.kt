@@ -2,22 +2,57 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.vision.PredictedTag
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Perceptual hashes of stored posts' pictures (see [Post.pictureHash]), so a copy of a liked or saved picture on another
- * site is recognised. Rows exist only while their post is stored; they are derived data and never backed up.
+ * What the app derived from stored posts' pictures: a perceptual hash (see [Post.pictureHash]), so a copy of a liked or
+ * saved picture on another site is recognised, and what the on-device tagger saw ([PictureVision]). Rows exist only
+ * while their post is stored; they are derived data and never backed up.
  */
 interface VisualSignatureRepository {
     /** Every stored post's picture hash, again whenever one is added. */
     fun observePictureHashes(): Flow<Map<PostId, Long>>
 
     /**
-     * Records [hash] for [postId], or that its picture cannot be hashed (null) so it is not tried again. Ignored when
-     * the post is not stored.
+     * Records [hash] for [postId], or that its picture cannot be hashed (null) so it is not tried again. Keeps what the
+     * tagger stored. Ignored when the post is not stored.
      */
     suspend fun put(postId: PostId, hash: Long?)
 
-    /** Up to [limit] liked or saved posts that have no record yet, most recently stored first. */
+    /** Up to [limit] liked or saved posts whose picture has not been hashed or tried yet, most recently stored first. */
     suspend fun libraryPostsWithoutSignature(limit: Int): List<Post>
+
+    /**
+     * Stores [entries] in one transaction; entries for posts that are not stored are skipped. A post with no row yet
+     * still has its picture hash to try ([libraryPostsWithoutSignature]); an existing hash is kept.
+     */
+    suspend fun putVision(entries: List<PictureVision>)
+
+    /** Up to [limit] liked or saved posts that [modelId] has not analysed (including those another model did), most recently stored first. */
+    suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post>
+
+    /** The predicted tags of every stored post [modelId] analysed with tags, again whenever one changes. */
+    fun observePredictedTags(modelId: String): Flow<Map<PostId, List<PredictedTag>>>
+
+    /** How far [modelId] has come through the liked or saved posts, again whenever it changes. */
+    fun observeVisionProgress(modelId: String): Flow<VisionProgress>
+
+    /** Forgets everything the tagger stored, for any model (its files were deleted). Picture hashes stay. */
+    suspend fun clearVision()
 }
+
+/**
+ * What one tagger model saw in a stored post's picture. A null [embedding] and null [tags] mean it could not be
+ * analysed, so it is not tried again. The embedding is opaque bytes here; nothing reads it yet. It is stored now so
+ * the swipe-trained taste scorer and "Similar in your library" can use the Library without tagging it again.
+ */
+data class PictureVision(val postId: PostId, val modelId: String, val embedding: ByteArray?, val tags: List<PredictedTag>?) {
+    override fun equals(other: Any?): Boolean = other is PictureVision && postId == other.postId && modelId == other.modelId &&
+        tags == other.tags && (embedding contentEquals other.embedding)
+
+    override fun hashCode(): Int = 31 * (31 * (31 * postId.hashCode() + modelId.hashCode()) + (embedding?.contentHashCode() ?: 0)) + (tags?.hashCode() ?: 0)
+}
+
+/** [analysed] of the [total] liked or saved posts have been through the model. */
+data class VisionProgress(val analysed: Int, val total: Int)

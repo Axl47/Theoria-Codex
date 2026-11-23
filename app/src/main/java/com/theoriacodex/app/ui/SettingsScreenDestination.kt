@@ -10,6 +10,7 @@ import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsPage
 import com.theoriacodex.app.settings.SettingsSheet
 import com.theoriacodex.app.settings.StatsActions
+import com.theoriacodex.app.settings.rememberPictureTagsEntry
 import com.theoriacodex.app.settings.rememberSettingsBackupEntry
 import com.theoriacodex.app.settings.sites.rememberCustomSitesEntry
 import com.theoriacodex.app.ui.routes.SettingsDestinationStateBoundary
@@ -29,6 +30,7 @@ internal fun SettingsScreenDestination(shell: TheoriaShell) {
         owner, libraryStorageSummary(shell.transfers),
         sites = rememberCustomSitesEntry(shell.container),
         backup = rememberSettingsBackupEntry(shell.transfers),
+        pictures = shell.container.pictures?.let { rememberPictureTagsEntry(it, shell.container.applicationScope) },
         statsActions = remember(shell) {
             StatsActions(shell::openStatisticsPost, shell::shareStats, shell::readStatsFile, shell::previewStatisticsPost, shell::downloadStats)
         },
