@@ -55,6 +55,7 @@
 
 ### Changed
 
+- In the reader's chapter strip, downloaded chapters and chapters the reader has loaded show their first page instead of the series cover, so chapters are easier to tell apart.
 - When a series chapter's pages fail to load, the Diagnostics failure log records why, including whether the site refused the request outright.
 - The Diagnostics failure log names the extension source behind a failed image, and records when an extension image was sent without its source's own connection.
 - A tag trail now narrows the search you were in, adding the tag to it, instead of searching that tag alone.
