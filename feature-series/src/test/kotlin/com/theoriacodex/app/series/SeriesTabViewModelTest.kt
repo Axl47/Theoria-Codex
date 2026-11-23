@@ -33,6 +33,7 @@ import androidx.lifecycle.SavedStateHandle
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -381,6 +382,35 @@ class SeriesTabViewModelTest {
         assertEquals(listOf(anime.key), content.sources?.map { it.key })
         assertEquals("The browsed manga source gives way", anime.key, content.browse?.key)
         assertEquals(listOf(anime.key), content.search?.map { it.key })
+        collecting.cancel()
+    }
+
+    @Test
+    fun aSourceOfTheNarrowedKindThatComesOnIsBrowsed() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val manga = Answering("custom_mihon_7")
+        val anime = Answering("custom_aniyomi_7")
+        // A followed anime whose extension is off: both kinds exist, with only a manga source to browse.
+        val followed = MutableStateFlow(
+            listOf(
+                FollowedSeries(Series(SeriesId(manga.key, "/m"), "M"), unreadCount = 0),
+                FollowedSeries(Series(SeriesId(anime.key, "/a"), "A"), unreadCount = 0),
+            ),
+        )
+        var offered = listOf<SeriesSource>(manga)
+        val changed = MutableStateFlow(0)
+        val viewModel = SeriesTabViewModel(Following(followed), { offered }, changed) {}
+        val collecting = launch { viewModel.content.collect {} }
+        advanceUntilIdle()
+        viewModel.chooseKind(SeriesKind.ANIME)
+        advanceUntilIdle()
+        assertNull("No anime source is on yet", viewModel.content.value.browse)
+
+        offered = listOf(manga, anime)
+        changed.value = 1
+        advanceUntilIdle()
+
+        assertEquals(anime.key, viewModel.content.value.browse?.key)
         collecting.cancel()
     }
 

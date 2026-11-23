@@ -2,6 +2,9 @@ package com.theoriacodex.extensionhost
 
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
+import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesEntry
+import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesStatus
 import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.HostUnavailableException
@@ -100,6 +103,33 @@ internal fun <T> recentlyListed(): MutableMap<String, T> = Collections.synchroni
 )
 
 private const val MAX_LISTED = 2_048
+
+/**
+ * A series as an extension of either interface describes it, as the app's: blank texts are none, and the genres are
+ * one comma-separated text.
+ */
+internal fun extensionSeries(id: SeriesId, title: String, cover: String?, author: String?, genres: String?, language: String, description: String?, status: Int) = Series(
+    id = id,
+    title = title,
+    coverUrl = cover?.takeIf(String::isNotBlank),
+    author = author?.takeIf(String::isNotBlank),
+    genres = genres.orEmpty().split(',').map(String::trim).filter(String::isNotEmpty),
+    language = language,
+    description = description?.trim()?.takeIf(String::isNotEmpty),
+    status = seriesStatus(status),
+)
+
+/**
+ * A chapter or episode of [seriesTitle] as the app's entry. Extensions may leave the [number] at -1 for the app to
+ * read from the name, as Mihon and Aniyomi do; a blank group and an upload time of 0 are none.
+ */
+internal fun extensionEntry(seriesTitle: String, address: String, name: String, number: Float, group: String?, uploadedAtEpochMs: Long) = SeriesEntry(
+    address = address,
+    name = name,
+    number = number.takeIf { it >= 0f } ?: ChapterRecognition.parseChapterNumber(seriesTitle, name),
+    translatorGroup = group?.takeIf(String::isNotBlank),
+    uploadedAtEpochMs = uploadedAtEpochMs.takeIf { it > 0L },
+)
 
 /** A status number as the app's status. Aniyomi numbers its statuses as Mihon does and adds one; any other is unknown. */
 internal fun seriesStatus(status: Int): SeriesStatus = when (status) {

@@ -38,8 +38,9 @@ data class VideoPlaybackRequest(
  * player and prefetcher get a stream from, so both name the same location, headers and cache identity.
  *
  * Media with [ImageRef.streams] (a series episode) plays the stream labelled [streamLabel], else the first, which is
- * its source's preferred one, outside the shared cache. It sends that stream's headers when it has any, else
- * [source]'s. Any other media plays its saved file, or the rendition [withVideoQuality] picks for [quality], [metered]
+ * its source's preferred one, outside the shared cache, with exactly that stream's headers: the extension host
+ * already gave a stream without headers of its own its source's, and [source]'s here would be a custom site's
+ * placeholders. Any other media plays its saved file, or the rendition [withVideoQuality] picks for [quality], [metered]
  * and a [height] chosen in the playback menu, with [source]'s headers and that rendition's mime.
  */
 fun ImageRef.viewerPlayback(
@@ -53,7 +54,7 @@ fun ImageRef.viewerPlayback(
     if (localPath.isNullOrBlank() && stream != null) {
         return VideoPlaybackRequest(
             location = stream.url,
-            headers = stream.headers.ifEmpty { source.requestHeaders() },
+            headers = stream.headers,
             mime = stream.mime,
             subtitles = stream.subtitles,
             audioTracks = stream.audioTracks,

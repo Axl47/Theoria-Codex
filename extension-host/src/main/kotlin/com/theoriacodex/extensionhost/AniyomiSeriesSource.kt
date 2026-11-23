@@ -63,23 +63,16 @@ class AniyomiSeriesSource internal constructor(
 
     /**
      * An anime whose source groups its episodes into seasons is refused, in words the series page shows as they are.
-     * Its details tell, so an anime not listed or opened in this process, as the background new-episode check asks
-     * about after a restart, has them asked for first: one more request, for such an anime only.
+     * Only its details tell: sources leave a listing at episodes. So an anime not opened in this process, as a search
+     * or the new-episode check asks about, has them asked for first: one more request, for such an anime only.
      */
     override suspend fun entries(series: Series): List<SeriesEntry> {
-        val anime = listedAnime[series.id.address] ?: calls.calling { opened(anime(series)) }
+        val anime = listedAnime[series.id.address]?.takeIf { it.initialized } ?: calls.calling { opened(anime(series)) }
         if (anime.fetch_type == FetchType.Seasons) throw UnsupportedEntriesException(SEASONS_UNSUPPORTED)
         return calls.calling {
             source.getEpisodeList(anime).map { episode ->
                 listedEpisodes[episode.url] = episode
-                SeriesEntry(
-                    address = episode.url,
-                    name = episode.name,
-                    // Extensions may leave the number at -1 for the app to read from the name, as Aniyomi does.
-                    number = episode.episode_number.takeIf { it >= 0f } ?: ChapterRecognition.parseChapterNumber(series.title, episode.name),
-                    translatorGroup = episode.scanlator?.takeIf(String::isNotBlank),
-                    uploadedAtEpochMs = episode.date_upload.takeIf { it > 0L },
-                )
+                extensionEntry(series.title, episode.url, episode.name, episode.episode_number, episode.scanlator, episode.date_upload)
             }
         }
     }
@@ -97,16 +90,20 @@ class AniyomiSeriesSource internal constructor(
 
     override fun coverAddress(series: Series): String? = series.coverUrl?.let { address -> if (sourceImages != null) host.images.tag(key, address) else address }
 
+    /** Kept as listed, except an anime already opened, which keeps what its details said (about seasons, too). */
     private fun AnimesPage.listed() = SeriesPage(
         series = animes.map { anime ->
-            listedAnime[anime.url] = anime
+            if (listedAnime[anime.url]?.initialized != true) listedAnime[anime.url] = anime
             anime.toSeries()
         },
         hasNextPage = hasNextPage,
     )
 
-    /** [anime] with its details, kept as listed. */
-    private suspend fun opened(anime: SAnime): SAnime = anime.withDetails(source.getAnimeDetails(anime)).also { listedAnime[it.url] = it }
+    /** [anime] with its details, kept as listed and marked as opened. */
+    private suspend fun opened(anime: SAnime): SAnime = anime.withDetails(source.getAnimeDetails(anime)).also {
+        it.initialized = true
+        listedAnime[it.url] = it
+    }
 
     private fun anime(series: Series): SAnime = listedAnime[series.id.address] ?: SAnime.create().apply {
         url = series.id.address
@@ -131,16 +128,7 @@ class AniyomiSeriesSource internal constructor(
         if (details.fetch_type == FetchType.Seasons) anime.fetch_type = FetchType.Seasons
     }
 
-    private fun SAnime.toSeries() = Series(
-        id = SeriesId(key, url),
-        title = title,
-        coverUrl = thumbnail_url?.takeIf(String::isNotBlank),
-        author = author?.takeIf(String::isNotBlank),
-        genres = genre.orEmpty().split(',').map(String::trim).filter(String::isNotEmpty),
-        language = source.lang,
-        description = description?.trim()?.takeIf(String::isNotEmpty),
-        status = seriesStatus(status),
-    )
+    private fun SAnime.toSeries() = extensionSeries(SeriesId(key, url), title, thumbnail_url, author, genre, source.lang, description, status)
 
     internal companion object {
         const val SEASONS_UNSUPPORTED = "Seasons aren't supported yet"

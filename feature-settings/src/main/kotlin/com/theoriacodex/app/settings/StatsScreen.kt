@@ -172,7 +172,7 @@ internal fun OverallTimeCard(caption: String, overall: StatsShareOverall) {
                 TimeSegment("Watching", overall.watchingMs, WatchingColor),
                 TimeSegment("In Codices", overall.codexMs, CodexColor),
                 TimeSegment("Reading", overall.readingMs, ReadingColor),
-                TimeSegment("Watching anime", overall.animeMs, AnimeColor),
+                TimeSegment("Anime", overall.animeMs, AnimeColor),
                 // Foreground time also counts screens without a category, such as Settings.
                 TimeSegment("Other", (overall.timeInAppMs - categorized).coerceAtLeast(0L), OtherColor),
             ),

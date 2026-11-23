@@ -46,7 +46,7 @@ class SeriesProgressTest {
 
         val rewatched = finished.withProgress(position = 60_000, length = length, SeriesKind.ANIME)
         assertTrue(rewatched.read)
-        assertEquals(60_000L, rewatched.position)
+        assertEquals("A rewatch left partway resumes", 60_000L, rewatched.resumePositionMs())
     }
 
     @Test

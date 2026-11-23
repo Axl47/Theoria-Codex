@@ -13,7 +13,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
- * The background check for new chapters, run by `JobScheduler` on [scheduleSeriesUpdates]' terms. It loads the
+ * The background check for new chapters and episodes, run by `JobScheduler` on [scheduleSeriesUpdates]' terms. It loads the
  * extensions the way the Series tab does, stores the followed series' new chapters, and announces each series as soon
  * as its chapters are stored, so a run the system stops midway has announced what it stored.
  */
@@ -26,13 +26,13 @@ class SeriesUpdateJobService : JobService() {
             try {
                 val series = (application as TheoriaAppContainerOwner).awaitAppContainer().series
                 val updates = series?.checkFollowed { notifySeriesUpdate(this@SeriesUpdateJobService, it) }.orEmpty()
-                Diagnostics.report("series", "Checked followed series: ${updates.size} with new chapters")
+                Diagnostics.report("series", "Checked followed series: ${updates.size} with new chapters or episodes")
             } catch (error: CancellationException) {
                 // onStopJob ended this run; the job is not reported finished a second time.
                 throw error
             } catch (error: Exception) {
                 // Saved data that cannot open, say: the app's own start shows that failure, and the next period tries again.
-                Diagnostics.report("series", "The check for new chapters failed", error)
+                Diagnostics.report("series", "The check for new chapters and episodes failed", error)
             }
             jobFinished(params, false)
         }

@@ -339,7 +339,8 @@ private fun Post.candidate(
     )
 }
 
-private fun ImageRef.hasAnyLocation(): Boolean = !url.isNullOrBlank() || !localPath.isNullOrBlank()
+/** Whether the media has something to show: a file, an address, or a series episode's streams. */
+private fun ImageRef.hasAnyLocation(): Boolean = !url.isNullOrBlank() || !localPath.isNullOrBlank() || streams.isNotEmpty()
 
 private fun ImageRef.bestLocation(): String? =
     localPath?.takeIf(String::isNotBlank) ?: url?.takeIf(String::isNotBlank)

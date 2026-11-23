@@ -46,23 +46,21 @@ class VideoPlaybackRequestTest {
         val subtitles = listOf(MediaTrack("https://subs.test/en.vtt", "English"))
         val first = MediaStream("https://a.test/master.m3u8", "1080p · A", mime = "application/x-mpegURL", subtitles = subtitles)
         val second = MediaStream("https://b.test/video.mp4", "720p · B", audioTracks = listOf(MediaTrack("https://b.test/ja.m4a", "Japanese")))
-        val episode = ImageRef(first.url, null, null, streams = listOf(first, second))
+        val episode = ImageRef(null, null, null, streams = listOf(first, second))
 
         val chosen = episode.viewerPlayback(source, VideoQuality.AUTO, metered = false, streamLabel = "720p · B")
-        assertEquals(VideoPlaybackRequest(second.url, source.requestHeaders(), audioTracks = second.audioTracks, cache = false), chosen)
+        assertEquals(VideoPlaybackRequest(second.url, emptyMap(), audioTracks = second.audioTracks, cache = false), chosen)
 
         val fallback = episode.viewerPlayback(source, VideoQuality.DATA_SAVER, metered = true, height = 360, streamLabel = "gone")
-        assertEquals(
-            VideoPlaybackRequest(first.url, source.requestHeaders(), mime = first.mime, subtitles = subtitles, cache = false),
-            fallback,
-        )
+        assertEquals(VideoPlaybackRequest(first.url, emptyMap(), mime = first.mime, subtitles = subtitles, cache = false), fallback)
     }
 
-    @Test fun `a stream's own headers replace its source's when it has any`() {
+    @Test fun `a stream sends exactly its own headers, and none of its source's when it has none`() {
         val headers = mapOf("Referer" to "https://host.test/")
-        val episode = ImageRef(null, null, null, streams = listOf(MediaStream("https://host.test/v.mp4", "Host", headers = headers)))
+        fun sent(stream: MediaStream) = ImageRef(null, null, null, streams = listOf(stream)).viewerPlayback(source, VideoQuality.AUTO, false)?.headers
 
-        assertEquals(headers, episode.viewerPlayback(source, VideoQuality.AUTO, metered = false)?.headers)
+        assertEquals(headers, sent(MediaStream("https://host.test/v.mp4", "Host", headers = headers)))
+        assertEquals(emptyMap<String, String>(), sent(MediaStream("https://host.test/v.mp4", "Host")))
     }
 
     @Test fun `an episode saved on the device plays its file`() {
