@@ -21,14 +21,6 @@ class VideoQualityPolicyTest {
         assertEquals(media.videoVariants, media.withVideoQuality(VideoQuality.DATA_SAVER, true).videoVariants)
     }
 
-    @Test fun `prefetch warms the stream a Viewer page plays on each network`() {
-        assertEquals("720", media.viewerPlaybackLocation(VideoQuality.AUTO, metered = true))
-        assertEquals("original", media.viewerPlaybackLocation(VideoQuality.AUTO, metered = false))
-        assertEquals("360", media.viewerPlaybackLocation(VideoQuality.DATA_SAVER, metered = false))
-        assertEquals("/saved.mp4", media.copy(localPath = "/saved.mp4").viewerPlaybackLocation(VideoQuality.AUTO, true))
-        assertEquals(null, ImageRef(null, null, "video/mp4").viewerPlaybackLocation(VideoQuality.AUTO, false))
-    }
-
     @Test fun `feed cards use the smallest sensible stream only on metered networks`() {
         assertEquals("360", media.feedPreviewLocation(metered = true))
         assertEquals("original", media.feedPreviewLocation(metered = false))

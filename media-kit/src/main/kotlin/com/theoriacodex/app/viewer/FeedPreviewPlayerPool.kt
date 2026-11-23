@@ -86,7 +86,7 @@ class FeedPreviewPlayerPool(
     ): VideoPlayerLease {
         checkMainThread()
         // A card keeps loading until the Viewer stops it, so it must not lock the rest of a clip the Viewer reads.
-        val request = infrastructure.bind(location, headers, boundedLocks = true)
+        val request = infrastructure.bind(VideoPlaybackRequest(location, headers), boundedLocks = true)
         val slotLease = slots.acquire(request.identity)
         if (slotLease.requiresBinding || slotLease.resource.playerError != null) {
             if (slotLease.resource.mediaItemCount > 0 || slotLease.resource.playerError != null) {

@@ -25,7 +25,7 @@ class ViewerVideoPlayerPoolTest {
     fun `switch returns stopped empty player without release and reuses it for new media`() {
         val infrastructure = VideoPlaybackInfrastructure(RuntimeEnvironment.getApplication())
         val pool = infrastructure.viewerVideoPlayerPool
-        val first = pool.acquire("/first.mp4", emptyMap())
+        val first = pool.acquire(VideoPlaybackRequest("/first.mp4", emptyMap()))
         first.player.play()
 
         pool.recycle(first)
@@ -35,7 +35,7 @@ class ViewerVideoPlayerPoolTest {
         assertEquals(Player.STATE_IDLE, first.player.playbackState)
         assertEquals(0, first.player.mediaItemCount)
         assertFalse(infrastructure.hasActiveViewerPlayer)
-        val second = pool.acquire("/second.mp4", emptyMap())
+        val second = pool.acquire(VideoPlaybackRequest("/second.mp4", emptyMap()))
         assertSame(first.player, second.player)
         assertEquals("file:///second.mp4", second.player.currentMediaItem?.localConfiguration?.uri.toString())
         assertEquals(0L, second.player.currentPosition)
@@ -53,8 +53,8 @@ class ViewerVideoPlayerPoolTest {
     fun `overlapping bindings remain independent and cleanup waits for active playback`() {
         val infrastructure = VideoPlaybackInfrastructure(RuntimeEnvironment.getApplication())
         val pool = infrastructure.viewerVideoPlayerPool
-        val first = pool.acquire("/first.mp4", emptyMap())
-        val second = pool.acquire("/second.mp4", emptyMap())
+        val first = pool.acquire(VideoPlaybackRequest("/first.mp4", emptyMap()))
+        val second = pool.acquire(VideoPlaybackRequest("/second.mp4", emptyMap()))
         assertNotSame(first.player, second.player)
         assertEquals(2, pool.activePlayerCount())
         pool.recycle(first)
@@ -74,7 +74,7 @@ class ViewerVideoPlayerPoolTest {
         val viewer = infrastructure.viewerVideoPlayerPool
         val preview = feed.acquire("/feed.mp4", emptyMap())
         feed.recycle(preview, retainBinding = true)
-        val fullscreen = viewer.acquire("/viewer.mp4", emptyMap())
+        val fullscreen = viewer.acquire(VideoPlaybackRequest("/viewer.mp4", emptyMap()))
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(FEED_PREVIEW_IDLE_TIMEOUT_MS + 1))
         assertFalse(preview.player.isReleased)
         viewer.recycle(fullscreen)

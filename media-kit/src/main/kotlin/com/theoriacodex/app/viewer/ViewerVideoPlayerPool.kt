@@ -38,10 +38,11 @@ class ViewerVideoPlayerPool(
         }
     }
 
-    fun acquire(location: String, headers: Map<String, String>): VideoPlayerLease {
+    /** A player prepared with [playback]; give it back with [recycle]. */
+    fun acquire(playback: VideoPlaybackRequest): VideoPlayerLease {
         checkMainThread()
         infrastructure.onViewerStreamAcquired()
-        val request = infrastructure.bind(location, headers)
+        val request = infrastructure.bind(playback)
         val lease = slots.acquire(request.identity)
         val player = lease.resource
         traceMediaSection(MediaTraceSections.VIEWER_PREPARE) {
