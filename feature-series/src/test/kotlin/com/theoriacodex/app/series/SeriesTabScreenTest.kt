@@ -151,6 +151,7 @@ private object EmptySeriesRepository : SeriesRepository {
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit
+    override suspend fun setChaptersShareFirstPage(id: SeriesId) = Unit
     override suspend fun setAllRead(id: SeriesId, read: Boolean) = EntryProgressRestore()
     override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean) = EntryProgressRestore()
     override suspend fun restoreProgress(id: SeriesId, restore: EntryProgressRestore) = Unit

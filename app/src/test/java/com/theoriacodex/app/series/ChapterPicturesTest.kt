@@ -1,7 +1,9 @@
 package com.theoriacodex.app.series
 
+import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -14,7 +16,7 @@ class ChapterPicturesTest {
 
     @Test fun `a first page that failed to load is compared again the next time`() = runTest {
         var online = false
-        val pictures = ChapterPictures { _, _ -> if (online) 7L else null }
+        val pictures = ChapterPictures(StoredOnly(StoredSeries(Series(id, "Title")), emptyList())) { _, _ -> if (online) 7L else null }
 
         pictures.compare(id, mapOf("/c1" to credit, "/c2" to credit))
         assertEquals(0, pictures.leadPage(id).first())

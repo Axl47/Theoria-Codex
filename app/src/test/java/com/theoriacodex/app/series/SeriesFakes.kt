@@ -30,6 +30,8 @@ import java.io.File
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 
@@ -50,12 +52,13 @@ internal class FakeSeriesSource(override val key: SourceKey, private val answer:
  * A repository over one stored series that records progress as the Room repository does: the entry opened last, and
  * the progress by [withProgress] once the length is known. [progress] lists each call as "address position/length".
  */
-internal class StoredOnly(private var stored: StoredSeries, private var entries: List<StoredSeriesEntry>) : SeriesRepository {
+internal class StoredOnly(stored: StoredSeries, private var entries: List<StoredSeriesEntry>) : SeriesRepository {
+    private val stored = MutableStateFlow(stored)
     val progress = mutableListOf<String>()
-    override suspend fun series(id: SeriesId) = stored.takeIf { it.series.id == id }
+    override suspend fun series(id: SeriesId) = stored.value.takeIf { it.series.id == id }
     override suspend fun entries(id: SeriesId) = entries
     override fun observeFollowed(): Flow<List<FollowedSeries>> = emptyFlow()
-    override fun observeSeries(id: SeriesId): Flow<StoredSeries?> = emptyFlow()
+    override fun observeSeries(id: SeriesId): Flow<StoredSeries?> = stored.map { it.takeIf { it.series.id == id } }
     override fun observeEntries(id: SeriesId): Flow<List<StoredSeriesEntry>> = emptyFlow()
     override suspend fun store(series: Series, entries: List<SeriesEntry>?) = emptyList<SeriesEntry>()
     override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>) = emptyList<SeriesEntry>()
@@ -63,12 +66,13 @@ internal class StoredOnly(private var stored: StoredSeries, private var entries:
     override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) = false
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit
+    override suspend fun setChaptersShareFirstPage(id: SeriesId) = stored.update { it.copy(chaptersShareFirstPage = true) }
     override suspend fun setAllRead(id: SeriesId, read: Boolean) = EntryProgressRestore()
     override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean) = EntryProgressRestore()
     override suspend fun restoreProgress(id: SeriesId, restore: EntryProgressRestore) = Unit
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?) {
         progress += "$entryAddress $position/$length"
-        stored = stored.copy(lastOpenedEntry = entryAddress)
+        stored.update { it.copy(lastOpenedEntry = entryAddress) }
         if (length == null || length <= 0) return
         entries = entries.map { if (it.entry.address == entryAddress) it.withProgress(position, length, id.source.seriesKind) else it }
     }
@@ -99,7 +103,7 @@ internal fun TestScope.seriesDependencies(
     sources: suspend () -> List<SeriesSource>,
     deleteAfterReading: Boolean = false,
     store: OfflineMediaStore = OfflineMediaStore(folder.resolve("downloads"), StandardTestDispatcher(testScheduler)),
-    pictures: ChapterPictures = ChapterPictures(),
+    pictures: ChapterPictures = ChapterPictures(repository),
 ): SeriesDependencies {
     val covers = SeriesCovers { series -> series.coverUrl?.let { "$it#loadable" } }
     val source: suspend (SourceKey) -> SeriesSource? = { key -> sources().firstOrNull { it.key == key } }

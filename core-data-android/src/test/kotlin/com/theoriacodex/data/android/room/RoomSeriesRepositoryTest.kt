@@ -77,10 +77,11 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `a new listing keeps progress, follow and mode, adds new entries and hides dropped ones`() = runTest {
+    fun `a new listing keeps progress, follow, mode and shared first pages, adds new entries and hides dropped ones`() = runTest {
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))
         repository.setFollowed(id, true)
         repository.setReadingMode(id, GalleryReadingMode.VERTICAL)
+        repository.setChaptersShareFirstPage(id)
         repository.recordProgress(id, "/c/2", position = 2, length = 2)
         assertEquals(1, repository.observeFollowed().first().single().unreadCount)
 
@@ -91,6 +92,7 @@ class RoomSeriesRepositoryTest {
         assertEquals("Renamed", stored.series.title)
         assertTrue(stored.followed)
         assertEquals(GalleryReadingMode.VERTICAL, stored.readingMode)
+        assertTrue(stored.chaptersShareFirstPage)
         assertEquals("/c/2", stored.lastOpenedEntry)
         val entries = repository.entries(id)
         assertEquals(listOf("/c/3", "/c/2"), entries.map { it.entry.address })

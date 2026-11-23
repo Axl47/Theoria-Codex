@@ -20,6 +20,11 @@ data class StoredSeries(
     val lastCheckedAtEpochMs: Long? = null,
     /** Whether chapters the check for new chapters finds are downloaded, while the series is followed. */
     val downloadNewChapters: Boolean = false,
+    /**
+     * Whether two of its chapters were found to open on the same page, as a group's credit page does, so the Viewer's
+     * strip pictures each chapter by its second page. Stays set once set.
+     */
+    val chaptersShareFirstPage: Boolean = false,
 )
 
 /**
@@ -97,6 +102,9 @@ interface SeriesRepository {
     suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode)
 
     suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean)
+
+    /** Records that two of [id]'s chapters open on the same page. Does nothing for a series that is not stored. */
+    suspend fun setChaptersShareFirstPage(id: SeriesId)
 
     /**
      * Marks every listed entry of [id] as read or unread and returns the prior state of only the entries changed.
