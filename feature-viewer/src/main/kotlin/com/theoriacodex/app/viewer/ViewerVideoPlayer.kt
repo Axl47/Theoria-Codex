@@ -226,7 +226,9 @@ private fun ViewerVideoBinding(
     val latestEvents by rememberUpdatedState(events)
     DisposableEffect(state, playback) {
         val pool = context.videoPlaybackInfrastructure().viewerVideoPlayerPool
-        val lease = pool.acquire(playback)
+        // The pool can hand back the same player after a stream switch, when the effect that follows
+        // [ViewerRendererControls.loopPlayback] would not run again; so the lease starts in the right mode.
+        val lease = pool.acquire(playback, loop = controls.loopPlayback)
         val player = lease.player
         // Read after the previous binding's disposal has saved its final position.
         resumePosition().takeIf { it > 0L }?.let(player::seekTo)
