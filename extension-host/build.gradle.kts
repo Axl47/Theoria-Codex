@@ -42,6 +42,8 @@ dependencies {
     runtimeOnly(libs.okhttp.brotli)
     runtimeOnly(libs.okhttp.zstd)
     runtimeOnly(libs.kotlinx.serialization.json.okio)
+    // The JavaScript engine extensions evaluate scripts with (a third of anime extensions, some manga ones).
+    runtimeOnly(libs.quickjs.android)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

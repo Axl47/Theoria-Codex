@@ -1,6 +1,6 @@
-# Host classes and members that a sample of 300 Mihon extensions referenced (November 2026), one per line as R8
-# writes them to seeds.txt. scripts/check.sh --part release fails when a release build no longer keeps one; the
-# keep rules are in consumer-rules.pro. A line naming a member a library has since moved to a supertype is edited.
+# Host classes and members that samples of 300 Mihon and 168 Aniyomi extensions referenced (November 2026), one per
+# line as R8 writes them to seeds.txt. scripts/check.sh --part release fails when a release build no longer keeps one;
+# the keep rules are in consumer-rules.pro. A line naming a member a library has since moved to a supertype is edited.
 androidx.preference.CheckBoxPreference
 androidx.preference.CheckBoxPreference: CheckBoxPreference(android.content.Context)
 androidx.preference.DialogPreference
@@ -14,8 +14,12 @@ androidx.preference.EditTextPreference: void setOnBindEditTextListener(androidx.
 androidx.preference.EditTextPreference: void setText(java.lang.String)
 androidx.preference.ListPreference
 androidx.preference.ListPreference: ListPreference(android.content.Context)
+androidx.preference.ListPreference: int findIndexOfValue(java.lang.String)
+androidx.preference.ListPreference: java.lang.CharSequence[] getEntries()
+androidx.preference.ListPreference: java.lang.CharSequence[] getEntryValues()
 androidx.preference.ListPreference: void setEntries(java.lang.CharSequence[])
 androidx.preference.ListPreference: void setEntryValues(java.lang.CharSequence[])
+androidx.preference.ListPreference: void setValue(java.lang.String)
 androidx.preference.MultiSelectListPreference
 androidx.preference.MultiSelectListPreference: MultiSelectListPreference(android.content.Context)
 androidx.preference.MultiSelectListPreference: java.lang.CharSequence[] getEntries()
@@ -27,6 +31,7 @@ androidx.preference.Preference$OnPreferenceChangeListener
 androidx.preference.Preference$OnPreferenceChangeListener: boolean onPreferenceChange(androidx.preference.Preference,java.lang.Object)
 androidx.preference.Preference: android.content.Context getContext()
 androidx.preference.Preference: java.lang.CharSequence getTitle()
+androidx.preference.Preference: java.lang.String getKey()
 androidx.preference.Preference: void setDefaultValue(java.lang.Object)
 androidx.preference.Preference: void setEnabled(boolean)
 androidx.preference.Preference: void setKey(java.lang.String)
@@ -41,6 +46,10 @@ androidx.preference.SwitchPreferenceCompat: SwitchPreferenceCompat(android.conte
 androidx.preference.TwoStatePreference
 androidx.preference.TwoStatePreference: void setSummaryOff(java.lang.CharSequence)
 androidx.preference.TwoStatePreference: void setSummaryOn(java.lang.CharSequence)
+app.cash.quickjs.QuickJs
+app.cash.quickjs.QuickJs: app.cash.quickjs.QuickJs create()
+app.cash.quickjs.QuickJs: java.lang.Object evaluate(java.lang.String)
+app.cash.quickjs.QuickJs: void close()
 # Not from an extension: the zstd decoder's native library looks these up by name, so no dex shows the reference.
 com.squareup.zstd.JniZstdCompressor
 com.squareup.zstd.JniZstdDecompressor
@@ -52,10 +61,165 @@ com.squareup.zstd.okio.OkioZstd: okio.Source zstdDecompress(okio.Source)
 eu.kanade.tachiyomi.AppInfo
 eu.kanade.tachiyomi.AppInfo: eu.kanade.tachiyomi.AppInfo INSTANCE
 eu.kanade.tachiyomi.AppInfo: java.lang.String getVersionName()
+eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
+eu.kanade.tachiyomi.animesource.AnimeCatalogueSource: java.lang.String getLang()
+eu.kanade.tachiyomi.animesource.AnimeSource
+eu.kanade.tachiyomi.animesource.AnimeSource: java.lang.String getName()
+eu.kanade.tachiyomi.animesource.model.AnimeFilter
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$CheckBox
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$CheckBox: AnimeFilter$CheckBox(java.lang.String,boolean)
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$CheckBox: AnimeFilter$CheckBox(java.lang.String,boolean,int,kotlin.jvm.internal.DefaultConstructorMarker)
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$Group
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$Group: AnimeFilter$Group(java.lang.String,java.util.List)
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$Header
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$Header: AnimeFilter$Header(java.lang.String)
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$Select
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$Select: AnimeFilter$Select(java.lang.String,java.lang.Object[],int)
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$Select: AnimeFilter$Select(java.lang.String,java.lang.Object[],int,int,kotlin.jvm.internal.DefaultConstructorMarker)
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$Select: java.lang.Object[] getValues()
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$Separator
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$Separator: AnimeFilter$Separator(java.lang.String,int,kotlin.jvm.internal.DefaultConstructorMarker)
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$Sort
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$Sort$Selection
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$Sort$Selection: AnimeFilter$Sort$Selection(int,boolean)
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$Sort$Selection: boolean getAscending()
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$Sort$Selection: int getIndex()
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$Sort: AnimeFilter$Sort(java.lang.String,java.lang.String[],eu.kanade.tachiyomi.animesource.model.AnimeFilter$Sort$Selection)
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$Text
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$Text: AnimeFilter$Text(java.lang.String,java.lang.String,int,kotlin.jvm.internal.DefaultConstructorMarker)
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$TriState
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$TriState: AnimeFilter$TriState(java.lang.String,int,int,kotlin.jvm.internal.DefaultConstructorMarker)
+eu.kanade.tachiyomi.animesource.model.AnimeFilter$TriState: boolean isIgnored()
+eu.kanade.tachiyomi.animesource.model.AnimeFilter: java.lang.Object getState()
+eu.kanade.tachiyomi.animesource.model.AnimeFilter: java.lang.String getName()
+eu.kanade.tachiyomi.animesource.model.AnimeFilter: void setState(java.lang.Object)
+eu.kanade.tachiyomi.animesource.model.AnimeFilterList
+eu.kanade.tachiyomi.animesource.model.AnimeFilterList: AnimeFilterList(eu.kanade.tachiyomi.animesource.model.AnimeFilter[])
+eu.kanade.tachiyomi.animesource.model.AnimeFilterList: AnimeFilterList(java.util.List)
+eu.kanade.tachiyomi.animesource.model.AnimeFilterList: boolean isEmpty()
+eu.kanade.tachiyomi.animesource.model.AnimeFilterList: java.util.Iterator iterator()
+eu.kanade.tachiyomi.animesource.model.AnimeFilterList: java.util.List getList()
+eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy
+eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy: eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy ALWAYS_UPDATE
+eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy: eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy ONLY_FETCH_ONCE
+eu.kanade.tachiyomi.animesource.model.AnimesPage
+eu.kanade.tachiyomi.animesource.model.AnimesPage: AnimesPage(java.util.List,boolean)
+eu.kanade.tachiyomi.animesource.model.AnimesPage: boolean getHasNextPage()
+eu.kanade.tachiyomi.animesource.model.AnimesPage: java.util.List getAnimes()
+eu.kanade.tachiyomi.animesource.model.FetchType
+eu.kanade.tachiyomi.animesource.model.FetchType: eu.kanade.tachiyomi.animesource.model.FetchType Episodes
+eu.kanade.tachiyomi.animesource.model.FetchType: eu.kanade.tachiyomi.animesource.model.FetchType Seasons
+eu.kanade.tachiyomi.animesource.model.Hoster
+eu.kanade.tachiyomi.animesource.model.Hoster$Companion
+eu.kanade.tachiyomi.animesource.model.Hoster$Companion: java.util.List toHosterList(java.util.List)
+eu.kanade.tachiyomi.animesource.model.Hoster: Hoster(java.lang.String,java.lang.String,java.util.List,java.lang.String,boolean)
+eu.kanade.tachiyomi.animesource.model.Hoster: Hoster(java.lang.String,java.lang.String,java.util.List,java.lang.String,boolean,int,kotlin.jvm.internal.DefaultConstructorMarker)
+eu.kanade.tachiyomi.animesource.model.Hoster: boolean getLazy()
+eu.kanade.tachiyomi.animesource.model.Hoster: eu.kanade.tachiyomi.animesource.model.Hoster$Companion Companion
+eu.kanade.tachiyomi.animesource.model.Hoster: java.lang.String getHosterName()
+eu.kanade.tachiyomi.animesource.model.Hoster: java.lang.String getHosterUrl()
+eu.kanade.tachiyomi.animesource.model.Hoster: java.lang.String getInternalData()
+eu.kanade.tachiyomi.animesource.model.Hoster: java.util.List getVideoList()
+eu.kanade.tachiyomi.animesource.model.SAnime
+eu.kanade.tachiyomi.animesource.model.SAnime$Companion
+eu.kanade.tachiyomi.animesource.model.SAnime$Companion: eu.kanade.tachiyomi.animesource.model.SAnime create()
+eu.kanade.tachiyomi.animesource.model.SAnime: double getSeason_number()
+eu.kanade.tachiyomi.animesource.model.SAnime: eu.kanade.tachiyomi.animesource.model.FetchType getFetch_type()
+eu.kanade.tachiyomi.animesource.model.SAnime: eu.kanade.tachiyomi.animesource.model.SAnime$Companion Companion
+eu.kanade.tachiyomi.animesource.model.SAnime: int getStatus()
+eu.kanade.tachiyomi.animesource.model.SAnime: java.lang.String getArtist()
+eu.kanade.tachiyomi.animesource.model.SAnime: java.lang.String getAuthor()
+eu.kanade.tachiyomi.animesource.model.SAnime: java.lang.String getDescription()
+eu.kanade.tachiyomi.animesource.model.SAnime: java.lang.String getGenre()
+eu.kanade.tachiyomi.animesource.model.SAnime: java.lang.String getThumbnail_url()
+eu.kanade.tachiyomi.animesource.model.SAnime: java.lang.String getTitle()
+eu.kanade.tachiyomi.animesource.model.SAnime: java.lang.String getUrl()
+eu.kanade.tachiyomi.animesource.model.SAnime: void setArtist(java.lang.String)
+eu.kanade.tachiyomi.animesource.model.SAnime: void setAuthor(java.lang.String)
+eu.kanade.tachiyomi.animesource.model.SAnime: void setBackground_url(java.lang.String)
+eu.kanade.tachiyomi.animesource.model.SAnime: void setDescription(java.lang.String)
+eu.kanade.tachiyomi.animesource.model.SAnime: void setFetch_type(eu.kanade.tachiyomi.animesource.model.FetchType)
+eu.kanade.tachiyomi.animesource.model.SAnime: void setGenre(java.lang.String)
+eu.kanade.tachiyomi.animesource.model.SAnime: void setInitialized(boolean)
+eu.kanade.tachiyomi.animesource.model.SAnime: void setSeason_number(double)
+eu.kanade.tachiyomi.animesource.model.SAnime: void setStatus(int)
+eu.kanade.tachiyomi.animesource.model.SAnime: void setThumbnail_url(java.lang.String)
+eu.kanade.tachiyomi.animesource.model.SAnime: void setTitle(java.lang.String)
+eu.kanade.tachiyomi.animesource.model.SAnime: void setUpdate_strategy(eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy)
+eu.kanade.tachiyomi.animesource.model.SAnime: void setUrl(java.lang.String)
+eu.kanade.tachiyomi.animesource.model.SEpisode
+eu.kanade.tachiyomi.animesource.model.SEpisode$Companion
+eu.kanade.tachiyomi.animesource.model.SEpisode$Companion: eu.kanade.tachiyomi.animesource.model.SEpisode create()
+eu.kanade.tachiyomi.animesource.model.SEpisode: eu.kanade.tachiyomi.animesource.model.SEpisode$Companion Companion
+eu.kanade.tachiyomi.animesource.model.SEpisode: float getEpisode_number()
+eu.kanade.tachiyomi.animesource.model.SEpisode: java.lang.String getName()
+eu.kanade.tachiyomi.animesource.model.SEpisode: java.lang.String getScanlator()
+eu.kanade.tachiyomi.animesource.model.SEpisode: java.lang.String getUrl()
+eu.kanade.tachiyomi.animesource.model.SEpisode: long getDate_upload()
+eu.kanade.tachiyomi.animesource.model.SEpisode: void setDate_upload(long)
+eu.kanade.tachiyomi.animesource.model.SEpisode: void setEpisode_number(float)
+eu.kanade.tachiyomi.animesource.model.SEpisode: void setFillermark(boolean)
+eu.kanade.tachiyomi.animesource.model.SEpisode: void setName(java.lang.String)
+eu.kanade.tachiyomi.animesource.model.SEpisode: void setPreview_url(java.lang.String)
+eu.kanade.tachiyomi.animesource.model.SEpisode: void setScanlator(java.lang.String)
+eu.kanade.tachiyomi.animesource.model.SEpisode: void setSummary(java.lang.String)
+eu.kanade.tachiyomi.animesource.model.SEpisode: void setUrl(java.lang.String)
+eu.kanade.tachiyomi.animesource.model.Track
+eu.kanade.tachiyomi.animesource.model.Track: Track(java.lang.String,java.lang.String)
+eu.kanade.tachiyomi.animesource.model.Track: java.lang.String getLang()
+eu.kanade.tachiyomi.animesource.model.Track: java.lang.String getUrl()
+eu.kanade.tachiyomi.animesource.model.Video
+eu.kanade.tachiyomi.animesource.model.Video: Video(java.lang.String,java.lang.String,java.lang.Integer,java.lang.Integer,okhttp3.Headers,boolean,java.util.List,java.util.List,java.util.List,java.util.List,java.util.List,java.util.List,java.lang.String,boolean)
+eu.kanade.tachiyomi.animesource.model.Video: Video(java.lang.String,java.lang.String,java.lang.Integer,java.lang.Integer,okhttp3.Headers,boolean,java.util.List,java.util.List,java.util.List,java.util.List,java.util.List,java.util.List,java.lang.String,boolean,int,kotlin.jvm.internal.DefaultConstructorMarker)
+eu.kanade.tachiyomi.animesource.model.Video: Video(java.lang.String,java.lang.String,java.lang.String,okhttp3.Headers,java.util.List,java.util.List)
+eu.kanade.tachiyomi.animesource.model.Video: Video(java.lang.String,java.lang.String,java.lang.String,okhttp3.Headers,java.util.List,java.util.List,int,kotlin.jvm.internal.DefaultConstructorMarker)
+eu.kanade.tachiyomi.animesource.model.Video: boolean getInitialized()
+eu.kanade.tachiyomi.animesource.model.Video: boolean getPreferred()
+eu.kanade.tachiyomi.animesource.model.Video: eu.kanade.tachiyomi.animesource.model.Video copy$default(eu.kanade.tachiyomi.animesource.model.Video,java.lang.String,java.lang.String,java.lang.Integer,java.lang.Integer,okhttp3.Headers,boolean,java.util.List,java.util.List,java.util.List,java.util.List,java.util.List,java.util.List,java.lang.String,boolean,int,java.lang.Object)
+eu.kanade.tachiyomi.animesource.model.Video: java.lang.Integer getBitrate()
+eu.kanade.tachiyomi.animesource.model.Video: java.lang.Integer getResolution()
+eu.kanade.tachiyomi.animesource.model.Video: java.lang.String getInternalData()
+eu.kanade.tachiyomi.animesource.model.Video: java.lang.String getVideoTitle()
+eu.kanade.tachiyomi.animesource.model.Video: java.lang.String getVideoUrl()
+eu.kanade.tachiyomi.animesource.model.Video: java.util.List getAudioTracks()
+eu.kanade.tachiyomi.animesource.model.Video: java.util.List getFfmpegStreamArgs()
+eu.kanade.tachiyomi.animesource.model.Video: java.util.List getFfmpegVideoArgs()
+eu.kanade.tachiyomi.animesource.model.Video: java.util.List getMpvArgs()
+eu.kanade.tachiyomi.animesource.model.Video: java.util.List getSubtitleTracks()
+eu.kanade.tachiyomi.animesource.model.Video: java.util.List getTimestamps()
+eu.kanade.tachiyomi.animesource.model.Video: okhttp3.Headers getHeaders()
+eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
+eu.kanade.tachiyomi.animesource.online.AnimeHttpSource: AnimeHttpSource()
+eu.kanade.tachiyomi.animesource.online.AnimeHttpSource: eu.kanade.tachiyomi.network.NetworkHelper getNetwork()
+eu.kanade.tachiyomi.animesource.online.AnimeHttpSource: java.lang.Object getAnimeDetails(eu.kanade.tachiyomi.animesource.model.SAnime,kotlin.coroutines.Continuation)
+eu.kanade.tachiyomi.animesource.online.AnimeHttpSource: java.lang.Object getHosterList(eu.kanade.tachiyomi.animesource.model.SEpisode,kotlin.coroutines.Continuation)
+eu.kanade.tachiyomi.animesource.online.AnimeHttpSource: java.lang.Object getLatestUpdates(int,kotlin.coroutines.Continuation)
+eu.kanade.tachiyomi.animesource.online.AnimeHttpSource: java.lang.Object getPopularAnime(int,kotlin.coroutines.Continuation)
+eu.kanade.tachiyomi.animesource.online.AnimeHttpSource: java.lang.Object getSearchAnime(int,java.lang.String,eu.kanade.tachiyomi.animesource.model.AnimeFilterList,kotlin.coroutines.Continuation)
+eu.kanade.tachiyomi.animesource.online.AnimeHttpSource: java.lang.String getBaseUrl()
+eu.kanade.tachiyomi.animesource.online.AnimeHttpSource: long getId()
+eu.kanade.tachiyomi.animesource.online.AnimeHttpSource: okhttp3.Headers getHeaders()
+eu.kanade.tachiyomi.animesource.online.AnimeHttpSource: okhttp3.Headers$Builder headersBuilder()
+eu.kanade.tachiyomi.animesource.online.AnimeHttpSource: okhttp3.OkHttpClient getClient()
+eu.kanade.tachiyomi.animesource.online.AnimeHttpSource: okhttp3.Request animeDetailsRequest(eu.kanade.tachiyomi.animesource.model.SAnime)
+eu.kanade.tachiyomi.animesource.online.AnimeHttpSource: okhttp3.Request hosterListRequest(eu.kanade.tachiyomi.animesource.model.SEpisode)
+eu.kanade.tachiyomi.animesource.online.AnimeHttpSource: okhttp3.Request popularAnimeRequest(int)
+eu.kanade.tachiyomi.animesource.online.AnimeHttpSource: void setUrlWithoutDomain(eu.kanade.tachiyomi.animesource.model.SAnime,java.lang.String)
+eu.kanade.tachiyomi.animesource.online.AnimeHttpSource: void setUrlWithoutDomain(eu.kanade.tachiyomi.animesource.model.SEpisode,java.lang.String)
+eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
+eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource: ParsedAnimeHttpSource()
+eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource: eu.kanade.tachiyomi.animesource.model.AnimesPage latestUpdatesParse(okhttp3.Response)
+eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource: eu.kanade.tachiyomi.animesource.model.AnimesPage popularAnimeParse(okhttp3.Response)
+eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource: eu.kanade.tachiyomi.animesource.model.SAnime animeDetailsParse(okhttp3.Response)
+eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource: eu.kanade.tachiyomi.animesource.model.SAnime popularAnimeFromElement(org.jsoup.nodes.Element)
+eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource: java.lang.String popularAnimeNextPageSelector()
+eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource: java.lang.String popularAnimeSelector()
+eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource: java.util.List episodeListParse(okhttp3.Response)
 eu.kanade.tachiyomi.network.HttpException
 eu.kanade.tachiyomi.network.HttpException: HttpException(int)
 eu.kanade.tachiyomi.network.HttpException: int getCode()
 eu.kanade.tachiyomi.network.NetworkHelper
+eu.kanade.tachiyomi.network.NetworkHelper: java.lang.String defaultUserAgentProvider()
 eu.kanade.tachiyomi.network.NetworkHelper: okhttp3.OkHttpClient getClient()
 eu.kanade.tachiyomi.network.OkHttpExtensionsKt
 eu.kanade.tachiyomi.network.OkHttpExtensionsKt: java.lang.Object await(okhttp3.Call,kotlin.coroutines.Continuation)
@@ -64,7 +228,9 @@ eu.kanade.tachiyomi.network.RequestsKt
 eu.kanade.tachiyomi.network.RequestsKt: okhttp3.Request GET$default(java.lang.String,okhttp3.Headers,okhttp3.CacheControl,int,java.lang.Object)
 eu.kanade.tachiyomi.network.RequestsKt: okhttp3.Request GET$default(okhttp3.HttpUrl,okhttp3.Headers,okhttp3.CacheControl,int,java.lang.Object)
 eu.kanade.tachiyomi.network.RequestsKt: okhttp3.Request GET(java.lang.String,okhttp3.Headers,okhttp3.CacheControl)
+eu.kanade.tachiyomi.network.RequestsKt: okhttp3.Request GET(okhttp3.HttpUrl,okhttp3.Headers,okhttp3.CacheControl)
 eu.kanade.tachiyomi.network.RequestsKt: okhttp3.Request POST$default(java.lang.String,okhttp3.Headers,okhttp3.RequestBody,okhttp3.CacheControl,int,java.lang.Object)
+eu.kanade.tachiyomi.network.RequestsKt: okhttp3.Request POST(java.lang.String,okhttp3.Headers,okhttp3.RequestBody,okhttp3.CacheControl)
 eu.kanade.tachiyomi.source.CatalogueSource
 eu.kanade.tachiyomi.source.CatalogueSource: java.lang.String getLang()
 eu.kanade.tachiyomi.source.ConfigurableSource
@@ -200,6 +366,8 @@ eu.kanade.tachiyomi.source.online.HttpSource: okhttp3.OkHttpClient getClient()
 eu.kanade.tachiyomi.source.online.HttpSource: okhttp3.Request imageRequest(eu.kanade.tachiyomi.source.model.Page)
 eu.kanade.tachiyomi.source.online.HttpSource: void setUrlWithoutDomain(eu.kanade.tachiyomi.source.model.SChapter,java.lang.String)
 eu.kanade.tachiyomi.source.online.HttpSource: void setUrlWithoutDomain(eu.kanade.tachiyomi.source.model.SManga,java.lang.String)
+eu.kanade.tachiyomi.util.JsoupExtensionsKt
+eu.kanade.tachiyomi.util.JsoupExtensionsKt: org.jsoup.nodes.Document asJsoup$default(okhttp3.Response,java.lang.String,int,java.lang.Object)
 kotlin.Function
 kotlin.Lazy
 kotlin.Lazy: boolean isInitialized()
@@ -1514,3 +1682,5 @@ uy.kohesive.injekt.api.FullTypeReference: java.lang.reflect.Type getType()
 uy.kohesive.injekt.api.InjektFactory
 uy.kohesive.injekt.api.InjektFactory: java.lang.Object getInstance(java.lang.reflect.Type)
 uy.kohesive.injekt.api.InjektScope
+uy.kohesive.injekt.api.TypeReference
+uy.kohesive.injekt.api.TypeReference: java.lang.reflect.Type getType()
