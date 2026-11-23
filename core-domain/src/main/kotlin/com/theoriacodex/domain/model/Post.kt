@@ -79,14 +79,18 @@ fun List<MediaStream>.playable(): List<MediaStream> {
 
 /**
  * [labels] fit to choose between by name: trimmed, a blank one named [unnamed] of its 1-based place, and a repeated
- * one with its count, `English (2)`. Episode streams ([playable]) and the player's tracks follow this one rule.
+ * one with the first count no other label holds, `English (2)`. Episode streams ([playable]) and the player's tracks
+ * follow this one rule.
  */
 fun uniqueLabels(labels: List<String>, unnamed: (place: Int) -> String): List<String> {
-    val seen = HashMap<String, Int>()
-    return labels.mapIndexed { index, raw ->
-        val label = raw.trim().ifEmpty { unnamed(index + 1) }
-        val count = seen.merge(label, 1, Int::plus) ?: 1
-        if (count == 1) label else "$label ($count)"
+    val named = labels.mapIndexed { index, raw -> raw.trim().ifEmpty { unnamed(index + 1) } }
+    val taken = named.toHashSet()
+    val seen = HashSet<String>()
+    return named.map { label ->
+        if (seen.add(label)) return@map label
+        var count = 2
+        while (!taken.add("$label ($count)")) count++
+        "$label ($count)"
     }
 }
 

@@ -17,4 +17,11 @@ class MediaStreamTest {
         assertEquals(listOf("1080p", "1080p (2)", "Stream 3", "1080p (3)"), streams.playable().map { it.label })
         assertEquals(listOf("https://a.example/1", "https://b.example/1", "https://c.example/1", "https://d.example/1"), streams.playable().map { it.url })
     }
+
+    @Test
+    fun `a repeated label skips a count another label already holds`() {
+        val labels = uniqueLabels(listOf("English", "English", "English (2)", "", "Track 4")) { "Track $it" }
+
+        assertEquals(listOf("English", "English (3)", "English (2)", "Track 4", "Track 4 (2)"), labels)
+    }
 }
