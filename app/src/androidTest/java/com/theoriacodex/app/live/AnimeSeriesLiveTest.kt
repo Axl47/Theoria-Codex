@@ -32,8 +32,8 @@ import org.junit.runner.RunWith
  * series of two or more episodes.
  *
  * `-e targetPackage com.theoriacodex.acceptance` drives the minified acceptance build instead of this debug app, by
- * its screen alone; with the debug app, the stored progress is read as well, which shows how often playback is
- * recorded.
+ * its screen and the player state its media session reports; with the debug app, the stored progress is read as well,
+ * which shows playback is recorded about every ten seconds and on pause.
  *
  * The story crosses a restart, so run each test as its own `am instrument` call with the app stopped between them:
  * [anEpisodePlaysSwitchesStreamAndIsLeftPartway], `am force-stop <targetPackage>`, then
@@ -47,7 +47,7 @@ class AnimeSeriesLiveTest {
     private val device = live.device
     private val arguments = InstrumentationRegistry.getArguments()
 
-    /** What the first run leaves for the second, in this test app's own data, which a stop of the target keeps. */
+    /** What the first run leaves for the second, in the debug app's data, which a force-stop keeps. */
     private val notes by lazy { live.context.getSharedPreferences("anime_series_live_test", Context.MODE_PRIVATE) }
 
     @Before
