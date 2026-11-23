@@ -10,6 +10,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.vision.PredictedTag
 import java.security.MessageDigest
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import okhttp3.OkHttpClient
 import org.junit.After
@@ -179,6 +181,26 @@ class LibraryVisionBackfillTest {
         assertEquals(listOf("plain", "video-1", "video-2"), library.stored.map { it.postId.sourcePostId })
         leave()
         assertEquals(2, scheduled)
+        watching.cancel()
+    }
+
+    @Test
+    fun `leaving the screen before a run finishes still schedules the frames it left`() = runBlocking {
+        val library = Library(listOf(post("video"), post("plain")))
+        val away = MutableStateFlow(false)
+        val pictures = Pictures(
+            plays = { it.id.sourcePostId == "video" },
+            // The app leaves the screen while the run is past the video, before it ends.
+            still = { away.value = true; null },
+        )
+        val backfill = backfill(PictureTagger(readyStore(), library, pictures, scope), library, away)
+        val scheduled = CompletableDeferred<Unit>()
+        val watching = launch { backfill.whenAway { scheduled.complete(Unit) } }
+        yield()
+
+        backfill.drain()
+
+        withTimeout(1_000) { scheduled.await() }
         watching.cancel()
     }
 

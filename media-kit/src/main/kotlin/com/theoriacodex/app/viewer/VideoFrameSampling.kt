@@ -154,6 +154,8 @@ internal class DataSourceMediaReader(
             ?: position
         // Reading a kept window marks it recently read.
         val bytes = windows[start] ?: guarded { fetch(position) } ?: return END
+        // A fetch can outlast the job; what it brought is kept but not handed over.
+        if (!job.isActive) return END
         val from = (position - start).toInt()
         val count = minOf(size, bytes.size - from)
         if (count <= 0) return END
@@ -175,7 +177,7 @@ internal class DataSourceMediaReader(
             val wanted = if (opened == C.LENGTH_UNSET.toLong()) WINDOW_BYTES else minOf(opened, WINDOW_BYTES)
             val bytes = ByteArray(wanted.toInt())
             var filled = 0
-            while (filled < bytes.size) {
+            while (filled < bytes.size && job.isActive) {
                 val read = source.read(bytes, filled, bytes.size - filled)
                 if (read == C.RESULT_END_OF_INPUT) break
                 filled += read

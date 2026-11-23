@@ -16,6 +16,7 @@ import com.theoriacodex.sources.pixiv.PixivTokenCoordinator
 import com.theoriacodex.sources.pixiv.PixivUgoiraMetadataCache
 import java.io.File
 import java.io.IOException
+import java.util.zip.ZipException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.currentCoroutineContext
@@ -113,8 +114,7 @@ class PixivUgoiraClient constructor(
     suspend fun sampleFrames(postId: String, count: Int, sizePx: Int): FrameSample = withContext(Dispatchers.IO) {
         try {
             val held = synchronized(cacheLock) { memoryArchive(postId) } ?: heldArchive(postId, markUsed = false)
-            val frames = held?.let { sampleUgoiraFrames(it.file, it.metadata.frames, count, sizePx) }
-                ?: downloadedFrames(postId, count, sizePx)
+            val frames = held?.let { heldFrames(postId, it, count, sizePx) } ?: downloadedFrames(postId, count, sizePx)
             if (frames.isEmpty()) FrameSample.Unreadable else FrameSample.Frames(frames)
         } catch (_: UgoiraRefused) {
             FrameSample.Refused
@@ -127,6 +127,17 @@ class PixivUgoiraClient constructor(
         }
     }
 
+    /**
+     * [sampleFrames] from a held archive. One whose data turns out damaged is forgotten, as playback does, so the next
+     * try downloads the post again.
+     */
+    private suspend fun heldFrames(postId: String, archive: UgoiraArchive, count: Int, sizePx: Int): List<Bitmap> = try {
+        sampleUgoiraFrames(archive.file, archive.metadata.frames, count, sizePx)
+    } catch (error: ZipException) {
+        forgetCachedArchive(postId, archive.file)
+        throw error
+    }
+
     /** [sampleFrames] from a freshly downloaded archive, deleted afterwards. */
     private suspend fun downloadedFrames(postId: String, count: Int, sizePx: Int): List<Bitmap> {
         val (metadata, tokens) = fetchMetadataWithRetry(postId, tokenCoordinator.activeTokens())
@@ -135,7 +146,11 @@ class PixivUgoiraClient constructor(
             withTimeoutOrNull(operationTimeoutMs) { downloadZipWithRetry(metadata.zipUrl, tokens, temporary) }
                 ?: throw IOException("Pixiv animation download timed out")
             if (!isValidArchive(temporary, metadata.frames)) throw InvalidUgoiraArchive()
-            return sampleUgoiraFrames(temporary, metadata.frames, count, sizePx)
+            return try {
+                sampleUgoiraFrames(temporary, metadata.frames, count, sizePx)
+            } catch (_: ZipException) {
+                throw InvalidUgoiraArchive()
+            }
         } finally {
             temporary.delete()
         }

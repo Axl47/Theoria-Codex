@@ -82,15 +82,25 @@ internal fun scheduleLibraryPictures(context: Context) {
     if (running.get()) return
     val scheduler = context.getSystemService(JobScheduler::class.java)
     if (scheduler.getPendingJob(LIBRARY_PICTURES_JOB_ID) != null) return
-    scheduler.schedule(
-        JobInfo.Builder(LIBRARY_PICTURES_JOB_ID, ComponentName(context, LibraryPictureJobService::class.java))
-            .setRequiresCharging(true)
-            .setRequiresBatteryNotLow(true)
-            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED)
-            .setPersisted(true)
-            .build(),
-    )
+    scheduler.schedule(libraryPicturesJob(context))
 }
+
+/**
+ * Replaces any waiting or finishing [LibraryPictureJobService] run with a fresh one, free of a retry's back-off, for
+ * video frames a finished run left until the app left the screen. Unlike [scheduleLibraryPictures], a run that is
+ * ending (and so still listed) cannot swallow the request.
+ */
+private fun restartLibraryPictures(context: Context) {
+    context.getSystemService(JobScheduler::class.java).schedule(libraryPicturesJob(context))
+}
+
+private fun libraryPicturesJob(context: Context): JobInfo =
+    JobInfo.Builder(LIBRARY_PICTURES_JOB_ID, ComponentName(context, LibraryPictureJobService::class.java))
+        .setRequiresCharging(true)
+        .setRequiresBatteryNotLow(true)
+        .setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED)
+        .setPersisted(true)
+        .build()
 
 /**
  * Keeps [LibraryPictureJobService] scheduled for [pictures]: at every start, whenever the model comes or goes, whenever
@@ -98,7 +108,7 @@ internal fun scheduleLibraryPictures(context: Context) {
  * until cancelled.
  */
 internal suspend fun keepLibraryPicturesScheduled(context: Context, pictures: AppPictures): Unit = coroutineScope {
-    launch { pictures.tags.whenAway { scheduleLibraryPictures(context) } }
+    launch { pictures.tags.whenAway { restartLibraryPictures(context) } }
     val model = pictures.model.states.filter { it == ModelState.Absent || it == ModelState.Ready }.distinctUntilChanged()
     combine(model, pictures.progress.map { it.total }.distinctUntilChanged()) { _, _ -> }
         .collect { scheduleLibraryPictures(context) }
