@@ -590,7 +590,7 @@ private fun ViewerUiState.retryMedia(session: ViewerSessionIdentity): ViewerRedu
         return retried.requestResolution(session, page.post.id)
     }
     // An episode's next load asks for fresh links itself, and replays in place when none come
-    // (ViewerVideoRecovery.opensWithAsk); a route recovery beside it would look the episode up twice.
+    // (ViewerVideoRecovery.opening); a route recovery beside it would look the episode up twice.
     if (retriedMedia.ref.streams.isNotEmpty()) return ViewerReduction(retried)
     return ViewerReduction(retried, listOf(ViewerEffect.RetryMedia(session, recoverable.mediaKey)))
 }

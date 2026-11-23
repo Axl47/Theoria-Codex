@@ -10,9 +10,12 @@ import com.theoriacodex.app.viewer.ViewerRecoveryEvent.PlayerError
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.MediaStream
+import com.theoriacodex.domain.model.VideoQuality
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 /** [ViewerVideoRecovery.decide] as a table: each row is the situation, the event, and what the player does next. */
@@ -92,20 +95,34 @@ class ViewerVideoRecoveryTest {
     @Test
     fun `Retry asks for fresh links before it plays, and replays in place once when nothing new comes`() {
         val attempts = ViewerStreamAttempts()
-        assertFalse("A first load plays at once", recovery(attempts).opensWithAsk())
+        assertNull("A first load plays at once", recovery(attempts).opening(0))
         val retried = recovery(attempts, loadGeneration = 1)
-        assertTrue(retried.opensWithAsk())
+        assertEquals(AskForFreshLinks, retried.opening(0))
         assertEquals(RetryInPlace, retried.decide(NothingNew))
-        // The replayed player of the same load opens normally, and with its ask spent the next stream plays.
-        val replayed = recovery(attempts, loadGeneration = 1)
-        assertFalse(replayed.opensWithAsk())
-        assertEquals(FallBack("B"), replayed.decide(PlayerError(badStatus)))
+        // The replayed player, with the ask spent, moves on to the next stream when it fails.
+        assertEquals(FallBack("B"), retried.decide(PlayerError(badStatus)))
+        // Another player of the Retry (a stream picked meanwhile) plays at once.
+        assertNull(recovery(attempts, loadGeneration = 1, playing = "C").opening(0))
+    }
+
+    @Test
+    fun `a stream with the same request as the one that failed is still a new player`() {
+        // Two servers offering one address under two labels.
+        val streams = listOf(MediaStream("https://cdn.test/e.m3u8", "Server A"), MediaStream("https://cdn.test/e.m3u8", "Server B"))
+        val media = ImageRef(url = null, localPath = null, mime = "video/mp4", streams = streams)
+        val load = ViewerMediaLoad(episode, 0)
+        fun key(label: String): ViewerVideoKey {
+            val playback = requireNotNull(media.viewerPlayback(SourceKey.HITOMI, VideoQuality.AUTO, metered = false, streamLabel = label))
+            return ViewerVideoKey.of(load, media, label, playback)
+        }
+        assertEquals(key("Server A").playback, key("Server B").playback)
+        assertNotEquals(key("Server A"), key("Server B"))
     }
 
     @Test
     fun `media without streams retries a decoder once and fails on anything else`() {
         val recovery = ViewerVideoRecovery(ViewerMediaLoad(episode, 1))
-        assertFalse(recovery.opensWithAsk())
+        assertNull(recovery.opening(0))
         assertEquals(Fail, recovery.decide(PlayerError(badStatus)))
         assertEquals(RetryInPlace, recovery.decide(PlayerError(decoder)))
         assertEquals(Fail, recovery.decide(PlayerError(decoder)))
