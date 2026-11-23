@@ -25,6 +25,12 @@ extensions.configure<LibraryExtension> {
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
+
+    // Only this module's test APK is packaged here. Its native libraries are extracted so the process map names them,
+    // which is how the anime harness sees that an extension started QuickJS.
+    packaging {
+        jniLibs.useLegacyPackaging = true
+    }
 }
 
 dependencies {
@@ -35,12 +41,15 @@ dependencies {
     api(libs.okhttp)
     api(libs.kotlinx.coroutines.core)
     api(libs.kotlinx.serialization.json)
+    // Most extensions parse pages with Jsoup; Aniyomi's ParsedAnimeHttpSource and asJsoup name it in their signatures.
+    api(libs.jsoup)
     // Not called from this module: every extension's HTTP client names the first two, and most extensions decode
-    // JSON straight from the response stream and parse pages with Jsoup.
+    // JSON straight from the response stream.
     runtimeOnly(libs.okhttp.brotli)
     runtimeOnly(libs.okhttp.zstd)
     runtimeOnly(libs.kotlinx.serialization.json.okio)
-    runtimeOnly(libs.jsoup)
+    // The JavaScript engine extensions evaluate scripts with (a third of anime extensions, some manga ones).
+    runtimeOnly(libs.quickjs.android)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -48,4 +57,5 @@ dependencies {
 
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.quickjs.android)
 }

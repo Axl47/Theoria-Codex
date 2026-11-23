@@ -63,7 +63,7 @@ class MihonFiltersTest {
 
         val searched = source.searchedWith.single()
         assertNotSame(source.made.first(), searched)
-        assertEquals(chosen, searched.toSeriesFilters())
+        assertEquals(chosen, searched.nodes().toSeriesFilters())
     }
 
     @Test
@@ -74,7 +74,7 @@ class MihonFiltersTest {
 
         series.search("one", 1, stale)
 
-        assertEquals(defaults, source.searchedWith.single().toSeriesFilters())
+        assertEquals(defaults, source.searchedWith.single().nodes().toSeriesFilters())
     }
 
     @Test
@@ -96,7 +96,7 @@ class MihonFiltersTest {
     fun `no filters search with the source's own list untouched`() = runTest {
         series.search("one", 1)
 
-        assertEquals(series.filters(), source.searchedWith.single().toSeriesFilters())
+        assertEquals(series.filters(), source.searchedWith.single().nodes().toSeriesFilters())
     }
 
     private class Status(val label: String) {

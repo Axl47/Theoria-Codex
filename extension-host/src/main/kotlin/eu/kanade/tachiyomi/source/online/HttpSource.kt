@@ -12,9 +12,6 @@ import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.model.SMangaUpdate
-import java.net.URI
-import java.net.URISyntaxException
-import java.security.MessageDigest
 import kotlinx.coroutines.async
 import kotlinx.coroutines.supervisorScope
 import okhttp3.Call
@@ -46,11 +43,7 @@ abstract class HttpSource : CatalogueSource {
 
     open val client: OkHttpClient get() = network.client
 
-    protected fun generateId(name: String, lang: String, versionId: Int): Long {
-        val bytes = MessageDigest.getInstance("MD5").digest("${name.lowercase()}/$lang/$versionId".toByteArray())
-        return (0 until Long.SIZE_BYTES).map { bytes[it].toLong() and BYTE_MASK shl Byte.SIZE_BITS * (Long.SIZE_BYTES - 1 - it) }
-            .reduce(Long::or) and Long.MAX_VALUE
-    }
+    protected fun generateId(name: String, lang: String, versionId: Int): Long = sourceId(name, lang, versionId)
 
     protected open fun headersBuilder(): Headers.Builder = Headers.Builder().add("User-Agent", network.defaultUserAgentProvider())
 
@@ -126,17 +119,6 @@ abstract class HttpSource : CatalogueSource {
         this.url = withoutDomain(url)
     }
 
-    private fun withoutDomain(original: String): String = try {
-        val uri = URI(original.replace(" ", "%20"))
-        buildString {
-            append(uri.path)
-            uri.query?.let { append('?').append(it) }
-            uri.fragment?.let { append('#').append(it) }
-        }
-    } catch (_: URISyntaxException) {
-        original
-    }
-
     open fun getMangaUrl(manga: SManga): String = mangaDetailsRequest(manga).url.toString()
 
     open fun getChapterUrl(chapter: SChapter): String = pageListRequest(chapter).url.toString()
@@ -147,8 +129,4 @@ abstract class HttpSource : CatalogueSource {
     private suspend fun fetch(request: Request): Response = client.newCall(request).awaitSuccess()
 
     private fun unsupported(): Nothing = throw UnsupportedOperationException("The source implements neither this step nor the call that uses it")
-
-    private companion object {
-        const val BYTE_MASK = 0xffL
-    }
 }

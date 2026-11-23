@@ -13,6 +13,7 @@ import com.theoriacodex.domain.series.ExtensionChoiceStore
 import com.theoriacodex.domain.series.ExtensionChoices
 import com.theoriacodex.domain.series.SeriesExtensions
 import com.theoriacodex.domain.series.SeriesSource
+import com.theoriacodex.extensionhost.AnimeKind
 import com.theoriacodex.extensionhost.ExtensionImages
 import com.theoriacodex.extensionhost.ExtensionLoader
 import com.theoriacodex.extensionhost.ExtensionPackages
@@ -77,7 +78,7 @@ internal class ExtensionSourceHost : ExtensionSites {
     fun attach(application: Application, browsers: ChallengeBrowsers, outages: () -> HostOutageTracker) {
         // Release builds run installed packages only; the folder is how tests hand a debug build an APK.
         images = ExtensionImages(lazy { ExtensionHost.imageKey(application) }) { runBlocking { registry.sources() } }
-        val packages = ExtensionPackages(application, listOf(MihonKind)) { if (BuildConfig.DEBUG) application.getExternalFilesDir(DIRECTORY) else null }
+        val packages = ExtensionPackages(application, listOf(MihonKind, AnimeKind)) { if (BuildConfig.DEBUG) application.getExternalFilesDir(DIRECTORY) else null }
         val loader = ExtensionLoader(application, packages)
         // What extensions ask their host for is set up when the first one loads, not at startup.
         val hostInstalled = lazy {

@@ -208,6 +208,7 @@ class ExtensionRegistry(
                 signer = extension.signer,
                 on = trusted,
                 problem = extension.unsupported ?: NOT_SIGNED.takeIf { extension.signer == null },
+                kind = extension.kind.seriesKind,
             )
             if (!trusted || extension.unsupported != null) return@map listing
             val code = loaded.getOrPut(extension) { load(extension) }
