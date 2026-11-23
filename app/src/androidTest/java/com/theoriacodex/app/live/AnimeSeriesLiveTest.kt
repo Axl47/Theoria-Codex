@@ -186,12 +186,16 @@ class AnimeSeriesLiveTest {
 
     /**
      * Presses one of the Viewer's controls by an accessibility click on the node that takes it, which the controls
-     * hiding a moment later cannot swallow as they can a tap.
+     * hiding a moment later cannot swallow as they can a tap. A click refused because they hid as it arrived was not
+     * delivered, so it is tried again.
      */
     private fun press(what: String, selector: BySelector) {
-        val node = live.viewerControl(what, selector).accessibilityNodeInfo
-        val target = checkNotNull(generateSequence(node) { it.parent }.firstOrNull { it.isClickable }) { "Nothing takes a press on $what" }
-        assertTrue("$what takes the press", target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        repeat(PRESS_TRIES) {
+            val node = live.viewerControl(what, selector).accessibilityNodeInfo
+            val target = generateSequence(node) { it.parent }.firstOrNull { it.isClickable }
+            if (target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) return
+        }
+        error("$what refused $PRESS_TRIES presses")
     }
 
     /**
@@ -331,5 +335,6 @@ class AnimeSeriesLiveTest {
         const val CADENCE_WATCH_MS = 32_000L
         val REPORT_GAPS_MS = 8_000L..13_000L
         const val DRAG_STEPS = 40
+        const val PRESS_TRIES = 3
     }
 }
