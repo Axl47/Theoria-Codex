@@ -57,6 +57,10 @@ class VideoStreamPlaybackTest {
         assertTrue(source(request("https://cdn.test/manifest.mpd")) is DashMediaSource)
         assertTrue(source(request("https://cdn.test/clip.m3u8", mime = "video/mp4")) is ProgressiveMediaSource)
         assertTrue(source(request("https://cdn.test/stream")) is ProgressiveMediaSource)
+        // Formats the app plays as nothing else (SmoothStreaming, RTSP) are progressive files, not a crash here.
+        assertTrue(source(request("https://cdn.test/live.isml/manifest")) is ProgressiveMediaSource)
+        assertTrue(source(request("https://cdn.test/live", mime = "application/vnd.ms-sstr+xml")) is ProgressiveMediaSource)
+        assertTrue(source(request("rtsp://cam.test/stream", mime = "application/x-rtsp")) is ProgressiveMediaSource)
         // An extension's own proxy on the device is an ordinary web address.
         val loopback = request("http://127.0.0.1:8341/clip.mp4", mime = "video/mp4")
         assertEquals("http://127.0.0.1:8341/clip.mp4", infrastructure.bind(loopback).mediaItem.localConfiguration?.uri.toString())
@@ -189,12 +193,15 @@ class VideoStreamPlaybackTest {
         pool.recycle(lease)
     }
 
-    @Test fun `a malformed manifest fails as an ordinary player error`() {
+    @Test fun `a malformed manifest or an RTSP stream fails as an ordinary player error`() {
         val lease = pool.acquire(VideoPlaybackRequest("${server.base}/bad.mpd", STREAM_FIXTURE_HEADERS, cache = false))
         until { lease.player.playerError != null }
 
         assertEquals(PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED, lease.player.playerError?.errorCode)
         pool.recycle(lease)
+        val rtsp = pool.acquire(VideoPlaybackRequest("rtsp://127.0.0.1:1/stream", emptyMap(), mime = "application/x-rtsp", cache = false))
+        until { rtsp.player.playerError != null }
+        pool.recycle(rtsp)
     }
 
     @Test fun `prefetch skips a manifest and an uncached stream without a request, and still warms a post`() = runBlocking {
