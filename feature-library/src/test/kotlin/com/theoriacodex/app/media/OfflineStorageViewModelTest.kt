@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -129,7 +130,7 @@ class OfflineStorageViewModelTest {
         }
     }
 
-    @Test fun `Codex preparation publishes coordinator progress and the ring state without opening a sheet`() = runBlocking {
+    @Test fun `Codex preparation publishes coordinator progress and the ring state without opening a sheet`() = runBlocking<Unit> {
         withTimeout(10_000) {
             codices.ensureCodex("a", "First")
             codices.addItems("a", listOf(post()))
@@ -153,7 +154,10 @@ class OfflineStorageViewModelTest {
             assertEquals(1, completed.offline.postCount)
             assertEquals(1, completed.owners.single().job?.completedPosts)
             assertTrue(!completed.isOpen)
-            assertEquals(CodexOfflineState(fraction = 1f), owner.state.first { "a" in it.codexStates }.codexStates["a"])
+            // The ring stays running until the preparation is cleared, a moment after its job reports done.
+            // Waited for without failing, so a ring that never settles is reported with the state it stuck in.
+            withTimeoutOrNull(5_000) { owner.state.first { it.codexStates["a"] == CodexOfflineState(fraction = 1f) } }
+            assertEquals(CodexOfflineState(fraction = 1f), owner.state.value.codexStates["a"])
         }
     }
 
