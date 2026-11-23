@@ -52,7 +52,9 @@ fun FeedGrid(
         showPagingTile = showPagingTile,
         footerMessage = footerMessage,
         divider = divider,
-        postContent = { _, entry -> post(visibleIndexById.getValue(entry.id), entry) },
+        // A lazy grid can still recompose a card it composed ahead of time (prefetched, or pinned) after its post left
+        // the feed, before the next measure drops it; that card draws nothing instead of crashing.
+        postContent = { _, entry -> visibleIndexById[entry.id]?.let { post(it, entry) } },
         shelfContent = shelf,
     )
 }
