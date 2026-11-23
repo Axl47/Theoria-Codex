@@ -7,6 +7,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.os.Trace
 import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.ScrubbingModeParameters
@@ -127,8 +128,12 @@ fun ExoPlayer.endScrub(): Boolean = isScrubbingModeEnabled.also { scrubbing -> i
  * Scrubbing mode for instant-seek drags: Media3's defaults, with each seek snapped to the keyframe at or before its
  * target. A keyframe shows after its own bytes and one decode, where an exact seek first downloads and decodes up to
  * the target; the release's exact seek then reads on from the keyframe the drag fetched.
+ *
+ * Subtitles are off during the drag too: a side-loaded file is decoded whole after every seek (about 20 ms for an
+ * episode's 360 KB of ASS on a desktop JVM, several times that on a phone), and is decoded once more when it ends.
  */
 private val VIEWER_SCRUBBING = ScrubbingModeParameters.DEFAULT.buildUpon()
     // Fractions of the duration: any distance before the target, none after it.
     .setFractionalSeekTolerance(1.0, 0.0)
+    .setDisabledTrackTypes(ScrubbingModeParameters.DEFAULT.disabledTrackTypes + C.TRACK_TYPE_TEXT)
     .build()

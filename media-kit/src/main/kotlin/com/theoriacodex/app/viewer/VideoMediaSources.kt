@@ -87,7 +87,7 @@ internal class StreamMediaSourceFactory(
             *audio.map { track -> sourceFor(MediaItem.fromUri(videoLocationToUri(track.url))) }.toTypedArray(),
             *subtitles.map { track ->
                 val configuration = MediaItem.SubtitleConfiguration.Builder(videoLocationToUri(track.url))
-                    .setMimeType(subtitleMimeType(track.url))
+                    .setMimeType(subtitleMimeType(track.url) ?: MimeTypes.TEXT_UNKNOWN)
                     .setLabel(track.label)
                     .build()
                 subtitleSources.createMediaSource(configuration, C.TIME_UNSET)

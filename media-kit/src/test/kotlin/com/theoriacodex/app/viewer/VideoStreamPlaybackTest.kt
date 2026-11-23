@@ -40,6 +40,7 @@ class VideoStreamPlaybackTest {
             // Media3 alone would prefer this one, for its extra channel.
             "/en.wav" to FixtureRoute.Body(wav(channels = 2)),
             "/bad.mpd" to FixtureRoute.Body("4f2a9c0e17".toByteArray()),
+            "/subtitles/page" to FixtureRoute.Body("<html><body>Not found</body></html>".toByteArray()),
         ),
     )
     private val infrastructure = VideoPlaybackInfrastructure(application)
@@ -140,7 +141,7 @@ class VideoStreamPlaybackTest {
         val lease = pool.acquire(
             VideoPlaybackRequest(
                 "${server.base}/main.wav", STREAM_FIXTURE_HEADERS, cache = false,
-                subtitles = listOf(MediaTrack("${server.base}/subtitles/en.vtt", "English"), MediaTrack("${server.base}/subtitles/signs", "Signs")),
+                subtitles = listOf(MediaTrack("${server.base}/subtitles/en.vtt", "English"), MediaTrack("${server.base}/subtitles/signs.vtt", "Signs")),
             ),
         )
         val player = lease.player
@@ -150,12 +151,17 @@ class VideoStreamPlaybackTest {
         assertTrue(server.paths().none { it.startsWith("/subtitles/") })
         player.selectSubtitle(player.playbackTracks().subtitles.single { it.label == "Signs" }.id)
         until { player.playbackTracks().subtitles.single { it.label == "Signs" }.selected }
-        // Served without an extension, so its first bytes say it is ASS.
+        // Served at a .vtt address, but its first bytes say it is ASS.
         player.addListener(object : Player.Listener {
             override fun onCues(cueGroup: CueGroup) { cueGroup.cues.mapNotNullTo(cues) { it.text?.toString() } }
         })
         player.play()
         until { "Sniffed cue" in cues }
+        // A drag turns the chosen subtitles off, rather than decoding the file again after each of its seeks.
+        player.scrubTo(1_000L)
+        until { player.playbackTracks().subtitles.none { it.selected } }
+        player.endScrub()
+        until { player.playbackTracks().subtitles.single { it.label == "Signs" }.selected }
         player.selectSubtitle("gone/0")
         assertTrue(player.playbackTracks().subtitles.single { it.label == "Signs" }.selected)
         player.selectSubtitle(null)
@@ -164,18 +170,20 @@ class VideoStreamPlaybackTest {
         pool.recycle(lease)
     }
 
-    @Test fun `a dead subtitle link leaves the video playing`() {
+    @Test fun `a dead or unreadable subtitle leaves the video playing`() {
         val lease = pool.acquire(
             VideoPlaybackRequest(
                 "${server.base}/main.wav", STREAM_FIXTURE_HEADERS, cache = false,
-                subtitles = listOf(MediaTrack("${server.base}/subtitles/missing.vtt", "English")),
+                subtitles = listOf(MediaTrack("${server.base}/subtitles/missing.vtt", "Dead"), MediaTrack("${server.base}/subtitles/page", "Page")),
             ),
         )
         val player = lease.player
-        until { player.playbackTracks().subtitles.isNotEmpty() }
-        player.selectSubtitle(player.playbackTracks().subtitles.single().id)
+        until { player.playbackTracks().subtitles.size == 2 }
+        player.selectSubtitle(player.playbackTracks().subtitles.single { it.label == "Dead" }.id)
         player.play()
-        until { "/subtitles/missing.vtt" in server.paths() && player.currentPosition > 500L }
+        until { "/subtitles/missing.vtt" in server.paths() && player.currentPosition > 300L }
+        player.selectSubtitle(player.playbackTracks().subtitles.single { it.label == "Page" }.id)
+        until { "/subtitles/page" in server.paths() && player.currentPosition > 900L }
 
         assertNull(player.playerError)
         pool.recycle(lease)
