@@ -70,6 +70,12 @@ class VideoStreamPlaybackTest {
         assertEquals(videoCacheKey(post.location, post.headers), cacheKey(post.copy(subtitles = listOf(MediaTrack("https://cdn.test/a.vtt", "A")))))
         assertNull(cacheKey(request("https://cdn.test/master.m3u8")))
         assertNull(cacheKey(request("https://cdn.test/clip.mp4", cache = false)))
+        // What the cache keeps, or a file on the device, may be read ahead; any other web stream may not.
+        assertEquals(
+            listOf(true, true, false, false),
+            listOf(post, request("/data/clip.mp4"), request("https://cdn.test/master.m3u8"), request("https://cdn.test/clip.mp4", cache = false))
+                .map { it.readsAheadFreely() },
+        )
     }
 
     @Test fun `an HLS episode sends its headers with every request it causes, across a redirect and relative addresses`() {

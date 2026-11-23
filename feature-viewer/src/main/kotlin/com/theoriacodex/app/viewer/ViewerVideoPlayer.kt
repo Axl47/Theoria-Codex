@@ -423,13 +423,6 @@ private fun viewerPlaybackProgress(positionMs: Long, durationMs: Long): ViewerPl
     durationMs.takeIf { it > 0L }?.let { ViewerPlaybackProgress(positionMs.coerceIn(0L, it), it) }
 
 /**
- * Whether this video may be read ahead of being shown, preloaded or scrubbed through a second player, without
- * fetching anything twice: a file on the device, or a web file the shared cache keeps for playback.
- */
-private fun VideoPlaybackRequest.readsAheadFreely(): Boolean =
-    usesSharedCache() || !(location.startsWith("http://", ignoreCase = true) || location.startsWith("https://", ignoreCase = true))
-
-/**
  * Reports an episode's playback to [report] while it plays, when it stops, and after each seek; the player's release
  * reports once more ([ViewerVideoBinding]). Nothing is reported while the duration is unknown.
  */
