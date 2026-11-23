@@ -59,10 +59,16 @@ class ViewerVideoRecoveryTest {
             Row("plain HTTP, picked by hand", pickedByHand = true, event = PlayerError(cleartext), expected = Fail),
         )
         rows.forEach { row ->
-            val recovery = recovery(ViewerStreamAttempts(), pickedByHand = row.pickedByHand, linksAgeMs = row.linksAgeMs)
+            val recovery = recovery(ViewerStreamAttempts(), picked = labels.first().takeIf { row.pickedByHand }, linksAgeMs = row.linksAgeMs)
             if (row.played) recovery.onPlayed()
             assertEquals(row.name, row.expected, recovery.decide(row.event))
         }
+    }
+
+    @Test
+    fun `a hand-picked stream that fresh links no longer offer leaves the one playing free to fall back`() {
+        val recovery = recovery(ViewerStreamAttempts(), labels = listOf("B", "C"), picked = "A")
+        assertEquals(FallBack("C"), recovery.decide(PlayerError(badStatus)))
     }
 
     @Test
@@ -179,12 +185,12 @@ class ViewerVideoRecoveryTest {
         attempts: ViewerStreamAttempts,
         labels: List<String> = this.labels,
         playing: String = labels.first(),
-        pickedByHand: Boolean = false,
+        picked: String? = null,
         linksAgeMs: Long = 0,
         loadGeneration: Long = 0,
     ) = ViewerVideoRecovery(
         ViewerMediaLoad(episode, loadGeneration),
-        ViewerEpisodeStreams(attempts, labels, pickedByHand, linksResolvedAtMs = NOW - linksAgeMs, ask = { ViewerMediaRecovery.NOTHING_NEW }, fallBack = {}),
+        ViewerEpisodeStreams(attempts, labels, picked, linksResolvedAtMs = NOW - linksAgeMs, ask = { ViewerMediaRecovery.NOTHING_NEW }, fallBack = {}),
         playing,
         loadStartedAtMs = NOW,
     )

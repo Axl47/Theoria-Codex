@@ -73,11 +73,11 @@ internal data class ViewerVideoOptions(
 
 /**
  * The screen's side of an episode's stream recovery ([ViewerEpisodeStreams]): its [attempts], whether the stream
- * playing was [pickedByHand], when the page's links were looked up, and how to [fallBack] to another stream.
+ * the user picked by hand there ([pickedLabel]), when the page's links were looked up, and how to [fallBack] to another stream.
  */
 internal class ViewerEpisodeOptions(
     val attempts: ViewerStreamAttempts,
-    val pickedByHand: Boolean,
+    val pickedLabel: String?,
     val linksResolvedAtMs: Long?,
     val fallBack: (label: String) -> Unit,
 )

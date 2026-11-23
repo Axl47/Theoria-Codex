@@ -333,11 +333,11 @@ class ViewerWatchingTest {
         state = reduceViewerState(state, ViewerAction.FallBackToStream(first, "B")).state
         assertEquals("B", state.controls.episode.streamLabelFor(first))
         assertNull(state.controls.episode.streamLabelFor(second))
-        assertFalse(state.controls.episode.pickedByHand(first))
+        assertNull(state.controls.episode.pickedStream(first))
 
         state = reduceViewerState(state, ViewerAction.ChooseStream("A")).state
         assertEquals("A", state.controls.episode.streamLabelFor(first))
-        assertTrue(state.controls.episode.pickedByHand(first))
+        assertEquals("A", state.controls.episode.pickedStream(first))
         assertEquals("A", state.controls.episode.streamLabelFor(second))
 
         state = reduceViewerState(state, ViewerAction.MediaFailed(identity, ViewerMediaError.Recoverable(first, "Could not play video"))).state

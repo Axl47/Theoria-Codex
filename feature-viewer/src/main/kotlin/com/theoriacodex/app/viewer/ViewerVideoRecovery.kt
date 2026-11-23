@@ -86,14 +86,14 @@ internal class ViewerStreamAttempts {
 }
 
 /**
- * An episode's streams as its recovery sees them: [labels] in the source's order, whether the stream playing was
- * [pickedByHand] in this episode, when its links were looked up ([linksResolvedAtMs]), how to [ask] the route for fresh
+ * An episode's streams as its recovery sees them: [labels] in the source's order, the one the user picked by hand in
+ * this episode ([pickedLabel]; the stream playing may differ, when fresh links no longer offer it), when its links were looked up ([linksResolvedAtMs]), how to [ask] the route for fresh
  * links (it returns once the lookup ends, within its limit) and how to [fallBack] to another stream for this load.
  */
 internal class ViewerEpisodeStreams(
     val attempts: ViewerStreamAttempts,
     val labels: List<String>,
-    val pickedByHand: Boolean,
+    val pickedLabel: String?,
     val linksResolvedAtMs: Long?,
     val ask: suspend () -> ViewerMediaRecovery,
     val fallBack: (label: String) -> Unit,
@@ -110,7 +110,7 @@ internal class ViewerEpisodeStreams(
  *   lookup is cancelled ([onAskCancelled]). Plain HTTP, which the app refuses, never asks: new links cannot fix it.
  * - Otherwise (a stream that never played on fresh links: a dead server), or when fresh links brought nothing new, the
  *   episode falls back to its next stream not tried yet, at most [VIEWER_MAX_STREAM_FALLBACKS] times a load, unless
- *   the user picked the stream playing by hand; then it fails, with the picker.
+ *   the stream playing is the one the user picked by hand; then it fails, with the picker.
  * - A manual Retry ([ViewerMediaLoad.loadGeneration] above 0) of an episode opens with the ask ([opening]) instead of
  *   replaying the dead address; when it brings nothing new, the address replays in place once.
  * - Media without streams fails on anything but its one decoder retry.
@@ -180,7 +180,8 @@ internal class ViewerVideoRecovery(
         val episode = episode ?: return ViewerRecoveryDecision.Fail
         val attempts = attempts ?: return ViewerRecoveryDecision.Fail
         playingLabel?.let(attempts.failedStreams::add)
-        if (episode.pickedByHand || attempts.failedStreams.size > VIEWER_MAX_STREAM_FALLBACKS) return ViewerRecoveryDecision.Fail
+        val playingPicked = playingLabel != null && playingLabel == episode.pickedLabel
+        if (playingPicked || attempts.failedStreams.size > VIEWER_MAX_STREAM_FALLBACKS) return ViewerRecoveryDecision.Fail
         val next = episode.labels.firstOrNull { it !in attempts.failedStreams } ?: return ViewerRecoveryDecision.Fail
         return ViewerRecoveryDecision.FallBack(next)
     }

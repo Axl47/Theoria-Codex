@@ -261,7 +261,7 @@ private fun ViewerScreenHost.videoOptions(
     val episode = uiState.controls.episode
     return ViewerVideoOptions(
         quality, qualityHeight, episode.streamLabelFor(key), pageState.terminalResolutionMessage(), config.playbackDiagnosticsEnabled,
-        ViewerEpisodeOptions(screen.streamAttempts.forSession(uiState.session), episode.pickedByHand(key), pageState.resolution.resolvedAtMs) { label ->
+        ViewerEpisodeOptions(screen.streamAttempts.forSession(uiState.session), episode.pickedStream(key), pageState.resolution.resolvedAtMs) { label ->
             onAction(ViewerAction.FallBackToStream(key, label))
         },
     )
