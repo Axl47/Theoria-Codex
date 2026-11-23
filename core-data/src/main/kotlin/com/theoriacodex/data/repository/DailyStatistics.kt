@@ -16,6 +16,9 @@ data class DailyActivity(
     @SerialName("browsingMs") val browsingMs: Long = 0L,
     @SerialName("watchingMs") val watchingMs: Long = 0L,
     @SerialName("codexMs") val codexMs: Long = 0L,
+    // Absent from days recorded before series time counted, which read as zero.
+    @SerialName("readingMs") val readingMs: Long = 0L,
+    @SerialName("animeMs") val animeMs: Long = 0L,
     @SerialName("watchedPostCount") val watchedPostCount: Long = 0L,
     @SerialName("searchCount") val searchCount: Long = 0L,
 )
@@ -43,6 +46,8 @@ fun splitDailyUsage(start: Instant, zone: ZoneId, usage: UsageDurationDelta): Li
             browsingMs = part(usage.browsingMs),
             watchingMs = part(usage.watchingMs),
             codexMs = part(usage.codexMs),
+            readingMs = part(usage.readingMs),
+            animeMs = part(usage.animeMs),
         ))
         cursor = boundary
     }
@@ -56,6 +61,8 @@ fun Map<LocalDate, DailyActivity>.withDailyUsage(usage: List<DailyUsageDuration>
             browsingMs = day.browsingMs.saturatingAdd(slice.usage.browsingMs),
             watchingMs = day.watchingMs.saturatingAdd(slice.usage.watchingMs),
             codexMs = day.codexMs.saturatingAdd(slice.usage.codexMs),
+            readingMs = day.readingMs.saturatingAdd(slice.usage.readingMs),
+            animeMs = day.animeMs.saturatingAdd(slice.usage.animeMs),
         ) }
     }
 

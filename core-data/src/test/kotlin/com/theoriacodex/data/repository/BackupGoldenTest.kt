@@ -18,6 +18,7 @@ import com.theoriacodex.domain.source.SiteAddressParse
 import com.theoriacodex.domain.source.SiteProfile
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -52,7 +53,10 @@ class BackupGoldenTest {
         val written = DurableJson.parseToJsonElement(golden.decodeToString()).jsonObject
         // Retired before this codec moved to kotlinx (3731d4c9); no build reads it from a backup.
         val settings = written.getValue("settings").jsonObject - "lastSelectedTabRoute"
-        assertEquals(JsonObject(written + ("settings" to JsonObject(settings))),
+        // Series time began counting after the golden was written; older builds ignore it.
+        val statistics = written.getValue("statistics").jsonObject +
+            listOf("readingMs", "animeMs").associateWith { JsonPrimitive(0L) }
+        assertEquals(JsonObject(written + ("settings" to JsonObject(settings)) + ("statistics" to JsonObject(statistics))),
             DurableJson.parseToJsonElement(codec.encode(codec.decode(golden)).decodeToString()))
     }
 

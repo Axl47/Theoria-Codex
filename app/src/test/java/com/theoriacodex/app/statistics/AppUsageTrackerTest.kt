@@ -1,6 +1,10 @@
 package com.theoriacodex.app.statistics
 
+import com.theoriacodex.app.viewer.ViewerSeries
+import com.theoriacodex.app.viewer.ViewerSession
+import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.app.library.LibrarySection
 import com.theoriacodex.app.ui.statisticsUsageCategory
 import com.theoriacodex.data.repository.InMemoryStatisticsRepository
@@ -100,16 +104,27 @@ class AppUsageTrackerTest {
         tracker.onCategoryChanged(StatisticsUsageCategory.WATCHING)
         tracker.awaitIdle()
         elapsedMs = 4_000L
+        tracker.onCategoryChanged(StatisticsUsageCategory.READING)
+        tracker.awaitIdle()
+        elapsedMs = 4_700L
+        tracker.onCategoryChanged(StatisticsUsageCategory.ANIME)
+        tracker.awaitIdle()
+        elapsedMs = 5_000L
         tracker.onBackground()
         tracker.onBackground()
         tracker.awaitIdle()
 
         val statistics = repository.observeStatistics().first()
         assertEquals(1L, statistics.appOpenCount)
-        assertEquals(4_000L, statistics.totalForegroundMs)
+        assertEquals(5_000L, statistics.totalForegroundMs)
         assertEquals(2_500L, statistics.browsingMs)
         assertEquals(1_500L, statistics.watchingMs)
         assertEquals(0L, statistics.codexMs)
+        assertEquals(700L, statistics.readingMs)
+        assertEquals(300L, statistics.animeMs)
+        val day = statistics.history.values.single()
+        assertEquals(listOf(5_000L, 2_500L, 1_500L, 0L, 700L, 300L),
+            listOf(day.totalForegroundMs, day.browsingMs, day.watchingMs, day.codexMs, day.readingMs, day.animeMs))
         assertEquals(0L, tracker.liveUsage.value.totalMs)
         tracker.close()
     }
@@ -151,9 +166,19 @@ class AppUsageTrackerTest {
         assertEquals(StatisticsUsageCategory.CODEX, statisticsUsageCategory("home", "library", LibrarySection.Saved))
         assertNull(statisticsUsageCategory("settings-screen", "search", codices))
         assertEquals(StatisticsUsageCategory.WATCHING, statisticsUsageCategory("viewer", "search", codices))
-        assertEquals(StatisticsUsageCategory.WATCHING, statisticsUsageCategory("viewer", "search", codices, ViewerStreamSource.SEARCH))
-        assertNull(statisticsUsageCategory("viewer", "series", codices, ViewerStreamSource.SERIES))
+        assertEquals(StatisticsUsageCategory.WATCHING, statisticsUsageCategory("viewer", "search", codices, session(ViewerStreamSource.SEARCH)))
+        val reading = session(ViewerStreamSource.SERIES, ViewerSeries.Reading(GalleryReadingMode.LEFT_TO_RIGHT))
+        assertEquals(StatisticsUsageCategory.READING, statisticsUsageCategory("viewer", "series", codices, reading))
+        val watching = session(ViewerStreamSource.SERIES, ViewerSeries.Watching())
+        assertEquals(StatisticsUsageCategory.ANIME, statisticsUsageCategory("viewer", "series", codices, watching))
+        // A series session whose kind is not known is never counted as watching posts.
+        assertNull(statisticsUsageCategory("viewer", "series", codices, session(ViewerStreamSource.SERIES)))
+        // The session only matters while the Viewer is the current screen.
+        assertNull(statisticsUsageCategory("settings-screen", "search", codices, watching))
         assertEquals(StatisticsUsageCategory.BROWSING, statisticsUsageCategory("creator-profile", "library", codices))
         assertEquals(StatisticsUsageCategory.CODEX, statisticsUsageCategory("codex/detail/{codexId}", "search", codices))
     }
+
+    private fun session(stream: ViewerStreamSource, series: ViewerSeries? = null) =
+        ViewerSession(emptyList(), ViewerLaunchContext("query", 0, stream, scrollOffsetHint = 0), series = series)
 }

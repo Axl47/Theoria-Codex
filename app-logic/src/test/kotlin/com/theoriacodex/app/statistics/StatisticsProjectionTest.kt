@@ -1,5 +1,7 @@
 package com.theoriacodex.app.statistics
 
+import com.theoriacodex.data.repository.DailyActivity
+import com.theoriacodex.data.repository.DailyUsageDuration
 import com.theoriacodex.data.repository.LifetimeStatistics
 import com.theoriacodex.data.repository.StatisticsTagKey
 import com.theoriacodex.data.repository.UsageDurationDelta
@@ -8,6 +10,7 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -73,6 +76,27 @@ class StatisticsProjectionTest {
         assertEquals(3L, summary.mostUsedCodex?.entryCount)
         assertEquals("Second", summary.leastUsedCodex?.name)
         assertEquals(0L, summary.leastUsedCodex?.entryCount)
+    }
+
+    @Test
+    fun `series time reaches the projection overall and per day, stored and live`() {
+        val today = LocalDate.now()
+        val lifetime = LifetimeStatistics(
+            history = mapOf(today to DailyActivity(totalForegroundMs = 300L, readingMs = 100L, animeMs = 200L)),
+            totalForegroundMs = 300L,
+            readingMs = 100L,
+            animeMs = 200L,
+        )
+        val live = UsageDurationDelta(totalMs = 50L, animeMs = 50L)
+            .let { it.copy(dailyUsage = listOf(DailyUsageDuration(today, it))) }
+
+        val built = StatisticsProjection.build(lifetime, live)
+        val overlaid = StatisticsProjection.build(lifetime).withLiveUsage(live)
+
+        listOf(built, overlaid).forEach { summary ->
+            assertEquals(listOf(100L, 250L), listOf(summary.readingMs, summary.animeMs))
+            assertEquals(listOf(100L, 250L), summary.history.single().let { listOf(it.readingMs, it.animeMs) })
+        }
     }
 
     @Test

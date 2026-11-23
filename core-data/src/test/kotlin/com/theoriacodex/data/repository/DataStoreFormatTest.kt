@@ -87,7 +87,12 @@ class DataStoreFormatTest {
     @Test
     fun `statistics file keeps every stored key`() {
         val statistics = StatisticsStoreRecord(
-            history = mapOf("2026-11-02" to DailyActivity(1L, 2L, 3L, 4L, 5L, 6L, 7L)),
+            history = mapOf(
+                "2026-11-02" to DailyActivity(
+                    appOpenCount = 1L, totalForegroundMs = 2L, browsingMs = 3L, watchingMs = 4L, codexMs = 5L,
+                    watchedPostCount = 6L, searchCount = 7L,
+                ),
+            ),
             codexStatistics = mapOf(
                 "codex" to CodexStatistics(5L, 6L, mapOf("PIXIV:1" to CodexPostStatistics("Label & <x>", 1L, 2L, 3L))),
             ),
@@ -113,7 +118,19 @@ class DataStoreFormatTest {
             translatedSourceCharacterCount = 13L,
         )
         val full = StatisticsDataStoreFile(statistics = statistics)
-        assertStoredFormat(golden("statistics-full.json") to full)
+        // statistics-full.json predates series time, so it also pins that a file without it reads as zero.
+        val series = StatisticsDataStoreFile(
+            statistics = StatisticsStoreRecord(
+                history = mapOf(
+                    "2026-11-23" to DailyActivity(appOpenCount = 1L, totalForegroundMs = 30L, readingMs = 10L, animeMs = 20L),
+                ),
+                appOpenCount = 1L,
+                totalForegroundMs = 30L,
+                readingMs = 10L,
+                animeMs = 20L,
+            ),
+        )
+        assertStoredFormat(golden("statistics-full.json") to full, golden("statistics-series.json") to series)
     }
 
     @Test
