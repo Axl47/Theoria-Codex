@@ -13,6 +13,7 @@ import java.util.regex.Pattern
 import kotlin.math.abs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeFalse
 import org.junit.Before
@@ -81,7 +82,7 @@ class AnimeViewerLiveTest {
         hand.awaitPosition("playback past ${PARTWAY_MS.seconds()} s") { it >= PARTWAY_MS }
         live.report("restart", "\"$episode\" at ${before.seconds()} s started over at ${restarted.seconds()} s")
         val left = hand.leavePlaying(episode)
-        live.tap("Continue naming the episode", By.text("Continue · $episode"))
+        live.tap("Continue naming the episode", By.text(AnimeViewerHand.continueLabel(episode)))
         hand.assertResumesAt("restart", episode, left, "after starting it over")
         hand.leaveViewer()
     }
@@ -124,9 +125,86 @@ class AnimeViewerLiveTest {
         live.report("seek", "paused \"$episode\" at ${playing.tenths()} s, sought to ${sought.tenths()} s, then stopped the app")
         live.openSeriesTab()
         assertEquals(title, hand.openSeries(hand.argument(SERIES_QUERY)))
-        live.tap("Continue naming the episode", By.text("Continue · $episode"), SeriesLiveDriver.RESULTS_TIMEOUT_MS)
+        live.tap("Continue naming the episode", By.text(AnimeViewerHand.continueLabel(episode)), SeriesLiveDriver.RESULTS_TIMEOUT_MS)
         hand.assertResumesAt("seek", episode, sought, "after seeking while paused and a force-stop")
         hand.leaveViewer()
+    }
+
+    /**
+     * From the series page, the episode Continue names, marked watched, gives way to another, and marked unwatched, reads
+     * so again. Marking the episodes before it watched can be undone. An anime offers nothing to download. Needs an
+     * episode of the series watched partway first.
+     */
+    @Test
+    fun anEpisodeIsMarkedWatchedFromTheSeriesPage() {
+        live.openSeriesTab(By.text(Pattern.compile("Browse|No extensions on")))
+        hand.turnOn(hand.argument(EXTENSION_NAME))
+        live.openSeriesTab()
+        hand.openSeries(hand.argument(SERIES_QUERY))
+        val episode = continuing()
+        assertNull("An anime offers no download", device.findObject(By.desc(DOWNLOAD)))
+
+        val actions = entryActions(episode)
+        live.report("actions", "\"$episode\" offers $actions")
+        assertTrue("An episode cannot be downloaded", actions.none { DOWNLOAD in it })
+        live.tap("Mark as watched", By.text("Mark as watched"))
+        val watched = live.await("\"$episode\" to read as watched", { hand.rowDetail(hand.entryRow(episode).first) }) { WATCHED in it }
+        hand.backToTop()
+        val next = continuing()
+        live.report("watched", "\"$episode\" reads \"$watched\"; Continue names \"$next\"")
+        assertNotEquals("Continue moves past a watched episode", episode, next)
+
+        entryActions(episode)
+        live.tap("Mark as unwatched", By.text("Mark as unwatched"))
+        val unwatched = live.await("\"$episode\" to read as unwatched", { hand.rowDetail(hand.entryRow(episode).first) }) { WATCHED !in it }
+        hand.backToTop()
+        // Unwatching the episode opened last forgets it as such, and its position: Continue falls back to the furthest
+        // episode started, which depends on what was watched before.
+        live.report("unwatched", "\"$episode\" reads \"$unwatched\"; Continue names \"${continuing()}\"")
+
+        // Marking the episodes before it watched offers an undo. One of them still unwatched shows both: it is listed
+        // below the episode, since the list runs newest first.
+        hand.entryRow(episode)
+        val (earlier, before) = hand.shownRows().dropWhile { it.first != episode }.drop(1).firstOrNull { WATCHED !in it.second }
+            ?: error("No unwatched episode is listed below \"$episode\"")
+        val detail = { hand.shownRows().firstOrNull { it.first == earlier }?.second }
+        assertTrue("Marking the episodes before it is offered", MARK_PREVIOUS in entryActions(episode))
+        live.tap(MARK_PREVIOUS, By.text(MARK_PREVIOUS))
+        val marked = live.await("\"$earlier\" to read as watched", detail) { it != null && WATCHED in it }
+        live.tap("Undo", By.text("Undo"))
+        val undone = live.await("\"$earlier\" to read as it did", detail) { it == before }
+        live.report("undo", "\"$earlier\" read \"$before\", \"$marked\" once the episodes before were marked, then \"$undone\" after Undo")
+        hand.backToTop()
+    }
+
+    /** A followed anime is on the Following shelf when the app opens cold; the acceptance build only. */
+    @Test
+    fun aFollowedAnimeIsOnTheShelfOnAColdOpen() {
+        assumeFalse("Stopping the app would stop this test", live.targetIsThisApp)
+        live.openSeriesTab(By.text(Pattern.compile("Browse|No extensions on")))
+        hand.turnOn(hand.argument(EXTENSION_NAME))
+        live.openSeriesTab()
+        val title = hand.openSeries(hand.argument(SERIES_QUERY))
+        if (device.wait(Until.hasObject(By.text(FOLLOW)), SeriesLiveDriver.SHORT_WAIT_MS) == true) live.tap("Follow", By.text(FOLLOW))
+        live.waitFor("the series to read as followed", By.text(FOLLOWING))
+        device.executeShellCommand("am force-stop ${live.targetPackage}")
+        live.openSeriesTab(By.text(FOLLOWING))
+        val shelf = live.waitFor("\"$title\" on the Following shelf", By.text(title)).visibleBounds
+        live.report("shelf", "after a cold open, the Following shelf lists \"$title\" at $shelf")
+    }
+
+    /** The episode the series page's Continue names. */
+    private fun continuing(): String {
+        val button = live.waitFor("the button that starts watching", By.text(AnimeViewerHand.WATCH_BUTTON), SeriesLiveDriver.RESULTS_TIMEOUT_MS).text
+        return button.removePrefix(AnimeViewerHand.continueLabel("")).takeIf { it != button }
+            ?: error("Watch an episode of the series first: the page reads \"$button\"")
+    }
+
+    /** Long-presses [episode]'s row on the series page; returns the actions its menu offers. */
+    private fun entryActions(episode: String): List<String> {
+        val before = hand.labels().toSet()
+        hand.entryRow(episode).first.longClick()
+        return live.await("\"$episode\"'s actions", { hand.labels() - before }) { it.isNotEmpty() }
     }
 
     /** After some watching, the Stats screen splits out time on anime. */
@@ -175,6 +253,11 @@ class AnimeViewerLiveTest {
         const val ANIME = "Anime"
         const val PLAYED_MS = 5_000L
         const val START_OVER = "Start over"
+        const val DOWNLOAD = "Download"
+        const val WATCHED = "Watched"
+        const val MARK_PREVIOUS = "Mark previous as watched"
+        const val FOLLOW = "Follow"
+        const val FOLLOWING = "Following"
         const val PAUSED = "PAUSED"
         const val RESTART_FROM_MS = 20_000L
         const val PARTWAY_MS = 10_000L

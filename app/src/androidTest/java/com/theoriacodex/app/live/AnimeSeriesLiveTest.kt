@@ -61,7 +61,7 @@ class AnimeSeriesLiveTest {
         browseAnime(extension)
         val title = hand.openSeries(hand.argument(SERIES_QUERY))
         val episodes = live.waitFor("the episode count", By.text(AnimeViewerHand.EPISODE_COUNT), SeriesLiveDriver.RESULTS_TIMEOUT_MS).text
-            .substringAfterLast(" · ").substringBefore(' ').toInt()
+            .let(AnimeViewerHand::episodeCount)
         live.report("series", "\"$title\", episodes=$episodes")
         assertTrue("The series lists enough episodes for the story", episodes >= MIN_EPISODES)
 
@@ -82,12 +82,12 @@ class AnimeSeriesLiveTest {
         if (live.targetIsThisApp) recordsPlaybackOnPause(title, episode)
 
         val closedAt = hand.leavePlaying(episode)
-        live.tap("Continue naming the episode closed partway", By.text("Continue · $episode"))
+        live.tap("Continue naming the episode closed partway", By.text(AnimeViewerHand.continueLabel(episode)))
         hand.assertResumesAt("close", episode, closedAt, "after closing it while it played")
 
         val left = hand.leavePlaying(episode)
         notes.edit().putString(TITLE, title).putString(EPISODE, episode).putLong(LEFT_AT, left).commit()
-        live.report("left", "\"$episode\" at ${left.seconds()} s; the series page reads \"Continue · $episode\"")
+        live.report("left", "\"$episode\" at ${left.seconds()} s; the series page reads \"${AnimeViewerHand.continueLabel(episode)}\"")
     }
 
     @Test
@@ -98,7 +98,7 @@ class AnimeSeriesLiveTest {
         live.openSeriesTab()
         narrowToAnime()
         assertEquals(title, hand.openSeries(hand.argument(SERIES_QUERY)))
-        live.tap("Continue naming the episode left partway", By.text("Continue · $episode"), SeriesLiveDriver.RESULTS_TIMEOUT_MS)
+        live.tap("Continue naming the episode left partway", By.text(AnimeViewerHand.continueLabel(episode)), SeriesLiveDriver.RESULTS_TIMEOUT_MS)
         assertEquals(episode, hand.episodeOnScreen(title))
         hand.assertResumesAt("resume", episode, leftAt, "after a restart")
 
@@ -116,12 +116,12 @@ class AnimeSeriesLiveTest {
         val shownAt = System.currentTimeMillis()
         hand.leaveViewer()
         val leftAfterMs = System.currentTimeMillis() - shownAt
-        live.waitFor("Continue naming the episode glanced at", By.text("Continue · $glanced"), SeriesLiveDriver.RESULTS_TIMEOUT_MS)
-        live.report("glance", "left \"$glanced\" ${leftAfterMs} ms after it showed; the series page reads \"Continue · $glanced\"")
+        live.waitFor("Continue naming the episode glanced at", By.text(AnimeViewerHand.continueLabel(glanced)), SeriesLiveDriver.RESULTS_TIMEOUT_MS)
+        live.report("glance", "left \"$glanced\" ${leftAfterMs} ms after it showed; the series page reads \"${AnimeViewerHand.continueLabel(glanced)}\"")
         assertTrue("Left within five seconds", leftAfterMs < GLANCE_MS)
 
         val expected = hand.entryAfter(glanced)
-        live.tap("Continue naming the episode glanced at", By.text("Continue · $glanced"))
+        live.tap("Continue naming the episode glanced at", By.text(AnimeViewerHand.continueLabel(glanced)))
         hand.awaitPlayback("\"$glanced\" to play") { it.state == PLAYING }
         endOfEpisode(title, glanced, expected, playingSince = System.currentTimeMillis())
         hand.leaveViewer()
@@ -133,7 +133,10 @@ class AnimeSeriesLiveTest {
         narrowToAnime()
         val chip = live.waitFor("$source's chip", By.checkable(true).hasDescendant(By.text(source)))
         if (!chip.isChecked) chip.click()
-        val listed = live.await("$source's listing", { hand.labels().dropWhile { it != "Filter" }.drop(1) }) { it.size >= LISTED_AT_LEAST }
+        // The listing fills the grid below the source chips, above the Popular, Latest and Filter bar.
+        val listed = live.await("$source's listing", { hand.labels().dropWhile { it != source }.drop(1).takeWhile { it != POPULAR } }) {
+            it.size >= LISTED_AT_LEAST
+        }
         live.report("browse", "$source lists ${listed.size} labels")
     }
 
@@ -222,6 +225,7 @@ class AnimeSeriesLiveTest {
         const val EPISODE = "episode"
         const val LEFT_AT = "leftAt"
         const val ANIME = "Anime"
+        const val POPULAR = "Popular"
         const val LISTED_AT_LEAST = 3
         const val MIN_EPISODES = 4
         const val PLAYED_MS = 5_000L
