@@ -27,6 +27,7 @@ class ViewerVideoRecoveryTest {
     private val errorPage = PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED
     private val decoder = PlaybackException.ERROR_CODE_DECODER_INIT_FAILED
     private val unknown = PlaybackException.ERROR_CODE_UNSPECIFIED
+    private val cleartext = PlaybackException.ERROR_CODE_IO_CLEARTEXT_NOT_PERMITTED
 
     /** One load's situation: how it got here, then the event. */
     private data class Row(
@@ -53,6 +54,9 @@ class ViewerVideoRecoveryTest {
             Row("picked by hand, dead server", pickedByHand = true, event = PlayerError(badStatus), expected = Fail),
             Row("picked by hand, played", pickedByHand = true, played = true, event = PlayerError(badStatus), expected = AskForFreshLinks),
             Row("picked by hand, nothing new", pickedByHand = true, event = NothingNew, expected = Fail),
+            Row("plain HTTP, though it played", played = true, event = PlayerError(cleartext), expected = FallBack("B")),
+            Row("plain HTTP on old links", linksAgeMs = 3 * 60_000, event = PlayerError(cleartext), expected = FallBack("B")),
+            Row("plain HTTP, picked by hand", pickedByHand = true, event = PlayerError(cleartext), expected = Fail),
         )
         rows.forEach { row ->
             val recovery = recovery(ViewerStreamAttempts(), pickedByHand = row.pickedByHand, linksAgeMs = row.linksAgeMs)
@@ -153,6 +157,13 @@ class ViewerVideoRecoveryTest {
         }
         assertEquals(key("Server A").playback, key("Server B").playback)
         assertNotEquals(key("Server A"), key("Server B"))
+    }
+
+    @Test
+    fun `a failure says plain HTTP is blocked when it is, and the player's message otherwise`() {
+        assertEquals("This stream uses plain HTTP, which is blocked.", viewerVideoFailureMessage(cleartext, "Source error"))
+        assertEquals("Source error", viewerVideoFailureMessage(badStatus, "Source error"))
+        assertEquals(VIEWER_VIDEO_FAILED, viewerVideoFailureMessage(unknown, null))
     }
 
     @Test

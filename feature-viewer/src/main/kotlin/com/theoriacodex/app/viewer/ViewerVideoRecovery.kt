@@ -107,7 +107,7 @@ internal class ViewerEpisodeStreams(
  *   [VIEWER_LINKS_OLD_AFTER_MS] before the load began), asks for fresh links once on an I/O or parsing error: an
  *   expired link answers with an error status, or with an error page that reads as a malformed manifest. The ask comes
  *   back once playback gets [VIEWER_RECOVERED_PROGRESS_MS] past the failure that spent it ([onProgress]), or when its
- *   lookup is cancelled ([onAskCancelled]).
+ *   lookup is cancelled ([onAskCancelled]). Plain HTTP, which the app refuses, never asks: new links cannot fix it.
  * - Otherwise (a stream that never played on fresh links: a dead server), or when fresh links brought nothing new, the
  *   episode falls back to its next stream not tried yet, at most [VIEWER_MAX_STREAM_FALLBACKS] times a load, unless
  *   the user picked the stream playing by hand; then it fails, with the picker.
@@ -195,9 +195,18 @@ internal class ViewerVideoRecovery(
             PlaybackException.ERROR_CODE_VIDEO_FRAME_PROCESSING_FAILED,
         )
 
-        /** Whether fresh links may fix this error: [PlaybackException] numbers its I/O errors 2000–2999 and its parsing errors 3000–3999. */
-        fun Int.renewable() = this in 2_000..3_999
+        /**
+         * Whether fresh links may fix this error: [PlaybackException] numbers its I/O errors 2000–2999 and its parsing
+         * errors 3000–3999. Plain HTTP is refused by the app itself, whatever the links.
+         */
+        fun Int.renewable() = this in 2_000..3_999 && this != PlaybackException.ERROR_CODE_IO_CLEARTEXT_NOT_PERMITTED
     }
+}
+
+/** What a video that ends in [errorCode] tells the user: why, when it is the app's own refusal; else [message]. */
+internal fun viewerVideoFailureMessage(errorCode: Int, message: String?): String = when (errorCode) {
+    PlaybackException.ERROR_CODE_IO_CLEARTEXT_NOT_PERMITTED -> "This stream uses plain HTTP, which is blocked."
+    else -> message ?: VIEWER_VIDEO_FAILED
 }
 
 internal const val VIEWER_VIDEO_FAILED = "Could not play video"

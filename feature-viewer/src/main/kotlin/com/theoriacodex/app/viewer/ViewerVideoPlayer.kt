@@ -290,7 +290,7 @@ private fun viewerVideoListener(
             // The terminal state holds until a new player replaces this one; a recovery under way ignores later errors.
             if (state.pending != null) return
             val decision = recovery.decide(ViewerRecoveryEvent.PlayerError(error.errorCode, player.currentPosition.coerceAtLeast(0L)))
-            state.follow(decision, error.message ?: VIEWER_VIDEO_FAILED, events)
+            state.follow(decision, viewerVideoFailureMessage(error.errorCode, error.message), events)
         }
         override fun onRenderedFirstFrame() {
             if (state.player !== player) return
