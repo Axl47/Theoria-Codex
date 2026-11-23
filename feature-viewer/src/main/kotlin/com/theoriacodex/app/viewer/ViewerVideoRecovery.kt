@@ -4,6 +4,7 @@ package com.theoriacodex.app.viewer
 
 import androidx.media3.common.PlaybackException
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
+import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.MediaStream
 
@@ -70,9 +71,16 @@ internal class ViewerLoadAttempts {
     val failedStreams = mutableSetOf<String>()
 }
 
-/** Each episode load's [ViewerLoadAttempts], for the whole Viewer screen. */
+/** Each episode load's [ViewerLoadAttempts] in one Viewer session; another session starts with none ([forSession]). */
 internal class ViewerStreamAttempts {
+    private var session: ViewerSessionIdentity? = null
     private val loads = mutableMapOf<ViewerMediaLoad, ViewerLoadAttempts>()
+
+    /** These attempts for [session]: a session replacing the last one, whose loads start over at 0, inherits nothing. */
+    fun forSession(session: ViewerSessionIdentity?): ViewerStreamAttempts = apply {
+        if (session != this.session) loads.clear()
+        this.session = session
+    }
 
     fun of(load: ViewerMediaLoad): ViewerLoadAttempts = loads.getOrPut(load) { ViewerLoadAttempts() }
 }

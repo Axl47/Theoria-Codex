@@ -8,6 +8,7 @@ import com.theoriacodex.app.viewer.ViewerRecoveryDecision.RetryInPlace
 import com.theoriacodex.app.viewer.ViewerRecoveryEvent.NothingNew
 import com.theoriacodex.app.viewer.ViewerRecoveryEvent.PlayerError
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
+import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.ImageRef
@@ -95,6 +96,15 @@ class ViewerVideoRecoveryTest {
         val retried = ViewerStreamAttempts()
         recovery(retried, loadGeneration = 1).apply { assertEquals(AskForFreshLinks, opening(0)) }.onAskCancelled()
         assertEquals(AskForFreshLinks, recovery(retried, loadGeneration = 1).opening(0))
+    }
+
+    @Test
+    fun `a replacing session inherits none of the last one's attempts`() {
+        val attempts = ViewerStreamAttempts().forSession(ViewerSessionIdentity("first"))
+        recovery(attempts).decide(PlayerError(badStatus))
+        assertEquals(setOf("A"), attempts.of(ViewerMediaLoad(episode, 0)).failedStreams)
+        assertEquals(setOf("A"), attempts.forSession(ViewerSessionIdentity("first")).of(ViewerMediaLoad(episode, 0)).failedStreams)
+        assertEquals(emptySet<String>(), attempts.forSession(ViewerSessionIdentity("second")).of(ViewerMediaLoad(episode, 0)).failedStreams)
     }
 
     @Test
