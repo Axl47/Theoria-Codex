@@ -136,7 +136,7 @@ private suspend fun prefetchViewerVideoMedia(
     if (playback == null || !playback.cache) return ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED)
     val location = playback.location
     if (location.startsWith("http://", true) || location.startsWith("https://", true)) {
-        return context.videoPlaybackInfrastructure().prefetch(location, playback.headers, maxBytes)
+        return context.videoPlaybackInfrastructure().prefetch(playback, maxBytes)
     }
     if (location.startsWith("content://", true)) {
         return ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED)

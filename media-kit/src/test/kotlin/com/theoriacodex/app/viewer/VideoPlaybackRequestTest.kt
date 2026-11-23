@@ -29,9 +29,17 @@ class VideoPlaybackRequestTest {
         assertNull(ImageRef(null, null, "video/mp4").viewerPlayback(source, VideoQuality.AUTO, metered = false))
 
         assertEquals(
-            VideoPlaybackRequest("720", source.requestHeaders()),
+            VideoPlaybackRequest("720", source.requestHeaders(), mime = "video/mp4"),
             media.viewerPlayback(source, VideoQuality.AUTO, metered = true, streamLabel = "ignored"),
         )
+    }
+
+    @Test fun `a rendition's own mime goes with it, so a source whose addresses hide the type still plays`() {
+        val hls = ImageRef("https://cdn.test/play?id=1", null, "video/mp4", videoVariants = listOf(
+            VideoVariant("https://cdn.test/play?id=1", 1080, mime = "application/x-mpegURL"),
+        ))
+
+        assertEquals("application/x-mpegURL", hls.viewerPlayback(source, VideoQuality.BEST, metered = false)?.mime)
     }
 
     @Test fun `an episode plays the stream with the remembered label, else its source's first, outside the cache`() {
@@ -61,7 +69,7 @@ class VideoPlaybackRequestTest {
         val stream = MediaStream("https://a.test/v.mp4", "A")
         val saved = ImageRef(null, "/saved.mp4", "video/mp4", streams = listOf(stream))
 
-        assertEquals(VideoPlaybackRequest("/saved.mp4", source.requestHeaders()), saved.viewerPlayback(source, VideoQuality.AUTO, false))
+        assertEquals(VideoPlaybackRequest("/saved.mp4", source.requestHeaders(), mime = "video/mp4"), saved.viewerPlayback(source, VideoQuality.AUTO, false))
         assertNull(ImageRef(null, null, null, streams = listOf(stream.copy(url = " "))).viewerPlayback(source, VideoQuality.AUTO, false))
     }
 }

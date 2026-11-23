@@ -38,8 +38,13 @@ class ViewerVideoPlayerPool(
         }
     }
 
-    /** A player prepared with [playback]; give it back with [recycle]. */
-    fun acquire(playback: VideoPlaybackRequest): VideoPlayerLease {
+    /**
+     * A player prepared with [playback]; give it back with [recycle]. [loop] is its repeat mode until the caller
+     * changes it, so callers pass their own playback mode here: a player handed back and leased again for the next
+     * stream is the same object, and an effect keyed on the player would not run again to set it. Separate audio
+     * starts on the request's first track ([FirstSeparateAudio]).
+     */
+    fun acquire(playback: VideoPlaybackRequest, loop: Boolean = true): VideoPlayerLease {
         checkMainThread()
         infrastructure.onViewerStreamAcquired()
         val request = infrastructure.bind(playback)
@@ -48,12 +53,14 @@ class ViewerVideoPlayerPool(
         traceMediaSection(MediaTraceSections.VIEWER_PREPARE) {
             // Returned players have no media binding; every lease starts at the requested item.
             player.setMediaSource(request.mediaSourceFactory.createMediaSource(request.mediaItem), true)
-            player.repeatMode = Player.REPEAT_MODE_ONE
+            player.repeatMode = if (loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
             player.prepare()
         }
+        val separateAudio = (request.mediaItem.localConfiguration?.tag as? SeparateAudioLabels)
+            ?.let { FirstSeparateAudio(player).also(player::addListener) }
         publishCounters()
         scheduleCleanup()
-        return VideoPlayerLease(lease)
+        return VideoPlayerLease(lease, separateAudio)
     }
 
     fun recycle(lease: VideoPlayerLease) {
@@ -65,6 +72,8 @@ class ViewerVideoPlayerPool(
             lease.player.pause()
             lease.player.stop()
             lease.player.clearMediaItems()
+            lease.trackListener?.let(lease.player::removeListener)
+            lease.player.clearTrackChoices()
         }
         slots.recycle(lease.slotLease, retainBinding = false)
         publishCounters()

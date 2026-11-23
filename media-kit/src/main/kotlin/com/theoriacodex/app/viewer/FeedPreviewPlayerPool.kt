@@ -242,9 +242,13 @@ class FeedPreviewPlayerPool(
     }
 }
 
-/** A feed or Viewer pool's loan of one player; return it to the pool that lent it. */
+/**
+ * A feed or Viewer pool's loan of one player; return it to the pool that lent it. [trackListener] is one the pool
+ * added for this lease's video and removes when the player comes back.
+ */
 class VideoPlayerLease internal constructor(
     internal val slotLease: ReusableVideoSlotPool.Lease<ExoPlayer>,
+    internal val trackListener: Player.Listener? = null,
 ) {
     val player: ExoPlayer
         get() = slotLease.resource

@@ -21,9 +21,18 @@ import java.io.File
 /** Width of the frame as displayed, after non-square pixels are stretched to their intended shape. */
 val VideoSize.displayWidth: Int get() = (width * pixelWidthHeightRatio).toInt()
 
+/**
+ * How far above the video's bottom edge subtitles sit, as a fraction of its height: clear of the Viewer's timeline
+ * when a landscape video fills the screen, where Media3's 8% would put them under it.
+ */
+private const val SUBTITLE_BOTTOM_PADDING_FRACTION = 0.15f
+
+/** A surface-only player view for a feed card or Viewer page; it draws the video and any subtitle cues. */
 fun createTexturePlayerView(context: Context): PlayerView {
-    return LayoutInflater.from(context)
+    val view = LayoutInflater.from(context)
         .inflate(R.layout.player_view_texture, FrameLayout(context), false) as PlayerView
+    view.subtitleView?.setBottomPaddingFraction(SUBTITLE_BOTTOM_PADDING_FRACTION)
+    return view
 }
 
 /**
