@@ -31,5 +31,8 @@ class ViewerPageTopTest {
         pixels[200 * 64 + 5] = 0xFFF0F0F0.toInt()
         pixels[200 * 64 + 6] = 0xFFE8E8E8.toInt()
         assertEquals(400 - 4, pageTopStart(pixels, 64, 2000, window = 64))
+        // A narrow decode samples every pixel, and one speck is still not a row of content.
+        val narrow = page(32, 1000, contentFrom = 320).apply { this[0] = ink }
+        assertEquals(320 - 2, pageTopStart(narrow, 32, 1000, window = 32))
     }
 }

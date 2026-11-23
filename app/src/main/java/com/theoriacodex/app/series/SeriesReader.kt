@@ -79,8 +79,8 @@ internal class SeriesReader(private val series: SeriesDependencies) {
             .onFailure { Diagnostics.report("series", "${id.source.id} chapter pages failed to load: ${failureKinds(it)}") }
             .getOrThrow()
         if (pages.isEmpty()) return null
-        // A downloaded chapter's first page is compared from the downloads.
-        if (downloaded == null) series.scope.launch { series.pictures.compare(id, mapOf(entry.entry.address to pages.first())) }
+        // Any copy counts, even one another collection owns; only the hash is kept.
+        series.scope.launch { series.pictures.compare(id, mapOf(entry.entry.address to pages.first())) }
         return chapterPost(stored.series, entry.entry, series.covers.address(stored.series), pages)
     }
 

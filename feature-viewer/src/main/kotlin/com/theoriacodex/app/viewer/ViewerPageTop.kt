@@ -6,6 +6,7 @@ import coil.size.Size
 import coil.transform.Transformation
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -38,7 +39,7 @@ internal fun pageTopStart(pixels: IntArray, width: Int, height: Int, window: Int
     val samples = (width + step - 1) / step
     val top = (0 until width step step).map { pixels[it] }
     val background = top.maxBy { colour -> top.count { !differs(it, colour) } }
-    val needed = max(1, samples / CONTENT_SHARE)
+    val needed = max(min(2, samples), samples / CONTENT_SHARE)
     val content = (0 until height).firstOrNull { y ->
         (0 until width step step).count { x -> differs(pixels[y * width + x], background) } >= needed
     } ?: return 0
@@ -52,7 +53,7 @@ private val CHANNEL_SHIFTS = intArrayOf(16, 8, 0)
 /** Pixels compared across a row. */
 private const val ROW_SAMPLES = 64
 
-/** A row is content once one in this many of its samples differs (two of 64), so a lone speck stays blank. */
+/** A row is content once one in this many of its samples differs, and never fewer than two, so a lone speck stays blank. */
 private const val CONTENT_SHARE = 32
 
 /** Beyond JPEG noise on a flat margin. */
