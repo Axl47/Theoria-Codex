@@ -130,10 +130,10 @@ internal fun ViewerPostStrip(
     openPages: ViewerStripPages? = null,
     /**
      * Whether the posts are a series' chapters, which are named by their titles (their ids are addresses) and, once
-     * the Viewer has their pages, pictured by their first page rather than the cover they all share.
+     * the Viewer has their pages, pictured by one of them ([ViewerStripMark.page]) rather than the cover they all share.
      */
     chapters: Boolean = false,
-    /** How particular posts are shown, such as chapters' numbers and downloaded first pages in place of a shared cover. */
+    /** How particular posts are shown, such as chapters' numbers and downloaded pages in place of a shared cover. */
     stripMarks: Map<PostId, ViewerStripMark> = emptyMap(),
 ) {
     val list = rememberLazyListState(initialFirstVisibleItemIndex = selectedIndex)
@@ -164,8 +164,8 @@ internal fun ViewerPostStrip(
                     } else {
                         val mark = stripMarks[post.id]
                         val label = (mark?.label ?: post.title?.takeIf { chapters })?.let { "Open $it" } ?: viewerPostLabel(post)
-                        val image = mark?.image ?: post.media.firstOrNull()?.takeIf { chapters && (it.localPath ?: it.url) != null } ?: post.preview
-                        ViewerPostThumbnail(post, index == selectedIndex, Modifier.size(cell), postMediaCount(post), label, mark?.badge, image) { onSelect(index) }
+                        val page = post.media.takeIf { chapters }?.let { it.getOrNull(mark?.page ?: 0) ?: it.firstOrNull() }?.takeIf { (it.localPath ?: it.url) != null }
+                        ViewerPostThumbnail(post, index == selectedIndex, Modifier.size(cell), postMediaCount(post), label, mark?.badge, mark?.image ?: page ?: post.preview) { onSelect(index) }
                     }
                 }
             }
@@ -320,8 +320,8 @@ private fun ViewerUnfoldedPages(source: SourceKey, pages: ViewerStripPages, cell
 
 /**
  * [pageCount] above one stacks cards behind the thumbnail, so a multi-page post reads as one before it is opened.
- * [image] is the post's own preview unless the caller pictures it by something else, such as a chapter's first page;
- * if that fails to load (a chapter's page addresses expire), the preview stands in.
+ * [image] is the post's own preview unless the caller pictures it by one of its pages, which shows from its top
+ * ([PageTopCrop]); if that fails to load (a chapter's page addresses expire), the preview stands in.
  */
 @Composable
 internal fun ViewerPostThumbnail(
@@ -338,8 +338,10 @@ internal fun ViewerPostThumbnail(
     var failed by remember(image) { mutableStateOf(false) }
     val shown = if (failed) post.preview else image
     val location = shown.localPath ?: shown.url
-    val request = remember(context, location, post.id.source) {
+    val page = shown != post.preview
+    val request = remember(context, location, post.id.source, page) {
         location?.let { buildViewerImageRequest(context, it, post.id.source, staticAnimatedWebPFrame = true) }
+            ?.let { if (page) it.newBuilder().transformations(PageTopCrop).build() else it }
     }
     val animated = remember(post) { isAnimatedPost(post) }
     ViewerThumbnailTile(request, label, selected, animated, modifier, pageCount, badge, onError = { failed = true }, onClick = onClick)
