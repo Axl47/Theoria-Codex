@@ -178,6 +178,7 @@ test_tasks=(
   :extension-host:compileDebugAndroidTestKotlin
   :ui-kit:testDebugUnitTest
   :media-kit:testDebugUnitTest
+  :media-kit:compileDebugAndroidTestKotlin
   :vision-kit:testDebugUnitTest
   :feed-kit:testDebugUnitTest
   :feature-viewer:testDebugUnitTest
@@ -230,6 +231,7 @@ shared_tasks=(
   :extension-host:compileDebugUnitTestJavaWithJavac
   :extension-host:compileDebugAndroidTestKotlin
   :extension-host:bundleLibRuntimeToJarDebug
+  :media-kit:compileDebugAndroidTestKotlin
   :ui-kit:compileDebugUnitTestKotlin
   :ui-kit:compileDebugUnitTestJavaWithJavac
   :ui-kit:bundleLibRuntimeToJarDebug

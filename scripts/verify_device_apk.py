@@ -21,6 +21,7 @@ ISOLATED_LANES = {
     "com.theoriacodex.debug": "true",
     "com.theoriacodex.debug.test": "true",
     "com.theoriacodex.data.android.test": "true",
+    "com.theoriacodex.mediakit.test": "true",
     "com.theoriacodex.extensionhost.test": "true",
     "com.theoriacodex.benchmark": "false",
     "com.theoriacodex.macrobenchmark": "true",
@@ -30,6 +31,7 @@ ISOLATED_LANES = {
 INSTRUMENTATION_TARGETS = {
     "com.theoriacodex.debug.test": "com.theoriacodex.debug",
     "com.theoriacodex.data.android.test": "com.theoriacodex.data.android.test",
+    "com.theoriacodex.mediakit.test": "com.theoriacodex.mediakit.test",
     "com.theoriacodex.extensionhost.test": "com.theoriacodex.extensionhost.test",
     "com.theoriacodex.macrobenchmark": "com.theoriacodex.macrobenchmark",
     "com.theoriacodex.baselineprofile.test": "com.theoriacodex.baselineprofile.test",
