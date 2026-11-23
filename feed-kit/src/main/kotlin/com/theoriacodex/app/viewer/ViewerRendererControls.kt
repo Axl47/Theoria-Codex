@@ -14,7 +14,7 @@ data class ViewerRendererControls(
     val isPreloading: Boolean = false,
     val seekJumpSerial: Int = 0,
     val seekJumpDeltaMs: Long = 0L,
-    /** False while the Viewer opens: system media controls wait for it to land, since connecting them costs frames. */
+    /** Whether the player may take the system's media controls and picture-in-picture (the Viewer's frame decides). */
     val systemControlsReady: Boolean = true,
     /** The media's length as known before its player loads; timelines show it at 0:00 meanwhile instead of vanishing. */
     val expectedDurationMs: Long? = null,
