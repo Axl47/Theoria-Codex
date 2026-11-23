@@ -9,7 +9,6 @@ import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
-import com.theoriacodex.domain.series.SeriesStatus
 import com.theoriacodex.domain.series.UnsupportedEntriesException
 import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.HostUnavailableException
@@ -204,13 +203,6 @@ class AniyomiSeriesSourceTest {
         // Listed once its details were asked for, so a second listing asks no more.
         series.entries(stored)
         assertEquals(1, source.detailsAsked)
-    }
-
-    @Test
-    fun `an anime announced but not yet released is upcoming`() = runBlocking {
-        val source = ServerSource(listing = listOf(anime("/a/2", "Soon").apply { status = SAnime.UPCOMING }))
-
-        assertEquals(SeriesStatus.UPCOMING, AniyomiSeriesSource(source, HostServices(ExtensionImages())).popular(1).series.single().status)
     }
 
     private suspend fun streamsOf(source: AnimeHttpSource, serverLimitMs: Long = 60_000, onChallenged: (String) -> Unit = {}): List<MediaStream> {

@@ -8,7 +8,6 @@ import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
-import com.theoriacodex.domain.series.SeriesStatus
 import com.theoriacodex.domain.series.UnsupportedEntriesException
 import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
@@ -30,7 +29,7 @@ class AniyomiSeriesSource internal constructor(
 ) : SeriesSource {
     constructor(source: AnimeSource, host: HostServices) : this(source, host, AniyomiStreams.Limits())
 
-    override val key: SourceKey = AnimeKind.sourceKey(source.id)
+    override val key: SourceKey = AniyomiKind.sourceKey(source.id)
     private val calls = ExtensionCalls(source.name, host.log) { challenged -> host.onChallenged(key, challenged) }
     private val http = source as? AnimeHttpSource
     private val streams = AniyomiStreams(source, host, calls, limits)
@@ -140,7 +139,7 @@ class AniyomiSeriesSource internal constructor(
         genres = genre.orEmpty().split(',').map(String::trim).filter(String::isNotEmpty),
         language = source.lang,
         description = description?.trim()?.takeIf(String::isNotEmpty),
-        status = if (status == SAnime.UPCOMING) SeriesStatus.UPCOMING else seriesStatus(status),
+        status = seriesStatus(status),
     )
 
     internal companion object {

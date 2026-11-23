@@ -5,6 +5,7 @@ import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.series.SeriesStatus
 import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.HostUnavailableException
+import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.source.model.SManga
 import java.io.IOException
@@ -108,5 +109,6 @@ internal fun seriesStatus(status: Int): SeriesStatus = when (status) {
     SManga.PUBLISHING_FINISHED -> SeriesStatus.PUBLISHING_FINISHED
     SManga.CANCELLED -> SeriesStatus.CANCELLED
     SManga.ON_HIATUS -> SeriesStatus.ON_HIATUS
+    SAnime.UPCOMING -> SeriesStatus.UPCOMING
     else -> SeriesStatus.UNKNOWN
 }

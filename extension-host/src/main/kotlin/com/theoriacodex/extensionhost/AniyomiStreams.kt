@@ -23,7 +23,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
  * How [AniyomiSeriesSource] resolves an episode into the streams its servers offer, as [MihonImages] fetches a manga
  * source's images. Streams are asked for from every server at once. A server gets [Limits.serverMs] and listing the
  * servers [Limits.listMs], since some sources resolve every server inside that one call. Extension code can ignore
- * cancellation, so work past its limit, or whose caller stopped waiting, is abandoned in [HostServices.abandoned] and
+ * cancellation, so work past its limit, or whose caller stopped waiting, is abandoned in [HostServices.detached] and
  * never joined. Failures go through [calls], which reports each browser check that stopped a server.
  */
 internal class AniyomiStreams(
@@ -149,7 +149,7 @@ internal class AniyomiStreams(
      * either way it is asked to stop and left to finish there, never waited for.
      */
     private suspend fun <T : Any> abandoning(what: String, limitMs: Long, block: suspend () -> T): T? {
-        val work = host.abandoned.async { block() }
+        val work = host.detached.async { block() }
         try {
             val result = withTimeoutOrNull(limitMs) { work.await() }
             if (result == null) host.log("${source.name}: $what took longer than $limitMs ms")

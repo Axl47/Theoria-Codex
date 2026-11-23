@@ -18,7 +18,7 @@ import org.junit.Test
 
 class MihonFiltersTest {
     private val source = FilteringSource()
-    private val series = MihonSeriesSource(source, ExtensionImages())
+    private val series = MihonSeriesSource(source, HostServices(ExtensionImages()))
 
     @Test
     fun `each of Mihon's filters becomes the app's, and a group's members that are not filters are left out`() = runTest {

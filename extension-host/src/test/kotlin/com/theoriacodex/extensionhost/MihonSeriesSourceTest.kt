@@ -30,7 +30,7 @@ import org.junit.Test
 
 class MihonSeriesSourceTest {
     private val source = FakeSource()
-    private val series = MihonSeriesSource(source, ExtensionImages())
+    private val series = MihonSeriesSource(source, HostServices(ExtensionImages()))
 
     @Test
     fun `the source is named by its id, name and language`() {
@@ -86,12 +86,12 @@ class MihonSeriesSourceTest {
     }
 
     @Test
-    fun `each of Mihon's status numbers has its status, and any other is unknown`() {
+    fun `each status number Mihon and Aniyomi use has its status, and any other is unknown`() {
         val expected = listOf(
             SeriesStatus.UNKNOWN, SeriesStatus.ONGOING, SeriesStatus.COMPLETED, SeriesStatus.LICENSED,
-            SeriesStatus.PUBLISHING_FINISHED, SeriesStatus.CANCELLED, SeriesStatus.ON_HIATUS, SeriesStatus.UNKNOWN,
+            SeriesStatus.PUBLISHING_FINISHED, SeriesStatus.CANCELLED, SeriesStatus.ON_HIATUS, SeriesStatus.UPCOMING, SeriesStatus.UNKNOWN,
         )
-        assertEquals(expected, (0..7).map(::seriesStatus))
+        assertEquals(expected, (0..8).map(::seriesStatus))
     }
 
     @Test

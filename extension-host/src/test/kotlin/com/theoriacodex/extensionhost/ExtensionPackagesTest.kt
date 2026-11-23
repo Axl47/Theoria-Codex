@@ -17,7 +17,7 @@ import org.robolectric.Shadows.shadowOf
 class ExtensionPackagesTest {
     private val context: Context = RuntimeEnvironment.getApplication()
 
-    private val packages = ExtensionPackages(context, listOf(MihonKind, AnimeKind))
+    private val packages = ExtensionPackages(context, listOf(MihonKind, AniyomiKind))
 
     @Test
     fun `a package is listed under the kind whose feature it declares, and one declaring none is no extension`() {
@@ -25,13 +25,13 @@ class ExtensionPackagesTest {
             putString(MihonKind.sourceClassesKey, ".MangaSource")
             putFloat("tachiyomix.extensionLib", 1.6f)
         })
-        install("app.anime", AnimeKind.feature, "Aniyomi: Anime", Bundle().apply { putString(AnimeKind.sourceClassesKey, ".AnimeSource") }, version = "14.25")
+        install("app.anime", AniyomiKind.feature, "Aniyomi: Anime", Bundle().apply { putString(AniyomiKind.sourceClassesKey, ".AnimeSource") }, version = "14.25")
         install("app.other", "android.hardware.camera", "Other", Bundle().apply { putString(MihonKind.sourceClassesKey, ".Source") })
 
         val listed = packages.list()
 
         assertEquals(listOf("Anime", "Manga"), listed.map { it.name })
-        assertSame(AnimeKind, listed[0].kind)
+        assertSame(AniyomiKind, listed[0].kind)
         assertEquals(listOf("app.anime.AnimeSource"), listed[0].sourceClasses)
         assertSame(MihonKind, listed[1].kind)
         assertEquals(listOf(null, null), listed.map { it.unsupported })
@@ -50,10 +50,10 @@ class ExtensionPackagesTest {
     @Test
     fun `anime extensions of interface 14 and 16 are accepted, and any other version or a torrent one is refused`() {
         listOf("a" to "14.64", "b" to "16.8", "c" to "17.1", "d" to "13.9").forEach { (name, version) ->
-            install("app.$name", AnimeKind.feature, "Aniyomi: $name", Bundle().apply { putString(AnimeKind.sourceClassesKey, ".Source") }, version)
+            install("app.$name", AniyomiKind.feature, "Aniyomi: $name", Bundle().apply { putString(AniyomiKind.sourceClassesKey, ".Source") }, version)
         }
-        install("app.e", AnimeKind.feature, "Aniyomi: e", Bundle().apply {
-            putString(AnimeKind.sourceClassesKey, ".Source")
+        install("app.e", AniyomiKind.feature, "Aniyomi: e", Bundle().apply {
+            putString(AniyomiKind.sourceClassesKey, ".Source")
             putInt("tachiyomi.animeextension.torrent", 1)
         }, version = "16.1")
 

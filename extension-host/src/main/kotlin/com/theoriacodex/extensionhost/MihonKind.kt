@@ -36,8 +36,7 @@ object MihonKind : ExtensionKind {
 
     /** A source's name, language and id are its code too, so they are read here, within the load's limit. */
     internal fun hosted(source: Source, host: HostServices): HostedSource {
-        val key = sourceKey(source.id)
-        val series = MihonSeriesSource(source, host.images, host.log) { challenged -> host.onChallenged(key, challenged) }
+        val series = MihonSeriesSource(source, host)
         return HostedSource(
             series = series,
             name = source.name,

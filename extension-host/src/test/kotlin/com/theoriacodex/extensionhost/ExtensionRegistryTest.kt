@@ -303,7 +303,7 @@ class ExtensionRegistryTest {
 
     @Test
     fun `each extension is listed with the kind of series its interface serves`() = runBlocking {
-        onDevice = listOf(extension("a", signer = "key-1"), extension("b", signer = "key-1").copy(kind = AnimeKind))
+        onDevice = listOf(extension("a", signer = "key-1"), extension("b", signer = "key-1").copy(kind = AniyomiKind))
 
         assertEquals(listOf(SeriesKind.MANGA, SeriesKind.ANIME), registry.installed().map { it.kind })
     }
