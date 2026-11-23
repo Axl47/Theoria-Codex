@@ -17,12 +17,17 @@ import com.theoriacodex.extensionhost.assertFailsWith
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Test
 
 class HostInterceptorsTest {
+    /** A test that listens to diagnostics leaves no listener behind for the tests after it. */
+    @After
+    fun stopListeningToDiagnostics() = Diagnostics.install { _, _, _ -> }
+
     private val request = Request.Builder().url("https://example.test/").build()
 
     @Test

@@ -99,6 +99,7 @@ internal fun TestScope.seriesDependencies(
     sources: suspend () -> List<SeriesSource>,
     deleteAfterReading: Boolean = false,
     store: OfflineMediaStore = OfflineMediaStore(folder.resolve("downloads"), StandardTestDispatcher(testScheduler)),
+    pictures: ChapterPictures = ChapterPictures(),
 ): SeriesDependencies {
     val covers = SeriesCovers { series -> series.coverUrl?.let { "$it#loadable" } }
     val source: suspend (SourceKey) -> SeriesSource? = { key -> sources().firstOrNull { it.key == key } }
@@ -117,5 +118,5 @@ internal fun TestScope.seriesDependencies(
         deleteAfterReading = { deleteAfterReading },
         files = AtomicJsonFileStore(StandardTestDispatcher(testScheduler)),
     )
-    return SeriesDependencies(repository, sources, source, NoExtensions, downloads, scope = this, covers = covers, log = {})
+    return SeriesDependencies(repository, sources, source, NoExtensions, downloads, scope = this, covers = covers, pictures = pictures, log = {})
 }

@@ -206,12 +206,12 @@ class SeriesDownloads(
     suspend fun chapter(id: SeriesId, entry: String): Post? = store.find(PostId(id.source, entry))
 
     /**
-     * The first page, as a file, of each of [id]'s chapters on the device, by address, read from memory; then again
+     * The first two pages, as files, of each of [id]'s chapters on the device, by address, read from memory; then again
      * whenever a chapter is downloaded or deleted.
      */
-    fun firstPages(id: SeriesId): Flow<Map<String, ImageRef>> = flow {
+    fun leadPages(id: SeriesId): Flow<Map<String, List<ImageRef>>> = flow {
         store.load()
-        emitAll(store.snapshot.map { it.firstPages(id) }.distinctUntilChanged())
+        emitAll(store.snapshot.map { it.leadPages(id) }.distinctUntilChanged())
     }
 
     /** The addresses of [id]'s chapters on the device. */
@@ -494,8 +494,8 @@ class SeriesDownloads(
     private fun OfflineMediaSnapshot.chapters(id: SeriesId): Set<String> =
         postsByOwner[seriesOfflineOwner(id)].orEmpty().mapTo(HashSet()) { it.sourcePostId }
 
-    private fun OfflineMediaSnapshot.firstPages(id: SeriesId): Map<String, ImageRef> =
-        postsByOwner[seriesOfflineOwner(id)].orEmpty().mapNotNull { post -> firstPages[post]?.let { post.sourcePostId to it } }.toMap()
+    private fun OfflineMediaSnapshot.leadPages(id: SeriesId): Map<String, List<ImageRef>> =
+        postsByOwner[seriesOfflineOwner(id)].orEmpty().mapNotNull { post -> leadPages[post]?.let { post.sourcePostId to it } }.toMap()
 
     companion object {
         const val PAGE_ATTEMPTS = 3

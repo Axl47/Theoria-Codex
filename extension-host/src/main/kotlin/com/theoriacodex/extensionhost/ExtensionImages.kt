@@ -119,6 +119,9 @@ class ExtensionImages(
         val fragment = url.fragment.orEmpty()
         if (!fragment.startsWith(TAG)) return chain.proceed(chain.request())
         val untagged = url.newBuilder().fragment(null).build()
+        // A request that may only read caches never reaches the source: untagged, the client answers it from its cache or
+        // refuses it, and neither loads an extension.
+        if (chain.request().cacheControl.onlyIfCached) return chain.proceed(chain.request().newBuilder().url(untagged).build())
         // A tag this host did not issue, or one for a source that is not on: an ordinary request, without the tag.
         val (source, data) = issued(untagged, fragment) ?: return chain.proceed(chain.request().newBuilder().url(untagged).build())
         return failingAsIo { source.fetch(url.toString(), untagged, data) }

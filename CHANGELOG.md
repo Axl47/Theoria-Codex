@@ -66,6 +66,8 @@
 
 - Downloading chapters, checking followed series for new chapters, a series' images and a chapter reopened from where you left off start only the extension that series comes from, not every extension that is on, so they no longer wait for the others to load.
 - In the reader's chapter strip, downloaded chapters and chapters the reader has loaded show their first page instead of the series cover, so chapters are easier to tell apart.
+- When a series' chapters open on the same page, such as a scanlation group's credits, the reader's chapter strip shows each chapter's second page instead.
+- Chapter pictures in the reader's strip show the top of the page, below its blank margin, so a long webtoon page no longer shows a slice from its middle.
 - When a series chapter's pages fail to load, the Diagnostics failure log records why, including whether the site refused the request outright.
 - The Diagnostics failure log names the extension source behind a failed image, and records when an extension image was sent without its source's own connection.
 - The Diagnostics failure log records why an extension failed to load, and when one needed something Theoria doesn't provide.

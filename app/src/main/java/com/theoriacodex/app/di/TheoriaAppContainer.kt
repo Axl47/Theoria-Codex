@@ -22,6 +22,8 @@ import com.theoriacodex.app.media.OfflineMediaAcquisition
 import com.theoriacodex.app.media.OfflineMediaCoordinator
 import com.theoriacodex.app.media.PostDownloads
 import com.theoriacodex.app.media.codexOfflineOwner
+import com.theoriacodex.app.media.pictureHashAt
+import com.theoriacodex.app.series.ChapterPictures
 import com.theoriacodex.app.codex.LikesCodexSyncService
 import com.theoriacodex.app.codex.transfer.CodexTransferService
 import com.theoriacodex.app.recommend.ForYouCoordinator
@@ -591,6 +593,7 @@ internal class DefaultTheoriaAppContainer(
         )
         SeriesDependencies(
             repository, host::sources, host::source, host.extensions, downloads, scope = durableStoreScope, covers = host.covers,
+            pictures = ChapterPictures { source, page -> (page.localPath ?: page.url)?.let { pictureHashAt(appContext, it, source, cachedOnly = true) } },
         ) { Log.i("SeriesReader", it) }
     }
 
