@@ -1,7 +1,7 @@
 package com.theoriacodex.app.vision
 
-import android.graphics.Bitmap
 import com.theoriacodex.data.repository.PictureVision
+import com.theoriacodex.data.repository.VisionFrames
 import com.theoriacodex.data.repository.VisualSignatureRepository
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.diagnostics.Diagnostics
@@ -12,6 +12,7 @@ import com.theoriacodex.domain.vision.PictureLook
 import com.theoriacodex.domain.vision.PictureTags
 import com.theoriacodex.domain.vision.PredictedTag
 import com.theoriacodex.domain.vision.PredictedTagIndex
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -47,25 +48,25 @@ sealed interface PictureResult {
 }
 
 /**
- * The picture tagger, whatever the source: [analyze] reads a post's still preview with the downloaded model, and
- * [library] holds what Room stores for library posts, while [known] also answers from this session's analyses of For You
- * candidates without anything observing them. While the model is absent [library] is empty and [analyze] answers
- * [PictureResult.Unavailable], so every consumer behaves as before the tagger existed.
- *
- * [loadStill] decodes a post's still preview (null when it has none or it failed to load: [hasStill] tells them apart).
+ * The picture tagger, whatever the source: [analyze] reads a post's still preview with the downloaded model,
+ * [analyzeFrames] reads a playing post's still and frames from across it, and [library] holds what Room stores for
+ * library posts, while [known] also answers from this session's analyses of For You candidates without anything
+ * observing them.
+ * While the model is absent [library] is empty and [analyze] answers [PictureResult.Unavailable], so every consumer
+ * behaves as before the tagger existed. [pictures] supplies the stills and frames.
  */
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class PictureTagger(
     private val store: VisualModelStore,
     private val signatures: VisualSignatureRepository,
-    private val hasStill: (Post) -> Boolean,
-    private val loadStill: suspend (Post) -> Bitmap?,
+    private val pictures: PictureSource,
     scope: CoroutineScope,
-    threads: Int = WdTaggerRunner.DEFAULT_THREADS,
+    /** Loads the model from its file for a vocabulary of the given size; tests pass a stand-in. */
+    openModel: (File, Int) -> PictureModel = { file, size -> WdTaggerRunner(file, size) },
 ) : PictureTags {
     private val vocabularyLock = Mutex()
     private var vocabulary: TagVocabulary? = null
-    private val holder = PictureModelHolder(scope) { WdTaggerRunner(store.modelFile, checkNotNull(vocabulary).size, threads) }
+    private val holder = PictureModelHolder(scope) { openModel(store.modelFile, checkNotNull(vocabulary).size) }
     private val session = SessionAnalyses()
 
     // Held while results are kept and while a deleted model's are forgotten, so none outlive the delete.
@@ -84,10 +85,12 @@ class PictureTagger(
 
     override fun known(id: PostId): List<PredictedTag>? {
         if (!ready.value) return null
+        // What the Library stored wins: it may have read a playing post's frames, which this session's look never does.
+        library.value[id]?.let { return it }
         return when (val result = session[id]) {
             is PictureResult.Analysed -> result.tags
             PictureResult.Unanalysable -> emptyList()
-            else -> library.value[id]
+            else -> null
         }
     }
 
@@ -111,12 +114,29 @@ class PictureTagger(
     suspend fun analyze(post: Post, remember: Boolean = true): PictureResult {
         session[post.id]?.let { return it }
         if (!ready.value) return PictureResult.Unavailable
-        val result = if (!hasStill(post)) PictureResult.Unanalysable else read(post)
+        val result = if (!pictures.hasStill(post)) PictureResult.Unanalysable else read(post)
         if (!remember || result == PictureResult.Unavailable || result == PictureResult.Unreachable) return result
         return commits.withLock {
             // A model deleted while this ran must not leave its answer behind.
             if (current) result.also { session[post.id] = result } else PictureResult.Unavailable
         }
+    }
+
+    /**
+     * [post]'s still and frames from across it as one analysis ([combineScores], [combineEmbeddings]), to replace the
+     * still analysis the Library stored ([storeFrames]). A post that does not play, or whose frames cannot be read, is
+     * [PictureResult.Unanalysable]; frames that cannot be read now leave it [PictureResult.Unreachable]. Never remembered.
+     */
+    suspend fun analyzeFrames(post: Post): PictureResult {
+        if (!ready.value) return PictureResult.Unavailable
+        if (!pictures.plays(post)) return PictureResult.Unanalysable
+        val frames = when (val read = pictures.frames(post)) {
+            is PostFrames.Read -> read.frames
+            PostFrames.Unreadable -> return PictureResult.Unanalysable
+            PostFrames.Unreachable -> return PictureResult.Unreachable
+        }
+        val still = if (pictures.hasStill(post)) runCatchingPreservingCancellation { pictures.still(post) }.getOrNull() else null
+        return analyzePictures(distinctPictures(listOfNotNull(still) + frames))
     }
 
     override suspend fun look(post: Post): PictureLook {
@@ -150,15 +170,16 @@ class PictureTagger(
     }
 
     /**
-     * Stores [results] for the Library's posts, leaving out pictures that could not be read now; returns false, storing
-     * nothing, once the model was deleted.
+     * Stores [results] for the Library's posts, leaving out pictures that could not be read now; a post that plays is
+     * marked for [analyzeFrames]. Returns false, storing nothing, once the model was deleted.
      */
-    suspend fun store(results: Map<PostId, PictureResult>): Boolean = commits.withLock {
+    suspend fun store(results: Map<Post, PictureResult>): Boolean = commits.withLock {
         if (!current) return@withLock false
-        val visions = results.mapNotNull { (id, result) ->
+        val visions = results.mapNotNull { (post, result) ->
+            val frames = if (pictures.plays(post)) VisionFrames.WANTED else VisionFrames.NONE
             when (result) {
-                is PictureResult.Analysed -> PictureVision(id, store.id, result.embedding, result.tags)
-                PictureResult.Unanalysable -> PictureVision(id, store.id, embedding = null, tags = null)
+                is PictureResult.Analysed -> PictureVision(post.id, store.id, result.embedding, result.tags, frames)
+                PictureResult.Unanalysable -> PictureVision(post.id, store.id, embedding = null, tags = null, frames = frames)
                 PictureResult.Unreachable, PictureResult.Unavailable -> null
             }
         }
@@ -167,15 +188,52 @@ class PictureTagger(
     }
 
     /**
-     * Only a loaded model failing on this picture makes it [PictureResult.Unanalysable]; a model or vocabulary that
-     * fails to load (low memory, say) leaves it [PictureResult.Unavailable] for a later try.
+     * [posts] that play, in order; the others' still analyses are marked as all those posts offer, in one write, so
+     * [analyzeFrames] is not asked of them again. Analyses marked before anything knew whether their post plays (the
+     * migration marks them all) are settled here.
      */
+    suspend fun playing(posts: List<Post>): List<Post> {
+        val (playing, still) = posts.partition(pictures::plays)
+        if (still.isNotEmpty()) commits.withLock { if (current) signatures.unwantFrames(still.map(Post::id), store.id) }
+        return playing
+    }
+
+    /**
+     * Stores what [analyzeFrames] gave for [postId] in place of its still analysis; a failure leaves the still analysis
+     * standing and counts against the post's frame reads, for good when another try would repeat it. Returns false,
+     * storing nothing, once the model was deleted.
+     */
+    suspend fun storeFrames(postId: PostId, result: PictureResult): Boolean = commits.withLock {
+        if (!current) return@withLock false
+        when (result) {
+            is PictureResult.Analysed ->
+                signatures.putVision(listOf(PictureVision(postId, store.id, result.embedding, result.tags, VisionFrames.READ)))
+            PictureResult.Unreachable -> signatures.failFrames(postId, store.id, permanently = false)
+            PictureResult.Unanalysable -> signatures.failFrames(postId, store.id, permanently = true)
+            PictureResult.Unavailable -> Unit
+        }
+        true
+    }
+
     private suspend fun read(post: Post): PictureResult {
-        val picture = runCatchingPreservingCancellation { loadStill(post) }.getOrNull() ?: return PictureResult.Unreachable
+        val picture = runCatchingPreservingCancellation { pictures.still(post) }.getOrNull() ?: return PictureResult.Unreachable
+        return analyzePictures(listOf(WeightedPicture(picture, 1)))
+    }
+
+    /**
+     * [weighted] through the model, one picture at a time so a For You look waits for at most one, as one analysis. Only
+     * a loaded model failing on a picture makes it [PictureResult.Unanalysable]; a model or vocabulary that fails to load
+     * (low memory, say) leaves it [PictureResult.Unavailable] for a later try.
+     */
+    private suspend fun analyzePictures(weighted: List<WeightedPicture>): PictureResult {
         return runCatchingPreservingCancellation {
             val words = vocabulary()
-            val analysis = holder.use { model -> model.analyze(picture) }
-            PictureResult.Analysed(words.predictions(analysis.scores), PictureEmbedding.encode(analysis.embedding))
+            val analyses = weighted.map { picture -> holder.use { model -> model.analyze(picture.bitmap) } }
+            val weights = weighted.map(WeightedPicture::weight)
+            PictureResult.Analysed(
+                words.predictions(combineScores(analyses.map { it.scores }, weights)),
+                PictureEmbedding.encode(combineEmbeddings(analyses.map { it.embedding }, weights)),
+            )
         }.getOrElse { error ->
             Diagnostics.report("vision", "The picture tagger could not read a picture", error)
             if (error is PictureModelHolder.LoadFailed || vocabulary == null || !ready.value) PictureResult.Unavailable else PictureResult.Unanalysable

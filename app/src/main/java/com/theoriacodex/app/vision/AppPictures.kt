@@ -3,9 +3,22 @@ package com.theoriacodex.app.vision
 import android.content.Context
 import android.os.PowerManager
 import com.theoriacodex.app.BuildConfig
+import android.graphics.Bitmap
 import com.theoriacodex.app.media.LibraryPictureBackfill
+import com.theoriacodex.app.media.PostMotion
+import com.theoriacodex.app.media.awaitsVideoStream
 import com.theoriacodex.app.media.loadPreviewStill
+import com.theoriacodex.app.media.postMotion
 import com.theoriacodex.app.media.postPreviewImageCandidate
+import com.theoriacodex.app.viewer.FrameSample
+import com.theoriacodex.app.viewer.NetworkBudget
+import com.theoriacodex.app.viewer.PixivUgoiraClient
+import com.theoriacodex.app.viewer.frameSample
+import com.theoriacodex.app.viewer.VideoPlaybackInfrastructure
+import com.theoriacodex.app.viewer.videoPlaybackInfrastructure
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.data.repository.VisionProgress
 import com.theoriacodex.data.repository.VisualSignatureRepository
 import java.io.File
@@ -15,7 +28,8 @@ import okhttp3.OkHttpClient
 
 /**
  * The Library's picture upkeep and the opt-in picture tagger, as the app holds them: [model] is the tagger's download,
- * [tagger] what it predicts, and [indexLibrary] the work the charging-only background job does.
+ * [tagger] what it predicts, [indexLibrary] the work the charging-only background job does, and [readFrames] the work
+ * the idle-only one does.
  */
 class AppPictures(
     val model: VisualModelStore,
@@ -30,18 +44,26 @@ class AppPictures(
         hashes.drain()
         return tags.drain()
     }
+
+    /** Upgrades playing posts' still analyses with their frames; returns whether it should run again soon. */
+    suspend fun readFrames(): Boolean = tags.drainFrames()
 }
 
 /**
  * Builds [AppPictures]: the model lives in no-backup storage, since it is large and downloads again, and its files come
  * from [BuildConfig.VISION_MODEL_BASE_URL]. Deleting it removes every stored prediction too. [hashes] is the Library's
- * picture hashing, which runs whether or not the model is there.
+ * picture hashing, which runs whether or not the model is there. [offlineCopy] finds a post's downloaded copy, whose
+ * video plays from disk. [resolvePost] looks a post up again at its source, for a video whose saved address expired or
+ * was never listed.
  */
 fun appPictures(
     context: Context,
     client: OkHttpClient,
     signatures: VisualSignatureRepository,
     hashes: LibraryPictureBackfill,
+    ugoira: PixivUgoiraClient,
+    offlineCopy: suspend (PostId) -> Post?,
+    resolvePost: suspend (PostId) -> Post?,
     scope: CoroutineScope,
 ): AppPictures {
     val app = context.applicationContext
@@ -49,17 +71,67 @@ fun appPictures(
     val model = VisualModelStore(
         VisualModelSpec.wdVitTaggerV3(BuildConfig.VISION_MODEL_BASE_URL), File(app.noBackupFilesDir, "models"), client, scope,
     ) { tagger.forget() }
-    tagger = PictureTagger(
-        model,
-        signatures,
-        hasStill = { post -> postPreviewImageCandidate(post) != null },
-        loadStill = { post -> postPreviewImageCandidate(post)?.let { loadPreviewStill(app, it, INPUT_PX) } },
-        scope,
-    )
+    tagger = PictureTagger(model, signatures, AppPictureSource(app, ugoira, offlineCopy, resolvePost), scope)
     val power = app.getSystemService(PowerManager::class.java)
-    val tags = LibraryVisionBackfill(tagger, signatures) { power.currentThermalStatus >= PowerManager.THERMAL_STATUS_MODERATE }
+    val tags = LibraryVisionBackfill(tagger, signatures, hot = { power.currentThermalStatus >= PowerManager.THERMAL_STATUS_MODERATE })
     return AppPictures(model, tagger, hashes, tags, signatures.observeVisionProgress(model.id))
+}
+
+/**
+ * The tagger's pictures as the app holds them: stills through the image loader, from the disk cache cards fill; video
+ * frames through the shared video cache ([VideoPlaybackInfrastructure.sampleFrames]), or from a downloaded copy on disk;
+ * Pixiv animation frames from their archive. A post whose listing gave no stream yet, or whose server refuses its saved
+ * address (addresses expire), is looked up again once; failures are classed by [frameSample]. One post's downloads,
+ * video or animation, retries and a refreshed address included, share one [NetworkBudget].
+ */
+private class AppPictureSource(
+    private val context: Context,
+    private val ugoira: PixivUgoiraClient,
+    private val offlineCopy: suspend (PostId) -> Post?,
+    private val resolvePost: suspend (PostId) -> Post?,
+) : PictureSource {
+    override fun hasStill(post: Post): Boolean = postPreviewImageCandidate(post) != null
+
+    override suspend fun still(post: Post): Bitmap? = postPreviewImageCandidate(post)?.let { loadPreviewStill(context, it, INPUT_PX) }
+
+    override fun plays(post: Post): Boolean = postMotion(post) != null || post.awaitsVideoStream
+
+    override suspend fun frames(post: Post): PostFrames {
+        val budget = NetworkBudget(MAX_POST_NETWORK_BYTES)
+        val offline = runCatchingPreservingCancellation { offlineCopy(post.id) }.getOrNull()
+        val motion = offline?.let(::postMotion) ?: postMotion(post) ?: return refreshed(post, budget)
+        val sample = sample(motion, budget)
+        return if (sample == FrameSample.Refused && motion is PostMotion.Video) refreshed(post, budget) else sample.asFrames()
+    }
+
+    /** [post] as its source lists it now, sampled against the same [budget]; refused again, nothing beyond the still. */
+    private suspend fun refreshed(post: Post, budget: NetworkBudget): PostFrames {
+        val fresh = runCatchingPreservingCancellation { resolvePost(post.id) }
+            .getOrElse { return frameSample(emptyList(), it).asFrames() }
+        val motion = fresh?.let(::postMotion) ?: return PostFrames.Unreadable
+        return sample(motion, budget).asFrames()
+    }
+
+    private suspend fun sample(motion: PostMotion, budget: NetworkBudget): FrameSample = runCatchingPreservingCancellation {
+        when (motion) {
+            is PostMotion.Ugoira -> ugoira.sampleFrames(motion.postId.sourcePostId, FRAMES, INPUT_PX, budget)
+            is PostMotion.Video ->
+                context.videoPlaybackInfrastructure().sampleFrames(motion.location, motion.headers, FRAMES, INPUT_PX, budget)
+        }
+    }.getOrElse { frameSample(emptyList(), it) }
+
+    private fun FrameSample.asFrames(): PostFrames = when (this) {
+        is FrameSample.Frames -> PostFrames.Read(frames)
+        FrameSample.Unreachable -> PostFrames.Unreachable
+        FrameSample.Refused, FrameSample.Unreadable -> PostFrames.Unreadable
+    }
 }
 
 /** The model reads 448 px squares; decoding the preview larger only costs memory. */
 private const val INPUT_PX = 448
+
+/** Frames read from across a playing post, beside its still. */
+private const val FRAMES = 6
+
+/** A light rendition's index and six keyframes, or a 600 px animation archive, usually take well under this. */
+private const val MAX_POST_NETWORK_BYTES = 6L * 1024 * 1024

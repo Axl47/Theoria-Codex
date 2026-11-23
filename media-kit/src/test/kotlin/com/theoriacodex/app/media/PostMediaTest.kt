@@ -1,13 +1,43 @@
 package com.theoriacodex.app.media
 
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.PIXIV_UGOIRA_MIME
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.VideoVariant
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class PostMediaTest {
+    @Test
+    fun `motion reads the lightest video rendition with the source's headers, or the local copy`() {
+        val video = ref("file.mp4", "video/mp4").copy(
+            videoVariants = listOf(
+                VideoVariant("https://example.test/1080.mp4", height = 1080, original = true),
+                VideoVariant("https://example.test/480.mp4", height = 480),
+                VideoVariant("https://example.test/720.mp4", height = 720),
+            ),
+        )
+        val videoPost = post(SourceKey.GELBOORU, ref("full.jpg", "image/jpeg")).copy(media = listOf(video))
+
+        val motion = postMotion(videoPost) as PostMotion.Video
+        assertEquals("https://example.test/480.mp4", motion.location)
+        assertEquals("https://gelbooru.com/", motion.headers["Referer"])
+        val saved = videoPost.copy(media = listOf(video.copy(localPath = "/data/offline/file.mp4")))
+        assertEquals("/data/offline/file.mp4", (postMotion(saved) as PostMotion.Video).location)
+    }
+
+    @Test
+    fun `a Pixiv animation plays from its archive, while stills and animated images keep their still`() {
+        val ugoira = post(SourceKey.PIXIV, ref("ugoira.jpg", PIXIV_UGOIRA_MIME))
+        assertEquals(PostMotion.Ugoira(ugoira.id), postMotion(ugoira))
+        assertNull(postMotion(post(SourceKey.DANBOORU, ref("full.gif", "image/gif"))))
+        assertNull(postMotion(post(SourceKey.DANBOORU, ref("full.webp", "image/webp").copy(isAnimated = true))))
+        assertNull(postMotion(post(SourceKey.DANBOORU, ref("full.jpg", "image/jpeg"))))
+    }
+
     @Test
     fun `playback keeps source headers`() {
         val video = ref("file.mp4", "video/mp4")

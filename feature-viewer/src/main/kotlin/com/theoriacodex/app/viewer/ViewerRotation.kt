@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
+import com.theoriacodex.app.media.awaitsVideoStream
 import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.domain.model.Post
@@ -100,7 +101,7 @@ internal fun rememberViewerRotation(selection: ViewerSelection, rotation: Viewer
 
 /** Videos qualify for rotation, including ones whose stream has not resolved yet. */
 private fun ViewerSelection.isVideoForRotation(): Boolean =
-    media?.let(::isVideoMediaRef) == true || (mediaIndex == 0 && post.awaitsVideoStream())
+    media?.let(::isVideoMediaRef) == true || (mediaIndex == 0 && post.awaitsVideoStream)
 
 /** What the current media fills: its decoded frames when known, else the post's dimensions, which describe its first item. */
 private fun ViewerSelection.fillOrientation(measured: MeasuredVideoShape?): ViewerOrientation? = when {
@@ -108,12 +109,6 @@ private fun ViewerSelection.fillOrientation(measured: MeasuredVideoShape?): View
     mediaIndex == 0 -> viewerFillOrientation(post.width, post.height)
     else -> null
 }
-
-/**
- * A video whose stream resolves only after it opens: its listing gave just a preview and a running time.
- * Lets the Viewer rotate at once instead of waiting for the stream. GIFs and ugoira carry their media up front.
- */
-private fun Post.awaitsVideoStream(): Boolean = full == null && media.isEmpty() && (durationMs ?: 0L) > 0L
 
 /** The rotate button's action; [fits] when the other orientation suits the current media better. */
 internal class ViewerRotationOffer(val fits: Boolean, val rotate: () -> Unit)

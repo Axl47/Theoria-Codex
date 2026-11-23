@@ -4,6 +4,7 @@
 
 ### Added
 
+- Picture tags now cover videos and Pixiv animations in your Library too. Each is tagged from its preview first, then, while the phone charges and sits unused (usually overnight), a few frames from across the clip refine its tags, so a scene the preview doesn't show still counts. If the frames can't be read, the preview's tags stay.
 - Trails: in the Viewer, a row under the top bar shows the post's creator, Similar, and its most characteristic tags. Tapping one opens that stream in place, and you keep swiping from there. The steps you followed are listed beside it: tap one to return to it, or go Back one step at a time to the post you started from.
 - Tapping a tag in the Viewer's information sheet starts a trail too. Holding the tag opens the Search moves (include, exclude, save).
 - The Viewer's Save button shows the Codex the post most likely belongs in. Tap to save there, with Undo on the button for a few seconds. Hold it and slide onto another Codex, or New, to save there instead.

@@ -14,6 +14,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import com.theoriacodex.sources.credentials.PixivAuthTokens
+import com.theoriacodex.sources.credentials.PixivCredentialSession
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
@@ -202,6 +203,29 @@ class PixivUgoiraClientTest {
     }
 
     @Test
+    fun `sampling frames leaves the playback store alone, a refused post samples nothing, and a refused sign-in waits`() = runTest {
+        val budget = NetworkBudget(maxBytes = 1L shl 20)
+        val client = fixtureClient()
+
+        assertTrue(client.sampleFrames("sampled", count = 6, sizePx = 2, budget) is FrameSample.Frames)
+        assertEquals(0L, client.disposableCacheBytes())
+
+        val refused = fixtureClient(download = { _, _, _ -> BinaryResponse(404) })
+        assertEquals(FrameSample.Refused, refused.sampleFrames("gone", count = 6, sizePx = 2, budget))
+
+        // Still refused after a token refresh: signed out or rate limited, which a later run may get past.
+        val forbidden = fixtureClient(
+            credentials = SavingCredentialsProvider(),
+            httpClient = RefreshingHttpClient,
+            download = { _, _, _ -> BinaryResponse(403) },
+        )
+        assertEquals(FrameSample.Unreachable, forbidden.sampleFrames("locked", count = 6, sizePx = 2, budget))
+
+        // An archive past the post's budget is left alone: its still stands.
+        assertEquals(FrameSample.Unreadable, fixtureClient().sampleFrames("large", count = 6, sizePx = 2, NetworkBudget(maxBytes = 16)))
+    }
+
+    @Test
     fun `a failed warm reports false and leaves playback able to retry`() = runTest {
         val downloads = AtomicInteger()
         val client = fixtureClient(download = { _, _, file ->
@@ -291,14 +315,16 @@ class PixivUgoiraClientTest {
         directory: File = temporaryFolder.newFolder(),
         timeoutMs: Long = 30_000L,
         decode: UgoiraFrameDecoder = ::decodeUgoiraFrames,
+        credentials: SourceCredentialsProvider = FixedCredentialsProvider,
+        httpClient: SourceHttpClient = UnusedHttpClient,
         frames: String = """[{"file":"0001.png","delay":50}]""",
         download: (String, String, File) -> BinaryResponse = { _, _, file ->
             writeFrameZip(file)
             BinaryResponse(200)
         },
     ) = PixivUgoiraClient(
-        credentialsProvider = FixedCredentialsProvider,
-        httpClient = UnusedHttpClient,
+        credentialsProvider = credentials,
+        httpClient = httpClient,
         archiveDirectory = directory,
         metadataFetcher = { _, _ -> TextResponse(200,
             """{"ugoira_metadata":{"zip_urls":{"medium":"https://example.test/a.zip"},"frames":$frames}}""",
@@ -328,11 +354,8 @@ class PixivUgoiraClientTest {
     }
 
     private object FixedCredentialsProvider : SourceCredentialsProvider {
-        override suspend fun getPixivTokens(): PixivAuthTokens = PixivAuthTokens(
-            accessToken = "access",
-            refreshToken = "refresh",
-            expiresAtEpochMs = Long.MAX_VALUE,
-        )
+        fun getTokens() = PixivAuthTokens(accessToken = "access", refreshToken = "refresh", expiresAtEpochMs = Long.MAX_VALUE)
+        override suspend fun getPixivTokens(): PixivAuthTokens = getTokens()
         override suspend fun savePixivTokens(tokens: PixivAuthTokens) = Unit
         override suspend fun clearPixivTokens() = Unit
     }
@@ -349,5 +372,27 @@ class PixivUgoiraClientTest {
             form: Map<String, String>,
             headers: Map<String, String>,
         ): SourceHttpResponse = error("HTTP should not be reached after credential cancellation")
+    }
+
+    /** Keeps the tokens it is given, as the app's credential store does. */
+    private class SavingCredentialsProvider : SourceCredentialsProvider {
+        private var tokens: PixivAuthTokens? = FixedCredentialsProvider.getTokens()
+        override suspend fun getPixivTokens(): PixivAuthTokens? = tokens
+        override suspend fun savePixivTokens(tokens: PixivAuthTokens) {
+            this.tokens = tokens
+        }
+        override suspend fun clearPixivTokens() {
+            tokens = null
+        }
+        override suspend fun commitPixivRefresh(session: PixivCredentialSession, tokens: PixivAuthTokens?): Boolean {
+            this.tokens = tokens
+            return true
+        }
+    }
+
+    /** Answers Pixiv's token refresh with fresh tokens; nothing else. */
+    private object RefreshingHttpClient : SourceHttpClient by UnusedHttpClient {
+        override suspend fun postForm(url: String, form: Map<String, String>, headers: Map<String, String>) =
+            SourceHttpResponse(200, """{"access_token":"fresh","refresh_token":"refresh","expires_in":3600}""")
     }
 }
