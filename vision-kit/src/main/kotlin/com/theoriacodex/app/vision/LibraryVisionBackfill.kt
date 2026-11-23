@@ -3,14 +3,12 @@ package com.theoriacodex.app.vision
 import com.theoriacodex.data.repository.VisualSignatureRepository
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.TimeSource
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
@@ -34,8 +32,8 @@ class LibraryVisionBackfill(
      */
     private val away: Flow<Boolean>,
 ) {
-    /** Set when a [drain] left playing posts for the app to leave the screen; [whenAway] takes it. */
-    private val framesWaiting = AtomicBoolean(false)
+    /** Whether the last [drain] left playing posts for the app to leave the screen; [whenAway] takes it. */
+    private val framesWaiting = MutableStateFlow(false)
 
     /**
      * Analyses a batch at a time and rests as long as the batch took, so the CPU works half the time at most. Stops when
@@ -53,8 +51,7 @@ class LibraryVisionBackfill(
                 if (hot()) return true
                 // The posts this run left are the backlog's first rows, since newest come first and the rest got stored.
                 val batch = signatures.libraryPostsWithoutVision(tagger.modelId, BATCH, offset = pass.left)
-                // Frames cut short by a visit that already ended would miss the app leaving: those retry instead.
-                if (batch.isEmpty()) return pass.retry || pass.waiting && away.first()
+                if (batch.isEmpty()) return pass.retry
                 val started = TimeSource.Monotonic.markNow()
                 val results = analyze(batch, pass)
                 if (PictureResult.Unavailable in results.values) return tagger.ready.value
@@ -63,24 +60,27 @@ class LibraryVisionBackfill(
             }
             return false
         } finally {
-            framesWaiting.set(pass.waiting)
+            framesWaiting.value = pass.waiting
         }
     }
 
     /**
-     * Calls [schedule] each time the app leaves the screen after a [drain] left frames for that, so they are read on the
-     * next charge without waiting out a retry's back-off. Runs until cancelled.
+     * Calls [schedule] whenever the app is off screen while a [drain] has left frames for that, whichever happened
+     * last, so they are read on the next charge without waiting out a retry's back-off. Runs until cancelled.
      */
     suspend fun whenAway(schedule: () -> Unit) {
-        away.distinctUntilChanged().filter { it }.collect { if (framesWaiting.getAndSet(false)) schedule() }
+        combine(away, framesWaiting) { isAway, waiting -> isAway && waiting }.filter { it }.collect {
+            framesWaiting.value = false
+            schedule()
+        }
     }
 
     /** [batch]'s results in order, up to the device running [hot]; what it leaves for later is counted in [pass]. */
     private suspend fun analyze(batch: List<Post>, pass: Pass): Map<PostId, PictureResult> {
         val results = LinkedHashMap<PostId, PictureResult>()
         for (post in batch) {
-            // Checked before each post: a playing one takes up to seven inferences.
-            if (results.isNotEmpty() && hot()) break
+            // Checked before each post, since a playing one takes up to seven inferences; drain stores what is done.
+            if (hot()) break
             when (val result = if (tagger.plays(post)) whileAway(post) else tagger.analyzeForLibrary(post)) {
                 null -> pass.leave(waiting = true)
                 PictureResult.Unreachable -> pass.leave(waiting = false)
@@ -96,14 +96,10 @@ class LibraryVisionBackfill(
         return coroutineScope {
             val analysis = async { tagger.analyzeForLibrary(post) }
             val watch = launch { if (away.firstOrNull { !it } != null) analysis.cancel() }
-            try {
-                analysis.await()
-            } catch (cancelled: CancellationException) {
-                ensureActive()
-                null
-            } finally {
-                watch.cancel()
-            }
+            // Joining, unlike awaiting, does not throw when only the analysis was cancelled.
+            analysis.join()
+            watch.cancel()
+            if (analysis.isCancelled) null else analysis.await()
         }
     }
 

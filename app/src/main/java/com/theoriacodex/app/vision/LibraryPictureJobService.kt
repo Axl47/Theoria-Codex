@@ -15,6 +15,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /** The Library's picture indexing, as `JobScheduler` knows it. */
@@ -85,4 +90,16 @@ internal fun scheduleLibraryPictures(context: Context) {
             .setPersisted(true)
             .build(),
     )
+}
+
+/**
+ * Keeps [LibraryPictureJobService] scheduled for [pictures]: at every start, whenever the model comes or goes, whenever
+ * the Library gains or loses a post, and whenever the app leaves the screen while video frames wait for that. Runs
+ * until cancelled.
+ */
+internal suspend fun keepLibraryPicturesScheduled(context: Context, pictures: AppPictures): Unit = coroutineScope {
+    launch { pictures.tags.whenAway { scheduleLibraryPictures(context) } }
+    val model = pictures.model.states.filter { it == ModelState.Absent || it == ModelState.Ready }.distinctUntilChanged()
+    combine(model, pictures.progress.map { it.total }.distinctUntilChanged()) { _, _ -> }
+        .collect { scheduleLibraryPictures(context) }
 }

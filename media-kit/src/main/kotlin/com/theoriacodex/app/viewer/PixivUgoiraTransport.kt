@@ -46,7 +46,7 @@ internal class PixivUgoiraTransport(private val client: OkHttpClient) {
                     if (read < 0) break
                     written += read
                     if (written > UGOIRA_MAX_COMPRESSED_BYTES) {
-                        throw IOException("Pixiv ugoira archive exceeds compressed-byte limit")
+                        throw UgoiraArchiveTooLarge()
                     }
                     output.write(buffer, 0, read)
                 }
@@ -71,3 +71,6 @@ internal class PixivUgoiraTransport(private val client: OkHttpClient) {
 
 private const val PIXIV_API_BASE = "https://app-api.pixiv.net"
 private const val UGOIRA_DOWNLOAD_BUFFER_BYTES = 64 * 1024
+
+/** An archive past [UGOIRA_MAX_COMPRESSED_BYTES]: downloading it again gives the same answer. */
+internal class UgoiraArchiveTooLarge : IOException("Pixiv ugoira archive exceeds compressed-byte limit")

@@ -106,8 +106,9 @@ class PixivUgoiraClient constructor(
      * Up to [count] frames spread evenly through [postId]'s animation, each at least [sizePx] on its long edge, for the
      * picture tagger ([sampleUgoiraFrames]). Reads an archive already held (offline or in the playback store) without
      * marking it used; otherwise downloads one to a temporary file it deletes afterwards, so sampling a Library never
-     * evicts the archives the user watched. Pixiv refusing the post, or an invalid archive, is [FrameSample.Refused] or
-     * [FrameSample.Unreadable]; any other failure may pass, so it is [FrameSample.Unreachable].
+     * evicts the archives the user watched. Pixiv refusing the post is [FrameSample.Refused]; an invalid or oversized
+     * archive, or frames that will not decode, [FrameSample.Unreadable]; any other failure may pass, so it is
+     * [FrameSample.Unreachable].
      */
     suspend fun sampleFrames(postId: String, count: Int, sizePx: Int): FrameSample = withContext(Dispatchers.IO) {
         try {
@@ -118,6 +119,8 @@ class PixivUgoiraClient constructor(
         } catch (_: UgoiraRefused) {
             FrameSample.Refused
         } catch (_: InvalidUgoiraArchive) {
+            FrameSample.Unreadable
+        } catch (_: UgoiraArchiveTooLarge) {
             FrameSample.Unreadable
         } catch (_: IOException) {
             FrameSample.Unreachable
@@ -406,6 +409,8 @@ class PixivUgoiraClient constructor(
         repeat(UGOIRA_NETWORK_MAX_ATTEMPTS) { attempt ->
             val response = try {
                 request(tokens.accessToken)
+            } catch (error: UgoiraArchiveTooLarge) {
+                throw error
             } catch (error: IOException) {
                 if (attempt >= UGOIRA_NETWORK_MAX_ATTEMPTS - 1) throw error
                 delay(ugoiraRetryDelayMs(attempt))

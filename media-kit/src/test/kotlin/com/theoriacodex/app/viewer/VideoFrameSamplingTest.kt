@@ -71,7 +71,8 @@ class VideoFrameSamplingTest {
     @Test
     fun `the reader keeps the windows it fetched, so reading them again costs no request`() {
         val source = RecordingSource(ByteArray(1024 * 1024) { it.toByte() })
-        val reader = DataSourceMediaReader(source, uri, key = null, Job())
+        val job = Job()
+        val reader = DataSourceMediaReader(source, uri, key = null, job)
         val buffer = ByteArray(16)
 
         assertEquals(1024L * 1024, reader.size)
@@ -84,6 +85,10 @@ class VideoFrameSamplingTest {
 
         // The first request asks for the whole file to learn its length; a jump asks for one bounded window.
         assertEquals(listOf(0L to C.LENGTH_UNSET.toLong(), 400_000L to 256L * 1024), source.opened)
+
+        // Once its job ends, the reader gives the retriever nothing more, kept windows included.
+        job.cancel()
+        assertEquals(-1, reader.readAt(10, buffer, 0, 16))
     }
 
     private fun status(code: Int) =

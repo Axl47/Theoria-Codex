@@ -92,9 +92,8 @@ import com.theoriacodex.data.repository.ForYouVerdictRepository
 import com.theoriacodex.data.repository.VisualSignatureRepository
 import com.theoriacodex.app.media.LibraryPictureBackfill
 import com.theoriacodex.app.vision.AppPictures
-import com.theoriacodex.app.vision.ModelState
 import com.theoriacodex.app.vision.appPictures
-import com.theoriacodex.app.vision.scheduleLibraryPictures
+import com.theoriacodex.app.vision.keepLibraryPicturesScheduled
 import com.theoriacodex.domain.vision.PictureTags
 import com.theoriacodex.data.android.room.RoomMediaDurationRepository
 import com.theoriacodex.data.android.room.RoomRecentsRepository
@@ -133,8 +132,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -672,19 +669,9 @@ internal class DefaultTheoriaAppContainer(
                 }
             }
         }
-        // Optional upkeep, run by JobScheduler while charging: at every start, whenever the model comes or goes, and
-        // whenever the Library gains or loses a post.
         durableStoreScope.launch {
-            runCatchingPreservingCancellation {
-                val model = pictures.model.states.filter { it == ModelState.Absent || it == ModelState.Ready }.distinctUntilChanged()
-                combine(model, pictures.progress.map { it.total }.distinctUntilChanged()) { _, _ -> }
-                    .collect { scheduleLibraryPictures(appContext) }
-            }.onFailure { Diagnostics.report("similarity", "The Library's picture indexing could not be scheduled", it) }
-        }
-        // Video frames a run left while the app was on screen are read on the next charge after it leaves.
-        durableStoreScope.launch {
-            runCatchingPreservingCancellation { pictures.tags.whenAway { scheduleLibraryPictures(appContext) } }
-                .onFailure { Diagnostics.report("similarity", "The Library's video frames could not be scheduled", it) }
+            runCatchingPreservingCancellation { keepLibraryPicturesScheduled(appContext, pictures) }
+                .onFailure { Diagnostics.report("similarity", "The Library's picture indexing could not be scheduled", it) }
         }
         durableStoreScope.launch {
             runCatchingPreservingCancellation { pictures.tags.writeThrough() }

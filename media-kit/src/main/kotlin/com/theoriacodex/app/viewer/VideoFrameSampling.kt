@@ -146,6 +146,8 @@ internal class DataSourceMediaReader(
     @Synchronized
     override fun readAt(position: Long, buffer: ByteArray, offset: Int, size: Int): Int {
         if (size == 0) return 0
+        // Kept windows too: once the job ends, the retriever gets nothing more to decode.
+        if (!job.isActive) return END
         if (length != C.LENGTH_UNSET.toLong() && position >= length) return END
         // Entries, not get(), while searching: a get() reorders the map mid-iteration.
         val start = windows.entries.firstOrNull { (start, bytes) -> position >= start && position < start + bytes.size }?.key

@@ -91,15 +91,15 @@ internal suspend fun sampleUgoiraFrames(archive: File, specs: List<UgoiraFrameSp
     if (specs.isEmpty() || count <= 0) return emptyList()
     val picked = List(minOf(count, specs.size)) { index -> specs[((index + 0.5) * specs.size / minOf(count, specs.size)).toInt()] }
     return ZipFile(archive).use { zip ->
-        picked.map { spec ->
-            val entry = zip.getEntry(spec.fileName) ?: throw IOException("Pixiv ugoira frame is missing")
+        // A frame that is missing or will not decode is skipped; the archive will not change on a later try.
+        picked.mapNotNull { spec ->
+            val entry = zip.getEntry(spec.fileName) ?: return@mapNotNull null
             val bytes = readUgoiraFrame(zip, entry)
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
             var sample = 1
             while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= sizePx) sample *= 2
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
-                ?: throw IOException("Pixiv ugoira frame could not be decoded")
         }
     }
 }

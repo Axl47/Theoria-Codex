@@ -158,7 +158,8 @@ class LibraryVisionBackfillTest {
         val watching = launch { backfill.whenAway { scheduled++ } }
         suspend fun leave() {
             away.value = true
-            yield()
+            // whenAway combines two flows, which takes a few turns of this single-threaded loop.
+            repeat(10) { yield() }
         }
 
         // Waiting frames ask for no retry: the app leaving the screen schedules the next run.
