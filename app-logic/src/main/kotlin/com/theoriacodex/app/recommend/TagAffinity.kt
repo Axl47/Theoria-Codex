@@ -330,8 +330,9 @@ fun TagAffinityInputs.affinity(source: SourceKey, tag: String, feedShare: Map<St
  * the profile watched on [source], never below its share of Danbooru posts, so a tag the source's providers rarely write
  * cannot look sought after. Before [source] has enough watched posts the Danbooru share stands alone and must be beaten
  * [COLD_PICTURE_LIFT] times. Proven like a provider tag: on [MIN_KEPT_FOR_TAG] kept posts at the lift, out of at least
- * [MIN_KEPT_FOR_LIFT] analysed kept posts, never universal (on more than [UNIVERSAL_LIKED_SHARE] of them, too) and never
- * text on the image. The kept share weighs each post by its score.
+ * [MIN_KEPT_FOR_LIFT] analysed kept posts, never universal (on more than [UNIVERSAL_LIKED_SHARE] of them, too), never
+ * text on the image and never about the file ([isFileTag]); a profile that chose such a tag gets it through [affinity].
+ * The kept share weighs each post by its score.
  */
 fun TagAffinityInputs.pictureAffinity(source: SourceKey, booruToken: String, sourceToken: String): TagAffinity {
     val kept = pictures.keptByTag[booruToken] ?: 0.0
@@ -342,7 +343,7 @@ fun TagAffinityInputs.pictureAffinity(source: SourceKey, booruToken: String, sou
     val universal = maxOf(watched ?: 0.0, baseRate) >= UNIVERSAL_WATCHED_SHARE || posts > UNIVERSAL_LIKED_SHARE * pictures.kept
     val floor = LIFT_PSEUDO_COUNT / maxOf(watchedBySource[source] ?: 0L, MIN_WATCHED_FOR_SHARE)
     val lift = (kept + LIFT_PSEUDO_COUNT) / (pictures.kept + 1.0) / maxOf(watched ?: 0.0, baseRate, floor)
-    val proven = !universal && !isImageTextTag(booruToken) && pictures.kept >= MIN_KEPT_FOR_LIFT && posts >= MIN_KEPT_FOR_TAG &&
+    val proven = !universal && !isImageTextTag(booruToken) && !isFileTag(booruToken) && pictures.kept >= MIN_KEPT_FOR_LIFT && posts >= MIN_KEPT_FOR_TAG &&
         lift >= if (watched != null) MIN_INFORMATIVE_LIFT else COLD_PICTURE_LIFT
     return TagAffinity(sourceToken, interest = kept, score = ln(lift) * ln(1.0 + kept), universal, informative = proven, proven = proven)
 }

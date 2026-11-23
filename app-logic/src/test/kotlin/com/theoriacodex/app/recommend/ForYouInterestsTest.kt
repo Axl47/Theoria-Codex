@@ -104,6 +104,17 @@ class ForYouPictureInterestsTest {
         assertFalse(text.pictureAffinity(source, "signature", "signature").proven)
     }
 
+    @Test fun `a tag about the file proves nothing by its picture, though a profile that chose it still gets it`() {
+        val evidence = PictureEvidence(
+            mapOf("3d" to 12.0, "cat ears" to 12.0), mapOf("3d" to 12, "cat ears" to 12), kept = 30, baseRates = mapOf("3d" to 0.01, "cat ears" to 0.01),
+        )
+        // The same evidence proves a tag about what the picture shows.
+        assertTrue(TagAffinityInputs(pictures = evidence).pictureAffinity(source, "cat ears", "cat_ears").proven)
+        assertFalse(TagAffinityInputs(pictures = evidence).pictureAffinity(source, "3d", "3d").proven)
+        val chosen = TagAffinityInputs(interest = mapOf("3d" to EXPLICIT_WEIGHT), explicit = setOf("3d"), pictures = evidence)
+        assertTrue(chosen.affinity(source, "3d").proven)
+    }
+
     @Test fun `picture evidence counts kept posts' confident predictions, weighted by score`() {
         val kept = PostId(SourceKey.NHENTAI, "kept")
         val index = PredictedTagIndex(

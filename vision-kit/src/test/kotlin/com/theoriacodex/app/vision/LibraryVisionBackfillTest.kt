@@ -78,7 +78,7 @@ class LibraryVisionBackfillTest {
     )
 
     @Test
-    fun `previews that fail to load are skipped, so the older Library is still indexed`() = runBlocking {
+    fun `previews that fail to load are skipped, so the older Library is still indexed, and a later run tries them again`() = runBlocking {
         val dead = List(40) { post("dead-$it") }
         val older = List(3) { post("no-still-$it") }
         val library = Library(dead + older)
@@ -87,7 +87,7 @@ class LibraryVisionBackfillTest {
         // Posts without a still are settled without the model; the dead previews never load.
         val tagger = PictureTagger(store, library, hasStill = { it.id.sourcePostId.startsWith("dead") }, loadStill = { null }, scope = scope)
 
-        assertFalse(LibraryVisionBackfill(tagger, library, hot = { false }).drain())
+        assertTrue(LibraryVisionBackfill(tagger, library, hot = { false }).drain())
 
         assertEquals(older.map(Post::id), library.stored.map(PictureVision::postId))
     }
