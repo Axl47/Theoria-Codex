@@ -93,10 +93,13 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         }
         // Nothing is asked of the source for a downloaded chapter; the cover is the stored address, as in a session.
         val downloaded = series.downloads.chapter(id, entry.entry.address)?.media
+        val kind = id.source.seriesKind
         val source = if (downloaded == null) source(id.source) else null
+        // Logged, without naming the entry, so a lookup can be timed against playback: the next episode's starts
+        // before the current one ends.
+        if (source != null) series.log(if (kind == SeriesKind.ANIME) LOOKING_UP_EPISODE else LOOKING_UP_CHAPTER)
         val media = downloaded?.let(EntryMedia::Pages) ?: checkNotNull(source).media(entry.entry)
         val cover = source?.coverAddress(stored.series) ?: stored.series.coverUrl
-        val kind = id.source.seriesKind
         return when (media) {
             is EntryMedia.Pages -> {
                 check(kind == SeriesKind.MANGA) { WRONG_MEDIA }
@@ -193,3 +196,5 @@ private fun StoredSeries.readingModeOrGuess() = seriesReadingMode(readingMode, s
 private const val SERIES_QUERY_PREFIX = "series:"
 private const val WRONG_MEDIA = "This extension served the wrong kind of media"
 private const val NO_STREAM = "No stream found for this episode"
+private const val LOOKING_UP_EPISODE = "Looking up an episode"
+private const val LOOKING_UP_CHAPTER = "Looking up a chapter"

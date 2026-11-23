@@ -2,6 +2,7 @@ package com.theoriacodex.app.di
 
 import com.theoriacodex.app.network.AppHttpClients
 import android.content.Context
+import android.util.Log
 import androidx.core.net.toUri
 import com.theoriacodex.app.backup.AndroidAutoBackupFolder
 import com.theoriacodex.app.backup.AutoBackupWorkflow
@@ -587,7 +588,7 @@ internal class DefaultTheoriaAppContainer(
             scheduler = SeriesDownloadScheduler(appContext) { settingsRepository.observeSettings().first().cache },
             deleteAfterReading = { settingsRepository.observeSettings().first().seriesDeleteAfterReading },
         )
-        SeriesDependencies(repository, host::sources, host.extensions, downloads, scope = durableStoreScope)
+        SeriesDependencies(repository, host::sources, host.extensions, downloads, scope = durableStoreScope) { Log.i("SeriesReader", it) }
     }
 
     /** Keeps the new-chapter check scheduled; started by [awaitDurableStores], once. */
