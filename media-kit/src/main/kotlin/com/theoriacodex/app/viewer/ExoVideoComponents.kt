@@ -23,7 +23,9 @@ val VideoSize.displayWidth: Int get() = (width * pixelWidthHeightRatio).toInt()
 
 /**
  * How far above the video's bottom edge subtitles sit, as a fraction of its height: clear of the Viewer's timeline
- * when a landscape video fills the screen, where Media3's 8% would put them under it.
+ * when a landscape video fills the screen, where Media3's 8% would put them under it. Feed cards share the view and so
+ * the padding, which costs them nothing: their requests never side-load subtitles, so only a clip's own default
+ * subtitle track could show there, a little higher.
  */
 private const val SUBTITLE_BOTTOM_PADDING_FRACTION = 0.15f
 
