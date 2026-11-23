@@ -2,6 +2,8 @@ package com.theoriacodex.app.series
 
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.isSamePicture
@@ -35,21 +37,23 @@ class ChapterPictures(
 
     /**
      * Compares the [firstPages] of [id]'s chapters, by address, with those compared before, until two match. A page
-     * that does not hash is tried again the next time its chapter is offered. Nothing is compared for a series that
-     * is not stored or already shares its first pages.
+     * that does not hash, or whose match could not be saved, is tried again the next time its chapter is offered.
+     * Nothing is compared for a series that is not stored or already shares its first pages.
      */
-    suspend fun compare(id: SeriesId, firstPages: Map<String, ImageRef>) = hashing.withLock {
-        val known = hashes.getOrPut(id, ::mutableMapOf)
-        val fresh = firstPages.filterKeys { it !in known }
-        if (fresh.isEmpty() || repository.series(id)?.chaptersShareFirstPage != false) return@withLock
-        for ((address, page) in fresh) {
-            val hash = hashPage(id.source, page) ?: continue
-            if (known.values.any { isSamePicture(it, hash) }) {
-                repository.setChaptersShareFirstPage(id)
-                return@withLock
+    suspend fun compare(id: SeriesId, firstPages: Map<String, ImageRef>): Unit = hashing.withLock {
+        runCatchingPreservingCancellation {
+            val known = hashes.getOrPut(id, ::mutableMapOf)
+            val fresh = firstPages.filterKeys { it !in known }
+            if (fresh.isEmpty() || repository.series(id)?.chaptersShareFirstPage != false) return@withLock
+            for ((address, page) in fresh) {
+                val hash = hashPage(id.source, page) ?: continue
+                if (known.values.any { isSamePicture(it, hash) }) {
+                    repository.setChaptersShareFirstPage(id)
+                    return@withLock
+                }
+                known[address] = hash
             }
-            known[address] = hash
-        }
+        }.onFailure { Diagnostics.report("series", "Chapter pictures could not be compared", it) }
     }
 }
 
