@@ -87,7 +87,7 @@ class CheckSlotTest(unittest.TestCase):
         self.assertEqual(0, second.wait(timeout=3))
         _, third_stderr = third.communicate(timeout=3)
         self.assertEqual(0, third.returncode)
-        self.assertIn("Waiting for a local check slot (2 max concurrent runs;", third_stderr)
+        self.assertIn("Waiting for a local check slot (limit: 2;", third_stderr)
         self.assertIn("THEORIA_CHECK_SLOTS=0", third_stderr)
 
     def test_exits_immediately_when_terminated_while_waiting(self) -> None:

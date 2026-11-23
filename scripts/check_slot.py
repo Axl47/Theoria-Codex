@@ -49,7 +49,7 @@ def acquire_slot(
             return slot, fd
         if not announced:
             print(
-                f"Waiting for a local check slot ({slots} max concurrent runs; "
+                f"Waiting for a local check slot (limit: {slots}; "
                 f"lock dir {lock_dir}; set THEORIA_CHECK_SLOTS=0 to bypass)...",
                 file=sys.stderr,
                 flush=True,
@@ -67,7 +67,7 @@ def _write_ready_file(ready_file: pathlib.Path, slot: int) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dir", required=True, type=pathlib.Path)
-    parser.add_argument("--slots", type=int, default=2)
+    parser.add_argument("--slots", type=int, default=1)
     parser.add_argument("--ready-file", required=True, type=pathlib.Path)
     parser.add_argument("--parent-pid", type=int, default=0)
     parser.add_argument("--poll-seconds", type=float, default=1.0)

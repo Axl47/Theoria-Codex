@@ -403,7 +403,7 @@ run_screenshots() {
 # terminates the helper on exit and releases the slot. Set THEORIA_CHECK_SLOTS=0 to bypass.
 acquire_check_slot() {
   [[ "${GITHUB_ACTIONS:-}" != true ]] || return 0
-  local slots="${THEORIA_CHECK_SLOTS:-2}"
+  local slots="${THEORIA_CHECK_SLOTS:-1}"
   [[ "$slots" =~ ^(0|[1-9][0-9]*)$ ]] || { echo "THEORIA_CHECK_SLOTS must be a non-negative integer: $slots" >&2; exit 2; }
   (( slots > 0 )) || return 0
   local lock_dir="${THEORIA_CHECK_LOCK_DIR:-/tmp/theoria-codex-check-slots-$(id -u)}"
