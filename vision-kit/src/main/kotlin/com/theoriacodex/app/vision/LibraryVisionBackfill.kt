@@ -1,12 +1,23 @@
 package com.theoriacodex.app.vision
 
 import com.theoriacodex.data.repository.VisualSignatureRepository
+import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.TimeSource
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 /**
  * Tags the pictures of liked and saved posts that the current model has not analysed, and stores what it found beside
@@ -18,38 +29,97 @@ class LibraryVisionBackfill(
     /** Whether the device is warm enough that indexing should wait (thermal status moderate or worse). */
     private val hot: () -> Boolean,
     /**
-     * Whether a playing post's frames may be decoded now: none of the app is on screen and no player is leased. A frame
-     * decoder can take a hardware codec a visible card needs, so frames are read only then.
+     * Whether none of the app is on screen, as it changes. A playing post's frames are read only then, so the decoding
+     * never competes with a visible card or the Like tap.
      */
-    private val quiet: suspend () -> Boolean,
+    private val away: Flow<Boolean>,
 ) {
+    /** Set when a [drain] left playing posts for the app to leave the screen; [whenAway] takes it. */
+    private val framesWaiting = AtomicBoolean(false)
+
     /**
      * Analyses a batch at a time and rests as long as the batch took, so the CPU works half the time at most. Stops when
      * done, when the model goes or would not load, or when the device runs [hot]; losing the network stops the job
-     * itself. Returns whether pictures are left that a later run can read, which includes a model that would not load
-     * but is still installed (memory pressure, say) and previews that failed to load, which are skipped for the rest of
-     * this run. Playing posts read frames too ([PictureTagger.analyzeForLibrary]), but only while the app is [quiet]; the
-     * rest wait for a later run.
+     * itself. Returns whether a later run should try again, which includes a model that would not load but is still
+     * installed (memory pressure, say) and pictures that failed to load, which are skipped for the rest of this run.
+     * Playing posts read frames too ([PictureTagger.analyzeForLibrary]), but only while the app is [away]; ones it
+     * reaches while the app is on screen, or that are cut short when the app comes on screen, wait for [whenAway]
+     * instead of a retry.
      */
     suspend fun drain(): Boolean {
-        val later = HashSet<PostId>()
-        while (tagger.ready.value) {
-            if (hot()) return true
-            val batch = signatures.libraryPostsWithoutVision(tagger.modelId, later.size + BATCH).filterNot { it.id in later }
-            // Only posts that could not be read now are left: a later run tries them again.
-            if (batch.isEmpty()) return later.isNotEmpty()
-            val started = TimeSource.Monotonic.markNow()
-            val results = LinkedHashMap<PostId, PictureResult>()
-            for (post in batch) {
-                // Checked before each playing post, so frames stop between posts once the app is in use.
-                results[post.id] = if (tagger.plays(post) && !quiet()) PictureResult.Unreachable else tagger.analyzeForLibrary(post)
+        val pass = Pass()
+        try {
+            while (tagger.ready.value) {
+                if (hot()) return true
+                // The posts this run left are the backlog's first rows, since newest come first and the rest got stored.
+                val batch = signatures.libraryPostsWithoutVision(tagger.modelId, BATCH, offset = pass.left)
+                // Frames cut short by a visit that already ended would miss the app leaving: those retry instead.
+                if (batch.isEmpty()) return pass.retry || pass.waiting && away.first()
+                val started = TimeSource.Monotonic.markNow()
+                val results = analyze(batch, pass)
+                if (PictureResult.Unavailable in results.values) return tagger.ready.value
+                if (!tagger.store(results)) return false
+                delay(started.elapsedNow())
             }
-            if (PictureResult.Unavailable in results.values) return tagger.ready.value
-            later += results.filterValues { it == PictureResult.Unreachable }.keys
-            if (!tagger.store(results)) return false
-            delay(started.elapsedNow())
+            return false
+        } finally {
+            framesWaiting.set(pass.waiting)
         }
-        return false
+    }
+
+    /**
+     * Calls [schedule] each time the app leaves the screen after a [drain] left frames for that, so they are read on the
+     * next charge without waiting out a retry's back-off. Runs until cancelled.
+     */
+    suspend fun whenAway(schedule: () -> Unit) {
+        away.distinctUntilChanged().filter { it }.collect { if (framesWaiting.getAndSet(false)) schedule() }
+    }
+
+    /** [batch]'s results in order, up to the device running [hot]; what it leaves for later is counted in [pass]. */
+    private suspend fun analyze(batch: List<Post>, pass: Pass): Map<PostId, PictureResult> {
+        val results = LinkedHashMap<PostId, PictureResult>()
+        for (post in batch) {
+            // Checked before each post: a playing one takes up to seven inferences.
+            if (results.isNotEmpty() && hot()) break
+            when (val result = if (tagger.plays(post)) whileAway(post) else tagger.analyzeForLibrary(post)) {
+                null -> pass.leave(waiting = true)
+                PictureResult.Unreachable -> pass.leave(waiting = false)
+                else -> results[post.id] = result
+            }
+        }
+        return results
+    }
+
+    /** [post]'s Library analysis while the app is [away]; null when the app is on screen, or comes on screen first. */
+    private suspend fun whileAway(post: Post): PictureResult? {
+        if (!away.first()) return null
+        return coroutineScope {
+            val analysis = async { tagger.analyzeForLibrary(post) }
+            val watch = launch { if (away.firstOrNull { !it } != null) analysis.cancel() }
+            try {
+                analysis.await()
+            } catch (cancelled: CancellationException) {
+                ensureActive()
+                null
+            } finally {
+                watch.cancel()
+            }
+        }
+    }
+
+    /** What one [drain] left unstored: how many posts, whether any wait for a retry, and whether any wait for [away]. */
+    private class Pass {
+        var left = 0
+            private set
+        var retry = false
+            private set
+        var waiting = false
+            private set
+
+        fun leave(waiting: Boolean) {
+            left++
+            if (waiting) this.waiting = true else retry = true
+        }
     }
 
     /**

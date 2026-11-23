@@ -152,12 +152,9 @@ class VideoPlaybackInfrastructure(
         get() = viewerPlayers.value
     internal val hasActiveViewerPlayer: Boolean
         get() = viewerPlayers.isInitialized() && viewerPlayers.value.activePlayerCount() > 0
-
-    /** Whether any feed or Viewer player is leased now, and so may hold a decoder. Read it on the main thread. */
-    val hasActivePlayer: Boolean
-        get() = hasActiveViewerPlayer || feedPlayers.isInitialized() && feedPlayers.value.activePlayerCount() > 0
+    private val videoClient = videoHttpClient(httpClient)
     private val sharedFactories = SharedVideoFactories(
-        http = AbandoningHttpDataSourceFactory(videoHttpClient(httpClient)),
+        http = AbandoningHttpDataSourceFactory(videoClient),
         local = DefaultDataSource.Factory(appContext),
         cache = SimpleCache(
             File(appContext.cacheDir, VIDEO_PLAYBACK_CACHE_DIRECTORY),
@@ -268,29 +265,25 @@ class VideoPlaybackInfrastructure(
 
     /**
      * Up to [count] keyframes from across [location]'s video, each scaled to fit [sizePx] ([sampleVideoFrames]), for the
-     * picture tagger. A web video reads what the shared cache holds for free and fetches the rest in bounded ranges, at
-     * most [maxNetworkBytes], without writing it to the cache, so sampling never evicts what the user is watching. A
-     * local copy reads from disk.
+     * picture tagger. A web video reads what the shared cache holds of that same address for free and fetches the rest
+     * in bounded ranges against [budget], without writing it to the cache, so sampling never evicts what the user is
+     * watching. A local copy reads from disk.
      */
     suspend fun sampleFrames(
         location: String,
         headers: Map<String, String>,
         count: Int,
         sizePx: Int,
-        maxNetworkBytes: Long,
-    ): VideoFrameSample = withContext(Dispatchers.IO) {
+        budget: NetworkBudget,
+    ): FrameSample = withContext(Dispatchers.IO) {
         val job = currentCoroutineContext().job
         val uri = videoLocationToUri(location)
         if (!isHttpVideoLocation(location)) {
             return@withContext sampleVideoFrames(sharedFactories.local.createDataSource(), uri, key = null, count, sizePx, job)
         }
         val immutableHeaders = headers.toMap()
-        val upstream = DataSource.Factory {
-            BudgetedDataSource(
-                ResolvingDataSource.Factory(sharedFactories.http) { it.withAdditionalHeaders(immutableHeaders) }.createDataSource(),
-                maxNetworkBytes,
-            )
-        }
+        val http = AbandoningHttpDataSourceFactory(videoClient.newBuilder().addNetworkInterceptor(budget.interceptor).build())
+        val upstream = ResolvingDataSource.Factory(http) { it.withAdditionalHeaders(immutableHeaders) }
         val source = CacheDataSource.Factory()
             .setCache(sharedFactories.cache)
             .setUpstreamDataSourceFactory(upstream)

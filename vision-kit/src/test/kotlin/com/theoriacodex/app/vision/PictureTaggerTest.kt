@@ -39,7 +39,7 @@ class PictureTaggerTest {
         override suspend fun put(postId: PostId, hash: Long?) = Unit
         override suspend fun libraryPostsWithoutSignature(limit: Int): List<Post> = emptyList()
         override suspend fun putVision(entries: List<PictureVision>) = Unit
-        override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post> = emptyList()
+        override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int, offset: Int): List<Post> = emptyList()
         override fun observePredictedTags(modelId: String): Flow<Map<PostId, List<PredictedTag>>> =
             flowOf(mapOf(PostId(SourceKey.DANBOORU, "stored") to listOf(PredictedTag("solo", 0.9f, PredictedTag.Kind.GENERAL))))
         override fun observeVisionProgress(modelId: String): Flow<VisionProgress> = flowOf(VisionProgress(0, 0))

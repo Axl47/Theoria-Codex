@@ -202,6 +202,17 @@ class PixivUgoiraClientTest {
     }
 
     @Test
+    fun `sampling frames leaves the playback store alone, and a refused post samples nothing`() = runTest {
+        val client = fixtureClient()
+
+        assertTrue(client.sampleFrames("sampled", count = 6, sizePx = 2) is FrameSample.Frames)
+        assertEquals(0L, client.disposableCacheBytes())
+
+        val refused = fixtureClient(download = { _, _, _ -> BinaryResponse(404) })
+        assertEquals(FrameSample.Refused, refused.sampleFrames("gone", count = 6, sizePx = 2))
+    }
+
+    @Test
     fun `a failed warm reports false and leaves playback able to retry`() = runTest {
         val downloads = AtomicInteger()
         val client = fixtureClient(download = { _, _, file ->

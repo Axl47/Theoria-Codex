@@ -52,9 +52,8 @@ class RoomVisualSignatureRepository(
         }
     }
 
-    override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post> = withContext(Dispatchers.IO) {
-        dao.libraryPostsWithoutVision(modelId, limit).decoded()
-    }
+    override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int, offset: Int): List<Post> =
+        withContext(Dispatchers.IO) { dao.libraryPostsWithoutVision(modelId, limit, offset).decoded() }
 
     override fun observePredictedTags(modelId: String): Flow<Map<PostId, List<PredictedTag>>> =
         dao.observePredictedTags(modelId).map { rows ->

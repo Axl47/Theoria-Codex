@@ -10,11 +10,13 @@ import androidx.lifecycle.lifecycleScope
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
+import com.theoriacodex.app.media.PerceptualHash
 import com.theoriacodex.app.recommend.ForYouInterests
 import com.theoriacodex.app.recommend.pictureAffinity
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.triage.hiddenBy
-import com.theoriacodex.app.viewer.VideoFrameSample
+import com.theoriacodex.app.viewer.FrameSample
+import com.theoriacodex.app.viewer.NetworkBudget
 import com.theoriacodex.app.viewer.videoPlaybackInfrastructure
 import com.theoriacodex.app.vision.AppPictures
 import com.theoriacodex.app.vision.ModelState
@@ -24,6 +26,7 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.isSamePicture
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import com.theoriacodex.domain.vision.PictureLook
 import com.theoriacodex.domain.vision.PredictedTagIndex
@@ -140,14 +143,23 @@ private class VisionPhases(
         return "analysed=${progress.analysed}/${progress.total} tagged=$tagged videosFromFrames=$framed ${forYou()} ${hidden()}"
     }
 
-    /** Each fixture video sampled as the job does it, timed; the host counts the bytes each fetched. */
+    /**
+     * Each fixture video sampled as the job does it, timed, with the frames from different points told apart (each
+     * second shows another drawing); the host counts the bytes each fetched.
+     */
     private suspend fun sample(): String = buildList {
         for (file in VIDEOS) {
             val started = SystemClock.elapsedRealtime()
             val sample = context.videoPlaybackInfrastructure()
-                .sampleFrames(videoUrl(file), SourceKey.DANBOORU.requestHeaders(), 6, 448, 6L shl 20)
-            check(sample is VideoFrameSample.Frames) { "$file sampled $sample" }
-            add("$file=${sample.frames.size}frames/${SystemClock.elapsedRealtime() - started}ms")
+                .sampleFrames(videoUrl(file), SourceKey.DANBOORU.requestHeaders(), 6, 448, NetworkBudget(6L shl 20))
+            val ms = SystemClock.elapsedRealtime() - started
+            check(sample is FrameSample.Frames) { "$file sampled $sample" }
+            val distinct = sample.frames.mapNotNull { frame ->
+                IntArray(frame.width * frame.height).also { frame.getPixels(it, 0, frame.width, 0, 0, frame.width, frame.height) }
+                    .let { PerceptualHash.ofArgb(it, frame.width, frame.height) }
+            }.fold(emptyList<Long>()) { kept, hash -> if (kept.any { isSamePicture(hash, it) }) kept else kept + hash }.size
+            check(distinct >= MIN_DISTINCT_FRAMES) { "$file gave $distinct distinct frames" }
+            add("$file=${sample.frames.size}frames/${distinct}distinct/${ms}ms")
         }
     }.joinToString(" ")
 
@@ -235,3 +247,6 @@ private val VIDEOS = listOf("video-start.mp4", "video-tail.mp4", "video.webm")
 private const val TAG = "TheoriaVision"
 private const val PHASE_TIMEOUT_MS = 300_000L
 private const val IDLE_WAIT_MS = 10_000L
+
+/** Of the six points across a six-drawing video, at least this many must show different drawings. */
+private const val MIN_DISTINCT_FRAMES = 4

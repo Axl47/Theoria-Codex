@@ -119,6 +119,13 @@ fun postMotion(post: Post): PostMotion? {
     return PostMotion.Video(normalizeMediaUrl(post.id.source, location) ?: location, video.requestHeaders)
 }
 
+/**
+ * A video whose stream resolves only after it opens: its listing gave just a preview and a running time (Iwara's, for
+ * one). GIFs and ugoira carry their media up front.
+ */
+val Post.awaitsVideoStream: Boolean
+    get() = full == null && media.isEmpty() && (durationMs ?: 0L) > 0L
+
 fun postDownloadMediaCandidate(post: Post): PostMediaCandidate? {
     return post.orderedPlayableRefs().firstNotNullOfOrNull { (ref, reason) ->
         ref.url?.takeIf(String::isNotBlank)?.let { url -> post.candidate(ref, url, reason) }

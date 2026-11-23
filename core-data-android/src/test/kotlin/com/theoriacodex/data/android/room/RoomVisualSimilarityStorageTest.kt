@@ -99,6 +99,10 @@ class RoomVisualSimilarityStorageTest {
         assertEquals(listOf(id("new")), signatures.libraryPostsWithoutVision("m1", limit = 10).map(Post::id))
         assertEquals(setOf(id("seen"), id("unreadable"), id("new")), signatures.libraryPostsWithoutVision("m2", limit = 10).map(Post::id).toSet())
         assertEquals(1, signatures.libraryPostsWithoutVision("m2", limit = 1).size)
+        assertEquals(
+            signatures.libraryPostsWithoutVision("m2", limit = 10).drop(1),
+            signatures.libraryPostsWithoutVision("m2", limit = 10, offset = 1),
+        )
         signatures.put(id("seen"), 1L)
         assertEquals(setOf(id("unreadable"), id("new")), signatures.libraryPostsWithoutSignature(limit = 10).map(Post::id).toSet())
     }

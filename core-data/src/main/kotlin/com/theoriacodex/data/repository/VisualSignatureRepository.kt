@@ -29,8 +29,11 @@ interface VisualSignatureRepository {
      */
     suspend fun putVision(entries: List<PictureVision>)
 
-    /** Up to [limit] liked or saved posts that [modelId] has not analysed (including those another model did), most recently stored first. */
-    suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post>
+    /**
+     * Up to [limit] liked or saved posts that [modelId] has not analysed (including those another model did), most
+     * recently stored first, after skipping the first [offset].
+     */
+    suspend fun libraryPostsWithoutVision(modelId: String, limit: Int, offset: Int = 0): List<Post>
 
     /** The predicted tags of every stored post [modelId] analysed with tags, again whenever one changes. */
     fun observePredictedTags(modelId: String): Flow<Map<PostId, List<PredictedTag>>>

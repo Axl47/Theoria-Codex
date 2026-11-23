@@ -8,21 +8,22 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.theoriacodex.app.media.LibraryPictureBackfill
 import com.theoriacodex.app.media.PostMotion
+import com.theoriacodex.app.media.awaitsVideoStream
 import com.theoriacodex.app.media.loadPreviewStill
 import com.theoriacodex.app.media.postMotion
 import com.theoriacodex.app.media.postPreviewImageCandidate
+import com.theoriacodex.app.viewer.FrameSample
+import com.theoriacodex.app.viewer.NetworkBudget
 import com.theoriacodex.app.viewer.PixivUgoiraClient
-import com.theoriacodex.app.viewer.VideoFrameSample
 import com.theoriacodex.app.viewer.VideoPlaybackInfrastructure
 import com.theoriacodex.app.viewer.videoPlaybackInfrastructure
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import java.net.SocketException
-import java.net.SocketTimeoutException
-import java.net.UnknownHostException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import java.io.IOException
+import kotlinx.coroutines.flow.map
 import com.theoriacodex.data.repository.VisionProgress
 import com.theoriacodex.data.repository.VisualSignatureRepository
 import java.io.File
@@ -52,8 +53,9 @@ class AppPictures(
 /**
  * Builds [AppPictures]: the model lives in no-backup storage, since it is large and downloads again, and its files come
  * from [BuildConfig.VISION_MODEL_BASE_URL]. Deleting it removes every stored prediction too. [hashes] is the Library's
- * picture hashing, which runs whether or not the model is there. [resolvePost] looks a post up again at its source, for
- * a video whose saved address expired.
+ * picture hashing, which runs whether or not the model is there. [offlineCopy] finds a post's downloaded copy, whose
+ * video plays from disk. [resolvePost] looks a post up again at its source, for a video whose saved address expired or
+ * was never listed.
  */
 fun appPictures(
     context: Context,
@@ -61,6 +63,7 @@ fun appPictures(
     signatures: VisualSignatureRepository,
     hashes: LibraryPictureBackfill,
     ugoira: PixivUgoiraClient,
+    offlineCopy: suspend (PostId) -> Post?,
     resolvePost: suspend (PostId) -> Post?,
     scope: CoroutineScope,
 ): AppPictures {
@@ -69,73 +72,74 @@ fun appPictures(
     val model = VisualModelStore(
         VisualModelSpec.wdVitTaggerV3(BuildConfig.VISION_MODEL_BASE_URL), File(app.noBackupFilesDir, "models"), client, scope,
     ) { tagger.forget() }
-    tagger = PictureTagger(model, signatures, AppPictureSource(app, ugoira, resolvePost), scope)
+    tagger = PictureTagger(model, signatures, AppPictureSource(app, ugoira, offlineCopy, resolvePost), scope)
     val power = app.getSystemService(PowerManager::class.java)
     val tags = LibraryVisionBackfill(
         tagger,
         signatures,
         hot = { power.currentThermalStatus >= PowerManager.THERMAL_STATUS_MODERATE },
-        quiet = {
-            withContext(Dispatchers.Main.immediate) {
-                !ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
-                    !app.videoPlaybackInfrastructure().hasActivePlayer
-            }
-        },
+        // Below STARTED no activity is visible, and so no card plays; PiP keeps the process STARTED.
+        away = ProcessLifecycleOwner.get().lifecycle.currentStateFlow.map { !it.isAtLeast(Lifecycle.State.STARTED) },
     )
     return AppPictures(model, tagger, hashes, tags, signatures.observeVisionProgress(model.id))
 }
 
 /**
  * The tagger's pictures as the app holds them: stills through the image loader, from the disk cache cards fill; video
- * frames through the shared video cache ([VideoPlaybackInfrastructure.sampleFrames]); Pixiv animation frames from their
- * archive. A video whose server refuses its saved address is looked up again once, since addresses expire; when that
- * fails too, its still is analysed alone.
+ * frames through the shared video cache ([VideoPlaybackInfrastructure.sampleFrames]), or from a downloaded copy on disk;
+ * Pixiv animation frames from their archive. A post whose listing gave no stream yet, or whose server refuses its saved
+ * address (addresses expire), is looked up again once; when that fails too, its still is analysed alone. One post's
+ * video downloads share one [NetworkBudget].
  */
 private class AppPictureSource(
     private val context: Context,
     private val ugoira: PixivUgoiraClient,
+    private val offlineCopy: suspend (PostId) -> Post?,
     private val resolvePost: suspend (PostId) -> Post?,
 ) : PictureSource {
     override fun hasStill(post: Post): Boolean = postPreviewImageCandidate(post) != null
 
     override suspend fun still(post: Post): Bitmap? = postPreviewImageCandidate(post)?.let { loadPreviewStill(context, it, INPUT_PX) }
 
-    override fun plays(post: Post): Boolean = postMotion(post) != null
+    override fun plays(post: Post): Boolean = postMotion(post) != null || post.awaitsVideoStream
 
-    override suspend fun frames(post: Post): PostFrames = when (val motion = postMotion(post)) {
-        null -> PostFrames.Unreadable
-        is PostMotion.Ugoira -> runCatchingPreservingCancellation { ugoira.sampleFrames(motion.postId.sourcePostId, FRAMES, INPUT_PX) }
-            .fold({ if (it.isEmpty()) PostFrames.Unreadable else PostFrames.Read(it) }, ::failed)
-        is PostMotion.Video -> when (val sample = sample(motion)) {
-            VideoFrameSample.Refused -> refreshed(post)
-            else -> sample.asFrames()
+    override suspend fun frames(post: Post): PostFrames {
+        val budget = NetworkBudget(MAX_VIDEO_NETWORK_BYTES)
+        val offline = runCatchingPreservingCancellation { offlineCopy(post.id) }.getOrNull()
+        val motion = offline?.let(::postMotion) ?: postMotion(post) ?: return refreshed(post, budget)
+        val sample = sample(motion, budget)
+        return if (sample == FrameSample.Refused && motion is PostMotion.Video) refreshed(post, budget) else sample.asFrames()
+    }
+
+    /** [post] as its source lists it now, sampled against the same [budget]; refused again, nothing beyond the still. */
+    private suspend fun refreshed(post: Post, budget: NetworkBudget): PostFrames {
+        val fresh = runCatchingPreservingCancellation { resolvePost(post.id) }
+            .getOrElse { return if (mayPass(it)) PostFrames.Unreachable else PostFrames.Unreadable }
+        val motion = fresh?.let(::postMotion) ?: return PostFrames.Unreadable
+        return sample(motion, budget).asFrames()
+    }
+
+    private suspend fun sample(motion: PostMotion, budget: NetworkBudget): FrameSample = runCatchingPreservingCancellation {
+        when (motion) {
+            is PostMotion.Ugoira -> ugoira.sampleFrames(motion.postId.sourcePostId, FRAMES, INPUT_PX)
+            is PostMotion.Video ->
+                context.videoPlaybackInfrastructure().sampleFrames(motion.location, motion.headers, FRAMES, INPUT_PX, budget)
         }
+    }.getOrElse { if (mayPass(it)) FrameSample.Unreachable else FrameSample.Unreadable }
+
+    private fun FrameSample.asFrames(): PostFrames = when (this) {
+        is FrameSample.Frames -> PostFrames.Read(frames)
+        FrameSample.Unreachable -> PostFrames.Unreachable
+        FrameSample.Refused, FrameSample.Unreadable -> PostFrames.Unreadable
     }
 
-    /** A refused video's post as its source lists it now, sampled again; refused again, nothing beyond the still. */
-    private suspend fun refreshed(post: Post): PostFrames {
-        val fresh = runCatchingPreservingCancellation { resolvePost(post.id) }.getOrElse { return failed(it) }
-        val motion = fresh?.let(::postMotion) as? PostMotion.Video ?: return PostFrames.Unreadable
-        return sample(motion).asFrames()
+    /** Whether [error] is a network failure or a source asking for a later try, which a later run may get past. */
+    private fun mayPass(error: Throwable): Boolean = generateSequence(error, Throwable::cause).any {
+        it is IOException || it is SourceAdapterException && it.reason in PASSING_FAILURES
     }
-
-    private suspend fun sample(video: PostMotion.Video): VideoFrameSample =
-        context.videoPlaybackInfrastructure().sampleFrames(video.location, video.headers, FRAMES, INPUT_PX, MAX_VIDEO_NETWORK_BYTES)
-
-    private fun VideoFrameSample.asFrames(): PostFrames = when (this) {
-        is VideoFrameSample.Frames -> PostFrames.Read(frames)
-        VideoFrameSample.Unreachable -> PostFrames.Unreachable
-        VideoFrameSample.Refused, VideoFrameSample.Unreadable -> PostFrames.Unreadable
-    }
-
-    /** A network failure may pass, so a later run tries again; any other failure leaves the still alone. */
-    private fun failed(error: Throwable): PostFrames =
-        if (generateSequence(error, Throwable::cause).any { it is SocketException || it is SocketTimeoutException || it is UnknownHostException }) {
-            PostFrames.Unreachable
-        } else {
-            PostFrames.Unreadable
-        }
 }
+
+private val PASSING_FAILURES = setOf(SourceFailureReason.NETWORK, SourceFailureReason.RATE_LIMITED)
 
 /** The model reads 448 px squares; decoding the preview larger only costs memory. */
 private const val INPUT_PX = 448

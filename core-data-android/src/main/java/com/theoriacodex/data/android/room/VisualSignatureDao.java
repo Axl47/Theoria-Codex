@@ -52,7 +52,7 @@ public interface VisualSignatureDao {
             + "ORDER BY posts.rowid DESC LIMIT :limit")
     List<PostEntity> libraryPostsWithoutSignature(int limit);
 
-    /** Liked or saved posts that [modelId] has not analysed, most recently stored first. */
+    /** Liked or saved posts that [modelId] has not analysed, most recently stored first, skipping the first [offset]. */
     @Query("SELECT posts.* FROM posts WHERE NOT EXISTS (SELECT 1 FROM post_visual_signatures AS signature "
             + "WHERE signature.source = posts.source AND signature.source_post_id = posts.source_post_id "
             + "AND signature.model_id = :modelId) "
@@ -60,8 +60,8 @@ public interface VisualSignatureDao {
             + "AND codex_items.source_post_id = posts.source_post_id) "
             + "OR EXISTS (SELECT 1 FROM liked_posts WHERE liked_posts.source = posts.source "
             + "AND liked_posts.source_post_id = posts.source_post_id)) "
-            + "ORDER BY posts.rowid DESC LIMIT :limit")
-    List<PostEntity> libraryPostsWithoutVision(String modelId, int limit);
+            + "ORDER BY posts.rowid DESC LIMIT :limit OFFSET :offset")
+    List<PostEntity> libraryPostsWithoutVision(String modelId, int limit, int offset);
 
     /** Liked or saved posts [modelId] has analysed, and how many liked or saved posts there are. */
     @Query("SELECT (SELECT COUNT(*) FROM post_visual_signatures AS signature WHERE signature.model_id = :modelId "

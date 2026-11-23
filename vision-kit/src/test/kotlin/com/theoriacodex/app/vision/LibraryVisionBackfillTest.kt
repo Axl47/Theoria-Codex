@@ -14,9 +14,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import okhttp3.OkHttpClient
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -50,8 +54,8 @@ class LibraryVisionBackfillTest {
         override suspend fun putVision(entries: List<PictureVision>) {
             stored += entries
         }
-        override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post> =
-            posts.filter { post -> stored.none { it.postId == post.id } }.take(limit)
+        override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int, offset: Int): List<Post> =
+            posts.filter { post -> stored.none { it.postId == post.id } }.drop(offset).take(limit)
         override fun observePredictedTags(modelId: String): Flow<Map<PostId, List<PredictedTag>>> = flowOf(emptyMap())
         override fun observeVisionProgress(modelId: String): Flow<VisionProgress> = flowOf(VisionProgress(0, 0))
         override suspend fun clearVision() = stored.clear()
@@ -130,28 +134,51 @@ class LibraryVisionBackfillTest {
     }
 
     @Test
-    fun `while the app is in use playing posts wait for a later run and stills carry on`() = runBlocking {
+    fun `while the app is on screen playing posts wait for it to leave, even mid-read, and stills carry on`() = runBlocking {
         val library = Library(listOf(post("video-1"), post("plain"), post("video-2")))
+        val away = MutableStateFlow(false)
         var framesRead = 0
+        var comesBack = true
         val pictures = Pictures(
             hasStill = { false },
             plays = { it.id.sourcePostId.startsWith("video") },
-            frames = { framesRead++; PostFrames.Unreadable },
+            frames = {
+                framesRead++
+                // The app comes back on screen while the first video's frames are read.
+                if (comesBack) {
+                    comesBack = false
+                    away.value = false
+                    awaitCancellation()
+                }
+                PostFrames.Unreadable
+            },
         )
-        val tagger = PictureTagger(readyStore(), library, pictures, scope)
+        val backfill = backfill(PictureTagger(readyStore(), library, pictures, scope), library, away)
+        var scheduled = 0
+        val watching = launch { backfill.whenAway { scheduled++ } }
+        suspend fun leave() {
+            away.value = true
+            yield()
+        }
 
-        assertTrue(backfill(tagger, library, quiet = { false }).drain())
+        // Waiting frames ask for no retry: the app leaving the screen schedules the next run.
+        assertFalse(backfill.drain())
         assertEquals(listOf("plain"), library.stored.map { it.postId.sourcePostId })
         assertEquals(0, framesRead)
+        leave()
+        assertEquals(1, scheduled)
 
-        // Quiet for the first playing post only: the next one waits again.
-        var quietChecks = 0
-        assertTrue(backfill(tagger, library, quiet = { quietChecks++ == 0 }).drain())
-        assertEquals(listOf("plain", "video-1"), library.stored.map { it.postId.sourcePostId })
+        assertFalse(backfill.drain())
+        assertEquals(listOf("plain"), library.stored.map { it.postId.sourcePostId })
         assertEquals(1, framesRead)
+        leave()
+        assertEquals(2, scheduled)
 
-        assertFalse(backfill(tagger, library).drain())
+        assertFalse(backfill.drain())
         assertEquals(listOf("plain", "video-1", "video-2"), library.stored.map { it.postId.sourcePostId })
+        leave()
+        assertEquals(2, scheduled)
+        watching.cancel()
     }
 
     @Test
@@ -173,15 +200,15 @@ class LibraryVisionBackfillTest {
         assertNull(library.stored.firstOrNull { it.postId.sourcePostId == "offline" })
     }
 
-    private fun backfill(tagger: PictureTagger, library: Library, quiet: () -> Boolean = { true }) =
-        LibraryVisionBackfill(tagger, library, hot = { false }, quiet = { quiet() })
+    private fun backfill(tagger: PictureTagger, library: Library, away: Flow<Boolean> = flowOf(true)) =
+        LibraryVisionBackfill(tagger, library, hot = { false }, away = away)
 
     /** Stills and frames as a test sets them; by default every post has a still that fails to load and none plays. */
     private class Pictures(
         private val hasStill: (Post) -> Boolean = { true },
         private val still: (Post) -> Bitmap? = { null },
         private val plays: (Post) -> Boolean = { false },
-        private val frames: (Post) -> PostFrames = { error("only playing posts read frames") },
+        private val frames: suspend (Post) -> PostFrames = { error("only playing posts read frames") },
     ) : PictureSource {
         override fun hasStill(post: Post): Boolean = hasStill.invoke(post)
         override suspend fun still(post: Post): Bitmap? = still.invoke(post)

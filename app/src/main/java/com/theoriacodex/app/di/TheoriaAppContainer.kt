@@ -363,7 +363,7 @@ internal class DefaultTheoriaAppContainer(
     private val visualSignatures = RoomVisualSignatureRepository(contentDatabase)
     override val pictures = appPictures(
         appContext, httpClients.shared, visualSignatures, LibraryPictureBackfill(visualSignatures, listingPictures.hasher::hash),
-        pixivUgoiraClient, { id -> sourceRegistry.adapterFor(id.source)?.resolvePost(id) }, durableStoreScope,
+        pixivUgoiraClient, offlineStore::find, { id -> sourceRegistry.adapterFor(id.source)?.resolvePost(id) }, durableStoreScope,
     )
     private val codexRepository: CodexRepository = contentRepository
     private val likesRepository: LikesRepository = contentRepository
@@ -680,6 +680,11 @@ internal class DefaultTheoriaAppContainer(
                 combine(model, pictures.progress.map { it.total }.distinctUntilChanged()) { _, _ -> }
                     .collect { scheduleLibraryPictures(appContext) }
             }.onFailure { Diagnostics.report("similarity", "The Library's picture indexing could not be scheduled", it) }
+        }
+        // Video frames a run left while the app was on screen are read on the next charge after it leaves.
+        durableStoreScope.launch {
+            runCatchingPreservingCancellation { pictures.tags.whenAway { scheduleLibraryPictures(appContext) } }
+                .onFailure { Diagnostics.report("similarity", "The Library's video frames could not be scheduled", it) }
         }
         durableStoreScope.launch {
             runCatchingPreservingCancellation { pictures.tags.writeThrough() }
