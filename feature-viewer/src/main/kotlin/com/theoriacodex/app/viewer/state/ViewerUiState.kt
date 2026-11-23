@@ -91,6 +91,10 @@ enum class ViewerPanel(
     ACTIONS_MENU(inChrome = true),
     PLAYBACK_SETTINGS(inChrome = true),
     INFO(inChrome = false),
+    /** An episode's streams, subtitles and audio ([ViewerEpisodeChoice]). */
+    EPISODE_STREAM(inChrome = true),
+    EPISODE_SUBTITLES(inChrome = true),
+    EPISODE_AUDIO(inChrome = true),
 }
 
 data class ViewerControlsState(
@@ -100,6 +104,7 @@ data class ViewerControlsState(
     val playback: ViewerPlaybackControlsState = ViewerPlaybackControlsState(),
     /** A slideshow is moving through the queue; session-only, never saved. */
     val slideshow: Boolean = false,
+    val episode: ViewerEpisodeChoice = ViewerEpisodeChoice(),
 )
 
 data class ViewerOverviewState(

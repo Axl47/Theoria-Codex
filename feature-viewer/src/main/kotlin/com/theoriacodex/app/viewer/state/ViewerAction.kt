@@ -56,6 +56,15 @@ sealed interface ViewerAction {
     data object TogglePlayback : ViewerAction
     data object RestartPlayback : ViewerAction
     data class SetPlaybackRate(val rate: Float) : ViewerAction
+    /**
+     * Plays the episode stream labelled [label], from where playback is. It closes the episode menus, and clears a
+     * failure shown on the media and plays again, so a stream picked after another failed starts at once.
+     */
+    data class ChooseStream(val label: String) : ViewerAction
+    /** Applies [choice] to this episode and every later one; it closes the episode menus. */
+    data class ChooseSubtitle(val choice: ViewerSubtitleChoice) : ViewerAction
+    /** Plays the audio labelled [label] in this episode and every later one that has it; it closes the episode menus. */
+    data class ChooseAudio(val label: String) : ViewerAction
 
     data class RequestPageResolution(val postId: PostId) : ViewerAction
     data class ResolutionCancelled(val session: ViewerSessionIdentity, val postId: PostId) : ViewerAction

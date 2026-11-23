@@ -153,8 +153,11 @@ internal fun ViewerInfoSheet(
         AdaptiveViewerInfo(onDismiss = { controls.setInfoSheetVisible(false) }) {
             ViewerChapterActions(post) {
                 controls.jumpToMedia(post.id, 0)
-                // An episode is one video, so starting over is playing it from its start.
-                host.onAction(ViewerAction.RestartPlayback)
+                if (config.series is ViewerSeries.Watching) {
+                    // An episode is one video: starting over plays it from its start, which the sheet would hide.
+                    host.onAction(ViewerAction.RestartPlayback)
+                    controls.setInfoSheetVisible(false)
+                }
             }
         }
     } else {

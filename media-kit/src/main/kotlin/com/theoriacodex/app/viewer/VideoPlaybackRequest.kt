@@ -66,11 +66,10 @@ fun ImageRef.viewerPlayback(
 }
 
 /**
- * The stream [viewerPlayback] plays for media with [ImageRef.streams]: the playable one labelled [streamLabel], else
- * the first playable one; null when there is none. A label that no longer exists after its links were fetched again
- * falls back to the first.
+ * The stream [viewerPlayback] plays for media with [ImageRef.streams]: the one labelled [streamLabel], else the first;
+ * null when there is none. A label that no longer exists after its links were fetched again falls back to the first.
+ * An episode's streams are already the playable ones, each under a label of its own (`playable()`, applied where
+ * the episode is built), so every list of them the Viewer shows is [ImageRef.streams] as it is.
  */
-fun ImageRef.viewerStream(streamLabel: String?): MediaStream? {
-    val playable = streams.filter { it.url.isNotBlank() }
-    return playable.firstOrNull { it.label == streamLabel } ?: playable.firstOrNull()
-}
+fun ImageRef.viewerStream(streamLabel: String?): MediaStream? =
+    streams.firstOrNull { it.label == streamLabel } ?: streams.firstOrNull()

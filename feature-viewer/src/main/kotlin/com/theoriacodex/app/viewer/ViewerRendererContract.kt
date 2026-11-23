@@ -18,6 +18,7 @@ internal fun viewerRendererEvents(
     onAction: (ViewerAction) -> Unit,
     onTimelineInteractionActiveChanged: (Boolean) -> Unit,
     onDurationKnown: (Long) -> Unit,
+    onPlaybackProgress: ((ViewerPlaybackProgress) -> Unit)? = null,
 ): ViewerRendererEvents = ViewerRendererEvents(
     onPlaybackCompleted = { session?.let { onAction(ViewerAction.PlaybackCompleted(it, key, generation)) } },
     onError = { message -> session?.let {
@@ -29,6 +30,7 @@ internal fun viewerRendererEvents(
     onRestartPlayback = { onAction(ViewerAction.RestartPlayback) },
     onPlaybackIntentChanged = { onAction(if (it) ViewerAction.Play else ViewerAction.Pause) },
     onTimelineInteractionActiveChanged = onTimelineInteractionActiveChanged,
+    onPlaybackProgress = onPlaybackProgress,
 )
 
 /**

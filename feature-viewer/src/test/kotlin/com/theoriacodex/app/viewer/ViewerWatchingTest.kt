@@ -1,10 +1,22 @@
 package com.theoriacodex.app.viewer
 
 import androidx.lifecycle.SavedStateHandle
+import androidx.media3.common.C
+import androidx.media3.common.Player
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.post
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.session
+import com.theoriacodex.app.viewer.state.ViewerAction
+import com.theoriacodex.app.viewer.state.ViewerEpisodeChoice
+import com.theoriacodex.app.viewer.state.ViewerMediaError
+import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.app.viewer.state.ViewerPlaybackMode
 import com.theoriacodex.app.viewer.state.ViewerResolutionStatus
+import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
+import com.theoriacodex.app.viewer.state.ViewerSubtitleChoice
+import com.theoriacodex.app.viewer.state.createViewerUiState
+import com.theoriacodex.app.viewer.state.reduceViewerState
+import com.theoriacodex.domain.model.GalleryReadingMode
+import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -17,6 +29,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -87,19 +100,111 @@ class ViewerWatchingTest {
     }
 
     @Test
-    fun `a stream is recovered once until it plays again`() {
-        val requests = mutableSetOf<String>()
-        var asked = 0
-        val recovery = ViewerStreamRecovery(requests, "stream:episode:0") { asked++ }
-        assertTrue(recovery.request())
-        assertFalse(recovery.request())
-        assertEquals(1, asked)
-        // A player rebuilt for the recovered stream shares the budget through the page's set.
-        assertFalse(ViewerStreamRecovery(requests, "stream:episode:0") { asked++ }.request())
-        recovery.played()
-        assertTrue(recovery.request())
-        assertEquals(2, asked)
+    fun `a drag toward a neighbouring episode does not look it up`() = runTest {
+        val started = mutableListOf<PostId>()
+        val owner = testViewerOwner(SavedStateHandle(), postResolver = ViewerPostResolver { _, id ->
+            started += id
+            null
+        }, scopeOverride = this)
+        owner.replaceSession(session("watching", episodes).copy(series = ViewerSeries.Watching()))
+        advanceUntilIdle()
+        // A horizontal drag asks for its target's page as the swipe's load target.
+        owner.onAction(ViewerAction.RequestPageResolution(episodes[1].id))
+        advanceUntilIdle()
+        assertEquals(listOf(episodes[0].id), started)
+        assertEquals(ViewerResolutionStatus.IDLE, owner.state.value.pages[1].resolution.status)
+        owner.clearSession()
     }
+
+    @Test
+    fun `a chapter's lookup keeps a post's limit`() = runTest {
+        val owner = testViewerOwner(SavedStateHandle(), postResolver = ViewerPostResolver { _, id ->
+            delay(35_000)
+            post(id.sourcePostId, id.source)
+        }, scopeOverride = this)
+        owner.replaceSession(session("reading", episodes.take(1)).copy(series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL)))
+        advanceUntilIdle()
+        assertEquals(ViewerResolutionStatus.FAILED, owner.state.value.currentPage?.resolution?.status)
+        owner.clearSession()
+    }
+
+    @Test
+    fun `progress reported as the Viewer closes still reaches the closed session`() = runTest {
+        val episode = post("episode", media = listOf(ViewerOwnerTestData.video("episode.mp4")))
+        val recorded = mutableListOf<Pair<String, Long>>()
+        val record: suspend (Post, ViewerPlaybackProgress, ViewerSession) -> Unit = { _, progress, session ->
+            recorded += session.sessionId to progress.positionMs
+        }
+        val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this)
+        owner.replaceSession(session("watching", listOf(episode)).copy(series = ViewerSeries.Watching()))
+        owner.recordPlaybackProgress(episode, ViewerPlaybackProgress(4_000, 1_440_000), record)
+        // Closing retains the paused pages; their players report as they pause and let go.
+        owner.clearSession(retainPresentation = true)
+        owner.recordPlaybackProgress(episode, ViewerPlaybackProgress(6_000, 1_440_000), record)
+        advanceUntilIdle()
+        assertEquals(listOf("watching" to 4_000L, "watching" to 6_000L), recorded)
+    }
+
+    @Test
+    fun `picking a stream after one failed clears the failure and plays on, keeping the choice for the session`() {
+        val identity = ViewerSessionIdentity("watching")
+        val episode = post("episode", media = listOf(ViewerOwnerTestData.video("episode.mp4")))
+        var state = createViewerUiState(identity, listOf(episode))
+        val key = requireNotNull(state.currentMedia).key
+        state = reduceViewerState(state, ViewerAction.ShowPanel(ViewerPanel.EPISODE_STREAM)).state
+        state = reduceViewerState(state, ViewerAction.MediaFailed(identity, ViewerMediaError.Recoverable(key, "Could not play video"))).state
+        assertFalse(state.controls.playback.playing)
+
+        state = reduceViewerState(state, ViewerAction.ChooseStream("720p · B")).state
+        assertNull(state.mediaError)
+        assertTrue(state.controls.playback.playing)
+        assertNull(state.controls.panel)
+        assertEquals("720p · B", state.controls.episode.streamLabel)
+        state = reduceViewerState(state, ViewerAction.ChooseSubtitle(ViewerSubtitleChoice.Track("English"))).state
+        assertEquals(ViewerEpisodeChoice("720p · B", ViewerSubtitleChoice.Track("English")), state.controls.episode)
+    }
+
+    @Test
+    fun `the next player gets the subtitles and audio chosen on the last, by label`() {
+        val choice = ViewerEpisodeChoice(subtitle = ViewerSubtitleChoice.Track("English"), audioLabel = "Japanese")
+        // A new stream or episode: other ids, Media3's own picks.
+        val next = PlaybackTracks(
+            subtitles = listOf(PlaybackTrack("0:1/0", "Español", selected = false), PlaybackTrack("0:2/0", "English", selected = false)),
+            audio = listOf(PlaybackTrack("1:0/0", "English", selected = true), PlaybackTrack("2:0/0", "Japanese", selected = false)),
+        )
+        assertEquals(listOf(ViewerTrackChange.Subtitle("0:2/0"), ViewerTrackChange.Audio("2:0/0")), choice.trackChanges(next))
+        // Once applied, nothing more changes; a label the episode lacks keeps the episode's own choice.
+        val applied = next.copy(
+            subtitles = next.subtitles.map { it.copy(selected = it.label == "English") },
+            audio = next.audio.map { it.copy(selected = it.label == "Japanese") },
+        )
+        assertEquals(emptyList<ViewerTrackChange>(), choice.trackChanges(applied))
+        assertEquals(emptyList<ViewerTrackChange>(), ViewerEpisodeChoice(audioLabel = "Korean").trackChanges(next))
+        // Off turns off a track Media3 picked by itself.
+        val defaulted = next.copy(subtitles = next.subtitles.map { it.copy(selected = it.label == "Español") })
+        assertEquals(listOf(ViewerTrackChange.Subtitle(null)), ViewerEpisodeChoice(subtitle = ViewerSubtitleChoice.Off).trackChanges(defaulted))
+    }
+
+    @Test
+    fun `every seek reports once, a drag's at its release, and a released player reports where it stopped`() {
+        var scrubbing = false
+        var seeks = 0
+        val counter = ViewerSeekCounter({ scrubbing }) { seeks++ }
+        fun discontinuity(reason: Int) = counter.onPositionDiscontinuity(position(0), position(60_000), reason)
+        discontinuity(Player.DISCONTINUITY_REASON_SEEK)
+        discontinuity(Player.DISCONTINUITY_REASON_AUTO_TRANSITION)
+        scrubbing = true
+        repeat(3) { discontinuity(Player.DISCONTINUITY_REASON_SEEK) }
+        scrubbing = false
+        discontinuity(Player.DISCONTINUITY_REASON_SEEK)
+        assertEquals(2, seeks)
+
+        assertEquals(ViewerPlaybackProgress(61_000, 1_440_000), viewerReleaseProgress(61_000, 1_440_000, ended = false))
+        assertEquals(ViewerPlaybackProgress(1_440_000, 1_440_000), viewerReleaseProgress(1_439_000, 1_440_000, ended = true))
+        assertNull(viewerReleaseProgress(4_000, C.TIME_UNSET, ended = false))
+    }
+
+    private fun position(ms: Long) = Player.PositionInfo(null, 0, null, null, 0, ms, ms, C.INDEX_UNSET, C.INDEX_UNSET)
 
     @Test
     fun `playback is reported every ten seconds while playing and once when it stops, never without a duration`() = runTest {

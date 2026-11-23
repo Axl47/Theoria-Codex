@@ -44,19 +44,14 @@ sealed interface ViewerSeries {
     data class Reading(val mode: GalleryReadingMode) : ViewerSeries
 
     /**
-     * Episodes, each one long video. An episode in [startPositionsMs] starts there, in milliseconds, and any other at
-     * its start; the positions seed the Viewer's video positions ([rememberViewerVideoPositions]). Where the user
-     * gets to goes back through [ViewerScreenHost.onPlaybackProgress].
+     * Episodes, each one long video. [startPositionsMs] holds where the user stopped in each episode that has saved
+     * progress, in milliseconds: it starts there, and any other episode at its start. A position within
+     * [VIEWER_EPISODE_END_MARGIN_MS] of the episode's end counts as watched to the end, so that episode starts over
+     * rather than ending at once. The positions seed the Viewer's video positions ([rememberViewerVideoPositions]);
+     * where the user gets to goes back through [ViewerScreenHost.onPlaybackProgress].
      */
     data class Watching(val startPositionsMs: Map<PostId, Long> = emptyMap()) : ViewerSeries
 }
-
-/**
- * Where an episode's playback is, as [ViewerScreenCallbacks.onPlaybackProgress] reports it for its series' progress: at
- * [positionMs] of an episode [durationMs] long. A chapter's page arrives through
- * [ViewerScreenCallbacks.onVisibleMediaChanged] instead.
- */
-data class ViewerPlaybackProgress(val positionMs: Long, val durationMs: Long)
 
 internal fun requiresViewerPostResolution(post: Post, streamSource: ViewerStreamSource): Boolean {
     if (requiresLazyMediaResolution(post)) return true

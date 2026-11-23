@@ -56,6 +56,7 @@ import com.theoriacodex.app.viewer.ViewerTrail
 import com.theoriacodex.app.ui.trails.ViewerLevel
 import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.newViewerPosts
+import com.theoriacodex.app.viewer.recoverMedia
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.viewer.state.ViewerEffect
@@ -216,10 +217,12 @@ internal fun ViewerRoute(
     ViewerDurationSync(activeSession, viewerState, durationOwner, dependencies.canonicalizePost)
     val sourceState = liveSourceState.matching(activeSession)
     val related = rememberViewerRelatedPosts(activeSession, liveSourceState)
+    // The session says what kind it is, so the Viewer's controls and video positions read it from the session they show.
+    val sessionConfig = remember(config, activeSession?.series) { config.copy(series = activeSession?.series) }
     ViewerScreen(
         uiState = viewerState,
-        host = rememberViewerScreenHost(viewerOwner, durationOwner, screenCallbacks, latestDependencies, latestEffectCallbacks, routeScope),
-        config = config,
+        host = rememberViewerScreenHost(viewerOwner, durationOwner, screenCallbacks, latestDependencies, latestEffectCallbacks),
+        config = sessionConfig,
         saveToCodexQuery = activeSession?.saveQuery,
         saveFromForYou = activeSession?.context?.streamSource == ViewerStreamSource.FOR_YOU,
         canLoadMoreFromSource = activeSession?.liveSearchBinding == true && sourceState?.canLoadMore == true,
@@ -300,7 +303,6 @@ private fun rememberViewerScreenHost(
     callbacks: ViewerScreenCallbacks,
     latestDependencies: State<ViewerRouteDependencies>,
     latestEffectCallbacks: State<ViewerRouteEffectCallbacks>,
-    routeScope: CoroutineScope,
 ) = remember(viewerOwner, durationOwner, callbacks) {
     ViewerScreenHost(
         onAction = { action ->
@@ -315,12 +317,7 @@ private fun rememberViewerScreenHost(
         },
         onOpenCreatorFallback = callbacks.onOpenCreatorFallback,
         onGalleryReadingModeSelected = callbacks.onGalleryReadingModeSelected,
-        onRequestMediaRecovery = { post, failedMedia ->
-            routeScope.launch {
-                if (viewerOwner.session.value == null) return@launch
-                recoverAndApplyMedia(viewerOwner, post, failedMedia, latestEffectCallbacks.value)
-            }
-        },
+        onRequestMediaRecovery = { post, failedMedia -> recoverAndApplyMedia(viewerOwner, post, failedMedia, latestEffectCallbacks.value) },
         onVisiblePostChanged = { post, viewedMediaNumber ->
             viewerOwner.state.value.session?.let { identity ->
                 viewerOwner.recordVisiblePost(identity, post, viewedMediaNumber, callbacks.onVisiblePostChanged)
@@ -555,6 +552,9 @@ private suspend fun retryViewerMedia(
 ) {
     val page = state.pages.firstOrNull { candidate -> candidate.post.id == effect.mediaKey.postId } ?: return
     val failedMedia = page.media.firstOrNull { candidate -> candidate.key == effect.mediaKey }?.ref ?: return
+    // A retried episode's new player asks for fresh links itself if its links fail again; asking here too would look
+    // the episode up twice at once.
+    if (failedMedia.streams.isNotEmpty()) return
     recoverAndApplyMedia(viewerOwner, page.post, failedMedia, callbacks)
 }
 
@@ -634,32 +634,15 @@ private fun rememberViewerRelatedPosts(
     return remember(relatedSource, relatedState, relatedPosts) { ViewerRelatedPosts(relatedSource, relatedState, relatedPosts) }
 }
 
-private fun ViewerViewModel.hasNoPage(post: Post): Boolean = state.value.pages.none { page -> page.post.id == post.id }
-
 /** Prevents buffered or suspended effects from crossing a Viewer session replacement. */
 internal fun ViewerEffect.isCurrentFor(state: ViewerUiState): Boolean = session == state.session
 
-/**
- * Asks the source for working media for [post] and applies the result. A source may return [post] itself with only the
- * failed media refreshed, so the result is dropped, before the feed records it too, when the session changed or the
- * page's post did (its lookup finished): applying it would replace the newer post with the older one.
- */
+/** Asks the source for working media for [post], in the session's launch context; see [recoverMedia]. */
 private suspend fun recoverAndApplyMedia(
     viewerOwner: ViewerViewModel,
     post: Post,
     failedMedia: ImageRef,
     callbacks: ViewerRouteEffectCallbacks,
-) {
-    val session = viewerOwner.session.value ?: return
-    if (viewerOwner.hasNoPage(post)) return
-    fun stillApplies() = viewerOwner.session.value?.sessionId == session.sessionId &&
-        viewerOwner.state.value.pages.any { page -> page.post == post }
-    val recovered = try {
-        callbacks.onRecoverMedia(post, failedMedia, session.context, ::stillApplies)
-    } catch (error: CancellationException) {
-        throw error
-    } catch (_: Exception) {
-        null
-    } ?: return
-    if (stillApplies()) viewerOwner.applyResolvedPost(recovered)
+) = viewerOwner.recoverMedia(post, failedMedia) { session, stillApplies ->
+    callbacks.onRecoverMedia(post, failedMedia, session.context, stillApplies)
 }

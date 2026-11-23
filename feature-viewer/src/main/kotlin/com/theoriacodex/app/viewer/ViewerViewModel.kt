@@ -93,6 +93,11 @@ class ViewerViewModel(
     override val state: StateFlow<ViewerUiState> = mutableState.asStateFlow()
     override val effects: Flow<ViewerEffect.Route> = effectChannel.receiveAsFlow()
     private val mutableSession = MutableStateFlow<ViewerSession?>(null)
+    /**
+     * The session progress reports belong to: the current one, or after [clearSession] the one that just closed, whose
+     * retained pages still report as their players let go. The next [replaceSession] replaces it.
+     */
+    @Volatile private var reportingSession: ViewerSession? = null
     val session: StateFlow<ViewerSession?> = mutableSession.asStateFlow()
 
     /**
@@ -124,6 +129,7 @@ class ViewerViewModel(
             queuePrefetch(action.requests)
             return
         }
+        if (action is ViewerAction.RequestPageResolution && !mayResolve(action.postId)) return
         val reduction = synchronized(lock) {
             if (action is ViewerAction.ReplaceSession) resetSessionWork(action)
             var result = reduceViewerState(mutableState.value, action)
@@ -146,6 +152,13 @@ class ViewerViewModel(
             showComments()
         }
     }
+
+    /**
+     * While a series is watched only the episode on screen resolves: its lookup scrapes third-party sites for links that
+     * soon expire, so a drag toward a neighbour (which asks for it as the swipe's target) must not start one.
+     */
+    private fun mayResolve(postId: PostId): Boolean =
+        mutableSession.value?.series !is ViewerSeries.Watching || postId == mutableState.value.currentPage?.post?.id
 
     /** The app's playback setting, except while a series is watched: an episode goes on to the next one, never loops. */
     private fun startingPlaybackMode(): ViewerPlaybackMode =
@@ -181,6 +194,7 @@ class ViewerViewModel(
     fun replaceSession(session: ViewerSession) {
         val isNewLaunch = state.value.session != session.toViewerSessionIdentity()
         mutableSession.value = session
+        reportingSession = session
         onAction(session.toReplaceViewerSessionAction(::requiresResolution))
         if (isNewLaunch) {
             val target = session.focusComment
@@ -284,10 +298,10 @@ class ViewerViewModel(
         progress: ViewerPlaybackProgress,
         record: suspend (Post, ViewerPlaybackProgress, ViewerSession) -> Unit,
     ) {
-        val current = mutableSession.value ?: return
-        if (state.value.pages.none { it.post.id == post.id }) return
+        val reporting = reportingSession ?: return
+        if (reporting.posts.none { it.id == post.id } && state.value.pages.none { it.post.id == post.id }) return
         workScope.launch(start = CoroutineStart.UNDISPATCHED) {
-            runCatchingPreservingCancellation { record(post, progress, current) }
+            runCatchingPreservingCancellation { record(post, progress, reporting) }
         }
     }
 
@@ -300,10 +314,11 @@ class ViewerViewModel(
             lastCurrentPostId = null
             comments.reset()
             mutableSession.value = null
+            // The retained pages keep their episode choice: a stream label dropped here would rebind the closing player.
             mutableState.value = if (retainPresentation) ViewerUiState(
                 pages = mutableState.value.pages,
                 currentPageIndex = mutableState.value.currentPageIndex,
-                controls = ViewerControlsState(chromeVisible = false),
+                controls = ViewerControlsState(chromeVisible = false, episode = mutableState.value.controls.episode),
             ) else ViewerUiState.Empty
             clearSavedState()
         }
@@ -594,11 +609,11 @@ private class ViewerPrefetchLedger {
 }
 
 /**
- * How long a post lookup may take, the first one or one asked again to recover expired media. A series entry is
- * looked up by its extension, which can take half a minute to find an episode's streams.
+ * How long a post lookup may take, the first one or one asked again to recover expired media. An episode is looked up
+ * by its extension, which can take half a minute to find its streams; a chapter keeps a post's limit.
  */
 internal fun viewerResolutionTimeoutMs(series: ViewerSeries?): Long =
-    if (series == null) VIEWER_RESOLUTION_TIMEOUT_MS else VIEWER_SERIES_RESOLUTION_TIMEOUT_MS
+    if (series is ViewerSeries.Watching) VIEWER_SERIES_RESOLUTION_TIMEOUT_MS else VIEWER_RESOLUTION_TIMEOUT_MS
 
 internal const val VIEWER_RESOLUTION_TIMEOUT_MS = 15_000L
 internal const val VIEWER_SERIES_RESOLUTION_TIMEOUT_MS = 60_000L

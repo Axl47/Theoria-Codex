@@ -67,8 +67,8 @@ internal data class ViewerVideoOptions(
     val streamLabel: String?,
     val terminalMessage: String?,
     val diagnosticsEnabled: Boolean,
-    /** Hears where an episode's playback is, in a [ViewerSeries.Watching] session only. */
-    val onPlaybackProgress: ((ViewerPlaybackProgress) -> Unit)? = null,
+    /** The screen's asks for fresh stream links, spent by media with streams whose player fails. */
+    val freshLinks: ViewerFreshLinksBudget? = null,
 )
 
 /** Owns taps and pinches and selects a renderer; swipes and route state stay in ViewerScreen. */
@@ -90,7 +90,7 @@ internal fun ViewerMediaPage(
     onAction: (ViewerAction) -> Unit,
     onInteraction: () -> Unit,
     onToggleChrome: () -> Unit,
-    onRequestMediaRecovery: ((Post, ImageRef) -> Unit)?,
+    onRequestMediaRecovery: ViewerMediaRecoveryRequest?,
     levelControls: ViewerLevelControls? = null,
     returnProgress: () -> Float = { 0f },
     dismissDrag: ViewerDismissDrag? = null,

@@ -5,6 +5,8 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertSame
 import org.junit.Test
 
@@ -85,6 +87,27 @@ class ViewerVideoPositionsTest {
     }
 
     @Test
+    fun `a watching session's seeds that arrive after the screen composed still apply, until a position is saved`() {
+        val store = ViewerVideoPositionStore()
+        val positions = store.forSession(identity("watching"))
+        positions.retainAround(posts, 0)
+        assertSame(positions, store.forSession(identity("watching"), ViewerSeries.Watching(mapOf(posts[0] to 90_000L, posts[8] to 60_000L))))
+        assertEquals(90_000L, positions.position(key(0)))
+        // Per-episode retention came with the seeds: an episode outside the window keeps where it got to.
+        positions.save(key(1), 30_000L)
+        positions.retainAround(posts, 7)
+        positions.retainAround(posts, 0)
+        assertEquals(30_000L, positions.position(key(1)))
+
+        val started = store.forSession(identity("started"))
+        started.retainAround(posts, 0)
+        started.save(key(0), 12_000L)
+        store.forSession(identity("started"), ViewerSeries.Watching(mapOf(posts[0] to 90_000L)))
+        assertEquals(12_000L, started.position(key(0)))
+        assertFalse(started.startsOver(12_000L, 14_000L))
+    }
+
+    @Test
     fun `gallery items and Viewer sessions have independent positions`() {
         val positions = ViewerVideoPositions()
         positions.retainAround(posts, 0)
@@ -93,5 +116,13 @@ class ViewerVideoPositionsTest {
         assertEquals(12_000L, positions.position(key(0)))
         assertEquals(24_000L, positions.position(key(0, 1)))
         assertEquals(0L, ViewerVideoPositions().position(key(0)))
+    }
+
+    @Test
+    fun `an episode left at its end starts over, any other video resumes anywhere`() {
+        val watching = ViewerVideoPositions(ViewerSeries.Watching())
+        assertTrue(watching.startsOver(1_436_000L, 1_440_000L))
+        assertFalse(watching.startsOver(1_400_000L, 1_440_000L))
+        assertFalse(ViewerVideoPositions().startsOver(5_900L, 6_000L))
     }
 }

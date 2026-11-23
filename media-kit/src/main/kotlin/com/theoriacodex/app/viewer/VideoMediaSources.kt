@@ -43,7 +43,7 @@ internal fun isSegmentedStream(uri: Uri, mime: String?): Boolean =
  * change between reads, and the cache would answer with the stale copy, and its segments are separate files that one
  * cache identity cannot name.
  */
-internal fun VideoPlaybackRequest.usesSharedCache(): Boolean =
+fun VideoPlaybackRequest.usesSharedCache(): Boolean =
     cache && isHttpVideoLocation(location) && !isSegmentedStream(videoLocationToUri(location), streamMimeType(mime))
 
 /** The labels of a request's separate audio, in merge order, carried as its media item's tag for [playbackTracks]. */

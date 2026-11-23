@@ -29,6 +29,7 @@ internal class ViewerScreenState {
     val imageSession = ViewerImageSession()
     /** The selected video's tracks, for the episode controls. */
     val activeTracks = ViewerActiveTracks()
+    val freshLinks = ViewerFreshLinksBudget()
     val mediaPagers = mutableMapOf<PostId, PagerState>()
     /** Galleries shown as one vertical column, by post; observed, so the screen's gestures follow a new one at once. */
     val verticalGalleries = mutableStateMapOf<PostId, ViewerVerticalGalleryState>()
@@ -92,7 +93,7 @@ internal class ViewerControls(
     fun setPlaybackSettingsExpanded(expanded: Boolean) = setPanelOpen(ViewerPanel.PLAYBACK_SETTINGS, expanded)
 
     /** Opening a panel closes the one that was open. */
-    private fun setPanelOpen(panel: ViewerPanel, open: Boolean) {
+    fun setPanelOpen(panel: ViewerPanel, open: Boolean) {
         onAction(if (open) ViewerAction.ShowPanel(panel) else ViewerAction.HidePanel(panel))
     }
 
@@ -203,8 +204,6 @@ internal class ViewerFrame(
     val inPictureInPicture: Boolean,
     val touchExplorationEnabled: Boolean,
     val isLandscape: Boolean,
-    /** The session is a series being watched ([ViewerSeries.Watching]): each post is one long episode. */
-    val watching: Boolean,
 ) {
     val mediaOverviewVisible = uiState.overview.visible && !inPictureInPicture
 

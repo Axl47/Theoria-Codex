@@ -16,7 +16,16 @@ import com.theoriacodex.domain.model.PostId
 internal class ViewerVideoPositions(watching: ViewerSeries.Watching? = null) {
     private var retainedPosts = emptySet<PostId>()
     private val positions = mutableMapOf<ViewerMediaKey, Long>()
-    private val episodes = watching?.startPositionsMs?.mapKeysTo(mutableMapOf()) { (postId) -> ViewerMediaKey(postId, mediaIndex = 0) }
+    private var episodes = watching?.episodes()
+    private var saved = false
+
+    /**
+     * Makes this a [watching] session when its kind arrives after the screen first composed. Only before any position
+     * was saved: a later seed would overwrite where the user got to with where the episodes opened.
+     */
+    fun watch(watching: ViewerSeries.Watching) {
+        if (episodes == null && !saved) episodes = watching.episodes()
+    }
 
     fun retainAround(posts: List<PostId>, currentIndex: Int) {
         retainedPosts = posts.slice(
@@ -28,11 +37,25 @@ internal class ViewerVideoPositions(watching: ViewerSeries.Watching? = null) {
     fun position(key: ViewerMediaKey): Long = positions[key] ?: episodes?.get(key) ?: 0L
 
     fun save(key: ViewerMediaKey, positionMs: Long) {
+        saved = true
         val position = positionMs.coerceAtLeast(0L)
         episodes?.set(key, position)
         if (key.postId in retainedPosts) positions[key] = position
     }
+
+    /**
+     * Whether a start at [positionMs] of a video [durationMs] long begins again instead: in a watched session, within
+     * [VIEWER_EPISODE_END_MARGIN_MS] of the end, the episode was watched to its end. Any other video resumes anywhere.
+     */
+    fun startsOver(positionMs: Long, durationMs: Long): Boolean =
+        episodes != null && positionMs >= durationMs - VIEWER_EPISODE_END_MARGIN_MS
+
+    private fun ViewerSeries.Watching.episodes() =
+        startPositionsMs.mapKeysTo(mutableMapOf()) { (postId) -> ViewerMediaKey(postId, mediaIndex = 0) }
 }
+
+/** How close to an episode's end a saved position counts as watched to the end. */
+internal const val VIEWER_EPISODE_END_MARGIN_MS = 5_000L
 
 /**
  * Holds the current session's [ViewerVideoPositions] in the screen's ViewModel store (the Viewer's navigation entry), so
@@ -42,11 +65,13 @@ internal class ViewerVideoPositionStore : ViewModel() {
     private var session: ViewerSessionIdentity? = null
     private var positions = ViewerVideoPositions()
 
-    /** [watching] applies only when [identity] starts a new session. */
+    /** A new [identity] starts new positions; [watching] seeds them, or the current session's if it arrives late. */
     fun forSession(identity: ViewerSessionIdentity?, watching: ViewerSeries.Watching? = null): ViewerVideoPositions {
         if (identity != session) {
             session = identity
             positions = ViewerVideoPositions(watching)
+        } else if (watching != null) {
+            positions.watch(watching)
         }
         return positions
     }
@@ -59,5 +84,6 @@ internal class ViewerVideoPositionStore : ViewModel() {
 @Composable
 internal fun rememberViewerVideoPositions(session: ViewerSessionIdentity?, series: ViewerSeries? = null): ViewerVideoPositions {
     val store = viewModel<ViewerVideoPositionStore>()
-    return remember(store, session) { store.forSession(session, series as? ViewerSeries.Watching) }
+    val watching = series as? ViewerSeries.Watching
+    return remember(store, session, watching) { store.forSession(session, watching) }
 }
