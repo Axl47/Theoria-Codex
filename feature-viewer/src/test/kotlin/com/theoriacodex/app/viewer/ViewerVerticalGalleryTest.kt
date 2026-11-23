@@ -12,6 +12,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.performClick
 import org.junit.Assert.assertFalse
@@ -200,6 +201,15 @@ class ViewerVerticalGalleryTest {
         show()
         compose.onNode(hasText("Retry") and hasAnyAncestor(hasContentDescription("Page 1"))).performClick()
         assertTrue(actions.any { it is ViewerAction.RetryMedia })
+    }
+
+    @Test fun `a failed page taller than the screen shows its Retry on screen`() {
+        val strips = gallery.copy(width = 690, height = 16_000)
+        state.value = createViewerUiState(ViewerSessionIdentity("tall"), listOf(strips, next))
+        show()
+        val screen = compose.onRoot().getUnclippedBoundsInRoot()
+        val retry = compose.onNode(hasText("Retry") and hasAnyAncestor(hasContentDescription("Page 1"))).getUnclippedBoundsInRoot()
+        assertTrue("Retry at ${retry.top}..${retry.bottom} on a screen to ${screen.bottom}", retry.top >= screen.top && retry.bottom <= screen.bottom)
     }
 
     @Test fun `picking a page shorter than a third of the screen keeps it selected`() {

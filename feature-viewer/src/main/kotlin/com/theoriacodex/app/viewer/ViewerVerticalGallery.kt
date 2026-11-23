@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -335,13 +336,43 @@ private fun VerticalGalleryPage(
                     events = events, imageSession = imageSession,
                     onRequestMediaRecovery = onRequestMediaRecovery,
                     onPainted = { size -> onPainted(size.width, size.height) },
+                    spinnerModifier = Modifier.onVisiblePart(gallery.list, index),
                 )
             }
             (sharedError ?: failed?.let { ViewerMediaError.Recoverable(key, it) })?.let { error ->
-                ViewerMediaErrorOverlay(error) { if (sharedError != null) onRetry() else { failed = null; attempt += 1 } }
+                Box(Modifier.onVisiblePart(gallery.list, index)) {
+                    ViewerMediaErrorOverlay(error) { if (sharedError != null) onRetry() else { failed = null; attempt += 1 } }
+                }
             }
         }
     }
+}
+
+/**
+ * Moves a status centered on page [index] of [list] (its spinner or error) to the middle of the part of that page on
+ * screen, so a page taller than the screen never looks blank while it loads. Read while drawing, so scrolling moves it
+ * without recomposing.
+ */
+private fun Modifier.onVisiblePart(list: LazyListState, index: Int) = graphicsLayer {
+    val viewport = list.layoutInfo
+    val page = viewport.visibleItemsInfo.firstOrNull { it.index == index } ?: return@graphicsLayer
+    translationY = visiblePartShift(
+        page.offset, page.size, viewport.viewportStartOffset, viewport.viewportEndOffset,
+        reach = size.height / 2 + STATUS_EDGE_MARGIN.toPx(),
+    )
+}
+
+/**
+ * How far to move a status from the middle of a page at [pageOffset] and [pageSize] in a viewport from [viewportStart]
+ * to [viewportEnd] so it sits in the middle of the page's part on screen: it rises with a page coming in at the bottom,
+ * holds the screen's middle while the page fills it, and leaves with the page at the top. It stays [reach] inside the
+ * page's edges, and does not move on a page too short for that.
+ */
+internal fun visiblePartShift(pageOffset: Int, pageSize: Int, viewportStart: Int, viewportEnd: Int, reach: Float): Float {
+    if (pageSize <= reach * 2) return 0f
+    val shownTop = maxOf(viewportStart, pageOffset) - pageOffset
+    val shownBottom = minOf(viewportEnd, pageOffset + pageSize) - pageOffset
+    return ((shownTop + shownBottom) / 2f).coerceIn(reach, pageSize - reach) - pageSize / 2f
 }
 
 @Composable
@@ -432,3 +463,6 @@ private val VERTICAL_PAGE_CONTROLS = ViewerRendererControls(
 private const val DEFAULT_PAGE_SHAPE = 0.7f
 private const val MAX_ZOOM = 4f
 private const val DOUBLE_TAP_ZOOM = 2f
+
+/** How close a page's spinner or error comes to the page's top and bottom edges. */
+private val STATUS_EDGE_MARGIN = 24.dp
