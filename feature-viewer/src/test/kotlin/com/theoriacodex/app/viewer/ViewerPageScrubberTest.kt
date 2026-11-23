@@ -49,6 +49,24 @@ class ViewerPageScrubberTest {
         assertEquals(0, viewerPageAt(120f, 120f, 12, mirrored = true))
     }
 
+    @Test fun `a held page keeps a touch until it is clearly past the page`() {
+        // Pages own 10 px each; page 4 spans 40 to 50.
+        assertEquals(4, viewerPageAt(53f, 120f, 12, mirrored = false, held = 4, holdPx = 4f))
+        assertEquals(4, viewerPageAt(37f, 120f, 12, mirrored = false, held = 4, holdPx = 4f))
+        assertEquals(5, viewerPageAt(54f, 120f, 12, mirrored = false, held = 4, holdPx = 4f))
+        assertEquals(3, viewerPageAt(35f, 120f, 12, mirrored = false, held = 4, holdPx = 4f))
+        // Mirrored, page 4 spans 70 to 80.
+        assertEquals(4, viewerPageAt(82f, 120f, 12, mirrored = true, held = 4, holdPx = 4f))
+        assertEquals(3, viewerPageAt(85f, 120f, 12, mirrored = true, held = 4, holdPx = 4f))
+    }
+
+    @Test fun `a finger rolling across a boundary as it lifts lands on the page it rested on`() {
+        setScrubber(pageIndex = 0)
+        // Page 6 of 12 spans 50% to 58.3% of the track; the finger rests near its end, then rolls a few pixels over.
+        scrubber { down(at(0.1f)); moveTo(at(0.58f)); moveTo(at(0.59f)); moveTo(at(0.58f)); moveTo(at(0.59f)); up() }
+        compose.runOnIdle { assertEquals(listOf(6), selected) }
+    }
+
     @Test fun `a landscape page and its neighbours are shrunk to fit a phone, a portrait one is left alone`() {
         val landscape = viewerPagePreviewFrame(16f / 9f, 344.dp)
         assertTrue("target is ${landscape.width}", landscape.width * 2.1f + 12.dp <= 344.01.dp)
@@ -98,11 +116,16 @@ class ViewerPageScrubberTest {
         }
     }
 
-    @Test fun `instant seek turns the page at each new step without a preview`() {
+    @Test fun `instant seek turns the page at each new step and floats only its number`() {
+        val loads = installHangingLoader()
         setScrubber(pageIndex = 0, instantSeek = true)
         scrubber { down(at(0.2f)); moveTo(at(0.21f)); moveTo(at(0.4f)) }
-        preview.assertDoesNotExist()
+        compose.onNodeWithText("5 / 12").assertIsDisplayed()
+        compose.onNodeWithText("+4").assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(SCRUB_FRAME_SETTLE_MS + 250 + 20)
+        compose.runOnIdle { assertTrue("started ${loads.started}", loads.started.isEmpty()) }
         scrubber { up() }
+        preview.assertDoesNotExist()
         compose.runOnIdle { assertEquals(listOf(2, 4), selected) }
     }
 
