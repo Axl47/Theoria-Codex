@@ -52,7 +52,7 @@ class ExtensionImagesTest {
 
     @Test
     fun `a stored cover is plain and is tagged for its own source each time it is loaded`() = runTest {
-        val series = MihonSeriesSource(source, images)
+        val series = MihonSeriesSource(source, HostServices(images))
         val stored = Series(SeriesId(series.key, "/s"), "Series", coverUrl = "https://covers.test/1.jpg")
 
         assertEquals("source-token https://covers.test/1.jpg", fetch(checkNotNull(series.coverAddress(stored))))

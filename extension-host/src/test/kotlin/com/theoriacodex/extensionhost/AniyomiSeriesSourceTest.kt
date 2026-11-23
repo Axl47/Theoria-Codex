@@ -9,8 +9,9 @@ import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
-import com.theoriacodex.domain.series.SeriesStatus
 import com.theoriacodex.domain.series.UnsupportedEntriesException
+import com.theoriacodex.sources.http.HostOutageKind
+import com.theoriacodex.sources.http.HostUnavailableException
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.FetchType
 import eu.kanade.tachiyomi.animesource.model.Hoster
@@ -19,6 +20,7 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
+import java.io.IOException
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
@@ -27,9 +29,11 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import okhttp3.Headers
 import okhttp3.Headers.Companion.headersOf
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -48,6 +52,23 @@ class AniyomiSeriesSourceTest {
     }
 
     @Test
+    fun `a cover is handed out tagged, and fetched through the source's own client with its headers`() {
+        val images = ExtensionImages()
+        val asked = mutableListOf<Request>()
+        val source = object : FakeAnimeSource() {
+            override val client: OkHttpClient = OkHttpClient.Builder().addInterceptor(answering { request -> asked += request; cannedResponse(request) }).build()
+        }
+        val hosted = AniyomiKind.hosted(source, HostServices(images))
+        images.publish(listOf(hosted))
+        val tagged = checkNotNull(hosted.series.coverAddress(Series(SeriesId(hosted.key, "/a/1"), "Show", coverUrl = "https://img.example/c.jpg")))
+
+        OkHttpClient.Builder().addInterceptor(images).build().newCall(Request.Builder().url(tagged).build()).execute().close()
+
+        assertEquals(listOf("https://img.example/c.jpg"), asked.map { it.url.toString() })
+        assertEquals("FakeBrowser/1.0", asked.single().header("User-Agent"))
+    }
+
+    @Test
     fun `every server's streams come in the source's preferred order, and a stream without headers gets the source's`() = runBlocking {
         val source = ServerSource(
             servers = listOf(Hoster(hosterName = "Server A"), Hoster(hosterName = "Server B", videoList = listOf(Video("https://b.example/v.mp4", "Server B 480p")))),
@@ -62,6 +83,9 @@ class AniyomiSeriesSourceTest {
                             audioTracks = listOf(Track("https://a.example/ja.m4a", "Japanese")),
                         ),
                         Video("https://a.example/720.mp4", "720p"),
+                        // The address's own extension outranks the name.
+                        Video("https://a.example/480.mp4", "480p HLS"),
+                        Video("https://a.example/play?id=360", "360p HLS"),
                     )
                 },
             ),
@@ -81,6 +105,8 @@ class AniyomiSeriesSourceTest {
                     subtitles = listOf(MediaTrack("https://a.example/en.vtt", "English")),
                     audioTracks = listOf(MediaTrack("https://a.example/ja.m4a", "Japanese")),
                 ),
+                MediaStream("https://a.example/480.mp4", "480p HLS · Server A", headers = sourceHeaders),
+                MediaStream("https://a.example/play?id=360", "360p HLS · Server A", mime = "application/x-mpegURL", headers = sourceHeaders),
                 MediaStream("https://b.example/v.mp4", "Server B 480p", headers = sourceHeaders),
             ),
             media,
@@ -88,7 +114,7 @@ class AniyomiSeriesSourceTest {
     }
 
     @Test
-    fun `a source with only the older single call answers through it, its addresses asked for where it left them out`() = runBlocking {
+    fun `a source with only the older single call answers through it without a request, its addresses asked for where it left them out`() = runBlocking {
         val source = SingleCallSource {
             listOf(Video(url = "https://old.example/watch/1", quality = "360p", videoUrl = null), Video("https://old.example/480.mp4", "480p", "https://old.example/480.mp4"))
         }
@@ -101,7 +127,7 @@ class AniyomiSeriesSourceTest {
 
     @Test
     fun `a server that ignores cancellation delays neither the answer nor a caller that stops waiting`() = runBlocking {
-        val stuck = { Thread.sleep(STUCK_MS); emptyList<Video>() }
+        val stuck: suspend () -> List<Video> = { Thread.sleep(STUCK_MS); emptyList() }
         val fastAndStuck = ServerSource(
             servers = listOf(Hoster(hosterName = "Fast"), Hoster(hosterName = "Stuck")),
             videos = mapOf("Fast" to { listOf(Video("https://fast.example/v.mp4", "720p")) }, "Stuck" to stuck),
@@ -122,25 +148,89 @@ class AniyomiSeriesSourceTest {
     }
 
     @Test
-    fun `an anime grouped into seasons is refused in words the series page shows, unwrapped`() = runBlocking {
-        val source = ServerSource(listing = listOf(anime("/a/1", "Grouped").apply { fetch_type = FetchType.Seasons }))
-        val series = AniyomiSeriesSource(source, HostServices(ExtensionImages()))
+    fun `a stub the extension left unwritten and its own timeout fail only their own call`() = runBlocking {
+        val source = ServerSource(
+            servers = listOf(Hoster(hosterName = "Unwritten"), Hoster(hosterName = "Impatient"), Hoster(hosterName = "Fine")),
+            videos = mapOf(
+                "Unwritten" to { TODO() },
+                "Impatient" to { withTimeout(1) { delay(1_000) }; emptyList() },
+                "Fine" to { listOf(Video("https://fine.example/v.mp4", "720p")) },
+            ),
+        )
+        assertEquals(listOf("720p · Fine"), streamsOf(source).map { it.label })
 
-        val listed = series.popular(1).series.single()
-        val refusal = assertFailsWith<UnsupportedEntriesException> { series.entries(listed) }
-
-        assertEquals("Seasons aren't supported yet", refusal.message)
+        val unwritten = object : FakeAnimeSource() {
+            override suspend fun getPopularAnime(page: Int): AnimesPage = TODO()
+        }
+        val failure = assertFailsWith<SourceAdapterException> { AniyomiSeriesSource(unwritten, HostServices(ExtensionImages())).popular(1) }
+        assertEquals(SourceFailureReason.UNKNOWN, failure.reason)
     }
 
     @Test
-    fun `an anime announced but not yet released is upcoming`() = runBlocking {
-        val source = ServerSource(listing = listOf(anime("/a/2", "Soon").apply { status = SAnime.UPCOMING }))
+    fun `a browser check behind every video is the answer, and one that stopped a server is heard even when another answers`() = runBlocking {
+        val heard = mutableListOf<String>()
+        val challenged = Hoster(hosterName = "Checked", videoList = listOf(Video(url = "https://checked.example/watch/1", quality = "720p", videoUrl = null)))
+        val checkedOrBroken = ServerSource(
+            servers = listOf(Hoster(hosterName = "Broken"), challenged),
+            videos = mapOf("Broken" to { throw IOException("Gone") }),
+            addressOf = { throw HostUnavailableException("checked.example", HostOutageKind.CHALLENGE) },
+        )
+        val failure = assertFailsWith<SourceAdapterException> { streamsOf(checkedOrBroken, onChallenged = { heard += it }) }
+        assertTrue(failure.isBrowserCheck())
+        assertEquals(listOf("checked.example"), heard)
 
-        assertEquals(SeriesStatus.UPCOMING, AniyomiSeriesSource(source, HostServices(ExtensionImages())).popular(1).series.single().status)
+        heard.clear()
+        val checkedAndFine = ServerSource(
+            servers = listOf(challenged, Hoster(hosterName = "Fine", videoList = listOf(Video("https://fine.example/v.mp4", "720p")))),
+            addressOf = { throw HostUnavailableException("checked.example", HostOutageKind.CHALLENGE) },
+        )
+        assertEquals(listOf("720p · Fine"), streamsOf(checkedAndFine, onChallenged = { heard += it }).map { it.label })
+        assertEquals(listOf("checked.example"), heard)
     }
 
-    private suspend fun streamsOf(source: AnimeHttpSource, serverLimitMs: Long = 60_000): List<MediaStream> {
-        val series = AniyomiSeriesSource(source, HostServices(ExtensionImages()), serverLimitMs = serverLimitMs)
+    @Test
+    fun `servers that answer with no videos give no streams, which is no failure`() = runBlocking {
+        assertEquals(emptyList<MediaStream>(), streamsOf(ServerSource(servers = listOf(Hoster(hosterName = "Empty")), videos = mapOf("Empty" to { emptyList() }))))
+        assertEquals(emptyList<MediaStream>(), streamsOf(ServerSource()))
+    }
+
+    @Test
+    fun `an anime whose details group it into seasons is refused unwrapped, asking for them first after a restart`() = runBlocking {
+        val source = ServerSource(listing = listOf(anime("/a/1", "Grouped")), details = { SAnime.create().apply { fetch_type = FetchType.Seasons } })
+        val warm = AniyomiSeriesSource(source, HostServices(ExtensionImages()))
+        val opened = warm.details(warm.popular(1).series.single())
+        assertEquals("Seasons aren't supported yet", assertFailsWith<UnsupportedEntriesException> { warm.entries(opened) }.message)
+        assertEquals(1, source.detailsAsked)
+
+        // As the new-episode check asks after a restart: nothing listed, nothing opened.
+        val cold = AniyomiSeriesSource(source, HostServices(ExtensionImages()))
+        assertFailsWith<UnsupportedEntriesException> { cold.entries(Series(SeriesId(cold.key, "/a/1"), "Grouped")) }
+        assertEquals(2, source.detailsAsked)
+    }
+
+    @Test
+    fun `episodes are listed with their numbers, read from the name where the source left none`() = runBlocking {
+        val source = ServerSource(
+            episodes = listOf(
+                SEpisode.create().apply { url = "/e/2"; name = "Episode 2"; episode_number = 2f; date_upload = 1_000L; scanlator = "Subs" },
+                SEpisode.create().apply { url = "/e/1"; name = "Show - Episode 1" },
+            ),
+        )
+        val series = AniyomiSeriesSource(source, HostServices(ExtensionImages()))
+        val stored = Series(SeriesId(series.key, "/a/3"), "Show")
+
+        assertEquals(
+            listOf(SeriesEntry("/e/2", "Episode 2", 2f, "Subs", 1_000L), SeriesEntry("/e/1", "Show - Episode 1", 1f)),
+            series.entries(stored),
+        )
+        // Listed once its details were asked for, so a second listing asks no more.
+        series.entries(stored)
+        assertEquals(1, source.detailsAsked)
+    }
+
+    private suspend fun streamsOf(source: AnimeHttpSource, serverLimitMs: Long = 60_000, onChallenged: (String) -> Unit = {}): List<MediaStream> {
+        val host = HostServices(ExtensionImages(), onChallenged = { _, challenged -> onChallenged(challenged) })
+        val series = AniyomiSeriesSource(source, host, AniyomiStreams.Limits(serverMs = serverLimitMs))
         return (series.media(SeriesEntry("/episode/1", "Episode 1")) as EntryMedia.Streams).streams
     }
 
@@ -164,13 +254,24 @@ class AniyomiSeriesSourceTest {
         override fun headersBuilder() = Headers.Builder().apply { sourceHeaders.forEach { (name, value) -> add(name, value) } }
     }
 
-    /** A source built against the server list: [videos] answers each of [servers] that came without its videos. */
+    /**
+     * A source built against the server list: [videos] answers each of [servers] that came without its videos, and
+     * [addressOf] gives the address of a video that came without one.
+     */
     private inner class ServerSource(
         private val servers: List<Hoster> = emptyList(),
-        private val videos: Map<String, () -> List<Video>> = emptyMap(),
+        private val videos: Map<String, suspend () -> List<Video>> = emptyMap(),
         private val listing: List<SAnime> = emptyList(),
+        private val addressOf: suspend (Video) -> String = { it.url },
+        private val details: (SAnime) -> SAnime = { SAnime.create() },
+        private val episodes: List<SEpisode> = emptyList(),
     ) : FakeAnimeSource() {
         override val id = 7L
+        var detailsAsked = 0
+
+        override suspend fun getAnimeDetails(anime: SAnime): SAnime = details(anime).also { detailsAsked++ }
+
+        override suspend fun getEpisodeList(anime: SAnime): List<SEpisode> = episodes
 
         override suspend fun getPopularAnime(page: Int) = AnimesPage(listing, hasNextPage = false)
 
@@ -179,14 +280,17 @@ class AniyomiSeriesSourceTest {
         override suspend fun getVideoList(hoster: Hoster): List<Video> = videos.getValue(hoster.hosterName)()
 
         override fun List<Video>.sortVideos(): List<Video> = sortedByDescending { it.videoTitle == "720p" }
+
+        override suspend fun getVideoUrl(video: Video): String = addressOf(video)
     }
 
     /**
      * A source built before the server list: it answers only the single call, and names some videos by the page they
-     * are on. The host's default server list asks its client, which answers anything, before finding no way to read it.
+     * are on. It makes no request of its own, so its client fails every one, as a site that keeps something other
+     * than a page's address in an episode would answer the host's default server list.
      */
-    private inner class SingleCallSource(private val videos: () -> List<Video>) : FakeAnimeSource() {
-        override val client: OkHttpClient = OkHttpClient.Builder().addInterceptor(answering { cannedResponse(it) }).build()
+    private inner class SingleCallSource(private val videos: suspend () -> List<Video>) : FakeAnimeSource() {
+        override val client: OkHttpClient = OkHttpClient.Builder().addInterceptor { throw IOException("The older call makes no request") }.build()
 
         @Deprecated("Use the hoster version instead")
         override suspend fun getVideoList(episode: SEpisode): List<Video> = videos()

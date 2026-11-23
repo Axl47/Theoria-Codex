@@ -9,7 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 
 /**
- * One extension interface this host runs: Mihon's for manga ([MihonKind]) or Aniyomi's for anime ([AnimeKind]). It says
+ * One extension interface this host runs: Mihon's for manga ([MihonKind]) or Aniyomi's for anime ([AniyomiKind]). It says
  * how to recognize an extension of its kind from what the package manager reports, and turns the classes such an
  * extension names into [HostedSource]s. Everything else ([ExtensionPackages], [ExtensionLoader], [ExtensionRegistry], [ExtensionImages]) works the same for every kind,
  * so a new interface is a new implementation of this, handed to [ExtensionPackages] beside the others.
@@ -75,12 +75,19 @@ class HostedSource(
 
 /**
  * What the host gives each source an [ExtensionKind] adapts: [images] to tag the addresses it hands out, [log],
- * [abandoned], where extension work a caller stopped waiting for is left to finish, since extension code can ignore
- * cancellation, and [onChallenged], to hear of each host whose browser check stopped one of the source's calls.
+ * [detached], where extension work runs that a caller may stop waiting for and leave to finish, since extension code
+ * can ignore cancellation, and [onChallenged], to hear of each host whose browser check stopped one of the source's calls.
  */
 class HostServices(
     val images: ExtensionImages,
     val log: (String) -> Unit = {},
-    val abandoned: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    val detached: CoroutineScope = CoroutineScope(SupervisorJob() + detachedDispatcher),
     val onChallenged: (source: SourceKey, host: String) -> Unit = { _, _ -> },
 )
+
+/**
+ * Detached extension work gets threads of its own, beside the 64 the app's IO work shares rather than out of them, so
+ * extractors blocked on a dead server cannot starve the app's downloads and database. 32 covers the largest fan-out
+ * measured (18 servers and their list) with room for an earlier lookup's stragglers.
+ */
+private val detachedDispatcher = Dispatchers.IO.limitedParallelism(32)

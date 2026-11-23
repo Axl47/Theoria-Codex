@@ -14,7 +14,7 @@ import eu.kanade.tachiyomi.animesource.sourcePreferences
  * extension interface 14 or 16. Their sources implement `eu.kanade.tachiyomi.animesource.AnimeSource`, presented to the
  * app by [AniyomiSeriesSource]. Extensions that stream by torrent need an engine the app does not have.
  */
-object AnimeKind : ExtensionKind {
+object AniyomiKind : ExtensionKind {
     override val feature = "tachiyomi.animeextension"
     override val sourceClassesKey = "tachiyomi.animeextension.class"
 
@@ -30,6 +30,7 @@ object AnimeKind : ExtensionKind {
     override fun unsupported(info: PackageInfo): String? {
         val version = info.versionName?.substringBefore('.')?.toIntOrNull()
         return when {
+            version == null -> "Unknown extension API"
             version !in SUPPORTED_VERSIONS -> "Needs extension API $version"
             info.applicationInfo?.metaData?.getInt(TORRENT_KEY) == 1 -> "Streams by torrent"
             else -> null

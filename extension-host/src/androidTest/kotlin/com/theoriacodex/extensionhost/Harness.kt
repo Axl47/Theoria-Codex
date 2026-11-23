@@ -26,7 +26,7 @@ internal class Harness(private val tag: String) {
     /** Installs the host and loads [apkName] as the app would, with both kinds of extension known. */
     fun load(apkName: String, services: HostServices): Pair<ExtensionPackage, List<HostedSource>> {
         ExtensionHost.install(context.applicationContext as Application, versionName = "harness", versionCode = 1, cookies = NoCookies, browsers = ChallengeBrowsers(NoCookies, NoBrowser), outages = HostOutageTracker())
-        val packages = ExtensionPackages(context, listOf(MihonKind, AnimeKind))
+        val packages = ExtensionPackages(context, listOf(MihonKind, AniyomiKind))
         val extension = checkNotNull(packages.read(File(context.getExternalFilesDir(null), apkName))) { "$apkName is not an extension" }
         val sources = timed("load") { ExtensionLoader(context, packages).load(extension, services) }
         report("extension", "${extension.name} ${extension.versionName}, ${extension.kind.seriesKind}, ${sources.size} sources, signer ${extension.signer}")
