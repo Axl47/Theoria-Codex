@@ -134,12 +134,17 @@ internal class AniyomiStreams(
         return listOfNotNull(videoTitle.trim().takeIf(String::isNotEmpty), serverName).joinToString(" · ")
     }
 
-    /** A manifest type the address or the quality's name gives away; the player works out anything else. */
+    /**
+     * A manifest type the address gives away, or else the quality's name; the player works out anything else. The
+     * address decides first: a server named "HLS" can also offer a plain file.
+     */
     private fun Video.impliedMime(): String? {
         val path = videoUrl.toHttpUrlOrNull()?.encodedPath.orEmpty().lowercase()
         return when {
-            ".m3u8" in path || HLS_NAME.containsMatchIn(videoTitle) -> HLS_MIME
+            ".m3u8" in path -> HLS_MIME
             ".mpd" in path -> DASH_MIME
+            FILE_EXTENSIONS.any { path.endsWith(it) } -> null
+            HLS_NAME.containsMatchIn(videoTitle) -> HLS_MIME
             else -> null
         }
     }
@@ -182,6 +187,7 @@ internal class AniyomiStreams(
         const val LIST_LIMIT_MS = 50_000L
         private const val HLS_MIME = "application/x-mpegURL"
         private const val DASH_MIME = "application/dash+xml"
+        private val FILE_EXTENSIONS = listOf(".mp4", ".mkv", ".webm")
         private val HLS_NAME = Regex("""\b(hls|m3u8)\b""", RegexOption.IGNORE_CASE)
     }
 }

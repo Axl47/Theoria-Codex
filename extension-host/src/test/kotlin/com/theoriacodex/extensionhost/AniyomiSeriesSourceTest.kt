@@ -65,6 +65,9 @@ class AniyomiSeriesSourceTest {
                             audioTracks = listOf(Track("https://a.example/ja.m4a", "Japanese")),
                         ),
                         Video("https://a.example/720.mp4", "720p"),
+                        // The address's own extension outranks the name.
+                        Video("https://a.example/480.mp4", "480p HLS"),
+                        Video("https://a.example/play?id=360", "360p HLS"),
                     )
                 },
             ),
@@ -84,6 +87,8 @@ class AniyomiSeriesSourceTest {
                     subtitles = listOf(MediaTrack("https://a.example/en.vtt", "English")),
                     audioTracks = listOf(MediaTrack("https://a.example/ja.m4a", "Japanese")),
                 ),
+                MediaStream("https://a.example/480.mp4", "480p HLS · Server A", headers = sourceHeaders),
+                MediaStream("https://a.example/play?id=360", "360p HLS · Server A", mime = "application/x-mpegURL", headers = sourceHeaders),
                 MediaStream("https://b.example/v.mp4", "Server B 480p", headers = sourceHeaders),
             ),
             media,
