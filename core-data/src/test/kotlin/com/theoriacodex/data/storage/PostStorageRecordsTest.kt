@@ -46,8 +46,8 @@ class PostStorageRecordsTest {
             DurableJson.encodeToString(PostStorageCodec.encode(episode)),
             encodeBackupPost(episode).toString(),
         )
-        // The media item's own address is the default stream's, as for any video; nothing only a stream has is written.
-        written.forEach { json -> listOf("Server A", "mpegURL", "host.test", "subs.test").forEach { assertTrue(json, it !in json) } }
+        // The media item has no address of its own, so nothing a stream has is written, its address included.
+        written.forEach { json -> listOf("video.test", "Server A", "mpegURL", "host.test", "subs.test").forEach { assertTrue(json, it !in json) } }
         val stored = PostStorageCodec.decode(DurableJson.decodeFromString<PostStorageRecord>(written.first()))
         assertTrue(checkNotNull(stored).media.all { it.streams.isEmpty() })
     }

@@ -1,6 +1,7 @@
 package com.theoriacodex.app.media
 
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.MediaStream
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -28,6 +29,13 @@ class MediaDurationProbeTest {
         val full = ImageRef("https://media.test/full.mp4?token=1", null, null)
 
         assertEquals(full, authoritativeDurationProbeRef(post(full = full)))
+    }
+
+    @Test
+    fun `duration probe leaves an episode's streams to its player`() {
+        val episode = ImageRef("https://video.test/v.mp4", null, "video/mp4", streams = listOf(MediaStream("https://video.test/v.mp4", "A")))
+
+        assertNull(authoritativeDurationProbeRef(post(full = episode)))
     }
 
     private fun post(
