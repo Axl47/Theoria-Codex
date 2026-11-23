@@ -13,7 +13,8 @@ import kotlinx.serialization.Serializable
  * A series in a profile backup (`library.series`): what its source said, what the user did with it, and its entries
  * with their progress. Series are stored once for the whole app, not per profile, so a backup holds them once.
  * Pages are never stored, so none are here; opening a restored chapter needs the series' extension installed and on.
- * Downloads are neither: the files stay on the device they were made on.
+ * Downloads are neither: the files stay on the device they were made on. Nor is
+ * [StoredSeries.chaptersShareFirstPage], which the Viewer finds again from the chapters it shows.
  *
  * The cover is the address the source gave, as stored. Which client fetches it is decided when it is loaded, by the
  * series' own source, so a file cannot pick one; it can name the address that source's client is sent to, as it can
