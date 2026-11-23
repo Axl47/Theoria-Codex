@@ -59,7 +59,9 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         // Nothing is asked of the source for a downloaded chapter; the cover is the stored address, as in a session.
         val downloaded = series.downloads.chapter(id, entry.entry.address)?.media
         val source = if (downloaded == null) source(id.source) else null
-        val pages = downloaded ?: checkNotNull(source).pages(entry.entry)
+        val pages = downloaded ?: runCatchingPreservingCancellation { checkNotNull(source).pages(entry.entry) }
+            .onFailure { Diagnostics.report("series", "${id.source.id} chapter pages failed to load", it) }
+            .getOrThrow()
         if (pages.isEmpty()) return null
         return chapterPost(stored.series, entry.entry, source?.coverAddress(stored.series) ?: stored.series.coverUrl, pages)
     }
