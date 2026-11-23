@@ -93,7 +93,10 @@ interface SeriesSource {
     /** [series] with what its own page adds; what the source leaves out keeps the value [series] has. */
     suspend fun details(series: Series): Series
 
-    /** In the source's order, which lists the newest first. */
+    /**
+     * In the source's order, which lists the newest first. Throws [UnsupportedEntriesException] for a series it finds
+     * but whose entries the app cannot list.
+     */
     suspend fun entries(series: Series): List<SeriesEntry>
 
     /**
@@ -109,3 +112,10 @@ interface SeriesSource {
      */
     fun coverAddress(series: Series): String? = series.coverUrl
 }
+
+/**
+ * Thrown by [SeriesSource.entries] for a series the source lists but whose entries the app cannot list yet, such as an
+ * anime that groups its episodes into seasons. [message] says so in words for the user; the series page shows it as it
+ * is, where any other failure's own text is never shown.
+ */
+class UnsupportedEntriesException(override val message: String) : Exception(message)

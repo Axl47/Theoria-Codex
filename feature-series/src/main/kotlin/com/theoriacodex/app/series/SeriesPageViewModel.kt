@@ -11,7 +11,9 @@ import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.data.repository.continueEntry
 import com.theoriacodex.data.repository.refresh
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.SeriesSource
+import com.theoriacodex.domain.series.seriesKind
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
@@ -30,9 +32,11 @@ import kotlinx.coroutines.launch
 /**
  * One series' page: what is stored of it, its entries in the source's order (newest first), and how the refresh from
  * its source is going. A failed refresh leaves the stored series and entries on screen. So does a series whose source
- * is [sourceMissing], but its chapters cannot be opened until the extension is back.
+ * is [sourceMissing], but its entries cannot be opened until the extension is back.
  */
 data class SeriesPageState(
+    /** Read from the series' source id, so it is known before anything loads and while the extension is gone. */
+    val kind: SeriesKind = SeriesKind.MANGA,
     val stored: StoredSeries? = null,
     val entries: List<StoredSeriesEntry> = emptyList(),
     /** The series' source while it is on. */
@@ -46,10 +50,10 @@ data class SeriesPageState(
      * or the source's language off.
      */
     val sourceMissing: Boolean = false,
-    /** Each chapter queued for download or on the device, by address; empty in a build that cannot download. */
+    /** Each chapter queued for download or on the device, by address; empty when the page offers no downloads. */
     val downloads: Map<String, ChapterDownload> = emptyMap(),
 ) {
-    /** Whether the chapter at [entry] can be read now: through its source, or from the device without one. */
+    /** Whether the entry at [entry] can be opened now: through its source, or from the device without one. */
     fun canOpen(entry: String): Boolean = !sourceMissing || downloads[entry] == ChapterDownload.OnDevice
 
     /** The entry Continue opens. */
@@ -61,28 +65,29 @@ data class SeriesPageState(
 
 /**
  * [sourcesChanged] emits once at the start and again whenever [loadSources] may answer differently; each is a refresh.
- * Without [downloads] the page offers none.
+ * Without [downloads] the page offers none, and an anime offers none either: episodes do not download yet.
  */
 class SeriesPageViewModel(
     private val id: SeriesId,
     private val repository: SeriesRepository,
     private val loadSources: suspend () -> List<SeriesSource>,
     sourcesChanged: Flow<*> = flowOf(Unit),
-    private val downloads: SeriesDownloads? = null,
+    downloads: SeriesDownloads? = null,
 ) : ViewModel() {
-    private val refresh = MutableStateFlow(SeriesPageState())
+    private val downloads = downloads.takeIf { id.source.seriesKind == SeriesKind.MANGA }
+    private val refresh = MutableStateFlow(SeriesPageState(kind = id.source.seriesKind))
 
     /** Whether this page offers downloads. */
-    val canDownload: Boolean = downloads != null
+    val canDownload: Boolean = this.downloads != null
 
     val state: StateFlow<SeriesPageState> = combine(
         repository.observeSeries(id),
         repository.observeEntries(id),
         refresh,
-        downloads?.states(id) ?: flowOf(emptyMap()),
+        this.downloads?.states(id) ?: flowOf(emptyMap()),
     ) { stored, entries, refresh, downloads ->
         refresh.copy(stored = stored, entries = entries.sortedBy { it.sourceOrder }, downloads = downloads)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SeriesPageState())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), refresh.value)
 
     /** The refresh running, which a newer one replaces. */
     private var refreshJob: Job? = null

@@ -64,12 +64,27 @@ private fun ExtensionsList(
         when {
             extensions == null -> LoadingState()
             extensions.isEmpty() -> EmptyState("No extensions installed")
-            else -> SettingsGroup(null) {
-                extensions.forEachIndexed { index, extension ->
-                    if (index > 0) SettingsRowDivider()
-                    ExtensionRow(extension, onOpen, onSwitch = { on -> if (on) onAsk(extension) else onTurnOff(extension) })
-                }
+            else -> {
+                // With extensions of both kinds installed, each kind is a group headed by its name.
+                val kinds = extensions.groupBy(InstalledExtension::kind).toSortedMap()
+                kinds.forEach { (kind, group) -> ExtensionGroup(kind.label.takeIf { kinds.size > 1 }, group, onOpen, onAsk, onTurnOff) }
             }
+        }
+    }
+}
+
+@Composable
+private fun ExtensionGroup(
+    title: String?,
+    extensions: List<InstalledExtension>,
+    onOpen: (String) -> Unit,
+    onAsk: (InstalledExtension) -> Unit,
+    onTurnOff: (InstalledExtension) -> Unit,
+) {
+    SettingsGroup(title) {
+        extensions.forEachIndexed { index, extension ->
+            if (index > 0) SettingsRowDivider()
+            ExtensionRow(extension, onOpen, onSwitch = { on -> if (on) onAsk(extension) else onTurnOff(extension) })
         }
     }
 }

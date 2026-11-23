@@ -1,14 +1,22 @@
 package com.theoriacodex.app.series
 
+import com.theoriacodex.data.repository.DownloadScheduler
 import com.theoriacodex.data.repository.FollowedSeries
+import com.theoriacodex.data.repository.OfflineMediaStore
+import com.theoriacodex.data.repository.SeriesDownloads
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
+import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SeriesPage
+import com.theoriacodex.domain.series.SeriesSource
+import com.theoriacodex.domain.series.UnsupportedEntriesException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -24,10 +32,15 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SeriesPageViewModelTest {
+    @get:Rule
+    val folder = TemporaryFolder()
+
     @After
     fun resetMainDispatcher() = Dispatchers.resetMain()
 
@@ -68,6 +81,61 @@ class SeriesPageViewModelTest {
         viewModel.refresh()
         advanceUntilIdle()
         assertEquals(2, asked)
+    }
+
+    @Test
+    fun anAnimeOffersNoDownloads() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        fun page(source: String): SeriesPageViewModel {
+            val id = SeriesId(SourceKey.parseOrThrow(source), "/title/1")
+            return SeriesPageViewModel(id, Restored(StoredSeries(Series(id, "Title")), emptyList()), { emptyList() }, downloads = downloads())
+        }
+
+        assertTrue(page("custom_mihon_7").canDownload)
+        assertFalse(page("custom_aniyomi_7").canDownload)
+    }
+
+    /** As an Aniyomi source that groups an anime's episodes into seasons reports it. */
+    @Test
+    fun aSourceThatCannotListTheEntriesSaysWhyInItsOwnWords() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val id = SeriesId(SourceKey.parseOrThrow("custom_aniyomi_7"), "/title/1")
+        val source = Seasons(id.source)
+        val viewModel = SeriesPageViewModel(id, Restored(StoredSeries(Series(id, "Title")), emptyList()), loadSources = { listOf(source) })
+        val collecting = launch { viewModel.state.collect {} }
+
+        advanceUntilIdle()
+        assertEquals(Seasons.MESSAGE, viewModel.state.value.failure)
+        collecting.cancel()
+    }
+
+    /** Downloads over this test's folder that never run: the page only asks whether it offers them. */
+    private fun downloads() = SeriesDownloads(
+        store = OfflineMediaStore(folder.newFolder()),
+        queueFile = folder.root.resolve("queue.json"),
+        repository = Restored(StoredSeries(Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/"), "")), emptyList()),
+        sources = { emptyList() },
+        fetch = { _, _ -> error("Nothing downloads") },
+        scheduler = object : DownloadScheduler {
+            override suspend fun schedule(automatic: Boolean) = Unit
+            override suspend fun ensureScheduled(automatic: Boolean) = Unit
+        },
+        deleteAfterReading = { false },
+    )
+}
+
+/** Fails every entry list the way a source that groups episodes into seasons does. */
+private class Seasons(override val key: SourceKey) : SeriesSource {
+    override val name = "Fake"
+    override val language = "en"
+    override suspend fun popular(page: Int) = SeriesPage(emptyList(), hasNextPage = false)
+    override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>) = popular(page)
+    override suspend fun details(series: Series) = series
+    override suspend fun entries(series: Series): List<SeriesEntry> = throw UnsupportedEntriesException(MESSAGE)
+    override suspend fun media(entry: SeriesEntry) = EntryMedia.Streams(emptyList())
+
+    companion object {
+        const val MESSAGE = "Anime split into seasons aren't supported yet"
     }
 }
 
