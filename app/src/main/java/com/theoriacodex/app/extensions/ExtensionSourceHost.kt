@@ -146,6 +146,7 @@ internal class ExtensionSourceHost : ExtensionSites {
 
     private companion object {
         const val TAG = "ExtensionHost"
+        // Named when Mihon's were the only extensions; kept so files pushed there for tests keep loading.
         const val DIRECTORY = "mihon-extensions"
     }
 }

@@ -30,6 +30,7 @@ object AniyomiKind : ExtensionKind {
     override fun unsupported(info: PackageInfo): String? {
         val version = info.versionName?.substringBefore('.')?.toIntOrNull()
         return when {
+            version == null -> "Unknown extension API"
             version !in SUPPORTED_VERSIONS -> "Needs extension API $version"
             info.applicationInfo?.metaData?.getInt(TORRENT_KEY) == 1 -> "Streams by torrent"
             else -> null
