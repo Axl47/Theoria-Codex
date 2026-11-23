@@ -152,6 +152,28 @@ class SourceSettingsTest {
     }
 
     @Test
+    fun `a list's listener finds the entry that was picked and can store a value itself`() {
+        val settings = settings { screen ->
+            screen.addPreference(
+                ListPreference(screen.context).apply {
+                    key = "server"
+                    entries = arrayOf("First", "Second")
+                    entryValues = arrayOf("one", "two")
+                    onPreferenceChangeListener = Preference.OnPreferenceChangeListener { preference, picked ->
+                        val list = preference as ListPreference
+                        list.value = "${list.findIndexOfValue(picked as String)}:$picked"
+                        false
+                    }
+                },
+            )
+        }
+
+        settings.change((settings.list().single() as ExtensionSetting.Choice).copy(value = "two"))
+
+        assertEquals("1:two", store.getString("server", null))
+    }
+
+    @Test
     fun `a switch describes each state, a hidden setting is left out and a disabled one cannot change`() {
         val settings = settings { screen ->
             screen.addPreference(SwitchPreferenceCompat(screen.context).apply { key = "a"; summaryOn = "Shown"; summaryOff = "Hidden"; isEnabled = false })
