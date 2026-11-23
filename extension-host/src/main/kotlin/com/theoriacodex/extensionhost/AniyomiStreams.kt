@@ -29,6 +29,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
  */
 internal class AniyomiStreams(private val source: AnimeSource, private val host: HostServices, private val limits: Limits = Limits()) {
     private val http = source as? AnimeHttpSource
+    private val hasServerList = declaresServerList(source.javaClass)
 
     /** How long a server and the server list each get; tests shorten them. */
     data class Limits(val serverMs: Long = SERVER_LIMIT_MS, val listMs: Long = LIST_LIMIT_MS)
@@ -53,15 +54,18 @@ internal class AniyomiStreams(private val source: AnimeSource, private val host:
 
     /**
      * The episode's servers in the order the source prefers. A source without the server list answers the older single
-     * call, as one server that holds every video; the version it declares does not tell which it has.
+     * call, as one server that holds every video. A plain source that declares the server list in no class of its own
+     * can still lack it, which only calling it shows.
      */
     @Suppress("DEPRECATION")
     private suspend fun servers(episode: SEpisode): List<Hoster> {
-        val servers = try {
-            source.getHosterList(episode)
-        } catch (_: UnsupportedOperationException) {
-            null
-        } catch (_: AbstractMethodError) {
+        val servers = if (hasServerList) {
+            try {
+                source.getHosterList(episode)
+            } catch (_: AbstractMethodError) {
+                null
+            }
+        } else {
             null
         } ?: source.getVideoList(episode).toHosterList()
         return http?.run { servers.sortHosters() } ?: servers
@@ -159,3 +163,21 @@ internal class AniyomiStreams(private val source: AnimeSource, private val host:
 }
 
 private fun Track.toMediaTrack() = MediaTrack(url, lang)
+
+/**
+ * Whether a source class has the server list, decided as Aniyomi decides it: some class of the extension's own, from
+ * [type] up to the host's classes, declares one of its steps. Shared base classes in an extension put the override in
+ * a class between the two. The version an extension declares does not tell (nearly every version-14 extension has it),
+ * and calling the host's default to find out would fetch the episode's page, which a source that keeps an id or a full
+ * address in it cannot answer. A class that cannot be inspected is taken to have it, as nearly all do.
+ */
+internal fun declaresServerList(type: Class<*>): Boolean = try {
+    generateSequence(type) { it.superclass }
+        .takeWhile { it != Any::class.java && !it.name.startsWith(HOST_ANIME_PACKAGE) }
+        .any { declared -> declared.declaredMethods.any { it.name in SERVER_LIST_STEPS } }
+} catch (_: LinkageError) {
+    true
+}
+
+private const val HOST_ANIME_PACKAGE = "eu.kanade.tachiyomi.animesource."
+private val SERVER_LIST_STEPS = setOf("getHosterList", "hosterListParse", "hosterListSelector")

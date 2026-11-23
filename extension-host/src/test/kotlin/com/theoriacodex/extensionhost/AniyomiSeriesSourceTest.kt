@@ -19,6 +19,7 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
+import java.io.IOException
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
@@ -88,7 +89,7 @@ class AniyomiSeriesSourceTest {
     }
 
     @Test
-    fun `a source with only the older single call answers through it, its addresses asked for where it left them out`() = runBlocking {
+    fun `a source with only the older single call answers through it without a request, its addresses asked for where it left them out`() = runBlocking {
         val source = SingleCallSource {
             listOf(Video(url = "https://old.example/watch/1", quality = "360p", videoUrl = null), Video("https://old.example/480.mp4", "480p", "https://old.example/480.mp4"))
         }
@@ -183,10 +184,11 @@ class AniyomiSeriesSourceTest {
 
     /**
      * A source built before the server list: it answers only the single call, and names some videos by the page they
-     * are on. The host's default server list asks its client, which answers anything, before finding no way to read it.
+     * are on. It makes no request of its own, so its client fails every one, as a site that keeps something other
+     * than a page's address in an episode would answer the host's default server list.
      */
     private inner class SingleCallSource(private val videos: () -> List<Video>) : FakeAnimeSource() {
-        override val client: OkHttpClient = OkHttpClient.Builder().addInterceptor(answering { cannedResponse(it) }).build()
+        override val client: OkHttpClient = OkHttpClient.Builder().addInterceptor { throw IOException("The older call makes no request") }.build()
 
         @Deprecated("Use the hoster version instead")
         override suspend fun getVideoList(episode: SEpisode): List<Video> = videos()

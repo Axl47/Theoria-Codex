@@ -49,20 +49,20 @@ abstract class HttpSource : CatalogueSource {
 
     override fun toString(): String = "$name (${lang.uppercase()})"
 
-    override suspend fun getPopularManga(page: Int): MangasPage = popularMangaParse(fetch(popularMangaRequest(page)))
+    override suspend fun getPopularManga(page: Int): MangasPage = fetch(popularMangaRequest(page)).use { popularMangaParse(it) }
 
     protected open fun popularMangaRequest(page: Int): Request = unsupported()
 
     protected open fun popularMangaParse(response: Response): MangasPage = unsupported()
 
     override suspend fun getSearchManga(page: Int, query: String, filters: FilterList): MangasPage =
-        searchMangaParse(fetch(searchMangaRequest(page, query, filters)))
+        fetch(searchMangaRequest(page, query, filters)).use { searchMangaParse(it) }
 
     protected open fun searchMangaRequest(page: Int, query: String, filters: FilterList): Request = unsupported()
 
     protected open fun searchMangaParse(response: Response): MangasPage = unsupported()
 
-    override suspend fun getLatestUpdates(page: Int): MangasPage = latestUpdatesParse(fetch(latestUpdatesRequest(page)))
+    override suspend fun getLatestUpdates(page: Int): MangasPage = fetch(latestUpdatesRequest(page)).use { latestUpdatesParse(it) }
 
     protected open fun latestUpdatesRequest(page: Int): Request = unsupported()
 
@@ -74,8 +74,8 @@ abstract class HttpSource : CatalogueSource {
         fetchDetails: Boolean,
         fetchChapters: Boolean,
     ): SMangaUpdate = supervisorScope {
-        val details = if (fetchDetails) async { mangaDetailsParse(fetch(mangaDetailsRequest(manga))).apply { initialized = true } } else null
-        val listed = if (fetchChapters) async { chapterListParse(fetch(chapterListRequest(manga))) } else null
+        val details = if (fetchDetails) async { fetch(mangaDetailsRequest(manga)).use { mangaDetailsParse(it) }.apply { initialized = true } } else null
+        val listed = if (fetchChapters) async { fetch(chapterListRequest(manga)).use { chapterListParse(it) } } else null
         SMangaUpdate(details?.await() ?: manga, listed?.await() ?: chapters)
     }
 
@@ -87,14 +87,14 @@ abstract class HttpSource : CatalogueSource {
 
     protected open fun chapterListParse(response: Response): List<SChapter> = unsupported()
 
-    override suspend fun getPageList(chapter: SChapter): List<Page> = pageListParse(fetch(pageListRequest(chapter)))
+    override suspend fun getPageList(chapter: SChapter): List<Page> = fetch(pageListRequest(chapter)).use { pageListParse(it) }
 
     protected open fun pageListRequest(chapter: SChapter): Request = GET(baseUrl + chapter.url, headers)
 
     protected open fun pageListParse(response: Response): List<Page> = unsupported()
 
     /** The image address of a page whose [Page.imageUrl] the page list left empty. */
-    open suspend fun getImageUrl(page: Page): String = imageUrlParse(fetch(imageUrlRequest(page)))
+    open suspend fun getImageUrl(page: Page): String = fetch(imageUrlRequest(page)).use { imageUrlParse(it) }
 
     protected open fun imageUrlRequest(page: Page): Request = GET(page.url, headers)
 
