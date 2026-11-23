@@ -396,8 +396,8 @@ class OfflineMediaStore internal constructor(
         val bytes = record?.let { it.mediaBytes + File(folder, MANIFEST_NAME).length() }
             ?: folder.walkTopDown().filter(File::isFile).sumOf(File::length)
         // A detached copy: the record's own refs are weak keys of [sourceMediaByOfflineRef], which the catalog must not pin.
-        val firstPage = record?.post?.media?.firstOrNull()?.let { ImageRef(url = null, localPath = it.localPath, mime = it.mime) }
-        catalog.update(folder, record?.post?.id, record?.owners ?: salvageOwners(folder), record?.post?.media?.size ?: 0, bytes, firstPage)
+        val leadPages = record?.post?.media.orEmpty().take(OFFLINE_LEAD_PAGES).map { ImageRef(url = null, localPath = it.localPath, mime = it.mime) }
+        catalog.update(folder, record?.post?.id, record?.owners ?: salvageOwners(folder), record?.post?.media?.size ?: 0, bytes, leadPages)
     }
 
     private fun postDirectory(id: PostId) = File(directory, digest("${id.source.id}:${id.sourcePostId}"))
@@ -442,6 +442,9 @@ internal data class OfflineManifest(
 )
 
 /** Reads only the owners, from any manifest version, when the rest cannot be decoded; a malformed entry costs only itself. */
+/** How many of each copy's first pages the catalog keeps in memory. */
+internal const val OFFLINE_LEAD_PAGES = 2
+
 @Serializable
 private class ManifestOwners(@SerialName("owners") val owners: List<JsonElement> = emptyList())
 
@@ -452,8 +455,8 @@ data class OfflineMediaSnapshot(
     /** Every owner with a folder on disk, and the ids of its posts that are available; empty when none of its copies open. */
     val postsByOwner: Map<String, Set<PostId>> = emptyMap(),
     val availablePostIds: Set<PostId> = emptySet(),
-    /** Each available copy's first page, as a file. */
-    val firstPages: Map<PostId, ImageRef> = emptyMap(),
+    /** Each available copy's first [OFFLINE_LEAD_PAGES] pages, as files: enough to picture it even when its first page is a credit. */
+    val leadPages: Map<PostId, List<ImageRef>> = emptyMap(),
 )
 
 class OfflineMediaAdmission internal constructor(

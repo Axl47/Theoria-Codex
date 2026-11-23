@@ -21,9 +21,11 @@ import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
 
@@ -55,7 +57,7 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         val numbered = entries.mapNotNull { entry ->
             entry.entry.number?.takeIf { it >= 0f && it.isFinite() }?.let { PostId(id.source, entry.entry.address) to seriesChapterMark(stored.series.title, entry.entry.name, it) }
         }.toMap()
-        val marks = withFirstPages(numbered, posts, series.downloads.firstPages(id).first())
+        val marks = withPictures(numbered, posts, series.downloads.leadPages(id).first(), series.pictures.leadPage(id).first())
         val session = ViewerSession(
             posts, context, initialMediaIndices = resume, seriesReadingMode = stored.readingModeOrGuess(), stripMarks = marks,
         )
@@ -87,6 +89,9 @@ internal class SeriesReader(private val series: SeriesDependencies) {
     suspend fun recordProgress(session: ViewerSession, post: Post, mediaNumber: Int) {
         val id = seriesIdOf(session.context.queryHash) ?: return
         if (post.media.isEmpty()) return
+        // Once the chapter is being read its first page has been shown, so comparing it reads the copy the Viewer
+        // fetched rather than asking the source again. Any copy counts, even one another collection owns.
+        series.scope.launch { series.pictures.compare(id, mapOf(post.id.sourcePostId to post.media.first())) }
         series.repository.recordProgress(id, post.id.sourcePostId, mediaNumber, post.media.size)
     }
 
@@ -112,10 +117,17 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         seriesIdOf(session.context.queryHash)?.let { series.repository.setReadingMode(it, mode) }
     }
 
-    /** [session]'s strip marks from now on, following its chapters as they are downloaded or deleted. */
+    /**
+     * [session]'s strip marks from now on, following its chapters as they are downloaded or deleted and the page that
+     * pictures them ([ChapterPictures]).
+     */
     fun stripMarks(session: ViewerSession): Flow<Map<PostId, ViewerStripMark>> {
         val id = seriesIdOf(session.context.queryHash) ?: return emptyFlow()
-        return series.downloads.firstPages(id).map { withFirstPages(session.stripMarks, session.posts, it) }
+        val leads = series.downloads.leadPages(id)
+        return channelFlow {
+            launch { leads.collectLatest { downloaded -> series.pictures.compare(id, downloaded.mapValues { it.value.first() }) } }
+            combine(leads, series.pictures.leadPage(id)) { pages, lead -> withPictures(session.stripMarks, session.posts, pages, lead) }.collect { send(it) }
+        }
     }
 
     /** The mode [session]'s series is read in from now on; the session itself carries the mode it opens in. */
@@ -136,9 +148,15 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         checkNotNull(series.source(key)) { "The extension for this series is not installed" }
 }
 
-/** [marks] with each downloaded chapter's first page from [firstPages] (by address), so the strip shows it rather than the shared cover. */
-private fun withFirstPages(marks: Map<PostId, ViewerStripMark>, posts: List<Post>, firstPages: Map<String, ImageRef>) =
-    posts.associate { it.id to (marks[it.id] ?: ViewerStripMark()).copy(image = firstPages[it.id.sourcePostId]) }.filterValues { it != ViewerStripMark() }
+/**
+ * [marks] with each chapter pictured by its page at [lead]: downloaded ones by that file from [downloads] (their first
+ * pages, by address), the rest by that page once the Viewer has their pages.
+ */
+private fun withPictures(marks: Map<PostId, ViewerStripMark>, posts: List<Post>, downloads: Map<String, List<ImageRef>>, lead: Int) =
+    posts.associate { post ->
+        val pages = downloads[post.id.sourcePostId].orEmpty()
+        post.id to (marks[post.id] ?: ViewerStripMark()).copy(image = pages.getOrNull(lead) ?: pages.firstOrNull(), page = lead)
+    }.filterValues { it != ViewerStripMark() }
 
 /** The session key of a series' Viewer stream; [seriesIdOf] reads it back. A source id never contains `:`. */
 internal fun seriesQueryHash(id: SeriesId): String = "$SERIES_QUERY_PREFIX${id.source.id}:${id.address}"

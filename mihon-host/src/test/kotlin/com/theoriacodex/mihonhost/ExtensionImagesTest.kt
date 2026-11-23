@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.online.HttpSource
 import java.io.IOException
+import okhttp3.CacheControl
 import okhttp3.Headers
 import okhttp3.OkHttpClient
 import kotlinx.coroutines.test.runTest
@@ -151,6 +152,18 @@ class ExtensionImagesTest {
 
         repeat(3) { assertEquals("source-token https://covers.test/1.jpg", fetch(address, loading)) }
         assertEquals(listOf(source.id), asked)
+    }
+
+    @Test
+    fun `a request that may only read caches never asks the source or loads its extension`() {
+        var loads = 0
+        val loading = ExtensionImages(key) { loads += 1 }
+        val address = images.cover(source, "https://covers.test/1.jpg")
+        val cachedOnly = Request.Builder().url(address).cacheControl(CacheControl.FORCE_CACHE).build()
+
+        assertEquals("app https://covers.test/1.jpg", appClient(images).newCall(cachedOnly).execute().body.string())
+        appClient(loading).newCall(cachedOnly).execute().close()
+        assertEquals(0, loads)
     }
 
     @Test
