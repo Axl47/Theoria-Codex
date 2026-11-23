@@ -15,6 +15,7 @@ import com.theoriacodex.app.lift.LocalLiftUgoiraClient
 import com.theoriacodex.app.lift.rememberLiftSession
 import com.theoriacodex.app.recommend.LocalTagAffinityInputs
 import com.theoriacodex.app.related.LocalRelatedPostsSupport
+import com.theoriacodex.app.series.LocalSeriesCovers
 import com.theoriacodex.app.series.LocalSeriesGenreSearch
 import com.theoriacodex.app.series.SeriesGenreRequests
 import com.theoriacodex.app.search.LocalPostWatchPresentation
@@ -31,6 +32,7 @@ import com.theoriacodex.app.ui.routes.browsingMetadataOwner
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
 import com.theoriacodex.app.viewer.ViewerReturnTransition
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.series.SeriesCovers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
@@ -59,6 +61,7 @@ internal fun ShellCompositionLocals(shell: TheoriaShell, content: @Composable ()
         LocalNewCodexOpener provides remember { NewCodexRequests() },
         LocalHiddenTagsOpener provides remember { HiddenTagsRequests() },
         LocalSeriesGenreSearch provides remember { SeriesGenreRequests() },
+        LocalSeriesCovers provides (shell.container.series?.covers ?: SeriesCovers.Stored),
     ) {
         content()
         SiteCheckOverlay(shell.owners.siteChecks)

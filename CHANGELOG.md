@@ -99,7 +99,7 @@
 
 ### Fixed
 
-- Opening a chapter of a series from sites like Asura no longer shows an HTTP 403 error while its pages load: the series cover shown meanwhile is fetched the way the site requires, or left out until the extension has loaded.
+- Opening a chapter of a series from sites like Asura no longer shows an HTTP 403 error while its pages load: the series cover shown meanwhile is fetched the way the site requires. The cover now also shows for the first chapter you open after starting the app, and for downloaded chapters.
 - Opening an extension series chapter no longer fails some of its pages with "Network request failed unexpectedly" while the app checks for extension updates.
 - In vertical reading, a long page that is still loading no longer looks like a blank black screen until you scroll to its middle: its spinner, or its Retry if it failed, stays in the part of the page you can see.
 - Tapping a tab while the app was still sliding past it to another tab did nothing. It now goes to the tab you tapped.

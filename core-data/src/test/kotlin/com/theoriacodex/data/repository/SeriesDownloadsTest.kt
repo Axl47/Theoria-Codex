@@ -72,6 +72,16 @@ class SeriesDownloadsTest {
         assertEquals(emptyMap<String, ChapterDownload>() + chapters.associate { it.entry.address to ChapterDownload.OnDevice }, harness.downloads.states(id).first())
     }
 
+    @Test fun `a downloaded chapter keeps the cover as an image loader is handed it`() = runTest {
+        val harness = Harness(this, stored = StoredSeries(Series(id, "Title", coverUrl = "https://cover.test/1.jpg")))
+        harness.downloads.download(id, listOf("/c1"))
+        harness.downloads.drain(automatic = false)
+
+        // Offline, the first page is the preview; the chapter as its source gave it keeps the cover.
+        val saved = harness.store.withoutOfflineLocations(checkNotNull(harness.downloads.chapter(id, "/c1")))
+        assertEquals("https://cover.test/1.jpg#loadable", saved.preview.url)
+    }
+
     @Test fun `a page whose address names no type is saved under the type its fetch found`() = runTest {
         val harness = Harness(this)
         harness.downloads.download(id, listOf("/c1"))
@@ -334,6 +344,7 @@ class SeriesDownloadsTest {
             queueFile = folder.root.resolve("queue.json"),
             repository = Stored(stored, entries),
             sources = { listOf(FakeSource(source) { pagesOf(it) }) },
+            covers = { series -> series.coverUrl?.let { "$it#loadable" } },
             fetch = { url, file ->
                 onFetch(url)
                 fetched += url

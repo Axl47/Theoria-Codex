@@ -31,6 +31,7 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesCovers
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
@@ -113,16 +114,11 @@ class SeriesReaderTest {
     }
 
     @Test
-    fun aSessionShowsTheCoverItsLoadedSourceGivesAndNoneBeforeItLoads() = runTest {
+    fun aSessionShowsTheLoadableCoverWithoutLoadingAnExtension() = runTest {
         val stored = StoredOnly(StoredSeries(Series(id, "Title", coverUrl = "https://cover.test")), listOf(chapter))
-        suspend fun cover(loaded: List<SeriesSource>) =
-            SeriesReader(dependencies(stored, { error("No extension may load") }, loaded = loaded)).session(id, "/c1")?.posts?.single()?.preview?.url
-        val tagging = object : SeriesSource by OnePage(source) {
-            override fun coverAddress(series: Series) = series.coverUrl + "#tagged"
-        }
+        val reader = SeriesReader(dependencies(stored, { error("No extension may load") }))
 
-        assertEquals("https://cover.test#tagged", cover(listOf(tagging)))
-        assertNull(cover(emptyList()))
+        assertEquals("https://cover.test#loadable", reader.session(id, "/c1")?.posts?.single()?.preview?.url)
     }
 
     @Test
@@ -181,8 +177,7 @@ class SeriesReaderTest {
         assertEquals(pagesOf("/c1").map { it.url }, resolved.media.map { File(checkNotNull(it.localPath)).readText() })
         // Their addresses name no type, yet the Viewer takes the files as images.
         assertTrue(resolved.media.all { isLikelyImageLocation(it.mime, checkNotNull(it.localPath)) })
-        // Without its source loaded, no cover: the stored address can need the source's own client.
-        assertNull(resolved.preview.url)
+        assertEquals("https://cover.test#loadable", resolved.preview.url)
         // Anything that stores the chapter stores its source's pages, never the files.
         assertEquals(pagesOf("/c1"), store.withoutOfflineLocations(resolved).media)
     }
@@ -290,13 +285,14 @@ class SeriesReaderTest {
         sources: suspend () -> List<SeriesSource>,
         deleteAfterReading: Boolean = false,
         store: OfflineMediaStore = store(),
-        loaded: List<SeriesSource> = emptyList(),
     ): SeriesDependencies {
+        val covers = SeriesCovers { series -> series.coverUrl?.let { "$it#loadable" } }
         val downloads = SeriesDownloads(
             store = store,
             queueFile = folder.root.resolve("queue.json"),
             repository = repository,
             sources = sources,
+            covers = covers,
             fetch = { _, _ -> error("Nothing downloads here") },
             scheduler = object : DownloadScheduler {
                 override suspend fun schedule(automatic: Boolean) = Unit
@@ -306,7 +302,7 @@ class SeriesReaderTest {
             deleteAfterReading = { deleteAfterReading },
             files = AtomicJsonFileStore(StandardTestDispatcher(testScheduler)),
         )
-        return SeriesDependencies(repository, sources, NoExtensions, downloads, scope = this, loadedSources = { loaded })
+        return SeriesDependencies(repository, sources, NoExtensions, downloads, scope = this, covers = covers)
     }
 
     private val chapter = StoredSeriesEntry(SeriesEntry("/c1", "Ch. 1"), sourceOrder = 0, firstSeenAtEpochMs = 0)

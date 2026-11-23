@@ -18,7 +18,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,10 +49,8 @@ internal fun SwitchSourceSheet(
             SheetHeader(SWITCH_SOURCE, closeDescription = "Close", onDismiss = viewModel::close)
             if (sheet.switching) LinearProgressIndicator(Modifier.fillMaxWidth())
             sheet.failure?.let { Text(it, Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.error) }
-            CompositionLocalProvider(LocalSeriesSources provides state.others) {
-                sheet.results.forEach { result ->
-                    SourceResult(result, enabled = !sheet.switching, onRetry = { viewModel.retry(result.key) }, onPick = { viewModel.confirm(it) })
-                }
+            sheet.results.forEach { result ->
+                SourceResult(result, enabled = !sheet.switching, onRetry = { viewModel.retry(result.key) }, onPick = { viewModel.confirm(it) })
             }
         }
     }

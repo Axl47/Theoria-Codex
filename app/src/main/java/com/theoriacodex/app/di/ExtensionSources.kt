@@ -8,6 +8,7 @@ import com.theoriacodex.data.repository.switchSource
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesCovers
 import com.theoriacodex.domain.series.SeriesExtensions
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesSource
@@ -24,8 +25,7 @@ class SeriesDependencies(
     val downloads: SeriesDownloads,
     /** Lives as long as the app, for work that must finish after the screen that started it closes. */
     val scope: CoroutineScope,
-    /** The sources whose extensions have loaded already; never loads one. */
-    val loadedSources: () -> List<SeriesSource> = { emptyList() },
+    val covers: SeriesCovers,
 ) {
     private val checking = Mutex()
 

@@ -25,7 +25,7 @@ enum class SeriesStatus {
 data class Series(
     val id: SeriesId,
     val title: String,
-    /** As the source gave it; [SeriesSource.coverAddress] is what an image loader is handed. */
+    /** As the source gave it; [SeriesCovers.address] is what an image loader is handed. */
     val coverUrl: String? = null,
     val author: String? = null,
     val genres: List<String> = emptyList(),
@@ -83,15 +83,23 @@ interface SeriesSource {
     /** Addresses that can expire within minutes, so they are asked for each time an entry opens and never stored. */
     suspend fun pages(entry: SeriesEntry): List<ImageRef>
 
-    /**
-     * The address to load [series]' cover from. A source whose images only its own client can fetch marks the address
-     * here, each time it is loaded, so the stored cover stays what the source gave. Makes no request.
-     */
-    fun coverAddress(series: Series): String? = series.coverUrl
-
     /** The series' page on its site, for Open in browser and Share; null when the source has none. Makes no request. */
     fun webUrl(series: Series): String? =
         series.id.address.takeIf { it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true) }
+}
+
+/**
+ * Turns a series' stored cover into the address an image loader is handed. Every place that loads a cover, or saves
+ * one for a post, goes through this. A cover from a source whose images only its own client can fetch is marked here
+ * each time it is loaded, so the stored cover stays what the source gave. Makes no request and loads nothing.
+ */
+fun interface SeriesCovers {
+    fun address(series: Series): String?
+
+    companion object {
+        /** Every cover as stored: for a build without extension sources, and for tests. */
+        val Stored = SeriesCovers { it.coverUrl }
+    }
 }
 
 /** The id prefix of sources that run loaded extension code. It follows the custom-site id grammar, so stored ids parse. */

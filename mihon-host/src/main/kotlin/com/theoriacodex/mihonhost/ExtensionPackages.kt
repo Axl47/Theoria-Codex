@@ -3,6 +3,7 @@ package com.theoriacodex.mihonhost
 import android.content.Context
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.os.FileObserver
 import java.io.File
 import java.security.MessageDigest
 import java.util.HexFormat
@@ -56,21 +57,18 @@ class ExtensionPackages(private val context: Context, private val folder: () -> 
         return installed.sortedBy(ExtensionPackage::name) + files
     }
 
-    /** The number Android gave the latest package change, as of the last [stamp]; numbering restarts at boot. */
-    private var packageChanges = 0
-
     /**
-     * Changes whenever [list] would answer differently, and reads no APK to tell: the number of the device's latest
-     * package install, update or removal, and the folder's file names, lengths and write times. Cheap enough to ask
-     * before every image: listing every package instead sends hundreds of records over binder, and a chapter's pages
-     * asking at once filled the process's binder buffer and failed.
+     * Calls [changed], on a thread of its own, whenever an APK file in [folder] is written, moved or deleted; null
+     * without a folder. Watches only while the returned observer is held. Installed packages announce their changes
+     * by broadcast instead.
      */
-    fun stamp(): Any {
-        val installed = synchronized(this) {
-            context.packageManager.getChangedPackages(packageChanges)?.let { packageChanges = it.sequenceNumber }
-            packageChanges
-        }
-        return installed to apkFiles().map { "${it.name} ${it.length()} ${it.lastModified()}" }
+    fun watchFolder(changed: () -> Unit): FileObserver? {
+        val folder = folder() ?: return null
+        return object : FileObserver(folder, FOLDER_CHANGES) {
+            override fun onEvent(event: Int, path: String?) {
+                if (path?.endsWith(".apk") == true) changed()
+            }
+        }.apply { startWatching() }
     }
 
     private fun apkFiles(): List<File> = folder()?.listFiles { file -> file.extension == "apk" }.orEmpty().sortedBy(File::getName)
@@ -121,6 +119,7 @@ class ExtensionPackages(private val context: Context, private val folder: () -> 
     private companion object {
         const val FLAGS = (PackageManager.GET_CONFIGURATIONS or PackageManager.GET_META_DATA or PackageManager.GET_SIGNING_CERTIFICATES).toLong()
         const val EXTENSION_FEATURE = "tachiyomi.extension"
+        const val FOLDER_CHANGES = FileObserver.CLOSE_WRITE or FileObserver.MOVED_TO or FileObserver.MOVED_FROM or FileObserver.DELETE
         const val METADATA_SOURCE_CLASS = "tachiyomi.extension.class"
         const val METADATA_LIB_VERSION = "tachiyomix.extensionLib"
         const val SUPPORTED_LIB_VERSION = 1.6f

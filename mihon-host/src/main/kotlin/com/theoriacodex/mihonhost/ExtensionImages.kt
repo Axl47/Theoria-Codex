@@ -1,6 +1,8 @@
 package com.theoriacodex.mihonhost
 
 import com.theoriacodex.domain.diagnostics.Diagnostics
+import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesCovers
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
@@ -42,7 +44,8 @@ internal inline fun <T> failingAsIo(block: () -> T): T = try {
  *
  * Every address handed to the app ends in a fragment naming its source. The app requests it like any other image;
  * this interceptor, placed on the app's media client, answers tagged addresses through that source and passes every
- * other request on. The tag travels with the address, so a cover the app stored still loads after a restart.
+ * other request on. A tag needs only the source's id and [key], so a stored cover is tagged from its series' source
+ * key ([address]) without loading anything; its extension loads when the image is first requested.
  *
  * The app's media client also loads addresses that other parties supply, such as a Custom Site's thumbnails, and a
  * fragment is theirs to write. So a tag is honored only with a code only this host can compute: an HMAC, under
@@ -56,17 +59,18 @@ internal inline fun <T> failingAsIo(block: () -> T): T = try {
  * addresses expire.
  *
  * Only the sources last handed to [publish] answer: the ones whose extension loaded completely and whose extension
- * and language are on. [refresh] brings that up to date with the device, loading the extensions the first time, and
- * returns once that is done; it must not throw. It runs on an HTTP client's thread before every tagged request, so an
- * image of an extension removed since stops being fetched, and it must cost little while nothing changed.
+ * and language are on. Whoever publishes keeps that table current as extensions change ([ExtensionRegistry.recheck]);
+ * a request only reads it, with no system call or lock. Until the first [publish], a tagged request calls [load],
+ * which loads the extensions and publishes their sources, and returns once that is done; it must not throw.
  */
 class ExtensionImages(
-    /** Kept for the install, where Android does not back it up; read on first use, off the main thread. */
+    /** Kept for the install, where Android does not back it up; read on first use, best warmed off the main thread. */
     private val key: Lazy<ByteArray> = lazy { ByteArray(KEY_BYTES).also(SecureRandom()::nextBytes) },
-    private val refresh: () -> Unit = {},
-) : Interceptor {
+    private val load: () -> Unit = {},
+) : Interceptor, SeriesCovers {
+    /** Null until the first [publish]. */
     @Volatile
-    private var sources: Map<Long, HttpSource> = emptyMap()
+    private var sources: Map<Long, HttpSource>? = null
 
     private val reported = ConcurrentHashMap.newKeySet<String>()
 
@@ -79,8 +83,6 @@ class ExtensionImages(
 
     /** Makes [active] the only sources that fetch, all at once: one whose extension or language was turned off stops answering. */
     internal fun publish(active: List<Source>) {
-        // Read here, off the main thread: covers are tagged where screens draw them.
-        key.value
         sources = active.filterIsInstance<HttpSource>().associateBy { it.id }
     }
 
@@ -91,7 +93,7 @@ class ExtensionImages(
      */
     internal fun pageAddress(source: HttpSource, chapter: SChapter, page: Page): String? {
         val address = if (page.imageUrl != null) {
-            source.imageCall(page).request().url.tagged(source)
+            source.imageCall(page).request().url.tagged(source.id)
         } else {
             val names = page.url.takeIf(String::isNotBlank)?.let { it.toHttpUrlOrNull() ?: source.baseUrl.toHttpUrlOrNull()?.resolve(it) }
             names?.newBuilder()?.fragment(marker(UNRESOLVED_TAG, source.id, names, "${page.index}/${chapter.url}"))?.build() ?: return null
@@ -100,8 +102,16 @@ class ExtensionImages(
         return address.toString()
     }
 
-    internal fun coverAddress(source: HttpSource, address: String): String =
-        address.toHttpUrlOrNull()?.tagged(source)?.toString() ?: address
+    /**
+     * [series]' cover, tagged for its source when that is an extension's, whether or not the extension is loaded or
+     * on: one that is not answers as an ordinary request. Covers stored by earlier builds carry a tag of their own,
+     * which is replaced.
+     */
+    override fun address(series: Series): String? {
+        val sourceId = MihonSeriesSource.sourceId(series.id.source) ?: return series.coverUrl
+        val stored = series.coverUrl?.substringBefore(FRAGMENT) ?: return null
+        return stored.toHttpUrlOrNull()?.tagged(sourceId)?.toString() ?: stored
+    }
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val url = chain.request().url
@@ -138,8 +148,11 @@ class ExtensionImages(
             reportOnce("${url.host} image sent without its source: tag not issued here")
             return null
         }
-        refresh()
-        val source = sources[sourceId]
+        val published = sources ?: run {
+            load()
+            sources.orEmpty()
+        }
+        val source = published[sourceId]
         if (source == null) reportOnce("${url.host} image of source $sourceId sent without its source: source not on")
         return source
     }
@@ -186,7 +199,7 @@ class ExtensionImages(
         return response
     }
 
-    private fun HttpUrl.tagged(source: HttpSource): HttpUrl = newBuilder().fragment(marker(TAG, source.id, this)).build()
+    private fun HttpUrl.tagged(sourceId: Long): HttpUrl = newBuilder().fragment(marker(TAG, sourceId, this)).build()
 
     /** The fragment for [url] under [kind]: the source, this host's code for all of it, then [rest]. */
     private fun marker(kind: String, sourceId: Long, url: HttpUrl, rest: String = ""): String {

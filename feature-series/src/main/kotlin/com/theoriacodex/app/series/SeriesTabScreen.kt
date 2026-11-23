@@ -37,7 +37,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -91,38 +90,36 @@ fun SeriesTabScreen(
     val searchList = rememberLazyListState()
     val dedicated = state.dedicated
 
-    CompositionLocalProvider(LocalSeriesSources provides state.sources.orEmpty()) {
-        if (dedicated != null) {
-            DedicatedSourceSearchView(
-                dedicated = dedicated,
-                followedIds = followedIds,
-                supportsLatest = state.sources?.firstOrNull { it.key == dedicated.source.key }?.supportsLatest == true,
-                oldSearchBar = oldSearchBar,
-                onBack = viewModel::closeDedicatedSearch,
-                onSearch = viewModel::searchDedicated,
-                onChoose = viewModel::chooseDedicated,
-                onFilter = viewModel::openFilters,
-                onRetry = viewModel::retryDedicated,
-                onMore = viewModel::dedicatedMore,
-                onOpenSeries = open,
-                modifier = modifier,
-            )
-        } else {
-            SeriesTabHomeContent(
-                state = state,
-                followed = followed,
-                followedIds = followedIds,
-                query = query,
-                onQueryChange = { query = it },
-                grid = grid,
-                searchList = searchList,
-                viewModel = viewModel,
-                oldSearchBar = oldSearchBar,
-                onOpenSeries = open,
-                onOpenExtensions = onOpenExtensions,
-                modifier = modifier,
-            )
-        }
+    if (dedicated != null) {
+        DedicatedSourceSearchView(
+            dedicated = dedicated,
+            followedIds = followedIds,
+            supportsLatest = state.sources?.firstOrNull { it.key == dedicated.source.key }?.supportsLatest == true,
+            oldSearchBar = oldSearchBar,
+            onBack = viewModel::closeDedicatedSearch,
+            onSearch = viewModel::searchDedicated,
+            onChoose = viewModel::chooseDedicated,
+            onFilter = viewModel::openFilters,
+            onRetry = viewModel::retryDedicated,
+            onMore = viewModel::dedicatedMore,
+            onOpenSeries = open,
+            modifier = modifier,
+        )
+    } else {
+        SeriesTabHomeContent(
+            state = state,
+            followed = followed,
+            followedIds = followedIds,
+            query = query,
+            onQueryChange = { query = it },
+            grid = grid,
+            searchList = searchList,
+            viewModel = viewModel,
+            oldSearchBar = oldSearchBar,
+            onOpenSeries = open,
+            onOpenExtensions = onOpenExtensions,
+            modifier = modifier,
+        )
     }
 
     val sheet = state.filterSheet

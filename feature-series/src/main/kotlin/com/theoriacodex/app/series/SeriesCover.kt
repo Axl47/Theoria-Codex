@@ -31,12 +31,12 @@ import coil.request.ImageRequest
 import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.ui.theme.TextOverMediaShadow
 import com.theoriacodex.domain.series.Series
-import com.theoriacodex.domain.series.SeriesSource
+import com.theoriacodex.domain.series.SeriesCovers
 
-/** The sources that are on, for the covers drawn below: each cover loads through its series' own source. */
-internal val LocalSeriesSources = staticCompositionLocalOf<List<SeriesSource>> { emptyList() }
+/** What turns a stored cover into the address to load; the app provides its extension host's. */
+val LocalSeriesCovers = staticCompositionLocalOf { SeriesCovers.Stored }
 
-/** Builds the Coil request for [series]' cover through its active source when available. */
+/** Builds the Coil request for [series]' cover; null when the series has none. */
 @Composable
 internal fun rememberSeriesCoverRequest(
     series: Series,
@@ -44,9 +44,9 @@ internal fun rememberSeriesCoverRequest(
     targetHeightPx: Int = COVER_HEIGHT_PX,
 ): ImageRequest? {
     val context = LocalContext.current
-    val source = LocalSeriesSources.current.firstOrNull { it.key == series.id.source }
-    return remember(context, series.id, series.coverUrl, source, targetWidthPx, targetHeightPx) {
-        (if (source != null) source.coverAddress(series) else series.coverUrl)?.let { url ->
+    val covers = LocalSeriesCovers.current
+    return remember(context, covers, series.id, series.coverUrl, targetWidthPx, targetHeightPx) {
+        covers.address(series)?.let { url ->
             MediaRequestFactory.imageRequest(
                 context,
                 url,
@@ -59,10 +59,7 @@ internal fun rememberSeriesCoverRequest(
     }
 }
 
-/**
- * A series' cover at book proportions; a plain tile while it loads or when the series has none. A series whose source
- * is not among [LocalSeriesSources] loads the stored address as it is.
- */
+/** A series' cover at book proportions; a plain tile while it loads or when the series has none. */
 @Composable
 internal fun SeriesCover(series: Series, modifier: Modifier = Modifier) {
     val request = rememberSeriesCoverRequest(series)
