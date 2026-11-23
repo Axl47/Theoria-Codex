@@ -130,7 +130,7 @@ class SeriesPageViewModel(
     /** Whether this page offers downloads. */
     val canDownload: Boolean = downloads != null
 
-    /** Synchronous search bar state owned alongside [chapterOptions] so rotation and process death keep them in sync. */
+    /** Synchronous search bar state kept alongside [chapterOptions]; survives rotation and resets on process death. */
     var chapterSearchOpen: Boolean by mutableStateOf(false)
         private set
     var chapterSearchInput: String by mutableStateOf("")
