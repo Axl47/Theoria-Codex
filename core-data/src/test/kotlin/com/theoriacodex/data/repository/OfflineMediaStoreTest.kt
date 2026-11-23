@@ -77,6 +77,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         val post = gallery()
         val store = OfflineMediaStore(directory)
         val completed = store.save(post, post.media, "codex:a") { ref, file -> file.writeText(ref.url!!); null }
+        assertEquals(directory.walkTopDown().filter(File::isFile).sumOf(File::length), store.snapshot.value.bytes)
         assertEquals(2, completed.media.size)
         assertEquals(completed.media.first(), completed.full)
         assertTrue(completed.media.all { File(it.localPath!!).readText() == it.url })
@@ -465,6 +466,32 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         val store = OfflineMediaStore(directory)
         store.refresh()
         assertEquals(0, store.snapshot.value.postCount)
+    }
+
+    @Test
+    fun `a page outside its copy's folder is not a usable copy`() = runTest {
+        val outside = tempDir("outside").resolve("page.png").apply { writeText("bytes") }
+        for ((name, escape) in listOf<Pair<String, (File) -> String>>(
+            // The page's generation folder, then the copy's folder, then the store's: lands beside the store.
+            "dot-dot" to { page -> "${page.parent}/../../../escaped.png" },
+            "absolute" to { _ -> outside.absolutePath },
+        )) {
+            val directory = tempDir(name)
+            val post = gallery()
+            val saved = OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes"); null }
+            val page = File(saved.media.first().localPath!!)
+            val target = escape(page)
+            File(target).writeText("bytes")
+            editManifest(directory) { root ->
+                val media = root.getValue("post").jsonObject.getValue("media").jsonArray
+                val moved = JsonObject(media.first().jsonObject + ("localPath" to JsonPrimitive(target)))
+                root["post"] = JsonObject(root.getValue("post").jsonObject + ("media" to JsonArray(listOf(moved) + media.drop(1))))
+            }
+
+            val store = OfflineMediaStore(directory).apply { load() }
+            assertNull(name, store.find(post.id))
+            assertEquals(name, 0, store.snapshot.value.postCount)
+        }
     }
 
     private fun manifestFile(directory: File) = directory.listFiles().orEmpty().single().resolve("manifest.json")

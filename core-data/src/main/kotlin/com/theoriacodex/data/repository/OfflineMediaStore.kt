@@ -222,14 +222,14 @@ class OfflineMediaStore internal constructor(
                 ?: post.preview,
         )
         val sourcePost = withoutOfflineLocations(post)
-        try {
+        val mediaBytes = try {
             writeManifest(folder, completed, sourcePost, priorOwners + owner)
         } catch (failure: Exception) {
             generation.deleteRecursively()
             throw failure
         }
         folder.listFiles().orEmpty().filter { it.isDirectory && it != generation }.forEach(File::deleteRecursively)
-        val record = OfflineRecord(completed, sourcePost, priorOwners + owner)
+        val record = OfflineRecord(completed, sourcePost, priorOwners + owner, mediaBytes)
         rememberSourceMedia(record)
         updateCatalog(folder, record)
         return completed
@@ -297,7 +297,7 @@ class OfflineMediaStore internal constructor(
         // The folder name is derived from the id, so a manifest decoded onto the wrong values cannot pass.
         if (folder.name != digest("${post.id.source.id}:${post.id.sourcePostId}")) return null
         if (!hasCanonicalSourceSnapshot(post, sourcePost) || !mediaMatchesManifest(folder, post, manifest.mediaBytes)) return null
-        OfflineRecord(post, sourcePost, manifest.owners.toSet())
+        OfflineRecord(post, sourcePost, manifest.owners.toSet(), manifest.mediaBytes.sum())
     }.getOrNull()
 
     private fun <T> readManifest(folder: File, reader: DeserializationStrategy<T>): T? {
@@ -306,15 +306,19 @@ class OfflineMediaStore internal constructor(
         return DurableJson.decodeFromString(reader, manifest.readText())
     }
 
+    /**
+     * Every page must sit inside this copy's folder once its path is normalized, so `..` cannot escape it. The check
+     * is lexical: the store lives in app-private storage that only the app writes, so no symlink can redirect a page
+     * and resolving each path on disk would only cost a system call per page. A missing file's length is 0, so one
+     * length read per page confirms both that it exists and that it is complete.
+     */
     private fun mediaMatchesManifest(folder: File, post: Post, mediaBytes: List<Long>): Boolean {
-        if (post.media.isEmpty()) return false
-        val canonicalFolder = folder.canonicalFile
-        val files = post.media.map { ref -> ref.localPath?.let(::File) ?: return false }
-        if (files.any { file ->
-                !file.canonicalFile.toPath().startsWith(canonicalFolder.toPath()) || !file.isFile || file.length() <= 0L
-            }
-        ) return false
-        return mediaBytes == files.map { it.length() }
+        if (post.media.isEmpty() || post.media.size != mediaBytes.size) return false
+        val root = folder.absoluteFile.toPath().normalize()
+        return post.media.zip(mediaBytes).all { (ref, bytes) ->
+            val page = ref.localPath?.let { File(it).absoluteFile.toPath().normalize() } ?: return false
+            page.startsWith(root) && page != root && bytes > 0L && page.toFile().length() == bytes
+        }
     }
 
     /**
@@ -331,7 +335,8 @@ class OfflineMediaStore internal constructor(
         return (listOfNotNull(source.preview, source.full) + source.media).none(::isOfflineRef)
     }
 
-    private fun writeManifest(folder: File, post: Post, sourcePost: Post, owners: Set<String>) {
+    /** Returns the media's total length, as recorded in the manifest. */
+    private fun writeManifest(folder: File, post: Post, sourcePost: Post, owners: Set<String>): Long {
         val manifest = OfflineManifest(
             version = MANIFEST_VERSION,
             post = PostStorageCodec.encode(post),
@@ -340,6 +345,7 @@ class OfflineMediaStore internal constructor(
             mediaBytes = post.media.map { File(checkNotNull(it.localPath) { "Offline media is missing its local path" }).length() },
         )
         replaceManifest(folder, DurableJson.encodeToString(manifests, manifest))
+        return manifest.mediaBytes.sum()
     }
 
     /** Replaces only the owners of a manifest whose post cannot be decoded; the rest stays as it was parsed. */
@@ -382,10 +388,14 @@ class OfflineMediaStore internal constructor(
         mutableSnapshot.value = catalog.snapshot()
     }
 
-    /** A folder without a usable copy keeps its salvaged owners, so removing the last of them deletes it. */
+    /**
+     * A folder without a usable copy keeps its salvaged owners, so removing the last of them deletes it. A usable
+     * copy's media lengths were matched against its files when it was read, so only folders without one are walked.
+     */
     private fun indexFolder(folder: File, record: OfflineRecord?) {
-        catalog.update(folder, record?.post?.id, record?.owners ?: salvageOwners(folder), record?.post?.media?.size ?: 0,
-            folder.walkTopDown().filter(File::isFile).sumOf(File::length))
+        val bytes = record?.let { it.mediaBytes + File(folder, MANIFEST_NAME).length() }
+            ?: folder.walkTopDown().filter(File::isFile).sumOf(File::length)
+        catalog.update(folder, record?.post?.id, record?.owners ?: salvageOwners(folder), record?.post?.media?.size ?: 0, bytes)
     }
 
     private fun postDirectory(id: PostId) = File(directory, digest("${id.source.id}:${id.sourcePostId}"))
@@ -401,7 +411,7 @@ class OfflineMediaStore internal constructor(
             other is OfflineRefKey && get()?.let { it === other.get() } == true
     }
 
-    private data class OfflineRecord(val post: Post, val sourcePost: Post, val owners: Set<String>)
+    private data class OfflineRecord(val post: Post, val sourcePost: Post, val owners: Set<String>, val mediaBytes: Long)
     private data class OfflineSourceMedia(
         val preview: ImageRef,
         val full: ImageRef?,
