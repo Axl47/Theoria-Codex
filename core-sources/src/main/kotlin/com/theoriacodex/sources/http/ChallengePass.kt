@@ -93,6 +93,9 @@ class ChallengeBrowsers(private val cookies: BrowserCookieStore, private val bro
         while (!browsers.tryAcquire(POLL_MS, TimeUnit.MILLISECONDS)) call.throwIfCanceled()
         try {
             call.throwIfCanceled()
+            // The wait for a browser can be long: the user may have opened this site's check, or passed it, meanwhile.
+            if (cookies.hasNewClearance(url, refused)) return true
+            if (isShown(page.url.host)) return false
             // As in Mihon, the refused cookie goes first, so only one the browser earns now can count.
             runCatching { cookies.expire(url, CLEARANCE_COOKIE) }
             val passed = browser.pass(page, passed = { cookies.hasNewClearance(url, refused) }, cancelled = call::isCanceled)
