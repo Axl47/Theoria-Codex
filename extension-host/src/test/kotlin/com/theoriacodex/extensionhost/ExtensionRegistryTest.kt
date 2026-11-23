@@ -62,7 +62,7 @@ class ExtensionRegistryTest {
     /** Whether an image address tagged with [source] is answered by that source instead of passing down the chain. */
     private fun fetchesImages(source: StubHttpSource): Boolean {
         val client = OkHttpClient.Builder().addInterceptor(images).addInterceptor(answering { cannedResponse(it, body = "app") }).build()
-        return client.newCall(Request.Builder().url(images.tag(MihonSeriesSource.sourceKey(source), "https://covers.test/1.jpg")).build()).execute().body.string() == "source"
+        return client.newCall(Request.Builder().url(images.tag(MihonKind.sourceKey(source.id), "https://covers.test/1.jpg")).build()).execute().body.string() == "source"
     }
 
     @Test

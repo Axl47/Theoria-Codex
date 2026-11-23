@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesSource
 import com.theoriacodex.sources.http.BrowserCookieStore
@@ -93,7 +94,7 @@ class ExtensionHarnessTest {
     private suspend fun firstReadable(source: SeriesSource, listed: List<Series>): List<ImageRef> =
         listed.take(MAX_SERIES_TRIED).firstNotNullOfOrNull { series ->
             val first = source.entries(source.details(series)).lastOrNull()
-            first?.let { source.pages(it) }?.takeIf { it.isNotEmpty() }
+            (first?.let { source.media(it) } as? EntryMedia.Pages)?.pages?.takeIf { it.isNotEmpty() }
         } ?: error("None of the first $MAX_SERIES_TRIED series had a readable chapter")
 
     /** Describes a response by its leading bytes, so nothing depends on the server's content type. */

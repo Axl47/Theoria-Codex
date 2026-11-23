@@ -31,11 +31,12 @@ import okhttp3.Request
 import uy.kohesive.injekt.Injekt
 
 /**
- * The run-time environment Mihon extensions expect from their host app: the service locator they ask for an
+ * The run-time environment Mihon and Aniyomi extensions expect from their host app: the service locator they ask for an
  * `Application`, a `Json` and a `NetworkHelper`, and the host's version. Installed once, before any extension loads.
  *
- * Extensions get an HTTP client of their own, with Mihon's timeouts and interceptor names and none of the app's
- * interceptors, so they behave here as they do in Mihon. Like Mihon's, it shares the system browser's cookies.
+ * Extensions get an HTTP client of their own, with Mihon's timeouts and interceptor names (Aniyomi's are the same) and
+ * none of the app's interceptors, so they behave here as they do there. Like Mihon's, it shares the system browser's
+ * cookies.
  */
 object ExtensionHost {
     /** HTTP requests extensions have started, so a caller can report what one step cost. */

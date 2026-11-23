@@ -1,34 +1,20 @@
 package com.theoriacodex.extensionhost
 
-import com.theoriacodex.domain.adapter.SourceAdapterException
-import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EntryMedia
-import com.theoriacodex.domain.series.MIHON_SOURCE_ID_PREFIX
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
-import com.theoriacodex.domain.series.SeriesStatus
-import com.theoriacodex.domain.series.withChoices
-import com.theoriacodex.sources.http.HostOutageKind
-import com.theoriacodex.sources.http.HostUnavailableException
-import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.source.Source
-import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.MangasPage
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.HttpSource
-import java.io.IOException
-import java.util.Collections
-import kotlin.coroutines.cancellation.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /**
  * One Mihon extension source as the app's [SeriesSource]: a Mihon manga is a series, a chapter an entry, and a
@@ -38,10 +24,11 @@ import kotlinx.coroutines.withContext
 class MihonSeriesSource(
     private val source: Source,
     images: ExtensionImages,
-    private val log: (String) -> Unit = {},
-    private val onChallenged: (host: String) -> Unit = {},
+    log: (String) -> Unit = {},
+    onChallenged: (host: String) -> Unit = {},
 ) : SeriesSource {
-    override val key: SourceKey = sourceKey(source)
+    override val key: SourceKey = MihonKind.sourceKey(source.id)
+    private val calls = ExtensionCalls(source.name, log, onChallenged)
 
     /** Fetches its covers and pages through its own client; only an HTTP source has one. */
     internal val sourceImages: MihonImages? = (source as? HttpSource)?.let { MihonImages(it, key, images) }
@@ -52,41 +39,29 @@ class MihonSeriesSource(
      * Series and chapters as the source listed them. Sources may keep data on them between calls, so a later call
      * about one hands the source its own object back; one from an earlier run is rebuilt from what the app stored.
      */
-    private val listedSeries = recent<SManga>()
-    private val listedChapters = recent<SChapter>()
+    private val listedSeries = recentlyListed<SManga>()
+    private val listedChapters = recentlyListed<SChapter>()
+    private val searches = FilterSearch(source::getFilterList) { it.nodes() }
 
-    /** The last search asked for and the list its pages were given; another search replaces it. */
-    private class PagedSearch(val text: String, val filters: List<SeriesFilter>, val options: FilterList)
-
-    @Volatile private var pagedSearch: PagedSearch? = null
-
-    override suspend fun popular(page: Int): SeriesPage = calling { source.getPopularManga(page).listed() }
+    override suspend fun popular(page: Int): SeriesPage = calls.calling { source.getPopularManga(page).listed() }
 
     override val supportsLatest: Boolean get() = source.supportsLatest
 
-    override suspend fun latest(page: Int): SeriesPage = calling { source.getLatestUpdates(page).listed() }
+    override suspend fun latest(page: Int): SeriesPage = calls.calling { source.getLatestUpdates(page).listed() }
 
-    override suspend fun filters(): List<SeriesFilter> = calling { source.getFilterList().toSeriesFilters() }
+    override suspend fun filters(): List<SeriesFilter> = calls.calling { searches.defaults() }
 
-    /**
-     * The source reads a search's options from a list it makes, so a first page sets [filters] onto a new one. Later
-     * pages of the same search hand the source that list again, as Mihon does: a source that fills its filters in
-     * after its first request would otherwise page with other criteria.
-     */
-    override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>): SeriesPage = calling {
-        val options = pagedSearch?.takeIf { page > 1 && it.text == text && it.filters == filters }?.options
-            ?: source.getFilterList().also { options -> if (filters.isNotEmpty()) options.setFrom(options.toSeriesFilters().withChoices(filters)) }
-        pagedSearch = PagedSearch(text, filters, options)
-        source.getSearchManga(page, text, options).listed()
+    override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>): SeriesPage = calls.calling {
+        source.getSearchManga(page, text, searches.options(text, page, filters)).listed()
     }
 
-    override suspend fun details(series: Series): Series = calling {
+    override suspend fun details(series: Series): Series = calls.calling {
         val manga = manga(series)
         val details = source.getMangaUpdate(manga, emptyList(), fetchDetails = true, fetchChapters = false).manga
         manga.withDetails(details).also { listedSeries[it.url] = it }.toSeries()
     }
 
-    override suspend fun entries(series: Series): List<SeriesEntry> = calling {
+    override suspend fun entries(series: Series): List<SeriesEntry> = calls.calling {
         source.getMangaUpdate(manga(series), emptyList(), fetchDetails = false, fetchChapters = true).chapters.map { chapter ->
             listedChapters[chapter.url] = chapter
             SeriesEntry(
@@ -102,8 +77,7 @@ class MihonSeriesSource(
 
     override suspend fun media(entry: SeriesEntry): EntryMedia = EntryMedia.Pages(pages(entry))
 
-    /** [entry]'s pages, which are all a manga extension serves. */
-    suspend fun pages(entry: SeriesEntry): List<ImageRef> = calling {
+    private suspend fun pages(entry: SeriesEntry): List<ImageRef> = calls.calling {
         val chapter = listedChapters[entry.address] ?: SChapter.create().apply {
             url = entry.address
             name = entry.name
@@ -168,62 +142,4 @@ class MihonSeriesSource(
         val address = if (sourceImages != null) sourceImages.pageAddress(chapter, page) else page.imageUrl
         return address?.let { ImageRef(url = it, localPath = null, mime = null) }
     }
-
-    /**
-     * Runs an extension call off the caller's thread, which is often the main one: extensions parse there and some
-     * block on the network. Its failures are reported the way built-in sources report theirs, with the failure's own
-     * message and never its class name, which screens would show.
-     */
-    @Suppress("TooGenericExceptionCaught")
-    private suspend fun <T> calling(block: suspend () -> T): T = try {
-        withContext(Dispatchers.IO) { block() }
-    } catch (error: CancellationException) {
-        throw error
-    } catch (error: Exception) {
-        throw failure(error)
-    } catch (error: LinkageError) {
-        // The extension called a part of Mihon's host API this module does not provide.
-        log("${source.name} needs host API this module lacks: $error")
-        throw SourceAdapterException(SourceFailureReason.UNKNOWN, error.message, error)
-    }
-
-    private fun failure(error: Exception): SourceAdapterException {
-        generateSequence<Throwable>(error) { it.cause }.firstNotNullOfOrNull { it as? HostUnavailableException }
-            ?.takeIf { it.kind == HostOutageKind.CHALLENGE }
-            ?.let { onChallenged(it.host) }
-        val reason = when (error) {
-            // A refusal (401, 403) is not reported as a missing key: the app holds no key for an extension source, and
-            // would point the user at a Settings field that does not exist.
-            is HttpException -> if (error.code == HTTP_TOO_MANY_REQUESTS) SourceFailureReason.RATE_LIMITED else SourceFailureReason.NETWORK
-            is IOException -> SourceFailureReason.NETWORK
-            else -> SourceFailureReason.PARSE
-        }
-        return SourceAdapterException(reason, error.message, error)
-    }
-
-    companion object {
-        /** The app-wide identity of an extension source; the `mihon` label can never be a real site's host. */
-        fun sourceKey(source: Source): SourceKey = SourceKey.parseOrThrow("$MIHON_SOURCE_ID_PREFIX${source.id}")
-
-        private const val MAX_LISTED = 2_048
-        private const val HTTP_TOO_MANY_REQUESTS = 429
-
-        /** The most recent [MAX_LISTED] values by address. */
-        private fun <T> recent(): MutableMap<String, T> = Collections.synchronizedMap(
-            object : LinkedHashMap<String, T>() {
-                override fun removeEldestEntry(eldest: Map.Entry<String, T>): Boolean = size > MAX_LISTED
-            },
-        )
-    }
-}
-
-/** Mihon's `SManga.status` constant as the app's status; a number Mihon does not define is unknown. */
-internal fun seriesStatus(status: Int): SeriesStatus = when (status) {
-    SManga.ONGOING -> SeriesStatus.ONGOING
-    SManga.COMPLETED -> SeriesStatus.COMPLETED
-    SManga.LICENSED -> SeriesStatus.LICENSED
-    SManga.PUBLISHING_FINISHED -> SeriesStatus.PUBLISHING_FINISHED
-    SManga.CANCELLED -> SeriesStatus.CANCELLED
-    SManga.ON_HIATUS -> SeriesStatus.ON_HIATUS
-    else -> SeriesStatus.UNKNOWN
 }
