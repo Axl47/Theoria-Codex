@@ -31,6 +31,8 @@ data class ViewerSession(
     val focusComment: CommentTarget? = null,
     // The mode a series session's chapters open in, known before the first one draws.
     val seriesReadingMode: com.theoriacodex.domain.model.GalleryReadingMode? = null,
+    // What the strip draws over a post's thumbnail and reads for its tile, such as a series chapter's number.
+    val stripMarks: Map<com.theoriacodex.domain.model.PostId, ViewerStripMark> = emptyMap(),
 )
 
 internal fun requiresViewerPostResolution(post: Post, streamSource: ViewerStreamSource): Boolean {

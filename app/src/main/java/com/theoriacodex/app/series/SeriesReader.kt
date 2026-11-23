@@ -2,6 +2,7 @@ package com.theoriacodex.app.series
 
 import com.theoriacodex.app.di.SeriesDependencies
 import com.theoriacodex.app.viewer.ViewerSession
+import com.theoriacodex.app.viewer.ViewerStripMark
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
@@ -45,7 +46,12 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         val context = ViewerLaunchContext(seriesQueryHash(id), start, ViewerStreamSource.SERIES, scrollOffsetHint = 0)
         val resume = entries.associate { PostId(id.source, it.entry.address) to it.resumePageIndex() } +
             listOfNotNull(pageIndex?.let { posts[start].id to it })
-        val session = ViewerSession(posts, context, initialMediaIndices = resume, seriesReadingMode = stored.readingModeOrGuess())
+        val marks = entries.mapNotNull { entry ->
+            entry.entry.number?.takeIf { it >= 0f && it.isFinite() }?.let { PostId(id.source, entry.entry.address) to seriesChapterMark(stored.series.title, entry.entry.name, it) }
+        }.toMap()
+        val session = ViewerSession(
+            posts, context, initialMediaIndices = resume, seriesReadingMode = stored.readingModeOrGuess(), stripMarks = marks,
+        )
         return if (sessionId == null) session else session.copy(sessionId = sessionId)
     }
 
@@ -119,3 +125,13 @@ internal fun seriesIdOf(queryHash: String?): SeriesId? {
 private fun StoredSeries.readingModeOrGuess() = seriesReadingMode(readingMode, series.genres, series.language)
 
 private const val SERIES_QUERY_PREFIX = "series:"
+
+/**
+ * A chapter's strip mark: its [number] as a reader writes it (12, or 10.5 for a part-chapter) over the series cover,
+ * and a spoken name that says the number when the chapter's own [name] does not.
+ */
+internal fun seriesChapterMark(seriesTitle: String, name: String, number: Float): ViewerStripMark {
+    val shown = if (number % 1f == 0f) number.toLong().toString() else number.toString()
+    val named = Regex("""(?<![\d.])${Regex.escape(shown)}(?!\d|\.\d)""").containsMatchIn(name)
+    return ViewerStripMark(shown, "$seriesTitle · ${if (named) name else "Chapter $shown, $name"}")
+}
