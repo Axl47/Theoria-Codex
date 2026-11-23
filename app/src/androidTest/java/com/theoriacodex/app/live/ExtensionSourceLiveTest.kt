@@ -5,7 +5,6 @@ import android.app.job.JobScheduler
 import android.database.sqlite.SQLiteDatabase
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.UiObject2
@@ -153,7 +152,7 @@ class ExtensionSourceLiveTest {
             repeat(CONTROL_TAPS) {
                 if (device.hasObject(By.desc("Info"))) {
                     device.click(x, device.displayHeight / 4)
-                    device.wait(Until.gone(By.desc("Info")), CONTROLS_WAIT_MS)
+                    device.wait(Until.gone(By.desc("Info")), SeriesLiveDriver.CONTROLS_WAIT_MS)
                 }
             }
             device.wait(Until.hasObject(By.text("Next")), SeriesLiveDriver.SHORT_WAIT_MS) == true
@@ -337,19 +336,11 @@ class ExtensionSourceLiveTest {
         live.waitFor("the chapter's sheet after a tap", By.desc("Start over"))
         assertNull("A chapter's sheet has no tag search", device.findObject(By.text("Your search")))
         device.pressBack()
-        viewerControl("the dock's Info button", By.desc("Info"))
-        val node = checkNotNull(described(InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow, "Info")) { "No Info node" }
+        val node = viewerControl("the dock's Info button", By.desc("Info")).accessibilityNodeInfo
         assertTrue("Info takes an accessibility click", node.performAction(AccessibilityNodeInfo.ACTION_CLICK))
         live.waitFor("the chapter's sheet after an accessibility click", By.desc("Start over"))
         live.report("info", "a tap and an accessibility click on Info each opened the chapter's sheet, with no tag search")
         device.pressBack()
-    }
-
-    /** The node under [root] whose description is [description]. */
-    private fun described(root: AccessibilityNodeInfo?, description: String): AccessibilityNodeInfo? {
-        root ?: return null
-        if (root.contentDescription?.toString() == description) return root
-        return (0 until root.childCount).firstNotNullOfOrNull { described(root.getChild(it), description) }
     }
 
     /** Follows the series whose page is open, answering the notification question a follow asks while the permission is missing. */
@@ -508,18 +499,7 @@ class ExtensionSourceLiveTest {
     /** The page strip's tile for [page] of the open chapter. */
     private fun pageTile(page: Int): UiObject2 = viewerControl("the tile for page $page", By.descStartsWith("Go to page $page of "))
 
-    /**
-     * One of the Viewer's controls. The Viewer hides them after a few seconds, often before a chapter's pages have
-     * arrived, so each wait that finds none taps the page to bring them back.
-     */
-    private fun viewerControl(what: String, selector: BySelector): UiObject2 {
-        val deadline = System.currentTimeMillis() + SeriesLiveDriver.RESULTS_TIMEOUT_MS
-        while (System.currentTimeMillis() < deadline) {
-            device.wait(Until.findObject(selector), CONTROLS_WAIT_MS)?.let { return it }
-            device.click(device.displayWidth / 2, device.displayHeight / 2)
-        }
-        error("The Viewer did not show $what; on screen: ${live.screenText()}")
-    }
+    private fun viewerControl(what: String, selector: BySelector): UiObject2 = live.viewerControl(what, selector)
 
     private companion object {
         val CHAPTER_COUNT: Pattern = Pattern.compile("(.+ · )?\\d+ chapters?")
@@ -547,6 +527,5 @@ class ExtensionSourceLiveTest {
         const val CONTROL_TAPS = 3
         const val SWIPE_STEPS = 20
 
-        const val CONTROLS_WAIT_MS = 2_500L
     }
 }

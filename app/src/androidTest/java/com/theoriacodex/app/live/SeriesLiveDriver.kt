@@ -20,7 +20,8 @@ import org.junit.Assume.assumeTrue
 /**
  * What the live Series tests share: the real debug app's Series dependencies, and a hand on its screen that reads
  * and reports text only, so no provider media leaves the device. The tests talk to live sites, so each one starts
- * with [requireOptIn].
+ * with [requireOptIn]. The hand works on [targetPackage], this debug app unless `-e targetPackage` names another build
+ * of the app, such as the minified acceptance one, which a test then drives through its screen alone.
  */
 internal class SeriesLiveDriver {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -28,6 +29,10 @@ internal class SeriesLiveDriver {
     val context: Context = ApplicationProvider.getApplicationContext()
     val container: TheoriaAppContainer by lazy { runBlocking { (context as TheoriaAppContainerOwner).awaitAppContainer() } }
     val series: SeriesDependencies by lazy { checkNotNull(container.series) { "This build has no extension host" } }
+    val targetPackage: String = InstrumentationRegistry.getArguments().getString(TARGET_PACKAGE) ?: context.packageName
+
+    /** Whether the app on screen is this process, so its data can be read directly as well as its screen. */
+    val targetIsThisApp: Boolean get() = targetPackage == context.packageName
 
     fun requireOptIn() {
         val enabled = InstrumentationRegistry.getArguments().getString(OPT_IN)?.toBooleanStrictOrNull() ?: false
@@ -36,8 +41,9 @@ internal class SeriesLiveDriver {
 
     /** Launches the app afresh on the Series tab, which also proves the tab is in the bar, and waits for [shown]. */
     fun openSeriesTab(shown: BySelector = By.text("Browse")) {
-        val launch = requireNotNull(context.packageManager.getLaunchIntentForPackage(context.packageName))
-        context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+        // A task of its own, cleared: the app opens on its first screen. The shell can start another package's activity.
+        val flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        device.executeShellCommand("am start -W -n $targetPackage/$MAIN_ACTIVITY -f $flags")
         tap("the Series tab", By.desc(TopLevelDestination.Series.label), LAUNCH_TIMEOUT_MS)
         waitFor("the Series tab's content", shown, RESULTS_TIMEOUT_MS)
     }
@@ -59,13 +65,26 @@ internal class SeriesLiveDriver {
     }
 
     /** The labels on screen, for a failure message; text only. */
-    fun screenText(): String = device.findObjects(By.pkg(context.packageName))
+    fun screenText(): String = device.findObjects(By.pkg(targetPackage))
         // The screen keeps changing while it is read; an element that has gone is skipped.
         .flatMap { element -> runCatching { listOfNotNull(element.text, element.contentDescription) }.getOrDefault(emptyList()) }
         .filter(String::isNotBlank)
         .distinct()
         .joinToString(" | ")
         .take(SCREEN_TEXT_CHARS)
+
+    /**
+     * One of the Viewer's controls. The Viewer hides them after a few seconds, often before an entry's media has
+     * arrived, so each wait that finds none taps the middle of the screen to bring them back.
+     */
+    fun viewerControl(what: String, selector: BySelector, timeoutMs: Long = RESULTS_TIMEOUT_MS): UiObject2 {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            device.wait(Until.findObject(selector), CONTROLS_WAIT_MS)?.let { return it }
+            device.click(device.displayWidth / 2, device.displayHeight / 2)
+        }
+        error("The Viewer did not show $what; on screen: ${screenText()}")
+    }
 
     /** Shown by `am instrument -r` as it happens. */
     fun report(step: String, text: String) {
@@ -74,6 +93,9 @@ internal class SeriesLiveDriver {
 
     companion object {
         const val OPT_IN = "extensionSourceLive"
+        const val TARGET_PACKAGE = "targetPackage"
+        private const val MAIN_ACTIVITY = "com.theoriacodex.app.MainActivity"
+        const val CONTROLS_WAIT_MS = 2_500L
         const val LAUNCH_TIMEOUT_MS = 30_000L
         const val RESULTS_TIMEOUT_MS = 45_000L
         const val UI_TIMEOUT_MS = 30_000L
