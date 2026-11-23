@@ -48,6 +48,10 @@ internal fun ViewerMediaContent(
             controls = controls, events = events,
             mediaKey = key, positions = videoPositions,
             loadingPreview = { ViewerLoadingPreview(post, media, modifier) },
+            onProgress = videoOptions.onPlaybackProgress,
+            streamRecovery = onRequestMediaRecovery?.takeIf { media.streams.isNotEmpty() }?.let { recover ->
+                ViewerStreamRecovery(imageSession.recoveryRequests, "stream:${encodeViewerPostId(post.id)}:${key.mediaIndex}") { recover(post, media) }
+            },
         )
         ViewerMediaKind.GIF -> {
             val locations = remember(post, media, controls.loadGeneration) { viewerGifLocations(post, media) }

@@ -46,7 +46,7 @@ internal fun viewerDockActions(
     commentCount: CommentCount?,
     onAction: (ViewerAction) -> Unit,
     moreExtras: List<ViewerMenuItem> = emptyList(),
-    /** Whether the post can be liked and saved; a series' chapter cannot. */
+    /** Whether the post can be liked and saved; a series' entry cannot. */
     collectable: Boolean = true,
 ): ViewerDockActions {
     val selection = frame.selection
@@ -103,7 +103,8 @@ private fun ViewerPlaybackSettings(
             onAction(ViewerAction.SetPlaybackRate(selectedRate.speed))
             controls.markInteraction()
         },
-        playbackMode = uiState.controls.playbackMode,
+        // An episode always goes on to the next one, so it offers no choice of mode.
+        playbackMode = uiState.controls.playbackMode.takeUnless { frame.watching },
         onPlaybackModeSelected = { onAction(ViewerAction.SetPlaybackMode(it)) },
         quality = quality.value,
         qualityHeight = qualityHeight.value,

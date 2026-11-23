@@ -67,6 +67,8 @@ internal data class ViewerVideoOptions(
     val streamLabel: String?,
     val terminalMessage: String?,
     val diagnosticsEnabled: Boolean,
+    /** Hears where an episode's playback is, in a [ViewerSeries.Watching] session only. */
+    val onPlaybackProgress: ((ViewerPlaybackProgress) -> Unit)? = null,
 )
 
 /** Owns taps and pinches and selects a renderer; swipes and route state stay in ViewerScreen. */

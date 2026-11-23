@@ -9,14 +9,14 @@ import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.domain.model.PostId
 
 /**
- * Session-local timestamps for the current post and five neighboring posts in either direction. A
- * [ViewerSeries.Watching] session seeds each episode's start with [startPositionsMs]; an episode's seed follows what is
- * saved for it, so it never falls back to the start it opened at once the episode leaves the retained window.
+ * Session-local timestamps for the current post and five neighboring posts in either direction. A [watching] session
+ * keeps every episode's position however far the user goes, seeded with [ViewerSeries.Watching.startPositionsMs], so an
+ * episode outside the retained window resumes where it was left rather than at the start it opened at.
  */
-internal class ViewerVideoPositions(startPositionsMs: Map<PostId, Long> = emptyMap()) {
+internal class ViewerVideoPositions(watching: ViewerSeries.Watching? = null) {
     private var retainedPosts = emptySet<PostId>()
     private val positions = mutableMapOf<ViewerMediaKey, Long>()
-    private val starts = startPositionsMs.mapKeysTo(mutableMapOf()) { (postId) -> ViewerMediaKey(postId, mediaIndex = 0) }
+    private val episodes = watching?.startPositionsMs?.mapKeysTo(mutableMapOf()) { (postId) -> ViewerMediaKey(postId, mediaIndex = 0) }
 
     fun retainAround(posts: List<PostId>, currentIndex: Int) {
         retainedPosts = posts.slice(
@@ -25,11 +25,11 @@ internal class ViewerVideoPositions(startPositionsMs: Map<PostId, Long> = emptyM
         positions.keys.retainAll { it.postId in retainedPosts }
     }
 
-    fun position(key: ViewerMediaKey): Long = positions[key] ?: starts[key] ?: 0L
+    fun position(key: ViewerMediaKey): Long = positions[key] ?: episodes?.get(key) ?: 0L
 
     fun save(key: ViewerMediaKey, positionMs: Long) {
         val position = positionMs.coerceAtLeast(0L)
-        if (key in starts) starts[key] = position
+        episodes?.set(key, position)
         if (key.postId in retainedPosts) positions[key] = position
     }
 }
@@ -42,11 +42,11 @@ internal class ViewerVideoPositionStore : ViewModel() {
     private var session: ViewerSessionIdentity? = null
     private var positions = ViewerVideoPositions()
 
-    /** [startPositionsMs] seeds the positions only when [identity] starts a new session. */
-    fun forSession(identity: ViewerSessionIdentity?, startPositionsMs: Map<PostId, Long> = emptyMap()): ViewerVideoPositions {
+    /** [watching] applies only when [identity] starts a new session. */
+    fun forSession(identity: ViewerSessionIdentity?, watching: ViewerSeries.Watching? = null): ViewerVideoPositions {
         if (identity != session) {
             session = identity
-            positions = ViewerVideoPositions(startPositionsMs)
+            positions = ViewerVideoPositions(watching)
         }
         return positions
     }
@@ -54,11 +54,10 @@ internal class ViewerVideoPositionStore : ViewModel() {
 
 /**
  * The positions for [session], kept across the screen leaving composition while its entry stays on the back stack. A
- * [ViewerSeries.Watching] [series] seeds its episodes' starts.
+ * [ViewerSeries.Watching] [series] keeps its episodes' positions; see [ViewerVideoPositions].
  */
 @Composable
 internal fun rememberViewerVideoPositions(session: ViewerSessionIdentity?, series: ViewerSeries? = null): ViewerVideoPositions {
     val store = viewModel<ViewerVideoPositionStore>()
-    val starts = (series as? ViewerSeries.Watching)?.startPositionsMs.orEmpty()
-    return remember(store, session) { store.forSession(session, starts) }
+    return remember(store, session) { store.forSession(session, series as? ViewerSeries.Watching) }
 }

@@ -380,10 +380,13 @@ private fun rememberSeriesViewerConfig(shell: TheoriaShell): (ViewerScreenConfig
             owner.addCloseable(SERIES_READER_KEY, AutoCloseable(reader::closed))
         }
     }
-    val mode by remember(session.context.queryHash) { shell.seriesReader?.readingMode(session) ?: emptyFlow() }
-        .collectAsStateWithLifecycle(initialValue = (session.series as? ViewerSeries.Reading)?.mode)
+    // Only chapters are read in a mode; an episode plays.
+    val reading = session.series as? ViewerSeries.Reading
+    val mode by remember(session.context.queryHash, reading != null) {
+        shell.seriesReader?.takeIf { reading != null }?.readingMode(session) ?: emptyFlow()
+    }.collectAsStateWithLifecycle(initialValue = reading?.mode)
     val modes = mode?.let { chosen -> session.posts.associate { it.id to chosen } }.orEmpty()
-    return { it.copy(seriesChapters = true, galleryReadingModes = modes) }
+    return { it.copy(series = session.series, galleryReadingModes = modes) }
 }
 
 private const val SERIES_READER_KEY = "series-reader"

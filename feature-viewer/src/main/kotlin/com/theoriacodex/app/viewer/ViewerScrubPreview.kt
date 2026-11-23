@@ -41,13 +41,13 @@ import kotlinx.coroutines.withTimeout
  * keeps one while its timeline is composed; each drag's popup follows it through [ViewerVideoScrubPreview].
  */
 @Composable
-internal fun rememberViewerScrubPreviews(player: ExoPlayer?, headers: Map<String, String>): ViewerScrubPreviews? {
+internal fun rememberViewerScrubPreviews(player: ExoPlayer?, playback: VideoPlaybackRequest): ViewerScrubPreviews? {
     val context = LocalContext.current
     // Extract at the size actually shown: fixed small frames were enlarged about threefold on high-density screens.
     val frameSize = viewerScrubFrameSize(LocalViewerMediaAspectRatio.current)
     val (widthPx, heightPx) = with(LocalDensity.current) { frameSize.width.roundToPx().even() to frameSize.height.roundToPx().even() }
-    val previews = remember(player, headers, widthPx, heightPx) {
-        player?.let { ViewerScrubPreviews(context, it, headers, widthPx, heightPx) }
+    val previews = remember(player, playback, widthPx, heightPx) {
+        player?.let { ViewerScrubPreviews(context, it, playback, widthPx, heightPx) }
     }
     DisposableEffect(previews) { onDispose { previews?.close() } }
     return previews
@@ -88,12 +88,13 @@ internal fun ViewerVideoScrubPreview(previews: ViewerScrubPreviews, positionMs: 
 private fun Int.even(): Int = this and 1.inv()
 
 /**
- * Scrub previews of [player]'s stream, requested with the [headers] its playback sends, read by a [ScrubPreviewPlayer]
- * at [widthPx] × [heightPx].
+ * Scrub previews of [player]'s stream, requested as its [playback] is (headers, container type, cache), read by a
+ * [ScrubPreviewPlayer] at [widthPx] × [heightPx]. Frames need neither subtitles nor separate audio.
  */
-fun ViewerScrubPreviews(context: Context, player: ExoPlayer, headers: Map<String, String>, widthPx: Int, heightPx: Int): ViewerScrubPreviews =
+fun ViewerScrubPreviews(context: Context, player: ExoPlayer, playback: VideoPlaybackRequest, widthPx: Int, heightPx: Int): ViewerScrubPreviews =
     ViewerScrubPreviews(player) { location ->
-        ScrubPreviewPlayer(context, context.videoPlaybackInfrastructure().bind(VideoPlaybackRequest(location, headers)), widthPx, heightPx)
+        val frames = playback.copy(location = location, subtitles = emptyList(), audioTracks = emptyList())
+        ScrubPreviewPlayer(context, context.videoPlaybackInfrastructure().bind(frames), widthPx, heightPx)
     }
 
 /**

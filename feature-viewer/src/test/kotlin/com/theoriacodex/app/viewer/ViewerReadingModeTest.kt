@@ -30,7 +30,7 @@ class ViewerReadingModeTest {
     @Test fun `a series' one-page chapter keeps the series' mode`() {
         val single = page(listOf(image))
         for (mode in listOf(GalleryReadingMode.RIGHT_TO_LEFT, GalleryReadingMode.VERTICAL)) {
-            val config = ViewerScreenConfig(seriesChapters = true, galleryReadingModes = mapOf(single.post.id to mode))
+            val config = ViewerScreenConfig(series = ViewerSeries.Reading(mode), galleryReadingModes = mapOf(single.post.id to mode))
             assertEquals(mode, config.readingModeOf(single))
         }
     }
@@ -45,7 +45,7 @@ class ViewerReadingModeTest {
 
     @Test fun `a series chapter left on its last page is entered at its first, and any other post where it was left`() {
         val pages = listOf(image, image, image)
-        val series = ViewerScreenConfig(seriesChapters = true)
+        val series = ViewerScreenConfig(series = ViewerSeries.Reading(GalleryReadingMode.LEFT_TO_RIGHT))
         assertEquals(0, series.entryMediaIndex(page(pages).copy(selectedMediaIndex = 2)))
         assertEquals(2, series.entryMediaIndex(page(pages).copy(selectedMediaIndex = 2), back = true))
         assertEquals(1, series.entryMediaIndex(page(pages).copy(selectedMediaIndex = 1)))

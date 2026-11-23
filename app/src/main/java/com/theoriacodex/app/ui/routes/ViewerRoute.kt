@@ -222,7 +222,6 @@ internal fun ViewerRoute(
         config = config,
         saveToCodexQuery = activeSession?.saveQuery,
         saveFromForYou = activeSession?.context?.streamSource == ViewerStreamSource.FOR_YOU,
-        series = activeSession?.series,
         canLoadMoreFromSource = activeSession?.liveSearchBinding == true && sourceState?.canLoadMore == true,
         loadingMoreFromSource = sourceState?.loadingMore == true,
         contextActions = rememberViewerContextActions(related.source, activeSession?.context, latestScreenCallbacks),

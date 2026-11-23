@@ -56,8 +56,6 @@ fun ViewerScreen(
     config: ViewerScreenConfig = ViewerScreenConfig(),
     saveToCodexQuery: Query? = null,
     saveFromForYou: Boolean = false,
-    /** The session's [ViewerSession.series]: how a series' entries open, null for any other session. */
-    series: ViewerSeries? = null,
     canLoadMoreFromSource: Boolean = false,
     loadingMoreFromSource: Boolean = false,
     contextActions: ViewerContextActions = ViewerContextActions(),
@@ -79,7 +77,7 @@ fun ViewerScreen(
         viewerPostNavigation(uiState, pendingPostId.value)
     }
     val posts = remember(navigation.pages) { navigation.pages.map { it.post } }
-    val videoPositions = rememberViewerVideoPositions(uiState.session, series)
+    val videoPositions = rememberViewerVideoPositions(uiState.session, config.series)
     if (posts.isEmpty()) {
         ViewerNoPosts()
         return
@@ -145,8 +143,9 @@ private fun ViewerLoadedScreen(
     val chromeVisible = viewerChromeVisible(uiState, touchExplorationEnabled, inPictureInPicture, returning, opening, dismissDrag)
     val chromeStage = rememberViewerChromeStage(chromeVisible)
     val controls = rememberViewerControls(onAction, screen, uiState.overview.visible, chromeVisible, opening, returning)
-    val frame = remember(uiState, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape) {
-        ViewerFrame(uiState, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape)
+    val frame = remember(uiState, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape, config.series) {
+        val watching = config.series is ViewerSeries.Watching
+        ViewerFrame(uiState, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape, watching)
     }
     val flingVelocity = with(LocalDensity.current) { VIEWER_FLING_VELOCITY.toPx() }
     val swipe = rememberViewerSwipe(frame, postPagerState, config, screen, controls, flingVelocity, scope, onAction)
@@ -160,6 +159,7 @@ private fun ViewerLoadedScreen(
         LocalViewerTimelineInset provides if (chromeVisible) viewerDockInset() else 0.dp,
         LocalViewerAccent provides viewerAccent,
         LocalViewerHoldScrub provides holdScrub,
+        LocalViewerActiveTracks provides screen.activeTracks,
     ) {
         ViewerBackdrop(returnProgress, dismissDrag) {
             if (frame.mediaOverviewVisible && selection.overviewAvailable) {
@@ -171,7 +171,7 @@ private fun ViewerLoadedScreen(
                 )
             }
             ViewerChromeOverlays(
-                frame, postPagerState, screen, controls, swipe, activity, quality, qualityHeight, pendingPostId, host, config,
+                frame, postPagerState, screen, controls, swipe, activity, quality, qualityHeight, streamLabel, pendingPostId, host, config,
                 loadMoreFromStrip, relatedShelf, comments, saveContext, trail,
             )
         }

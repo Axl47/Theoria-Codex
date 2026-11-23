@@ -23,3 +23,23 @@ internal class ViewerVideoRecovery {
         return true
     }
 }
+
+/**
+ * Asks once, through [ask] ([ViewerScreenHost.onRequestMediaRecovery]), for an episode's stream links to be fetched
+ * again when its player fails: they expire. The recovered media replaces the player and starts where it stopped, on
+ * the stream with the same label. The ask is spent until the media plays again ([played]), so a recovered stream that
+ * fails too shows the failure, and the user picks another stream, rather than asking in a loop. [requests] holds the
+ * spent asks by [key] and outlives the player the recovered media replaces.
+ */
+internal class ViewerStreamRecovery(
+    private val requests: MutableSet<String>,
+    private val key: String,
+    private val ask: () -> Unit,
+) {
+    /** Asks, unless an ask is spent; whether it asked. */
+    fun request(): Boolean = requests.add(key).also { asked -> if (asked) ask() }
+
+    fun played() {
+        requests.remove(key)
+    }
+}

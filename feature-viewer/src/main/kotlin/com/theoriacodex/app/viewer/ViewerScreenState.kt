@@ -27,6 +27,8 @@ internal enum class InfoSheetTarget { Top, Comments }
 @Stable
 internal class ViewerScreenState {
     val imageSession = ViewerImageSession()
+    /** The selected video's tracks, for the episode controls. */
+    val activeTracks = ViewerActiveTracks()
     val mediaPagers = mutableMapOf<PostId, PagerState>()
     /** Galleries shown as one vertical column, by post; observed, so the screen's gestures follow a new one at once. */
     val verticalGalleries = mutableStateMapOf<PostId, ViewerVerticalGalleryState>()
@@ -201,6 +203,8 @@ internal class ViewerFrame(
     val inPictureInPicture: Boolean,
     val touchExplorationEnabled: Boolean,
     val isLandscape: Boolean,
+    /** The session is a series being watched ([ViewerSeries.Watching]): each post is one long episode. */
+    val watching: Boolean,
 ) {
     val mediaOverviewVisible = uiState.overview.visible && !inPictureInPicture
 

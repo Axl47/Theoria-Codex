@@ -52,17 +52,11 @@ sealed interface ViewerSeries {
 }
 
 /**
- * Where the user is in a series entry, as the Viewer reports it for the series' progress, in the unit its kind uses.
- * [ViewerScreenCallbacks.onVisibleMediaChanged] reports a chapter's [Page]; [ViewerScreenCallbacks.onPlaybackProgress]
- * an episode's [Playback].
+ * Where an episode's playback is, as [ViewerScreenCallbacks.onPlaybackProgress] reports it for its series' progress: at
+ * [positionMs] of an episode [durationMs] long. A chapter's page arrives through
+ * [ViewerScreenCallbacks.onVisibleMediaChanged] instead.
  */
-sealed interface ViewerSeriesProgress {
-    /** On page [number], counted from 1, of a chapter. */
-    data class Page(val number: Int) : ViewerSeriesProgress
-
-    /** At [positionMs] of an episode [durationMs] long; a duration of 0 or less is not known yet. */
-    data class Playback(val positionMs: Long, val durationMs: Long) : ViewerSeriesProgress
-}
+data class ViewerPlaybackProgress(val positionMs: Long, val durationMs: Long)
 
 internal fun requiresViewerPostResolution(post: Post, streamSource: ViewerStreamSource): Boolean {
     if (requiresLazyMediaResolution(post)) return true

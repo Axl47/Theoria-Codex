@@ -14,7 +14,7 @@ import com.theoriacodex.app.codex.isVirtualCodex
 import com.theoriacodex.app.series.SeriesReader
 import com.theoriacodex.app.series.seriesIdOf
 import com.theoriacodex.app.viewer.ViewerSession
-import com.theoriacodex.app.viewer.ViewerSeriesProgress
+import com.theoriacodex.app.viewer.ViewerPlaybackProgress
 import com.theoriacodex.app.viewer.ViewerPostResolver
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.ViewerRestorationRequest
@@ -250,7 +250,7 @@ internal class ViewerRouteWorkflow(
         viewedMediaNumber: Int,
         session: ViewerSession?,
     ) {
-        if (recordSeriesProgress(post, ViewerSeriesProgress.Page(viewedMediaNumber), session)) return
+        if (recordSeriesProgress(session) { recordPageProgress(it, post, viewedMediaNumber) }) return
         val origin = historyOrigin(session?.context)
         recordReadingPosition(post, viewedMediaNumber, session)
         runCatchingPreservingCancellation { data.statisticsRepository.recordPostAvailable(post) }
@@ -281,7 +281,7 @@ internal class ViewerRouteWorkflow(
         viewedMediaNumber: Int,
         session: ViewerSession?,
     ) {
-        if (recordSeriesProgress(post, ViewerSeriesProgress.Page(viewedMediaNumber), session)) return
+        if (recordSeriesProgress(session) { recordPageProgress(it, post, viewedMediaNumber) }) return
         val origin = historyOrigin(session?.context)
         recordReadingPosition(post, viewedMediaNumber, session)
         runCatchingPreservingCancellation {
@@ -297,14 +297,14 @@ internal class ViewerRouteWorkflow(
     }
 
     /** An episode's playback position, which only a series session reports and only its series records. */
-    suspend fun recordPlaybackProgress(post: Post, progress: ViewerSeriesProgress.Playback, session: ViewerSession) {
-        recordSeriesProgress(post, progress, session)
+    suspend fun recordPlaybackProgress(post: Post, progress: ViewerPlaybackProgress, session: ViewerSession) {
+        recordSeriesProgress(session) { recordPlaybackProgress(it, post, progress) }
     }
 
     /** Records progress through a series entry on its series and reports true, so History and statistics never see it. */
-    private suspend fun recordSeriesProgress(post: Post, progress: ViewerSeriesProgress, session: ViewerSession?): Boolean {
+    private suspend fun recordSeriesProgress(session: ViewerSession?, record: suspend SeriesReader.(ViewerSession) -> Unit): Boolean {
         if (session?.context?.streamSource != ViewerStreamSource.SERIES) return false
-        runCatchingPreservingCancellation { series?.recordProgress(session, post, progress) }
+        runCatchingPreservingCancellation { series?.record(session) }
         return true
     }
 

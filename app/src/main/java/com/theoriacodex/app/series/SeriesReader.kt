@@ -2,7 +2,7 @@ package com.theoriacodex.app.series
 
 import com.theoriacodex.app.di.SeriesDependencies
 import com.theoriacodex.app.viewer.ViewerSeries
-import com.theoriacodex.app.viewer.ViewerSeriesProgress
+import com.theoriacodex.app.viewer.ViewerPlaybackProgress
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.ViewerLaunchContext
@@ -75,21 +75,19 @@ internal class SeriesReader(private val series: SeriesDependencies) {
     }
 
     /**
-     * The user is at [progress] in the entry [post], which the series records in the unit its kind uses. A chapter
-     * whose pages have not arrived shows only its cover, which is not a page read; the Viewer reports the chapter again
-     * once they have. An episode whose duration is not known yet records only that it was the last one opened.
+     * The user is on [page] of the chapter [post]. A chapter whose pages have not arrived shows only its cover, which
+     * is not a page read; the Viewer reports the chapter again once they have.
      */
-    suspend fun recordProgress(session: ViewerSession, post: Post, progress: ViewerSeriesProgress) {
+    suspend fun recordPageProgress(session: ViewerSession, post: Post, page: Int) {
         val id = seriesIdOf(session.context.queryHash) ?: return
-        val address = post.id.sourcePostId
-        when (progress) {
-            is ViewerSeriesProgress.Page -> {
-                if (post.media.isEmpty()) return
-                series.repository.recordProgress(id, address, progress.number.toLong(), post.media.size.toLong())
-            }
-            is ViewerSeriesProgress.Playback ->
-                series.repository.recordProgress(id, address, progress.positionMs, progress.durationMs.takeIf { it > 0 })
-        }
+        if (post.media.isEmpty()) return
+        series.repository.recordProgress(id, post.id.sourcePostId, page.toLong(), post.media.size.toLong())
+    }
+
+    /** The user is at [progress] in the episode [post]. */
+    suspend fun recordPlaybackProgress(session: ViewerSession, post: Post, progress: ViewerPlaybackProgress) {
+        val id = seriesIdOf(session.context.queryHash) ?: return
+        series.repository.recordProgress(id, post.id.sourcePostId, progress.positionMs, progress.durationMs.takeIf { it > 0 })
     }
 
     /** A Viewer started reading a series; [closed] says when it stops. */
