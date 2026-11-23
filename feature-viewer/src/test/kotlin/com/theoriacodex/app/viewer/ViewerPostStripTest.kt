@@ -134,8 +134,16 @@ class ViewerPostStripTest {
         compose.onNodeWithText("9", useUnmergedTree = true).assertIsDisplayed()
         compose.onNodeWithText("10.5", useUnmergedTree = true).assertIsDisplayed()
         compose.onAllNodesWithText("3", useUnmergedTree = true).assertCountEquals(0)
-        // The number is drawn only; the tile's label already names the chapter.
+        // The drawn number stays out of TalkBack, which hears it in the tile's label.
         compose.onNodeWithText("9", useUnmergedTree = true).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility).or(hasAnyAncestor(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility))))
+    }
+
+    @Test fun `a chapter's label says its number unless the title already does`() {
+        assertEquals("Chapter 10", viewerChapterTitle("Chapter 10", "10"))
+        assertEquals("Chapter 0, Prologue", viewerChapterTitle("Prologue", "0"))
+        assertEquals("Chapter 1, Chapter 10", viewerChapterTitle("Chapter 10", "1"))
+        assertEquals("Chapter 10, Ch. 10.5", viewerChapterTitle("Ch. 10.5", "10"))
+        assertEquals("Extra", viewerChapterTitle("Extra", null))
     }
 
     @Test fun `only multi-page posts announce their page count`() {

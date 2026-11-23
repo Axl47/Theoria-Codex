@@ -112,14 +112,16 @@ internal fun ViewerPageScrubber(
 
 /**
  * The page a touch at [x] on a track [widthPx] wide stands for: each page owns an equal share of the track. A
- * [held] page keeps the touch until it is [holdPx] past that page's share, so a finger resting on a boundary, or
- * rolling as it lifts, does not flip between two pages. Long posts give each page a sliver, so this matters most there.
+ * [held] page keeps the touch until it is [holdPx] (at most half a share) past that page's share, so a finger resting
+ * on a boundary, or rolling as it lifts, does not flip between two pages. Long posts give each page a sliver, so this
+ * matters most there.
  */
 internal fun viewerPageAt(x: Float, widthPx: Float, pageCount: Int, mirrored: Boolean, held: Int? = null, holdPx: Float = 0f): Int {
     if (held != null) {
         val slot = widthPx / pageCount
         val start = (if (mirrored) pageCount - 1 - held else held) * slot
-        if (x >= start - holdPx && x < start + slot + holdPx) return held
+        val hold = minOf(holdPx, slot / 2)
+        if (x >= start - hold && x < start + slot + hold) return held
     }
     val page = ((x / widthPx).coerceIn(0f, 1f) * pageCount).toInt().coerceAtMost(pageCount - 1)
     return if (mirrored) pageCount - 1 - page else page
