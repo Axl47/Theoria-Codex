@@ -4,6 +4,7 @@ package com.theoriacodex.app.viewer
 
 import android.app.Application
 import android.os.Looper
+import androidx.media3.common.C
 import androidx.media3.common.Player
 import java.time.Duration
 import org.junit.Assert.assertEquals
@@ -47,6 +48,20 @@ class ViewerVideoPlayerPoolTest {
         pool.recycle(second)
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(VIEWER_PLAYER_IDLE_TIMEOUT_MS + 1))
         assertTrue(second.player.isReleased)
+    }
+
+    @Test
+    fun `a lease loops unless the caller says otherwise, and starts without the last lease's track choices`() {
+        val pool = VideoPlaybackInfrastructure(RuntimeEnvironment.getApplication()).viewerVideoPlayerPool
+        val post = pool.acquire(VideoPlaybackRequest("/post.mp4", emptyMap()))
+        assertEquals(Player.REPEAT_MODE_ONE, post.player.repeatMode)
+        post.player.selectSubtitle(null)
+        pool.recycle(post)
+
+        val episode = pool.acquire(VideoPlaybackRequest("/episode.mp4", emptyMap()), loop = false)
+        assertSame(post.player, episode.player)
+        assertEquals(Player.REPEAT_MODE_OFF, episode.player.repeatMode)
+        assertFalse(C.TRACK_TYPE_TEXT in episode.player.trackSelectionParameters.disabledTrackTypes)
     }
 
     @Test
