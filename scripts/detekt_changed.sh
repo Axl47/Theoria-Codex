@@ -15,7 +15,7 @@ base="$(git merge-base "${1:-origin/main}" HEAD)"
 files=()
 while IFS= read -r file; do
   [[ -f "$file" ]] || continue
-  [[ "$file" =~ ^(app|app-logic|core-[a-z-]+|[a-z-]+-kit|feature-[a-z-]+)/src/ && ! "$file" =~ /src/[A-Za-z]*[Tt]est[A-Za-z]*/ ]] || continue
+  [[ "$file" =~ ^(app|app-logic|core-[a-z-]+|[a-z-]+-kit|feature-[a-z-]+|extension-host)/src/ && ! "$file" =~ /src/[A-Za-z]*[Tt]est[A-Za-z]*/ ]] || continue
   files+=("$PWD/$file")
 done < <({ git diff --name-only "$base" -- '*.kt'; git ls-files --others --exclude-standard -- '*.kt'; } | sort -u)
 
