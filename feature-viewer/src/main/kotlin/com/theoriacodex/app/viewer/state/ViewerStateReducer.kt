@@ -276,7 +276,7 @@ private fun ViewerUiState.reduceResolution(action: ViewerAction): ViewerReductio
     }
     is ViewerAction.ResolutionStarted -> this.reduceResolutionStarted(action)
     is ViewerAction.ResolutionCompleted -> this.ifCurrentSession(action.session) {
-        replaceResolvedPost(action.post, action.resolvedAtMs)
+        replaceResolvedPost(action.post, action.resolvedAtMs, action.recovered)
     }
     is ViewerAction.ResolutionFailed -> this.ifCurrentSession(action.session) {
         resolutionFailed(action)
@@ -483,11 +483,12 @@ private fun ViewerUiState.requestResolution(session: ViewerSessionIdentity, post
     )
 }
 
-private fun ViewerUiState.replaceResolvedPost(post: Post, resolvedAtMs: Long?): ViewerUiState {
+/** The page of [post] replaced by its lookup's answer; see [ViewerAction.ResolutionCompleted.recovered]. */
+private fun ViewerUiState.replaceResolvedPost(post: Post, resolvedAtMs: Long?, recovered: Boolean): ViewerUiState {
     val pageIndex = pages.indexOfFirst { page -> page.post.id == post.id }
     if (pageIndex < 0) return this
     val previous = pages[pageIndex]
-    val replacement = post.toViewerPageState(
+    val resolved = post.toViewerPageState(
         selectedMediaIndex = previous.targetMediaIndex,
         resolution = previous.resolution.copy(
             status = ViewerResolutionStatus.RESOLVED,
@@ -496,15 +497,18 @@ private fun ViewerUiState.replaceResolvedPost(post: Post, resolvedAtMs: Long?): 
             resolvedAtMs = resolvedAtMs,
         ),
     )
+    val replacement = if (!recovered) resolved else resolved.copy(
+        media = resolved.media.map { media ->
+            previous.media.firstOrNull { it.key == media.key }?.let { media.copy(loadGeneration = it.loadGeneration) } ?: media
+        },
+    )
     val updatedPages = pages.toMutableList().also { values -> values[pageIndex] = replacement }
     if (pageIndex != currentPageIndex) return copy(pages = updatedPages)
+    val playback = playbackControlsFor(media = replacement.selectedMedia, playbackRate = controls.playback.playbackRate)
     return copy(
         pages = updatedPages,
         controls = controls.copy(
-            playback = playbackControlsFor(
-                media = replacement.selectedMedia,
-                playbackRate = controls.playback.playbackRate,
-            ),
+            playback = if (recovered && playback.available) controls.playback.copy(available = true) else playback,
         ),
         overview = overviewFor(replacement, visible = overview.visible),
         mediaError = null,

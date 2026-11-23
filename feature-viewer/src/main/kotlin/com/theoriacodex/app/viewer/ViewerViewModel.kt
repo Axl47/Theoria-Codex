@@ -266,8 +266,8 @@ class ViewerViewModel(
 
     private fun requiresResolution(post: Post): Boolean = postResolver.requiresResolution(post)
 
-    /** Replaces a page's post with its [resolved] form, keeping what only its listing knew. */
-    fun applyResolvedPost(resolved: Post) {
+    /** Replaces a page's post with its [resolved] form, keeping what only its listing knew; see [ViewerAction.ResolutionCompleted.recovered]. */
+    fun applyResolvedPost(resolved: Post, recovered: Boolean = false) {
         if (mutableSession.value == null) return
         val listed = state.value.pages.firstOrNull { page -> page.post.id == resolved.id }?.post ?: return
         val post = resolved.keepingListingDataOf(listed)
@@ -278,7 +278,7 @@ class ViewerViewModel(
             prefetchLedger.forget(post.id)
         }
         state.value.session?.let { identity ->
-            onAction(ViewerAction.ResolutionCompleted(identity, post, System.currentTimeMillis()))
+            onAction(ViewerAction.ResolutionCompleted(identity, post, System.currentTimeMillis(), recovered))
         }
     }
 

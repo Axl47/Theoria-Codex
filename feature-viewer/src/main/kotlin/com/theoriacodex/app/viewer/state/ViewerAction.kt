@@ -82,6 +82,12 @@ sealed interface ViewerAction {
         val post: Post,
         /** When the lookup answered, in wall-clock milliseconds; see [ViewerResolutionState.resolvedAtMs]. */
         val resolvedAtMs: Long? = null,
+        /**
+         * The lookup asked again for media that failed while its page showed it ([com.theoriacodex.app.viewer.recoverMedia]):
+         * the load in progress continues on the new media, so each media keeps its load generation (what a Retry
+         * started, and what the load has tried), and a current page keeps its playback controls (paused stays paused).
+         */
+        val recovered: Boolean = false,
     ) : ViewerAction
 
     data class ResolutionFailed(
