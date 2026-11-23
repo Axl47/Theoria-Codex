@@ -13,6 +13,7 @@ import com.theoriacodex.app.codex.SAVED_CODEX_ID
 import com.theoriacodex.app.codex.isVirtualCodex
 import com.theoriacodex.app.series.SeriesReader
 import com.theoriacodex.app.series.seriesIdOf
+import com.theoriacodex.app.viewer.ViewerSeries
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.ViewerPlaybackProgress
 import com.theoriacodex.app.viewer.ViewerPostResolver
@@ -53,7 +54,7 @@ internal class ViewerRouteWorkflow(
     private val feedOwner: (ViewerStreamSource) -> ViewerFeedOwner?,
     private val offlineMedia: OfflineMediaCoordinator,
     private val providerDispatcher: CoroutineDispatcher = Dispatchers.Default,
-    /** Reads series chapters; a [ViewerStreamSource.SERIES] session goes to it and leaves no trace anywhere else. */
+    /** Reads and watches series; a [ViewerStreamSource.SERIES] session goes to it and leaves no trace anywhere else. */
     private val series: SeriesReader? = null,
 ) : ViewerPostResolver {
     override fun requiresResolution(post: Post): Boolean =
@@ -95,8 +96,8 @@ internal class ViewerRouteWorkflow(
 
     /**
      * Recovers working media for [post]; a result that no longer [stillApplies] is dropped before anything records it.
-     * A series chapter's page addresses expire within minutes, so its pages are asked for again from the series
-     * [queryHash] names.
+     * A series entry's media addresses expire within minutes, so a chapter's pages, or an episode's streams, are asked
+     * for again from the series [queryHash] names.
      */
     suspend fun recoverMedia(
         post: Post,
@@ -250,7 +251,7 @@ internal class ViewerRouteWorkflow(
         viewedMediaNumber: Int,
         session: ViewerSession?,
     ) {
-        if (recordSeriesProgress(session) { recordPageProgress(it, post, viewedMediaNumber) }) return
+        if (recordSeriesPage(post, viewedMediaNumber, session)) return
         val origin = historyOrigin(session?.context)
         recordReadingPosition(post, viewedMediaNumber, session)
         runCatchingPreservingCancellation { data.statisticsRepository.recordPostAvailable(post) }
@@ -281,7 +282,7 @@ internal class ViewerRouteWorkflow(
         viewedMediaNumber: Int,
         session: ViewerSession?,
     ) {
-        if (recordSeriesProgress(session) { recordPageProgress(it, post, viewedMediaNumber) }) return
+        if (recordSeriesPage(post, viewedMediaNumber, session)) return
         val origin = historyOrigin(session?.context)
         recordReadingPosition(post, viewedMediaNumber, session)
         runCatchingPreservingCancellation {
@@ -300,6 +301,14 @@ internal class ViewerRouteWorkflow(
     suspend fun recordPlaybackProgress(post: Post, progress: ViewerPlaybackProgress, session: ViewerSession) {
         recordSeriesProgress(session) { recordPlaybackProgress(it, post, progress) }
     }
+
+    /**
+     * A visible page of a series entry, which goes to its series only while chapters are read: an episode's one media
+     * item showing is not progress, which arrives as [recordPlaybackProgress]. True for any series session, so neither
+     * kind of entry reaches History or statistics.
+     */
+    private suspend fun recordSeriesPage(post: Post, page: Int, session: ViewerSession?): Boolean =
+        recordSeriesProgress(session) { if (it.series is ViewerSeries.Reading) recordPageProgress(it, post, page) }
 
     /** Records progress through a series entry on its series and reports true, so History and statistics never see it. */
     private suspend fun recordSeriesProgress(session: ViewerSession?, record: suspend SeriesReader.(ViewerSession) -> Unit): Boolean {

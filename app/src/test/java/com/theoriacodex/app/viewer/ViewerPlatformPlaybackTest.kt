@@ -5,6 +5,7 @@ package com.theoriacodex.app.viewer
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -49,6 +50,17 @@ class ViewerPlatformPlaybackTest {
             assertEquals(false, intents.last())
             session.player.playWhenReady = true
             assertEquals(true, intents.last())
+        } finally { session.release(); player.release() }
+    }
+
+    @Test fun `an outside controller cannot switch repeat on, so an episode never loops`() {
+        val context = RuntimeEnvironment.getApplication()
+        val player = ExoPlayer.Builder(context).build()
+        val session = createViewerMediaSession(context, player) {}
+        try {
+            session.player.repeatMode = Player.REPEAT_MODE_ONE
+            assertEquals(Player.REPEAT_MODE_OFF, player.repeatMode)
+            assertFalse(session.player.isCommandAvailable(Player.COMMAND_SET_REPEAT_MODE))
         } finally { session.release(); player.release() }
     }
 

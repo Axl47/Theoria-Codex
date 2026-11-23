@@ -11,6 +11,7 @@ import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.data.repository.continueEntry
 import com.theoriacodex.data.repository.refresh
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.UnsupportedEntriesException
 import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.SeriesSource
 import com.theoriacodex.domain.series.seriesKind
@@ -44,7 +45,7 @@ data class SeriesPageState(
     /** What the screens call [source], by [label]; blank without it. */
     val sourceName: String = "",
     val refreshing: Boolean = true,
-    val failure: String? = null,
+    val failure: RefreshFailure? = null,
     /**
      * No source on offer is the series' own. The app cannot tell why: its extension may be off, removed or blocked,
      * or the source's language off.
@@ -61,6 +62,14 @@ data class SeriesPageState(
 
     /** Whether any entry has been opened, which is what makes the button Continue. */
     val started: Boolean get() = entries.any { it.read || it.position > 0 }
+}
+
+/**
+ * Why the page's last refresh failed, in words for the user. Trying again cannot list a series the source cannot list
+ * ([UnsupportedEntriesException]), so the page offers Retry only when [retryable].
+ */
+data class RefreshFailure(val message: String, val retryable: Boolean) {
+    constructor(error: Exception) : this(failureLine(error), error !is UnsupportedEntriesException)
 }
 
 /**
@@ -140,7 +149,7 @@ class SeriesPageViewModel(
         } catch (error: Exception) {
             error
         }
-        refresh.update { it.copy(refreshing = false, failure = failure?.let(::failureLine)) }
+        refresh.update { it.copy(refreshing = false, failure = failure?.let(::RefreshFailure)) }
     }
 
     /** The chapter row's download mark: downloads the chapter, or stops its download or deletes it from the device. */

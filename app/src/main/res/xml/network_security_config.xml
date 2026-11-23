@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
     <base-config cleartextTrafficPermitted="false" />
-    <!-- Acceptance journeys serve the picture tagger's files on loopback only. -->
+    <!-- Loopback only: some anime extensions serve their streams from a proxy of their own on the device, and device
+         and acceptance tests serve fixture bytes there. -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
     </domain-config>
 </network-security-config>

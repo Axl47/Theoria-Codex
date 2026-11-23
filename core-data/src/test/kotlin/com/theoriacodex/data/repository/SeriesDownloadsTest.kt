@@ -303,6 +303,16 @@ class SeriesDownloadsTest {
         assertEquals(listOf("/c2", "/c2", "/c3", "/c3"), on.fetched.map { it.substringBeforeLast('/').removePrefix(PAGES) })
     }
 
+    @Test fun `new episodes never download, whatever the anime's setting says`() = runTest {
+        val anime = Series(SeriesId(SourceKey.parseOrThrow("custom_aniyomi_7"), "/anime/1"), "Anime")
+        val harness = Harness(this, StoredSeries(anime, followed = true, downloadNewChapters = true))
+
+        harness.downloads.downloadNew(SeriesUpdate(anime, listOf(SeriesEntry("/e2", "2"))))
+
+        assertEquals(emptyMap<String, ChapterDownload>(), harness.downloads.states(anime.id).first())
+        assertEquals(emptyList<String>(), harness.scheduled)
+    }
+
     @Test fun `each menu choice picks its chapters oldest first, leaving out those already there`() {
         // Chapter 1 was skipped, 2 is read and was opened last, so Continue is at 3; 4 is already downloaded.
         val entries = (9 downTo 1).mapIndexed { order, number -> chapter(number, order, read = number == 2) }

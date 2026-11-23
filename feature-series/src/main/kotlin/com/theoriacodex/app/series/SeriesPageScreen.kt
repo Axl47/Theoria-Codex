@@ -113,7 +113,10 @@ fun SeriesPageScreen(
             when {
                 missing -> item("missing") { MissingSourceRow(onOpenExtensions) }
                 failure != null -> item("failure") {
-                    SourceLoadFailure(failure, state.source?.key, state.sourceName, viewModel::refresh, Modifier.padding(horizontal = 16.dp), compact = state.entries.isNotEmpty())
+                    SourceLoadFailure(
+                        failure.message, state.source?.key, state.sourceName, viewModel::refresh.takeIf { failure.retryable },
+                        Modifier.padding(horizontal = 16.dp), compact = state.entries.isNotEmpty(),
+                    )
                 }
                 state.refreshing && state.entries.isEmpty() -> item("loading") { LoadingState() }
                 state.entries.isEmpty() -> item("empty") { EmptyState(state.kind.words.none) }
