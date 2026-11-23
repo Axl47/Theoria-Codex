@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.network.interceptor
 
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.mihonhost.MihonHost
 import com.theoriacodex.mihonhost.answering
 import com.theoriacodex.mihonhost.cannedResponse
@@ -103,6 +104,23 @@ class HostInterceptorsTest {
         }
 
         assertEquals(setOf("other.test", "down.test"), outages.outages.value.keys)
+    }
+
+    @Test
+    fun `a refusal without a challenge reaches the extension and is logged with whether it carried a clearance`() {
+        val logged = mutableListOf<String>()
+        Diagnostics.install { _, message, _ -> logged += message }
+        val outages = HostOutageTracker()
+        val client = clientOf(
+            CloudflareInterceptor(ChallengePass(ChallengeBrowsers(NoCookies, NoBrowser), outages::isChallenged), outages),
+            answering { sent -> cannedResponse(sent, code = 403).newBuilder().header("Server", "cloudflare").build() },
+        )
+
+        val refused = client.newCall(Request.Builder().url("https://site.test/chapter/1").header("Cookie", "cf_clearance=old").build()).execute()
+
+        assertEquals(403, refused.code)
+        refused.close()
+        assertEquals(listOf("site.test refused 403 with a clearance, no challenge (server cloudflare)"), logged)
     }
 
     @Test

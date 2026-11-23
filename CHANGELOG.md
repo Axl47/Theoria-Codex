@@ -55,6 +55,7 @@
 
 ### Changed
 
+- When a series chapter's pages fail to load, the Diagnostics failure log records why, including whether the site refused the request outright.
 - A tag trail now narrows the search you were in, adding the tag to it, instead of searching that tag alone.
 - In the Viewer's information sheet, tags the current search already covers show as included or excluded.
 - Animated only now asks each site for animated posts instead of filtering a mixed page on the phone, so animated results fill the feed from the first page, on Pixiv especially. Turning it on or off re-runs the search like changing the sort, and saved and recent searches remember it. If you had it on, tap it once more after updating.
