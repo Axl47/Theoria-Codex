@@ -42,7 +42,7 @@ class ExtensionHarnessTest {
         val apkName = InstrumentationRegistry.getArguments().getString("extensionApk")
         assumeNotNull(apkName)
         val context = instrumentation.targetContext
-        MihonHost.install(context.applicationContext as Application, versionName = "harness", versionCode = 1, cookies = NoCookies, browsers = ChallengeBrowsers(NoCookies, NoBrowser), outages = HostOutageTracker())
+        ExtensionHost.install(context.applicationContext as Application, versionName = "harness", versionCode = 1, cookies = NoCookies, browsers = ChallengeBrowsers(NoCookies, NoBrowser), outages = HostOutageTracker())
 
         val packages = ExtensionPackages(context)
         val extension = checkNotNull(packages.read(File(context.getExternalFilesDir(null), apkName!!))) { "$apkName is not an extension" }
@@ -104,10 +104,10 @@ class ExtensionHarnessTest {
         size >= signature.size && signature.indices.all { this[it] == signature[it] }
 
     private inline fun <T> timed(step: String, block: () -> T): T {
-        val requests = MihonHost.requestCount.get()
+        val requests = ExtensionHost.requestCount.get()
         val started = TimeSource.Monotonic.markNow()
         return block().also {
-            report("timing", "$step: ${started.elapsedNow().inWholeMilliseconds} ms, ${MihonHost.requestCount.get() - requests} requests")
+            report("timing", "$step: ${started.elapsedNow().inWholeMilliseconds} ms, ${ExtensionHost.requestCount.get() - requests} requests")
         }
     }
 

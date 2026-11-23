@@ -1,6 +1,6 @@
 package eu.kanade.tachiyomi.network.interceptor
 
-import com.theoriacodex.extensionhost.MihonHost
+import com.theoriacodex.extensionhost.ExtensionHost
 import com.theoriacodex.extensionhost.answering
 import com.theoriacodex.extensionhost.cannedResponse
 import com.theoriacodex.sources.http.BrowserCookieStore
@@ -38,7 +38,7 @@ class HostInterceptorsTest {
     fun `the client extensions rebuild carries the interceptor names they require, in Mihon's order`() {
         assertEquals(
             listOf("UncaughtExceptionInterceptor", "UserAgentInterceptor", "CloudflareInterceptor"),
-            MihonHost.extensionClient(NoCookies, ChallengeBrowsers(NoCookies, NoBrowser), HostOutageTracker()).interceptors.map { it.javaClass.simpleName },
+            ExtensionHost.extensionClient(NoCookies, ChallengeBrowsers(NoCookies, NoBrowser), HostOutageTracker()).interceptors.map { it.javaClass.simpleName },
         )
     }
 

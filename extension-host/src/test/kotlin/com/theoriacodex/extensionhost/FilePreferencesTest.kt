@@ -16,7 +16,7 @@ import org.robolectric.Shadows.shadowOf
 @RunWith(RobolectricTestRunner::class)
 class FilePreferencesTest {
     private val context: Context = RuntimeEnvironment.getApplication()
-    private val file = MihonHost.preferencesFile(context, "source_1")
+    private val file = ExtensionHost.preferencesFile(context, "source_1")
 
     @Test
     fun valuesOfEveryTypeAreKeptAcrossReopeningAndChangesAreAnnouncedOnTheMainThread() {
@@ -110,14 +110,14 @@ class FilePreferencesTest {
         context.getSharedPreferences("mihon_source_9", Context.MODE_PRIVATE).edit().putString("password", "secret").commit()
         context.getSharedPreferences("theoria_other", Context.MODE_PRIVATE).edit().putString("kept", "yes").commit()
 
-        MihonHost.deleteLegacyPreferences(context)
+        ExtensionHost.deleteLegacyPreferences(context)
 
         assertFalse(File(context.dataDir, "shared_prefs").list().orEmpty().any { it.startsWith("mihon_") })
         assertEquals("yes", context.getSharedPreferences("theoria_other", Context.MODE_PRIVATE).getString("kept", null))
-        val next = MihonHost.preferencesFile(context, "source_9")
+        val next = ExtensionHost.preferencesFile(context, "source_9")
         assertTrue(next.path.startsWith(context.noBackupFilesDir.path))
         assertTrue(FilePreferences(next).all.isEmpty())
         // A name an extension chooses cannot leave the directory.
-        assertEquals(next.parentFile, MihonHost.preferencesFile(context, "../../escape").parentFile)
+        assertEquals(next.parentFile, ExtensionHost.preferencesFile(context, "../../escape").parentFile)
     }
 }

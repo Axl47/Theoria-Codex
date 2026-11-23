@@ -18,7 +18,7 @@ import com.theoriacodex.extensionhost.ExtensionLoader
 import com.theoriacodex.extensionhost.ExtensionPackages
 import com.theoriacodex.extensionhost.ExtensionRegistry
 import com.theoriacodex.extensionhost.ExtensionSite
-import com.theoriacodex.extensionhost.MihonHost
+import com.theoriacodex.extensionhost.ExtensionHost
 import com.theoriacodex.extensionhost.SourceSettings
 import com.theoriacodex.sources.http.ChallengeBrowsers
 import com.theoriacodex.sources.http.HostOutageTracker
@@ -53,7 +53,7 @@ interface ExtensionSites {
  * [ExtensionRegistry] holds that rule. Those load once, the first time [sources] is called or [mediaInterceptor] is
  * asked for an image only an extension can fetch.
  */
-internal class MihonExtensionSourceHost : ExtensionSites {
+internal class ExtensionSourceHost : ExtensionSites {
     private lateinit var registry: ExtensionRegistry
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var watching: Lazy<Unit>
@@ -76,12 +76,12 @@ internal class MihonExtensionSourceHost : ExtensionSites {
      */
     fun attach(application: Application, browsers: ChallengeBrowsers, outages: () -> HostOutageTracker) {
         // Release builds run installed packages only; the folder is how tests hand a debug build an APK.
-        images = ExtensionImages(lazy { MihonHost.imageKey(application) }) { runBlocking { registry.sources() } }
+        images = ExtensionImages(lazy { ExtensionHost.imageKey(application) }) { runBlocking { registry.sources() } }
         val packages = ExtensionPackages(application) { if (BuildConfig.DEBUG) application.getExternalFilesDir(DIRECTORY) else null }
         val loader = ExtensionLoader(application, packages)
         // What extensions ask their host for is set up when the first one loads, not at startup.
         val hostInstalled = lazy {
-            MihonHost.install(application, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, AndroidBrowserCookieStore, browsers, outages())
+            ExtensionHost.install(application, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, AndroidBrowserCookieStore, browsers, outages())
         }
         registry = ExtensionRegistry(
             packages = packages::list,
@@ -132,7 +132,7 @@ internal class MihonExtensionSourceHost : ExtensionSites {
 
     override val siteChanges: Flow<*> get() = registry.siteChanges
 
-    override suspend fun clearsChallenge(url: String, userAgent: String): Boolean = MihonHost.clearsChallenge(url, userAgent)
+    override suspend fun clearsChallenge(url: String, userAgent: String): Boolean = ExtensionHost.clearsChallenge(url, userAgent)
 
     /**
      * The sources of the extensions and languages that are on. The first call loads them, which can take seconds;
@@ -144,7 +144,7 @@ internal class MihonExtensionSourceHost : ExtensionSites {
     }
 
     private companion object {
-        const val TAG = "MihonHost"
+        const val TAG = "ExtensionHost"
         const val DIRECTORY = "mihon-extensions"
     }
 }

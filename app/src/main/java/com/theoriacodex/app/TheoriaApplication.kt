@@ -12,7 +12,7 @@ import com.theoriacodex.app.network.AndroidBrowserCookieStore
 import com.theoriacodex.app.customsites.SiteCookieBridge
 import com.theoriacodex.app.customsites.SiteCookieBridgeOwner
 import com.theoriacodex.app.di.DefaultTheoriaAppContainer
-import com.theoriacodex.app.extensions.MihonExtensionSourceHost
+import com.theoriacodex.app.extensions.ExtensionSourceHost
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
 import com.theoriacodex.app.diagnostics.DiagnosticLogStore
@@ -70,7 +70,7 @@ class TheoriaApplication :
     val challengeBrowsers = ChallengeBrowsers(AndroidBrowserCookieStore, WebViewChallengeBrowser(this))
 
     /** Series sources that run loaded extension code. It loads nothing until first used. */
-    private val extensionHost = MihonExtensionSourceHost().also { it.attach(this, challengeBrowsers) { hostOutages } }
+    private val extensionHost = ExtensionSourceHost().also { it.attach(this, challengeBrowsers) { hostOutages } }
 
     /** Every HTTP client in the app, so they share one connection pool and these cookies. */
     override val httpClients = AppHttpClients(

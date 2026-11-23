@@ -37,7 +37,7 @@ import uy.kohesive.injekt.Injekt
  * Extensions get an HTTP client of their own, with Mihon's timeouts and interceptor names and none of the app's
  * interceptors, so they behave here as they do in Mihon. Like Mihon's, it shares the system browser's cookies.
  */
-object MihonHost {
+object ExtensionHost {
     /** HTTP requests extensions have started, so a caller can report what one step cost. */
     val requestCount = AtomicLong()
 
@@ -64,7 +64,7 @@ object MihonHost {
         Injekt.bind(Application::class.java, extensionApplication)
         Injekt.bind(Context::class.java, extensionApplication)
         Injekt.bind(Json::class.java, Json { ignoreUnknownKeys = true; explicitNulls = false })
-        val client = extensionClient(cookies, browsers, outages).also { MihonHost.client = it }
+        val client = extensionClient(cookies, browsers, outages).also { ExtensionHost.client = it }
         Injekt.bind(NetworkHelper::class.java, NetworkHelper(client) { DEFAULT_USER_AGENT })
     }
 
@@ -74,7 +74,7 @@ object MihonHost {
      * [java.io.IOException] when the site cannot be reached at all.
      */
     suspend fun clearsChallenge(url: String, userAgent: String): Boolean = withContext(Dispatchers.IO) {
-        val client = MihonHost.client ?: return@withContext false
+        val client = ExtensionHost.client ?: return@withContext false
         try {
             client.newCall(Request.Builder().url(url).header("User-Agent", userAgent).build()).execute().use { !it.isCloudflareChallenge() }
         } catch (_: HostUnavailableException) {

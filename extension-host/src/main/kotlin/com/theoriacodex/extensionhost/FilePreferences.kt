@@ -25,7 +25,7 @@ import kotlinx.serialization.json.long
  * An extension's preferences, kept as one JSON file. Extensions store what the user typed into their settings, which
  * for a self-hosted server is its address, username and password, and Android backs up every file in `shared_prefs`
  * unless a rule names it. The host therefore keeps these files in a directory Android never backs up or transfers
- * (see [MihonHost]), which the platform's own `SharedPreferences` cannot be pointed at.
+ * (see [ExtensionHost]), which the platform's own `SharedPreferences` cannot be pointed at.
  *
  * As on the platform, the values in memory are what readers see: an edit is visible as soon as it is applied, also
  * when its write fails, and listeners are called on the main thread. Unlike the platform, `apply` writes the file
@@ -35,7 +35,7 @@ import kotlinx.serialization.json.long
 internal class FilePreferences(
     private val file: File,
     /** Told when a listener, which is extension code, fails; it must not take the main thread down. */
-    private val report: (Throwable) -> Unit = { Log.w("MihonHost", "An extension's preference listener failed", it) },
+    private val report: (Throwable) -> Unit = { Log.w("ExtensionHost", "An extension's preference listener failed", it) },
 ) : SharedPreferences {
     private val lock = Any()
 

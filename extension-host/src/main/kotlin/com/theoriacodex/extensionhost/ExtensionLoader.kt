@@ -15,7 +15,7 @@ class ExtensionRejectedException(message: String, cause: Throwable? = null) : Ex
  * already ships.
  *
  * Loaded code runs with the app's own permissions and can read the app's data, so the caller loads only extensions the
- * user turned on (see [ExtensionRegistry]). [MihonHost.install] must have run first.
+ * user turned on (see [ExtensionRegistry]). [ExtensionHost.install] must have run first.
  */
 class ExtensionLoader(private val context: Context, private val packages: ExtensionPackages) {
     /** Copies an earlier process left behind are removed once, before this process makes its first. */
