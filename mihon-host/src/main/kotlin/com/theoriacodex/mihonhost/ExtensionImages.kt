@@ -61,8 +61,9 @@ internal inline fun <T> failingAsIo(block: () -> T): T = try {
  * Only the sources last handed to [publish] answer: the ones whose extension loaded completely and whose extension
  * and language are on. Whoever publishes keeps that table current as extensions change ([ExtensionRegistry.recheck]);
  * a request only reads it, with no system call or lock. A tagged request for a source not in the table calls [load]
- * with its id, which loads that source's extension when it is on and publishes, and returns once that is done. A load
- * that fails is not tried again for later images until the next publish.
+ * with its id, which loads that source's extension when it is on and publishes, and returns once that is done. A
+ * source that load did not publish, because it is not on or the load failed, is not asked for again until the next
+ * publish: its images then only read the table.
  */
 class ExtensionImages(
     /** Kept for the install, where Android does not back it up; read on first use, best warmed off the main thread. */
@@ -72,9 +73,8 @@ class ExtensionImages(
     @Volatile
     private var sources: Map<Long, HttpSource> = emptyMap()
 
-    /** Set when [load] failed, until the next [publish]: images then read the table without loading. */
-    @Volatile
-    private var loadFailed = false
+    /** Sources [load] was asked for and did not publish, until the next [publish]. */
+    private val unanswered = ConcurrentHashMap.newKeySet<Long>()
 
     private val reported = ConcurrentHashMap.newKeySet<String>()
 
@@ -89,22 +89,20 @@ class ExtensionImages(
     @Synchronized
     internal fun publish(active: List<Source>) {
         sources = active.filterIsInstance<HttpSource>().associateBy { it.id }
-        loadFailed = false
+        unanswered.clear()
     }
 
     /** The published source [sourceId] names, loading its extension first when it is not published. */
     @Suppress("TooGenericExceptionCaught")
     private fun published(sourceId: Long): HttpSource? = sources[sourceId] ?: run {
-        if (loadFailed) return null
-        val before = sources
+        if (sourceId in unanswered) return null
+        // Marked only once load returns: a chapter's pages that ask together all wait for the load under way.
         try {
             load(sourceId)
         } catch (failure: Exception) {
             reportOnce("extensions failed to load for an image: ${failure.javaClass.simpleName}")
-            // Unless a publish landed meanwhile.
-            synchronized(this) { if (sources === before) loadFailed = true }
         }
-        sources[sourceId]
+        sources[sourceId] ?: null.also { unanswered += sourceId }
     }
 
     /**

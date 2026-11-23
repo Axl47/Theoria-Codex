@@ -55,7 +55,7 @@
 
 ### Changed
 
-- Opening a series chapter, downloading chapters and checking followed series for new chapters start only the extension that series comes from, not every extension that is on, so they no longer wait for the others to load.
+- Downloading chapters, checking followed series for new chapters, a series' images and a chapter reopened from where you left off start only the extension that series comes from, not every extension that is on, so they no longer wait for the others to load.
 - In the reader's chapter strip, downloaded chapters and chapters the reader has loaded show their first page instead of the series cover, so chapters are easier to tell apart.
 - When a series chapter's pages fail to load, the Diagnostics failure log records why, including whether the site refused the request outright.
 - The Diagnostics failure log names the extension source behind a failed image, and records when an extension image was sent without its source's own connection.

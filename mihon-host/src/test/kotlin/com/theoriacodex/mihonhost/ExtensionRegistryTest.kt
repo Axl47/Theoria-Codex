@@ -129,6 +129,16 @@ class ExtensionRegistryTest {
     }
 
     @Test
+    fun `a source whose recorded extension left the device is found under the one that offers it now`() = runBlocking {
+        twoExtensionsOn()
+        // Renamed extensions keep their source ids.
+        store.choices = store.choices.copy(owners = mapOf("custom_mihon_2" to "renamed-away"))
+
+        assertEquals("custom_mihon_2", registry.source(MihonSeriesSource.sourceKey(2))?.key?.id)
+        assertEquals("b", store.choices.owners["custom_mihon_2"])
+    }
+
+    @Test
     fun `a lookup cancelled while it keeps the owners still offers what it loaded`() = runBlocking {
         twoExtensionsOn()
         store.choices = store.choices.copy(owners = mapOf("custom_mihon_1" to "a", "custom_mihon_2" to "b"))

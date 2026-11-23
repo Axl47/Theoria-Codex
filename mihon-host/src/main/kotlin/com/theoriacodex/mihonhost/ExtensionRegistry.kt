@@ -128,8 +128,9 @@ class ExtensionRegistry(
 
     /**
      * The source [key] names, when its extension and language are on; null otherwise. Loads the extension this device
-     * last saw offer it, or every extension that is on when it saw none or that one loaded without it. An owner that is
-     * off, gone or offers it in a language that is off answers null at once: loading the rest would not find it.
+     * last saw offer it, or every extension that is on when it saw none, that one is no longer on the device (renamed
+     * extensions keep their source ids), or it loaded without it. An owner on the device that is off, or offers the
+     * source only in a language that is off, answers null at once: loading the rest would not find it.
      */
     suspend fun source(key: SourceKey): SeriesSource? {
         offer?.let { current ->
@@ -147,8 +148,9 @@ class ExtensionRegistry(
                 // The device as last listed: the package watcher lists it again whenever it changes.
                 if (wanted.add(owner) || offer == null) refresh(offer?.packages)
                 offer?.find(key)?.let { return@locked it }
+                val present = offer?.packages.orEmpty().any { it.identity == owner }
                 val code = loaded.entries.firstOrNull { it.key.identity == owner }?.value
-                if (code == null || code.sources.any { it.series.key == key }) return@locked null
+                if (present && (code == null || code.sources.any { it.series.key == key })) return@locked null
             }
             loadEverything()
             offer?.find(key)

@@ -154,6 +154,19 @@ class ExtensionImagesTest {
     }
 
     @Test
+    fun `a source its load does not publish is asked for once per publish`() {
+        var loads = 0
+        val off = ExtensionImages(key) { loads += 1 }
+        val address = images.cover(source, "https://covers.test/1.jpg")
+
+        repeat(3) { assertEquals("app https://covers.test/1.jpg", fetch(address, off)) }
+        assertEquals(1, loads)
+        off.publish(emptyList())
+        assertEquals("app https://covers.test/1.jpg", fetch(address, off))
+        assertEquals(2, loads)
+    }
+
+    @Test
     fun `a load that fails is not retried per image and the request goes out as an ordinary one`() {
         var loads = 0
         val failing = ExtensionImages(key) {
