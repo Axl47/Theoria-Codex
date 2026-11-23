@@ -143,6 +143,9 @@ internal class MihonExtensionSourceHost : ExtensionSites {
         return registry.sources()
     }
 
+    /** The sources already loaded, without loading any; empty until [sources] first runs. */
+    fun loadedSources(): List<SeriesSource> = registry.loadedSources()
+
     private companion object {
         const val TAG = "MihonHost"
         const val DIRECTORY = "mihon-extensions"

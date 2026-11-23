@@ -122,6 +122,9 @@ class ExtensionRegistry(
         offer?.takeIf { stamp() == it.stamp }?.sources ?: locked { refresh().let { offer?.sources.orEmpty() } }
     }
 
+    /** The sources [sources] last offered, without loading or checking anything; empty before the first load. */
+    fun loadedSources(): List<SeriesSource> = offer?.sources.orEmpty()
+
     /** Looks for a change on the device once the extensions have loaded, moving [revision] when there is one; before that, does nothing. */
     suspend fun recheck() {
         if (offer != null) sources()
