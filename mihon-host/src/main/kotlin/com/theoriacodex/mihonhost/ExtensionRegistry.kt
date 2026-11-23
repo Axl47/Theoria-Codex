@@ -144,17 +144,23 @@ class ExtensionRegistry(
             // Even when reading the choices fails: package changes then retry, as for any other first listing.
             listed = true
             val owner = choices.choices().owners[key.id]
-            if (owner != null) {
-                // The device as last listed: the package watcher lists it again whenever it changes.
-                if (wanted.add(owner) || offer == null) refresh(offer?.packages)
-                offer?.find(key)?.let { return@locked it }
-                val present = offer?.packages.orEmpty().any { it.identity == owner }
-                val code = loaded.entries.firstOrNull { it.key.identity == owner }?.value
-                if (present && (code == null || code.sources.any { it.series.key == key })) return@locked null
-            }
-            loadEverything()
+            if (owner == null || !ownerSettles(key, owner)) loadEverything()
             offer?.find(key)
         }
+    }
+
+    /**
+     * Loads [owner] for [key] and says whether that settles the lookup: [key] is on offer now, or [owner] is on the device
+     * but off or offers [key] only in a language that is off, so loading the rest would not find it. Guarded by [mutex].
+     */
+    private suspend fun ownerSettles(key: SourceKey, owner: String): Boolean {
+        // The device as last listed: the package watcher lists it again whenever it changes.
+        if (wanted.add(owner) || offer == null) refresh(offer?.packages)
+        if (offer?.find(key) != null) return true
+        // Renamed extensions keep their source ids, so an owner gone from the device settles nothing.
+        if (offer?.packages.orEmpty().none { it.identity == owner }) return false
+        val code = loaded.entries.firstOrNull { it.key.identity == owner }?.value
+        return code == null || code.sources.any { it.series.key == key }
     }
 
     /** Whether a listing was ever started, even one that failed. Written under [mutex]. */
