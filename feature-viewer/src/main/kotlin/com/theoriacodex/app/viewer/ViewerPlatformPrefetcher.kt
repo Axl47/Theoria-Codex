@@ -132,13 +132,12 @@ private suspend fun prefetchViewerVideoMedia(
     playback: VideoPlaybackRequest?,
     maxBytes: Long,
 ): ViewerPrefetchResult {
-    // Playback that bypasses the shared cache would never read what was warmed.
-    if (playback == null || !playback.cache) return ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED)
+    if (playback == null) return ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED)
+    // Only a web stream that playback reads through the shared cache is worth warming there.
+    if (playback.usesSharedCache()) return context.videoPlaybackInfrastructure().prefetch(playback, maxBytes)
     val location = playback.location
-    if (location.startsWith("http://", true) || location.startsWith("https://", true)) {
-        return context.videoPlaybackInfrastructure().prefetch(playback, maxBytes)
-    }
-    if (location.startsWith("content://", true)) {
+    val web = location.startsWith("http://", true) || location.startsWith("https://", true)
+    if (web || !playback.cache || location.startsWith("content://", true)) {
         return ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED)
     }
     val bytes = File(location).takeIf(File::isFile)?.length()?.takeIf { it > 0L }
