@@ -1,5 +1,6 @@
 package com.theoriacodex.mihonhost
 
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
@@ -129,9 +130,14 @@ class ExtensionImages(
         val sourceId = tag[0].substringBefore('.').toLongOrNull() ?: return null
         val kind = if (fragment.startsWith(UNRESOLVED_TAG)) UNRESOLVED_TAG else TAG
         val issued = marker(kind, sourceId, url, tag.drop(1).joinToString("/"))
-        if (!MessageDigest.isEqual(issued.toByteArray(), fragment.toByteArray())) return null
+        if (!MessageDigest.isEqual(issued.toByteArray(), fragment.toByteArray())) {
+            Diagnostics.report(LOG_AREA, "${url.host} image of source $sourceId sent without its source: tag not issued here")
+            return null
+        }
         refresh()
-        return sources[sourceId]
+        val source = sources[sourceId]
+        if (source == null) Diagnostics.report(LOG_AREA, "${url.host} image of source $sourceId sent without its source: source not on")
+        return source
     }
 
     /**
@@ -187,6 +193,7 @@ class ExtensionImages(
         /** Marks the address of a page that names an image, in place of the image's own; then the source, the page's index and its chapter. */
         private const val UNRESOLVED_TAG = "mihon-page="
         private const val UNRESOLVED_PARTS = 3
+        private const val LOG_AREA = "extension-image"
 
         /** Where the tag starts in a tagged address. */
         const val FRAGMENT = "#$TAG"

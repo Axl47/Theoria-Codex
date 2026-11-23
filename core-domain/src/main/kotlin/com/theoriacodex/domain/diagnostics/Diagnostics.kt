@@ -1,5 +1,7 @@
 package com.theoriacodex.domain.diagnostics
 
+import com.theoriacodex.domain.series.EXTENSION_SOURCE_ID_PREFIX
+
 /** Receives failures worth keeping for a later diagnostics report. */
 fun interface DiagnosticSink {
     fun record(area: String, message: String, error: Throwable?)
@@ -33,7 +35,8 @@ object DiagnosticRedaction {
     private val authorizationValue = Regex("""(?i)\b(bearer|basic)\s+[a-z0-9._~+/=-]{8,}""")
     private val email = Regex("""[\w.+-]+@[\w-]+(?:\.[\w-]+)+""")
     private val devicePath = Regex("""/(?:storage/emulated/\d+|data/(?:user/\d+|data)/[\w.]+)/[^\s"':]*""")
-    private val opaqueValue = Regex("""\b[A-Za-z0-9_-]{32,}\b""")
+    // An extension's source id is as long as a token, but it is the app's own name for a source and says which one failed.
+    private val opaqueValue = Regex("""\b(?!${Regex.escape(EXTENSION_SOURCE_ID_PREFIX)}-?\d+\b)[A-Za-z0-9_-]{32,}\b""")
 
     fun redact(text: String): String = text
         // Addresses go first: their paths and queries hold post ids, tags and keys. The host still locates a failure.

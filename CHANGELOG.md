@@ -56,6 +56,7 @@
 ### Changed
 
 - When a series chapter's pages fail to load, the Diagnostics failure log records why, including whether the site refused the request outright.
+- The Diagnostics failure log names the extension source behind a failed image, and records when an extension image was sent without its source's own connection.
 - A tag trail now narrows the search you were in, adding the tag to it, instead of searching that tag alone.
 - In the Viewer's information sheet, tags the current search already covers show as included or excluded.
 - Animated only now asks each site for animated posts instead of filtering a mixed page on the phone, so animated results fill the feed from the first page, on Pixiv especially. Turning it on or off re-runs the search like changing the sort, and saved and recent searches remember it. If you had it on, tap it once more after updating.
@@ -97,6 +98,7 @@
 
 ### Fixed
 
+- Opening an extension series chapter no longer fails some of its pages with "Network request failed unexpectedly" while the app checks for extension updates.
 - In vertical reading, a long page that is still loading no longer looks like a blank black screen until you scroll to its middle: its spinner, or its Retry if it failed, stays in the part of the page you can see.
 - Tapping a tab while the app was still sliding past it to another tab did nothing. It now goes to the tab you tapped.
 - Undoing a save to a Codex you just created with New also removes that Codex, instead of leaving it behind empty.
