@@ -23,7 +23,7 @@ coil = "2.7.0"
 okhttp = "5.5.1"
 androidAnimation = "3.0.5"
 media3 = "1.11.1"
-jsoup = "1.23.2"
+jsoup = "1.24.1"
 # The JavaScript engine Mihon and Aniyomi give extensions; its last release (2021).
 quickjs = "0.9.2"
 jspecify = "1.0.1"
