@@ -343,6 +343,7 @@ private class Restored(stored: StoredSeries, entries: List<StoredSeriesEntry>) :
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit
+    override suspend fun setChaptersShareFirstPage(id: SeriesId) = Unit
     override suspend fun setAllRead(id: SeriesId, read: Boolean): EntryProgressRestore {
         val changed = entryFlow.value.filter { if (read) !it.read else (it.read || it.position > 0) }
         val prevLast = storedFlow.value?.lastOpenedEntry

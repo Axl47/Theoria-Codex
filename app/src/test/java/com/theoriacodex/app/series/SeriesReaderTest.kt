@@ -323,8 +323,9 @@ class SeriesReaderTest {
         }
         val entries = listOf(chapter, StoredSeriesEntry(SeriesEntry("/c2", "Ch. 2"), sourceOrder = 1, firstSeenAtEpochMs = 0))
         // Every chapter opens on the same credit page.
-        val credits = ChapterPictures { _, page -> address(page).let { if (it.endsWith("/0")) 1L else it.hashCode().toLong() } }
-        val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), entries), { listOf(twoPages) }, store = store, pictures = credits))
+        val repository = StoredOnly(StoredSeries(Series(id, "Title")), entries)
+        val credits = ChapterPictures(repository) { _, page -> address(page).let { if (it.endsWith("/0")) 1L else it.hashCode().toLong() } }
+        val reader = SeriesReader(dependencies(repository, { listOf(twoPages) }, store = store, pictures = credits))
         val session = checkNotNull(reader.session(id, "/c2"))
         val seen = mutableListOf<Map<PostId, ViewerStripMark>>()
         val collector = launch { reader.stripMarks(session).collect { seen += it } }
@@ -343,6 +344,11 @@ class SeriesReaderTest {
         // The downloaded chapter's second page is its file; the loaded one's, its own pages, which the Viewer holds.
         assertEquals(mapOf(PostId(source, "/c1") to (pagesOf("/c1")[1].url to 1), PostId(source, "/c2") to (null to 1)), pictured())
         collector.cancel()
+
+        // The series keeps it: a Viewer in a new process, which has hashed nothing yet, opens on second pages.
+        val restarted = checkNotNull(SeriesReader(dependencies(repository, { listOf(twoPages) }, store = store)).session(id, "/c2"))
+        val opening = restarted.stripMarks.mapValues { (_, mark) -> mark.image?.let(::address) to mark.page }
+        assertEquals(mapOf(PostId(source, "/c1") to (pagesOf("/c1")[1].url to 1), PostId(source, "/c2") to (null to 1)), opening)
     }
 
     /** A page's address, read from its file when it is downloaded. */
@@ -417,7 +423,7 @@ class SeriesReaderTest {
         sources: suspend () -> List<SeriesSource>,
         deleteAfterReading: Boolean = false,
         store: OfflineMediaStore = store(),
-        pictures: ChapterPictures = ChapterPictures(),
+        pictures: ChapterPictures = ChapterPictures(repository),
     ) = seriesDependencies(folder.root, repository, sources, deleteAfterReading, store, pictures)
 
     /** Every page of every chapter at an address that changes each time the source is asked. */

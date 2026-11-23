@@ -106,6 +106,8 @@ class RoomSeriesRepository(
 
     override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = update(id) { it.copy(downloadNewChapters = on) }
 
+    override suspend fun setChaptersShareFirstPage(id: SeriesId) = update(id) { it.copy(chaptersShareFirstPage = true) }
+
     override suspend fun setAllRead(id: SeriesId, read: Boolean): EntryProgressRestore = database.withTransaction {
         val current = dao.entries(id.source.id, id.address).map(SeriesEntryEntity::toStored)
         val changedBefore = current.filter { it.withReadState(null, read) != null }
@@ -238,6 +240,7 @@ internal fun SeriesEntity.toStored() = StoredSeries(
     lastOpenedEntry = lastOpenedEntry,
     lastCheckedAtEpochMs = lastCheckedAtEpochMs,
     downloadNewChapters = downloadNew,
+    chaptersShareFirstPage = chaptersShareFirstPage,
 )
 
 internal fun StoredSeries.toEntity() = SeriesEntity(
@@ -255,6 +258,7 @@ internal fun StoredSeries.toEntity() = SeriesEntity(
     series.description,
     series.status.takeUnless { it == SeriesStatus.UNKNOWN }?.name,
     downloadNewChapters,
+    chaptersShareFirstPage,
 )
 
 /**

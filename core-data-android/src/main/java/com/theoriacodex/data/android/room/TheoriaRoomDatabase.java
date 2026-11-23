@@ -31,7 +31,7 @@ import org.json.JSONObject;
                 SeriesEntity.class,
                 SeriesEntryEntity.class
         },
-        version = 17,
+        version = 18,
         exportSchema = true
 )
 public abstract class TheoriaRoomDatabase extends RoomDatabase {
@@ -197,6 +197,13 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             database.execSQL("UPDATE `post_visual_signatures` SET `frame_state` = 1 WHERE `model_id` IS NOT NULL");
         }
     };
+    // Whether a series' chapters open on the same page, kept so the Viewer's strip knows from its first frame. Unknown,
+    // hence off, for every series stored before; the Viewer finds it again.
+    public static final Migration MIGRATION_17_18 = new Migration(17, 18) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("ALTER TABLE `series` ADD COLUMN `chapters_share_first_page` INTEGER NOT NULL DEFAULT 0");
+        }
+    };
 
     public static final Migration[] MIGRATIONS = new Migration[] {
             MIGRATION_1_2,
@@ -214,7 +221,8 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             MIGRATION_13_14,
             MIGRATION_14_15,
             MIGRATION_15_16,
-            MIGRATION_16_17
+            MIGRATION_16_17,
+            MIGRATION_17_18
     };
 
     public abstract CodexLikesDao codexLikesDao();

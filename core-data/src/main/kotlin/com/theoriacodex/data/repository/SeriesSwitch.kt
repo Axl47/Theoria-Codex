@@ -47,7 +47,8 @@ suspend fun SeriesRepository.switchSource(
 
 /**
  * [this] with the per-series settings the user chose on [from], for a series replacing it. Each setting is one line;
- * one added to [StoredSeries] belongs here too.
+ * one added to [StoredSeries] belongs here too. [StoredSeries.chaptersShareFirstPage] is not a setting but what the
+ * Viewer found on [from]'s pages, so it stays behind: another source's chapters are compared afresh.
  */
 fun StoredSeries.withSettingsOf(from: StoredSeries): StoredSeries = copy(
     followed = followed || from.followed,

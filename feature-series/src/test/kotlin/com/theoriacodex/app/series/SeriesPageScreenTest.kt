@@ -282,6 +282,7 @@ private class PageMemoryRepository(stored: StoredSeries, entries: List<StoredSer
 
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit
+    override suspend fun setChaptersShareFirstPage(id: SeriesId) = Unit
     override suspend fun setAllRead(id: SeriesId, read: Boolean): EntryProgressRestore {
         val changed = entriesFlow.value.filter { if (read) !it.read else (it.read || it.position > 0) }
         val prevLast = storedFlow.value?.lastOpenedEntry

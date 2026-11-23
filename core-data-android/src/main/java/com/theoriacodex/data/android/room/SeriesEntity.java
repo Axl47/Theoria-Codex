@@ -26,6 +26,8 @@ public final class SeriesEntity {
     @Nullable @ColumnInfo(name = "status") private final String status;
     /** Whether new chapters the background check finds are downloaded. */
     @ColumnInfo(name = "download_new", defaultValue = "0") private final boolean downloadNew;
+    /** Whether two of its chapters were found to open on the same page, so the Viewer pictures them by their second. */
+    @ColumnInfo(name = "chapters_share_first_page", defaultValue = "0") private final boolean chaptersShareFirstPage;
 
     public SeriesEntity(
             @NonNull String source,
@@ -41,7 +43,8 @@ public final class SeriesEntity {
             @Nullable Long lastCheckedAtEpochMs,
             @Nullable String description,
             @Nullable String status,
-            boolean downloadNew
+            boolean downloadNew,
+            boolean chaptersShareFirstPage
     ) {
         this.source = source;
         this.address = address;
@@ -57,6 +60,7 @@ public final class SeriesEntity {
         this.description = description;
         this.status = status;
         this.downloadNew = downloadNew;
+        this.chaptersShareFirstPage = chaptersShareFirstPage;
     }
 
     @NonNull public String getSource() { return source; }
@@ -73,4 +77,5 @@ public final class SeriesEntity {
     @Nullable public String getDescription() { return description; }
     @Nullable public String getStatus() { return status; }
     public boolean getDownloadNew() { return downloadNew; }
+    public boolean getChaptersShareFirstPage() { return chaptersShareFirstPage; }
 }

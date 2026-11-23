@@ -77,7 +77,7 @@ internal class SeriesReader(private val series: SeriesDependencies) {
                 val numbered = entries.mapNotNull { entry ->
                     entry.entry.number?.takeIf { it >= 0f && it.isFinite() }?.let { postId(entry) to seriesChapterMark(stored.series.title, entry.entry.name, it) }
                 }.toMap()
-                val marks = withPictures(numbered, posts, series.downloads.leadPages(id).first(), series.pictures.leadPage(id).first())
+                val marks = withPictures(numbered, posts, series.downloads.leadPages(id).first(), stored.chapterLeadPage())
                 ViewerSession(
                     posts, context, initialMediaIndices = resume, series = ViewerSeries.Reading(stored.readingModeOrGuess()),
                     stripMarks = marks,
