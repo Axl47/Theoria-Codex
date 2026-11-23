@@ -34,7 +34,7 @@ class FeedPreviewPlayerPool(
     private val handler: Handler = Handler(Looper.getMainLooper()),
     clock: () -> Long = SystemClock::elapsedRealtime,
 ) {
-    private val slots = ReusableVideoSlotPool<ExoPlayer, VideoPlaybackIdentity>(
+    private val slots = ReusableVideoSlotPool<ExoPlayer, VideoPlaybackRequest>(
         maxIdleResources = FEED_PREVIEW_MAX_IDLE_PLAYERS,
         idleTimeoutMs = FEED_PREVIEW_IDLE_TIMEOUT_MS,
         clock = clock,
@@ -86,8 +86,11 @@ class FeedPreviewPlayerPool(
     ): VideoPlayerLease {
         checkMainThread()
         // A card keeps loading until the Viewer stops it, so it must not lock the rest of a clip the Viewer reads.
+        // No mime: a card gets only its rendition's address (app-logic's feedPreviewLocation, through feed-kit), so the
+        // address decides the stream type. A manifest whose address lacks .m3u8 or .mpd plays as a file and fails as an
+        // ordinary player error; carrying the mime means widening that chain to the rendition.
         val request = infrastructure.bind(VideoPlaybackRequest(location, headers), boundedLocks = true)
-        val slotLease = slots.acquire(request.identity)
+        val slotLease = slots.acquire(request.request)
         if (slotLease.requiresBinding || slotLease.resource.playerError != null) {
             if (slotLease.resource.mediaItemCount > 0 || slotLease.resource.playerError != null) {
                 traceMediaSection(MediaTraceSections.PREVIEW_PLAYER_REBIND) {
@@ -242,13 +245,9 @@ class FeedPreviewPlayerPool(
     }
 }
 
-/**
- * A feed or Viewer pool's loan of one player; return it to the pool that lent it. [trackListener] is one the pool
- * added for this lease's video and removes when the player comes back.
- */
+/** A feed or Viewer pool's loan of one player; return it to the pool that lent it. */
 class VideoPlayerLease internal constructor(
     internal val slotLease: ReusableVideoSlotPool.Lease<ExoPlayer>,
-    internal val trackListener: Player.Listener? = null,
 ) {
     val player: ExoPlayer
         get() = slotLease.resource

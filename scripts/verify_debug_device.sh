@@ -5,12 +5,12 @@ readonly repo="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$repo/scripts/device_validation_common.sh"
 cd "$repo"
 readonly owner="${1:-all}"
-if [[ $# -gt 1 || ( "$owner" != app && "$owner" != data && "$owner" != all ) ]]; then
-  echo 'Usage: scripts/verify_debug_device.sh [app|data|all]' >&2
+if [[ $# -gt 1 || ( "$owner" != app && "$owner" != data && "$owner" != media && "$owner" != all ) ]]; then
+  echo 'Usage: scripts/verify_debug_device.sh [app|data|media|all]' >&2
   exit 2
 fi
 if [[ "$owner" == all && -n "${DEVICE_TEST_CLASS:-}" ]]; then
-  echo 'A class filter requires selecting its app or data owner.' >&2
+  echo 'A class filter requires selecting its app, data or media owner.' >&2
   exit 2
 fi
 # DEVICE_TEST_SHARD=k/n runs the k-th of n disjoint slices of every selected owner, so separate
@@ -46,6 +46,10 @@ if [[ "$owner" == data || "$owner" == all ]]; then
   connected+=(":core-data-android:connectedDebugAndroidTest")
   assemblies+=(":core-data-android:assembleDebugAndroidTest")
 fi
+if [[ "$owner" == media || "$owner" == all ]]; then
+  connected+=(":media-kit:connectedDebugAndroidTest")
+  assemblies+=(":media-kit:assembleDebugAndroidTest")
+fi
 ./gradlew "${connected[@]}" "${test_options[@]}" --dry-run --no-parallel --console=plain > "$evidence/task-graph.txt" 2>&1
 ./gradlew "${assemblies[@]}" --console=plain > "$evidence/build.log" 2>&1
 if [[ "$owner" == app || "$owner" == all ]]; then
@@ -54,6 +58,9 @@ if [[ "$owner" == app || "$owner" == all ]]; then
 fi
 if [[ "$owner" == data || "$owner" == all ]]; then
   python3 scripts/verify_device_apk.py core-data-android/build/outputs/apk/androidTest/debug/core-data-android-debug-androidTest.apk --package com.theoriacodex.data.android.test
+fi
+if [[ "$owner" == media || "$owner" == all ]]; then
+  python3 scripts/verify_device_apk.py media-kit/build/outputs/apk/androidTest/debug/media-kit-debug-androidTest.apk --package com.theoriacodex.mediakit.test
 fi
 current_device="$(selected_device)"
 [[ "$current_device" == "$serial" ]]

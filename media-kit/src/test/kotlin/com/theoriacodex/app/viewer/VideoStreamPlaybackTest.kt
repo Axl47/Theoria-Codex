@@ -18,7 +18,6 @@ import java.time.Duration
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -40,6 +39,7 @@ class VideoStreamPlaybackTest {
             // Media3 alone would prefer this one, for its extra channel.
             "/en.wav" to FixtureRoute.Body(wav(channels = 2)),
             "/bad.mpd" to FixtureRoute.Body("4f2a9c0e17".toByteArray()),
+            "/subtitles/page" to FixtureRoute.Body("<html><body>Not found</body></html>".toByteArray()),
         ),
     )
     private val infrastructure = VideoPlaybackInfrastructure(application)
@@ -56,23 +56,20 @@ class VideoStreamPlaybackTest {
         assertTrue(source(request("https://cdn.test/manifest.mpd")) is DashMediaSource)
         assertTrue(source(request("https://cdn.test/clip.m3u8", mime = "video/mp4")) is ProgressiveMediaSource)
         assertTrue(source(request("https://cdn.test/stream")) is ProgressiveMediaSource)
+        // Formats the app plays as nothing else (SmoothStreaming, RTSP) are progressive files, not a crash here.
+        assertTrue(source(request("https://cdn.test/live.isml/manifest")) is ProgressiveMediaSource)
+        assertTrue(source(request("https://cdn.test/live", mime = "application/vnd.ms-sstr+xml")) is ProgressiveMediaSource)
+        assertTrue(source(request("rtsp://cam.test/stream", mime = "application/x-rtsp")) is ProgressiveMediaSource)
         // An extension's own proxy on the device is an ordinary web address.
         val loopback = request("http://127.0.0.1:8341/clip.mp4", mime = "video/mp4")
         assertEquals("http://127.0.0.1:8341/clip.mp4", infrastructure.bind(loopback).mediaItem.localConfiguration?.uri.toString())
-        assertEquals(infrastructure.bind(loopback).identity.cacheKey, cacheKey(loopback))
+        assertEquals(videoCacheKey(loopback.location, loopback.headers), cacheKey(loopback))
         val post = request("https://cdn.test/clip", mime = "video/webm")
         assertTrue(source(post) is ProgressiveMediaSource)
-        assertEquals(infrastructure.bind(post).identity.cacheKey, cacheKey(post))
+        // The key names the bytes alone, whatever else the request adds.
+        assertEquals(videoCacheKey(post.location, post.headers), cacheKey(post.copy(subtitles = listOf(MediaTrack("https://cdn.test/a.vtt", "A")))))
         assertNull(cacheKey(request("https://cdn.test/master.m3u8")))
         assertNull(cacheKey(request("https://cdn.test/clip.mp4", cache = false)))
-    }
-
-    @Test fun `a slot is reused only for the same request, while the cache key names the bytes alone`() {
-        val plain = infrastructure.bind(request("https://cdn.test/clip.mp4")).identity
-        val subtitled = infrastructure.bind(request("https://cdn.test/clip.mp4", subtitles = listOf(MediaTrack("https://cdn.test/a.vtt", "A")))).identity
-
-        assertNotEquals(plain, subtitled)
-        assertEquals(plain.cacheKey, subtitled.cacheKey)
     }
 
     @Test fun `an HLS episode sends its headers with every request it causes, across a redirect and relative addresses`() {
@@ -82,7 +79,8 @@ class VideoStreamPlaybackTest {
                 headers = STREAM_FIXTURE_HEADERS,
                 mime = "application/vnd.apple.mpegurl",
                 subtitles = listOf(MediaTrack("${server.base}/subtitles/en.vtt", "English")),
-                audioTracks = listOf(MediaTrack("${server.base}/hls/audio.m3u8", "Japanese")),
+                // Without an extension, the audio is read as the same kind of stream as the episode.
+                audioTracks = listOf(MediaTrack("${server.base}/hls/audio", "Japanese")),
                 cache = false,
             ),
         )
@@ -95,7 +93,7 @@ class VideoStreamPlaybackTest {
         assertNull(player.playerError)
         val expected = listOf(
             "/episode", "/hls/master.m3u8", "/hls/video.m3u8", "/hls/key.bin", "/hls/video0.ts",
-            "/hls/audio.m3u8", "/hls/audio0.ts", "/subtitles/en.vtt",
+            "/hls/audio", "/hls/audio0.ts", "/subtitles/en.vtt",
         )
         assertTrue(server.paths().toString(), server.paths().containsAll(expected))
         assertTrue(server.requests.toString(), server.requests.all { it.authorised })
@@ -135,12 +133,21 @@ class VideoStreamPlaybackTest {
         pool.recycle(lease)
     }
 
+    @Test fun `an id without a track index chooses nothing, though it names a track group`() {
+        val lease = pool.acquire(VideoPlaybackRequest("${server.base}/main.wav", STREAM_FIXTURE_HEADERS, cache = false))
+        until { lease.player.playbackState == Player.STATE_READY }
+        lease.player.selectAudio("0")
+
+        assertTrue(lease.player.trackSelectionParameters.overrides.isEmpty())
+        pool.recycle(lease)
+    }
+
     @Test fun `subtitles stay off and unloaded until chosen, a stale id changes nothing, and null turns them off`() {
         val cues = mutableListOf<String>()
         val lease = pool.acquire(
             VideoPlaybackRequest(
                 "${server.base}/main.wav", STREAM_FIXTURE_HEADERS, cache = false,
-                subtitles = listOf(MediaTrack("${server.base}/subtitles/en.vtt", "English"), MediaTrack("${server.base}/subtitles/signs", "Signs")),
+                subtitles = listOf(MediaTrack("${server.base}/subtitles/en.vtt", "English"), MediaTrack("${server.base}/subtitles/signs.vtt", "Signs")),
             ),
         )
         val player = lease.player
@@ -150,12 +157,17 @@ class VideoStreamPlaybackTest {
         assertTrue(server.paths().none { it.startsWith("/subtitles/") })
         player.selectSubtitle(player.playbackTracks().subtitles.single { it.label == "Signs" }.id)
         until { player.playbackTracks().subtitles.single { it.label == "Signs" }.selected }
-        // Served without an extension, so its first bytes say it is ASS.
+        // Served at a .vtt address, but its first bytes say it is ASS.
         player.addListener(object : Player.Listener {
             override fun onCues(cueGroup: CueGroup) { cueGroup.cues.mapNotNullTo(cues) { it.text?.toString() } }
         })
         player.play()
         until { "Sniffed cue" in cues }
+        // A drag turns the chosen subtitles off, rather than decoding the file again after each of its seeks.
+        player.scrubTo(1_000L)
+        until { player.playbackTracks().subtitles.none { it.selected } }
+        player.endScrub()
+        until { player.playbackTracks().subtitles.single { it.label == "Signs" }.selected }
         player.selectSubtitle("gone/0")
         assertTrue(player.playbackTracks().subtitles.single { it.label == "Signs" }.selected)
         player.selectSubtitle(null)
@@ -164,29 +176,34 @@ class VideoStreamPlaybackTest {
         pool.recycle(lease)
     }
 
-    @Test fun `a dead subtitle link leaves the video playing`() {
+    @Test fun `a dead or unreadable subtitle leaves the video playing`() {
         val lease = pool.acquire(
             VideoPlaybackRequest(
                 "${server.base}/main.wav", STREAM_FIXTURE_HEADERS, cache = false,
-                subtitles = listOf(MediaTrack("${server.base}/subtitles/missing.vtt", "English")),
+                subtitles = listOf(MediaTrack("${server.base}/subtitles/missing.vtt", "Dead"), MediaTrack("${server.base}/subtitles/page", "Page")),
             ),
         )
         val player = lease.player
-        until { player.playbackTracks().subtitles.isNotEmpty() }
-        player.selectSubtitle(player.playbackTracks().subtitles.single().id)
+        until { player.playbackTracks().subtitles.size == 2 }
+        player.selectSubtitle(player.playbackTracks().subtitles.single { it.label == "Dead" }.id)
         player.play()
-        until { "/subtitles/missing.vtt" in server.paths() && player.currentPosition > 500L }
+        until { "/subtitles/missing.vtt" in server.paths() && player.currentPosition > 300L }
+        player.selectSubtitle(player.playbackTracks().subtitles.single { it.label == "Page" }.id)
+        until { "/subtitles/page" in server.paths() && player.currentPosition > 900L }
 
         assertNull(player.playerError)
         pool.recycle(lease)
     }
 
-    @Test fun `a malformed manifest fails as an ordinary player error`() {
+    @Test fun `a malformed manifest or an RTSP stream fails as an ordinary player error`() {
         val lease = pool.acquire(VideoPlaybackRequest("${server.base}/bad.mpd", STREAM_FIXTURE_HEADERS, cache = false))
         until { lease.player.playerError != null }
 
         assertEquals(PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED, lease.player.playerError?.errorCode)
         pool.recycle(lease)
+        val rtsp = pool.acquire(VideoPlaybackRequest("rtsp://127.0.0.1:1/stream", emptyMap(), mime = "application/x-rtsp", cache = false))
+        until { rtsp.player.playerError != null }
+        pool.recycle(rtsp)
     }
 
     @Test fun `prefetch skips a manifest and an uncached stream without a request, and still warms a post`() = runBlocking {

@@ -14,7 +14,9 @@ import org.junit.runner.RunWith
 
 /**
  * Plays the stream fixture on real decoders: an HLS episode that needs a header, whose video carries no audio, with
- * separate audio and a WebVTT file, served from a loopback server in this process.
+ * separate audio and a WebVTT file, served from a loopback server in this process. It runs in `:media-kit`'s own test
+ * APK (`scripts/verify_debug_device.sh media`), whose process has no application infrastructure, so the one it makes
+ * here is the only one; the stream skips the shared cache, whose directory only one instance per process may open.
  */
 @RunWith(AndroidJUnit4::class)
 class StreamPlaybackDeviceTest {
@@ -45,22 +47,25 @@ class StreamPlaybackDeviceTest {
                 }
             }
             val player = lease.player
-            awaitOnMain { player.playbackState == Player.STATE_READY || player.playerError != null }
-            onMain {
-                player.selectSubtitle(player.playbackTracks().subtitles.single { it.label == "English" }.id)
-                player.play()
-            }
-            awaitOnMain { player.currentPosition >= 1_500L || player.playerError != null }
-            awaitOnMain { "Fixture cue" in cues || player.playerError != null }
+            try {
+                awaitOnMain { player.playbackState == Player.STATE_READY || player.playerError != null }
+                onMain {
+                    player.selectSubtitle(player.playbackTracks().subtitles.single { it.label == "English" }.id)
+                    player.play()
+                }
+                awaitOnMain { player.currentPosition >= 1_500L || player.playerError != null }
+                awaitOnMain { "Fixture cue" in cues || player.playerError != null }
 
-            onMain {
-                assertNull(player.playerError)
-                assertTrue(player.currentPosition >= 1_500L)
-                assertEquals(listOf("Japanese"), player.playbackTracks().audio.filter { it.selected }.map { it.label })
-                assertTrue(server.requests.all { it.authorised })
-                player.release()
+                onMain {
+                    assertNull(player.playerError)
+                    assertTrue(player.currentPosition >= 1_500L)
+                    assertEquals(listOf("Japanese"), player.playbackTracks().audio.filter { it.selected }.map { it.label })
+                    assertTrue(server.requests.all { it.authorised })
+                }
+                assertTrue(cues.toString(), "Fixture cue" in cues)
+            } finally {
+                onMain { player.release() }
             }
-            assertTrue(cues.toString(), "Fixture cue" in cues)
         }
     }
 

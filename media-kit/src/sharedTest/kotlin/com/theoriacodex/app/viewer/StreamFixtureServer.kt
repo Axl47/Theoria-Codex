@@ -2,11 +2,15 @@ package com.theoriacodex.app.viewer
 
 import android.content.res.AssetManager
 import java.io.Closeable
+import java.io.IOException
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.concurrent.thread
+
+/** How long a connection may sit without sending its request before [StreamFixtureServer] drops it. */
+private const val CONNECTION_TIMEOUT_MS = 5_000
 
 /** The header every fixture request must carry, as an extension stream's referer or token would be. */
 val STREAM_FIXTURE_HEADERS = mapOf("X-Fixture-Token" to "episode-secret")
@@ -19,8 +23,19 @@ sealed interface FixtureRoute {
 
 /**
  * The tiny episode in `stream-fixture/` as routes: `/episode` redirects to an HLS master whose video-only variant has
- * AES-128 segments and relative addresses, beside a separate audio playlist, a WebVTT file and an ASS file served
- * without an extension.
+ * AES-128 segments and relative addresses, beside a separate audio playlist (also at `/hls/audio`, without an
+ * extension), a WebVTT file and an ASS file served at a `.vtt` address.
+ *
+ * The binary files were made with ffmpeg; `master.m3u8` and the subtitles are hand-written:
+ * ```
+ * printf '0123456789abcdef' > key.bin
+ * printf 'key.bin\n%s/key.bin\n' "$PWD" > keyinfo
+ * ffmpeg -f lavfi -i testsrc=size=160x90:rate=15 -t 4 -c:v libx264 -profile:v baseline -pix_fmt yuv420p -g 15 \
+ *   -b:v 40k -an -f hls -hls_time 2 -hls_playlist_type vod -hls_key_info_file keyinfo \
+ *   -hls_segment_filename 'video%d.ts' video.m3u8
+ * ffmpeg -f lavfi -i sine=frequency=440:duration=4 -c:a aac -b:a 24k -ac 1 -ar 22050 -f hls -hls_time 2 \
+ *   -hls_playlist_type vod -hls_segment_filename 'audio%d.ts' audio.m3u8
+ * ```
  */
 fun streamFixtureRoutes(assets: AssetManager): Map<String, FixtureRoute> {
     val files = requireNotNull(assets.list("stream-fixture")).associate { name ->
@@ -28,8 +43,9 @@ fun streamFixtureRoutes(assets: AssetManager): Map<String, FixtureRoute> {
     }
     return files + mapOf(
         "/episode" to FixtureRoute.Redirect("/hls/master.m3u8"),
+        "/hls/audio" to files.getValue("/hls/audio.m3u8"),
         "/subtitles/en.vtt" to files.getValue("/hls/subtitles.vtt"),
-        "/subtitles/signs" to files.getValue("/hls/subtitles-ass"),
+        "/subtitles/signs.vtt" to files.getValue("/hls/subtitles-ass"),
     )
 }
 
@@ -49,7 +65,14 @@ class StreamFixtureServer(private val routes: Map<String, FixtureRoute>) : Close
         thread(isDaemon = true, name = "StreamFixtureServer") {
             while (!socket.isClosed) {
                 val connection = runCatching { socket.accept() }.getOrNull() ?: break
-                thread(isDaemon = true) { connection.use(::answer) }
+                connection.soTimeout = CONNECTION_TIMEOUT_MS
+                thread(isDaemon = true) {
+                    try {
+                        connection.use(::answer)
+                    } catch (expected: IOException) {
+                        // The player hung up mid-answer, having read enough, or went quiet: this exchange is over.
+                    }
+                }
             }
         }
     }

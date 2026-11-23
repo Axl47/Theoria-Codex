@@ -97,6 +97,12 @@ class HotspotGateTest(unittest.TestCase):
         self.write_lines(self.test, 7)
         self.assertIn("oversized test file", "\n".join(self.audit()["errors"]))
 
+    def test_shared_test_sources_are_tests(self) -> None:
+        shared = self.module / "src/sharedTest/kotlin/Fixture.kt"
+        shared.parent.mkdir(parents=True)
+        self.write_lines(shared, 7)
+        self.assertIn("oversized test file", "\n".join(self.audit()["errors"]))
+
     def test_non_test_source_sets_are_production(self) -> None:
         benchmark_source = self.module / "src/benchmarkRelease/kotlin/Fixture.kt"
         benchmark_source.parent.mkdir(parents=True)

@@ -68,16 +68,6 @@ internal enum class VideoPlaybackProfile(val usesPlatformDiagnostics: Boolean) {
     VIEWER(usesPlatformDiagnostics = true),
 }
 
-/**
- * What a pooled player is bound to. A slot is reused only for an equal [request] (location, headers, mime, separate
- * audio, subtitles and cache choice alike); [cacheKey] names the stream's bytes in the shared cache, which depend on
- * its location and headers alone ([videoCacheKey]).
- */
-data class VideoPlaybackIdentity(
-    val request: VideoPlaybackRequest,
-    val cacheKey: String,
-)
-
 /** Immutable shared policy; each player receives a fresh state-owning LoadControl instance. */
 internal object VideoLoadControlFactory {
     fun create(profile: VideoPlaybackProfile): LoadControl {
@@ -175,7 +165,7 @@ class VideoPlaybackInfrastructure(
      * Binds a player's media to [request]: its location and mime choose a progressive, HLS or DASH source; its headers go
      * on every request the stream causes (playlists, segments, keys, separate audio and subtitles), across redirects;
      * its separate audio and subtitles are merged in ([StreamMediaSourceFactory]). Only a request that
-     * [usesSharedCache] reads and writes the shared cache, under its identity. [boundedLocks] is for players that keep
+     * [usesSharedCache] reads and writes the shared cache, under its [videoCacheKey]. [boundedLocks] is for players that keep
      * loading while another reader may want the same stream (a feed card behind the Viewer): each of their requests
      * locks at most a chunk of it.
      */
@@ -183,7 +173,6 @@ class VideoPlaybackInfrastructure(
         request: VideoPlaybackRequest,
         boundedLocks: Boolean = false,
     ): BoundVideoPlaybackRequest {
-        val identity = VideoPlaybackIdentity(request, videoCacheKey(request.location, request.headers))
         val cached = request.usesSharedCache()
         val upstream = requestScopedHttp(request.headers)
         val dataSourceFactory = if (cached) {
@@ -195,11 +184,11 @@ class VideoPlaybackInfrastructure(
         val mediaItem = MediaItem.Builder()
             .setUri(videoLocationToUri(request.location))
             .setMimeType(streamMimeType(request.mime))
-            .setCustomCacheKey(identity.cacheKey.takeIf { cached })
+            .setCustomCacheKey(if (cached) videoCacheKey(request.location, request.headers) else null)
             .setTag(separateAudio.takeIf { it.isNotEmpty() }?.let { tracks -> SeparateAudioLabels(tracks.map { it.label }) })
             .build()
         return BoundVideoPlaybackRequest(
-            identity = identity,
+            request = request,
             mediaSourceFactory = StreamMediaSourceFactory(dataSourceFactory, separateAudio, request.subtitles.filter { it.url.isNotBlank() }),
             mediaItem = mediaItem,
         )
@@ -395,8 +384,12 @@ private suspend fun CacheWriter.cacheCancellable() {
     }
 }
 
+/**
+ * A [request] made playable: [mediaSourceFactory] builds its source from [mediaItem]. Pools reuse a player's slot only
+ * for an equal [request] (location, headers, mime, separate audio, subtitles and cache choice alike).
+ */
 data class BoundVideoPlaybackRequest(
-    val identity: VideoPlaybackIdentity,
+    val request: VideoPlaybackRequest,
     val mediaSourceFactory: MediaSource.Factory,
     val mediaItem: MediaItem,
 )
