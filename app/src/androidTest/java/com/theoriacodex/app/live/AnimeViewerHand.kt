@@ -1,0 +1,162 @@
+package com.theoriacodex.app.live
+
+import android.os.SystemClock
+import android.view.accessibility.AccessibilityNodeInfo
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.BySelector
+import androidx.test.uiautomator.StaleObjectException
+import androidx.test.uiautomator.Until
+import java.util.regex.Pattern
+
+/**
+ * The hand the anime live tests share, on top of [SeriesLiveDriver]: it turns an extension on, opens a series, and
+ * watches through the Viewer by its screen and by the player state the target's media session reports to the system,
+ * so it works on the minified acceptance build as well as on this debug app.
+ */
+internal class AnimeViewerHand(val live: SeriesLiveDriver = SeriesLiveDriver()) {
+    val device = live.device
+    private val arguments = InstrumentationRegistry.getArguments()
+
+    fun argument(name: String): String = checkNotNull(arguments.getString(name)) { "Pass -e $name" }
+
+    /** Turns [extension] on in the Extensions page unless it is on already, accepting the trust question. */
+    fun turnOn(extension: String) {
+        live.tap("the Extensions button", By.desc("Extensions"))
+        val switch = By.checkable(true).hasDescendant(By.desc(extension))
+        if (live.waitFor("$extension's switch", switch).isChecked) {
+            live.report("extension", "$extension was on already")
+        } else {
+            live.tap("$extension's switch", switch)
+            live.tap("Turn on", By.text("Turn on"))
+            live.waitFor("the switch to read as on", switch.checked(true), SeriesLiveDriver.RESULTS_TIMEOUT_MS)
+            live.report("extension", "turned $extension on")
+        }
+        device.pressBack()
+        live.waitFor("the Series tab's sources", By.text("Browse"), SeriesLiveDriver.RESULTS_TIMEOUT_MS)
+    }
+
+    /** Searches the Series tab for [query] and opens the first series whose title holds it; returns that title. */
+    fun openSeries(query: String): String {
+        val field = live.waitFor("the search field", By.clazz(EDIT_TEXT))
+        field.text = query
+        field.click()
+        device.pressEnter()
+        val matching = By.text(Pattern.compile("(?i).*${Pattern.quote(query)}.*")).clazz(NOT_EDIT_TEXT)
+        val result = live.waitFor("a series titled like \"$query\"", matching, SeriesLiveDriver.RESULTS_TIMEOUT_MS)
+        val title = result.text
+        result.click()
+        return title
+    }
+
+    /** Opens the series [query] finds from a fresh Series tab and starts or continues it; returns its title and episode. */
+    fun startWatching(query: String): Pair<String, String> {
+        live.openSeriesTab()
+        val title = openSeries(query)
+        live.tap("the button that starts watching", By.text(WATCH_BUTTON), SeriesLiveDriver.RESULTS_TIMEOUT_MS)
+        return title to episodeOnScreen(title)
+    }
+
+    /** The episode the Viewer's title names, read as "series · episode"; a title replaced as it is read is read again. */
+    fun episodeOnScreen(title: String): String = fresh {
+        live.viewerControl("the episode's name as the Viewer's title", By.textStartsWith("$title · "), PLAYBACK_TIMEOUT_MS).text.removePrefix("$title · ")
+    }
+
+    /** The stream the Viewer's pill names: the text of its one node, described "Stream". */
+    fun streamOnScreen(): String {
+        val node = fresh { live.viewerControl("the stream pill", By.desc(STREAM)).accessibilityNodeInfo }
+        return checkNotNull(node.text?.toString()) { "The stream pill names no stream" }
+    }
+
+    /** The track the Viewer's [description] button ("Subtitles" or "Audio") names as its state. */
+    fun trackOnScreen(description: String): String {
+        val node = fresh { live.viewerControl("the $description button", By.desc(description)).accessibilityNodeInfo }
+        return checkNotNull((node.stateDescription ?: node.parent?.stateDescription)?.toString()) { "$description names no track" }
+    }
+
+    /**
+     * Presses one of the Viewer's controls by an accessibility click on the node that takes it, which the controls
+     * hiding a moment later cannot swallow as they can a tap. A click refused because they hid as it arrived was not
+     * delivered, so it is tried again.
+     */
+    fun press(what: String, selector: BySelector) {
+        repeat(PRESS_TRIES) {
+            val node = fresh { live.viewerControl(what, selector).accessibilityNodeInfo }
+            val target = generateSequence(node) { it.parent }.firstOrNull { it.isClickable }
+            if (target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) return
+        }
+        error("$what refused $PRESS_TRIES presses")
+    }
+
+    /** What [read] takes from the Viewer's controls, read again when they hide while it reads. */
+    private fun <T> fresh(read: () -> T): T {
+        repeat(PRESS_TRIES - 1) {
+            try {
+                return read()
+            } catch (_: StaleObjectException) {
+                // The controls hid as they were read; looking them up again brings them back.
+            }
+        }
+        return read()
+    }
+
+    /** Leaves the Viewer for the series page. */
+    fun leaveViewer() {
+        device.pressBack()
+        if (device.wait(Until.hasObject(By.text(EPISODE_COUNT)), SeriesLiveDriver.SHORT_WAIT_MS) != true) device.pressBack()
+    }
+
+    /** The playback position once it satisfies [done]. */
+    fun awaitPosition(what: String, done: (Long) -> Boolean): Long = awaitPlayback(what) { done(it.positionMs) }.positionMs
+
+    fun awaitPlayback(what: String, done: (Playback) -> Boolean): Playback {
+        val deadline = System.currentTimeMillis() + PLAYBACK_TIMEOUT_MS
+        var last: Playback? = null
+        while (System.currentTimeMillis() < deadline) {
+            last = playback() ?: last
+            if (last != null && done(last)) return last
+            Thread.sleep(SeriesLiveDriver.POLL_MS)
+        }
+        error("Timed out waiting for $what; last playback: $last; on screen: ${live.screenText()}")
+    }
+
+    /**
+     * What the target's player is doing, as its media session last told the system: the position it reported, carried
+     * forward by the time since while it plays. Null before the Viewer opens a session.
+     */
+    fun playback(): Playback? {
+        val sessions = device.executeShellCommand("dumpsys media_session").substringAfter("package=${live.targetPackage}\n", "")
+        val (state, position, speed, updated) = SESSION_STATE.find(sessions)?.destructured ?: return null
+        val moved = if (state == PLAYING) (SystemClock.elapsedRealtime() - updated.toLong()) * speed.toFloat() else 0f
+        return Playback(state, position.toLong() + moved.toLong())
+    }
+
+    /** When, in wall-clock milliseconds, the app logged starting each episode lookup since [sinceMs]. */
+    fun lookupsSince(sinceMs: Long): List<Long> = device.executeShellCommand("logcat -d -v epoch -s SeriesReader:I")
+        .lines()
+        .filter { it.endsWith("Looking up an episode") }
+        .mapNotNull { it.trim().substringBefore(' ').toDoubleOrNull()?.let { seconds -> (seconds * 1000).toLong() } }
+        .filter { it >= sinceMs }
+
+    data class Playback(val state: String, val positionMs: Long)
+
+    companion object {
+        const val EXTENSION_NAME = "extensionName"
+        const val SERIES_QUERY = "seriesQuery"
+        const val STREAM = "Stream"
+        const val PLAYING = "PLAYING"
+        const val EDIT_TEXT = "android.widget.EditText"
+        private val NOT_EDIT_TEXT: Pattern = Pattern.compile("^(?!${Pattern.quote(EDIT_TEXT)}$).*")
+        val EPISODE_COUNT: Pattern = Pattern.compile("(.+ · )?\\d+ episodes?")
+        val WATCH_BUTTON: Pattern = Pattern.compile("Start|Continue · .*")
+
+        /** An episode's lookup can take about 35 s for some extensions, and its stream must then buffer. */
+        const val PLAYBACK_TIMEOUT_MS = 90_000L
+        const val PRESS_TRIES = 3
+
+        /** A session's line in `dumpsys media_session`: "state=PlaybackState {state=PLAYING(3), position=…, …, speed=1.0, updated=…". */
+        val SESSION_STATE = Regex("""state=PlaybackState \{state=(\w+)\(\d+\), position=(-?\d+), .*?speed=(-?[\d.]+), updated=(\d+)""")
+
+        fun Long.seconds() = this / 1000
+    }
+}
