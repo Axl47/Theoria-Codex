@@ -188,6 +188,19 @@ class ViewerVerticalGalleryTest {
         assertEquals(10, state.value.currentPage?.selectedMediaIndex)
     }
 
+    @Test fun `pages resizing as they load leave the selected page alone`() {
+        // Unloaded pages borrow the post's tall shape; once loaded they are wide, which slides another page under the line.
+        val land = installGatedLoader(width = 300, height = 100)
+        show()
+        compose.runOnIdle { state.value = reduceViewerState(state.value, ViewerAction.SelectMedia(3)).state }
+        compose.waitForIdle()
+        actions.clear()
+        compose.runOnIdle { land() }
+        compose.waitForIdle()
+        assertEquals(emptyList<ViewerAction>(), actions.filterIsInstance<ViewerAction.SelectMedia>())
+        assertEquals(3, state.value.currentPage?.selectedMediaIndex)
+    }
+
     @Test fun `a narrower screen pulls a zoomed pan back inside the pages`() {
         val zoomed = ViewerVerticalGalleryState(LazyListState()).apply {
             resize(2400)
