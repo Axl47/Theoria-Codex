@@ -208,7 +208,10 @@ private fun ViewerVideoBinding(
     events: ViewerRendererEvents,
     recovery: ViewerVideoRecovery,
     start: ViewerVideoStart,
-    /** Hears where the player stopped as it lets go, how long its video is (unset while unknown), and whether it ended. */
+    /**
+     * Hears where the player stopped as it lets go, how long its video is (unset while unknown), and whether it ended;
+     * only from a player that got to a position ([ViewerStartedPlayback.atPosition]).
+     */
     onRelease: (positionMs: Long, durationMs: Long, ended: Boolean) -> Unit,
 ) {
     val context = LocalContext.current
@@ -223,7 +226,7 @@ private fun ViewerVideoBinding(
         val lease = pool.acquire(playback, loop = controls.loopPlayback)
         val player = lease.player
         // Read after the previous binding's disposal has saved its final position.
-        val startCheck = start.applyTo(player)
+        val started = start.applyTo(player)
         player.playbackParameters = PlaybackParameters(controls.playbackRate)
         val listener = viewerVideoListener(player, state, recovery) { latestEvents }
         val seeks = ViewerSeekCounter({ state.scrubbing }) { state.seeks += 1 }
@@ -232,8 +235,10 @@ private fun ViewerVideoBinding(
         state.player = player
         state.setPlaying(controls.isActive && controls.isPlaying)
         onDispose {
-            latestOnRelease(player.currentPosition.coerceAtLeast(0L), player.duration, player.playbackState == Player.STATE_ENDED)
-            startCheck?.let(player::removeListener)
+            if (started.atPosition) {
+                latestOnRelease(player.currentPosition.coerceAtLeast(0L), player.duration, player.playbackState == Player.STATE_ENDED)
+            }
+            player.removeListener(started)
             player.removeListener(seeks)
             player.removeListener(listener)
             state.actuallyPlaying = false
@@ -364,22 +369,45 @@ private class ViewerVideoStart(
     private val resume: () -> Long,
     private val startsOver: (positionMs: Long, durationMs: Long) -> Boolean,
 ) {
-    /** Seeks [player]; returns the listener still waiting for the duration, to remove on release, or null. */
-    fun applyTo(player: Player): Player.Listener? {
-        val resumeMs = resume().takeIf { it > 0L } ?: return null
-        player.seekTo(resumeMs)
-        // The duration is negative (unset) until the timeline is known.
-        fun settled(): Boolean {
-            val durationMs = player.duration.takeIf { it > 0L } ?: return false
-            if (startsOver(resumeMs, durationMs)) player.seekTo(0L)
-            return true
+    /** Seeks [player]; the listener it returns, to remove on release, follows whether the player got there. */
+    fun applyTo(player: Player): ViewerStartedPlayback =
+        ViewerStartedPlayback(player, resume().coerceAtLeast(0L), startsOver).also(player::addListener)
+}
+
+/**
+ * Whether a player started at [resumeMs] has been [atPosition]: its start applied (a resume settled once the duration
+ * was known) and a frame rendered. Only then does its release report where it stopped: a player let go of before
+ * that, rebuilt or short-lived, still stands at its unplayed start and would write it over the real position.
+ */
+private class ViewerStartedPlayback(
+    private val player: Player,
+    private val resumeMs: Long,
+    private val startsOver: (positionMs: Long, durationMs: Long) -> Boolean,
+) : Player.Listener {
+    private var settled = resumeMs == 0L
+    private var rendered = false
+    val atPosition get() = settled && rendered
+
+    init {
+        if (!settled) {
+            player.seekTo(resumeMs)
+            settle()
         }
-        if (settled()) return null
-        return object : Player.Listener {
-            override fun onTimelineChanged(timeline: Timeline, reason: Int) {
-                if (settled()) player.removeListener(this)
-            }
-        }.also(player::addListener)
+    }
+
+    // The duration is negative (unset) until the timeline is known.
+    private fun settle() {
+        val durationMs = player.duration.takeIf { it > 0L } ?: return
+        if (startsOver(resumeMs, durationMs)) player.seekTo(0L)
+        settled = true
+    }
+
+    override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+        if (!settled) settle()
+    }
+
+    override fun onRenderedFirstFrame() {
+        rendered = true
     }
 }
 
