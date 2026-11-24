@@ -15,6 +15,7 @@ import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -28,6 +29,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -43,7 +45,7 @@ class SeriesDownloadsTest {
 
     private val chapters = (3 downTo 1).mapIndexed { order, number -> chapter(number, order) }
 
-    @Test fun `deleting a chapter or a series leaves the rest`() = runTest {
+    @Test fun `deleting a chapter or a series leaves the rest (ADR 0027)`() = runTest {
         val harness = Harness(this)
         val other = SeriesId(source, "/title/2")
         listOf(id to "/c1", id to "/c2", other to "/c1").forEach { (series, address) -> harness.store.saveChapter(series, address) }
@@ -55,7 +57,7 @@ class SeriesDownloadsTest {
         assertEquals(setOf("/c1"), Harness(this).downloads.downloaded(other))
     }
 
-    @Test fun `the files decide what is downloaded whatever the database or a lost queue says`() = runTest {
+    @Test fun `the files decide what is downloaded whatever the database or a lost queue says (ADR 0027, 0028)`() = runTest {
         val harness = Harness(this)
         assertEquals(emptyMap<String, ChapterDownload>(), harness.downloads.states(id).first())
 
@@ -83,7 +85,7 @@ class SeriesDownloadsTest {
         assertEquals("https://cover.test/1.jpg#loadable", saved.preview.url)
     }
 
-    @Test fun `a page whose address names no type is saved under the type its fetch found`() = runTest {
+    @Test fun `a page whose address names no type is saved under the type its fetch found (ADR 0022)`() = runTest {
         val harness = Harness(this)
         harness.downloads.download(id, listOf("/c1"))
         harness.downloads.drain(automatic = false)
@@ -93,7 +95,7 @@ class SeriesDownloadsTest {
         assertTrue(pages.all { checkNotNull(it.localPath).endsWith(".png") })
     }
 
-    @Test fun `a chapter already kept offline, such as in a Codex, is not fetched again`() = runTest {
+    @Test fun `a chapter already kept offline, such as in a Codex, is not fetched again (ADR 0027)`() = runTest {
         val harness = Harness(this)
         val pages = twoPages(chapters.last().entry)
         val post = chapterPost(Series(id, "Title"), chapters.last().entry, null, pages)
@@ -121,7 +123,7 @@ class SeriesDownloadsTest {
         assertFalse(root().walk().any { it.name.startsWith(".pending-") })
     }
 
-    @Test fun `a page is tried a bounded number of times and a failure that may pass keeps the chapter and holds its source`() = runTest {
+    @Test fun `a page is tried a bounded number of times and a failure that may pass keeps the chapter and holds its source (ADR 0027)`() = runTest {
         val harness = Harness(this)
         val attempts = mutableMapOf<String, Int>()
         harness.onFetch = { url ->
@@ -140,7 +142,7 @@ class SeriesDownloadsTest {
         assertFalse(root().walk().any { it.name.startsWith(".pending-") })
     }
 
-    @Test fun `a source that is off holds only its own chapters, which the drain reports as waiting`() = runTest {
+    @Test fun `a source that is off holds only its own chapters, which the drain reports as waiting (ADR 0027)`() = runTest {
         val elsewhere = SeriesId(SourceKey.parseOrThrow("custom_mihon_8"), "/title/2")
         val harness = Harness(this, others = listOf(StoredSeries(Series(elsewhere, "Other"))))
         harness.off = setOf(source)
@@ -174,7 +176,7 @@ class SeriesDownloadsTest {
         watching.cancel()
     }
 
-    @Test fun `an unavailable chapter leaves the queue and the lane goes on`() = runTest {
+    @Test fun `an unavailable chapter leaves the queue and the lane goes on (ADR 0027)`() = runTest {
         val harness = Harness(this)
         harness.onFetch = { url -> if ("/c1/" in url) throw ChapterUnavailable("Gone") }
         harness.downloads.download(id, listOf("/c1", "/c9", "/c2"))
@@ -211,7 +213,7 @@ class SeriesDownloadsTest {
         assertTrue(harness.fetched.none { "video.test" in it })
     }
 
-    @Test fun `delete after reading removes read chapters except where the series was last opened, also at start`() = runTest {
+    @Test fun `delete after reading removes read chapters except where the series was last opened, also at start (ADR 0027)`() = runTest {
         val entries = (3 downTo 1).mapIndexed { order, number -> chapter(number, order, read = number != 3) }
         val stored = StoredSeries(Series(id, "Title"), lastOpenedEntry = "/c2")
         listOf("/c1", "/c2", "/c3").forEach { address -> store().saveChapter(id, address) }
@@ -231,7 +233,49 @@ class SeriesDownloadsTest {
         assertEquals(DrainResult(downloaded = 1), restarted.downloads.drain(automatic = false))
     }
 
-    @Test fun `a chapter fetched while every offline copy is removed is not kept, and stays queued unless cancelled first`() = runTest {
+    @Test fun `queuing a chapter finishes even when its caller is cancelled (ADR 0027)`() = runTest {
+        val harness = Harness(this)
+
+        launch(start = CoroutineStart.UNDISPATCHED) { harness.downloads.download(id, listOf("/c1")) }.cancel()
+        advanceUntilIdle()
+
+        assertEquals(listOf("schedule user"), harness.scheduled)
+        assertEquals(DrainResult(downloaded = 1), Harness(this).downloads.drain(automatic = false))
+    }
+
+    @Test fun `deleting a chapter, a series or the whole queue finishes even when its caller is cancelled (ADR 0027)`() = runTest {
+        val harness = Harness(this)
+        val other = SeriesId(source, "/title/2")
+        listOf(id to "/c1", id to "/c2", other to "/c1").forEach { (series, address) -> harness.store.saveChapter(series, address) }
+        fun cancelled(block: suspend () -> Unit) = launch(start = CoroutineStart.UNDISPATCHED) { block() }.cancel()
+
+        cancelled { harness.downloads.delete(id, "/c1") }
+        advanceUntilIdle()
+        assertEquals(setOf("/c2"), harness.downloads.downloaded(id))
+        cancelled { harness.downloads.deleteSeries(id) }
+        advanceUntilIdle()
+        assertEquals(emptySet<String>(), harness.downloads.downloaded(id))
+        harness.downloads.download(id, listOf("/c3"))
+        val reopened = Harness(this)
+        launch(start = CoroutineStart.UNDISPATCHED) { reopened.downloads.delete(other, "/c9") }
+        cancelled { reopened.downloads.cancelAll() }
+        advanceUntilIdle()
+        assertEquals(emptySet<Boolean>(), reopened.downloads.queuedLanes().first())
+        assertEquals(DrainResult(downloaded = 0), Harness(this).downloads.drain(automatic = false))
+        assertEquals(setOf("/c1"), harness.downloads.downloaded(other))
+    }
+
+    @Test fun `a queued chapter whose source this build cannot read is dropped and the rest load (ADR 0027)`() = runTest {
+        Harness(this).downloads.download(id, listOf("/c1"))
+        val queue = folder.root.resolve("queue.json")
+        val unreadable = """{"source":"not a source","series":"/title/9","entry":"/c9"},"""
+        queue.writeText(queue.readText().replaceFirst("{\"source\"", unreadable + "{\"source\""))
+        assertTrue(queue.readText().contains("not a source"))
+
+        assertEquals(DrainResult(downloaded = 1), Harness(this).downloads.drain(automatic = false))
+    }
+
+    @Test fun `a chapter fetched while every offline copy is removed is not kept, and stays queued unless cancelled first (ADR 0027)`() = runTest {
         val harness = Harness(this)
         val held = CompletableDeferred<Unit>()
         harness.onFetch = { url -> if ("/c1/" in url) held.await() }
@@ -250,7 +294,7 @@ class SeriesDownloadsTest {
         assertEquals(DrainResult(downloaded = 0), harness.downloads.drain(automatic = false))
     }
 
-    @Test fun `each lane has its own job, and a running one never holds back the other`() = runTest {
+    @Test fun `each lane has its own job, and a running one never holds back the other (ADR 0027)`() = runTest {
         val harness = Harness(this)
         val held = CompletableDeferred<Unit>()
         harness.onFetch = { url -> if ("/c1/" in url) held.await() }
@@ -266,7 +310,22 @@ class SeriesDownloadsTest {
         assertEquals(DrainResult(downloaded = 1), harness.downloads.drain(automatic = true))
     }
 
-    @Test fun `lanes are scheduled again when the sources change, and the user's lane, draining too, when the network settings do`() = runTest {
+    @Test fun `the two lanes never fetch at the same time (ADR 0027)`() = runTest {
+        val harness = Harness(this)
+        val held = CompletableDeferred<Unit>()
+        harness.onFetch = { url -> if ("/c1/" in url) held.await() }
+        harness.downloads.download(id, listOf("/c1"))
+        harness.downloads.download(id, listOf("/c2"), automatic = true)
+        val user = async { harness.downloads.drain(automatic = false) }
+        val automatic = async { harness.downloads.drain(automatic = true) }
+        advanceUntilIdle()
+
+        assertEquals(emptyList<String>(), harness.fetched)
+        held.complete(Unit)
+        assertEquals(DrainResult(downloaded = 1) to DrainResult(downloaded = 1), user.await() to automatic.await())
+    }
+
+    @Test fun `lanes are scheduled again when the sources change, and the user's lane, draining too, when the network settings do (ADR 0027, 0028)`() = runTest {
         val harness = Harness(this)
         val sources = MutableStateFlow(1)
         val network = MutableStateFlow(false)
@@ -301,7 +360,7 @@ class SeriesDownloadsTest {
         user.await()
     }
 
-    @Test fun `a replaced drain stops without dropping its chapter, and leaves the lane to the drain that replaced it`() = runTest {
+    @Test fun `a replaced drain stops without dropping its chapter, and leaves the lane to the drain that replaced it (ADR 0027, 0028)`() = runTest {
         val harness = Harness(this)
         val held = CompletableDeferred<Unit>()
         harness.onFetch = { url -> if ("/c1/" in url) held.await() }
@@ -323,7 +382,7 @@ class SeriesDownloadsTest {
         assertFalse(root().walk().any { it.name.startsWith(".pending-") })
     }
 
-    @Test fun `new chapters download by themselves only for a followed series set to`() = runTest {
+    @Test fun `new chapters download by themselves only for a followed series set to (ADR 0027)`() = runTest {
         val update = SeriesUpdate(Series(id, "Title"), listOf(SeriesEntry("/c3", "Ch. 3"), SeriesEntry("/c2", "Ch. 2")))
         val off = Harness(this, StoredSeries(Series(id, "Title"), followed = true))
         off.downloads.downloadNew(update)
@@ -335,7 +394,7 @@ class SeriesDownloadsTest {
         assertEquals(listOf("/c2", "/c2", "/c3", "/c3"), on.fetched.map { it.substringBeforeLast('/').removePrefix(PAGES) })
     }
 
-    @Test fun `new episodes never download, whatever the anime's setting says`() = runTest {
+    @Test fun `new episodes never download, whatever the anime's setting says (ADR 0027)`() = runTest {
         val anime = Series(SeriesId(SourceKey.parseOrThrow("custom_aniyomi_7"), "/anime/1"), "Anime")
         val harness = Harness(this, StoredSeries(anime, followed = true, downloadNewChapters = true))
 
@@ -399,6 +458,7 @@ class SeriesDownloadsTest {
             },
             scheduler = object : DownloadScheduler {
                 override suspend fun schedule(automatic: Boolean) {
+                    yield()
                     scheduled += "schedule ${if (automatic) "automatic" else "user"}"
                 }
 

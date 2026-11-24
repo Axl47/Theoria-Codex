@@ -90,7 +90,7 @@ internal class FileBackedQueryRepositoryTest : FileBackedRepositoryTestFixture()
     }
 
     @Test
-    fun `verified query quarantine is rediscovered after process restart`() = runTest {
+    fun `verified query quarantine is rediscovered after process restart (ADR 0032)`() = runTest {
         val dir = tempDir("legacy-json-recovery-restart-")
         val original = "{broken-query".toByteArray()
         dir.resolve("query_store.json").writeBytes(original)
@@ -147,7 +147,7 @@ internal class FileBackedQueryRepositoryTest : FileBackedRepositoryTestFixture()
     }
 
     @Test
-    fun `query repository falls back when persisted source or sort is unknown`() = runTest {
+    fun `query repository falls back when persisted source or sort is unknown (ADR 0038)`() = runTest {
         val dir = tempDir("query-unknown-enums-")
         dir.resolve("query_store.json").writeText(
             """

@@ -15,7 +15,7 @@ import org.junit.Test
 
 class SiteProfileRecordsTest {
     @Test
-    fun `records round trip every profile field through JSON without credentials`() {
+    fun `records round trip every profile field through JSON without credentials (ADR 0024, 0031)`() {
         val original = profile("https://booru.example:8443/board", familyId = "DANBOORU").copy(
             searchTermLimit = 2,
             headers = SiteHeaders(userAgent = "Theoria/1", referer = "https://booru.example/"),
@@ -41,7 +41,7 @@ class SiteProfileRecordsTest {
     }
 
     @Test
-    fun `invalid records decode to null`() {
+    fun `invalid records decode to null (ADR 0031)`() {
         val valid = SiteProfileRecord.fromDomain(profile("safebooru.org"))
 
         listOf(
@@ -57,7 +57,7 @@ class SiteProfileRecordsTest {
     }
 
     @Test
-    fun `in-memory repository enforces identity, the site limit and restore semantics`() = runTest {
+    fun `in-memory repository enforces identity, the site limit and restore semantics (ADR 0035)`() = runTest {
         val repository = InMemorySiteProfileRepository()
         val first = profile("safebooru.org")
 

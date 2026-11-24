@@ -4,9 +4,12 @@ import com.theoriacodex.data.storage.withDataStoreScope
 import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.data.storage.assertStoredFormat
 import java.nio.file.Files
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -14,7 +17,7 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProfileDeletionServiceTest {
-    @Test fun `retired profile checks execute inside Settings writes without affecting another profile`() = runTest {
+    @Test fun `retired profile checks execute inside Settings writes without affecting another profile (ADR 0026)`() = runTest {
         val directory = Files.createTempDirectory("retired-profile-settings").toFile()
         try {
             withDataStoreScope { scope ->
@@ -71,7 +74,67 @@ class ProfileDeletionServiceTest {
         } finally { directory.deleteRecursively() }
     }
 
-    @Test fun `capacity preflight and invalid durable intent fail before library mutation`() = runTest {
+    @Test fun `a caller that leaves after the intent is admitted still removes the profile (ADR 0026)`() = runTest {
+        val directory = Files.createTempDirectory("profile-deletion-cancelled").toFile()
+        try {
+            val settings = InMemorySettingsRepository()
+            val profile = settings.addRecommendationProfile("Remove")
+            val removing = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            val stored = InMemoryCodexLikesTransactions()
+            val library = object : CodexLikesTransactions by stored {
+                override suspend fun removeProfileLibrary(profileId: String) {
+                    removing.complete(Unit)
+                    release.await()
+                    stored.removeProfileLibrary(profileId)
+                }
+            }
+            val journal = directory.resolve("intent.json")
+            val dispatcher = StandardTestDispatcher(testScheduler)
+            val owner = ProfileDeletionService(settings, library, journal, ProfileLibraryWriteGuard(),
+                AtomicJsonFileStore(ioDispatcher = dispatcher), dispatcher)
+            val caller = launch { owner.removeProfile(profile.profileId) }
+            removing.await()
+            caller.cancel()
+            release.complete(Unit)
+            advanceUntilIdle()
+            assertTrue(settings.observeSettings().first().recommendationProfiles.none { it.profileId == profile.profileId })
+            assertFalse(journal.exists())
+        } finally { directory.deleteRecursively() }
+    }
+
+    @Test fun `a startup recovery whose caller leaves partway still finishes the removal (ADR 0026)`() = runTest {
+        val directory = Files.createTempDirectory("profile-deletion-recovery").toFile()
+        try {
+            val profileId = "p&<a>='b'"
+            val settings = InMemorySettingsRepository()
+            settings.updateSettings { it.copy(recommendationProfiles = it.recommendationProfiles + RecommendationProfile(profileId, "Removed")) }
+            val removing = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            val stored = InMemoryCodexLikesTransactions()
+            val library = object : CodexLikesTransactions by stored {
+                override suspend fun removeProfileLibrary(profileId: String) {
+                    removing.complete(Unit)
+                    release.await()
+                    stored.removeProfileLibrary(profileId)
+                }
+            }
+            val journal = directory.resolve("intent.json")
+            journal.writeText(golden("gson-written.json"))
+            val dispatcher = StandardTestDispatcher(testScheduler)
+            val owner = ProfileDeletionService(settings, library, journal, ProfileLibraryWriteGuard(),
+                AtomicJsonFileStore(ioDispatcher = dispatcher), dispatcher)
+            val caller = launch { owner.recoverPendingDeletion() }
+            removing.await()
+            caller.cancel()
+            release.complete(Unit)
+            advanceUntilIdle()
+            assertTrue(settings.observeSettings().first().recommendationProfiles.none { it.profileId == profileId })
+            assertFalse(journal.exists())
+        } finally { directory.deleteRecursively() }
+    }
+
+    @Test fun `capacity preflight and invalid durable intent fail before library mutation (ADR 0026)`() = runTest {
         val directory = Files.createTempDirectory("profile-deletion").toFile()
         try {
             val settings = InMemorySettingsRepository()
@@ -88,7 +151,7 @@ class ProfileDeletionServiceTest {
         } finally { directory.deleteRecursively() }
     }
 
-    @Test fun `a journal the Gson store wrote resumes the same removal`() = runTest {
+    @Test fun `a journal the Gson store wrote resumes the same removal (ADR 0026)`() = runTest {
         val directory = Files.createTempDirectory("profile-deletion").toFile()
         try {
             val profileId = "p&<a>='b'"
@@ -111,11 +174,11 @@ class ProfileDeletionServiceTest {
         } finally { directory.deleteRecursively() }
     }
 
-    @Test fun `the profile removal journal golden pins every stored key`() {
+    @Test fun `the profile removal journal golden pins every stored key (ADR 0026)`() {
         assertStoredFormat(golden("gson-written.json") to ProfileDeletionJournal(1, "p&<a>='b'"))
     }
 
-    @Test fun `a journal from a newer or damaged writer is kept and never acted on`() = runTest {
+    @Test fun `a journal from a newer or damaged writer is kept and never acted on (ADR 0026)`() = runTest {
         val directory = Files.createTempDirectory("profile-deletion").toFile()
         try {
             val library = InMemoryCodexLikesTransactions()

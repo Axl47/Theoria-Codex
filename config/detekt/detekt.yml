@@ -95,3 +95,9 @@ theoria:
   CancellationCatchRule:
     active: true
     excludes: ['**/CoroutineResults.kt']
+  StoredJsonUsesDurableJsonRule:
+    active: true
+    excludes: ['**/DurableJson.kt', '**/core-sources/src/**', '**/extension-host/src/**', '**/app/src/releaseAcceptance/**']
+  DefaultedCoroutineScopeRule:
+    active: true
+    includes: ['**/core-data/src/main/**']
