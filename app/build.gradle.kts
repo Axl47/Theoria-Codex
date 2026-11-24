@@ -6,6 +6,7 @@ import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFile
+import org.gradle.api.tasks.InputFiles
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.PathSensitive
@@ -13,6 +14,9 @@ import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.testing.Test
 import java.awt.image.BufferedImage
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.util.zip.ZipFile
 import javax.imageio.ImageIO
 
 /**
@@ -132,6 +136,55 @@ abstract class VerifyPublicDeveloperCopyAbsentTask : DefaultTask() {
         check(!mappingFile.get().asFile.readText().contains("com.theoriacodex.app.developercopy.")) {
             "Public release compiled developer copy code"
         }
+    }
+}
+
+/**
+ * Fails when a packaged native library has a LOAD segment aligned below 16 KB. Android flags such an app (a debuggable
+ * build shows a dialog at launch) and a device with 16 KB pages may refuse to load the library. The libraries come from
+ * dependencies, so this catches a new or bumped one; zip alignment is AGP's and isn't checked here.
+ */
+abstract class VerifyNativePageAlignmentTask : DefaultTask() {
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val apkDirectory: DirectoryProperty
+
+    @TaskAction
+    fun verify() {
+        val misaligned = apkDirectory.get().asFileTree.matching { include("*.apk") }.flatMap { apk ->
+            ZipFile(apk).use { zip ->
+                zip.entries().asSequence()
+                    .filter { it.name.startsWith("lib/") && it.name.endsWith(".so") }
+                    .mapNotNull { entry ->
+                        val alignment = zip.getInputStream(entry).use { loadAlignments(it.readBytes()).min() }
+                        "${apk.name}!${entry.name} (${alignment / 1024} KB)".takeIf { alignment < PAGE_SIZE }
+                    }
+                    .toList()
+            }
+        }
+        check(misaligned.isEmpty()) {
+            "Native libraries aligned below 16 KB, which Android 16 flags and 16 KB-page devices may not load. " +
+                "Use a build linked for 16 KB pages (NDK r28+):\n" + misaligned.joinToString("\n")
+        }
+    }
+
+    /** The `p_align` of every PT_LOAD program header in a little-endian 64-bit ELF file. */
+    private fun loadAlignments(elf: ByteArray): List<Long> {
+        val bytes = ByteBuffer.wrap(elf).order(ByteOrder.LITTLE_ENDIAN)
+        check(bytes.getInt(0) == ELF_MAGIC && elf[4] == ELF_CLASS_64) { "Not a 64-bit ELF file" }
+        val headersAt = bytes.getLong(0x20).toInt()
+        val headerSize = bytes.getShort(0x36).toInt()
+        return (0 until bytes.getShort(0x38).toInt())
+            .map { headersAt + it * headerSize }
+            .filter { bytes.getInt(it) == PT_LOAD }
+            .map { bytes.getLong(it + 0x30) }
+    }
+
+    private companion object {
+        const val PAGE_SIZE = 16_384L
+        const val ELF_MAGIC = 0x464c457f // 0x7f "ELF", read little-endian
+        const val ELF_CLASS_64: Byte = 2
+        const val PT_LOAD = 1
     }
 }
 
@@ -346,6 +399,17 @@ androidComponents {
         if (variant.buildType in setOf("benchmarkPersonalRelease", "nonMinifiedPersonalRelease")) {
             variant.enable = false
         }
+    }
+    // Every assembled APK's native libraries must load with 16 KB pages; the pre-PR check assembles debug.
+    onVariants(selector().all()) { variant ->
+        val capitalizedVariant = variant.name.replaceFirstChar(Char::uppercaseChar)
+        val verification = tasks.register<VerifyNativePageAlignmentTask>(
+            "verify${capitalizedVariant}NativePageAlignment",
+        ) {
+            group = "verification"
+            apkDirectory.set(variant.artifacts.get(SingleArtifact.APK))
+        }
+        tasks.matching { it.name == "assemble$capitalizedVariant" }.configureEach { finalizedBy(verification) }
     }
     val deviceSafeApplicationIds = mapOf(
         "debug" to "com.theoriacodex.debug",
