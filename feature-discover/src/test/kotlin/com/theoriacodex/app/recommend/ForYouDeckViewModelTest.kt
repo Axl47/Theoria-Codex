@@ -16,6 +16,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +46,7 @@ class ForYouDeckViewModelTest {
     private val actions = FakeDeckActions()
     private val quickSave = FakeDeckQuickSave()
     private val verdicts = InMemoryForYouVerdictRepository()
+    private val clock = AtomicLong()
 
     @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
 
@@ -57,7 +59,8 @@ class ForYouDeckViewModelTest {
     }
 
     private fun owner(environment: ForYouEnvironment = deckEnvironment(), copiesOf: (Post) -> Set<PostId> = { setOf(it.id) }) =
-        ForYouDeckViewModel(engine, deckWiring(writeScope, trails, actions, quickSave, verdicts, copiesOf)).also { it.synchronize(environment) }
+        ForYouDeckViewModel(engine, deckWiring(writeScope, trails, actions, quickSave, verdicts, copiesOf, clock = clock::incrementAndGet))
+            .also { it.synchronize(environment) }
 
     private val ForYouDeckViewModel.top get() = levels.value.last()
     private val ForYouDeckViewModel.posts get() = top.feed.value.posts
@@ -457,7 +460,8 @@ class ForYouDeckViewModelTest {
 
     @Test fun `Start over deals a small source's skipped posts again, while Refresh keeps them out`() {
         val small = FakeForYouEngine(listOf("a"), pages = 1, pageSize = 4)
-        fun smallOwner() = ForYouDeckViewModel(small, deckWiring(writeScope, trails, actions, quickSave, verdicts)).also { it.synchronize(deckEnvironment()) }
+        fun smallOwner() = ForYouDeckViewModel(small, deckWiring(writeScope, trails, actions, quickSave, verdicts, clock = clock::incrementAndGet))
+            .also { it.synchronize(deckEnvironment()) }
         smallOwner().skip(4)
 
         val next = smallOwner()
@@ -473,8 +477,8 @@ class ForYouDeckViewModelTest {
         verdicts.record(ForYouVerdict(AppSettings().activeProfileId, lanePost("a", 0, 0).id, ForYouVerdictKind.SKIPPED, 1, null))
         var down = true
         val flaky = object : ForYouVerdictRepository by verdicts {
-            override suspend fun skippedSince(profileId: String, sinceEpochMs: Long, limit: Int) =
-                if (down) error("down") else verdicts.skippedSince(profileId, sinceEpochMs, limit)
+            override suspend fun skippedBetween(profileId: String, sinceEpochMs: Long, untilEpochMs: Long, limit: Int) =
+                if (down) error("down") else verdicts.skippedBetween(profileId, sinceEpochMs, untilEpochMs, limit)
         }
         val owner = ForYouDeckViewModel(engine, deckWiring(writeScope, trails, actions, quickSave, flaky)).also { it.synchronize(deckEnvironment()) }
         assertEquals("a-0-0", owner.current.id.sourcePostId)
@@ -487,9 +491,9 @@ class ForYouDeckViewModelTest {
         verdicts.record(ForYouVerdict(AppSettings().activeProfileId, lanePost("b", 0, 1).id, ForYouVerdictKind.SKIPPED, 1, null))
         val slow = CompletableDeferred<Unit>()
         val held = object : ForYouVerdictRepository by verdicts {
-            override suspend fun skippedSince(profileId: String, sinceEpochMs: Long, limit: Int): Set<PostId> {
+            override suspend fun skippedBetween(profileId: String, sinceEpochMs: Long, untilEpochMs: Long, limit: Int): Set<PostId> {
                 slow.await()
-                return verdicts.skippedSince(profileId, sinceEpochMs, limit)
+                return verdicts.skippedBetween(profileId, sinceEpochMs, untilEpochMs, limit)
             }
         }
         val owner = ForYouDeckViewModel(engine, deckWiring(writeScope, trails, actions, quickSave, held)).also { it.synchronize(deckEnvironment()) }
@@ -502,6 +506,27 @@ class ForYouDeckViewModelTest {
         owner.skip(2)
         assertEquals(8, owner.posts.size)
         assertFalse(lanePost("b", 0, 1) in owner.posts)
+    }
+
+    @Test fun `a skip undone while the skips are read is not kept out by the read`() = runTest {
+        val queried = CompletableDeferred<Unit>()
+        val landed = CompletableDeferred<Unit>()
+        val held = object : ForYouVerdictRepository by verdicts {
+            override suspend fun skippedBetween(profileId: String, sinceEpochMs: Long, untilEpochMs: Long, limit: Int): Set<PostId> {
+                queried.await()
+                return verdicts.skippedBetween(profileId, sinceEpochMs, untilEpochMs, limit).also { landed.await() }
+            }
+        }
+        val owner = ForYouDeckViewModel(engine, deckWiring(writeScope, trails, actions, quickSave, held)).also { it.synchronize(deckEnvironment()) }
+        testScheduler.advanceTimeBy(2_000)
+        testScheduler.runCurrent()
+        val undone = owner.decide(TriageChoice.Skip)
+        queried.complete(Unit)
+        owner.top.deck.undo()
+        landed.complete(Unit)
+
+        owner.rebuild()
+        assertTrue(undone in owner.posts)
     }
 
     @Test fun `a trail still offers posts skipped in an earlier session`() = runTest {
