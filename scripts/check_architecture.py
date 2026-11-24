@@ -256,6 +256,25 @@ def off_main_notes_run_where_work_runs() -> list[str]:
     )
 
 
+ROOM_DATABASE = "core-data-android/src/main/java/com/theoriacodex/data/android/room/TheoriaRoomDatabase.java"
+REGISTERED_MIGRATIONS = re.compile(r"Migration\[\]\s+MIGRATIONS\s*=\s*new\s+Migration\[\]\s*\{([^}]*)\}")
+
+
+@rule
+def room_migrations_have_host_tests() -> list[str]:
+    registry = REGISTERED_MIGRATIONS.search(read(ROOM_DATABASE))
+    names = re.findall(r"\bMIGRATION_\d+_\d+\b", registry.group(1)) if registry else []
+    if not names:
+        return [f"{ROOM_DATABASE} has no readable MIGRATIONS array (docs/adr/0012-room-explicit-migrations.md)"]
+    tests = "\n".join(path.read_text(encoding="utf-8") for path in sorted(ROOT.glob("core-data-android/src/test/**/*.kt")))
+    return [
+        f"{name} has no host test naming it in core-data-android/src/test; every schema bump adds a migration "
+        "and a test for it (docs/adr/0012-room-explicit-migrations.md)"
+        for name in names
+        if not re.search(rf"\b{name}\b", tests)
+    ]
+
+
 def main() -> int:
     failures = [failure for rule in RULES for failure in rule()]
     for failure in failures:

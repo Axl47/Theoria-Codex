@@ -137,5 +137,31 @@ class CoreDomainRulesTest(unittest.TestCase):
         )
 
 
+class RoomMigrationRuleTest(unittest.TestCase):
+    def test_reports_a_registered_migration_no_host_test_names_adr_0012(self) -> None:
+        self.assertIn(check_architecture.room_migrations_have_host_tests, check_architecture.RULES)
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            database = root / check_architecture.ROOM_DATABASE
+            database.parent.mkdir(parents=True)
+            database.write_text(
+                "public static final Migration MIGRATION_23_24 = new Migration(23, 24) {};\n"
+                "public static final Migration[] MIGRATIONS = new Migration[] {\n"
+                "        MIGRATION_22_23,\n        MIGRATION_23_24\n};\n",
+                encoding="utf-8",
+            )
+            host = root / "core-data-android/src/test/kotlin/RoomUpgradeJourneyTest.kt"
+            host.parent.mkdir(parents=True)
+            host.write_text("helper.runMigrationsAndValidate(name, 23, true, TheoriaRoomDatabase.MIGRATION_22_23)\n", encoding="utf-8")
+            device = root / "core-data-android/src/androidTest/kotlin/DeviceTest.kt"
+            device.parent.mkdir(parents=True)
+            device.write_text("TheoriaRoomDatabase.MIGRATION_23_24\n", encoding="utf-8")
+            with mock.patch.object(check_architecture, "ROOT", root):
+                failures = check_architecture.room_migrations_have_host_tests()
+                self.assertEqual(["MIGRATION_23_24"], [failure.split(" ", 1)[0] for failure in failures])
+                database.write_text("public static final Migration[] MIGRATIONS = new Migration[] {};\n", encoding="utf-8")
+                self.assertEqual(1, len(check_architecture.room_migrations_have_host_tests()))
+
+
 if __name__ == "__main__":
     unittest.main()
