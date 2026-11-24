@@ -34,7 +34,6 @@ dependencies {
     implementation(project(":core-domain"))
     implementation(project(":core-data"))
     // Aligns Coil's OkHttp with the version the rest of the app resolves.
-    implementation(project(":core-sources"))
     implementation(project(":ui-kit"))
     implementation(project(":media-kit"))
 
