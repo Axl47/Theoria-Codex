@@ -88,3 +88,4 @@ and link the record that replaces it.
 | [0207](0207-series-notifications.md) | Series notifications: one frozen channel, per-series tags, and a private trampoline |
 | [0208](0208-viewer-holds-back-while-closing.md) | The Viewer holds a Back pressed while it closes, and its dismissal never suspends |
 | [0211](0211-viewer-owns-keep-screen-on.md) | The Viewer owns keep-screen-on: the player's actual playback, reading and slideshow, counted by Compose |
+| [0212](0212-settings-and-tag-term-behaviour.md) | Settings navigation, the Series sheet, and how post tag chips are built |

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import pathlib
 import subprocess
 import sys
@@ -93,6 +94,41 @@ class RatchetTest(unittest.TestCase):
         problem = check_comments.check({}, {path: 1})[0]
         self.assertIn("banned", problem)
         self.assertIn(f"{path}:1: // new", problem)
+
+
+class RenameTest(unittest.TestCase):
+    def setUp(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(directory.name)
+        self.git("init", "-q")
+        pathlib.Path("Old.kt").write_text("// kept\nfun a() = 1\nfun b() = 2\nfun c() = 3\n", encoding="utf-8")
+        check_comments.BASELINE.parent.mkdir(parents=True)
+        check_comments.write_baseline({"Old.kt": 1})
+        self.git("add", ".")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base")
+        self.git("mv", "Old.kt", "New.kt")
+
+    def git(self, *args: str) -> None:
+        subprocess.run(["git", *args], check=True)
+
+    def test_finds_renames_against_the_base(self) -> None:
+        self.assertEqual(check_comments.renames("HEAD"), {"Old.kt": "New.kt"})
+
+    def test_moved_file_keeps_its_allowance_and_may_not_raise_it(self) -> None:
+        base = check_comments.carried({"Old.kt": 1}, check_comments.renames("HEAD"))
+        self.assertEqual(check_comments.check({"New.kt": 1}, {"New.kt": 1}, base), [])
+        self.assertIn("may only shrink", check_comments.check({"New.kt": 2}, {"New.kt": 2}, base)[0])
+        self.assertIn("may only shrink", check_comments.check({"Old.kt": 1, "New.kt": 1}, {"New.kt": 1}, base)[0])
+
+    def test_update_carries_an_allowance_across_two_renames(self) -> None:
+        check_comments.write_baseline({"New.kt": 1})
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "first move")
+        self.git("mv", "New.kt", "Final.kt")
+        script = str(SCRIPTS_DIR / "check_comments.py")
+        subprocess.run([sys.executable, script, "--update", "--base", "HEAD^"], check=True)
+        self.assertEqual(check_comments.read_baseline(), {"Final.kt": 1})
 
 
 if __name__ == "__main__":
