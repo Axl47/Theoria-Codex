@@ -1,5 +1,6 @@
 package com.theoriacodex.app.benchmark
 
+import android.graphics.Bitmap
 import android.os.Bundle
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -10,6 +11,7 @@ import androidx.lifecycle.ViewModelProvider
 import com.theoriacodex.app.appshell.AppShellViewModel
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import kotlinx.coroutines.launch
+import java.io.File
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -77,6 +79,7 @@ class BenchmarkFixtureActivity : ComponentActivity() {
         }
         if (scenario == SCENARIO_SEARCH_DURATION) BenchmarkDurationStartSignal.reset()
         val mediaUri = "android.resource://$packageName/${R.raw.benchmark_loop}".toUri().toString()
+        val chromePosts = if (scenario == SCENARIO_VIEWER_CHROME) chromePosts(mediaUri) else null
         setContent {
             TheoriaNightTheme {
                 when (scenario) {
@@ -89,6 +92,7 @@ class BenchmarkFixtureActivity : ComponentActivity() {
                         durationEnrichmentEnabled = true,
                     )
                     SCENARIO_VIEWER -> BenchmarkViewerFixture(mediaUri)
+                    SCENARIO_VIEWER_CHROME -> BenchmarkViewerFixture(mediaUri, chromePosts)
                     else -> error("Unknown benchmark fixture scenario: $scenario")
                 }
             }
@@ -116,7 +120,39 @@ class BenchmarkFixtureActivity : ComponentActivity() {
         const val SCENARIO_SEARCH = "search"
         const val SCENARIO_SEARCH_DURATION = "search_duration"
         const val SCENARIO_VIEWER = "viewer"
+        const val SCENARIO_VIEWER_CHROME = "viewer_chrome"
     }
+
+    private fun chromePosts(mediaUri: String): List<Post> {
+        val stills = List(CHROME_GALLERY_PAGES) { index -> solidStill("chrome_$index", CHROME_COLORS[index % CHROME_COLORS.size]) }
+        val video = benchmarkPosts("benchmark_viewer", 1, mediaUri, BENCHMARK_MEDIA_DURATION_MS).single()
+        return listOf(stillPost("chrome_still", listOf(stills.first())), video, stillPost("chrome_gallery", stills))
+    }
+
+    private fun solidStill(name: String, color: Int): ImageRef {
+        val file = File(cacheDir, "$name.png")
+        val bitmap = Bitmap.createBitmap(1080, 1520, Bitmap.Config.ARGB_8888)
+        bitmap.eraseColor(color)
+        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        bitmap.recycle()
+        return ImageRef(url = null, localPath = file.absolutePath, mime = "image/png")
+    }
+
+    private fun stillPost(id: String, media: List<ImageRef>) = Post(
+        id = PostId(SourceKey.GELBOORU, id),
+        preview = media.first(),
+        full = media.first(),
+        media = media,
+        pageUrl = null,
+        width = 1080,
+        height = 1520,
+        canonicalTags = listOf("benchmark"),
+        rawTags = listOf("benchmark"),
+        authorName = "Offline fixture",
+        createdAtEpochMs = 0L,
+        title = id,
+        mediaCount = media.size,
+    )
 }
 
 /** Runs the duration workload over [posts] when [enabled] and returns its live duration states. */
@@ -214,9 +250,12 @@ private fun BenchmarkSearchFixture(
 }
 
 @Composable
-private fun BenchmarkViewerFixture(mediaUri: String) {
+private fun BenchmarkViewerFixture(
+    mediaUri: String,
+    fixturePosts: List<Post>? = null,
+) {
     val posts = remember(mediaUri) {
-        benchmarkPosts(
+        fixturePosts ?: benchmarkPosts(
             prefix = "benchmark_viewer",
             count = VIEWER_POST_COUNT,
             mediaUri = mediaUri,
@@ -283,4 +322,6 @@ private fun benchmarkPosts(
 private const val SEARCH_GRID_TAG = "benchmark_search_grid"
 internal const val SEARCH_POST_COUNT = 24
 private const val VIEWER_POST_COUNT = 6
+private const val CHROME_GALLERY_PAGES = 5
+private val CHROME_COLORS = intArrayOf(0xFF2E7D32.toInt(), 0xFF1565C0.toInt(), 0xFFC62828.toInt(), 0xFFF9A825.toInt())
 private const val BENCHMARK_MEDIA_DURATION_MS = 2_000L

@@ -38,6 +38,13 @@ private const val FIXTURE_PROCESS_SUFFIX = ":benchmarkFixture"
 private const val SCENARIO_SEARCH = "search"
 private const val SCENARIO_SEARCH_DURATION = "search_duration"
 private const val SCENARIO_VIEWER = "viewer"
+private const val SCENARIO_VIEWER_CHROME = "viewer_chrome"
+private const val CHROME_POSTS = 3
+private const val CHROME_VIDEO_POST = 1
+private const val CHROME_GALLERY_POST = 2
+private const val CHROME_GALLERY_FIRST_PAGE = "Page 1 of 5"
+private const val CHROME_TOGGLES = 6
+private const val CHROME_STRIP_DESCRIPTION = "Open post chrome_still"
 private const val SEARCH_GRID_TAG = "benchmark_search_grid"
 private const val DURATION_STATUS_TAG = "benchmark_duration_status"
 private const val DURATION_SETTLED_DESCRIPTION = "Settled 24/24"
@@ -203,6 +210,32 @@ class TheoriaMacrobenchmark {
         for (page in (VIEWER_PAGE_COUNT - 2) downTo 0) {
             device.swipeViewer(next = false)
             device.requireViewerVideoPlaying(page)
+        }
+    }
+
+    @Test
+    fun viewerChromeToggle() = benchmarkRule.measureRepeated(
+        packageName = TARGET_PACKAGE,
+        metrics = listOf(fixtureFrameTimingMetric()),
+        compilationMode = COMPILATION_MODE,
+        startupMode = null,
+        iterations = INTERACTION_ITERATIONS,
+        setupBlock = {
+            pressHome()
+            startActivityAndWait(fixtureIntent(SCENARIO_VIEWER_CHROME))
+            device.wait(Until.hasObject(By.desc(CHROME_STRIP_DESCRIPTION)), UI_TIMEOUT_MS)
+            device.setViewerChrome(visible = false)
+        },
+    ) {
+        for (post in 0 until CHROME_POSTS) {
+            repeat(CHROME_TOGGLES) { toggle ->
+                device.setViewerChrome(visible = toggle % 2 == 0)
+                if (toggle == 0) device.requireChromePost(post)
+            }
+            if (post < CHROME_POSTS - 1) {
+                device.swipeViewer(next = true)
+                device.setViewerChrome(visible = false)
+            }
         }
     }
 
@@ -375,6 +408,23 @@ private fun UiDevice.swipeViewer(next: Boolean) {
     check(swipe(startX, centerY, endX, centerY, 24)) {
         "UI Automator could not dispatch the Viewer ${if (next) "next" else "previous"} swipe"
     }
+}
+
+private fun UiDevice.requireChromePost(post: Int) {
+    when (post) {
+        CHROME_VIDEO_POST -> requireViewerVideoPlaying(page = 0)
+        CHROME_GALLERY_POST -> checkNotNull(wait(Until.findObject(By.desc(CHROME_GALLERY_FIRST_PAGE)), UI_TIMEOUT_MS)) {
+            "The chrome-toggle journey did not reach the gallery"
+        }
+    }
+}
+
+private fun UiDevice.setViewerChrome(visible: Boolean) {
+    val strip = By.desc(CHROME_STRIP_DESCRIPTION)
+    if (hasObject(strip) == visible) return
+    click(displayWidth / 2, displayHeight / 2 - displayHeight / 12)
+    val reached = if (visible) wait(Until.hasObject(strip), UI_TIMEOUT_MS) else wait(Until.gone(strip), UI_TIMEOUT_MS)
+    check(reached) { "Viewer chrome did not become ${if (visible) "visible" else "hidden"} within ${UI_TIMEOUT_MS}ms" }
 }
 
 private fun UiObject2.reportsPlaying(): Boolean {

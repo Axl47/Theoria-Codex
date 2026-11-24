@@ -230,7 +230,7 @@ internal class ViewerFrame(
     val posts: List<Post>,
     val selection: ViewerSelection,
     val chromeVisible: Boolean,
-    val chromeStage: Int,
+    val chromeStage: State<Int>,
     val opening: Boolean,
     val returning: Boolean,
     val inPictureInPicture: Boolean,
