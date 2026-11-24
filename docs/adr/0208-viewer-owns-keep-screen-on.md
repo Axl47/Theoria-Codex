@@ -8,7 +8,9 @@ Status: Accepted
 
 ## Decision
 
-`ViewerKeepScreenOnEffect` is the only code that sets the flag during normal use. It keeps the screen on while the selected media is a video whose playback is playing and the Viewer is at least started, so picture-in-picture counts; and, as before, while a slideshow runs or a chapter is read without 10 idle minutes, only while the Viewer is resumed. Player views never request it themselves.
+`viewerKeepsScreenOn` is the only code that decides it during normal use, and the Viewer's backdrop applies Compose's `Modifier.keepScreenOn()` while it holds. It keeps the screen on while the selected media is a video the page is showing (not hidden behind the page overview) whose playback is playing and the Viewer is at least started, so picture-in-picture counts; and, as before, while a slideshow runs or a chapter is read without 10 idle minutes, only while the Viewer is resumed. Player views never request it themselves.
+
+The modifier counts requests per window, unlike `View.keepScreenOn`. During a trail transition two Viewers are composed in the same window and the incoming one can request at started; a plain view flag would be cleared by the outgoing Viewer's disposal.
 
 Feed cards autoplay muted as previews, so they never hold the screen on: nothing in the feed asked for it beyond the shared layout attribute.
 
@@ -20,5 +22,6 @@ A feed left open now sleeps on the system timeout while its cards keep playing. 
 
 ## Applies to
 
-- `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerFrameEffects.kt`: `ViewerKeepScreenOnEffect`
+- `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerFrameEffects.kt`: `viewerKeepsScreenOn`
+- `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerScreen.kt`: `ViewerBackdrop`
 - `media-kit/src/main/res/layout/player_view_texture.xml`

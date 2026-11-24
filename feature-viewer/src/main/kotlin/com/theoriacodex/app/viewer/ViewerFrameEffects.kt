@@ -146,18 +146,22 @@ internal fun ViewerFrameEffects(
         if (!frame.chromeVisible || !frame.selection.isSeekable) screen.timelineInteractionActive = false
     }
     ViewerUnlockPeekEffect(frame, screen)
-    ViewerKeepScreenOnEffect(
-        slideshow = uiState.controls.slideshow,
-        reading = frame.reading,
-        videoPlaying = frame.selection.isVideo && uiState.controls.playback.playing,
-        activity = { listOf(screen.touchSerial, screen.interactionSerial, frame.selection.post.id, frame.selection.mediaIndex) },
-    )
     ViewerPendingPostEffect(frame, screen, swipe, postPagerState, pendingPostId, config)
 }
 
 @Composable
-internal fun ViewerKeepScreenOnEffect(slideshow: Boolean, reading: Boolean, videoPlaying: Boolean, activity: () -> Any) {
-    val view = LocalView.current
+internal fun viewerKeepsScreenOn(frame: ViewerFrame, screen: ViewerScreenState): Boolean {
+    val videoShown = frame.selection.isVideo && !(frame.mediaOverviewVisible && frame.selection.overviewAvailable)
+    return viewerKeepsScreenOn(
+        slideshow = frame.uiState.controls.slideshow,
+        reading = frame.reading,
+        videoPlaying = videoShown && frame.uiState.controls.playback.playing,
+        activity = { listOf(screen.touchSerial, screen.interactionSerial, frame.selection.post.id, frame.selection.mediaIndex) },
+    )
+}
+
+@Composable
+internal fun viewerKeepsScreenOn(slideshow: Boolean, reading: Boolean, videoPlaying: Boolean, activity: () -> Any): Boolean {
     val lifecycle = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value
     val resumed = lifecycle.isAtLeast(Lifecycle.State.RESUMED)
     val visible = lifecycle.isAtLeast(Lifecycle.State.STARTED)
@@ -172,11 +176,7 @@ internal fun ViewerKeepScreenOnEffect(slideshow: Boolean, reading: Boolean, vide
             readingIdle = true
         }
     }
-    val on = visible && videoPlaying || resumed && (slideshow || reading && !readingIdle)
-    DisposableEffect(view, on) {
-        view.keepScreenOn = on
-        onDispose { view.keepScreenOn = false }
-    }
+    return visible && videoPlaying || resumed && (slideshow || reading && !readingIdle)
 }
 
 /** Auto-hides the revealed Unlock button after the accessibility-adjusted timeout; clears immediately when unlocked. */
