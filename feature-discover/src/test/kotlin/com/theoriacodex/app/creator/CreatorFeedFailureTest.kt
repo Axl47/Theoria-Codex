@@ -39,8 +39,6 @@ class CreatorFeedFailureTest {
                         marks = FeedMarks.NONE,
                         onToggleLike = {},
                         onAction = {},
-                        onRequestSaveToCodex = {},
-                        onSaveToDevice = {},
                         onOpenUrl = {},
                     )
                 }

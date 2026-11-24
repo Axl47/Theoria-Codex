@@ -2,7 +2,6 @@ package com.theoriacodex.app.search
 
 import com.theoriacodex.app.search.omnibox.OmniboxEntry
 import com.theoriacodex.app.related.RelatedShelfBinding
-import com.theoriacodex.app.ui.components.LocalPostMenuActions
 import com.theoriacodex.app.ui.components.FeedMarks
 import com.theoriacodex.app.ui.components.FeedDurations
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
@@ -80,7 +79,6 @@ import kotlinx.coroutines.launch
 fun SearchScreen(
     state: SearchUiState,
     related: RelatedShelfBinding,
-    creatorBrowsingSources: Set<SourceKey>,
     onAction: (SearchAction) -> Unit,
     resolvePostById: suspend (PostId) -> Post?,
     recoverPostMedia: suspend (Post, ImageRef) -> Post?,
@@ -90,7 +88,6 @@ fun SearchScreen(
     durations: FeedDurations = FeedDurations.NONE,
     onToggleLike: ((Post) -> Unit)? = null,
     onRequestSaveToCodex: (Post) -> Unit,
-    onSaveToDevice: (Post) -> Unit,
     onOpenSourceAccounts: () -> Unit = {},
     onAddFavoriteTag: (SourceKey, List<String>, String?) -> Unit = { _, _, _ -> },
     onRemoveFavoriteTag: (SourceKey, List<String>) -> Unit = { _, _ -> },
@@ -142,11 +139,7 @@ fun SearchScreen(
         }
     }
     actionPost.post?.let { post ->
-        SearchPostSheet(
-            post, actionPost, state, related, creatorBrowsingSources, onAction, onSaveToDevice,
-            onRequestSaveToCodex, onAddFavoriteTag,
-            liked = post.id in marks.liked, onToggleLike = onToggleLike,
-        )
+        SearchPostSheet(post, actionPost, state, related, onAction, onRequestSaveToCodex, onAddFavoriteTag, onToggleLike)
     }
     if (chrome.composerOpen) {
         val saved = composerSavedSearches(state, savedSearches, onSaveSearch, onManageSavedSearches) { chrome.closeComposer(onAction); onOpenSavedSearch(it) }
@@ -389,26 +382,17 @@ private fun SearchPostSheet(
     actionPost: SearchActionPostState,
     state: SearchUiState,
     related: RelatedShelfBinding,
-    creatorBrowsingSources: Set<SourceKey>,
     onAction: (SearchAction) -> Unit,
-    onSaveToDevice: (Post) -> Unit,
     onRequestSaveToCodex: (Post) -> Unit,
     onAddFavoriteTag: (SourceKey, List<String>, String?) -> Unit,
-    liked: Boolean,
     onToggleLike: ((Post) -> Unit)?,
 ) {
-    val menuActions = LocalPostMenuActions.current
     PostActionSheet(
         post = post,
-        creatorBrowsingSources = creatorBrowsingSources,
         onDismiss = actionPost::dismiss,
-        onSaveToDevice = { onSaveToDevice(post) },
-        liked = liked,
-        onToggleLike = onToggleLike?.let { toggle -> { toggle(post) } },
-        onSaveToCodex = { onRequestSaveToCodex(post) },
+        onToggleLike = onToggleLike,
+        onSaveToCodex = onRequestSaveToCodex,
         saveToCodexQuery = state.query.applied,
-        onOpenCreatorProfile = menuActions.openCreator,
-        onOpenLegacyCreatorProfile = { menuActions.openPostCreator(post) },
         onShowRelated = { related.controller.show(post) },
         tagContent = {
             PostTagActionSection(

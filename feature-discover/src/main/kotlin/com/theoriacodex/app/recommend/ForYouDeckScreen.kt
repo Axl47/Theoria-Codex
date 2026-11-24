@@ -62,7 +62,6 @@ class ForYouDeckCallbacks(
     /** Asks which Codex to save [post] to, for the deck to save it there. */
     val onPickCodex: (post: Post, onPick: (ChosenCodex) -> Unit) -> Unit,
     val onRequestSaveToCodex: (Post) -> Unit,
-    val onSaveToDevice: (Post) -> Unit,
     /** Saves a tag trail's search as a saved search. */
     val onSaveSearch: (Query) -> Unit,
     val onToggleLike: (Post) -> Unit,
@@ -120,8 +119,8 @@ fun ForYouDeckScreen(
 
     actionPost?.let { post ->
         FeedPostActionSheet(
-            post, config.creatorBrowsingSources, { actionPost = null }, callbacks.onSaveToDevice, callbacks.onRequestSaveToCodex,
-            callbacks.onGoToSearch, liked = post.id in config.likedPostIds, onToggleLike = callbacks.onToggleLike,
+            post, { actionPost = null }, callbacks.onGoToSearch, callbacks.onToggleLike,
+            onSaveToCodex = callbacks.onRequestSaveToCodex,
             onShowRelated = { related.controller.show(post) },
         )
     }

@@ -154,7 +154,7 @@ class RecentsRemovalTest {
             watchedPosts = listOf(post), codexPosts = emptyList(), searches = searches,
             activity = activity,
             onRemoveSearch = { removedSearches += it }, onRemovePost = { removedPosts += it }, removedSearch = removedSearch,
-            onRequestSaveToCodex = {}, onSaveToDevice = {}, onGoToSearch = {},
+            onGoToSearch = {},
             onOpenWatchedPost = { _, _ -> }, onOpenCodexPost = { _, _ -> }, onOpenSearch = {}, onClear = {},
         )
     }

@@ -64,9 +64,9 @@ class SearchUndoScrollTest {
             val state by owner.state.collectAsState()
             MaterialTheme {
                 SearchScreen(
-                    state = state, related = testRelatedShelf(), creatorBrowsingSources = emptySet(),
+                    state = state, related = testRelatedShelf(),
                     onAction = owner::onAction, resolvePostById = { null }, recoverPostMedia = { _, _ -> null },
-                    onRequestSaveToCodex = {}, onSaveToDevice = {},
+                    onRequestSaveToCodex = {},
                 )
             }
         }

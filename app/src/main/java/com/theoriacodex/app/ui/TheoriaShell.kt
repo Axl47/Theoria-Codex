@@ -93,6 +93,7 @@ import com.theoriacodex.app.update.ReleaseChangelogEntry
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.data.repository.CodexSortMode
+import com.theoriacodex.data.repository.followKey
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.SavedSearchEntry
@@ -416,8 +417,11 @@ internal class TheoriaShell(
     /**
      * Opens [creator] above the current screen, so Back returns to it. A Viewer stays open underneath, except one
      * browsing a creator page's feed: that feed lives in the single creator owner the new page takes over, so it closes.
+     * A creator page already showing [creator] stays as it is.
      */
     suspend fun openCreatorProfile(creator: CreatorProfile) {
+        val shownCreator = routes.creator.current?.state?.value?.creator
+        if (navigation.currentRoute == AppRoute.CreatorProfile && shownCreator?.followKey() == creator.followKey()) return
         pendingCreatorProfile = creator
         val viewerSession = routes.viewer.current?.session?.value
         val viewerUsesCreatorFeed = viewerSession != null && ViewerStreamSource.CREATOR_PROFILE in

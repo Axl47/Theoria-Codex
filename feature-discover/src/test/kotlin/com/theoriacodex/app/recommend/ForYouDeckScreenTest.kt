@@ -31,6 +31,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onChild
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.dp
@@ -85,6 +86,7 @@ class ForYouDeckScreenTest {
     private val savedSearches = mutableStateListOf<Query>()
     private val selectedProfiles = mutableListOf<String>()
     private var wentToSearch = 0
+    private val menuActions = mutableListOf<String>()
     private var sourcesOpened = 0
     private var hiddenTagsOpened = 0
 
@@ -109,10 +111,9 @@ class ForYouDeckScreenTest {
             },
             onOpenPost = { level, post, _ -> opened += level.id to post },
             onPickCodex = { _, _ -> },
-            onRequestSaveToCodex = {},
-            onSaveToDevice = {},
+            onRequestSaveToCodex = { menuActions += "save ${it.id.sourcePostId}" },
             onSaveSearch = { savedSearches += it },
-            onToggleLike = {},
+            onToggleLike = { menuActions += "like ${it.id.sourcePostId}" },
             onOpenSourceAccounts = { sourcesOpened++ },
             onGoToSearch = { wentToSearch++ },
         )
@@ -226,6 +227,17 @@ class ForYouDeckScreenTest {
         compose.runOnIdle { assertEquals(listOf(listOf("sky")), savedSearches.map(Query::includeTags)) }
         compose.onNodeWithContentDescription("Saved").assertExists()
         compose.onNodeWithTag(FOR_YOU_SAVE_SEARCH_TAG).assertIsNotEnabled()
+    }
+
+    @Test fun `a held grid card's menu likes and saves through For You's own actions`() {
+        render()
+        compose.onNodeWithContentDescription("Grid").performClick()
+        card("sea-0-0").performSemanticsAction(SemanticsActions.OnLongClick)
+        compose.onNodeWithText("Like").performClick()
+        card("sea-0-0").performSemanticsAction(SemanticsActions.OnLongClick)
+        compose.onNodeWithText("Save to Codex").performClick()
+
+        compose.runOnIdle { assertEquals(listOf("like sea-0-0", "save sea-0-0"), menuActions) }
     }
 
     @Test fun `a chip narrows the deck to its interest`() {
