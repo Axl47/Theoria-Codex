@@ -95,13 +95,7 @@ jobs:
           fetch-depth: 2
 
       - name: Policy checks against main
-        run: |
-          source scripts/policy_checks.sh
-          line_budgets HEAD^1
-          comment_ratchet HEAD^1
-          module_layering
-          architecture_rules
-          module_registration
+        run: source scripts/policy_checks.sh && policy_violations HEAD^1
 
   # A static name: GitHub shows each run as `Check part (tests)` and so on, and a skipped job as
   # `Check part`. A name built from the matrix would show unevaluated when the job is skipped.

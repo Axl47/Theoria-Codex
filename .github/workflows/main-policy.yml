@@ -29,25 +29,19 @@ jobs:
           BEFORE: ${{ github.event.before }}
         run: |
           source scripts/policy_checks.sh
-          violations() {
-            local check out
-            for check in "line_budgets $1" "comment_ratchet $1" module_layering architecture_rules module_registration; do
-              out="$($check 2>&1)" || printf '%s\n' "$out"
-            done
-          }
           [[ "$BEFORE" =~ ^0+$ ]] || git cat-file -e "$BEFORE^{commit}" 2>/dev/null || git fetch -q --depth=1 origin "$BEFORE" 2>/dev/null || true
           if [[ "$BEFORE" =~ ^0+$ ]] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
-            now="$(violations HEAD^1 2>/dev/null || violations HEAD)"
+            now="$(policy_violations HEAD^1 || true)"
             [[ -z "$now" ]] && exit 0
             echo "::error::main fails these policy checks; the commit main pointed at before this push is unknown."
             printf '%s\n' "$now"
             exit 1
           fi
-          now="$(violations "$BEFORE")"
+          now="$(policy_violations "$BEFORE" || true)"
           [[ -z "$now" ]] && exit 0
           previous="$(mktemp -d)/previous"
           git worktree add -q --detach "$previous" "$BEFORE"
-          before="$(cd "$previous" && violations HEAD^1)"
+          before="$(cd "$previous" && policy_violations HEAD^1 || true)"
           # Indented lines list where each comment sits, which moves with unrelated edits; compare the summaries.
           introduced="$(grep -v '^  ' <<< "$now" | grep -vxF -f <(grep -v '^  ' <<< "$before"; echo) || true)"
           if [[ -n "$introduced" ]]; then
