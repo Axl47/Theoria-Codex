@@ -142,7 +142,7 @@ class JourneyAppContainer(
         RoomRecentsRepository(database), settings, statistics,
         OfflineAwareCacheRepository(FileBackedCacheRepository(storageDirectory), offline),
         restore, durations, MutableStateFlow(emptyList()),
-        readingPositions = FileBackedReadingPositionRepository(storageDirectory),
+        readingPositions = FileBackedReadingPositionRepository(storageDirectory, writeScope = ownerScope),
         galleryReadingModes = FileBackedGalleryReadingModeRepository(storageDirectory),
         savedSearches = FileBackedSavedSearchRepository(storageDirectory),
         forYouVerdicts = RoomForYouVerdictRepository(database, profileWriteGuard),

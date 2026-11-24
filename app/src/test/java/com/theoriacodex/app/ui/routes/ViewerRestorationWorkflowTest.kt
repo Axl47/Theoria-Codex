@@ -106,6 +106,7 @@ class ViewerRestorationWorkflowTest {
             viewer.replaceSession(neighborLaunch)
             viewer.onAction(ViewerAction.SelectPage(1))
             assertEquals(1, viewer.state.value.currentPage?.selectedMediaIndex)
+            graph.data.flushPendingWrites()
             val fromDisk = FileBackedReadingPositionRepository(graph.data.storageDirectory)
             assertEquals(2, fromDisk.get(gallery.id, RecentPostSection.WATCHED)?.mediaNumber)
 

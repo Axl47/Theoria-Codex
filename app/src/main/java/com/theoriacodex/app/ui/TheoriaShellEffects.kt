@@ -64,6 +64,7 @@ internal fun ShellOwnerHosts(shell: TheoriaShell) {
             when (event) {
                 Lifecycle.Event.ON_START -> appUsageTracker.onForeground()
                 Lifecycle.Event.ON_STOP -> {
+                    shell.flushPendingWrites()
                     appUsageTracker.onBackground()
                     autoBackup?.onAppBackgrounded()
                 }

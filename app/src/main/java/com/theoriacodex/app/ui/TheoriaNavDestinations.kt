@@ -295,9 +295,16 @@ private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
     val tagActions = remember(shell) { viewerTagSearchActions(shell) }
     val effectCallbacks = remember(shell, level.isFork, level.feed) { viewerEffectCallbacks(shell, tagActions).forLevel(level) { shell.navController.popBackStack() } }
     val screenCallbacks = remember(shell) { viewerScreenCallbacks(shell) }
-    val onOwnerChanged = remember<(ViewerViewModel?) -> Unit>(routes.viewer) {
+    val onOwnerChanged = remember<(ViewerViewModel?) -> Unit>(routes.viewer, shell) {
         var published: ViewerViewModel? = null
-        { owner -> if (owner != null) routes.viewer.publish(owner.also { published = it }) else published?.let(routes.viewer::withdraw) }
+        { owner ->
+            if (owner != null) {
+                routes.viewer.publish(owner.also { published = it })
+            } else {
+                published?.let(routes.viewer::withdraw)
+                shell.flushPendingWrites()
+            }
+        }
     }
     val forSeries = rememberSeriesViewerConfig(shell)
     ViewerDestinationStateBoundary(
