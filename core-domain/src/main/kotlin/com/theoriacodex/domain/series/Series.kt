@@ -56,6 +56,7 @@ data class Series(
     /**
      * What the source keeps with the series to find it again, such as a slug its address leaves out: a Mihon
      * extension's memo, a JSON object as text. Stored as given and handed back to the source; null when it keeps none.
+     * One longer than [MAX_MEMO_LENGTH] is not stored.
      */
     val memo: String? = null,
 )
@@ -71,6 +72,12 @@ data class SeriesEntry(
     /** What the source keeps with the entry, as [Series.memo] is for a series. */
     val memo: String? = null,
 )
+
+/**
+ * The longest memo the app stores, in characters. A memo loads with every series and entry row, and sources keep a
+ * slug or an id in it, so a longer one, from a misbehaving extension or an edited backup, is dropped rather than kept.
+ */
+const val MAX_MEMO_LENGTH = 8_192
 
 data class SeriesPage(val series: List<Series>, val hasNextPage: Boolean)
 

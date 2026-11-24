@@ -2,6 +2,7 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.MAX_MEMO_LENGTH
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
@@ -131,10 +132,10 @@ internal data class BackupSeriesEntryRecord(
 
 /**
  * A backed-up memo as Theoria stores one: the JSON object's text, or null for an empty object, the default of
- * Mihon-family backups, and for anything that is not a JSON object, which no extension wrote. Null stays eligible for
- * a later restore to fill.
+ * Mihon-family backups, for anything that is not a JSON object, which no extension wrote, and for text longer than
+ * [MAX_MEMO_LENGTH]. Null stays eligible for a later restore to fill.
  */
-internal fun storedMemo(text: String?): String? = text?.takeIf(String::isNotBlank)
+internal fun storedMemo(text: String?): String? = text?.takeIf { it.isNotBlank() && it.length <= MAX_MEMO_LENGTH }
     ?.let { runCatching { Json.parseToJsonElement(it) }.getOrNull() as? JsonObject }
     ?.takeIf(JsonObject::isNotEmpty)?.toString()
 
