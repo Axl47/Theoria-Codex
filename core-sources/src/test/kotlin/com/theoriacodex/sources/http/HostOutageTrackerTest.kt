@@ -135,6 +135,65 @@ class HostOutageTrackerTest {
         }
     }
 
+    @Test fun `a rate limit holds the site and its subdomains for as long as Retry-After asks, within an hour`() {
+        assertEquals(
+            HostOutageKind.RATE_LIMITED,
+            tracker.recordResponse("https://nhentai.net/api/v2/search", 429, mapOf("Retry-After" to listOf("120"))),
+        )
+        assertTrue(tracker.isRateLimited("https://t.nhentai.net/galleries/1/thumb.webp"))
+        assertTrue(tracker.holdsOffChallengePass("https://nhentai.net/"))
+        assertFalse(tracker.isRateLimited("https://nhentai.to/"))
+        val refused = runCatching { tracker.ensureAvailable("https://i.nhentai.net/galleries/1/1.webp") }.exceptionOrNull()
+        assertEquals(HostOutageKind.RATE_LIMITED, (refused as HostUnavailableException).kind)
+        now += 119_999L
+        assertTrue(tracker.isRateLimited("https://nhentai.net/"))
+        now += 1L
+        assertFalse(tracker.isRateLimited("https://nhentai.net/"))
+        tracker.recordResponse("https://nhentai.net/", 429, mapOf("Retry-After" to listOf("86400")))
+        now += 60 * 60 * 1000L
+        assertFalse(tracker.isRateLimited("https://nhentai.net/"))
+    }
+
+    @Test fun `a 429 fails at once without a retry and the next request never reaches the host`() = runBlocking {
+        val hits = AtomicInteger()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            createContext("/") { exchange ->
+                hits.incrementAndGet()
+                exchange.sendResponseHeaders(429, -1)
+                exchange.close()
+            }
+            start()
+        }
+        val client = DefaultSourceHttpClient(maxRetries = 2, retryBaseDelayMs = 1L, outages = HostOutageTracker())
+        val url = "http://127.0.0.1:${server.address.port}/api/v2/search"
+        try {
+            val first = runCatching { client.get(url) }.exceptionOrNull()
+            assertEquals(HostOutageKind.RATE_LIMITED, (first as HostUnavailableException).kind)
+            assertTrue(runCatching { client.get(url) }.exceptionOrNull() is HostUnavailableException)
+            assertEquals(1, hits.get())
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    @Test fun `server errors are still retried`() = runBlocking {
+        val hits = AtomicInteger()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            createContext("/") { exchange ->
+                exchange.sendResponseHeaders(if (hits.incrementAndGet() < 3) 500 else 200, -1)
+                exchange.close()
+            }
+            start()
+        }
+        val client = DefaultSourceHttpClient(maxRetries = 2, retryBaseDelayMs = 1L, outages = HostOutageTracker())
+        try {
+            assertEquals(200, client.get("http://127.0.0.1:${server.address.port}/").statusCode)
+            assertEquals(3, hits.get())
+        } finally {
+            server.stop(0)
+        }
+    }
+
     @Test fun `a maintenance page fails at once and the next request never reaches the host`() = runBlocking {
         val hits = AtomicInteger()
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
@@ -206,6 +265,16 @@ class SiteHealthCheckTest {
         }
         assertEquals(listOf<String?>("WebView/2"), seenAgents)
         assertEquals(setOf("127.0.0.1"), tracker.working.value)
+    }
+
+    @Test fun `the startup check leaves a rate-limited site alone`() = runBlocking {
+        var calls = 0
+        tracker.recordResponse("https://nhentai.net/api/v2/search", 429, emptyMap())
+        SiteHealthCheck(tracker) { calls++; SourceByteResponse(200, ByteArray(0), emptyMap()) }
+            .check("https://nhentai.net/", emptyMap(), countChallenges = false)
+        assertEquals(0, calls)
+        check(429).check("https://hitomi.la/", emptyMap(), countChallenges = false)
+        assertEquals(HostOutageKind.RATE_LIMITED, tracker.outages.value["hitomi.la"]?.kind)
     }
 
     @Test fun `challenges count only for user-added sites`() = runBlocking {

@@ -383,24 +383,6 @@ class DefaultSourceHttpClientTest {
     }
 
     @Test
-    fun `iwara 429 responses are not retried by default policy`() {
-        assertFalse(defaultShouldRetryStatus("https://api.iwara.tv/search?type=videos", 429))
-        assertFalse(defaultShouldRetryStatus("https://filesq.iwara.tv/file/abc", 429))
-        assertFalse(defaultShouldRetryStatus("https://mikoto.iwara.tv/view?file=video.mp4", 429))
-    }
-
-    @Test
-    fun `non iwara 429 responses still retry by default policy`() {
-        assertTrue(defaultShouldRetryStatus("https://rule34video.com/video/123", 429))
-    }
-
-    @Test
-    fun `server errors still retry by default policy`() {
-        assertTrue(defaultShouldRetryStatus("https://api.iwara.tv/search?type=videos", 503))
-        assertTrue(defaultShouldRetryStatus("https://rule34video.com/video/123", 500))
-    }
-
-    @Test
     fun `retry delay honors a short retry after header`() {
         assertEquals(2_000L, retryDelayMs(mapOf("Retry-After" to listOf("2")), attempt = 2, baseDelayMs = 300L))
     }

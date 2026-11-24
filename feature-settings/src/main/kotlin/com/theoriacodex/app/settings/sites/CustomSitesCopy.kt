@@ -101,6 +101,7 @@ internal fun builtInTestStatus(site: BuiltInSiteSummary, result: BuiltInTestResu
     BuiltInTestResult.NEEDS_BROWSER_CHECK -> RetestStatus.Done("Needs browser verification.", ok = false, blocked = true)
     BuiltInTestResult.NEEDS_ACCOUNT -> RetestStatus.Done("Needs an account or API key.", ok = false)
     BuiltInTestResult.DOWN -> RetestStatus.Done("Down for maintenance. Try again later.", ok = false)
+    BuiltInTestResult.RATE_LIMITED -> RetestStatus.Done("Too many requests. Try again later.", ok = false)
     BuiltInTestResult.UNREACHABLE -> RetestStatus.Done(unreachableMessage(site.host, ProbeFailure.TIMEOUT), ok = false)
     BuiltInTestResult.FAILED -> RetestStatus.Done(unreachableMessage(site.host, ProbeFailure.HTTP_ERROR), ok = false)
 }

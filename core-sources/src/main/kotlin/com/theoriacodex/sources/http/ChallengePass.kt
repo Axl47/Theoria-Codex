@@ -93,7 +93,7 @@ class ChallengeBrowsers(private val cookies: BrowserCookieStore, private val bro
 
 class ChallengePass(
     private val browsers: ChallengeBrowsers,
-    private val isChallenged: (url: String) -> Boolean,
+    private val heldOff: (url: String) -> Boolean,
     private val mayPass: (host: String) -> Boolean = { true },
     private val page: (challenged: Request) -> Request = { it },
 ) : Interceptor {
@@ -104,10 +104,10 @@ class ChallengePass(
         val challenged = response.challengedRequest
         val url = challenged.url.toString()
         val host = HostOutageTracker.normalizeHost(challenged.url.host)
-        if (!mayPass(host) || browsers.isShown(host) || isChallenged(url) || !browsers.mayWait()) return response
+        if (!mayPass(host) || browsers.isShown(host) || heldOff(url) || !browsers.mayWait()) return response
         val refusal = response.newBuilder().body(response.peekBody(CHALLENGE_BODY_LIMIT)).build()
         response.close()
-        val earned = browsers.earn(challenged, page(challenged), chain.call()) { !isChallenged(url) }
+        val earned = browsers.earn(challenged, page(challenged), chain.call()) { !heldOff(url) }
         return if (earned) chain.proceed(request) else refusal
     }
 

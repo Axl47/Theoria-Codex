@@ -185,6 +185,7 @@ internal class CustomSitesControllerImpl(
         val result = when (sourceIssues(outages.outages.value, listOf(source), clock())[source]) {
             HostOutageKind.CHALLENGE -> BuiltInTestResult.NEEDS_BROWSER_CHECK
             HostOutageKind.MAINTENANCE -> BuiltInTestResult.DOWN
+            HostOutageKind.RATE_LIMITED -> BuiltInTestResult.RATE_LIMITED
             HostOutageKind.UNRESOLVED -> BuiltInTestResult.UNREACHABLE
             null -> searched.fold(
                 onSuccess = { finished ->

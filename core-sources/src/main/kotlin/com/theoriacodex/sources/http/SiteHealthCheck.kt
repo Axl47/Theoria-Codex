@@ -14,6 +14,7 @@ class SiteHealthCheck internal constructor(
         this(tracker, httpTransport(okHttpClient, CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS, followRedirects = true))
 
     suspend fun check(url: String, headers: Map<String, String>, countChallenges: Boolean): Unit = sourceCall {
+        if (tracker.isRateLimited(url)) return@sourceCall
         val response = runCatchingPreservingCancellation { fetch(url, headers) }.getOrElse { error ->
             if (error is IOException) tracker.recordFailure(url, error) else tracker.clear(hostOf(url))
             return@sourceCall

@@ -1,6 +1,7 @@
 package com.theoriacodex.app.network
 
 import com.sun.net.httpserver.HttpServer
+import com.theoriacodex.sources.http.HostOutageTracker
 import java.net.InetSocketAddress
 import java.util.concurrent.CopyOnWriteArrayList
 import okhttp3.CookieJar
@@ -22,6 +23,8 @@ class AppHttpClientsTest {
             if (exchange.requestURI.path == "/moved.jpg" && authorization != null) {
                 exchange.responseHeaders.add("Location", "/elsewhere.jpg")
                 exchange.sendResponseHeaders(302, -1)
+            } else if (exchange.requestURI.path == "/limited.jpg") {
+                exchange.sendResponseHeaders(429, -1)
             } else {
                 exchange.sendResponseHeaders(if (refuseWithoutKey && authorization == null) 403 else 200, -1)
             }
@@ -47,6 +50,17 @@ class AppHttpClientsTest {
         get(clients.sources, "verified.json")
 
         assertEquals(listOf("browser", "browser", "browser", "catalog", "catalog"), agents.toList())
+    }
+
+    @Test
+    fun `a picture host that answers 429 is marked rate limited for background work`() {
+        val outages = HostOutageTracker()
+        val clients = AppHttpClients(CookieJar.NO_COOKIES, outages = outages)
+
+        assertEquals(200, status(clients.images, "fine.jpg"))
+        assertEquals(false, outages.isRateLimited("http://127.0.0.1/"))
+        assertEquals(429, status(clients.images, "limited.jpg"))
+        assertEquals(true, outages.isRateLimited("http://127.0.0.1/"))
     }
 
     @Test

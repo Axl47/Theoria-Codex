@@ -41,7 +41,7 @@ class ChallengePassTest {
 
     private fun client(page: (Request) -> Request = { it }) = OkHttpClient.Builder()
         .addInterceptor(
-            ChallengePass(browsers, isChallenged = { HostOutageTracker.hostKey(it) in challengedHosts }, mayPass = passableHosts::contains, page = page),
+            ChallengePass(browsers, heldOff = { HostOutageTracker.hostKey(it) in challengedHosts }, mayPass = passableHosts::contains, page = page),
         )
         .addInterceptor { chain ->
             val request = chain.request().newBuilder().apply { cookies.cookieHeader("")?.let { header("Cookie", it) } }.build()

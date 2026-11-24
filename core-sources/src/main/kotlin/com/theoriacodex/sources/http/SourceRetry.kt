@@ -2,7 +2,6 @@ package com.theoriacodex.sources.http
 
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import java.io.IOException
-import java.net.URL
 import java.net.UnknownHostException
 import kotlinx.coroutines.delay
 
@@ -46,7 +45,7 @@ private suspend fun retrying(
     while (true) {
         try {
             val response = block()
-            val delayMs = policy.delayBeforeRetry(requestUrl, response, attempt)
+            val delayMs = policy.delayBeforeRetry(response, attempt)
             if (delayMs == null) {
                 outages?.settle(requestUrl, response, extraOutage)
                 return response
@@ -66,17 +65,10 @@ private suspend fun retrying(
     }
 }
 
-private fun SourceRetryPolicy.delayBeforeRetry(requestUrl: String, response: SourceByteResponse, attempt: Int): Long? {
+private fun SourceRetryPolicy.delayBeforeRetry(response: SourceByteResponse, attempt: Int): Long? {
     if (attempt == maxRetries || isCloudflareChallenge(response.statusCode, response.headers::header)) return null
-    if (!defaultShouldRetryStatus(requestUrl, response.statusCode)) return null
+    if (response.statusCode !in 500..599) return null
     return retryDelayMs(response.headers, attempt + 1, baseDelayMs)
-}
-
-internal fun defaultShouldRetryStatus(requestUrl: String, statusCode: Int): Boolean {
-    if (statusCode in 500..599) return true
-    if (statusCode != 429) return false
-    val host = runCatching { URL(requestUrl).host.lowercase() }.getOrNull() ?: return true
-    return host != "iwara.tv" && !host.endsWith(".iwara.tv")
 }
 
 internal fun retryDelayMs(headers: Map<String, List<String>>, attempt: Int, baseDelayMs: Long): Long? {

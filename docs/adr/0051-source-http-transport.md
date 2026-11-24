@@ -15,7 +15,7 @@ Provider requests can carry API keys in query strings, arrive in bursts to one h
 - `unexpectedFailuresAsIoExceptions` turns every `RuntimeException` (such as the `SecurityException` from blocked DNS) into an `IOException`, because OkHttp rethrows anything else on its dispatcher threads and kills the app. `Call.await` reads the body on OkHttp's thread and cancels the call when the caller is cancelled.
 - Requests keep the platform `http.agent` where a source sets none, because some providers reject library agents. Danbooru's Cloudflare challenges generic browser agents (`Mozilla/5.0`) on its API and CDN, so its traffic sends `THEORIA_SOURCE_USER_AGENT`.
 - Query-component spaces are encoded as `%20`, not `+`, for wider API compatibility.
-- Retries: 5xx are retried, 429s are retried except for Iwara, whose rate limit counts each retry and lasts longer for it. A `Retry-After` of more than a few seconds ends retrying (Danbooru's maintenance page sends 30 s).
+- Retries: 5xx are retried; a 429 is never retried, because providers count each retry against the limit and lengthen it (Iwara, nhentai), and it becomes a host outage instead (ADR 0050). A `Retry-After` of more than a few seconds ends retrying (Danbooru's maintenance page sends 30 s).
 
 ## Consequences
 
@@ -28,4 +28,4 @@ Custom-site keys stay on TLS and on one site, so a custom site that legitimately
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/http/SourceHttpClient.kt`: `THEORIA_SOURCE_USER_AGENT`, range headers
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/http/CancellableHttpConnection.kt`: `executeCancellableHttpConnection`
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/http/OkHttpCalls.kt`: `unexpectedFailuresAsIoExceptions`, `Call.await`
-- `core-sources/src/main/kotlin/com/theoriacodex/sources/http/SourceRetry.kt`: `defaultShouldRetryStatus`, `retryDelayMs`
+- `core-sources/src/main/kotlin/com/theoriacodex/sources/http/SourceRetry.kt`: `delayBeforeRetry`, `retryDelayMs`
