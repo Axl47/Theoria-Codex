@@ -70,4 +70,25 @@ class RoomUpgradeJourneyTest {
             }
         }
     }
+
+    @Test fun `a series and chapter stored before memos keep everything and have none`() {
+        val name = "series-memos.db"
+        helper.createDatabase(name, 19).use {
+            it.execSQL("INSERT INTO series (source, address, title, genres, language, followed) VALUES ('custom_mihon_7', '/a', 'A', '', 'en', 1)")
+            it.execSQL(
+                "INSERT INTO series_entries (source, series_address, address, name, source_order, first_seen_at_epoch_ms, read, last_page) " +
+                    "VALUES ('custom_mihon_7', '/a', '/a/1', 'Chapter', 0, 10, 1, 4)",
+            )
+        }
+        helper.runMigrationsAndValidate(name, 20, true, TheoriaRoomDatabase.MIGRATION_19_20).use { database ->
+            database.query("SELECT title, followed, memo FROM series").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(listOf("A", "1", null), (0..2).map(it::getString))
+            }
+            database.query("SELECT read, last_page, memo FROM series_entries").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(listOf("1", "4", null), (0..2).map(it::getString))
+            }
+        }
+    }
 }

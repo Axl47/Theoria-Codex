@@ -309,11 +309,11 @@ class ProfileBackupServiceTest {
         val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
         val series = BackupSeries(
             StoredSeries(
-                Series(id, "Title", "https://example.test/cover.jpg", "Author", listOf("Drama"), "en", "Synopsis", SeriesStatus.ONGOING),
+                Series(id, "Title", "https://example.test/cover.jpg", "Author", listOf("Drama"), "en", "Synopsis", SeriesStatus.ONGOING, """{"slug":"t"}"""),
                 followed = true, readingMode = GalleryReadingMode.VERTICAL, lastOpenedEntry = "/chapter/2", lastCheckedAtEpochMs = 9L,
             ),
             listOf(
-                StoredSeriesEntry(SeriesEntry("/chapter/2", "Ch.2", 2f, "Group", 5L), sourceOrder = 0, firstSeenAtEpochMs = 6L, position = 3, length = 20),
+                StoredSeriesEntry(SeriesEntry("/chapter/2", "Ch.2", 2f, "Group", 5L, """{"id":2}"""), sourceOrder = 0, firstSeenAtEpochMs = 6L, position = 3, length = 20),
                 StoredSeriesEntry(SeriesEntry("/chapter/1", "Ch.1"), sourceOrder = 1, firstSeenAtEpochMs = 4L, read = true, position = 18, length = 18),
                 StoredSeriesEntry(SeriesEntry("/chapter/0", "Dropped"), sourceOrder = -1, firstSeenAtEpochMs = 4L),
             ),
@@ -324,6 +324,11 @@ class ProfileBackupServiceTest {
         // The cover travels as the plain address the source gave; a series without one is written without the field.
         assertTrue(encoded.toString(Charsets.UTF_8).contains("\"coverUrl\":\"https://example.test/cover.jpg\""))
         assertEquals(listOf(series), codec.decode(encoded).library.series)
+        // A memo no build writes, an empty object or text that is not one, restores as none.
+        val withMemo = encoded.toString(Charsets.UTF_8)
+        val emptyMemo = withMemo.replace(""""memo":"{\"slug\":\"t\"}"""", """"memo":"{}"""")
+        assertTrue(emptyMemo != withMemo)
+        assertEquals(null, codec.decode(emptyMemo.toByteArray()).library.series.single().series.series.memo)
         // Trust is never in a backup, with or without series.
         assertFalse(encoded.toString(Charsets.UTF_8).contains("trustedExtensions"))
         val twice = withSeries.copy(library = withSeries.library.copy(series = listOf(series, series)))

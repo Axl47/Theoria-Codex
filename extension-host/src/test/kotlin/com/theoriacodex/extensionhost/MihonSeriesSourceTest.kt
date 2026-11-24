@@ -23,6 +23,9 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -122,6 +125,61 @@ class MihonSeriesSourceTest {
         series.entries(Series(SeriesId(series.key, "/stored"), "Stored"))
         assertEquals("/stored", source.asked.last().url)
         assertEquals("Stored", source.asked.last().title)
+    }
+
+    @Test
+    fun `memos the source keeps reach the app and come back when a stored series or chapter is rebuilt`() = runTest {
+        val slug = buildJsonObject { put("slug", "s-1") }
+        source.listing = MangasPage(listOf(manga("/s", "Series").also { it.memo = slug }), hasNextPage = false)
+        source.chapters = listOf(chapter("Chapter 1", "/c/1").also { it.memo = buildJsonObject { put("id", 1) } }, chapter("Chapter 2", "/c/2"))
+        val listed = series.popular(1).series.single()
+        assertEquals("""{"slug":"s-1"}""", listed.memo)
+        assertEquals(listOf("""{"id":1}""", null), series.entries(listed).map { it.memo })
+
+        // A later run: nothing listed, so both are rebuilt from what the app stored.
+        val later = MihonSeriesSource(source, HostServices(ExtensionImages()))
+        later.details(listed)
+        assertEquals(slug, source.asked.last().memo)
+        later.media(SeriesEntry("/c/1", "Chapter 1", memo = """{"id":1}"""))
+        assertEquals(buildJsonObject { put("id", 1) }, source.pageListRequests.last().memo)
+        // A stored memo that is not a JSON object is none, rather than a failed call.
+        later.media(SeriesEntry("/c/2", "Chapter 2", memo = "not json"))
+        assertTrue(source.pageListRequests.last().memo.isEmpty())
+        // A rebuilt chapter is held, so the source gets the same object when its pages are listed again.
+        val rebuilt = source.pageListRequests.last()
+        later.media(SeriesEntry("/c/2", "Chapter 2"))
+        assertSame(rebuilt, source.pageListRequests.last())
+    }
+
+    @Test
+    fun `a series listed without its memo takes the stored one, and details that give a memo replace it`() = runTest {
+        source.listing = MangasPage(listOf(manga("/s", "Series")), hasNextPage = false)
+        val listed = series.popular(1).series.single()
+        assertNull(listed.memo)
+
+        series.entries(listed.copy(memo = """{"slug":"s-1"}"""))
+        assertEquals(buildJsonObject { put("slug", "s-1") }, source.asked.last().memo)
+
+        source.details = manga("/s", "Series").also { it.memo = buildJsonObject { put("slug", "s-2") } }
+        assertEquals("""{"slug":"s-2"}""", series.details(listed).memo)
+
+        // Details that clear the memo of the series they were handed keep the one it had.
+        source.details = null
+        source.clearMemo = true
+        assertEquals("""{"slug":"s-2"}""", series.details(listed).memo)
+    }
+
+    @Test
+    fun `a chapter listed twice is the first, for the app and for its pages`() = runTest {
+        source.chapters = listOf(
+            chapter("Chapter 1", "/c/1").also { it.memo = buildJsonObject { put("id", 1) } },
+            chapter("Chapter 1 again", "/c/1").also { it.memo = buildJsonObject { put("id", 2) } },
+        )
+        val entry = series.entries(Series(SeriesId(series.key, "/s"), "Series")).single()
+
+        assertEquals("""{"id":1}""", entry.memo)
+        series.media(entry)
+        assertSame(source.chapters.first(), source.pageListRequests.last())
     }
 
     @Test
@@ -229,6 +287,9 @@ class MihonSeriesSourceTest {
         var pages = emptyList<Page>()
         var failure: Throwable? = null
 
+        /** Whether a details call clears the memo of the series it is handed. */
+        var clearMemo = false
+
         val calls = mutableListOf<String>()
         val updates = mutableListOf<String>()
         val asked = mutableListOf<SManga>()
@@ -247,6 +308,7 @@ class MihonSeriesSourceTest {
             fetchChapters: Boolean,
         ): SMangaUpdate {
             asked += manga
+            if (fetchDetails && clearMemo) manga.memo = JsonObject(emptyMap())
             updates += "${manga.url}${if (fetchDetails) " details" else ""}${if (fetchChapters) " chapters" else ""}"
             return SMangaUpdate(details ?: manga, this.chapters)
         }

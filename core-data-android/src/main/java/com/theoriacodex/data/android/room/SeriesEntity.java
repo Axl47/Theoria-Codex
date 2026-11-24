@@ -30,6 +30,8 @@ public final class SeriesEntity {
     @ColumnInfo(name = "chapters_share_first_page", defaultValue = "0") private final boolean chaptersShareFirstPage;
     /** When the user last followed it; null while not followed. */
     @Nullable @ColumnInfo(name = "followed_at_epoch_ms") private final Long followedAtEpochMs;
+    /** What its extension keeps with it, as JSON text; null when it keeps nothing. */
+    @Nullable @ColumnInfo(name = "memo") private final String memo;
 
     public SeriesEntity(
             @NonNull String source,
@@ -47,7 +49,8 @@ public final class SeriesEntity {
             @Nullable String status,
             boolean downloadNew,
             boolean chaptersShareFirstPage,
-            @Nullable Long followedAtEpochMs
+            @Nullable Long followedAtEpochMs,
+            @Nullable String memo
     ) {
         this.source = source;
         this.address = address;
@@ -65,6 +68,7 @@ public final class SeriesEntity {
         this.downloadNew = downloadNew;
         this.chaptersShareFirstPage = chaptersShareFirstPage;
         this.followedAtEpochMs = followedAtEpochMs;
+        this.memo = memo;
     }
 
     @NonNull public String getSource() { return source; }
@@ -83,4 +87,5 @@ public final class SeriesEntity {
     public boolean getDownloadNew() { return downloadNew; }
     public boolean getChaptersShareFirstPage() { return chaptersShareFirstPage; }
     @Nullable public Long getFollowedAtEpochMs() { return followedAtEpochMs; }
+    @Nullable public String getMemo() { return memo; }
 }

@@ -38,6 +38,8 @@ public final class SeriesEntryEntity {
     @Nullable @ColumnInfo(name = "page_count") private final Long pageCount;
     /** When the user last read or watched in it; null before that was kept. */
     @Nullable @ColumnInfo(name = "last_read_at_epoch_ms") private final Long lastReadAtEpochMs;
+    /** What its extension keeps with it, as JSON text; null when it keeps nothing. */
+    @Nullable @ColumnInfo(name = "memo") private final String memo;
 
     public SeriesEntryEntity(
             @NonNull String source,
@@ -52,7 +54,8 @@ public final class SeriesEntryEntity {
             boolean read,
             long lastPage,
             @Nullable Long pageCount,
-            @Nullable Long lastReadAtEpochMs
+            @Nullable Long lastReadAtEpochMs,
+            @Nullable String memo
     ) {
         this.source = source;
         this.seriesAddress = seriesAddress;
@@ -67,6 +70,7 @@ public final class SeriesEntryEntity {
         this.lastPage = lastPage;
         this.pageCount = pageCount;
         this.lastReadAtEpochMs = lastReadAtEpochMs;
+        this.memo = memo;
     }
 
     @NonNull public String getSource() { return source; }
@@ -82,4 +86,5 @@ public final class SeriesEntryEntity {
     public long getLastPage() { return lastPage; }
     @Nullable public Long getPageCount() { return pageCount; }
     @Nullable public Long getLastReadAtEpochMs() { return lastReadAtEpochMs; }
+    @Nullable public String getMemo() { return memo; }
 }

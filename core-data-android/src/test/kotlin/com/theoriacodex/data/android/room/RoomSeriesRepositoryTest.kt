@@ -28,13 +28,16 @@ class RoomSeriesRepositoryTest {
     private var now = 100L
     private val repository = RoomSeriesRepository(database) { now }
     private val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_1"), "/series/a")
-    private val series = Series(id, "Series", coverUrl = "https://cdn.test/c.jpg", author = "Author", genres = listOf("Action", "Long Strip"), language = "en")
+    private val series = Series(
+        id, "Series", coverUrl = "https://cdn.test/c.jpg", author = "Author", genres = listOf("Action", "Long Strip"), language = "en",
+        memo = """{"slug":"a"}""",
+    )
 
     @After fun close() = database.close()
 
     @Test
     fun `a stored series reads back as it was stored, unfollowed and unread`() = runTest {
-        repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2", 2f, "Group", 2_000L), SeriesEntry("/c/1", "Chapter 1")))
+        repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2", 2f, "Group", 2_000L, """{"id":2}"""), SeriesEntry("/c/1", "Chapter 1")))
 
         val stored = repository.series(id)!!
         assertEquals(series, stored.series)
@@ -43,7 +46,7 @@ class RoomSeriesRepositoryTest {
         assertEquals(100L, stored.lastCheckedAtEpochMs)
         val entries = repository.entries(id)
         assertEquals(listOf("/c/2", "/c/1"), entries.map { it.entry.address })
-        assertEquals(SeriesEntry("/c/2", "Chapter 2", 2f, "Group", 2_000L), entries.first().entry)
+        assertEquals(SeriesEntry("/c/2", "Chapter 2", 2f, "Group", 2_000L, """{"id":2}"""), entries.first().entry)
         assertTrue(entries.none { it.read })
         assertTrue(repository.observeFollowed().first().isEmpty())
     }
@@ -104,17 +107,23 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `a listing or details without a description or status keep the stored ones`() = runTest {
+    fun `a listing or details without a description, status or memo keep the stored ones, and entries their memos`() = runTest {
         val detailed = series.copy(description = "A synopsis.", status = SeriesStatus.COMPLETED)
         repository.store(detailed)
         assertEquals(detailed, repository.series(id)!!.series)
 
-        repository.store(series.copy(title = "Renamed"))
+        repository.store(series.copy(title = "Renamed", memo = null))
         assertEquals(detailed.copy(title = "Renamed"), repository.series(id)!!.series)
 
-        repository.store(series.copy(description = "Rewritten.", status = SeriesStatus.ON_HIATUS))
+        // So does an entry listed without its memo, while one listed with a memo replaces it.
+        repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2", memo = """{"id":2}"""), SeriesEntry("/c/1", "Chapter 1", memo = """{"id":1}""")))
+        repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1", memo = """{"id":"1b"}""")))
+        assertEquals(listOf("""{"id":2}""", """{"id":"1b"}"""), repository.entries(id).map { it.entry.memo })
+
+        repository.store(series.copy(description = "Rewritten.", status = SeriesStatus.ON_HIATUS, memo = """{"slug":"b"}"""))
         assertEquals("Rewritten.", repository.series(id)!!.series.description)
         assertEquals(SeriesStatus.ON_HIATUS, repository.series(id)!!.series.status)
+        assertEquals("""{"slug":"b"}""", repository.series(id)!!.series.memo)
     }
 
     @Test

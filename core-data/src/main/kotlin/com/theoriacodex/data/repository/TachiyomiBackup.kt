@@ -134,6 +134,7 @@ private fun TachiyomiSeries.toBackup(kind: SeriesKind, now: Long): BackupSeries?
         genres = genres.map(String::trim).filter(String::isNotBlank),
         description = description?.trim()?.ifBlank { null },
         status = extensionSeriesStatus(status),
+        memo = storedMemo(memo),
     )
     val followedAt = if (favorite) dateAdded.takeIf { it > 0 } ?: now else null
     return BackupSeries(StoredSeries(series, followed = favorite, lastOpenedEntry = lastOpened, followedAtEpochMs = followedAt), stored)
@@ -146,7 +147,9 @@ private fun TachiyomiEntry.toStored(kind: SeriesKind, now: Long, readAt: Long?):
         SeriesKind.ANIME -> totalSeconds.takeIf { it > 0 }.let { duration -> lastPosition.coerceIn(0, duration ?: Long.MAX_VALUE) to duration }
     }
     return StoredSeriesEntry(
-        entry = SeriesEntry(url, name, number.takeIf { it.isFinite() && it >= 0f }, scanlator?.takeIf(String::isNotBlank), dateUpload.takeIf { it > 0 }),
+        entry = SeriesEntry(
+            url, name, number.takeIf { it.isFinite() && it >= 0f }, scanlator?.takeIf(String::isNotBlank), dateUpload.takeIf { it > 0 }, storedMemo(memo),
+        ),
         sourceOrder = sourceOrder.coerceIn(0, Int.MAX_VALUE.toLong()).toInt(),
         firstSeenAtEpochMs = dateFetch.takeIf { it > 0 } ?: now,
         read = read,
@@ -155,6 +158,8 @@ private fun TachiyomiEntry.toStored(kind: SeriesKind, now: Long, readAt: Long?):
         lastReadAtEpochMs = readAt,
     )
 }
+
+private fun storedMemo(bytes: ByteArray): String? = bytes.takeIf(ByteArray::isNotEmpty)?.let { storedMemo(it.decodeToString()) }
 
 /**
  * The parts of a Mihon-family backup this import reads; protobuf skips the rest. Mihon and TachiyomiJ2K keep manga in
@@ -202,6 +207,11 @@ private class TachiyomiSeries(
     /** Mihon writes it only when false, so a series without it is in the library. */
     @ProtoNumber(100) val favorite: Boolean = true,
     @ProtoNumber(104) val history: List<TachiyomiHistory> = emptyList(),
+    /**
+     * What the extension keeps with the series, as JSON text: bytes from Mihon and Aniyomi, a string from TachiyomiJ2K
+     * (one wire type), and an empty object when it keeps nothing. Anikku leaves the number unused.
+     */
+    @ProtoNumber(112) val memo: ByteArray = ByteArray(0),
 )
 
 /** A chapter, or an anime's episode: [read] is "seen" there, and [lastPosition] its last moment. */
@@ -217,6 +227,8 @@ private class TachiyomiEntry(
     /** Mihon's default, so a chapter it numbered 0 has no field; -1 is its "unknown". */
     @ProtoNumber(9) val number: Float = 0f,
     @ProtoNumber(10) val sourceOrder: Long = 0,
+    /** As [TachiyomiSeries.memo], for the chapter. */
+    @ProtoNumber(13) val memo: ByteArray = ByteArray(0),
     @ProtoNumber(16) val totalSeconds: Long = 0,
     /** TachiyomiJ2K's pages from the last one read to the end, that one included: 1 for a finished chapter. */
     @ProtoNumber(800) val pagesLeft: Long = 0,

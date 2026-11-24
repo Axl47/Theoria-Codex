@@ -97,9 +97,12 @@ class RoomSeriesRepository(
         val moved = movedEntries(current.partition { it.address in known }, known.values.filter { it.entry.address !in listed })
         val newEntries = mutableListOf<SeriesEntry>()
         val rows = current.mapIndexed { order, entry ->
-            val before = known[entry.address] ?: moved[entry.address]
+            val kept = known[entry.address]
+            val before = kept ?: moved[entry.address]
             if (before == null) newEntries += entry
-            (before?.copy(entry = entry, sourceOrder = order) ?: StoredSeriesEntry(entry, order, firstSeenAtEpochMs = now))
+            // An entry listed without a memo keeps the one stored at its address, as a series does.
+            val listed = if (entry.memo == null && kept?.entry?.memo != null) entry.copy(memo = kept.entry.memo) else entry
+            (before?.copy(entry = listed, sourceOrder = order) ?: StoredSeriesEntry(listed, order, firstSeenAtEpochMs = now))
         }
         // A dropped entry keeps its row and progress, also when a new address took its progress over: if the source
         // lists both again, neither is new or unread.
@@ -249,6 +252,7 @@ internal fun SeriesEntity.toStored() = StoredSeries(
         language = language,
         description = description,
         status = SeriesStatus.entries.firstOrNull { it.name == status } ?: SeriesStatus.UNKNOWN,
+        memo = memo,
     ),
     followed = followed,
     readingMode = readingMode?.let { name -> GalleryReadingMode.entries.firstOrNull { it.name == name } },
@@ -276,19 +280,22 @@ internal fun StoredSeries.toEntity() = SeriesEntity(
     downloadNewChapters,
     chaptersShareFirstPage,
     followedAtEpochMs,
+    series.memo,
 )
 
 /**
- * [this] with [stored]'s description and status where it has none: only a details page gives them, so a listing of
- * the series, or details that leave them out, must not erase what an earlier details page said.
+ * [this] with [stored]'s description, status and memo where it has none: only a details page gives the first two, so a
+ * listing of the series, or details that leave them out, must not erase what an earlier details page said. A source
+ * may likewise give its memo on one of those and not the other, and needs it to open the series again.
  */
 private fun Series.keeping(stored: Series): Series = copy(
     description = description ?: stored.description,
     status = status.takeUnless { it == SeriesStatus.UNKNOWN } ?: stored.status,
+    memo = memo ?: stored.memo,
 )
 
 internal fun SeriesEntryEntity.toStored() = StoredSeriesEntry(
-    entry = SeriesEntry(address, name, number, translatorGroup, uploadedAtEpochMs),
+    entry = SeriesEntry(address, name, number, translatorGroup, uploadedAtEpochMs, memo),
     sourceOrder = sourceOrder,
     firstSeenAtEpochMs = firstSeenAtEpochMs,
     read = read,
@@ -311,4 +318,5 @@ internal fun StoredSeriesEntry.toEntity(series: SeriesId) = SeriesEntryEntity(
     position,
     length,
     lastReadAtEpochMs,
+    entry.memo,
 )

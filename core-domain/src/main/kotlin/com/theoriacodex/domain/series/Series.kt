@@ -53,6 +53,11 @@ data class Series(
     /** The synopsis; null when the source gave none, which a listing never does. */
     val description: String? = null,
     val status: SeriesStatus = SeriesStatus.UNKNOWN,
+    /**
+     * What the source keeps with the series to find it again, such as a slug its address leaves out: a Mihon
+     * extension's memo, a JSON object as text. Stored as given and handed back to the source; null when it keeps none.
+     */
+    val memo: String? = null,
 )
 
 /** One instalment of a [Series]: a chapter or an episode. [address] identifies it within its series. */
@@ -63,6 +68,8 @@ data class SeriesEntry(
     val number: Float? = null,
     val translatorGroup: String? = null,
     val uploadedAtEpochMs: Long? = null,
+    /** What the source keeps with the entry, as [Series.memo] is for a series. */
+    val memo: String? = null,
 )
 
 data class SeriesPage(val series: List<Series>, val hasNextPage: Boolean)

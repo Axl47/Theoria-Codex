@@ -20,7 +20,13 @@ import okhttp3.Response
  * its place and its chapter, so two pages never share an address. The image's address is asked for when that image is
  * requested, and asked for again after a fetch of it failed, since such addresses expire.
  */
-internal class MihonImages(private val source: HttpSource, private val key: SourceKey, private val images: ExtensionImages) : SourceImages {
+internal class MihonImages(
+    private val source: HttpSource,
+    private val key: SourceKey,
+    private val images: ExtensionImages,
+    /** The chapter at an address as the source last saw it this run, memo included; null when none is held. */
+    private val chapter: (String) -> SChapter? = { null },
+) : SourceImages {
     /** Pages whose request only the source can build, by the address handed out for them. */
     private val pages = Collections.synchronizedMap(
         object : LinkedHashMap<String, Page>() {
@@ -58,11 +64,12 @@ internal class MihonImages(private val source: HttpSource, private val key: Sour
 
     /**
      * The page handed out as [address]. When it is no longer held, after a restart or once enough newer pages pushed
-     * it out, its chapter's pages are listed again and the one at the same place is taken.
+     * it out, its chapter's pages are listed again and the one at the same place is taken. The chapter is the one the
+     * source last saw, when held, so it keeps the source's memo.
      */
     private fun unresolvedPage(address: String, data: String): Page = pages[address] ?: run {
         val (index, chapterUrl) = data.split('/', limit = 2).let { it[0].toIntOrNull() to it.getOrNull(1).orEmpty() }
-        val chapter = SChapter.create().apply {
+        val chapter = chapter(chapterUrl) ?: SChapter.create().apply {
             url = chapterUrl
             name = ""
         }

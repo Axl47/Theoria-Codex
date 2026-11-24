@@ -93,11 +93,11 @@ interface SeriesRepository {
     suspend fun entries(id: SeriesId): List<StoredSeriesEntry>
 
     /**
-     * Stores what the source says about [series], keeping what the user did with it, and the stored description and
-     * status when [series] has none. With [entries], the source's
-     * current list replaces the stored one: entries it kept keep their progress and first-seen time, and ones it
-     * dropped leave the list but are remembered, so one that returns is as the user left it. An empty list changes
-     * nothing, since a source that fails quietly lists none.
+     * Stores what the source says about [series], keeping what the user did with it, and the stored description,
+     * status and memo when [series] has none. With [entries], the source's current list replaces the stored one:
+     * entries it kept keep their progress, first-seen time and, when listed without one, memo; ones it dropped leave
+     * the list but are remembered, so one that returns is as the user left it. An empty list changes nothing, since a
+     * source that fails quietly lists none.
      *
      * Returns the new entries, in the source's order: those whose address was never stored, unless one is plainly a
      * dropped entry at a new address. That takes both to be the only release of their chapter number by their

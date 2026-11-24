@@ -8,6 +8,8 @@ import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesStatus
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 
 /**
  * A series in a profile backup (`library.series`): what its source said, what the user did with it, and its entries
@@ -39,6 +41,8 @@ internal data class BackupSeriesRecord(
     @SerialName("downloadNewChapters") val downloadNewChapters: Boolean = false,
     /** Absent from backups written before the Following sorts, which restore without it. */
     @SerialName("followedAt") val followedAt: Long? = null,
+    /** Absent from backups written before memos were kept, and for a series whose source keeps none. */
+    @SerialName("memo") val memo: String? = null,
     @SerialName("entries") val entries: List<BackupSeriesEntryRecord> = emptyList(),
 ) {
     /** A status or mode this build does not know is dropped; [validateBackupSeries] refuses what no build wrote. */
@@ -54,6 +58,7 @@ internal data class BackupSeriesRecord(
                     language = language,
                     description = description,
                     status = SeriesStatus.entries.firstOrNull { it.name == status } ?: SeriesStatus.UNKNOWN,
+                    memo = storedMemo(memo),
                 ),
                 followed = followed,
                 readingMode = GalleryReadingMode.entries.firstOrNull { it.name == readingMode },
@@ -84,6 +89,7 @@ internal data class BackupSeriesRecord(
                 lastCheckedAt = lastCheckedAtEpochMs,
                 downloadNewChapters = downloadNewChapters,
                 followedAt = followedAtEpochMs,
+                memo = series.memo,
                 entries = backup.entries.map(BackupSeriesEntryRecord::fromDomain),
             )
         }
@@ -105,19 +111,32 @@ internal data class BackupSeriesEntryRecord(
     @SerialName("pageCount") val length: Long? = null,
     /** Absent from backups written before read times were kept. */
     @SerialName("lastReadAt") val lastReadAt: Long? = null,
+    /** Absent from backups written before memos were kept, and for an entry whose source keeps none. */
+    @SerialName("memo") val memo: String? = null,
 ) {
-    fun toDomain() =
-        StoredSeriesEntry(SeriesEntry(address, name, number, translatorGroup, uploadedAt), sourceOrder, firstSeenAt, read, position, length, lastReadAt)
+    fun toDomain() = StoredSeriesEntry(
+        SeriesEntry(address, name, number, translatorGroup, uploadedAt, storedMemo(memo)),
+        sourceOrder, firstSeenAt, read, position, length, lastReadAt,
+    )
 
     companion object {
         fun fromDomain(stored: StoredSeriesEntry): BackupSeriesEntryRecord = with(stored) {
             BackupSeriesEntryRecord(
                 entry.address, entry.name, entry.number, entry.translatorGroup, entry.uploadedAtEpochMs,
-                sourceOrder, firstSeenAtEpochMs, read, position, length, lastReadAtEpochMs,
+                sourceOrder, firstSeenAtEpochMs, read, position, length, lastReadAtEpochMs, entry.memo,
             )
         }
     }
 }
+
+/**
+ * A backed-up memo as Theoria stores one: the JSON object's text, or null for an empty object, the default of
+ * Mihon-family backups, and for anything that is not a JSON object, which no extension wrote. Null stays eligible for
+ * a later restore to fill.
+ */
+internal fun storedMemo(text: String?): String? = text?.takeIf(String::isNotBlank)
+    ?.let { runCatching { Json.parseToJsonElement(it) }.getOrNull() as? JsonObject }
+    ?.takeIf(JsonObject::isNotEmpty)?.toString()
 
 /** The one check for series on both paths: a backup the app writes is one it restores. */
 internal fun validateBackupSeries(all: List<BackupSeries>) {
