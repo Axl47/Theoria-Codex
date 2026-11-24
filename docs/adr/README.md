@@ -10,7 +10,8 @@ in `config/quality/comment-baseline.json`, which may only shrink.
 One file per decision, named `NNNN-kebab-case-title.md` and numbered in order. Copy
 [`template.md`](template.md): context, decision, consequences, and the code the decision governs, named by
 file and symbol so a reader can find it. Group related code under one decision rather than writing one
-record per call site. When a decision changes, edit its record; when it is reversed, mark it superseded
+record per call site. Name constants rather than copying their values, and avoid claims that expire, such
+as "the latest release". When a decision changes, edit its record; when it is reversed, mark it superseded
 and link the record that replaces it.
 
 ## Index
