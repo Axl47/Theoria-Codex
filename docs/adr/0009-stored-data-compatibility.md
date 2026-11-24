@@ -27,4 +27,10 @@ Removing a legacy field needs a migration of stored queries and a new hash versi
 
 ## Guarded by
 
+- `core-domain/src/test/kotlin/com/theoriacodex/domain/model/SourceKeyTest.kt`: `built-in ids keep their historical names and round trip (ADR 0009)`, `built-ins match exactly while custom ids normalize (ADR 0009)`, `natural order is the old enum order followed by custom ids (ADR 0009)`, `a stored profile's id is its source identity (ADR 0009)`
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/model/SourceKey.kt`: `@JvmInline value class SourceKey private constructor(val id: String) : Comparable<SourceKey>`
+- `core-domain/src/test/kotlin/com/theoriacodex/domain/query/QueryHashTest.kt`: `media filter adds to the hash only when animated (ADR 0009)`
+- `scripts/tests/test_check_architecture.py`: `test_reports_a_min_score_read_outside_stores_and_the_hash_adr_0009`
+- `core-domain/src/test/kotlin/com/theoriacodex/domain/model/FacetedDomainModelsTest.kt`: `copying a query's groups recomputes its include terms (ADR 0009)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/storage/PostStorageRecordsTest.kt`: `nhentai and hitomi listings saved before the gallery flag read as galleries of unknown length (ADR 0009)`
+- `feature-library/src/test/kotlin/com/theoriacodex/app/codex/CodexShareModelsTest.kt`: `a shared gallery listing with no pages reads as a gallery of unknown length (ADR 0009)`

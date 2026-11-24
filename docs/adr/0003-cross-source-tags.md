@@ -21,3 +21,9 @@ Changing recommendation normalization does not touch stored favorites or search.
 
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/recommendation/CrossSourceTags.kt`: `crossSourceTagKey`, `CrossSourceTraining`, `sharesBooruVocabulary`
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/recommendation/RecommendationTagNormalization.kt`: `RecommendationTagNormalization`
+
+## Guarded by
+
+- `core-domain/src/test/kotlin/com/theoriacodex/domain/recommendation/CrossSourceTagsTest.kt`: `concept keys ignore booru spelling, width and escaping (ADR 0003)`, `pixiv likes teach booru sources through translations (ADR 0003)`, `foreign documents never outnumber native ones beyond the cold-start floor (ADR 0003)`, `custom sites share the booru vocabulary in both directions (ADR 0003)`
+- `scripts/tests/test_check_architecture.py`: `test_reports_recommendation_normalization_outside_recommendation_code_adr_0003`
+- Left to prose: ordering likes most recent first is the caller's precondition, caching concept keys changes no result, and that nothing persists `sharesBooruVocabulary` is an absence no check can point at.

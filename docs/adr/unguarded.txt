@@ -1,12 +1,3 @@
-0002-coroutine-and-diagnostics-rules.md
-0003-cross-source-tags.md
-0004-custom-site-profiles.md
-0005-picture-tagger-thresholds.md
-0006-post-identity-and-dedup.md
-0007-series-sources-and-extensions.md
-0008-source-adapter-contracts.md
-0010-tag-and-text-normalization.md
-0011-unified-search-orchestration.md
 0012-room-explicit-migrations.md
 0013-room-read-paths-and-projections.md
 0014-series-backup-merge.md

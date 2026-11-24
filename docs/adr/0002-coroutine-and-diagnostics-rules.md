@@ -24,3 +24,15 @@ Diagnostics stay safe to share. Redaction patterns must be revisited when new id
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/coroutines/SharedFlights.kt`: `SharedFlights`
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/diagnostics/Diagnostics.kt`: `Diagnostics`, `DiagnosticRedaction`
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/diagnostics/OffMainWork.kt`: `OffMainWork`
+
+## Guarded by
+
+- `core-domain/src/test/kotlin/com/theoriacodex/domain/coroutines/CoroutineResultsTest.kt`: `cancellation is rethrown unchanged (ADR 0002)`, `exception variant rethrows cancellation and captures exceptions (ADR 0002)`
+- `config/detekt/detekt.yml`: `SuspendFunSwallowedCancellation: active: true`, `CancellationCatchRule: active: true`
+- `detekt-rules/src/test/kotlin/com/theoriacodex/detekt/CancellationCatchRuleTest.kt`: `flags a rethrow before catching Throwable (ADR 0002)`
+- `core-domain/src/test/kotlin/com/theoriacodex/domain/coroutines/SharedFlightsTest.kt`: `the request runs on the first caller's dispatcher under its own job (ADR 0002)`
+- `media-kit/src/test/kotlin/com/theoriacodex/app/source/PostResolutionFlightsTest.kt`: `overlapping callers share one request and later callers start a new one (ADR 0002)`, `the first caller leaving does not cancel the request another caller waits on (ADR 0002)`, `the request is cancelled once every caller has left (ADR 0002)`
+- `core-domain/src/test/kotlin/com/theoriacodex/domain/diagnostics/DiagnosticsTest.kt`: `a sink that throws never breaks report (ADR 0002)`
+- `core-domain/src/test/kotlin/com/theoriacodex/domain/diagnostics/DiagnosticRedactionTest.kt`: `addresses keep only their host (ADR 0002)`, `credentials are removed however they are written (ADR 0002)`, `personal values are removed and stack frames survive (ADR 0002)`
+- `scripts/tests/test_check_architecture.py`: `test_reports_off_main_notes_outside_the_start_of_a_parse_helper_adr_0002`
+- Left to prose: whether a diagnostic message names browsing content is a judgment at each call site, with redaction as the checked backstop. `SELF_TEST`'s control is the emulator-only `MainThreadWorkCheckerDeviceTest`, which is not linked until a device run can prove it.

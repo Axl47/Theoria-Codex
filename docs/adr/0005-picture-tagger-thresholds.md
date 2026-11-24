@@ -22,3 +22,10 @@ Changing a threshold needs re-measurement; the stored floor must stay at or belo
 
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/vision/PredictedTag.kt`: `PredictedTag`, `PredictedTagUse`, `STORED_FLOOR`
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/vision/PictureTags.kt`: `PictureTags`, `PictureLook`
+
+## Guarded by
+
+- `core-domain/src/test/kotlin/com/theoriacodex/domain/vision/PredictedTagTest.kt`: `each use applies its own measured threshold (ADR 0005)`, `the stored floor is at or below every use's threshold (ADR 0005)`
+- `core-domain/src/test/kotlin/com/theoriacodex/domain/vision/PictureTagsTest.kt`: `without a tagger nothing is ready, known or seen (ADR 0005)`
+- `vision-kit/src/test/kotlin/com/theoriacodex/app/vision/PictureTaggerTest.kt`: `while the model is absent the tagger answers Unavailable and knows nothing (ADR 0005)`
+- Left to prose: never showing a prediction as a tag the post was given is a UI rule; the thresholds' precision and recall need re-measurement, not a check; `known`, `look` and `library` with a ready model need a model-file and vocabulary fixture that does not exist yet.
