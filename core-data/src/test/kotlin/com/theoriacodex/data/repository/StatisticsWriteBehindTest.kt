@@ -25,7 +25,7 @@ class StatisticsWriteBehindTest {
     private val writeScope = CoroutineScope(StandardTestDispatcher(writeClock))
 
     @Test
-    fun `many viewed posts write once with the newest counts`() = runTest {
+    fun `many viewed posts write once with the newest counts (ADR 0215)`() = runTest {
         val writes = mutableListOf<LifetimeStatistics>()
         val repository = CellStatisticsRepository(
             FileStateCell(LifetimeStatistics()) { writes += it }.writeBehind(writeScope, STATISTICS_WRITE_DELAY),
@@ -43,7 +43,7 @@ class StatisticsWriteBehindTest {
     }
 
     @Test
-    fun `a stop flush persists exactly what observers saw`() = runTest {
+    fun `a stop flush persists exactly what observers saw (ADR 0215)`() = runTest {
         val directory = temporary.newFolder()
         val storeScope = newDataStoreScope()
         val repository = DataStoreStatisticsRepository(directory, storeScope, writeScope = writeScope)
@@ -59,7 +59,7 @@ class StatisticsWriteBehindTest {
     }
 
     @Test
-    fun `cancelling during the delay keeps the last written statistics readable`() = runTest {
+    fun `cancelling during the delay keeps the last written statistics readable (ADR 0215)`() = runTest {
         val directory = temporary.newFolder()
         val storeScope = newDataStoreScope()
         val repository = DataStoreStatisticsRepository(directory, storeScope, writeScope = writeScope)
@@ -77,7 +77,7 @@ class StatisticsWriteBehindTest {
     }
 
     @Test
-    fun `restored statistics are on disk before restore returns`() = runTest {
+    fun `restored statistics are on disk before restore returns (ADR 0215)`() = runTest {
         val directory = temporary.newFolder()
         val storeScope = newDataStoreScope()
         val stoppedScope = CoroutineScope(Job().apply { cancel() })

@@ -18,7 +18,7 @@ import org.junit.Test
 
 class AppUsageTrackerTest {
     @Test
-    fun `going to the background saves its usage and then flushes the store`() = runTest {
+    fun `going to the background saves its usage and then flushes the store (ADR 0215)`() = runTest {
         var elapsed = 0L
         val calls = mutableListOf<String>()
         val memory = InMemoryStatisticsRepository()

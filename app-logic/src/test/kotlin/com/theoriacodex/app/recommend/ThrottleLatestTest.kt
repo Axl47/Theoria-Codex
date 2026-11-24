@@ -10,7 +10,7 @@ import org.junit.Test
 
 class ThrottleLatestTest {
     @Test
-    fun `the first value passes at once and a burst settles on its newest value once per period`() = runTest {
+    fun `the first value passes at once and a burst settles on its newest value once per period (ADR 0215)`() = runTest {
         val source = MutableStateFlow(0)
         val seen = mutableListOf<Int>()
         backgroundScope.launch { source.throttleLatest(TAG_AFFINITY_STATISTICS_PERIOD).collect { seen += it } }
