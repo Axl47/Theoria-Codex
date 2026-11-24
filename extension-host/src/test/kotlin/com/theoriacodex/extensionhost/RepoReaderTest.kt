@@ -9,8 +9,14 @@ import org.junit.Test
 class RepoReaderTest {
     private val signingKey = "9add655a78e96c4ec7a53ef89dccb557cb5d767489fac5e785d671a5a75d4da2"
 
-    /** A newer repo's index, built from `repos/store.txt` with `protoc --encode=Store store.proto < store.txt | gzip -9`. */
-    private val store = checkNotNull(javaClass.getResourceAsStream("/repos/store.pb.gz")).use { it.readBytes() }
+    /**
+     * Newer repos' indexes, a manga store and an anime one, built from `repos/store.txt` and `repos/anime.txt` with
+     * `protoc --encode=Store store.proto < store.txt | gzip -9` (and `--encode=AnimeStore` for the anime one).
+     */
+    private val store = resource("store.pb.gz")
+    private val animeStore = resource("anime.pb.gz")
+
+    private fun resource(name: String) = checkNotNull(javaClass.getResourceAsStream("/repos/$name")).use { it.readBytes() }
 
     private val legacyRepo = """{"meta":{"name":"Yūzōnō","shortName":"Yū","website":"https://yuzono.github.io","signingKeyFingerprint":"$signingKey"}}"""
     private val legacyIndex = """[
@@ -55,18 +61,22 @@ class RepoReaderTest {
         assertEquals("Fixture", index.name)
         assertEquals("The key is compared as lowercase hex", signingKey, index.signingKey)
         assertEquals(
-            listOf(
-                IndexedExtension("Achy", "eu.kanade.tachiyomi.extension.all.achy", "https://cdn.example.org/achy-v1.6.1.apk", "1.6", 106001, "1.6.1", listOf("es", "en"), SeriesKind.MANGA),
-                IndexedExtension("Onsen", "eu.kanade.tachiyomi.animeextension.all.onsen", "https://cdn.example.org/onsen-v16.12.apk", "16", 12, "16.12", listOf("all"), SeriesKind.ANIME),
-            ),
+            listOf(IndexedExtension("Achy", "eu.kanade.tachiyomi.extension.all.achy", "https://cdn.example.org/achy-v1.6.1.apk", "1.6", 106001, "1.6.1", listOf("es", "en"), SeriesKind.MANGA)),
             index.extensions,
         )
     }
 
     @Test
-    fun `a newer index is read from its own address`() = runTest {
-        val index = RepoReader.read("https://repo.example/store/index.pb") { url -> if (url.endsWith("index.pb")) store else throw IOException("404 $url") }
-        assertEquals(2, index.extensions.size)
+    fun `an anime store is read from its own address, with its torrent flag where a manga store has sources`() = runTest {
+        val index = RepoReader.read("https://repo.example/anime/index.pb") { url -> if (url.endsWith("index.pb")) animeStore else throw IOException("404 $url") }
+        assertEquals("Anime fixture", index.name)
+        assertEquals(
+            listOf(
+                IndexedExtension("Onsen", "eu.kanade.tachiyomi.animeextension.all.onsen", "https://cdn.example.org/onsen-v16.12.apk", "16", 12, "16.12", listOf("all"), SeriesKind.ANIME),
+                IndexedExtension("Torrents", "eu.kanade.tachiyomi.animeextension.all.torrents", "https://cdn.example.org/t-v14.6.apk", "14", 6, "14.6", listOf("all"), SeriesKind.ANIME, torrent = true),
+            ),
+            index.extensions,
+        )
     }
 
     @Test
