@@ -292,7 +292,7 @@ private fun viewerRendererControls(
         isPlaying = controls.playback.playing,
         isPreloading = preloading,
         // The page a swipe heads to shows its timeline too: the swipe only selects it once the slide settles.
-        showControls = (active || preloading) && frame.chromeStage >= VIEWER_CHROME_STAGE_TIMELINE,
+        showControls = (active || preloading) && frame.chromeStage.value >= VIEWER_CHROME_STAGE_TIMELINE,
         showPassiveProgress = !frame.chromeVisible && active && !frame.inPictureInPicture,
         loopPlayback = controls.playbackMode == com.theoriacodex.app.viewer.state.ViewerPlaybackMode.LOOP && !controls.slideshow,
         playbackRate = closestViewerPlaybackRate(controls.playback.playbackRate).speed,
