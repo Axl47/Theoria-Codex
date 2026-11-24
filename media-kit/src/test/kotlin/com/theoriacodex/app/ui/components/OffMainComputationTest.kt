@@ -101,7 +101,7 @@ class OffMainComputationTest {
     }
 
     @Test
-    fun `an input change keeps the previous value until the off-main result lands`() {
+    fun `an input change keeps the previous value until the off-main result lands (ADR 0106)`() {
         show()
         compose.runOnIdle { input = "b" }
         awaitOffMainCompute()

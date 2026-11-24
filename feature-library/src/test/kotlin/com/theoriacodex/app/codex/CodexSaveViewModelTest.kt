@@ -2,7 +2,7 @@ package com.theoriacodex.app.codex
 
 import androidx.lifecycle.ViewModelStore
 import com.theoriacodex.app.codex.transfer.CodexTransferService
-import com.theoriacodex.app.testing.InMemoryCodexLikesTransactions
+import com.theoriacodex.data.repository.InMemoryCodexLikesTransactions
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.CacheRepository
 import com.theoriacodex.data.repository.CodexRepository

@@ -171,7 +171,7 @@ class GelbooruCommentsTest {
     }
 
     @Test
-    fun `native comment anchors follow the site's markup`() {
+    fun `native comment anchors follow the site's markup (ADR 0008)`() {
         assertNull(gelbooru().nativeCommentAnchor("100"))
         assertEquals("c100", GelbooruSourceAdapter(safebooru, http).nativeCommentAnchor("100"))
     }
@@ -208,7 +208,7 @@ class GelbooruCommentsTest {
     }
 
     @Test
-    fun `listing hints prefer an exact count and read has_comments as a flag or a string`() {
+    fun `listing hints prefer an exact count and read has_comments as a flag or a string (ADR 0001)`() {
         fun hint(json: String) = JsonParser.parseString(json).asJsonObject.gelbooruCommentHint()
 
         assertEquals(CommentHint(3), hint("""{"comment_count":3,"has_comments":"false"}"""))

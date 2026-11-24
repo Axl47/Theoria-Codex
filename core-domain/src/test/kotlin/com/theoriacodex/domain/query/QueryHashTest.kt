@@ -40,7 +40,7 @@ class QueryHashTest {
     }
 
     @Test
-    fun `media filter adds to the hash only when animated`() {
+    fun `media filter adds to the hash only when animated (ADR 0009)`() {
         val any = Query(
             mode = QueryMode.Source(SourceKey.DANBOORU),
             includeTerms = listOf(SearchTerm("landscape")),
@@ -53,6 +53,23 @@ class QueryHashTest {
 
         assertEquals(stored, QueryHash.from(any))
         assertEquals("$stored|media=animated", QueryHash.from(any.copy(media = MediaFilter.ANIMATED)))
+    }
+
+    @Test
+    fun `a stored query with a retired minimum score keeps its hash (ADR 0009)`() {
+        fun legacy(score: Int) = QueryHash.from(Query(
+            mode = QueryMode.Source(SourceKey.DANBOORU),
+            includeTerms = listOf(SearchTerm("landscape")),
+            excludeTerms = emptyList(),
+            sort = SortMode.NEWEST,
+            dateRange = null,
+            minScore = score,
+        ))
+
+        assertEquals(
+            listOf(5, 0, -3).map { "v3|source:DANBOORU|group[include:TAG:null:9:landscape]|NEWEST|none|$it" },
+            listOf(legacy(5), legacy(0), legacy(-3)),
+        )
     }
 
     @Test

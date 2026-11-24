@@ -1,7 +1,6 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.domain.series.ExtensionChoices
 import com.theoriacodex.domain.tags.normalizeFavoriteTagForStorage
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -43,8 +42,6 @@ internal data class SettingsStoreRecord(
     @SerialName("instantSeek") val instantSeek: Boolean = false,
     @SerialName("viewerAutoRotateVideos") val viewerAutoRotateVideos: Boolean? = null,
     @SerialName("viewerCommentOrder") val viewerCommentOrder: String? = null,
-    @SerialName("scenarioPreset")
-    val scenarioPreset: String = ScenarioPreset.NORMAL.name,
     @SerialName("recommendationProfiles")
     val recommendationProfiles: List<RecommendationProfileRecord>? = null,
     @SerialName("activeProfileId")
@@ -55,8 +52,6 @@ internal data class SettingsStoreRecord(
     val favoriteTagsByProfile: Map<String, List<FavoriteTagEntryRecord>>? = null,
     @SerialName("providerHealth")
     val providerHealth: List<ProviderHealthSnapshotRecord>? = null,
-    @SerialName("trustedExtensions") val trustedExtensions: Map<String, String>? = null,
-    @SerialName("extensionLanguages") val extensionLanguages: Map<String, List<String>>? = null,
 ) {
     fun toDomain(): AppSettings {
         val storedEnabledSources = enabledSources
@@ -95,8 +90,6 @@ internal data class SettingsStoreRecord(
                     resolveUnknownAnimatedDurations = resolveUnknownAnimatedDurations,
                 ),
                 viewer = toViewerSettings(),
-                scenarioPreset = runCatching { ScenarioPreset.valueOf(scenarioPreset) }
-                    .getOrDefault(ScenarioPreset.NORMAL),
                 recommendationProfiles = profiles,
                 activeProfileId = resolvedActiveProfileId,
                 forYouBlacklistByProfile = forYouBlacklistByProfile
@@ -111,10 +104,6 @@ internal data class SettingsStoreRecord(
                         record.toDomainOrNull()?.let { snapshot -> snapshot.source to snapshot }
                     }
                     .toMap(),
-                extensions = ExtensionChoices(
-                    trusted = trustedExtensions.orEmpty(),
-                    languages = extensionLanguages.orEmpty().mapValues { (_, languages) -> languages.toSet() },
-                ),
             )
         )
     }
@@ -174,7 +163,6 @@ internal data class SettingsStoreRecord(
                 instantSeek = settings.viewer.instantSeek,
                 viewerAutoRotateVideos = settings.viewer.autoRotateVideos,
                 viewerCommentOrder = settings.viewer.commentOrder.name,
-                scenarioPreset = settings.scenarioPreset.name,
                 recommendationProfiles = settings.recommendationProfiles.map(RecommendationProfileRecord::fromDomain),
                 activeProfileId = settings.activeProfileId,
                 forYouBlacklistByProfile = settings.forYouBlacklistByProfile.mapValues { (_, entries) ->
@@ -186,8 +174,6 @@ internal data class SettingsStoreRecord(
                 providerHealth = settings.providerHealth.values
                     .sortedBy { snapshot -> snapshot.source.id }
                     .map(ProviderHealthSnapshotRecord::fromDomain),
-                trustedExtensions = settings.extensions.trusted.toSortedMap().takeIf { it.isNotEmpty() },
-                extensionLanguages = settings.extensions.languages.mapValues { (_, languages) -> languages.sorted() }.takeIf { it.isNotEmpty() },
             )
         }
     }

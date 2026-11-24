@@ -59,7 +59,7 @@ class GelbooruAccountsTest {
     }
 
     @Test
-    fun `feeds follow the profile shape and the site`() {
+    fun `feeds follow the profile shape and the site (ADR 0008)`() {
         val gelbooru = gelbooru()
         val named = CreatorProfile(SourceKey.GELBOORU, "alice", uploadsQuery = "user:alice")
         val idOnly = CreatorProfile(SourceKey.GELBOORU, "9", profileId = "9")

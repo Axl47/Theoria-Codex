@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import re
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -181,6 +181,79 @@ def host_tests_wait_settled() -> list[str]:
                     "docs/adr/0210-host-test-compose-waits.md and NON_IDLING_WAIT_FILES may use"
                 )
     return failures
+
+
+OFF_MAIN_CALL = re.compile(r"(?:(?<![\w.])(?:[a-z]\w*\s*\.\s*)+)?\bOffMainWork\s*\.\s*note\s*\(")
+BARE_NOTE_IMPORT = re.compile(r"^import\s+com\.theoriacodex\.domain\.diagnostics\.OffMainWork\.note\s*$", re.MULTILINE)
+BARE_NOTE_CALL = re.compile(r"(?<![\w.])(?<!fun\s)note\s*\(")
+OFF_MAIN_LABEL = re.compile(r"(?:label\s*=\s*)?(?:[A-Za-z_]\w*\.)*OffMainWork\.[A-Z][A-Z0-9_]*")
+KOTLIN_LITERAL = re.compile(r"'(?:\\.|[^'\\\n])'|\"\"\"[\s\S]*?\"\"\"|\"(?:\\.|[^\"\\\n])*\"")
+FUNCTION_KEYWORD = re.compile(r"\bfun\b")
+DECLARATION_MODIFIERS = re.compile(
+    r"(?:(?:@[\w.]+(?:\([^)]*\))?|public|private|internal|protected|override|open|final|inline|suspend|tailrec|operator|infix)\s+)*\Z"
+)
+
+
+def closing_paren(text: str, opening: int) -> int:
+    depth = 0
+    for index in range(opening, len(text)):
+        depth += {"(": 1, ")": -1}.get(text[index], 0)
+        if depth == 0:
+            return index
+    return len(text)
+
+
+def opening_brace(text: str, before: int) -> int:
+    depth = 0
+    for index in range(before - 1, -1, -1):
+        if text[index] == "}":
+            depth += 1
+        elif text[index] == "{":
+            if depth == 0:
+                return index
+            depth -= 1
+    return -1
+
+
+def notes_in_a_suspend_or_late_spot(text: str, call: int) -> bool:
+    brace = opening_brace(text, call)
+    if brace < 0 or text[brace + 1:call].strip():
+        return True
+    keywords = list(FUNCTION_KEYWORD.finditer(text, 0, brace))
+    if not keywords:
+        return True
+    header = text[keywords[-1].end():brace]
+    if header.count("{") != header.count("}"):
+        return True
+    modifiers = DECLARATION_MODIFIERS.search(text, 0, keywords[-1].start())
+    return modifiers is not None and re.search(r"\bsuspend\b", modifiers.group(0)) is not None
+
+
+def off_main_note_failures(sources: Iterable[tuple[str, str]]) -> list[str]:
+    failures = []
+    for relative, source in sources:
+        text = KOTLIN_LITERAL.sub(lambda literal: re.sub(r".", " ", literal.group(0)), source)
+        calls = list(OFF_MAIN_CALL.finditer(text))
+        if BARE_NOTE_IMPORT.search(text):
+            calls += BARE_NOTE_CALL.finditer(text)
+        for call in sorted(calls, key=lambda match: match.start()):
+            number = text.count("\n", 0, call.start()) + 1
+            label = " ".join(text[call.end():closing_paren(text, call.end() - 1)].split()).rstrip(",").strip()
+            if not OFF_MAIN_LABEL.fullmatch(label):
+                failures.append(f"{relative}:{number} notes '{label}'; OffMainWork labels are constants (docs/adr/0002-coroutine-and-diagnostics-rules.md)")
+            if notes_in_a_suspend_or_late_spot(text, call.start()):
+                failures.append(
+                    f"{relative}:{number} must call OffMainWork.note first in the non-suspend function that does the work "
+                    "(docs/adr/0002-coroutine-and-diagnostics-rules.md)"
+                )
+    return failures
+
+
+@rule
+def off_main_notes_run_where_work_runs() -> list[str]:
+    return off_main_note_failures(
+        (path.relative_to(ROOT).as_posix(), path.read_text(encoding="utf-8")) for path in sorted(ROOT.glob("*/src/main/**/*.kt"))
+    )
 
 
 def main() -> int:

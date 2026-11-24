@@ -24,14 +24,13 @@ class InMemoryRepositoriesTest {
     }
 
     @Test
-    fun `settings repository normalizes source weights and scenario preset`() = runTest {
+    fun `settings repository normalizes source weights`() = runTest {
         val repo = InMemorySettingsRepository()
 
         repo.setEnabledSources(setOf(SourceKey.PIXIV, SourceKey.GELBOORU))
         repo.updateSettings { it.copy(runtime = it.runtime.copy(sourceWeights = mapOf(SourceKey.PIXIV to 3.0, SourceKey.GELBOORU to 1.0))) }
         repo.setResolveUnknownAnimatedDurations(true)
         repo.setInvertMultiImageScrollDirection(true)
-        repo.setScenarioPreset(ScenarioPreset.PARTIAL_FAILURE)
         repo.setActiveProfile("profile-alt")
 
         val settings = repo.observeSettings().first()
@@ -42,7 +41,6 @@ class InMemoryRepositoriesTest {
         assertTrue(pixivWeight > gelbooruWeight)
         assertTrue(settings.contentFilters.resolveUnknownAnimatedDurations)
         assertTrue(settings.viewer.invertMultiImageScrollDirection)
-        assertEquals(ScenarioPreset.PARTIAL_FAILURE, settings.scenarioPreset)
         assertEquals("profile-alt", settings.activeProfileId)
     }
 

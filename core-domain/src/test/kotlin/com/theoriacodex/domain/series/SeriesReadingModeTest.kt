@@ -11,14 +11,14 @@ class SeriesReadingModeTest {
     }
 
     @Test
-    fun `a long-strip genre reads vertically`() {
+    fun `a long-strip genre reads vertically (ADR 0007)`() {
         for (genre in listOf("Long Strip", "Webtoons", "Manhwa", "manhua")) {
             assertEquals(genre, GalleryReadingMode.VERTICAL, mode(genres = listOf("Action", genre)))
         }
     }
 
     @Test
-    fun `a Korean or Chinese source reads vertically`() {
+    fun `a Korean or Chinese source reads vertically (ADR 0007)`() {
         for (language in listOf("ko", "zh", "zh-Hans", "ZH-hant")) {
             assertEquals(language, GalleryReadingMode.VERTICAL, mode(language = language))
         }

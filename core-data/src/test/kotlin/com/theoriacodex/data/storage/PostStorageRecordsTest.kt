@@ -3,6 +3,7 @@ package com.theoriacodex.data.storage
 import com.theoriacodex.data.repository.encodeBackupPost
 import com.theoriacodex.data.repository.episodePost
 import com.theoriacodex.data.repository.mergeSparsePost
+import com.theoriacodex.domain.model.CommentHint
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.MediaStream
@@ -15,6 +16,9 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -52,7 +56,30 @@ class PostStorageRecordsTest {
     }
 
     @Test
-    fun `a gallery of unknown length keeps its flag, and other records stay as they were`() {
+    fun `the stored post record keeps the file hash and never the comment hint, origin or picture hash (ADR 0006)`() {
+        val listed = samplePost().copy(
+            contentHash = "0123456789abcdef0123456789abcdef",
+            commentHint = CommentHint(count = 7_319),
+            originUrl = "https://origin.test/status/1",
+            pictureHash = 0x1234_5678_9ABC_DEF0L,
+        )
+        fun keys(element: JsonElement): List<String> = when (element) {
+            is JsonObject -> element.keys.toList() + element.values.flatMap(::keys)
+            is JsonArray -> element.flatMap(::keys)
+            else -> emptyList()
+        }
+
+        val written = DurableJson.encodeToString(PostStorageCodec.encode(listed))
+        val stored = checkNotNull(PostStorageCodec.decode(DurableJson.decodeFromString<PostStorageRecord>(written)))
+
+        assertEquals(emptySet<String>(), keys(DurableJson.parseToJsonElement(written)).toSet() intersect setOf("commentHint", "originUrl", "pictureHash"))
+        assertEquals(emptyList<String>(), listOf("origin.test", "7319", "${listed.pictureHash}").filter { it in written })
+        assertEquals(listOf("0123456789abcdef0123456789abcdef", null, null, null),
+            listOf(stored.contentHash, stored.commentHint, stored.originUrl, stored.pictureHash))
+    }
+
+    @Test
+    fun `a gallery of unknown length keeps its flag, and other records stay as they were (ADR 0006)`() {
         val gallery = samplePost().copy(galleryLengthUnknown = true)
         val stored = DurableJson.decodeFromString<PostStorageRecord>(DurableJson.encodeToString(PostStorageCodec.encode(gallery)))
 
@@ -61,7 +88,7 @@ class PostStorageRecordsTest {
     }
 
     @Test
-    fun `nhentai and hitomi listings saved before the gallery flag read as galleries of unknown length`() {
+    fun `nhentai and hitomi listings saved before the gallery flag read as galleries of unknown length (ADR 0009)`() {
         fun saved(source: String, extra: String = "") = PostStorageCodec.decode(
             DurableJson.decodeFromString<PostStorageRecord>(
                 """{"source":"$source","sourcePostId":"1","previewUrl":"https://example.com/t.jpg","media":[]$extra,"schemaVersion":1}""",

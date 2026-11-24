@@ -14,9 +14,11 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.isEnabled
@@ -35,6 +37,7 @@ import androidx.compose.ui.test.swipeWithVelocity
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
+import com.theoriacodex.app.codex.SAVE_TO_CODEX_SHEET_TAG
 import com.theoriacodex.app.fixtures.JourneyAppContainer
 import com.theoriacodex.app.fixtures.JourneyTestActivity
 import com.theoriacodex.app.search.searchCardTestTag
@@ -186,6 +189,11 @@ abstract class AppJourneyFixture {
     protected fun activate(node: SemanticsNodeInteraction) {
         waitForNode(node, "displayed and enabled") { node.isDisplayed() && isEnabled().matches(node.fetchSemanticsNode()) }
         node.performSemanticsAction(SemanticsActions.OnClick)
+    }
+
+    protected fun saveToCodex(name: String) {
+        val destination = compose.onNode(hasText(name) and hasAnyAncestor(hasTestTag(SAVE_TO_CODEX_SHEET_TAG)))
+        activate(destination)
     }
 
     protected fun longPress(node: SemanticsNodeInteraction) {
