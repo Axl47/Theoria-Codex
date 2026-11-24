@@ -21,13 +21,16 @@ BASELINE = pathlib.Path("config/quality/comment-baseline.json")
 SOURCE_SUFFIXES = (".kt", ".java")
 
 # TODO and FIXME comments are banned like any other: open an issue instead.
-# Comments a tool reads, so they are allowed anywhere and never counted:
+# Comments a tool or a licence requires, so they are allowed anywhere and never counted:
 # - `noinspection`: Android lint's only in-source suppression for a single statement.
 # - `@formatter:off` / `@formatter:on`: IDE formatter fences around hand-aligned code.
-# Detekt suppressions are `@Suppress` annotations, not comments. No source has a licence header, and
-# generated code lives under build/, which git does not track, so neither needs an exception.
+# - `// Derived from <project> (<url>), <licence>; see <file>`: the notice Apache 2.0 requires on files
+#   adapted from Mihon and Aniyomi (extension-host).
+# Detekt suppressions are `@Suppress` annotations, not comments. Generated code lives under build/, which
+# git does not track, so it needs no exception.
 ALLOWED_DIRECTIVE = re.compile(
     r"//\s*noinspection\s+\w[\w ,]*"
+    r"|// Derived from .+\(https?://\S+\), .*\bLicen[cs]e\b.*"
     r"|//\s*@formatter:(on|off)"
     r"|/\*\s*@formatter:(on|off)\s*\*/"
 )
