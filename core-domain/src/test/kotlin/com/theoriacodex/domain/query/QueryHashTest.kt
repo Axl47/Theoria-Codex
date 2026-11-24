@@ -56,6 +56,20 @@ class QueryHashTest {
     }
 
     @Test
+    fun `a stored query with a retired minimum score keeps its hash (ADR 0009)`() {
+        val legacy = Query(
+            mode = QueryMode.Source(SourceKey.DANBOORU),
+            includeTerms = listOf(SearchTerm("landscape")),
+            excludeTerms = emptyList(),
+            sort = SortMode.NEWEST,
+            dateRange = null,
+            minScore = 5,
+        )
+
+        assertEquals("v3|source:DANBOORU|group[include:TAG:null:9:landscape]|NEWEST|none|5", QueryHash.from(legacy))
+    }
+
+    @Test
     fun `hash changes when sort changes`() {
         val newest = Query(
             mode = QueryMode.Unified,

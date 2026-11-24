@@ -26,7 +26,7 @@ class DistinctByFileTest {
             post(SourceKey.DANBOORU, "1", HASH_A),
             post(SourceKey.GELBOORU, "9", HASH_A),
             post(SourceKey.GELBOORU, "8", HASH_B),
-            post(SourceKey.DANBOORU, "1", HASH_A),
+            post(SourceKey.DANBOORU, "1", HASH_C),
             post(SourceKey.PIXIV, "7"),
             post(SourceKey.IWARA, "7"),
         )
@@ -60,6 +60,7 @@ class DistinctByFileTest {
         )
         val incoming = listOf(
             post(SourceKey.RULE34XXX, "4", HASH_A),
+            post(SourceKey.PIXIV, "3"),
             post(SourceKey.IWARA, "5", picture = PICTURE xor 0b1L),
             post(SourceKey.DANBOORU, "6", HASH_B),
             post(SourceKey.GELBOORU, "7", HASH_B),

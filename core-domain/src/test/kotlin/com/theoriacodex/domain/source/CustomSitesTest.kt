@@ -81,6 +81,7 @@ class CustomSitesTest {
             "custom_booru_example__p8443",
             "custom_booru_example__h0a1b2c3d",
             "custom_booru_example__p8443__h0a1b2c3d",
+            "custom_${"a".repeat(89)}",
         ).forEach { assertTrue(it, CustomSourceIds.isValid(it)) }
 
         listOf(
@@ -93,7 +94,7 @@ class CustomSitesTest {
             "custom_booru__p0",
             "custom_booru__hXYZ",
             "custom_booru___org",
-            "custom_${"a".repeat(CustomSourceIds.MAX_LENGTH)}",
+            "custom_${"a".repeat(90)}",
         ).forEach { assertFalse(it, CustomSourceIds.isValid(it)) }
     }
 
@@ -130,6 +131,10 @@ class CustomSitesTest {
         assertRejected { profile.copy(searchTermLimit = 0) }
         assertRejected { SiteHeaders(userAgent = "Theoria\r\nX-Injected: 1") }
         assertRejected { SiteCredentials(user = "", apiKey = "key") }
+    }
+
+    @Test
+    fun `site credentials never show in text (ADR 0004)`() {
         assertEquals("SiteCredentials([REDACTED])", SiteCredentials("user", "secret-key").toString())
     }
 

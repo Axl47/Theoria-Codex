@@ -41,6 +41,8 @@ class MediaTermsTest {
             listOf("cat", "filetype:gif,mp4,webm,zip"),
             query("cat", sort = SortMode.TOP).withMediaTerms(danbooruLike).includeTags,
         )
+        val noFallback = danbooruLike.copy(animatedTerm = AnimatedSearchTerm(SearchTerm("animated")))
+        assertEquals(listOf("cat", "dog"), query("cat", "dog").withMediaTerms(noFallback).includeTags)
     }
 
     @Test

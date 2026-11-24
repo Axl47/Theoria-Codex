@@ -180,7 +180,7 @@ class ExtensionCatalogTest {
     }
 
     @Test
-    fun `an extension installed from a repo is kept privately and turned on, and an update keeps the user's choice (ADR 0007)`() = runTest {
+    fun `an extension installed from a repo is kept privately and turned on, an update keeps the user's choice, and uninstalling turns it off (ADR 0007)`() = runTest {
         serve(Triple("new", 2, "16"), Triple("old", 7, "16"))
         catalog.add(listOf(NewExtensionRepo(repoUrl)))
         apk("new", key, 2)
@@ -198,6 +198,19 @@ class ExtensionCatalogTest {
         catalog.uninstall(File(folder, "new.apk").path)
         assertFalse(File(folder, "new.apk").exists())
         assertEquals(emptyMap<String, String>(), store.choices.trusted)
+    }
+
+    @Test
+    fun `adding a repo installs and turns on nothing (ADR 0007)`() = runTest {
+        serve(Triple("new", 2, "16"))
+        apk("new", key, 2)
+
+        assertEquals(emptyMap<String, String>(), catalog.add(listOf(NewExtensionRepo(repoUrl))))
+
+        assertEquals(emptyList<String>(), folder.list().orEmpty().toList())
+        assertEquals(emptyMap<String, String>(), store.choices.trusted)
+        assertEquals(0, changes)
+        assertEquals(listOf(Status.AVAILABLE), catalog.available().extensions.map { it.status })
     }
 
     @Test

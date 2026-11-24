@@ -23,11 +23,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.coroutines.ContinuationInterceptor
 import kotlin.coroutines.EmptyCoroutineContext
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -143,17 +147,17 @@ class UnifiedSearchOrchestratorTest {
 
     @Test
     fun `provider calls run off the caller's thread by default (ADR 0011)`() {
-        var providerThread: String? = null
+        var providerDispatcher: ContinuationInterceptor? = null
         val adapter = object : SourceAdapter by FakeAdapter(SourceKey.PIXIV, supportedCapabilities(), emptyList()) {
             override suspend fun search(query: Query, pageToken: String?): Page<Post> {
-                providerThread = Thread.currentThread().name
+                providerDispatcher = currentCoroutineContext()[ContinuationInterceptor]
                 return Page(emptyList(), null)
             }
         }
 
         runBlocking { UnifiedSearchOrchestrator(mapOf(adapter.sourceKey to adapter)).searchSource(adapter, sampleQuery(), null) }
 
-        assertTrue("ran on $providerThread", providerThread.orEmpty().startsWith("DefaultDispatcher-worker"))
+        assertSame(Dispatchers.Default, providerDispatcher)
     }
 
     @Test

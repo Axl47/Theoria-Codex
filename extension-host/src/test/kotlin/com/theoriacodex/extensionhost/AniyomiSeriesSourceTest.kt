@@ -85,7 +85,7 @@ class AniyomiSeriesSourceTest {
     @Test
     fun `every server's streams come in the source's preferred order, and a stream without headers gets the source's (ADR 0007)`() = runBlocking {
         val source = ServerSource(
-            servers = listOf(Hoster(hosterName = "Server A"), Hoster(hosterName = "Server B", videoList = listOf(Video("https://b.example/v.mp4", "Server B 480p")))),
+            servers = listOf(Hoster(hosterName = "Server A"), Hoster(hosterName = "Server B", videoList = listOf(Video("https://b.example/v.mp4", "Server B 480p", preferred = true)))),
             videos = mapOf(
                 "Server A" to {
                     listOf(
@@ -108,6 +108,7 @@ class AniyomiSeriesSourceTest {
 
         assertEquals(
             listOf(
+                MediaStream("https://b.example/v.mp4", "Server B 480p", headers = sourceHeaders),
                 MediaStream("https://a.example/720.mp4", "720p · Server A", headers = sourceHeaders),
                 MediaStream(
                     "https://a.example/hls/master.m3u8",
@@ -119,7 +120,6 @@ class AniyomiSeriesSourceTest {
                 ),
                 MediaStream("https://a.example/480.mp4", "480p HLS · Server A", headers = sourceHeaders),
                 MediaStream("https://a.example/play?id=360", "360p HLS · Server A", mime = "application/x-mpegURL", headers = sourceHeaders),
-                MediaStream("https://b.example/v.mp4", "Server B 480p", headers = sourceHeaders),
             ),
             media,
         )

@@ -10,10 +10,11 @@ class FileHashTest {
         preview: String? = null,
         thumbnail: String? = null,
         hash: String? = null,
+        fullRef: ImageRef? = null,
     ) = Post(
         id = PostId(SourceKey.DANBOORU, "1"),
         preview = ImageRef(url = preview, localPath = null, mime = null, thumbnailUrl = thumbnail),
-        full = full?.let { ImageRef(url = it, localPath = null, mime = null) },
+        full = fullRef ?: full?.let { ImageRef(url = it, localPath = null, mime = null) },
         pageUrl = "https://danbooru.donmai.us/posts/1",
         width = null,
         height = null,
@@ -50,8 +51,40 @@ class FileHashTest {
         assertNull(post().fileHash)
     }
 
+    @Test
+    fun `only the file name and then its folder are searched (ADR 0006)`() {
+        assertEquals(MD5, post(full = "https://x.test/images/$OTHER/$MD5.jpg").fileHash)
+        assertEquals(OTHER, post(full = "https://x.test/images/$OTHER/sample.jpg").fileHash)
+        assertNull(post(full = "https://x.test/$MD5/images/sample.jpg").fileHash)
+        assertNull(post(full = "https://x.test/get_file/1/$MD5/123/123_720p.mp4/").fileHash)
+    }
+
+    @Test
+    fun `the original address is searched first, then its fallbacks, lighter renditions and thumbnail (ADR 0006)`() {
+        val roles = listOf(MD5, OTHER, THIRD, FOURTH)
+        fun address(role: Int, from: Int) = if (role >= from) "https://x.test/${roles[role]}.jpg" else "https://x.test/plain.jpg"
+        fun ref(from: Int) = ImageRef(
+            url = address(0, from), localPath = null, mime = null,
+            fallbackUrls = listOf(address(1, from)), progressiveUrls = listOf(address(2, from)), thumbnailUrl = address(3, from),
+        )
+
+        assertEquals(roles, (0..3).map { from -> post(fullRef = ref(from)).fileHash })
+    }
+
+    @Test
+    fun `a hash only in a video rendition's address is never taken (ADR 0006)`() {
+        val video = ImageRef(
+            url = "https://x.test/video.mp4", localPath = null, mime = "video/mp4",
+            videoVariants = listOf(VideoVariant("https://x.test/$MD5.mp4", height = 720)),
+        )
+
+        assertNull(post(fullRef = video).fileHash)
+    }
+
     private companion object {
         const val MD5 = "0123456789abcdef0123456789abcdef"
         const val OTHER = "fedcba9876543210fedcba9876543210"
+        const val THIRD = "00112233445566778899aabbccddeeff"
+        const val FOURTH = "ffeeddccbbaa99887766554433221100"
     }
 }

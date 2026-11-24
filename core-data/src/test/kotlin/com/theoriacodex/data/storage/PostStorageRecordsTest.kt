@@ -16,6 +16,9 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -56,15 +59,21 @@ class PostStorageRecordsTest {
     fun `the stored post record keeps the file hash and never the comment hint, origin or picture hash (ADR 0006)`() {
         val listed = samplePost().copy(
             contentHash = "0123456789abcdef0123456789abcdef",
-            commentHint = CommentHint(count = 7),
+            commentHint = CommentHint(count = 7_319),
             originUrl = "https://origin.test/status/1",
             pictureHash = 0x1234_5678_9ABC_DEF0L,
         )
+        fun keys(element: JsonElement): List<String> = when (element) {
+            is JsonObject -> element.keys.toList() + element.values.flatMap(::keys)
+            is JsonArray -> element.flatMap(::keys)
+            else -> emptyList()
+        }
 
-        val stored = checkNotNull(
-            PostStorageCodec.decode(DurableJson.decodeFromString<PostStorageRecord>(DurableJson.encodeToString(PostStorageCodec.encode(listed)))),
-        )
+        val written = DurableJson.encodeToString(PostStorageCodec.encode(listed))
+        val stored = checkNotNull(PostStorageCodec.decode(DurableJson.decodeFromString<PostStorageRecord>(written)))
 
+        assertEquals(emptySet<String>(), keys(DurableJson.parseToJsonElement(written)).toSet() intersect setOf("commentHint", "originUrl", "pictureHash"))
+        assertEquals(emptyList<String>(), listOf("origin.test", "7319", "${listed.pictureHash}").filter { it in written })
         assertEquals(listOf("0123456789abcdef0123456789abcdef", null, null, null),
             listOf(stored.contentHash, stored.commentHint, stored.originUrl, stored.pictureHash))
     }

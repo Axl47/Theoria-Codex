@@ -27,6 +27,16 @@ class PictureHashTest {
         assertEquals(emptyList<String>(), missed.take(3).map(java.lang.Long::toBinaryString))
     }
 
+    @Test
+    fun `the banded index never matches a hash beyond the distance, also when adding (ADR 0006)`() {
+        val sharesFirstBand = HASH xor (0b11111L shl 13)
+        val index = PictureHashIndex<String>().apply { add("stored", HASH) }
+
+        assertEquals(emptySet<String>(), index.matches(sharesFirstBand))
+        assertFalse("a copy within the distance was added", index.addUnlessMatched("copy", HASH xor 0b1111L))
+        assertTrue("a distinct picture sharing a band was refused", index.addUnlessMatched("distinct", sharesFirstBand))
+    }
+
     private companion object {
         const val HASH = 0x5A3C_96E1_0F7B_D248L
     }

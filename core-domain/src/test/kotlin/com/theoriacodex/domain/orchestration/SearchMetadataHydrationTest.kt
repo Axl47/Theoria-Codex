@@ -163,6 +163,33 @@ class SearchMetadataHydrationTest {
         assertEquals(null, result.statuses.single().failureReason)
     }
 
+    @Test
+    fun `a post the source reports gone is dropped even when its listing matches (ADR 0011)`() = runTest {
+        val adapter = SparseAdapter(
+            search = { _, _ -> Page(listOf(post("gone", "cat", "red"), post("a", "cat", "red")), null) },
+            resolve = { sparse -> if (sparse.id.sourcePostId == "gone") null else post(sparse.id.sourcePostId, "cat", "red") },
+        )
+
+        val page = testOrchestrator().searchSource(adapter, groupedQuery(), null)
+
+        assertEquals(listOf("a"), page.items.map { it.id.sourcePostId })
+    }
+
+    @Test
+    fun `hydration leaves the provider's continuation token as it was (ADR 0011)`() = runTest {
+        val adapter = SparseAdapter(
+            search = { _, _ -> Page(listOf(post("gone"), post("a")), "provider-next") },
+            resolve = { sparse -> if (sparse.id.sourcePostId == "gone") null else post("a", "cat") },
+        )
+
+        val result = testOrchestrator(mapOf(adapter.sourceKey to adapter)).search(
+            plainQuery().copy(excludeTerms = listOf(SearchTerm("blocked"))), setOf(adapter.sourceKey), emptyMap(), emptyMap(),
+        )
+
+        assertEquals(listOf("a"), result.items.map { it.id.sourcePostId })
+        assertEquals("provider-next", result.nextPageTokens[adapter.sourceKey])
+    }
+
     private class SparseAdapter(
         override val sourceKey: SourceKey = SourceKey.RULE34VIDEO,
         private val search: suspend (Query, String?) -> Page<Post>,

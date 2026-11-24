@@ -37,7 +37,7 @@ class PostResolutionFlightsTest {
     )
 
     @Test
-    fun `overlapping callers share one request and later callers start a new one (ADR 0002)`() = runTest {
+    fun `overlapping callers share one request and later callers start a new one`() = runTest {
         val flights = PostResolutionFlights()
         val release = CompletableDeferred<Unit>()
         var requests = 0
@@ -56,7 +56,7 @@ class PostResolutionFlightsTest {
     }
 
     @Test
-    fun `the first caller leaving does not cancel the request another caller waits on (ADR 0002)`() = runTest {
+    fun `the first caller leaving does not cancel the request another caller waits on`() = runTest {
         val flights = PostResolutionFlights()
         val release = CompletableDeferred<Unit>()
         var requests = 0
@@ -74,7 +74,7 @@ class PostResolutionFlightsTest {
     }
 
     @Test
-    fun `the request is cancelled once every caller has left (ADR 0002)`() = runTest {
+    fun `the request is cancelled once every caller has left`() = runTest {
         val flights = PostResolutionFlights()
         val cancelled = CompletableDeferred<Unit>()
         val fetch: suspend () -> Post? = { try { awaitCancellation() } finally { cancelled.complete(Unit) } }

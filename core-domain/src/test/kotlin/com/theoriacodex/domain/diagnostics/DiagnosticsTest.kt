@@ -1,7 +1,7 @@
 package com.theoriacodex.domain.diagnostics
 
 import org.junit.After
-import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DiagnosticsTest {
@@ -10,10 +10,15 @@ class DiagnosticsTest {
 
     @Test
     fun `a sink that throws never breaks report (ADR 0002)`() {
-        Diagnostics.install { _, _, _ -> error("the log is broken") }
+        var recorded = false
+        Diagnostics.install { _, _, _ ->
+            recorded = true
+            error("the log is broken")
+        }
 
-        val failure = runCatching { Diagnostics.report("search", "Source failed", IllegalStateException("timeout")) }
+        val outcome = runCatching { Diagnostics.report("search", "Source failed", IllegalStateException("timeout")) }
 
-        assertNull(failure.exceptionOrNull()?.message)
+        assertTrue("the sink was never called", recorded)
+        assertTrue("report threw ${outcome.exceptionOrNull()}", outcome.isSuccess)
     }
 }

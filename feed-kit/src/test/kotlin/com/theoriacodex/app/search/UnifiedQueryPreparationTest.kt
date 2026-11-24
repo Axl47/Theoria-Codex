@@ -10,7 +10,18 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class UnifiedQueryPreparationTest {
     @Test
-    fun `successful compatibility mappings are reused and expire (ADR 0008)`() = runTest {
+    fun `Unified looks up the provider's spelling of a typed tag before searching (ADR 0008)`() = runTest {
+        val adapter = TestAdapter(SourceKey.GELBOORU).apply {
+            autocomplete = listOf(TagSuggestion("blue_hair", "tag", 100))
+        }
+        val preparation = UnifiedQueryPreparation { 0L }
+
+        assertEquals(listOf("blue_hair"), preparation.prepareExactTags(adapter, unifiedQuery("blue")).includeTags)
+        assertEquals(listOf("blue"), adapter.autocompletePrefixes)
+    }
+
+    @Test
+    fun `successful compatibility mappings are reused and expire`() = runTest {
         val adapter = TestAdapter(SourceKey.GELBOORU).apply {
             autocomplete = listOf(TagSuggestion("blue_hair", "tag", 100))
         }

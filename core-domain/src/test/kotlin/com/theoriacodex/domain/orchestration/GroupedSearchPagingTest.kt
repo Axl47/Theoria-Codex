@@ -178,6 +178,24 @@ class GroupedSearchPagingTest {
         rawTags = emptyList(), authorName = null, createdAtEpochMs = time,
     )
 
+    @Test
+    fun `a source without grouped search branches on the smallest or group (ADR 0011)`() = runTest {
+        val requests = mutableListOf<List<String>>()
+        val adapter = adapter { query, _ ->
+            requests += query.includeTags
+            Page(emptyList(), null)
+        }
+        val query = groupedQuery().withIncludeTermGroups(listOf(
+            SearchTermGroup.single(SearchTerm("forest")),
+            SearchTermGroup((1..9).map { SearchTerm("tag$it") }),
+            SearchTermGroup(listOf(SearchTerm("cat"), SearchTerm("dog"))),
+        ))
+
+        testOrchestrator().searchSource(adapter, query, null)
+
+        assertEquals(listOf(listOf("forest", "cat"), listOf("forest", "dog")), requests)
+    }
+
     private val capabilities = SourceCapabilities(
         supportsSortNewest = true, supportsSortPopular = true, supportsSortTop = true,
         supportsSortRandom = true, supportsExcludeTagsServerSide = true,

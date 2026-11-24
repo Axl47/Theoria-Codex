@@ -20,6 +20,7 @@ class SearchTermLimitTest {
         assertEquals(1, guestLimit.budgetFor(SortMode.TOP))
         assertEquals(1, guestLimit.budgetFor(SortMode.POPULAR))
         assertEquals(2, SearchTermLimit(maxTerms = 2).budgetFor(SortMode.TOP))
+        assertEquals(1, SearchTermLimit(maxTerms = 1, rankedSortUsesTerm = true).budgetFor(SortMode.TOP))
     }
 
     @Test
