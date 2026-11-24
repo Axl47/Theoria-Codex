@@ -158,6 +158,9 @@ class TachiyomiBackupTest {
             message(505) { string(1, "https://anime.example/repo"); string(2, "Anime"); string(5, "bb22") }
             message(505) { string(1, "https://manga.example/repo/"); string(5, "aa11") }
             message(505) { string(1, "https://more.example/repo"); string(5, "cc33") }
+            // Neither comes back: one names no key, and older Aniyomi backups keep an installed extension here.
+            message(505) { string(1, "https://unsigned.example/repo") }
+            message(106) { string(1, "eu.kanade.tachiyomi.animeextension.en.example"); string(2, "apk bytes") }
         }
         val repos = RecordingRepos(refuse = "https://anime.example/repo", added = "https://manga.example/repo")
         val directory = temporary.newFolder()

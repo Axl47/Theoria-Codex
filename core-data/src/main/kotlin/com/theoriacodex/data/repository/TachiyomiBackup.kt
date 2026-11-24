@@ -52,9 +52,11 @@ internal fun decodeTachiyomiBackup(bytes: ByteArray, now: Long): TachiyomiImport
         .writable()
     require(series.isNotEmpty()) { "This backup has no series to import." }
     validateBackupSeries(series)
-    // A folder address is how these apps store a repo; ExtensionRepos.add takes it as it is.
-    val repos = (backup.repos + backup.animeRepos).filter { it.url.isNotBlank() }
-        .map { NewExtensionRepo(it.url.trim(), it.signingKey.trim().ifBlank { null }) }
+    // Only a repo pinned to a key comes back: an address alone would trust whatever key the repo names now. Older
+    // Aniyomi backups keep installed extensions in field 106, whose package names are no address. A folder address is
+    // how these apps store a repo, and ExtensionRepos.add takes it as it is.
+    val repos = (backup.repos + backup.animeRepos).filter { it.url.trim().startsWith("https://") && it.signingKey.isNotBlank() }
+        .map { NewExtensionRepo(it.url.trim(), it.signingKey.trim()) }
         .distinctBy { storedRepoAddress(it.url) }
     val names = backup.sources.named(SeriesKind.MANGA) + backup.animeSources.named(SeriesKind.ANIME)
     return TachiyomiImport(series, repos, names)
